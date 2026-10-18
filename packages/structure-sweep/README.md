@@ -509,6 +509,33 @@ commits nothing and reports `lint: "untouched"`. It prints a JSON report, includ
 paths still written as plain text somewhere. A row whose source and destination both exist stops
 the run.
 
+#### A hand-written plan: `move apply --plan <file>`
+
+When you already know where each file goes, write the moves yourself and skip the sweep:
+
+```json
+{
+  "scope": "app",
+  "moves": [
+    { "from": "app/src/lib/format.ts", "to": "app/src/shared/format.ts" },
+    { "from": "app/src/orders/total.ts", "to": "app/src/billing/total.ts" }
+  ]
+}
+```
+
+`scope` is the folder whose `tsconfig.json` apply loads, and every path is repo-relative. A row
+holds `from` and `to` and nothing else: Jev's `feature`, `role` and `confidence`, or a manifest's
+`features`, `floor`, `review` and `pinned`, are refused, so a hand plan never reads as a sweep's
+judgment. List each file on its own row, colocated tests included; there are no folder rows. A plan
+where two rows share a `from`, or two rows share a `to`, is refused too, naming both rows. Every
+refusal happens before anything is committed.
+
+Apply carries out the plan in the same two commits, with the same resume and the same no-op re-run
+as a manifest. Both commit messages say the moves were hand-planned, and both carry a
+`Structure-Sweep-Plan: <hash>` trailer naming the plan's content hash in place of the manifest's.
+`--plan` cannot be combined with `--manifest`: passing both is an error naming both flags. Without
+`--plan`, `apply` reads the manifest as before.
+
 ### `structure-sweep score`
 
 ```sh
@@ -776,7 +803,7 @@ excluded file, and a proposal left with fewer files than `consolidate`'s `--min-
 ## As a library
 
 Every command except `propose` is also a function — `runSweep`, `runPairs`, `planScope` /
-`planManifest`, `applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as
+`planManifest`, `applyManifest` / `applyHandPlan`, `scoreCoChange` over rows and change sets with `readChangeSets` as
 its git reader, `mergeProposals` / `collapseProposals` / `extractProposals` / `renderConsolidation` for
 `consolidate`, and `readGroupsFile` / `listGroups` / `showGroup` for `groups`, and `buildInventory` /
 `renderInventory` for `inventory` — and each

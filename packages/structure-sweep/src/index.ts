@@ -372,15 +372,20 @@ export {
 export {
   type ApplyCommits,
   type ApplyReport,
+  applyHandPlan,
   applyManifest,
 } from "./move/apply.js";
 export { planScope } from "./move/cli.js";
 export { entryFiles } from "./move/entries.js";
 export {
   GraphPull,
+  HandPlan,
+  HandPlanRow,
   Manifest,
   MoveRow,
+  type PathMove,
   PinnedRow,
+  parseHandPlan,
   ReviewRow,
   VerdictRow,
 } from "./move/manifest.js";

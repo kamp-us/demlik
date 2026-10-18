@@ -6,7 +6,7 @@ import {
   type StringLiteral,
   SyntaxKind,
 } from "ts-morph";
-import type { MoveRow } from "./manifest.js";
+import type { PathMove } from "./manifest.js";
 import { splitSpecifierExtension } from "./mover.js";
 
 const RESOLVABLE = ["", ".ts", ".tsx", ".d.ts", "/index.ts", "/index.tsx"];
@@ -19,7 +19,7 @@ export type Exists = (path: string) => boolean;
 
 export function movedModules(
   repoRoot: string,
-  rows: readonly MoveRow[],
+  rows: readonly PathMove[],
 ): MovedModules {
   return new Map(
     rows.map((r) => [

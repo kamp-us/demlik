@@ -19,17 +19,17 @@ import {
   moduleLiterals,
   movedModules,
 } from "./heal.js";
-import type { Manifest, MoveRow } from "./manifest.js";
+import type { HandPlan, Manifest, PathMove } from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
 
 export type RowState =
-  | { readonly kind: "pending"; readonly row: MoveRow }
-  | { readonly kind: "done"; readonly row: MoveRow }
-  | { readonly kind: "absent"; readonly row: MoveRow }
-  | { readonly kind: "conflict"; readonly row: MoveRow };
+  | { readonly kind: "pending"; readonly row: PathMove }
+  | { readonly kind: "done"; readonly row: PathMove }
+  | { readonly kind: "absent"; readonly row: PathMove }
+  | { readonly kind: "conflict"; readonly row: PathMove };
 
-export function stateOf(repoRoot: string, row: MoveRow): RowState {
+export function stateOf(repoRoot: string, row: PathMove): RowState {
   const from = existsSync(join(repoRoot, row.from));
   const to = existsSync(join(repoRoot, row.to));
   if (from && to) return { kind: "conflict", row };
@@ -67,7 +67,7 @@ const differing = (before: readonly string[], after: readonly string[]) =>
   before.reduce((n, spec, i) => n + (after[i] === spec ? 0 : 1), 0);
 
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
-function staleRefs(repoRoot: string, moved: readonly MoveRow[]): string[] {
+function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
   const hits = new Set<string>();
   for (const { from } of moved) {
     const needle = from.replace(/\.tsx?$/, "");
@@ -83,13 +83,13 @@ function staleRefs(repoRoot: string, moved: readonly MoveRow[]): string[] {
 }
 
 type Ledger = {
-  readonly pending: MoveRow[];
-  readonly conflicts: MoveRow[];
+  readonly pending: PathMove[];
+  readonly conflicts: PathMove[];
   readonly absent: string[];
   done: number;
 };
 
-function classify(repoRoot: string, rows: readonly MoveRow[]): Ledger {
+function classify(repoRoot: string, rows: readonly PathMove[]): Ledger {
   const ledger: Ledger = { pending: [], conflicts: [], absent: [], done: 0 };
   for (const state of rows.map((row) => stateOf(repoRoot, row))) {
     switch (state.kind) {
@@ -133,28 +133,73 @@ function format(repoRoot: string, paths: readonly string[]): string {
   }
 }
 
-/** Names the manifest in both commit messages, so a re-run can tell its own rename commit at HEAD. */
-const MANIFEST_TRAILER = "Structure-Sweep-Manifest";
 const RENAME_TRAILER = "Structure-Sweep-Step: rename";
 
-const manifestId = (manifest: Manifest) => contentHash(canonicalJson(manifest));
+/**
+ * What made the rows, and the content hash of the file that holds them. The hash goes into a
+ * trailer on both commits, so a re-run can tell its own rename commit at HEAD.
+ */
+type Planner =
+  | { readonly kind: "manifest"; readonly id: string }
+  | { readonly kind: "hand-plan"; readonly id: string };
 
-const renameMessage = (count: number, id: string) =>
-  `structure-sweep move: rename ${count} file${count === 1 ? "" : "s"} into feature folders
+/** The input both kinds of plan share: the scope apply loads, the from/to rows, and their planner. */
+type MoveSet = {
+  readonly scope: string;
+  readonly moves: readonly PathMove[];
+  readonly planner: Planner;
+};
+
+const files = (count: number) => `${count} file${count === 1 ? "" : "s"}`;
+
+/** The trailer naming the plan, and each commit's subject and body, for one kind of planner. */
+const WORDING = {
+  manifest: {
+    trailer: "Structure-Sweep-Manifest",
+    rename: (count: number) =>
+      `structure-sweep move: rename ${files(count)} into feature folders
 
 Content unchanged, so git records each move as a 100% rename and history follows it.
-The import rewrites follow in the next commit.
+The import rewrites follow in the next commit.`,
+    rewrite: `structure-sweep move: rewrite imports after the renames
+
+Specifier rewrites, heals and formatting for the files the previous commit moved.`,
+  },
+  "hand-plan": {
+    trailer: "Structure-Sweep-Plan",
+    rename: (count: number) =>
+      `structure-sweep move: rename ${files(count)} as hand-planned
+
+The moves were hand-planned; no sweep judged them.
+Content unchanged, so git records each move as a 100% rename and history follows it.
+The import rewrites follow in the next commit.`,
+    rewrite: `structure-sweep move: rewrite imports after the hand-planned renames
+
+Specifier rewrites, heals and formatting for the files the previous commit moved.`,
+  },
+} as const satisfies Record<
+  Planner["kind"],
+  {
+    readonly trailer: string;
+    readonly rename: (count: number) => string;
+    readonly rewrite: string;
+  }
+>;
+
+const planTrailer = ({ kind, id }: Planner) =>
+  `${WORDING[kind].trailer}: ${id}`;
+
+const renameMessage = (count: number, planner: Planner) =>
+  `${WORDING[planner.kind].rename(count)}
 
 ${RENAME_TRAILER}
-${MANIFEST_TRAILER}: ${id}
+${planTrailer(planner)}
 `;
 
-const rewriteMessage = (id: string) =>
-  `structure-sweep move: rewrite imports after the renames
+const rewriteMessage = (planner: Planner) =>
+  `${WORDING[planner.kind].rewrite}
 
-Specifier rewrites, heals and formatting for the files the previous commit moved.
-
-${MANIFEST_TRAILER}: ${id}
+${planTrailer(planner)}
 `;
 
 function commit(repoRoot: string, message: string): string {
@@ -165,33 +210,29 @@ function commit(repoRoot: string, message: string): string {
 /** One commit holding only the pending renames, each file byte-identical at its new path. */
 function commitRenames(
   repoRoot: string,
-  pending: readonly MoveRow[],
-  id: string,
+  pending: readonly PathMove[],
+  planner: Planner,
 ): string {
   for (const row of pending) {
     mkdirSync(dirname(join(repoRoot, row.to)), { recursive: true });
     git(repoRoot, ["mv", "--", row.from, row.to]);
   }
-  return commit(repoRoot, renameMessage(pending.length, id));
+  return commit(repoRoot, renameMessage(pending.length, planner));
 }
 
 /**
- * The rows HEAD renamed, when HEAD is this manifest's rename commit — the renames whose import
+ * The rows HEAD renamed, when HEAD is this plan's rename commit — the renames whose import
  * rewrites are still owed, whether this run just made that commit or an earlier one stopped after it.
  */
-function renamedAtHead(
-  repoRoot: string,
-  manifest: Manifest,
-  id: string,
-): MoveRow[] {
+function renamedAtHead(repoRoot: string, set: MoveSet): PathMove[] {
   const message = git(repoRoot, ["log", "-1", "--format=%B", "HEAD"]);
   const lines = new Set(message.split("\n"));
-  if (!lines.has(RENAME_TRAILER) || !lines.has(`${MANIFEST_TRAILER}: ${id}`))
+  if (!lines.has(RENAME_TRAILER) || !lines.has(planTrailer(set.planner)))
     return [];
   const destinations = new Set(
     exactRenames(repoRoot, "HEAD").map(({ to }) => to),
   );
-  return manifest.moves.filter((row) => destinations.has(row.to));
+  return set.moves.filter((row) => destinations.has(row.to));
 }
 
 /** One file the rewrite changes: the path its text was read from, where it lands, and its new text. */
@@ -214,7 +255,7 @@ const NO_REWRITE: Rewrite = { edits: [], healed: 0, specifiersRewritten: 0 };
  * the disk holds now. Heal resolves specifiers against this, so the rewrite comes out the same
  * whether the renames are still to be made or an earlier run already committed them.
  */
-function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
+function renamedTree(repoRoot: string, rows: readonly PathMove[]): Exists {
   const sources = new Set(rows.map((r) => join(repoRoot, r.from)));
   const destinations = new Set(rows.map((r) => join(repoRoot, r.to)));
   return (path) =>
@@ -231,7 +272,7 @@ function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
 function planRewrite(
   repoRoot: string,
   scope: string,
-  rows: readonly MoveRow[],
+  rows: readonly PathMove[],
   moved: MovedModules,
 ): Rewrite {
   const scopeRoot = join(repoRoot, scope);
@@ -314,30 +355,45 @@ export function applyManifest(
   repoRoot: string,
   manifest: Manifest,
 ): ApplyReport {
+  return applyMoveSet(repoRoot, {
+    scope: manifest.scope,
+    moves: manifest.moves,
+    planner: { kind: "manifest", id: contentHash(canonicalJson(manifest)) },
+  });
+}
+
+/**
+ * Carry out a hand-written plan exactly as {@link applyManifest} carries out a manifest: the same
+ * two commits, resume and no-op re-run, with both messages saying the moves were hand-planned and
+ * naming the plan's content hash.
+ */
+export function applyHandPlan(repoRoot: string, plan: HandPlan): ApplyReport {
+  return applyMoveSet(repoRoot, {
+    scope: plan.scope,
+    moves: plan.moves,
+    planner: { kind: "hand-plan", id: contentHash(canonicalJson(plan)) },
+  });
+}
+
+function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
   const started = performance.now();
   const dirty = uncommittedPaths(repoRoot);
   if (dirty.length > 0)
     throw new Error(
       `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
     );
-  const { pending, conflicts, absent, done } = classify(
-    repoRoot,
-    manifest.moves,
-  );
+  const { pending, conflicts, absent, done } = classify(repoRoot, set.moves);
   if (conflicts.length > 0)
     throw new Error(
       `both ends exist, refusing to guess:\n${conflicts.map((r) => `  ${r.from} -> ${r.to}`).join("\n")}`,
     );
-  const id = manifestId(manifest);
-  const moved = movedModules(repoRoot, manifest.moves);
+  const moved = movedModules(repoRoot, set.moves);
 
-  const rows =
-    pending.length > 0 ? pending : renamedAtHead(repoRoot, manifest, id);
+  const rows = pending.length > 0 ? pending : renamedAtHead(repoRoot, set);
   const owed =
-    rows.length > 0 ||
-    hasDangling(scopeSources(repoRoot, manifest.scope), moved);
+    rows.length > 0 || hasDangling(scopeSources(repoRoot, set.scope), moved);
   const rewrite = owed
-    ? planRewrite(repoRoot, manifest.scope, rows, moved)
+    ? planRewrite(repoRoot, set.scope, rows, moved)
     : NO_REWRITE;
   const untracked = untrackedEdits(repoRoot, rewrite);
   if (untracked.length > 0)
@@ -346,7 +402,7 @@ export function applyManifest(
     );
 
   const rename =
-    pending.length > 0 ? commitRenames(repoRoot, pending, id) : null;
+    pending.length > 0 ? commitRenames(repoRoot, pending, set.planner) : null;
   for (const edit of rewrite.edits) writeFileSync(edit.path, edit.text);
   const written = rewrite.edits.map((edit) => relative(repoRoot, edit.path));
   const { healed, specifiersRewritten } = rewrite;
@@ -355,7 +411,7 @@ export function applyManifest(
   if (written.length > 0) git(repoRoot, ["add", "--", ...written]);
   const changed = stagedPaths(repoRoot);
   const rewriteSha =
-    changed.length > 0 ? commit(repoRoot, rewriteMessage(id)) : null;
+    changed.length > 0 ? commit(repoRoot, rewriteMessage(set.planner)) : null;
 
   return {
     pending: pending.length,
@@ -367,7 +423,7 @@ export function applyManifest(
     filesTouched: changed.length,
     lint,
     commits: { rename, rewrite: rewriteSha },
-    staleStringRefs: staleRefs(repoRoot, manifest.moves),
+    staleStringRefs: staleRefs(repoRoot, set.moves),
     millis: Math.round(performance.now() - started),
   };
 }
