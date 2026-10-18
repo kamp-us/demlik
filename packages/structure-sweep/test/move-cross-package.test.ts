@@ -25,7 +25,8 @@ const B_EXPORTS = {
 /**
  * Three packages. `a` holds `one`, `two` and `three`, imported by two files of its own and two of
  * `c` — one through `@fixture/a`'s exports, one through a relative path into `a/src` — and by one
- * file of `b`. `one` imports `two`, which moves with it, and `helper`, which stays behind.
+ * file of `b`. `one` imports `two`, which moves with it. Nothing moved imports back into `a`, since
+ * `a` importing the moved files makes that a cycle between `a` and `b`.
  */
 function workspace(
   bExports: unknown = B_EXPORTS,
@@ -57,13 +58,8 @@ function workspace(
     "packages/a/src/uses-three.ts":
       'import { three } from "./three";\n\nexport const twice = three * 2;\n',
     "packages/a/src/helper.ts": "export const helper = 10;\n",
-    "packages/a/src/one.ts": [
-      'import { helper } from "./helper";',
-      'import { two } from "./two";',
-      "",
-      "export const one = helper + two;",
-      "",
-    ].join("\n"),
+    "packages/a/src/one.ts":
+      'import { two } from "./two";\n\nexport const one = two + 1;\n',
     "packages/a/src/two.ts": "export const two = 2;\n",
     "packages/a/src/three.ts": "export const three = 3;\n",
     "packages/b/src/index.ts": "export const b = 1;\n",
@@ -151,12 +147,14 @@ describe("applyManifest across workspace packages", () => {
     expect(
       git(root, "diff", "--name-only", "HEAD~1", "HEAD").split("\n").sort(),
     ).toEqual([
+      "packages/a/package.json",
       "packages/a/src/index.ts",
       "packages/a/src/uses-three.ts",
       "packages/b/src/consumer.ts",
-      "packages/b/src/one.ts",
+      "packages/c/package.json",
       "packages/c/src/index.ts",
       "packages/c/src/rel.ts",
+      "pnpm-lock.yaml",
     ]);
 
     // Importers in a and c now cross into b: package name plus the exports key, not the file name.
@@ -177,10 +175,7 @@ describe("applyManifest across workspace packages", () => {
     ]);
     // Imports that end up inside one package are relative.
     expect(specifiers(root, "packages/b/src/consumer.ts")).toEqual(["./one"]);
-    expect(specifiers(root, "packages/b/src/one.ts")).toEqual([
-      "@fixture/a/helper",
-      "./two",
-    ]);
+    expect(specifiers(root, "packages/b/src/one.ts")).toEqual(["./two"]);
     expect(git(root, "status", "--porcelain")).toBe("");
 
     const head = git(root, "rev-parse", "HEAD");
@@ -230,9 +225,33 @@ describe("applyManifest across workspace packages", () => {
       "@fixture/b/api/three",
     ]);
     expect(specifiers(root, "packages/b/src/handlers/one.ts")).toEqual([
+      "./two",
+    ]);
+  });
+
+  it("writes a moved file's import back into the package it left through that package's exports", () => {
+    // Only c and b import the moved files, so b gaining a dependency on a closes no cycle.
+    const root = workspace(B_EXPORTS, {
+      "packages/a/src/index.ts": "export const all = 0;\n",
+      "packages/a/src/uses-three.ts": "export const twice = 6;\n",
+      "packages/a/src/one.ts": [
+        'import { helper } from "./helper";',
+        'import { two } from "./two";',
+        "",
+        "export const one = helper + two;",
+        "",
+      ].join("\n"),
+    });
+
+    applyManifest(root, manifestOf(INTO_B));
+
+    expect(specifiers(root, "packages/b/src/one.ts")).toEqual([
       "@fixture/a/helper",
       "./two",
     ]);
+    expect(
+      JSON.parse(read(root, "packages/b/package.json")).dependencies,
+    ).toEqual({ "@fixture/a": "workspace:*" });
   });
 
   it("refuses a row whose destination no exports entry of the target package reaches, before the rename commit", () => {
