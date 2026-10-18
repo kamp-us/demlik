@@ -84,10 +84,17 @@ export interface EffectRuntime<
   readonly ready: Effect.Effect<EffectRuntime<S, M, E, Err>, Err | StoreFailed>;
   /** Succeeds once every dispatched Msg and its follow-ups are processed. */
   idle(): Effect.Effect<void>;
-  /** The terminal State, or `undefined` while the run is in flight. */
+  /**
+   * The saved terminal State, or `undefined` while its save is pending or failed.
+   * Without a store, answers as soon as State is set.
+   */
   result(): S | undefined;
-  /** Succeeds with the terminal State the first time the run reaches one. */
-  done(): Effect.Effect<S>;
+  /**
+   * Succeeds with the terminal State only once it is saved. A failed terminal
+   * save fails with `StoreFailed` (`operation: "save"`), for waiting and later
+   * callers. Without a store, answers as soon as State is set.
+   */
+  done(): Effect.Effect<S, StoreFailed>;
 }
 
 /** Run a loop call, ending with the typed Exit its rejection maps to. */
@@ -130,10 +137,11 @@ export function effectHandle<
     ready: Effect.suspend(() =>
       settled<unknown, Err>(() => loop.ready).pipe(Effect.as(handle)),
     ) as Effect.Effect<EffectRuntime<S, M, E, Err>, Err | StoreFailed>,
-    // `idle` rejects only on a livelock, and `done` and `stop` never do: a
-    // rejection here is a defect.
+    // `idle` rejects only on a livelock, and `stop` never does.
     idle: () => Effect.promise(() => loop.idle()),
-    done: () => Effect.promise(() => loop.done()),
+    // `done` rejects only at the terminal save boundary, never at the gate.
+    done: () =>
+      settled<S, never>(() => loop.done()) as Effect.Effect<S, StoreFailed>,
     stop: () => Effect.promise(() => loop.stop()),
   };
   return handle;

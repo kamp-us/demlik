@@ -1079,19 +1079,22 @@ export interface Runtime<
    */
   idle(): Promise<void>;
   /**
-   * The terminal State of the run, or `undefined` while in flight — "terminal"
+   * The saved terminal State of the run, or `undefined` while in flight — "terminal"
    * per the `terminal` predicate passed to `run()` (no predicate → never
    * terminal → always `undefined`). The first-class result read: the run's
    * product off the State the machine already owns, NOT scraped off the `observe`
-   * firehose by matching an internal Msg name. Total — never throws.
+   * firehose by matching an internal Msg name. With a store, returns `undefined`
+   * until the current State's save succeeds, including after a failed save.
+   * Without a store, answers as soon as State is set. Total — never throws.
    */
   result(): S | undefined;
   /**
-   * Resolves with the terminal State the first time the run reaches one (per the
-   * `terminal` predicate). If ALREADY terminal, resolves immediately; otherwise
-   * on the transition that first makes `terminal` hold. The awaitable companion
-   * to `result()`. With no predicate this never resolves. Idempotent and
-   * multi-caller safe.
+   * Resolves with the terminal State only once it is saved (per the `terminal`
+   * predicate). If ALREADY saved and terminal, resolves immediately; otherwise
+   * on that terminal commit. Rejects with the save failure if a terminal State
+   * cannot be saved, for both waiting and later callers. Without a store,
+   * answers as soon as State is set. The awaitable companion to `result()`.
+   * With no predicate this never resolves. Idempotent and multi-caller safe.
    */
   done(): Promise<S>;
 }

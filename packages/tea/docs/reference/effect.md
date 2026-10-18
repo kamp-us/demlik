@@ -294,13 +294,20 @@ interface EffectRuntime<S, M extends { type: string }, E extends { type: string 
    * failure when a boot Cmd fails with one.
    */
   readonly ready: Effect<EffectRuntime<S, M, E, Err>, StoreFailed | Err>;
-  /** Succeeds with the terminal State the first time the run reaches one. */
-  done(): Effect<S>;
+  /**
+   * Succeeds with the terminal State only once it is saved. A failed terminal
+   * save fails with `StoreFailed` (`operation: "save"`), for waiting and later
+   * callers. Without a store, answers as soon as State is set.
+   */
+  done(): Effect<S, StoreFailed>;
   /** The current State. Total. */
   getState(): S;
   /** Succeeds once every dispatched Msg and its follow-ups are processed. */
   idle(): Effect<void>;
-  /** The terminal State, or `undefined` while the run is in flight. */
+  /**
+   * The saved terminal State, or `undefined` while its save is pending or failed.
+   * Without a store, answers as soon as State is set.
+   */
   result(): S | undefined;
 }
 ```

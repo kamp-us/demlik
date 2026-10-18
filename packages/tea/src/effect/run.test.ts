@@ -477,7 +477,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
     expectTypeOf<Booted["idle"]>().returns.toEqualTypeOf<Effect.Effect<void>>();
     expectTypeOf<Booted["stop"]>().returns.toEqualTypeOf<Effect.Effect<void>>();
     expectTypeOf<Booted["done"]>().returns.toEqualTypeOf<
-      Effect.Effect<PingModel>
+      Effect.Effect<PingModel, StoreFailed>
     >();
   });
 
