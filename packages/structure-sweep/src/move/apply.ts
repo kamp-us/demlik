@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import type { SourceFile } from "ts-morph";
+import { dirname, join, relative, resolve } from "node:path";
+import { type Project, type SourceFile, ts } from "ts-morph";
 import { absurd } from "../absurd.js";
 import {
   exactRenames,
@@ -66,9 +66,18 @@ const specifiersOf = (sf: SourceFile) =>
 const differing = (before: readonly string[], after: readonly string[]) =>
   before.reduce((n, spec, i) => n + (after[i] === spec ? 0 : 1), 0);
 
+/**
+ * A path with a TypeScript extension. Only {@link staleRefs} reads it, to pick the rows whose
+ * old path may still be spelled as a plain relative string beside them; which rows ts-morph moves
+ * is decided in {@link planRewrite} by whether the move project holds the file as a module.
+ */
+const TS_EXTENSION = /\.[cm]?tsx?$/;
+
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
 function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
   const hits = new Set<string>();
+  for (const row of moved.filter((r) => !TS_EXTENSION.test(r.from)))
+    for (const line of relativeRefs(repoRoot, row.from)) hits.add(line);
   for (const { from } of moved) {
     const needle = from.replace(/\.tsx?$/, "");
     let out = "";
@@ -80,6 +89,36 @@ function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
     for (const line of out.split("\n").filter(Boolean)) hits.add(line);
   }
   return [...hits].sort();
+}
+
+const QUOTED_RELATIVE = /["'`](\.\.?\/[^"'`\n]+)["'`]/g;
+
+/**
+ * Lines holding a quoted relative path that, read from the directory of the file it is written in,
+ * still names `from` — a `new URL("./run.sh", import.meta.url)` beside a script that moved. The
+ * repo-relative grep in {@link staleRefs} cannot see these, since they spell only the file's name.
+ */
+function relativeRefs(repoRoot: string, from: string): string[] {
+  const name = from.split("/").at(-1) ?? from;
+  let out = "";
+  try {
+    out = git(repoRoot, ["grep", "-n", "-z", "-F", name, "--", ":!*.md"]);
+  } catch {
+    return [];
+  }
+  const hits: string[] = [];
+  for (const record of out.split("\n").filter(Boolean)) {
+    const [path, line, ...rest] = record.split("\0");
+    if (path === undefined || line === undefined) continue;
+    const text = rest.join("\0");
+    const dir = dirname(join(repoRoot, path));
+    const names = [...text.matchAll(QUOTED_RELATIVE)].some(
+      ([, literal]) =>
+        literal !== undefined && resolve(dir, literal) === join(repoRoot, from),
+    );
+    if (names) hits.push(`${path}:${line}:${text}`);
+  }
+  return hits;
 }
 
 type Ledger = {
@@ -262,6 +301,42 @@ function renamedTree(repoRoot: string, rows: readonly PathMove[]): Exists {
     destinations.has(path) || (!sources.has(path) && existsSync(path));
 }
 
+const relativeSpecifier = (fromDir: string, to: string) => {
+  const rel = relative(fromDir, to);
+  return rel.startsWith(".") ? rel : `./${rel}`;
+};
+
+/**
+ * Point every module specifier that named a moved non-TypeScript file (a `.json` fixture, say) at
+ * its new path. ts-morph cannot move such a file, so it rewrites none of its importers; each
+ * specifier is read as it was written before any move, from the directory its file sat in then,
+ * and re-derived from the directory that file sits in now.
+ */
+function repointOtherFiles(
+  project: Project,
+  repoRoot: string,
+  rows: readonly PathMove[],
+  before: ReadonlyMap<SourceFile, { readonly specifiers: readonly string[] }>,
+  dirBefore: ReadonlyMap<SourceFile, string>,
+): void {
+  if (rows.length === 0) return;
+  const destination = new Map(
+    rows.map((r) => [join(repoRoot, r.from), join(repoRoot, r.to)]),
+  );
+  for (const sf of project.getSourceFiles()) {
+    const written = before.get(sf)?.specifiers;
+    const dir = dirBefore.get(sf);
+    if (written === undefined || dir === undefined) continue;
+    const now = dirname(sf.getFilePath());
+    moduleLiterals(sf).forEach((literal, i) => {
+      const was = written[i];
+      if (was === undefined || !was.startsWith(".")) return;
+      const to = destination.get(resolve(dir, was));
+      if (to !== undefined) literal.setLiteralValue(relativeSpecifier(now, to));
+    });
+  }
+}
+
 /**
  * Every file the import rewrite for `rows` changes, worked out in memory with nothing written.
  * ts-morph holds each row's file at its old path (reading it from its new one when an earlier run
@@ -298,13 +373,33 @@ function planRewrite(
       },
     ]),
   );
+  const dirBefore = new Map(
+    project.getSourceFiles().map((sf) => [sf, dirname(sf.getFilePath())]),
+  );
+  // ts-morph moves every row whose file the move project holds as a module (a `.js` under
+  // allowJs too) and rewrites its importers. A file the project cannot hold goes through the
+  // repoint path, and so does a JSON file: resolveJsonModule pulls it into the project, but
+  // ts-morph's move rewrites its importers wrong (dropping `.json`, keeping the old directory).
+  const held = (r: PathMove) => {
+    const sf = project.getSourceFile(join(repoRoot, r.from));
+    return sf !== undefined && sf.getScriptKind() !== ts.ScriptKind.JSON;
+  };
   applyMoves(
     project,
     scopeRoot,
-    rows.map((r) => [
-      relative(scopeRoot, join(repoRoot, r.from)),
-      relative(scopeRoot, join(repoRoot, r.to)),
-    ]),
+    rows
+      .filter(held)
+      .map((r) => [
+        relative(scopeRoot, join(repoRoot, r.from)),
+        relative(scopeRoot, join(repoRoot, r.to)),
+      ]),
+  );
+  repointOtherFiles(
+    project,
+    repoRoot,
+    rows.filter((r) => !held(r)),
+    before,
+    dirBefore,
   );
   const healed = heal(
     project.getSourceFiles(),
