@@ -519,9 +519,23 @@ one package it is relative. That covers a moved file's own imports back into the
 
 A row whose destination no `exports` entry of its new package reaches is refused before either
 commit, naming the row and the package, since nothing could import the file there. So is a moved
-file's import of a file its old package does not export. Apply writes specifiers only: the
-importing package's `package.json` dependency is not added. A repository with no
-`pnpm-workspace.yaml` is one package, so nothing there changes.
+file's import of a file its old package does not export.
+
+Each package whose files now import another workspace package gains `"<name>": "workspace:*"` in
+its `package.json` `dependencies`, unless it already names that package in any dependency field.
+Apply then runs `pnpm install --lockfile-only` and puts the updated `pnpm-lock.yaml` in the rewrite
+commit with the `package.json` edits; the report lists them under `dependenciesAdded`. Both are
+worked out before the rename commit, so these refusals leave `HEAD` and the tree unchanged:
+
+- an added dependency that closes a cycle between workspace packages, named as the chain of
+  packages (`@scope/a -> @scope/b -> @scope/a`), since pnpm could not order them;
+- a dependency to add with no `pnpm` on `PATH`;
+- `pnpm install --lockfile-only` failing.
+
+A manifest that adds no dependency never runs pnpm, so its commits stay a function of `HEAD` and
+the manifest; one that adds a dependency takes its lockfile from the installed pnpm. Apply adds
+only `workspace:*` dependencies: an npm package a moved file imports is not added to its new
+package. A repository with no `pnpm-workspace.yaml` is one package, so nothing there changes.
 
 ### `structure-sweep score`
 

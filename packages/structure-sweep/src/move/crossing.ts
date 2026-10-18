@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { SourceFile } from "ts-morph";
+import type { PackageEdge } from "./dependencies.js";
 import {
   type ExportEntry,
   exportEntries,
@@ -126,18 +127,20 @@ export const describeUnreachable = (
  * relative one keeps what the move wrote. Bare specifiers are resolved in the tree before the
  * renames (`before`), since ts-morph left them naming the old paths; relative ones in the tree
  * after (`after`), since ts-morph already rewrote them. Returns the imports no `exports` entry
- * carries across, which the caller refuses rather than writes.
+ * carries across, which the caller refuses rather than writes, and the package edge of every import
+ * it carried across, which the importing package must now declare.
  */
 export function rewriteCrossings(
   sourceFiles: readonly SourceFile[],
   rows: readonly MoveRow[],
   before: PackageTree,
   after: PackageTree,
-): Unreachable[] {
+): { readonly unreachable: Unreachable[]; readonly edges: PackageEdge[] } {
   const at = (path: string) => join(after.repoRoot, path);
   const movedTo = new Map(rows.map((r) => [at(r.from), at(r.to)]));
   const landed = new Map(rows.map((r) => [at(r.to), r]));
   const unreachable: Unreachable[] = [];
+  const edges: PackageEdge[] = [];
   for (const sf of sourceFiles) {
     const importer = sf.getFilePath();
     const home = after.packageAt(importer);
@@ -159,12 +162,15 @@ export function rewriteCrossings(
         continue;
       }
       const specifier = after.specifierOf(target);
-      if (specifier === undefined)
+      if (specifier === undefined) {
         unreachable.push({ row, importer, target, pkg });
-      else if (specifier !== value) literal.setLiteralValue(specifier);
+        continue;
+      }
+      edges.push({ from: home, to: pkg });
+      if (specifier !== value) literal.setLiteralValue(specifier);
     }
   }
-  return unreachable;
+  return { unreachable, edges };
 }
 
 /** Every quoted string in a file — a cheap superset of its module specifiers. */
