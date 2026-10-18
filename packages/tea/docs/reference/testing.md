@@ -244,6 +244,6 @@ function step<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
   machine: Machine<S, M, C, U, Ctx>,
   loaded: NoInfer<S>,
   msg: NoInfer<M>,
-  ctx: NoInfer<Ctx>,
+  _ctx: NoInfer<Ctx>,
 ): readonly [S, readonly C[]]
 ```

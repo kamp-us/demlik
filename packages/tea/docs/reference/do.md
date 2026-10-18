@@ -1424,7 +1424,7 @@ interface RunStepLoopConfig {
 function sseFromAgentEvents<R, Frame>(
   runtime: {
     on<
-      K extends "BrainStarted" | "TurnSettled" | "ToolStarted" | "ToolSettled" | "ToolFailed" | "RunDone",
+      K extends "BrainStarted" | "RunDone" | "ToolFailed" | "ToolSettled" | "ToolStarted" | "TurnSettled",
     >(
       type: K,
       handler: (

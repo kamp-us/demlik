@@ -32,6 +32,11 @@ expect(cmds).toEqual([]); // this machine emits no effects
 Because the fold is pure, the same messages always produce the same `state` — so
 this test can never flake on timing.
 
+To test restored initialization, pass `loaded`. Init may transform that State
+and emit resume Cmds; `replay` collects those Cmds along with the update Cmds.
+To step an existing State without initializing it, use `step` or
+`bindMachine(...).step` from `@demlik/tea/testing`.
+
 ## 2. Or use the `@demlik/tea/testing` assertions
 
 `@demlik/tea/testing` wraps the common replay checks so a test reads as one line.
@@ -58,8 +63,10 @@ expectCmdEmitted(
 
 For a run whose messages you did not write by hand, record them off a live runtime
 with `@demlik/tea/parity`'s `recordRun` and re-fold the captured trace with its
-`goldenReplay`. It reconstructs the exact final Model with no model, tool, or
-clock calls — the same discipline `replay` uses, applied to a real production
-trace. That is how a stuck run becomes a diff at one field instead of a re-run;
+`goldenReplay`. It folds from the captured post-init State without calling
+init again or executing any commands. `replayTrace` from
+`@demlik/tea/persistence` uses the same captured-State fold and reports the
+first differing field. A trace without a captured starting State is refused;
+record the boot rather than trying to reconstruct it with fresh init. That is how a stuck run becomes a diff at one field instead of a re-run;
 [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
 record-then-replay loop.

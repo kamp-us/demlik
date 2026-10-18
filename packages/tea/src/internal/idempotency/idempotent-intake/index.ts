@@ -389,9 +389,8 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
    * Returns the same reference when nothing changed (no running item needed
    * re-arming) so the host can skip a redundant save.
    *
-   * Call once from a `boot` Msg the host dispatches after `run(...)` returns —
-   * never from `init`'s rehydrate branch (that branch must be a pure
-   * passthrough; see the substrate's `init` contract).
+   * Call once during restored init, returning its State and Cmds together,
+   * or from a deliberate host boot Msg after `ready`. Choose one resume path.
    */
   function boot(
     state: IntakeState<P, R>,

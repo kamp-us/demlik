@@ -3,9 +3,9 @@
 To prove a rewritten engine still behaves like the one it replaces, record a run
 off the old machine, re-fold that recording through the new one, and diff the two
 final states after normalizing away record-time noise. `@demlik/tea/parity` is
-thin packaging over three things you already have — `recorder` captures, `replay`
-re-folds, `trace-replay`'s `deepEqual` compares — plus the one genuinely new
-piece, `normalizeForParity`. What you get is a GO/NO-GO boolean per run.
+thin packaging over `recorder` for capture, `replayTrace` for update-only replay
+from the captured post-init State, `deepEqual` for comparison, and
+`normalizeForParity` for normalization. What you get is a GO/NO-GO boolean per run.
 
 ## 1. Record the golden run
 
@@ -55,15 +55,16 @@ artifact, not as the fixture the gate reads back.
 
 ## 3. Replay the same recording through both engines
 
-`goldenReplay` folds `loaded` + `msgs` through `init` and `update` only — no
-`interpret`, no `Store`, no subscription. It takes a live `Recording` handle or a
-bare `Trace`, and `ctx` is the environment supplied fresh at replay time:
+`goldenReplay` starts from the captured post-init State in `loaded` and folds
+`msgs` through `update` only. It calls no `init`, handlers, Store operations or
+Sub runners. It takes a live `Recording` handle or a bare `Trace`; `ctx` is an
+unused optional legacy argument, so omit it:
 
 ```ts
 import { goldenReplay } from "@demlik/tea/parity";
 
-const oldState = goldenReplay(auditMachine, golden, ctx);
-const newState = goldenReplay(auditMachineV2, golden, ctx);
+const oldState = goldenReplay(auditMachine, golden);
+const newState = goldenReplay(auditMachineV2, golden);
 ```
 
 Both sides consume the *same* input sequence, so any difference in the two
@@ -121,7 +122,7 @@ for (const [k, step] of (golden.steps ?? []).entries()) {
     msgs: golden.msgs.slice(0, k + 1),
     finalState: step.state,
   };
-  if (!parityEqual(normalize(goldenReplay(machineV2, prefix, ctx)), normalize(step.state))) {
+  if (!parityEqual(normalize(goldenReplay(machineV2, prefix)), normalize(step.state))) {
     throw new Error(`parity broke at msg ${k}: ${step.msg.type}`);
   }
 }

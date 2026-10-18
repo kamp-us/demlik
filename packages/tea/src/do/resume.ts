@@ -14,22 +14,8 @@ import {
 import type { RunHandle } from "../index";
 import type { DurableCommandCarrier } from "./deferred-gateway";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// bootResume + agentIsResumable + autoBoot — cold-wake resume on rehydrate (seam B).
-//
-// A run that loaded from storage mid-loop must re-fire its one outstanding
-// effect. `bootResume` is the GENERALIZED helper (issue #231): after
-// `runtime.ready`, it derives a single resume Msg from the rehydrated State via
-// a caller-supplied `ResumePort` and dispatches it exactly once — a no-op on a
-// fresh DO. `autoBoot` is the AGENT specialization of it (the `agentIsResumable`
-// predicate + the `agentBootMsg` typed port, issue #60), so no divergent second
-// resume pattern is left standing.
-//
-// It leans on the init-purity contract (Invariant 2, enforced by `replay` in
-// `../index`): `init(loaded)` returns ZERO Cmds on rehydrate, so effects never
-// re-fire from boot — `bootResume`, NOT `init`, is the boot-effect hook. See
-// `.patterns/tea-do/recovery.md`.
-// ─────────────────────────────────────────────────────────────────────────────
+// Optional host-message resume. Machines that need a first move ahead of Sub
+// messages return resume Cmds and an in-flight State directly from init.
 
 /**
  * The typed cold-wake resume port `bootResume` fires through — the agent's
@@ -53,6 +39,11 @@ export interface ResumePort<S, M extends { type: string }> {
  * no-op. Call once right after building the runtime; it standardizes the
  * hand-written `if (isResumable(state)) await runtime.dispatch(bootMsg(now()))`
  * every DO-hosted machine otherwise re-derives.
+ *
+ * Use this when the host deliberately supplies a Msg after boot, including
+ * the existing agent boot protocol. Subs are already open after `ready`; this
+ * helper cannot order resume ahead of their Msgs. Prefer restored init Cmds
+ * when the machine owns its first move, and do not resume the same work twice.
  *
  * `await ready` is the single boot gate (issue #45): `getState()` is total only
  * on the booted handle, so state cannot be inspected before boot populates
@@ -98,7 +89,7 @@ export function agentIsResumable<
  * resumable, a no-op on a fresh DO. Wires the agent slice's `agentIsResumable`
  * predicate + the agent-owned `agentBootMsg` typed port into the
  * generalized helper, so the resume dispatch lives in ONE place — see
- * `bootResume`'s docblock for the boot-gate / init-purity rationale.
+ * `bootResume`'s docblock for the post-boot ordering boundary.
  *
  * `now` is injected (the host's only clock read for boot) so a test can pin it.
  */

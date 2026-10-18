@@ -57,7 +57,7 @@ function MsgLog(__namedParameters: MsgLogProps): Element
 ```ts
 type MsgLogEntry = {
   /** Visual category — drives the row icon. Defaults to "msg" via CSS. */
-  kind?: "msg" | "sub" | "cmd" | "ok" | "fail";
+  kind?: "cmd" | "fail" | "msg" | "ok" | "sub";
   /** Row text — usually the Msg tag plus a short detail. */
   text: string;
   /** Display timestamp (whatever format you produced). */
@@ -87,7 +87,7 @@ interface StateChange {
   /** The value on the `expected` side (`undefined` when `added`). */
   expected: unknown;
   /** How the cell differs between the two states. */
-  kind: "changed" | "added" | "removed";
+  kind: "added" | "changed" | "removed";
   /** Access path from the state root, e.g. `state.items[1].status`. */
   path: string;
 }

@@ -1,34 +1,6 @@
-// ---------------------------------------------------------------------------
-// recorder — capture a Runtime's Msg sequence for later replay.
-//
-// `historyTracker` (in ../index) is the exemplar: a BOUNDED, in-memory ring
-// buffer over `runtime.observe`. The recorder is its UNBOUNDED, SERIALIZABLE
-// cousin. Where historyTracker exists to answer "what were the last N
-// transitions?", the recorder exists to answer "reproduce this entire run
-// locally against the current reducer."
-//
-// The killer feature this enables: record a prod Msg sequence, dump it as
-// JSONL, ship the file home, and feed it to `../trace-replay`'s `replayTrace`
-// — which folds the SAME msgs through `replay(machine, ...)` and diffs the
-// resulting state against the recorded final state. If they diverge, the
-// reducer changed behavior for that input. Regression-as-a-trace.
-//
-// What `replay` needs to reproduce a run (see `replay` in ../index):
-//   - `loaded`   — the value `init` was booted with. Captured at the boot
-//                  observe, where `msg === null` and `state` is the post-init
-//                  initial state. (We capture the post-init state, not the raw
-//                  storage value, because replay re-runs `init(loaded, ctx)`
-//                  itself — and for a faithful re-run we feed it that initial
-//                  state as `loaded` so `init` returns `[loaded, []]`. This is
-//                  the rehydrate path, which the substrate guarantees is a pure
-//                  passthrough; see Invariant 2.)
-//   - `msgs`     — every non-null msg, in dispatch order.
-//   - `ctx`      — NOT captured here. Ctx is host wiring (sibling runtimes,
-//                  clients), supplied fresh at replay time. The trace is the
-//                  INPUT (loaded + msgs); ctx is the ENVIRONMENT.
-//
-// This module OWNS the `Trace` type. `../trace-replay` imports it.
-// ---------------------------------------------------------------------------
+// Capture the post-init State and applied Msg sequence for update-only replay.
+// `loaded` is the replay anchor, not the raw value read from the Store.
+// `trace-replay` folds from it without init, handlers or host context.
 
 import type { BootingRuntime } from "../../../index";
 
@@ -43,10 +15,9 @@ import type { BootingRuntime } from "../../../index";
  */
 export interface Trace<S, M> {
   /**
-   * The initial state captured at the boot observe (the transition where
-   * `msg === null`). Fed back to replay as `loaded` so `init(loaded, ctx)`
-   * reproduces the exact starting point. `null` only if the recorder attached
-   * AFTER boot (it missed the boot observe) — replay then re-runs fresh `init`.
+   * The post-init State captured by `onBoot`, used directly as the recorded
+   * replay's starting State. No init call is repeated. `null` marks a missing
+   * anchor in an older or incomplete trace; `replayTrace` refuses it.
    */
   readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */
@@ -210,8 +181,7 @@ export function recorder<S, M extends { type: string }>(
   const captureSteps = opts?.captureSteps ?? false;
 
   // `loaded` is the post-init state captured at the boot observe. `undefined`
-  // sentinel = boot not yet seen; resolved to `S | null` in dump() (null when
-  // the recorder attached after boot and never observed msg === null).
+  // sentinel = boot not yet seen; a trace without that anchor cannot replay.
   let loaded: S | undefined;
   let sawBoot = false;
   // The ordered, recorded msgs. Unbounded (the recorder's whole point vs the
@@ -260,7 +230,7 @@ export function recorder<S, M extends { type: string }>(
       }
       return {
         // sawBoot ⇒ `loaded` is the captured boot state; otherwise the
-        // recorder attached post-boot and replay must re-run fresh init.
+        // trace has no replay anchor and replayTrace will refuse it.
         loaded: sawBoot ? (loaded as S) : null,
         msgs: msgs.slice(),
         finalState,

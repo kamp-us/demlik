@@ -67,35 +67,54 @@ interface Started {
 
 const engines: Record<
   "Promise" | "Effect",
-  (store?: Store<State>, work?: Promise<void>) => Promise<Started>
+  (
+    store?: Store<State>,
+    work?: Promise<void>,
+    init?: typeof machine.init,
+  ) => Promise<Started>
 > = {
-  Promise: async (store, work = Promise.resolve()) => {
+  Promise: async (store, work = Promise.resolve(), init = machine.init) => {
     const reports: unknown[] = [];
-    const rt = await runPromise(machine, {
-      store,
-      terminal: (state) => state.type === "done",
-      onError: (error) => reports.push(error),
-      interpret: { work: () => work },
-    }).ready;
-    return { rt, reports, completionFailures: [], close: () => rt.stop() };
+    const booting = runPromise(
+      { ...machine, init },
+      {
+        store,
+        terminal: (state) => state.type === "done",
+        onError: (error) => reports.push(error),
+        interpret: { work: () => work },
+      },
+    );
+    try {
+      const rt = await booting.ready;
+      return { rt, reports, completionFailures: [], close: () => rt.stop() };
+    } catch (error) {
+      await booting.stop();
+      throw error;
+    }
   },
-  Effect: async (store, work = Promise.resolve()) => {
+  Effect: async (store, work = Promise.resolve(), init = machine.init) => {
     const reports: unknown[] = [];
     const completionFailures: StoreFailed[] = [];
     const scope = await Effect.runPromise(Scope.make());
     const rt = await settle(
       Scope.provide(scope)(
         Effect.flatMap(
-          runEffect(machine, {
-            store,
-            terminal: (state) => state.type === "done",
-            onError: (error) => reports.push(error),
-            interpret: { work: () => Effect.promise(() => work) },
-          }),
+          runEffect(
+            { ...machine, init },
+            {
+              store,
+              terminal: (state) => state.type === "done",
+              onError: (error) => reports.push(error),
+              interpret: { work: () => Effect.promise(() => work) },
+            },
+          ),
           (booting) => booting.ready,
         ),
       ),
-    );
+    ).catch(async (error: unknown) => {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+      throw error;
+    });
     expectTypeOf(rt.done()).toEqualTypeOf<Effect.Effect<State, StoreFailed>>();
     return {
       rt: {
@@ -120,8 +139,8 @@ const engines: Record<
   },
 };
 
-function slowStore(failure?: Error) {
-  const inner = memoryStore<State>();
+function slowStore(failure?: Error, loaded?: State) {
+  const inner = memoryStore<State>(loaded);
   const entered = hold();
   const delayed = hold();
   const finish = hold();
@@ -260,6 +279,70 @@ describe.each(
     } finally {
       work.release();
       await close();
+    }
+  });
+
+  it("holds restored terminal boot and its completion reads until the delayed save succeeds", async () => {
+    const slow = slowStore(undefined, { type: "working" });
+    const init = vi.fn(
+      (loaded: State | null): readonly [State, readonly Cmd[]] => {
+        expect(loaded).toEqual({ type: "working" });
+        return [{ type: "done" }, []];
+      },
+    );
+    const starting = start(slow.store, undefined, init);
+    const readings: State[] = [];
+    const completion = starting.then(async ({ rt }) => {
+      const result = rt.result();
+      if (result !== undefined) readings.push(result);
+      readings.push(await rt.done());
+      return slow.store.load();
+    });
+    try {
+      await slow.entered.promise;
+      await slow.delayed.promise;
+      expect(readings).toEqual([]);
+      expect(await slow.store.load()).toEqual({ type: "working" });
+      slow.finish.release();
+      expect(await completion).toEqual({ type: "done" });
+      expect(readings).toEqual([{ type: "done" }, { type: "done" }]);
+      expect(init).toHaveBeenCalledTimes(1);
+    } finally {
+      slow.finish.release();
+      await (await starting).close();
+    }
+  });
+
+  it("rejects restored terminal boot when its save fails", async () => {
+    const failure = new Error("restored terminal save refused");
+    const slow = slowStore(failure, { type: "working" });
+    const init: typeof machine.init = (loaded) => {
+      expect(loaded).toEqual({ type: "working" });
+      return [{ type: "done" }, []];
+    };
+    const starting = start(slow.store, undefined, init).then(
+      async ({ close }) => {
+        await close();
+        return undefined;
+      },
+      (error: unknown) => error,
+    );
+    try {
+      await slow.entered.promise;
+      await slow.delayed.promise;
+      expect(await slow.store.load()).toEqual({ type: "working" });
+      slow.finish.release();
+      const error = await starting;
+      if (engine === "Effect") {
+        expect(error).toBeInstanceOf(StoreFailed);
+        expect(error).toMatchObject({ operation: "save", cause: failure });
+      } else {
+        expect(error).toBe(failure);
+      }
+      expect(await slow.store.load()).toEqual({ type: "working" });
+    } finally {
+      slow.finish.release();
+      await starting;
     }
   });
 

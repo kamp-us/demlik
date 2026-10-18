@@ -479,8 +479,8 @@ async function act3Replay() {
   );
 
   // --- DEBUG LOCALLY: replay the trace against the SAME machine — no I/O. ---
-  // `replayTrace` re-folds the recorded msgs through `init + update` only:
-  // never `interpret`, so the fake model + tools are NEVER called again.
+  // `replayTrace` folds recorded msgs from the captured post-init State through
+  // update only. Init and the fake model + tool handlers are never called again.
   const sameMachine = makeAgent({ i: 0 }).toMachine<object>({
     toolInterpret: toolInterpret(),
   }).machine;

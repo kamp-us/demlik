@@ -1,12 +1,16 @@
 ---
 id: 0006
 title: Client-prediction fold seam + runtime-free import boundary
-status: accepted
+status: amended-in-part by [0028](0028-restored-init-may-resume.md)
 date: 2026-06-27
 tags: []
 ---
 
 # 0006 — Client-prediction fold seam + runtime-free import boundary
+
+**Restored initialization is amended by [0028](./0028-restored-init-may-resume.md):**
+the init-passthrough requirement and replay throw described below are historical.
+The client-prediction seam and runtime-free boundary still stand.
 
 **Amended in part by the closing sweep (#51):** the `@demlik/tea/pure` **subpath**
 is closed — the runtime-free surface publishes as named exports of the root

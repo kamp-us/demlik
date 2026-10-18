@@ -1363,7 +1363,7 @@ type RunCmdDef<I, R, N extends string = DefaultResilientName> = ReturnType<typeo
 ### `RunErr`
 
 ```ts
-type RunErr = TaggedError<"port_rejected" | "deadline_exceeded">
+type RunErr = TaggedError<"deadline_exceeded" | "port_rejected">
 ```
 
 <a id="set"></a>

@@ -258,7 +258,7 @@ function replayTrace<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
-  ctx: Ctx,
+  _ctx?: Ctx,
 ): ReplayResult<S>
 ```
 
@@ -304,9 +304,9 @@ interface SnapshotKnob<V> {
    * un-checkpointed progress accumulated before the crash is moot — recovery
    * resumes from the last DURABLE checkpoint, so the cadence counter starts
    * fresh from there. `seq` / `lastSavedSeq` / `lastSavedAt` are preserved
-   * (they describe what is durable, which a reload does not change). Call from
-   * a `boot` Msg the host dispatches once after `run(...)`, never from `init`'s
-   * rehydrate branch (invariant 2).
+   * (they describe what is durable, which a reload does not change). A pure
+   * restored `init` may use this to return resume State and Cmds. A host `boot`
+   * Msg after `run(...)` is an optional protocol; Subs are already open then.
    *
    * Returns the reducer-cell shape `readonly [SnapshotState, readonly Cmd[]]`
    * (with `Cmd.none` — a resume emits nothing) so it drops straight into a
@@ -379,8 +379,9 @@ interface SnapshotKnob<V> {
    * `snapshot_load` Cmd carrying the configured `key`; returns the slice
    * UNCHANGED (a read decides nothing about the cadence bookkeeping — only the
    * later `snapshot_load_ok` fold, via `boot`, touches the slice). This is the
-   * entry point of the recovery loop: the consumer dispatches a `boot` Msg once
-   * after `run(...)` and folds `requestLoad` there.
+   * entry point of the recovery loop: call from pure restored `init` to return
+   * resume State and the load Cmd, or from an optional host `boot` Msg after
+   * `run(...)`, when Subs are already open.
    */
   requestLoad(
     state: SnapshotState,
@@ -484,10 +485,9 @@ interface Trace<S, M> {
    */
   readonly finalState: S;
   /**
-   * The initial state captured at the boot observe (the transition where
-   * `msg === null`). Fed back to replay as `loaded` so `init(loaded, ctx)`
-   * reproduces the exact starting point. `null` only if the recorder attached
-   * AFTER boot (it missed the boot observe) — replay then re-runs fresh `init`.
+   * The post-init State captured by `onBoot`, used directly as the recorded
+   * replay's starting State. No init call is repeated. `null` marks a missing
+   * anchor in an older or incomplete trace; `replayTrace` refuses it.
    */
   readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */

@@ -841,7 +841,7 @@ class DispatchDiscardedError extends RuntimeDiscardNotice {
 ### `DispatchSettle`
 
 ```ts
-type DispatchSettle = "quiescent" | "once"
+type DispatchSettle = "once" | "quiescent"
 ```
 
 <a id="Dispose"></a>
@@ -1404,17 +1404,14 @@ type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> =
    * Boot the runtime. Called once by `run(...)` with whatever `Store.load()`
    * returned: `null` on fresh boot, the persisted state on rehydrate.
    *
-   * **Contract:** when `loaded !== null`, init MUST return `[loaded, []]` —
-   * no Cmds. Init's rehydrate branch is the migration / parse boundary, not
-   * the boot-effect hook. See Invariant 2 in `.patterns/tea/tea-invariants.md`.
+   * Both fresh and restored init may return a new State and Cmds. Init is
+   * pure: it describes effects; handlers perform them. The engine saves the
+   * returned State, reconciles its Subs, then runs its Cmds.
    *
-   * Boot effects routes:
-   *   - Stateless infrastructure → host module top, outside TEA.
-   *   - State-conditional resume → a `boot` Msg the host dispatches once
-   *     after `run(...)` returns.
-   *
-   * Violations are caught at runtime by `replay` (which throws with a
-   * pointer to the alternatives).
+   * Put state-conditional resume work here, with the in-flight phase in the
+   * returned State so a fast Sub cannot start it again. A host Msg sent after
+   * `ready` runs after Subs have opened and supplies no such ordering.
+   * Recorded replay starts from captured post-init State without calling init.
    */
   init: (loaded: S | null, ctx: Ctx) => readonly [S, readonly C[]];
   /**
@@ -1997,19 +1994,19 @@ interface RuntimeErrorContext {
 
 ```ts
 type RuntimeErrorPhase =
+  | "boot"
+  | "discard"
+  | "event"
   | "follow-up"
+  | "identity-drop"
   | "interpret"
-  | "stop-save"
-  | "reduce"
   | "listener"
   | "observer"
-  | "event"
-  | "boot"
   | "port-emit"
-  | "sub-cleanup"
+  | "reduce"
+  | "stop-save"
   | "sub"
-  | "discard"
-  | "identity-drop"
+  | "sub-cleanup"
 ```
 
 <a id="RuntimeRef"></a>
@@ -2256,7 +2253,7 @@ type Supervision<S, M extends { type: string }> =
 ### `SupervisionStrategy`
 
 ```ts
-type SupervisionStrategy = "stop" | "escalate" | "restart"
+type SupervisionStrategy = "escalate" | "restart" | "stop"
 ```
 
 <a id="SyncReturn"></a>

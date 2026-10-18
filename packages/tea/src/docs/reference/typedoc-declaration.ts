@@ -137,6 +137,14 @@ function operand(type: unknown, inside: "union" | "intersection"): string {
   return loose ? `(${printed})` : printed;
 }
 
+function unionOperands(type: Node): string[] {
+  const members = nodes(type.types);
+  const printed = members.map((member) => operand(member, "union"));
+  return members.every((member) => member.type === "literal")
+    ? printed.sort()
+    : printed;
+}
+
 function typeArguments(type: Node): string {
   const args = nodes(type.typeArguments);
   return args.length === 0 ? "" : `<${args.map(printType).join(", ")}>`;
@@ -185,9 +193,7 @@ export function printType(type: unknown): string {
     case "array":
       return `${tight(type.elementType)}[]`;
     case "union":
-      return nodes(type.types)
-        .map((t) => operand(t, "union"))
-        .join(" | ");
+      return unionOperands(type).join(" | ");
     case "intersection":
       return nodes(type.types)
         .map((t) => operand(t, "intersection"))
@@ -360,8 +366,8 @@ function aliasBody(type: unknown): string {
   const oneLine = printType(type);
   if (fitsOneLine(oneLine) || !isRecord(type) || type.type !== "union")
     return ` ${oneLine}`;
-  return nodes(type.types)
-    .map((t) => `\n  | ${nest(operand(t, "union"))}`)
+  return unionOperands(type)
+    .map((member) => `\n  | ${nest(member)}`)
     .join("");
 }
 

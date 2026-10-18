@@ -34,30 +34,26 @@ EventSourcedBehavior[Command, Event, State](persistenceId, emptyState, commandHa
 - The number of concurrent recoveries across the system is bounded
   (`akka.persistence.max-concurrent-recoveries`) so replay doesn't overload the data store.
 
-### The TEA mapping — `init` purity + `bootResume` (`@demlik/tea/do`)
+### The TEA mapping: restored init and recorded replay
 
-**When to use:** Every DO-hosted `@demlik/tea/do` machine. This is the concrete
-`@demlik/tea` shape of the two rules above: keep boot effects out of the replay
-fold, and run the one post-recovery resume effect through a single hook.
+On cold wake, `init(loaded, ctx)` may return resume Cmds and a new State. It
+stays pure: effects are described as data and run by handlers after the State
+is saved. Subs open for that returned State before its Cmds run, and their Msgs
+fold after init. Mark the work in flight in the returned State so a fast Sub
+cannot request it again. See [ADR 0028](../../.decisions/0028-restored-init-may-resume.md).
 
-- **`init` is the pure rehydrate boundary.** On cold wake the runtime calls
-  `init(loaded)`; when `loaded !== null` it MUST return `[loaded, []]` — zero
-  Cmds (Invariant 2, enforced by `replay` in `packages/tea/src/index.ts`, which
-  throws on a non-empty Cmd list). That is the `@demlik/tea` analogue of "the
-  event handler runs on replay but side effects must not": no effect re-fires
-  from boot.
-- **`bootResume` is the `RecoveryCompleted` analogue.** The state-conditional
-  resume — "after `runtime.ready`, if the rehydrated State is mid-loop, dispatch
-  the single resume Msg that re-derives the next step" — lives in `bootResume`
-  (`packages/tea/src/do/host.ts`, exported from `@demlik/tea/do`). It derives one
-  resume Msg from the loaded State via a caller-supplied `ResumePort` (an
-  `isResumable` predicate + a TYPED resume-Msg constructor) and dispatches it
-  exactly once; on a fresh DO it is a no-op. The agent host's `autoBoot` is the
-  agent specialization of it (predicate `agentIsResumable`, port `agentBootMsg`,
-  issue #60); a non-agent grain supplies its own port. Use `bootResume` rather
-  than re-hand-rolling the "after ready, if resumable, dispatch the resume Msg"
-  boilerplate — the two easy mistakes (emit a Cmd from `init`; forget the resume
-  dispatch) each silently break resume with no failure at boot.
+Recorded replay starts directly from the captured post-init State and folds
+messages without calling init. Event-store recovery likewise folds directly
+from a snapshot; with no snapshot it needs fresh init to establish the log's
+starting State. The live runtime then initializes the recovered State once
+for the new activation.
+
+`bootResume` (`packages/tea/src/do/resume.ts`, exported from `@demlik/tea/do`)
+remains useful when the host deliberately supplies a resume Msg after `ready`.
+Subs are already open at that point; it cannot order the first move before
+their Msgs. The agent specialization `autoBoot` serves the existing agent's
+host-message protocol. A custom machine resuming in init does not also send
+that resume Msg from its host.
 
 ### Suppressing side effects during replay
 
@@ -190,4 +186,4 @@ are explicitly non-standard.
 - [event-handler.md](./event-handler.md) — the pure fold that runs identically on persist and replay
 - [snapshotting.md](./snapshotting.md) — how snapshots are created to bound this replay
 - [event-sourcing.md](./event-sourcing.md) — where post-persist side effects belong instead of the fold
-- `bootResume` (`packages/tea/src/do/host.ts`) — the `@demlik/tea/do` post-recovery resume hook: `init` stays pure, `bootResume` dispatches the one cold-wake resume Msg (issue #231)
+- `bootResume` (`packages/tea/src/do/resume.ts`): optional host-message resume after `ready`; restored init is the machine-owned first move.

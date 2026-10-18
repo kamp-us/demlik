@@ -80,6 +80,80 @@ describe("printType — where precedence needs parentheses", () => {
   });
 });
 
+describe("printDeclaration — union ordering", () => {
+  it.each([
+    {
+      name: "inline literals",
+      values: ["save", "load"],
+      expected: 'type Operation = "load" | "save"',
+    },
+    {
+      name: "wrapped literals",
+      values: [
+        "waiting-for-the-restored-operation-to-complete",
+        "resuming-the-operation-from-the-saved-state",
+        "completed-the-operation-and-saved-the-result",
+      ],
+      expected: [
+        "type Operation =",
+        '  | "completed-the-operation-and-saved-the-result"',
+        '  | "resuming-the-operation-from-the-saved-state"',
+        '  | "waiting-for-the-restored-operation-to-complete"',
+      ].join("\n"),
+    },
+  ])("stabilizes $name across input order", ({ values, expected }) => {
+    for (const order of [values, [...values].reverse()]) {
+      expect(
+        printDeclaration("Operation", {
+          kind: KIND_TYPE_ALIAS,
+          type: {
+            type: "union",
+            types: order.map((value) => ({ type: "literal", value })),
+          },
+        }),
+      ).toBe(expected);
+    }
+  });
+
+  it.each([
+    {
+      name: "named members",
+      types: [ref("Working"), ref("Pending"), ref("Done")],
+      expected: "type Operation = Working | Pending | Done",
+    },
+    {
+      name: "mixed members",
+      types: [
+        { type: "literal", value: "save" },
+        ref("Failure"),
+        { type: "literal", value: "load" },
+      ],
+      expected: 'type Operation = "save" | Failure | "load"',
+    },
+    {
+      name: "wrapped named members",
+      types: [
+        ref("WaitingForTheRestoredOperationToComplete"),
+        ref("ResumingTheOperationFromTheSavedState"),
+        ref("CompletedTheOperationAndSavedTheResult"),
+      ],
+      expected: [
+        "type Operation =",
+        "  | WaitingForTheRestoredOperationToComplete",
+        "  | ResumingTheOperationFromTheSavedState",
+        "  | CompletedTheOperationAndSavedTheResult",
+      ].join("\n"),
+    },
+  ])("preserves the order of $name", ({ types, expected }) => {
+    expect(
+      printDeclaration("Operation", {
+        kind: KIND_TYPE_ALIAS,
+        type: { type: "union", types },
+      }),
+    ).toBe(expected);
+  });
+});
+
 describe("printDeclaration", () => {
   it("prints a function's parameters and return type, one line per overload", () => {
     const printed = printDeclaration("store", {

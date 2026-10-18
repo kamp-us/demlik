@@ -276,8 +276,8 @@ describe("machine wiring (replay through testing helpers)", () => {
   it("rehydrates a persisted slice without emitting boot Cmds", () => {
     const payload: Hook = { id: "evt_1", amount: 5 };
     const [loaded] = intake.receive(intake.init(), payload, 0, "q1");
-    // Replaying with a loaded snapshot and no msgs: init must be a pure
-    // passthrough (no Cmds) — `replay` throws otherwise.
+    // This fixture chooses passive restored init; its explicit boot Msg
+    // owns resume.
     h.expectFinalState({ msgs: [], loaded }, loaded);
   });
 });

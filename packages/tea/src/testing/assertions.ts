@@ -23,7 +23,13 @@
 // ---------------------------------------------------------------------------
 
 import { expect } from "vitest";
-import { type Cmd, type Machine, replay, type Sub } from "../index";
+import {
+  applyCellChecked,
+  type Cmd,
+  type Machine,
+  replay,
+  type Sub,
+} from "../index";
 
 // `NoInfer<T>` is the built-in TypeScript 5.4+ intrinsic that blocks
 // inference from a generic parameter at a position. We use it on `expected`
@@ -152,10 +158,8 @@ export function expectActiveSubs<
  * `[next, cmds]` can swap `reduce(state, msg)` for `step(machine, state, msg,
  * ctx)` without changing the assertion code.
  *
- * Internally a `replay` call with `loaded: prevState` and a single-element
- * `msgs` array. The cmds returned are exactly the cmds emitted by THIS msg
- * (init emits no cmds when `loaded` is provided, so the slice is the entire
- * array).
+ * Calls the update cell directly, without init or subscription derivation.
+ * The returned Cmds belong only to this message.
  *
  * Use when consumers want to walk a machine one msg at a time and assert per
  * step. For one-shot "final state after N msgs" assertions, prefer
@@ -171,8 +175,7 @@ export function step<
   machine: Machine<S, M, C, U, Ctx>,
   loaded: NoInfer<S>,
   msg: NoInfer<M>,
-  ctx: NoInfer<Ctx>,
+  _ctx: NoInfer<Ctx>,
 ): readonly [S, readonly C[]] {
-  const { state, cmds } = replay(machine, { msgs: [msg], ctx, loaded });
-  return [state, cmds] as const;
+  return applyCellChecked<S, M, C>(machine, loaded, msg);
 }

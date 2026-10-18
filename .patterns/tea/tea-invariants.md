@@ -96,24 +96,27 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 }
 ```
 
-**Init's rehydrate branch is bound by the same rule.**
+**Init is pure on fresh boot and rehydrate.**
 
-`machine.init(loaded, ctx)` returns `[state, []]` (no Cmds) whenever
-`loaded !== null`. Init is a state migration / parse boundary on rehydrate,
-not a boot-effect hook. Boot effects on rehydrate go through a `boot` Msg
-dispatched once after `run(...)` returns; stateless infrastructure that the
-machine doesn't own goes at the host module top.
+`machine.init(loaded, ctx)` may return a new State and Cmds whether `loaded`
+is null or non-null. Commands describe the resume work; handlers perform it.
+The engine saves the returned State, reconciles its Subs, then runs its Cmds.
+Set the returned State's phase to reflect the work started so a fast Sub's Msg
+cannot start it twice. Recorded replay folds the captured post-init State
+without calling init again, per [ADR 0028](../../.decisions/0028-restored-init-may-resume.md).
 
 ```ts
-// Forbids
+// Forbids: doing the effect during init.
+init: (loaded, ctx) => {
+  ctx.attachDebugger(loaded.tabId);
+  return [loaded, []];
+};
+
+// Permits: describe resume work and its in-flight State together.
 init: (loaded, ctx) =>
   loaded?.type === "auditing"
-    ? [loaded, [{ type: "attach_debugger", tabId: loaded.tabId }]]  // ✗
+    ? [{ ...loaded, type: "attaching" }, [{ type: "attach_debugger", tabId: loaded.tabId }]]
     : [loaded ?? initial, []];
-
-// Permits
-init: (loaded, ctx) =>
-  loaded === null ? [initial, []] : [loaded, []];
 ```
 
 **Note on `Date`** — `Date.now()` and `new Date()` (no args) read current
@@ -136,8 +139,8 @@ Date("...")` and read the value in the fold.
   interpret/config boundary is not flagged; ids/timestamps read from Msg payload
   are permitted.
 - Substrate: `update` return type forces a new `[S, C[]]`.
-- Substrate: `replay` throws if `init(loaded)` returns non-empty Cmds with
-  non-null `loaded` — catches the violation at the first test that runs.
+- Substrate: `replay` collects fresh or restored init Cmds without executing
+  them. Recorded replay and existing-State steps bypass init.
 
 ---
 

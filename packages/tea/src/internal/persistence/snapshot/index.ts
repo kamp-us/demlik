@@ -202,9 +202,10 @@ export type SnapshotWriteCmd<V> = CmdOf<ReturnType<typeof snapshotWriteDef<V>>>;
  * `err({ _tag: "snapshot_load_failed", … })`.
  *
  * Distinct from `snapshot_write`: a write carries a payload OUT to the store; a
- * load asks the store to hand a payload BACK. The consumer dispatches the
- * triggering Msg once on resume (a `boot` Msg, never `init`'s rehydrate branch —
- * invariant 2), folds the recovered payload into its run slice, then continues.
+ * load asks the store to hand a payload BACK. A pure restored `init` may return
+ * resume State and Cmds, including a load Cmd from `requestLoad`. A host `boot`
+ * Msg after `run(...)` is an optional protocol; Subs are already open then.
+ * Fold the recovered payload into the run slice, then continue.
  */
 export function snapshotLoadDef<V>() {
   return Cmd.define("snapshot_load", {
@@ -331,9 +332,9 @@ export interface SnapshotKnob<V> {
    * un-checkpointed progress accumulated before the crash is moot — recovery
    * resumes from the last DURABLE checkpoint, so the cadence counter starts
    * fresh from there. `seq` / `lastSavedSeq` / `lastSavedAt` are preserved
-   * (they describe what is durable, which a reload does not change). Call from
-   * a `boot` Msg the host dispatches once after `run(...)`, never from `init`'s
-   * rehydrate branch (invariant 2).
+   * (they describe what is durable, which a reload does not change). A pure
+   * restored `init` may use this to return resume State and Cmds. A host `boot`
+   * Msg after `run(...)` is an optional protocol; Subs are already open then.
    *
    * Returns the reducer-cell shape `readonly [SnapshotState, readonly Cmd[]]`
    * (with `Cmd.none` — a resume emits nothing) so it drops straight into a
@@ -345,8 +346,9 @@ export interface SnapshotKnob<V> {
    * `snapshot_load` Cmd carrying the configured `key`; returns the slice
    * UNCHANGED (a read decides nothing about the cadence bookkeeping — only the
    * later `snapshot_load_ok` fold, via `boot`, touches the slice). This is the
-   * entry point of the recovery loop: the consumer dispatches a `boot` Msg once
-   * after `run(...)` and folds `requestLoad` there.
+   * entry point of the recovery loop: call from pure restored `init` to return
+   * resume State and the load Cmd, or from an optional host `boot` Msg after
+   * `run(...)`, when Subs are already open.
    */
   requestLoad(
     state: SnapshotState,

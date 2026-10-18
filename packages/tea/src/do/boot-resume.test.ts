@@ -56,9 +56,8 @@ function makeWorker(effects: number[]) {
       cmd: {} as DoWorkCmd,
       ctx: {} as Record<never, never>,
     },
-    // Rehydrate branch is PURE (zero Cmds) per Invariant 2 — the effect is
-    // re-fired by `bootResume`, never by init. Fresh boot starts idle; work is
-    // kicked by a `begin` Msg, not a boot Cmd.
+    // This fixture deliberately uses the host-message resume protocol.
+    // Its init is passive; `bootResume` reissues the outstanding work.
     init: (loaded) => [loaded ?? FRESH, []],
     update: {
       begin: (s) => [{ ...s, inFlight: true }, [{ type: "do_work" }]],
@@ -133,7 +132,7 @@ describe("bootResume — cold-wake resume for a non-agent durable machine (#231)
     await runtime.stop();
   });
 
-  it("without bootResume, a rehydrated machine stays stuck — init emits zero Cmds (Invariant 2)", async () => {
+  it("a machine choosing passive init waits for its host resume Msg", async () => {
     const effects: number[] = [];
     const evicted: WorkerState = { done: 2, inFlight: true, resumedAt: null };
     const { machine, interpret } = makeWorker(effects);

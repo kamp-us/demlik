@@ -13,7 +13,7 @@
  */
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { defineMachine, type Reducer, replay } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
 import { run } from "../promise";
@@ -21,8 +21,7 @@ import { doEventSourcedStore } from "./event-sourced-store";
 
 // ── A tiny counter machine with a few Msg variants. ─────────────────────────
 // State folds every Msg, so an arbitrary Msg sequence exercises a real fold
-// (not a no-op log). `init`'s rehydrate branch is a pure passthrough (TEA
-// invariant 2): a non-null `loaded` is returned as-is with no cmds.
+// (not a no-op log). This counter chooses passive restored initialization.
 
 interface State {
   readonly type: "counting";
@@ -56,6 +55,36 @@ function counter() {
 }
 
 const ctx: Record<string, never> = {};
+
+it("restores snapshot plus log before calling active init once at runtime boot", async () => {
+  const backing = new Map<string, string>();
+  await liveRun(
+    backing,
+    [
+      { type: "inc", by: 1 },
+      { type: "inc", by: 2 },
+      { type: "inc", by: 3 },
+    ],
+    2,
+  );
+  const init = vi.fn(
+    (loaded: State | null): readonly [State, readonly never[]] => {
+      if (loaded === null) throw new Error("expected recovered snapshot");
+      return [{ ...loaded, count: loaded.count + 100 }, []];
+    },
+  );
+  const machine = { ...counter(), init };
+  const { storage } = fakeStorage(backing);
+  const es = doEventSourcedStore(storage, machine, ctx);
+  const rt = await run(machine, { ctx, store: es.store }).ready;
+  try {
+    expect(rt.getState().count).toBe(106);
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(init.mock.calls[0]?.[0]?.count).toBe(6);
+  } finally {
+    await rt.stop();
+  }
+});
 
 // ── In-memory `DurableObjectStorage` fake. ──────────────────────────────────
 // Backs the three methods the store touches (get/put/list). The backing Map is

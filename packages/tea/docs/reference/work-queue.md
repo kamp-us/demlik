@@ -172,7 +172,7 @@ interface QueueItem<I> {
 ### `QueueItemStatus`
 
 ```ts
-type QueueItemStatus = "pending" | "running" | "done" | "failed" | "cancelled"
+type QueueItemStatus = "cancelled" | "done" | "failed" | "pending" | "running"
 ```
 
 <a id="removeOp"></a>

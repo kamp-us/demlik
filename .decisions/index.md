@@ -9,7 +9,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0003](./0003-do-targets-event-sourced-virtual-actors.md) | The DO host targets event-sourced virtual actors | Accepted | 2026-06-23 |
 | [0004](./0004-agent-context-compaction.md) | An opt-in context-compaction seam on `createAgent` | Accepted | 2026-06-23 |
 | [0005](./0005-web-timeline-player-hosting-and-render-primitive.md) | Web timeline player: hosting + render primitive | Accepted | 2026-06-24 |
-| [0006](./0006-client-prediction-fold-seam-and-pure-boundary.md) | Client-prediction fold seam + runtime-free import boundary | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md) | 2026-06-27 |
+| [0006](./0006-client-prediction-fold-seam-and-pure-boundary.md) | Client-prediction fold seam + runtime-free import boundary | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0028](./0028-restored-init-may-resume.md) | 2026-06-27 |
 | [0007](./0007-source-generated-diataxis-docs-factory.md) | Docs are a source-generated, drift-gated Diátaxis factory | Accepted | 2026-07-17 |
 | [0008](./0008-reference-drift-gate-fails-with-the-patch.md) | The reference drift gate fails with the patch, single-sourced | Accepted | 2026-07-17 |
 | [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental, showcases off the map | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0022](./0022-no-battery-layer-plain-functions.md) | 2026-07-17 |
@@ -29,6 +29,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0025](./0025-stop-gives-up-on-handlers.md) | `stop()` gives up on a Cmd handler that has not returned at `disposeTimeoutMs`, never waits for it without limit | Accepted | 2026-10-13 |
 | [0026](./0026-tea-owns-typed-ports-and-tell.md) | tea owns typed ports on a machine and a `tell` that never waits, never the program, the route graph or the registry | Accepted | 2026-10-13 |
 | [0027](./0027-one-impure-kind-and-one-word-per-concept.md) | code-graph reports one impure kind, and each concept has one word in code-graph and tea | Accepted | 2026-10-16 |
+| [0028](./0028-restored-init-may-resume.md) | Restored initialization may resume work | Accepted | 2026-10-18 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
