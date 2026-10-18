@@ -510,10 +510,18 @@ paths still written as plain text somewhere. A row whose source and destination 
 the run.
 
 Apply also reads the pnpm workspace: the `packages` globs in the repository's
-`pnpm-workspace.yaml`, and each matched package's `package.json`. A row that moves a file from one
-workspace package into another is refused before either commit, naming every such row and both
-packages, because the rewrite would write a relative path into the other package's sources. A
-repository with no `pnpm-workspace.yaml` is one package, so nothing there changes.
+`pnpm-workspace.yaml`, and each matched package's `package.json`. A row may move a file from one
+workspace package into another. Then the rewrite also loads every workspace package that imports a
+moved file, and each import the move touched is written to match where its two ends now sit:
+across a package line it becomes `<package name>/<subpath>`, the subpath read off the target
+package's `exports` (wildcard entries such as `"./api/*": "./dist/handlers/*.js"` included); inside
+one package it is relative. That covers a moved file's own imports back into the package it left.
+
+A row whose destination no `exports` entry of its new package reaches is refused before either
+commit, naming the row and the package, since nothing could import the file there. So is a moved
+file's import of a file its old package does not export. Apply writes specifiers only: the
+importing package's `package.json` dependency is not added. A repository with no
+`pnpm-workspace.yaml` is one package, so nothing there changes.
 
 ### `structure-sweep score`
 
