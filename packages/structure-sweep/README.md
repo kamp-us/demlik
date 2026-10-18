@@ -509,6 +509,12 @@ commits nothing and reports `lint: "untouched"`. It prints a JSON report, includ
 paths still written as plain text somewhere. A row whose source and destination both exist stops
 the run.
 
+Apply also reads the pnpm workspace: the `packages` globs in the repository's
+`pnpm-workspace.yaml`, and each matched package's `package.json`. A row that moves a file from one
+workspace package into another is refused before either commit, naming every such row and both
+packages, because the rewrite would write a relative path into the other package's sources. A
+repository with no `pnpm-workspace.yaml` is one package, so nothing there changes.
+
 ### `structure-sweep score`
 
 ```sh

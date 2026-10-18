@@ -22,6 +22,12 @@ import {
 import type { Manifest, MoveRow } from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
+import {
+  crossesPackages,
+  packageLabel,
+  placeRow,
+  readWorkspace,
+} from "./workspace.js";
 
 export type RowState =
   | { readonly kind: "pending"; readonly row: MoveRow }
@@ -308,7 +314,9 @@ function scopeSources(repoRoot: string, scope: string): string[] {
  * history; the second rewrites the imports that named the moved files, heals any specifier a move
  * left dangling and formats what changed. A pure function of HEAD and the manifest: over the same
  * HEAD it makes the same trees and messages. A re-run over a finished manifest commits nothing; one
- * over this manifest's rename commit alone makes the rewrite commit.
+ * over this manifest's rename commit alone makes the rewrite commit. A row that leaves one
+ * workspace package for another is refused before either commit, since the rewrite would write a
+ * relative path into the other package's sources.
  */
 export function applyManifest(
   repoRoot: string,
@@ -319,6 +327,14 @@ export function applyManifest(
   if (dirty.length > 0)
     throw new Error(
       `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
+    );
+  const workspace = readWorkspace(repoRoot);
+  const crossing = manifest.moves
+    .map((row) => placeRow(workspace, row))
+    .filter(crossesPackages);
+  if (crossing.length > 0)
+    throw new Error(
+      `rows move a file into another workspace package, which apply cannot carry yet; refusing before any commit:\n${crossing.map(({ row, from, to }) => `  ${row.from} -> ${row.to}  (${packageLabel(from)} -> ${packageLabel(to)})`).join("\n")}`,
     );
   const { pending, conflicts, absent, done } = classify(
     repoRoot,

@@ -44,6 +44,7 @@ catalog:
   vitest: ~5.0.1
   # openai@7.23.0 declares a `ws@^8.21.0` peer.
   ws: ^8.21.0
+  yaml: ^2.9.0
   zod: ^4.5.4
 
 catalogs:

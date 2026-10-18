@@ -47,6 +47,7 @@
     "oxc-resolver": "catalog:",
     "smol-toml": "catalog:",
     "ts-morph": "catalog:",
+    "yaml": "catalog:",
     "zod": "catalog:code-graph"
   },
   "devDependencies": {
