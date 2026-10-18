@@ -1,7 +1,7 @@
 ---
 id: 0026
 title: "tea owns typed ports on a machine and a `tell` that never waits, never the program, the route graph or the registry"
-status: accepted
+status: amended-in-part by [0029](0029-ports-live-at-program-layer.md)
 date: 2026-10-13
 tags: [tea, ports, tell, tuval, export-map]
 ---
