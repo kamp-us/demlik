@@ -113,13 +113,16 @@ Runtime B loads the saved count; it does not replay the earlier chunk messages.
 ### Resume pending commands
 
 This downloader counts incoming messages, so it waits for the next chunk after
-restore. A machine waiting on an API call needs a resume handler as well:
-keep the pending request's id and arguments in its Model, then have the host
-dispatch a boot message after `ready`. Its `update` cell issues the commands
-still needed. Keep `init(loaded)` as `[loaded, []]`.
+restore. For a machine waiting on an API call, keep the request id and arguments
+in its Model and return the needed Cmds from `init(loaded, ctx)`. Return a State
+that marks that work in flight too, so a fast Sub's Msg cannot request it again.
+The engine saves that State, opens its Subs, then runs the init Cmds; no host
+latch or resume dispatch is needed.
 
-`agent.run` handles this boot message automatically. Durable Object hosts can
-use [`bootResume`](../reference/do.md#bootResume) with their machine's resume port.
+Use [`bootResume`](../reference/do.md#bootResume) only when the host deliberately
+needs to supply a Msg after `ready`. Subscriptions are already open then, so it
+cannot put resume ahead of their Msgs. `agent.run` still handles its agent boot
+message automatically. Do not also dispatch that message for work init resumes.
 Handlers must tolerate a repeated attempt if their previous result was not
 saved; see [the repeated-effect window](../explanation/durability-model.md#effects-are-at-least-once).
 

@@ -2,10 +2,10 @@
  * the record → replay → normalized-diff go/no-go gate.
  *
  * The parity spike proved the mechanism already composes from in-tree
- * primitives: `recorder` captures a run's Msg sequence (the recording), `replay`
- * re-folds it purely, and `trace-replay`'s order-insensitive deep-equal diffs
+ * primitives: `recorder` captures the starting State and Msg sequence,
+ * `replayTrace` re-folds it purely, and `trace-replay`'s order-insensitive deep-equal diffs
  * the result. Non-determinism is a RECORD-TIME property — ids/timestamps freeze
- * into the recording, `replay` never re-mints them — so the same recording
+ * into the recording, `replayTrace` never re-mints them — so the same recording
  * replays byte-identical every time.
  *
  * This module is the thin packaging over that substrate plus the one genuinely
@@ -18,7 +18,7 @@
  *
  * ```text
  *   recordRun(runtime)            → Recording        // wraps the recorder
- *   goldenReplay(machine, rec)    → State            // wraps replay
+ *   goldenReplay(machine, rec)    → State            // wraps replayTrace
  *   normalizeForParity(schema)    → (finding) => norm // strip + stable-sort
  *   parityEqual(a, b)             → boolean           // normalized deep-equal
  * ```
@@ -27,13 +27,12 @@
  */
 
 import type { BootingRuntime, Cmd, Machine, Sub } from "../index";
-import { replay } from "../index";
 import {
   type RecorderOptions,
   recorder,
   type Trace,
 } from "../internal/persistence/recorder";
-import { deepEqual } from "../internal/persistence/trace-replay";
+import { deepEqual, replayTrace } from "../internal/persistence/trace-replay";
 
 /**
  * The two recorder types this module's own signatures name — `Trace` is what
@@ -89,15 +88,11 @@ export function recordRun<S, M extends { type: string }>(
 }
 
 /**
- * Reproduce a recording's final state by folding its msgs through the pure
- * `replay` — `init(loaded, ctx)` then `update` per msg, never `interpret`,
- * never a `Store`, never a live subscription. Accepts a live {@link Recording}
- * (snapshotted here) or a bare {@link Trace}.
+ * Reproduce a recording's final State by folding from its captured post-init
+ * State. Calls no init, handlers, Store operations or Sub runners. Accepts a
+ * live {@link Recording} or a bare {@link Trace}.
  *
- * `ctx` is the ENVIRONMENT supplied fresh at replay time (the trace is the
- * INPUT: `loaded` + `msgs`), mirroring `replayTrace`. It is optional so a
- * void-ctx machine can call `goldenReplay(machine, rec)`; a machine that reads
- * ctx passes it explicitly.
+ * `ctx` is an optional legacy argument; recorded replay needs no init context.
  */
 export function goldenReplay<
   S,
@@ -111,12 +106,7 @@ export function goldenReplay<
   ctx?: Ctx,
 ): S {
   const trace = asTrace(recording);
-  const { state } = replay(machine, {
-    msgs: trace.msgs,
-    ctx: ctx as Ctx,
-    loaded: trace.loaded,
-  });
-  return state;
+  return replayTrace(machine, trace, ctx).actual;
 }
 
 /** Narrow a `Recording | Trace` to a `Trace`, snapshotting a live recording. */

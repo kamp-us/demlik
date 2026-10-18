@@ -1344,7 +1344,9 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
  * Cmds emitted, and the Subs that would be running.
  *
  * It composes `init(loaded ?? null, ctx)` and then `update(state, msg)` for each
- * Msg. No Cmd handler is called, no `Store` is touched and no Sub is started.
+ * Msg. Restored init may change State and emit Cmds; those Cmds are collected
+ * alongside update Cmds. No handler, Store or Sub runner is called.
+ * Recorded traces instead use `replayTrace` to fold their captured post-init State.
  *
  * `subs` is each `machine.subs` entry that is on at the final state, as its
  * runner would see it: `{ id, type, deps }`, the id derived exactly as the
@@ -1369,20 +1371,6 @@ export function replay<
   // `init(null, ctx)`.
   const loaded = opts.loaded ?? null;
   const [initialState, initCmds] = machine.init(loaded, opts.ctx);
-
-  if (loaded !== null && initCmds.length > 0) {
-    throw new Error(
-      "TEA contract violation: machine.init must return [state, []] (no Cmds) " +
-        "when `loaded` is non-null. Init's rehydrate branch is a pure state " +
-        "passthrough — the migration/parse boundary, not the boot-effect hook.\n\n" +
-        "Routes for boot effects:\n" +
-        "  - Stateless infrastructure (e.g. chrome.alarms ensure) → host module " +
-        "top level, outside TEA.\n" +
-        "  - State-conditional resume (e.g. re-attach a session) → a `boot` Msg " +
-        "dispatched once from the host after `run(...)` returns, handled in update.\n\n" +
-        "See .patterns/tea/tea-invariants.md (Invariant 2).",
-    );
-  }
 
   // `replay` and `foldMsgs` share ONE internal fold (`foldUpdates`), keyed on
   // `formOf` — the same reader `run` uses — so all three agree on the

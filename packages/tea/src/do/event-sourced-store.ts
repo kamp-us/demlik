@@ -17,9 +17,9 @@
  *      replay bounded by ELAPSED TIME/TICKS rather than raw event count drives
  *      `snapshotNow()` instead (or alongside) — see that method.
  *   3. On activation REBUILDS state by FOLDING the log on top of the latest
- *      snapshot. The fold is the substrate's own `replay` — `init(snapshot)`
- *      then one reducer step per logged Msg. `replay` returns Cmds as data and
- *      never interprets them, so **side effects are suppressed on replay**
+ *      snapshot. The fold starts directly from a snapshot; without one it
+ *      starts from fresh init. One reducer step per logged Msg follows, with
+ *      no Cmd handlers executed: **side effects are suppressed on replay**
  *      (recovery.md). This is the same primitive `foldEvents` / the recorder
  *      use; it is reused here, not reinvented (ADR 0003: "the fold already
  *      exists; wire it to Store").
@@ -53,7 +53,7 @@
  */
 
 import type { Cmd, Machine, Store, Sub } from "../index";
-import { replay } from "../index";
+import { foldMsgs, replay } from "../index";
 
 /** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
 const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
@@ -232,12 +232,10 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
  * count-based snapshot is taken. The cooperating DO additionally calls
  * `append(msg)` from `runtime.observe` to grow the log.
  *
- * `machine` and `ctx` are required because the fold is `replay(machine, {
- * loaded: snapshot, msgs: log, ctx })` — the same pure reducer the live runtime
- * uses, so the rebuilt state is identical to the never-evicted state by
- * construction. `ctx` is only used to satisfy `init`'s signature during the
- * fold; an event-sourced machine's `init` rehydrate branch is a pure
- * passthrough (TEA invariant 2), so the fold touches nothing in `ctx`.
+ * Snapshot recovery folds update directly from the captured State; it does
+ * not initialize that State again. With no snapshot, `ctx` supplies the fresh
+ * init used to establish the event log's starting State. Live resume commands
+ * belong to the runtime's subsequent init over the recovered State.
  */
 // Cmd/Sub are INFERRED type params (`C`/`U`) that DEFAULT to the substrate's
 // base unions, not pinned to them. The fold itself only ever touches `init` +
@@ -372,16 +370,10 @@ export function doEventSourcedStore<
 
       const events = await readLog(snapSeq);
 
-      // THE FOLD. `replay` boots `init(snapshot, ctx)` then applies one reducer
-      // step per event. It returns Cmds as data and never interprets them, so
-      // no side effect fires on replay (recovery.md). The result is identical
-      // to the live runtime's state for the same (snapshot, events) — same
-      // reducer, same order.
-      const { state } = replay(machine, {
-        msgs: events,
-        ctx,
-        loaded: snapshot,
-      });
+      const state =
+        snapshot === null
+          ? replay(machine, { msgs: events, ctx }).state
+          : foldMsgs(machine, snapshot, events);
 
       // RecoveryCompleted: fire once per activation, AFTER the fold, even when
       // the log + snapshot were both empty (fresh actor). Idempotent within the

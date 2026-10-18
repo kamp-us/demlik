@@ -422,7 +422,7 @@ class Stopped extends YieldableError<this> & {} & Readonly<{
 ```ts
 class StoreFailed extends YieldableError<this> & {} & Readonly<{
   readonly cause: unknown;
-  readonly operation: "save" | "load";
+  readonly operation: "load" | "save";
 }> {
   get message(): string;
 }

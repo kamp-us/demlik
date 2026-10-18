@@ -1,28 +1,6 @@
-// ---------------------------------------------------------------------------
-// trace-replay — replay a recorded Trace against a machine and diff the state.
-//
-// This is the back half of the record/replay feature. `../recorder` captures
-// a run (`loaded` + `msgs` + `finalState`); this module feeds that input
-// through the core `replay(machine, { msgs, ctx, loaded })` fold and asks:
-//
-//     does the current reducer still produce the SAME final state for this
-//     recorded input?
-//
-// Equal ⇒ the reducer is behavior-compatible with the recording. Diverged ⇒
-// the reducer changed for that input, and the divergence path
-// (`state.queue[2].status`) points at exactly the cell that drifted. This is
-// the regression / production-repro tool: record a prod incident, replay it
-// against the fixed reducer locally, confirm the fix changes the state at the
-// path you expected — or catch an unintended drift before it ships.
-//
-// Standalone by design. It imports ONLY the `Trace` type from `../recorder`
-// and the `replay` engine from `../index`. The deep-equal + first-divergence
-// path finder is self-contained (no external diff lib) — a richer pretty-diff
-// lands in `../devtools` later; trace-replay stays dependency-free so it can
-// run anywhere a machine runs (CI, a Worker, a Node script).
-// ---------------------------------------------------------------------------
+// Recorded replay folds captured post-init State and reports the first divergence.
 
-import { type Cmd, type Machine, replay, type Sub } from "../../../index";
+import { type Cmd, foldMsgs, type Machine, type Sub } from "../../../index";
 import type { Trace } from "../recorder";
 import { indexPath, keyPath, typeOf, unionKeys } from "./state-walk";
 
@@ -54,18 +32,16 @@ export interface ReplayResult<S> {
  * Replay a recorded {@link Trace} against `machine` and diff the recomputed
  * final state against the recorded one.
  *
- * Runs the core pure fold `replay(machine, { msgs: trace.msgs, ctx,
- * loaded: trace.loaded })` — init + update only, never `interpret`, never a
- * `Store`, never a live subscription (see `replay` in ../index). The `ctx` is
- * supplied fresh by the caller: the trace is the INPUT (loaded + msgs); ctx is
- * the ENVIRONMENT the reducer runs against now.
+ * Folds recorded messages from the captured post-init State, without calling
+ * init, Cmd handlers, Store operations or Sub runners. A trace without that
+ * anchor is refused; a fresh init cannot reconstruct its starting State.
  *
  * @param machine - the machine to replay against. Mutating its reducer (the
  *                  whole point of a regression check) is what makes a recorded
  *                  trace diverge.
  * @param trace   - a Trace from `../recorder` (live `dump()` or a re-hydrated
  *                  `parseJSONL(...)`).
- * @param ctx     - the runtime ctx, supplied fresh at replay time.
+ * @param _ctx    - optional legacy argument; recorded replay needs no init context.
  */
 export function replayTrace<
   S,
@@ -76,14 +52,14 @@ export function replayTrace<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
-  ctx: Ctx,
+  _ctx?: Ctx,
 ): ReplayResult<S> {
-  const result = replay(machine, {
-    msgs: trace.msgs,
-    ctx,
-    loaded: trace.loaded,
-  });
-  const actual = result.state;
+  if (trace.loaded === null) {
+    throw new Error(
+      "tea replayTrace: trace has no captured initial State; record boot before replaying.",
+    );
+  }
+  const actual = foldMsgs(machine, trace.loaded, trace.msgs);
   const expected = trace.finalState;
 
   const divergence = firstDivergence(expected, actual, "state");

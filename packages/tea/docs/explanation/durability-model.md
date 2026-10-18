@@ -30,13 +30,15 @@ A store saves the Model, not a separate queue of command objects. The machine
 must keep enough data to reconstruct pending work: its phase, request ids,
 arguments, and any completed results.
 
-`init(loaded)` returns `[loaded, []]`. It restores state without issuing
-commands. A boot message handled by `update` derives the commands still needed;
-subscriptions are reconciled from the restored state.
+`init(loaded, ctx)` may return an updated Model and the commands needed to
+resume. The engine saves that Model, reconciles its subscriptions, then runs
+the commands. An in-flight phase in the returned Model tells a fast Sub's
+message that the work already started.
 
-`agent.run` sends that resume message automatically for a run caught mid-flight.
-A custom machine needs its own boot/resume handler. Durable Object hosts can use
-[`bootResume`](../reference/do.md#bootResume) with a typed resume port.
+`agent.run` retains its host boot-message protocol. A custom machine can instead
+own resume in init. [`bootResume`](../reference/do.md#bootResume) remains an
+option for a host message after `ready`, when Subs are already open; combining
+both resume paths for the same work can repeat it.
 An agent's saved retry counters survive too; restarting does not reset its attempt budget.
 
 Stopping the host and cancelling the run have different meanings. A killed
@@ -49,7 +51,9 @@ A completed agent likewise stays completed.
 The optional [`doEventSourcedStore`](../reference/do.md#doEventSourcedStore)
 recovers differently. It loads the latest snapshot and folds persisted messages
 after that snapshot through the reducer. With no snapshot, it folds the full log.
-Commands produced during this fold are data; their handlers are not executed.
+Snapshot recovery folds update directly, without re-running init on that
+snapshot. With no snapshot it starts from fresh init. Commands produced during
+the fold are data; their handlers are not executed.
 Pending work still needs the resume path after recovery.
 
 This mode requires applied-message append wiring as well as the store. Changing

@@ -278,6 +278,11 @@ export type DriveToDoneOptions<
  * observer is detached and `stop()` awaited on EVERY exit: resolve, `failed`,
  * a stall, a boot or dispatch throw, the quiescence cap.
  *
+ * Use this for a deliberate host `start` Msg after boot. Subs have already
+ * opened by then. A machine whose restored first move must precede their Msgs
+ * returns its resume Cmds and in-flight State from init instead; do not also
+ * use `start` to resume that same work.
+ *
  * Rejections are typed, never silent:
  *   - `DriveFailedError<S>` when `opts.failed` marks the final State — the State
  *     rides on `error.state`.

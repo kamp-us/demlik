@@ -258,7 +258,7 @@ function replayTrace<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
-  ctx: Ctx,
+  _ctx?: Ctx,
 ): ReplayResult<S>
 ```
 
@@ -484,10 +484,9 @@ interface Trace<S, M> {
    */
   readonly finalState: S;
   /**
-   * The initial state captured at the boot observe (the transition where
-   * `msg === null`). Fed back to replay as `loaded` so `init(loaded, ctx)`
-   * reproduces the exact starting point. `null` only if the recorder attached
-   * AFTER boot (it missed the boot observe) — replay then re-runs fresh `init`.
+   * The post-init State captured by `onBoot`, used directly as the recorded
+   * replay's starting State. No init call is repeated. `null` marks a missing
+   * anchor in an older or incomplete trace; `replayTrace` refuses it.
    */
   readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */

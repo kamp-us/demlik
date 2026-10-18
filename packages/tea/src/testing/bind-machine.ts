@@ -29,6 +29,7 @@ import {
   replay,
   type Sub,
 } from "../index";
+import { step } from "./assertions";
 
 /**
  * Replay options shape used by every bound method. `ctx` is captured by
@@ -105,7 +106,7 @@ export interface BoundMachine<
 
 /**
  * Bind a machine + ctx into a small bag of 2-arg helpers. Each method
- * delegates to `replay(machine, { ...opts, ctx })` and pipes the result
+ * delegates to `step` or `replay(machine, { ...opts, ctx })` and pipes the result
  * through a single `expect(...)` matcher (or returns the raw tuple, for
  * `step` and `replay`).
  *
@@ -122,8 +123,7 @@ export function bindMachine<
 >(machine: Machine<S, M, C, U, Ctx>, ctx: Ctx): BoundMachine<S, M, C, U, Ctx> {
   return {
     step(loaded, msg) {
-      const { state, cmds } = replay(machine, { msgs: [msg], ctx, loaded });
-      return [state, cmds] as const;
+      return step(machine, loaded, msg, ctx);
     },
     expectFinalState(opts, expected) {
       const { state } = replay(machine, { ...opts, ctx });

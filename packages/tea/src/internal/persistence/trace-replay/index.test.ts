@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Cmd, defineMachine } from "../../../index";
+import { memoryStore } from "../../../mem";
+import { goldenReplay } from "../../../parity";
 import { run } from "../../../promise";
 import { recorder } from "../recorder";
 import { replayTrace } from "./index";
@@ -74,6 +76,60 @@ async function recordRun() {
 }
 
 describe("replayTrace", () => {
+  it("folds the captured post-init state without re-running init or its commands", async () => {
+    type Model = { readonly count: number };
+    type Event = { readonly type: "add"; readonly by: number };
+    type Command = { readonly type: "write" };
+    const init = vi.fn(
+      (loaded: Model | null): readonly [Model, readonly Command[]] => [
+        { count: (loaded?.count ?? 0) + 10 },
+        [{ type: "write" }],
+      ],
+    );
+    const machine = defineMachine({
+      types: {
+        model: {} as Model,
+        msg: {} as Event,
+        cmd: {} as Command,
+      },
+      init,
+      update: { add: (s, m) => [{ count: s.count + m.by }, []] },
+    });
+    const write = vi.fn(async (): Promise<Event> => ({ type: "add", by: 1 }));
+    const booting = run(machine, {
+      store: memoryStore<Model>({ count: 4 }),
+      interpret: { write },
+    });
+    const rec = recorder(booting);
+    const rt = await booting.ready;
+    try {
+      await rt.idle();
+      await rt.dispatch({ type: "add", by: 3 });
+      const trace = rec.dump();
+      expect(trace.loaded).toEqual({ count: 14 });
+      expect(replayTrace(machine, trace, {}).actual).toEqual({ count: 18 });
+      expect(goldenReplay(machine, trace)).toEqual({ count: 18 });
+      expect(init).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    } finally {
+      rec.stop();
+      await rt.stop();
+    }
+  });
+
+  it("refuses a missing replay anchor instead of initializing a replacement", () => {
+    const machine = queueMachine();
+    const init = vi.spyOn(machine, "init");
+    expect(() =>
+      replayTrace(machine, {
+        loaded: null,
+        msgs: [],
+        finalState: { type: "queue", items: [], processed: 0 },
+      }),
+    ).toThrow(/no captured initial State/);
+    expect(init).not.toHaveBeenCalled();
+  });
+
   it("matches when replayed against the SAME machine", async () => {
     const trace = await recordRun();
 

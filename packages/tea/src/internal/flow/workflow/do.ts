@@ -225,9 +225,7 @@ function workflowMachine<A, R, F>(
     // dispatch Cmd is emitted for the grain to perform post-persist). A cold
     // wake from a SNAPSHOT rehydrates the recorder from the snapshot's ledger
     // tail (so ids resume gap-free) and hands back the folded state verbatim
-    // (init's rehydrate passthrough — TEA invariant 2; the owed dispatch the
-    // fold reissues is re-emitted by the grain via `survivingActivities`, NOT by
-    // replaying init's Cmd).
+    // by choice: the grain re-emits owed work via `survivingActivities`.
     init: (loaded) => {
       if (loaded) {
         ref.current = createWorkflow<A, R, F>({ events: loaded.ledgerEvents });

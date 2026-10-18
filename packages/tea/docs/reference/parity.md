@@ -12,7 +12,7 @@ import { … } from "@demlik/tea/parity";
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`goldenReplay`](#goldenReplay) | Function | stable | Reproduce a recording's final state by folding its msgs through the pure `replay` — `init(loaded, ctx)` then `update` per msg, never `interpret`, never a `Store`, never a live subscription. |
+| [`goldenReplay`](#goldenReplay) | Function | stable | Reproduce a recording's final State by folding from its captured post-init State. |
 | [`normalizeForParity`](#normalizeForParity) | Function | stable | Build a finding-normalizer: a pure `(value) => normalized` that strips the schema's `stripKeys`, recursively sorts object keys, and stable-key-sorts arrays by the schema's `sortKeys`. |
 | [`parityEqual`](#parityEqual) | Function | stable | The parity verdict: `true` iff `a` and `b` are structurally equal. |
 | [`ParitySchema`](#ParitySchema) | Interface | stable | Configuration for normalizeForParity. |
@@ -175,10 +175,9 @@ interface Trace<S, M> {
    */
   readonly finalState: S;
   /**
-   * The initial state captured at the boot observe (the transition where
-   * `msg === null`). Fed back to replay as `loaded` so `init(loaded, ctx)`
-   * reproduces the exact starting point. `null` only if the recorder attached
-   * AFTER boot (it missed the boot observe) — replay then re-runs fresh `init`.
+   * The post-init State captured by `onBoot`, used directly as the recorded
+   * replay's starting State. No init call is repeated. `null` marks a missing
+   * anchor in an older or incomplete trace; `replayTrace` refuses it.
    */
   readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */
