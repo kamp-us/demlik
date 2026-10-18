@@ -1084,7 +1084,7 @@ function emptyLedger<E>(): PendingEffectsLedger<E>
 ### `EndedRun`
 
 ```ts
-type EndedRun<Stage> = Extract<MonitoredRunState<Stage>, { readonly phase: "done" | "cancelled" }>
+type EndedRun<Stage> = Extract<MonitoredRunState<Stage>, { readonly phase: "cancelled" | "done" }>
 ```
 
 <a id="EnqueueInput"></a>
@@ -1706,7 +1706,7 @@ type PollerSub = DeadlineSub
 ### `ReconcilePhase`
 
 ```ts
-type ReconcilePhase = "idle" | "scanning" | "applying" | "done" | "failed"
+type ReconcilePhase = "applying" | "done" | "failed" | "idle" | "scanning"
 ```
 
 <a id="ReconcilerConfig"></a>
@@ -1884,12 +1884,12 @@ interface SagaConfig<D extends Cmd, U extends Cmd> {
 
 ```ts
 type SagaPhase =
+  | "aborted"
+  | "committed"
+  | "compensating"
+  | "compensation_failed"
   | "idle"
   | "running"
-  | "compensating"
-  | "committed"
-  | "aborted"
-  | "compensation_failed"
 ```
 
 <a id="SagaState"></a>

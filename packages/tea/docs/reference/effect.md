@@ -409,7 +409,7 @@ function stop(scope: Closeable): Effect<void>
 ```ts
 class Stopped extends YieldableError<this> & {} & Readonly<{
   readonly msgType: string;
-  readonly when: "stopping" | "stopped";
+  readonly when: "stopped" | "stopping";
 }> {
   get message(): string;
 }

@@ -841,7 +841,7 @@ class DispatchDiscardedError extends RuntimeDiscardNotice {
 ### `DispatchSettle`
 
 ```ts
-type DispatchSettle = "quiescent" | "once"
+type DispatchSettle = "once" | "quiescent"
 ```
 
 <a id="Dispose"></a>
@@ -1994,19 +1994,19 @@ interface RuntimeErrorContext {
 
 ```ts
 type RuntimeErrorPhase =
+  | "boot"
+  | "discard"
+  | "event"
   | "follow-up"
+  | "identity-drop"
   | "interpret"
-  | "stop-save"
-  | "reduce"
   | "listener"
   | "observer"
-  | "event"
-  | "boot"
   | "port-emit"
-  | "sub-cleanup"
+  | "reduce"
+  | "stop-save"
   | "sub"
-  | "discard"
-  | "identity-drop"
+  | "sub-cleanup"
 ```
 
 <a id="RuntimeRef"></a>
@@ -2253,7 +2253,7 @@ type Supervision<S, M extends { type: string }> =
 ### `SupervisionStrategy`
 
 ```ts
-type SupervisionStrategy = "stop" | "escalate" | "restart"
+type SupervisionStrategy = "escalate" | "restart" | "stop"
 ```
 
 <a id="SyncReturn"></a>

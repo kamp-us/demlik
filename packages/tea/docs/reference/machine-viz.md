@@ -26,7 +26,7 @@ import { … } from "@demlik/tea/machine-viz";
 ```ts
 interface MachineVizOptions<S, M> {
   /** Mermaid layout direction. Default `"TB"` (top-to-bottom). */
-  direction?: "TB" | "LR";
+  direction?: "LR" | "TB";
   samples?: {
     /** Ctx for `init(null, ctx)` — unlocks the `[*] -->` initial-state edge. */
     ctx?: unknown;

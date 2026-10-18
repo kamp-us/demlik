@@ -566,7 +566,7 @@ function passThroughMsg<M>(raw: unknown): M | null
 ### `TabsEventName`
 
 ```ts
-type TabsEventName = "onActivated" | "onUpdated" | "onRemoved"
+type TabsEventName = "onActivated" | "onRemoved" | "onUpdated"
 ```
 
 <a id="useBackgroundRuntime"></a>

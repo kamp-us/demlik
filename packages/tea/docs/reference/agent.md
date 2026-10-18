@@ -454,7 +454,7 @@ interface AgentConfigCore<
 
 ```ts
 type AgentEndedStatus<Stage = unknown> = Extract<AgentStatus<Stage>, {
-  readonly kind: "done" | "failed" | "cancelled";
+  readonly kind: "cancelled" | "done" | "failed";
 }>
 ```
 
@@ -1717,7 +1717,7 @@ type DefinedAgentWired<T extends AnyToolDef> = {
 ### `EndedRun`
 
 ```ts
-type EndedRun<Stage> = Extract<MonitoredRunState<Stage>, { readonly phase: "done" | "cancelled" }>
+type EndedRun<Stage> = Extract<MonitoredRunState<Stage>, { readonly phase: "cancelled" | "done" }>
 ```
 
 <a id="fanOutInterpret"></a>

@@ -149,7 +149,7 @@ function initRetry(): RetryState
 ### `Jitter`
 
 ```ts
-type Jitter = "none" | "full" | "equal"
+type Jitter = "equal" | "full" | "none"
 ```
 
 <a id="nextDelayMs"></a>

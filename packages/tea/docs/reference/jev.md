@@ -727,7 +727,7 @@ interface JevOk<Q extends JevQuestionMap> {
   /** The model that answered, as the response reported it (or the requested one, for a fallback). */
   readonly model: string;
   /** Which path produced this answer. */
-  readonly source: "port" | "fallback";
+  readonly source: "fallback" | "port";
   /** Tokens spent. Zero on the fallback path. */
   readonly usage: JevUsage;
 }
@@ -779,7 +779,7 @@ function jevQuestions<const Q extends Readonly<Record<string, JevQuestion>>>(
 ### `JevQuestionType`
 
 ```ts
-type JevQuestionType = "choice" | "score" | "noul"
+type JevQuestionType = "choice" | "noul" | "score"
 ```
 
 <a id="JevRejected"></a>
