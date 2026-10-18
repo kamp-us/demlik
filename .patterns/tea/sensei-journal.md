@@ -21,6 +21,15 @@ This is the `tea-sensei` agent's learning database. Every time the agent observe
 
 ---
 
+## 2026-10-18 — Restored init may describe resume commands
+
+**Trigger:** ADR 0028 permits a restored machine to choose its first move in `init`.
+**Mistake:** The 2026-05-22 entry, “`init` is where a stuck-at-running becomes observable,” equates pure initialization with returning no Cmds. That restriction is superseded.
+**Right shape:** Follow [ADR 0028](../../.decisions/0028-restored-init-may-resume.md): pure `init` may return resume State and Cmds, with State marking work as started before Subs open. Recorded replay folds the captured post-init State through update only.
+**Smell to remember:** “pure restored init means no Cmds”
+
+---
+
 ## 2026-06-01 — Optional state field as the install-guard for a peer-dependent Sub
 
 **Trigger:** Plan 2 added a half-open-lease alarm on `audit-agents.running`. The brain has two hands clients with asymmetric heartbeat behavior — the extension pings every 20s; the container never pings (no heartbeat in container/server.ts). If the lease alarm armed unconditionally on `running`, every container audit would falsely trip it within LEASE_MS of becoming running.

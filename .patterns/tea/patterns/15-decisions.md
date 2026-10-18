@@ -31,7 +31,11 @@ The Elm guide's time example makes this concrete:
 | One async fetch | `init = () -> (Loading, fetchCmd)` |
 | Multiple independent fetches | `init = () -> (Loading, Cmd.batch [fetch1, fetch2])` |
 | Data from JS (localStorage, config) | Use **flags**: `init = flags -> (decodeFlags flags, Cmd.none)` |
-| State-conditional resume after crash | Don't put resume logic in init. Dispatch a `Boot` Msg from the host after the runtime starts. |
+| State-conditional resume after crash | In `@demlik/tea`, return resume State and Cmds from pure `init(loaded, ctx)`. |
+
+For restored tea machines, [ADR 0028](../../../.decisions/0028-restored-init-may-resume.md)
+defines the resume contract. The returned State marks work as started before its
+Subs open. A host `Boot` Msg after the runtime starts remains an optional protocol.
 
 From the Elm guide HTTP example:
 ```elm
