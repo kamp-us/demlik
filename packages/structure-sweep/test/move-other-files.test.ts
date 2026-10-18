@@ -108,6 +108,42 @@ describe("move apply with rows naming non-TypeScript files", () => {
     ).toEqual([]);
   });
 
+  it("still moves a `.js` row the allowJs project holds through ts-morph, rewriting its extensionless importers", () => {
+    const root = repo({
+      "app/tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          allowJs: true,
+        },
+        include: ["src"],
+      }),
+      "app/src/index.ts":
+        'import { util } from "./util";\n\nexport const run = () => util();\n',
+      "app/src/util.js": "export const util = () => 1;\n",
+      "app/src/run.sh": '#!/bin/sh\necho "running the tool"\n',
+    });
+    const plan = {
+      scope: "app",
+      moves: [
+        { from: "app/src/util.js", to: "app/src/shared/util.js" },
+        { from: "app/src/run.sh", to: "app/tools/run.sh" },
+      ],
+    };
+
+    const report = applyHandPlan(root, plan);
+
+    expect(report.commits.rename).not.toBeNull();
+    expect(report.commits.rewrite).toBe(git(root, "rev-parse", "HEAD"));
+    expect(
+      git(root, "diff", "--name-status", "-M100%", "HEAD~2", "HEAD~1")
+        .split("\n")
+        .sort(),
+    ).toEqual(renameRows(plan.moves));
+    expect(read(root, "app/src/index.ts")).toContain('from "./shared/util"');
+    expect(git(root, "status", "--porcelain")).toBe("");
+  });
+
   it("applies a manifest of only non-TS rows as the rename commit and no rewrite commit", () => {
     const root = repo({
       "app/tsconfig.json": JSON.stringify({ include: ["src"] }),

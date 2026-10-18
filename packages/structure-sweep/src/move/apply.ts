@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import type { Project, SourceFile } from "ts-morph";
+import { type Project, type SourceFile, ts } from "ts-morph";
 import { absurd } from "../absurd.js";
 import {
   exactRenames,
@@ -66,13 +66,17 @@ const specifiersOf = (sf: SourceFile) =>
 const differing = (before: readonly string[], after: readonly string[]) =>
   before.reduce((n, spec, i) => n + (after[i] === spec ? 0 : 1), 0);
 
-/** A row ts-morph can move: its file is a TypeScript source the move project holds. */
-const TS_SOURCE = /\.[cm]?tsx?$/;
+/**
+ * A path with a TypeScript extension. Only {@link staleRefs} reads it, to pick the rows whose
+ * old path may still be spelled as a plain relative string beside them; which rows ts-morph moves
+ * is decided in {@link planRewrite} by whether the move project holds the file as a module.
+ */
+const TS_EXTENSION = /\.[cm]?tsx?$/;
 
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
 function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
   const hits = new Set<string>();
-  for (const row of moved.filter((r) => !TS_SOURCE.test(r.from)))
+  for (const row of moved.filter((r) => !TS_EXTENSION.test(r.from)))
     for (const line of relativeRefs(repoRoot, row.from)) hits.add(line);
   for (const { from } of moved) {
     const needle = from.replace(/\.tsx?$/, "");
@@ -372,11 +376,19 @@ function planRewrite(
   const dirBefore = new Map(
     project.getSourceFiles().map((sf) => [sf, dirname(sf.getFilePath())]),
   );
+  // ts-morph moves every row whose file the move project holds as a module (a `.js` under
+  // allowJs too) and rewrites its importers. A file the project cannot hold goes through the
+  // repoint path, and so does a JSON file: resolveJsonModule pulls it into the project, but
+  // ts-morph's move rewrites its importers wrong (dropping `.json`, keeping the old directory).
+  const held = (r: PathMove) => {
+    const sf = project.getSourceFile(join(repoRoot, r.from));
+    return sf !== undefined && sf.getScriptKind() !== ts.ScriptKind.JSON;
+  };
   applyMoves(
     project,
     scopeRoot,
     rows
-      .filter((r) => TS_SOURCE.test(r.from))
+      .filter(held)
       .map((r) => [
         relative(scopeRoot, join(repoRoot, r.from)),
         relative(scopeRoot, join(repoRoot, r.to)),
@@ -385,7 +397,7 @@ function planRewrite(
   repointOtherFiles(
     project,
     repoRoot,
-    rows.filter((r) => !TS_SOURCE.test(r.from)),
+    rows.filter((r) => !held(r)),
     before,
     dirBefore,
   );
