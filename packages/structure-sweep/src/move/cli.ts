@@ -5,14 +5,14 @@ import { z } from "zod";
 import { DEFAULTS, scopeOf, underRoot } from "../cli-paths.js";
 import { repoRootOf, trackedPaths } from "../git.js";
 import { loadVocabulary, type Vocabulary } from "../vocabulary.js";
-import { applyManifest } from "./apply.js";
+import { applyHandPlan, applyManifest } from "./apply.js";
 import { entryFiles } from "./entries.js";
-import { Manifest, VerdictRow } from "./manifest.js";
+import { Manifest, parseHandPlan, VerdictRow } from "./manifest.js";
 import { CONFIDENCE_FLOOR, planManifest } from "./plan.js";
 import { importEdges } from "./project.js";
 
 export const MOVE_USAGE = `structure-sweep move plan --scope <folder> --feature <key>... [options]
-structure-sweep move apply [--manifest <file>]
+structure-sweep move apply [--manifest <file> | --plan <file>]
 
   plan   Write a manifest moving each file of the named features into
          <folder>/src/<feature>/<role dir> when Jev's confident verdict and the import graph's
@@ -20,11 +20,14 @@ structure-sweep move apply [--manifest <file>]
          files are pinned and never moved.
   apply  Over a clean tree, commit the manifest's renames with content unchanged, then commit
          the import rewrites on top. A second apply over the same manifest changes nothing.
+         With --plan, apply a hand-written { scope, moves: [{ from, to }] } plan the same way;
+         its rows carry no Jev fields and its commits say the moves were hand-planned.
 
   --config <file>       vocabulary (default: ${DEFAULTS.config})
   --verdicts <file>     sweep output (default: ${DEFAULTS.verdicts})
   --floor <0..1>        below this feature confidence Jev does not say move (default: ${CONFIDENCE_FLOOR})
-  --manifest <file>     manifest to write or apply (default: ${DEFAULTS.manifest})`;
+  --manifest <file>     manifest to write or apply (default: ${DEFAULTS.manifest})
+  --plan <file>         hand-written plan to apply instead of a manifest`;
 
 export interface PlanScopeInput {
   readonly root: string;
@@ -66,13 +69,16 @@ export function moveCommand(argv: readonly string[], cwd: string): void {
       scope: { type: "string" },
       feature: { type: "string", multiple: true, default: [] },
       floor: { type: "string", default: String(CONFIDENCE_FLOOR) },
-      manifest: { type: "string", default: DEFAULTS.manifest },
+      manifest: { type: "string" },
+      plan: { type: "string" },
     },
   });
   const root = repoRootOf(cwd);
-  const manifestPath = underRoot(root, values.manifest);
+  const manifestPath = underRoot(root, values.manifest ?? DEFAULTS.manifest);
   const [verb] = positionals;
 
+  if (values.plan !== undefined && verb !== "apply")
+    throw new Error(`--plan is an apply option\n\n${MOVE_USAGE}`);
   if (verb === "plan") {
     if (values.scope === undefined)
       throw new Error(`--scope is required\n\n${MOVE_USAGE}`);
@@ -93,6 +99,17 @@ export function moveCommand(argv: readonly string[], cwd: string): void {
     console.error(
       `${manifest.moves.length} moves, ${manifest.review.length} to review, ${manifest.pinned.length} pinned → ${manifestPath}`,
     );
+    return;
+  }
+  if (verb === "apply" && values.plan !== undefined) {
+    if (values.manifest !== undefined)
+      throw new Error(
+        `--plan and --manifest each name the moves to apply; pass one of them, not both\n\n${MOVE_USAGE}`,
+      );
+    const plan = parseHandPlan(
+      readJson(underRoot(root, values.plan), "hand plan"),
+    );
+    console.log(JSON.stringify(applyHandPlan(root, plan), null, 1));
     return;
   }
   if (verb === "apply") {
