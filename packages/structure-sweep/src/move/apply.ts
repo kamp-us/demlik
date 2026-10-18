@@ -12,6 +12,12 @@ import {
 } from "../git.js";
 import { canonicalJson, contentHash } from "../lowering/artifact.js";
 import {
+  describeUnreachable,
+  importerPackageSources,
+  PackageTree,
+  rewriteCrossings,
+} from "./crossing.js";
+import {
   type Exists,
   hasDangling,
   heal,
@@ -27,6 +33,7 @@ import {
   packageLabel,
   placeRow,
   readWorkspace,
+  type Workspace,
 } from "./workspace.js";
 
 export type RowState =
@@ -227,21 +234,62 @@ function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
     destinations.has(path) || (!sources.has(path) && existsSync(path));
 }
 
+/** The tree before any row is renamed: `renamedTree` the other way round. */
+function originalTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
+  const sources = new Set(rows.map((r) => join(repoRoot, r.from)));
+  const destinations = new Set(rows.map((r) => join(repoRoot, r.to)));
+  return (path) =>
+    sources.has(path) || (!destinations.has(path) && existsSync(path));
+}
+
 /**
  * Every file the import rewrite for `rows` changes, worked out in memory with nothing written.
  * ts-morph holds each row's file at its old path (reading it from its new one when an earlier run
  * already renamed it) and moves it, so every specifier is rewritten from the directory it was
  * written in; heal then fixes any relative specifier still dangling in the renamed tree. Each edit
  * names the path its text was read from, so apply can check git tracks it before committing.
+ *
+ * With a `workspace` — a manifest moving a file across a package line — the project also holds
+ * every workspace package with an importer of a moved file, and each import the move touched is
+ * rewritten to match its ends' packages (`rewriteCrossings`). An import no `exports` entry carries
+ * across throws, before anything is written.
  */
 function planRewrite(
   repoRoot: string,
   scope: string,
   rows: readonly MoveRow[],
   moved: MovedModules,
+  workspace: Workspace | null,
 ): Rewrite {
   const scopeRoot = join(repoRoot, scope);
   const project = loadMoveProject(scopeRoot, repoRoot);
+  const trees =
+    workspace === null
+      ? null
+      : {
+          before: new PackageTree(
+            repoRoot,
+            workspace,
+            originalTree(repoRoot, rows),
+          ),
+          after: new PackageTree(
+            repoRoot,
+            workspace,
+            renamedTree(repoRoot, rows),
+          ),
+        };
+  if (trees !== null) {
+    const endpoints = rows
+      .flatMap((r) => [r.from, r.to])
+      .map((p) => join(repoRoot, p))
+      .filter((p) => existsSync(p));
+    for (const file of [
+      ...importerPackageSources(trackedSources(repoRoot), rows, trees.before),
+      ...endpoints,
+    ])
+      if (project.getSourceFile(file) === undefined)
+        project.addSourceFileAtPath(file);
+  }
   const renamedFrom = new Map<SourceFile, string>();
   for (const row of rows) {
     const at = project.getSourceFile(join(repoRoot, row.to));
@@ -276,6 +324,18 @@ function planRewrite(
     moved,
     renamedTree(repoRoot, rows),
   );
+  if (trees !== null) {
+    const unreachable = rewriteCrossings(
+      project.getSourceFiles(),
+      rows,
+      trees.before,
+      trees.after,
+    );
+    if (unreachable.length > 0)
+      throw new Error(
+        `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
+      );
+  }
   const edits: Edit[] = [];
   let specifiersRewritten = 0;
   for (const sf of project.getSourceFiles()) {
@@ -302,7 +362,7 @@ function untrackedEdits(repoRoot: string, rewrite: Rewrite): string[] {
 
 const SOURCE = /\.tsx?$/;
 
-function scopeSources(repoRoot: string, scope: string): string[] {
+function trackedSources(repoRoot: string, scope?: string): string[] {
   return trackedPaths(repoRoot, "index", scope)
     .filter((p) => SOURCE.test(p) && existsSync(join(repoRoot, p)))
     .map((p) => join(repoRoot, p));
@@ -314,9 +374,11 @@ function scopeSources(repoRoot: string, scope: string): string[] {
  * history; the second rewrites the imports that named the moved files, heals any specifier a move
  * left dangling and formats what changed. A pure function of HEAD and the manifest: over the same
  * HEAD it makes the same trees and messages. A re-run over a finished manifest commits nothing; one
- * over this manifest's rename commit alone makes the rewrite commit. A row that leaves one
- * workspace package for another is refused before either commit, since the rewrite would write a
- * relative path into the other package's sources.
+ * over this manifest's rename commit alone makes the rewrite commit. A row may leave one workspace
+ * package for another: every import that then crosses a package line is written as the target
+ * package's name and `exports` subpath. A row whose destination no `exports` entry of its new
+ * package reaches is refused before either commit, as is any import a move would carry across a
+ * package line to a file no `exports` entry reaches.
  */
 export function applyManifest(
   repoRoot: string,
@@ -332,9 +394,17 @@ export function applyManifest(
   const crossing = manifest.moves
     .map((row) => placeRow(workspace, row))
     .filter(crossesPackages);
-  if (crossing.length > 0)
+  const landed = new PackageTree(
+    repoRoot,
+    workspace,
+    renamedTree(repoRoot, manifest.moves),
+  );
+  const unexported = crossing.filter(
+    ({ row }) => landed.specifierOf(join(repoRoot, row.to)) === undefined,
+  );
+  if (unexported.length > 0)
     throw new Error(
-      `rows move a file into another workspace package, which apply cannot carry yet; refusing before any commit:\n${crossing.map(({ row, from, to }) => `  ${row.from} -> ${row.to}  (${packageLabel(from)} -> ${packageLabel(to)})`).join("\n")}`,
+      `rows move a file into another workspace package where no exports entry reaches it, so nothing could import it there; refusing before any commit:\n${unexported.map(({ row, to }) => `  ${row.from} -> ${row.to}  (${to.name === undefined ? `${packageLabel(to)} has no name to import it by` : `no exports entry of ${to.name} reaches it`})`).join("\n")}`,
     );
   const { pending, conflicts, absent, done } = classify(
     repoRoot,
@@ -351,9 +421,15 @@ export function applyManifest(
     pending.length > 0 ? pending : renamedAtHead(repoRoot, manifest, id);
   const owed =
     rows.length > 0 ||
-    hasDangling(scopeSources(repoRoot, manifest.scope), moved);
+    hasDangling(trackedSources(repoRoot, manifest.scope), moved);
   const rewrite = owed
-    ? planRewrite(repoRoot, manifest.scope, rows, moved)
+    ? planRewrite(
+        repoRoot,
+        manifest.scope,
+        rows,
+        moved,
+        crossing.length > 0 ? workspace : null,
+      )
     : NO_REWRITE;
   const untracked = untrackedEdits(repoRoot, rewrite);
   if (untracked.length > 0)

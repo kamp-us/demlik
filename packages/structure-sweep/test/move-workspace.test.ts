@@ -153,13 +153,16 @@ describe("readWorkspace", () => {
 });
 
 describe("applyManifest over a pnpm workspace", () => {
-  it("refuses rows that cross a package line before any commit, naming each with both packages", () => {
+  it("refuses rows into a package whose exports reach none of them before any commit, naming each with the package", () => {
     const root = workspace();
     const before = snapshot(root);
+    const intoC = ["one", "two", "three"].map((name) =>
+      row(`packages/a/src/${name}.ts`, `packages/c/src/${name}.ts`),
+    );
 
     let message = "";
     try {
-      applyManifest(root, manifestOf([...CROSSING, INSIDE]));
+      applyManifest(root, manifestOf([...intoC, INSIDE]));
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
@@ -169,7 +172,7 @@ describe("applyManifest over a pnpm workspace", () => {
     expect(named).toEqual(
       ["one", "two", "three"].map(
         (n) =>
-          `  packages/a/src/${n}.ts -> packages/b/src/${n}.ts  (@fixture/a -> @fixture/b)`,
+          `  packages/a/src/${n}.ts -> packages/c/src/${n}.ts  (no exports entry of @fixture/c reaches it)`,
       ),
     );
     expect(message).not.toContain("four.ts");
