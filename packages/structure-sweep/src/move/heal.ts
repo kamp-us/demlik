@@ -1,16 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import {
-  Node,
-  type SourceFile,
-  type StringLiteral,
-  SyntaxKind,
-} from "ts-morph";
+import type { SourceFile } from "ts-morph";
 import type { PathMove } from "./manifest.js";
-import { splitSpecifierExtension } from "./mover.js";
+import { moduleLiterals, splitSpecifierExtension } from "./specifier.js";
 
 const RESOLVABLE = ["", ".ts", ".tsx", ".d.ts", "/index.ts", "/index.tsx"];
-const MODULE_CALL = /^vi\.(do)?(un)?mock$|^vi\.import(Actual|Mock)$/;
 
 export type MovedModules = ReadonlyMap<string, string>;
 
@@ -44,29 +38,6 @@ export function healedSpecifier(
   if (target === undefined) return undefined;
   const rel = relative(dir, target);
   return `${rel.startsWith(".") ? rel : `./${rel}`}${extension}`;
-}
-
-export function moduleLiterals(sourceFile: SourceFile): StringLiteral[] {
-  const out: StringLiteral[] = [];
-  const push = (node: Node | undefined) => {
-    if (node !== undefined && Node.isStringLiteral(node)) out.push(node);
-  };
-  for (const node of sourceFile.getDescendants()) {
-    if (Node.isImportDeclaration(node) || Node.isExportDeclaration(node)) {
-      push(node.getModuleSpecifier());
-    } else if (Node.isCallExpression(node)) {
-      const callee = node.getExpression();
-      if (
-        callee.getKind() === SyntaxKind.ImportKeyword ||
-        MODULE_CALL.test(callee.getText())
-      )
-        push(node.getArguments()[0]);
-    } else if (Node.isImportTypeNode(node)) {
-      const arg = node.getArgument();
-      if (Node.isLiteralTypeNode(arg)) push(arg.getLiteral());
-    }
-  }
-  return out;
 }
 
 const QUOTED_RELATIVE = /["'](\.\.?\/[^"'\n]+)["']/g;

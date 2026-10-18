@@ -16,12 +16,12 @@ import {
   hasDangling,
   heal,
   type MovedModules,
-  moduleLiterals,
   movedModules,
 } from "./heal.js";
 import type { HandPlan, Manifest, PathMove } from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
+import { moduleLiterals } from "./specifier.js";
 
 export type RowState =
   | { readonly kind: "pending"; readonly row: PathMove }
