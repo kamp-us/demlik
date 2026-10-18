@@ -357,33 +357,54 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
 }
 
 /**
- * Run terminality: `result()` reads the State when `isTerminal` holds for it,
- * and `done()` resolves on the first commit (boot included — a rehydrated run
- * can land terminal) where it does. No predicate → never terminal.
+ * Run terminality: only saved State can be reported terminal. `done()` resolves
+ * on a terminal commit (boot included — a rehydrated run can land terminal),
+ * or rejects when that State's save fails. Storeless State is eligible as soon
+ * as it is set. No predicate → never terminal.
  */
 export function terminality<S, M, C>(
   isTerminal: ((state: S) => boolean) | undefined,
 ): AnyExtension<S, M, C> {
   const holds = isTerminal ?? (() => false);
   return (loop) => {
-    const waiters = new Set<(state: S) => void>();
+    const waiters = new Set<{
+      resolve(state: S): void;
+      reject(error: unknown): void;
+    }>();
     return {
       commit(_msg, state) {
+        if (
+          loop.saveStatus().type !== "saved" ||
+          waiters.size === 0 ||
+          !holds(state)
+        )
+          return;
+        const parked = [...waiters];
+        waiters.clear();
+        for (const waiter of parked) waiter.resolve(state);
+      },
+      saveFailed(state, error) {
         if (waiters.size === 0 || !holds(state)) return;
         const parked = [...waiters];
         waiters.clear();
-        for (const resolve of parked) resolve(state);
+        for (const waiter of parked) waiter.reject(error);
       },
       handle: {
         result(): S | undefined {
           const current = loop.state() as S;
-          return holds(current) ? current : undefined;
+          return loop.saveStatus().type === "saved" && holds(current)
+            ? current
+            : undefined;
         },
         done(): Promise<S> {
           const current = loop.state() as S;
-          if (holds(current)) return Promise.resolve(current);
-          return new Promise<S>((resolve) => {
-            waiters.add(resolve);
+          if (holds(current)) {
+            const saved = loop.saveStatus();
+            if (saved.type === "saved") return Promise.resolve(current);
+            if (saved.type === "failed") return Promise.reject(saved.error);
+          }
+          return new Promise<S>((resolve, reject) => {
+            waiters.add({ resolve, reject });
           });
         },
       },

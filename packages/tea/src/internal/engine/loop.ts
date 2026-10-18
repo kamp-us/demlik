@@ -13,7 +13,7 @@
  * Sharing the loop is also what makes the two engines' traces identical: the
  * fold, the save order and the built-ins are the same code.
  *
- * Everything else `run` offers is an {@link Extension} built on five points:
+ * Everything else `run` offers is an {@link Extension} built on six points:
  *
  *   1. `update`    — middleware over the fold. Returning `null` means "no
  *                    transition": no save, no effects, no commit.
@@ -23,7 +23,9 @@
  *   4. `commit`    — called after a transition's effects, with the Msg and the
  *                    committed State, even when a Cmd handler threw. Boot
  *                    passes `undefined` for the Msg.
- *   5. `ctx`       — keys added to the ctx every Cmd handler receives, so a
+ *   5. `saveFailed` — called when a transition's save rejects, before that
+ *                    rejection reaches the dispatch caller.
+ *   6. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
  *
@@ -74,6 +76,12 @@ export type InterpretStep<C, M> = (
   dispatch: (msg: M) => void,
 ) => Promise<unknown>;
 
+/** Whether the current State has crossed this transition's save boundary. */
+type SaveStatus =
+  | { readonly type: "pending" }
+  | { readonly type: "saved" }
+  | { readonly type: "failed"; readonly error: unknown };
+
 /** What the loop lends an extension. */
 export interface LoopServices<S> {
   /** Route a failure with no caller to the `onError` sink. */
@@ -86,8 +94,10 @@ export interface LoopServices<S> {
   ): void;
   /** Close the gate for good: every later dispatch is refused. */
   halt(): void;
-  /** The committed State, or `undefined` before boot has produced one. */
+  /** The current State, or `undefined` before boot has produced one. */
   state(): S | undefined;
+  /** The current State's save status; storeless State is saved immediately. */
+  saveStatus(): SaveStatus;
 }
 
 /** One built-in, as the loop sees it. Every member is optional. */
@@ -96,6 +106,7 @@ export interface Extension<S, M, C> {
   readonly interpret?: (next: InterpretStep<C, M>) => InterpretStep<C, M>;
   readonly store?: (store: Store<S>) => Store<S>;
   readonly commit?: (msg: M | undefined, state: S) => void;
+  readonly saveFailed?: (state: S, error: unknown) => void;
   readonly ctx?: object;
   readonly handle?: object;
 }
@@ -271,6 +282,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // `state` is late-initialized: synchronously when there is no store to read,
   // otherwise inside the boot step (the head of the tail).
   let state: S | undefined;
+  let saveStatus: SaveStatus = { type: "pending" };
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
   // `"closed"` or `"abandoned"` — so the discard window can never re-open under
@@ -308,6 +320,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
       if (gate !== "abandoned") gate = "closed";
     },
     state: () => state,
+    saveStatus: () =>
+      config.store === undefined ? { type: "saved" } : saveStatus,
   };
   const extensions = config.extensions.map((make) => make(services));
 
@@ -652,7 +666,17 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     cmds: readonly C[],
   ): Promise<void> {
     state = next;
-    if (store && gate !== "abandoned") await store.save(next);
+    saveStatus = { type: "pending" };
+    if (store && gate !== "abandoned") {
+      try {
+        await store.save(next);
+        saveStatus = { type: "saved" };
+      } catch (error) {
+        saveStatus = { type: "failed", error };
+        for (const ext of extensions) ext.saveFailed?.(next, error);
+        throw error;
+      }
+    }
     reconcileSubs();
     try {
       await runCmds(cmds);
