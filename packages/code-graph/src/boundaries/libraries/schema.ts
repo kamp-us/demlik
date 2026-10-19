@@ -17,16 +17,22 @@ const LibraryTypeSchema = z
   .strict();
 export type LibraryType = z.infer<typeof LibraryTypeSchema>;
 
-// The four keys of the rules file that declare libraries, spread into `BoundaryRulesSchema`.
+// The five keys of the rules file that declare libraries, spread into `BoundaryRulesSchema`.
 //  - `libraryTypes`: the types, by name.
 //  - `libraries`: a package's repo-relative directory, to its type.
 //  - `libraryRoots`: directories whose packages must all appear in `libraries`.
 //  - `worldLibraries`: package names (globs allowed) a pure library may not import.
+//  - `allowImportNames`: an importing library's directory, to the imported libraries' directories,
+//    to the names it may take from each although its type does not list that library's type. The
+//    name is ESLint's `no-restricted-imports` option.
 export const LIBRARY_KEYS = {
   libraryTypes: z.record(z.string().min(1), LibraryTypeSchema).default({}),
   libraries: z.record(z.string().min(1), z.string().min(1)).default({}),
   libraryRoots: z.array(z.string().min(1)).default([]),
   worldLibraries: z.array(z.string().min(1)).default([]),
+  allowImportNames: z
+    .record(z.string().min(1), z.record(z.string().min(1), z.array(z.string().min(1)).min(1)))
+    .default({}),
 };
 
 export type LibraryRules = z.infer<z.ZodObject<typeof LIBRARY_KEYS>>;
@@ -36,6 +42,7 @@ export function declaresLibraries(rules: LibraryRules): boolean {
     Object.keys(rules.libraryTypes).length > 0 ||
     Object.keys(rules.libraries).length > 0 ||
     rules.libraryRoots.length > 0 ||
-    rules.worldLibraries.length > 0
+    rules.worldLibraries.length > 0 ||
+    Object.keys(rules.allowImportNames).length > 0
   );
 }

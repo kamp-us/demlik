@@ -4,6 +4,17 @@ import { type SourceUnit, toRelative } from "../extract/project.js";
 import type { ImportEdge } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "./file.js";
 
+// What an import declaration takes from the module it names.
+export type ImportedNames = {
+  // The exported names it takes: `A` for `import { A as B }` and for `export { A } from`.
+  readonly names: ReadonlySet<string>;
+  // Whether it also takes what has no name to read: a default, a namespace, `export *`, `import()`,
+  // `import x = require()`, or nothing at all (`import "m"`).
+  readonly unreadable: boolean;
+};
+
+const UNREADABLE: ImportedNames = { names: new Set(), unreadable: true };
+
 export type ImportLiteral = {
   readonly specifier: string;
   readonly kind: ImportEdge["kind"];
@@ -14,6 +25,7 @@ export type ImportLiteral = {
   // `export { type Stats } from`, `import type x = require()`, a type-position `import("m")` and
   // anything inside an ambient module emit nothing, and none of them is `typeOnly` to the graph.
   readonly runtime: boolean;
+  readonly imported: ImportedNames;
   readonly start: number;
 };
 
@@ -45,13 +57,14 @@ function literalOf(
   source: SyntaxNode | null,
   kind: ImportEdge["kind"],
   reach: Reach,
+  imported: ImportedNames,
   inAmbientModule: boolean,
 ): ImportLiteral[] {
   const specifier = stringValue(source);
   if (source === null || specifier === null || specifier === "") return [];
   if (inAmbientModule && isRelativeName(specifier)) return [];
   const runtime = reach.runtime && !inAmbientModule;
-  return [{ specifier, kind, typeOnly: reach.typeOnly, runtime, start: source.start }];
+  return [{ specifier, kind, typeOnly: reach.typeOnly, runtime, imported, start: source.start }];
 }
 
 // Every specifier a declaration names says `type` (`import { type A, type B }`). A declaration that
@@ -65,6 +78,35 @@ function namesOnlyTypes(statement: SyntaxNode, typeField: string): boolean {
   );
 }
 
+// The exported name a specifier takes, or null for one that takes none to read: a default or a
+// namespace import.
+function specifierName(specifier: SyntaxNode): string | null {
+  switch (specifier.type) {
+    case "ImportSpecifier":
+      return moduleExportName(nodeField(specifier, "imported"));
+    case "ExportSpecifier":
+      return moduleExportName(nodeField(specifier, "local"));
+    default:
+      return null;
+  }
+}
+
+function moduleExportName(node: SyntaxNode | null): string | null {
+  if (node === null) return null;
+  const name = field(node, "name");
+  return typeof name === "string" ? name : stringValue(node);
+}
+
+function importedBy(statement: SyntaxNode): ImportedNames {
+  const specifiers = field(statement, "specifiers");
+  if (!Array.isArray(specifiers) || specifiers.length === 0) return UNREADABLE;
+  const taken = specifiers.map((specifier) => specifierName(specifier as SyntaxNode));
+  return {
+    names: new Set(taken.filter((name): name is string => name !== null)),
+    unreadable: taken.includes(null),
+  };
+}
+
 function declarationLiterals(
   statement: SyntaxNode,
   kind: ImportEdge["kind"],
@@ -73,7 +115,8 @@ function declarationLiterals(
 ): ImportLiteral[] {
   const typeOnly = field(statement, typeField) === "type";
   const runtime = !typeOnly && !namesOnlyTypes(statement, typeField);
-  return literalOf(nodeField(statement, "source"), kind, { typeOnly, runtime }, inAmbientModule);
+  const source = nodeField(statement, "source");
+  return literalOf(source, kind, { typeOnly, runtime }, importedBy(statement), inAmbientModule);
 }
 
 // `import type x = require("m")` is erased like `import type`, yet the graph has always called every
@@ -82,7 +125,13 @@ function importEqualsLiterals(statement: SyntaxNode, inAmbientModule: boolean): 
   const reference = nodeField(statement, "moduleReference");
   if (reference?.type !== "TSExternalModuleReference") return [];
   const reach = { typeOnly: false, runtime: field(statement, "importKind") !== "type" };
-  return literalOf(nodeField(reference, "expression"), "static", reach, inAmbientModule);
+  return literalOf(
+    nodeField(reference, "expression"),
+    "static",
+    reach,
+    UNREADABLE,
+    inAmbientModule,
+  );
 }
 
 // `declare module "x" { import … }`: TypeScript records the specifiers an ambient module's body
@@ -118,10 +167,10 @@ function expressionLiterals(syntax: SyntaxFile): ImportLiteral[] {
   const visit = (node: SyntaxNode): void => {
     if (node.type === "ImportExpression") {
       const reach = { typeOnly: false, runtime: true };
-      out.push(...literalOf(nodeField(node, "source"), "dynamic", reach, false));
+      out.push(...literalOf(nodeField(node, "source"), "dynamic", reach, UNREADABLE, false));
     } else if (node.type === "TSImportType") {
       const reach = { typeOnly: false, runtime: false };
-      out.push(...literalOf(nodeField(node, "source"), "static", reach, false));
+      out.push(...literalOf(nodeField(node, "source"), "static", reach, UNREADABLE, false));
     }
     for (const child of syntax.children(node)) visit(child);
   };
@@ -144,6 +193,24 @@ export function importLiterals(syntax: SyntaxFile): ImportLiteral[] {
 export function runtimeSpecifiers(syntax: SyntaxFile): Set<string> {
   const literals = importLiterals(syntax).filter((literal) => literal.runtime);
   return new Set(literals.map((literal) => literal.specifier));
+}
+
+// What a file takes from each specifier it writes, every declaration and spelling of it together.
+export function importedNamesOf(syntax: SyntaxFile): Map<string, ImportedNames> {
+  const bySpecifier = new Map<string, ImportedNames>();
+  for (const { specifier, imported } of importLiterals(syntax)) {
+    const held = bySpecifier.get(specifier);
+    bySpecifier.set(
+      specifier,
+      held === undefined
+        ? imported
+        : {
+            names: new Set([...held.names, ...imported.names]),
+            unreadable: held.unreadable || imported.unreadable,
+          },
+    );
+  }
+  return bySpecifier;
 }
 
 export function importDeclarationSpecifiers(syntax: SyntaxFile): string[] {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sourceUnit } from "../test-helpers/source-unit.js";
-import { importLiterals, runtimeSpecifiers } from "./imports.js";
+import { importedNamesOf, importLiterals, runtimeSpecifiers } from "./imports.js";
 
 const literalsOf = (source: string) =>
   importLiterals(sourceUnit(source).syntax).map((l) => [
@@ -61,5 +61,71 @@ describe("the specifiers a file runs", () => {
   it("is the specifier as soon as one literal of it survives emit", () => {
     const source = 'import { type Stats } from "node:fs";\nimport fs from "node:fs";\n';
     expect(runs(source)).toEqual(["node:fs"]);
+  });
+});
+
+describe("the names a file takes from each specifier", () => {
+  const takes = (source: string) =>
+    [...importedNamesOf(sourceUnit(source).syntax)].map(([specifier, imported]) => [
+      specifier,
+      [...imported.names].sort(),
+      imported.unreadable,
+    ]);
+
+  const READABLE: readonly (readonly [string, readonly string[]])[] = [
+    ['import { A } from "m";', ["A"]],
+    ['import { A as B } from "m";', ["A"]],
+    ['import { type A } from "m";', ["A"]],
+    ['import type { A } from "m";', ["A"]],
+    ['import { A, B as C, type D } from "m";', ["A", "B", "D"]],
+    ['import { "a-b" as A } from "m";', ["a-b"]],
+    ['export { A } from "m";', ["A"]],
+    ['export { A as B } from "m";', ["A"]],
+    ['export { type A } from "m";', ["A"]],
+    ['export type { A } from "m";', ["A"]],
+    ['declare module "x" { import { A } from "m"; }', ["A"]],
+  ];
+  for (const [source, names] of READABLE) {
+    it(source, () => expect(takes(source)).toEqual([["m", names, false]]));
+  }
+
+  const UNREADABLE: readonly (readonly [string, readonly string[]])[] = [
+    ['import m from "m";', []],
+    ['import m, { A } from "m";', ["A"]],
+    ['import * as m from "m";', []],
+    ['import m, * as n from "m";', []],
+    ['export * from "m";', []],
+    ['export * as m from "m";', []],
+    ['export type * from "m";', []],
+    ['import "m";', []],
+    ['import {} from "m";', []],
+    ['export {} from "m";', []],
+    ['import m = require("m");', []],
+    ['const m = await import("m");', []],
+    ['type T = import("m").A;', []],
+  ];
+  for (const [source, names] of UNREADABLE) {
+    it(`${source} takes a name no one can read`, () =>
+      expect(takes(source)).toEqual([["m", names, true]]));
+  }
+
+  it("sums every declaration of one specifier, and keeps the specifiers apart", () => {
+    const source = [
+      'import { A } from "m";',
+      'import type { B } from "m";',
+      'export { C } from "m";',
+      'import { D } from "m/sub";',
+      "export const local = 1;",
+      "export { local as renamed };",
+    ].join("\n");
+    expect(takes(source)).toEqual([
+      ["m", ["A", "B", "C"], false],
+      ["m/sub", ["D"], false],
+    ]);
+    expect(takes(`${source}\nimport * as ns from "m";`)).toContainEqual([
+      "m",
+      ["A", "B", "C"],
+      true,
+    ]);
   });
 });

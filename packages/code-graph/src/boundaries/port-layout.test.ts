@@ -159,3 +159,99 @@ describe("the per-feature layout keeps reading an adapters/ folder as adapters",
     ]);
   });
 });
+
+describe("a scope lists the whole port layout or none of it", () => {
+  const MODES = [{}, { ci: true }, { acceptCrossings: true, reason: "r" }] as const;
+  const PORT = "application, driving-adapters, driven-adapters";
+
+  const refusedIn = (files: Record<string, string>, rules: unknown): string => {
+    const messages = MODES.map((flags) => {
+      const run = open(files, rules);
+      const result = run.run(flags);
+      expect(result.code).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.errors).toHaveLength(1);
+      expect(fs.existsSync(run.ledgerFile)).toBe(false);
+      run.dispose();
+      return result.errors[0] ?? "";
+    });
+    expect(new Set(messages).size).toBe(1);
+    return messages[0] ?? "";
+  };
+
+  it("refuses a scope that lists some of the three folders, in every mode, naming the ones it leaves out", () => {
+    const listed = (...folders: string[]) => ({ features: { [API]: folders } });
+    expect(refusedIn(SERVICE, listed("application"))).toBe(
+      `"features" in "${API}" lists the port-layout folder(s) application and leaves out ` +
+        `driving-adapters, driven-adapters: the port layout is one hexagon of ${PORT}, so list ` +
+        "all three, or only feature folders.",
+    );
+    expect(refusedIn(SERVICE, listed("application", "driven-adapters"))).toBe(
+      `"features" in "${API}" lists the port-layout folder(s) application, driven-adapters and ` +
+        `leaves out driving-adapters: the port layout is one hexagon of ${PORT}, so list all ` +
+        "three, or only feature folders.",
+    );
+  });
+
+  it("refuses a partial listing whether or not the folders it leaves out exist", () => {
+    const files = { "tsconfig.json": SHOP_TSCONFIG, [`${SRC}/application/use.ts`]: "export {};\n" };
+    expect(refusedIn(files, { features: { [API]: ["application"] } })).toContain(
+      "leaves out driving-adapters, driven-adapters",
+    );
+  });
+
+  it("refuses a scope of feature folders whose src/ holds a port folder it does not list", () => {
+    const files = {
+      "tsconfig.json": SHOP_TSCONFIG,
+      [`${SRC}/orders/index.ts`]: "export const orders = 1;\n",
+      [`${SRC}/driven-adapters/db.ts`]: "export const db = 1;\n",
+    };
+    expect(refusedIn(files, { features: { [API]: ["orders"] } })).toBe(
+      `"features" in "${API}" leaves out the port-layout folder(s) driven-adapters that ` +
+        `${SRC}/ holds: list ${PORT} together, or rename the folder(s).`,
+    );
+  });
+
+  it("counts a port folder that exists on disk, holding no file", () => {
+    const run = open(
+      { "tsconfig.json": SHOP_TSCONFIG, [`${SRC}/orders/index.ts`]: "" },
+      {
+        features: { [API]: ["orders"] },
+      },
+    );
+    fs.mkdirSync(`${run.root}/${SRC}/application`);
+    const result = run.run();
+    expect(result.code).toBe(2);
+    expect(result.errors[0]).toContain("port-layout folder(s) application");
+  });
+
+  it("runs a scope that lists all three folders, whether or not each exists, as before", () => {
+    const run = open(SERVICE, PORT_RULES);
+    const result = run.run({ json: true });
+    expect(result.errors).toEqual([]);
+    expect(result.code).toBe(0);
+    const [scope] = JSON.parse(result.stdout).scopes;
+    expect(scope.features).toEqual(["application", "driven-adapters", "driving-adapters"]);
+    expect(scope.violations).not.toEqual([]);
+
+    run.dispose();
+
+    const bare = open(
+      { "tsconfig.json": SHOP_TSCONFIG, [`${SRC}/application/use.ts`]: "export {};\n" },
+      { features: PORT_RULES.features },
+    );
+    expect(bare.run().code).toBe(0);
+  });
+
+  it("places every file under the three folders, so no entry is unknown", () => {
+    const files = {
+      "tsconfig.json": SHOP_TSCONFIG,
+      [`${SRC}/application/a.ts`]: "export const a = 1;\n",
+      [`${SRC}/application/for-x/b.ts`]: "export const b = 1;\n",
+      [`${SRC}/driving-adapters/x/y/c.ts`]: "export const c = 1;\n",
+      [`${SRC}/driven-adapters/d.ts`]: "export const d = 1;\n",
+      [`${SRC}/loose.ts`]: "export const loose = 1;\n",
+    };
+    expect(crossingsOf(open(files, { features: PORT_RULES.features }))).toEqual([]);
+  });
+});

@@ -24,6 +24,7 @@ import {
   readBoundaryLedger,
   writeBoundaryLedger,
 } from "./ledger.js";
+import { allowanceIssue, importedNamesFor } from "./libraries/allowance.js";
 import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { declaresLibraries } from "./libraries/schema.js";
@@ -37,7 +38,12 @@ import {
   renderMigrated,
   renderMigrationRefused,
 } from "./render.js";
-import { type BoundaryRules, inScope, LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import {
+  type BoundaryRules,
+  inScope,
+  LEGACY_CEILINGS_FILENAME,
+  unlistedPortFolderIssue,
+} from "./rules.js";
 import { declaresReadAllowance } from "./shape/schema.js";
 import { readShape, shapeFactsOf } from "./shape/shape.js";
 import { unknownDriven } from "./zones/reads.js";
@@ -119,9 +125,19 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
     importEdges: importEdgesByFile.get(file) ?? [],
     impureUses: detectImpureUses(syntax),
     runtimeSpecifiers: runtimeSpecifiers(syntax),
+    importedNames: importedNamesFor(reads.libraries, scope, syntax),
     bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
     ...shapeFactsOf(reads.shape, scope, file, syntax),
   }));
+}
+
+// The names of the entries directly under a scope's `src/`, none when it has no such directory.
+function srcEntries(scope: string, repoRoot: string): string[] {
+  try {
+    return fs.readdirSync(path.join(repoRoot, scope, "src"));
+  } catch {
+    return [];
+  }
 }
 
 function analyzeScope(
@@ -130,10 +146,18 @@ function analyzeScope(
   reads: Reads,
   args: BoundaryGateArgs,
 ): ScopeAnalysis {
+  const listed = rules.features[scope];
+  const unlisted =
+    listed === undefined
+      ? null
+      : unlistedPortFolderIssue(scope, listed, srcEntries(scope, args.repoRoot));
+  if (unlisted !== null) throw new Error(unlisted);
   const modules = readsFiles(scope, rules, reads.libraries) ? loadModules(scope, reads, args) : [];
   const files = new Set(modules.map((module) => module.file));
   const owners = rules.bindingOwners[scope] ?? {};
-  const issue = bindingOwnerIssue(scope, owners, files, reads.deployables);
+  const issue =
+    bindingOwnerIssue(scope, owners, files, reads.deployables) ??
+    allowanceIssue(reads.libraries, scope, modules);
   if (issue !== null) throw new Error(issue);
   const unread = unknownDriven(reads.shape.allowance, scope, files);
   if (unread.length > 0) {
