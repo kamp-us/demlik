@@ -165,7 +165,7 @@ export function isWorldLibrary(libraries: Libraries, specifier: string): boolean
 
 // Whether a file in `zone` may not import the declared library `dir`: its type names where it may
 // be imported from, and `zone` is not one of them (B14). A `null` zone is a place no `importedFrom`
-// names: a hexagonal feature's `application/`, `adapters/driving/`, `index.ts` and `ports.ts`.
+// names: a hexagon's application, driving and ports zones, and a feature's `index.ts`.
 export function importedFromOutside(
   libraries: Libraries,
   dir: string,

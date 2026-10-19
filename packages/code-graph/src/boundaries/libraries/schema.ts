@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// Where a library of a type may be imported from: a hexagonal feature's `adapters/driven/`, a file
-// outside every feature, or anywhere.
+// Where a library of a type may be imported from: a hexagon's driven zone, a file outside every
+// feature, or anywhere.
 const ImportedFromSchema = z.enum(["driven", "configurator", "any"]);
 export type ImportedFrom = z.infer<typeof ImportedFromSchema>;
 

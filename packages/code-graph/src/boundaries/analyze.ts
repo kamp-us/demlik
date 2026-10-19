@@ -72,7 +72,7 @@ function withinFeature(
     case null:
       return null;
     case "application-imports-adapter":
-      return to.zone.entry.startsWith("adapters/") ? { kind, ...edge } : null;
+      return to.zone.adapter ? { kind, ...edge } : null;
     case "driving-reaches-driven": {
       if (to.zone.name === "application") return { kind, ...edge };
       if (to.zone.name !== "driven") return null;
@@ -135,8 +135,8 @@ function unknownZone(scope: string, place: FeaturePlace): BoundaryViolation {
   };
 }
 
-// Which `importedFrom` zone a file satisfies: a hexagonal feature's `adapters/driven/` is `driven`,
-// and a file outside every feature is a `configurator`.
+// Which `importedFrom` zone a file satisfies: a hexagonal feature's driven zone is `driven`, and a
+// file outside every feature is a `configurator`.
 function libraryZoneOf(place: Place): ImportedFrom | null {
   return place.kind === "feature" ? place.zone.rule.libraryZone : "configurator";
 }

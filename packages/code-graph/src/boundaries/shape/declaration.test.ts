@@ -9,6 +9,8 @@ const B15 = "index-not-exports-only";
 const B16 = "application-import-outside-allowlist";
 const DRIVEN = "src/orders/adapters/driven/reads.ts";
 const LIBRARIES = { libraryTypes: SHOP_TYPES, libraries: { "packages/domain-kernel": "kernel" } };
+const notDriven = (file: string): string =>
+  `file "${file}" of "readAllowance" in "${API}" is not under a driven adapter, src/<feature>/adapters/driven/ (per-feature layout) or src/driven-adapters/ (port layout): only a driven file can be read through, so a listing anywhere else could never grant.`;
 
 describe("the six keys are parsed at the config boundary", () => {
   let repo: BoundaryRepo;
@@ -146,13 +148,13 @@ describe("the six keys are parsed at the config boundary", () => {
     [
       "a driven file that is no driven adapter",
       api({ readAllowance: { [API]: { driven: ["src/orders/application/use.ts"] } } }),
-      `file "src/orders/application/use.ts" of "readAllowance" in "${API}" is not under a hexagonal feature's adapters/driven/: only a driven file can be read through, so a listing anywhere else could never grant.`,
+      notDriven("src/orders/application/use.ts"),
     ],
     [
       "a driven file the scope does not load",
       api({ readAllowance: { [API]: { driven: ["src/orders/adapters/driven/gone.ts"] } } }),
       `driven file(s) of "readAllowance" in "${API}" name no file the scope loads: src/orders/adapters/driven/gone.ts. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+        "A listed file is an exact scope-relative .ts/.tsx path.",
     ],
     [
       "a scope that declares no features",
@@ -179,9 +181,7 @@ describe("the six keys are parsed at the config boundary", () => {
     ["an entry in no zone", "src/orders/helpers.ts"],
     ["a file of a feature the scope does not declare", "src/shipping/adapters/driven/x.ts"],
   ])("refuses a driven file that is %s", (_, file) => {
-    expect(refused(api(allowance({ driven: [file] })))).toBe(
-      `file "${file}" of "readAllowance" in "${API}" is not under a hexagonal feature's adapters/driven/: only a driven file can be read through, so a listing anywhere else could never grant.`,
-    );
+    expect(refused(api(allowance({ driven: [file] })))).toBe(notDriven(file));
   });
 
   it("refuses a driven file the scope does not load, in every mode", () => {
@@ -193,7 +193,7 @@ describe("the six keys are parsed at the config boundary", () => {
     ]);
     expect(message).toBe(
       `driven file(s) of "readAllowance" in "${API}" name no file the scope loads: ${missing}. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+        "A listed file is an exact scope-relative .ts/.tsx path.",
     );
   });
 
