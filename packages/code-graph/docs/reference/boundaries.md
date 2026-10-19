@@ -50,7 +50,7 @@ src/
   application/
     driving-ports/     port types the driving adapters call
     driven-ports/      port types the driven adapters implement
-                       everything else: use cases
+    (other files)      use cases
   driving-adapters/    HTTP, RPC, cron, and other callers
   driven-adapters/     storage and other external operations
 ```
@@ -95,7 +95,9 @@ The port layout has no `index.ts` to go through, so a wiring file outside the
 three folders, such as a worker's entry, may import any of its zones. It has no
 other feature to import, so B1 does not arise, and every file under the three
 folders is in a zone, so B10 does not arise. A report lists the three folders
-as the scope's features.
+as the scope's features. In `--json`, a violation's `feature` and `toFeature`
+fields hold the scope path for a port-layout file, because the scope is the one
+hexagon.
 
 ## Impure globals
 

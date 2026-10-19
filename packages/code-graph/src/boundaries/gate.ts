@@ -139,7 +139,7 @@ function analyzeScope(
   if (unread.length > 0) {
     throw new Error(
       `driven file(s) of "readAllowance" in "${scope}" name no file the scope loads: ${unread.join("; ")}. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+        "A listed file is an exact scope-relative .ts/.tsx path.",
     );
   }
   return analyzeBoundaries(scope, modules, rules, reads);

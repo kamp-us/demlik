@@ -154,7 +154,7 @@ describe("the six keys are parsed at the config boundary", () => {
       "a driven file the scope does not load",
       api({ readAllowance: { [API]: { driven: ["src/orders/adapters/driven/gone.ts"] } } }),
       `driven file(s) of "readAllowance" in "${API}" name no file the scope loads: src/orders/adapters/driven/gone.ts. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+        "A listed file is an exact scope-relative .ts/.tsx path.",
     ],
     [
       "a scope that declares no features",
@@ -193,7 +193,7 @@ describe("the six keys are parsed at the config boundary", () => {
     ]);
     expect(message).toBe(
       `driven file(s) of "readAllowance" in "${API}" name no file the scope loads: ${missing}. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+        "A listed file is an exact scope-relative .ts/.tsx path.",
     );
   });
 
