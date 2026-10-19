@@ -1,5 +1,53 @@
 # @demlik/code-graph
 
+## 0.10.0
+
+### Minor Changes
+
+- 22929da: `code-graph --boundaries` can license some names of a library to one importer. A rules file's new
+  `allowImportNames` key (`{ "<importer>": { "<imported library>": ["<name>", …] } }`, both directories
+  as `libraries` writes them, named as ESLint's `no-restricted-imports` option is) waives B12
+  `library-imports-up` for a file when the allowance lists every name it imports from that library, so a
+  repo whose client apps import a service's contract library directly can record today's imports with
+  `--accept-crossings`, keep the names a client legitimately produces out of the ledger, and watch the
+  ledger shrink as clients move to the generated types.
+
+  - A name is the exported name, summed over all of a file's imports of the library: `import { A as B }`
+    and `export { A } from` take `A`, a subpath and a type-only import count. A default import,
+    `import * as ns`, `export * from`, `import()` and `import "m"` take no readable name and stay B12
+    whatever the list says. The entry is unchanged: one per importing file and library.
+  - Exit 2 with nothing written, in one line naming `allowImportNames`, for an importer or an imported
+    library that is no declared library, an importer whose type already lists the imported library's
+    type, and a name the importer never imports from that library.
+  - A rules file without the key runs as before. There is no new kind, and `--graph`, the ledger and
+    `ImportEdgeSchema` are unchanged.
+
+  A port-layout scope now lists all three of `application`, `driving-adapters` and `driven-adapters`. A
+  scope that lists some of them, or lists none while its `src/` holds one, exits 2 with one line naming
+  the scope and the folders it leaves out and writes nothing, where it used to leave those folders'
+  files unjudged and unreported. The port layout's zone table no longer carries an `index` or an
+  `unknown` row, and a port scope can no longer produce an `unknown-zone` entry.
+
+- 6b8d68e: `code-graph --boundaries` reads a service laid out in Cockburn's top-level port shape, not only the
+  per-feature one. A scope whose `features` list `application`, `driving-adapters` and
+  `driven-adapters` is one hexagon with those three folders straight under `src/`: a binding used in
+  `driven-adapters/` is no longer a false B17, and B6 (an application importing an adapter) and B8 (a
+  driving adapter reaching an application use case or a driven adapter) now run on that shape, where
+  they were silent.
+
+  - `application/driving-ports/` and `application/driven-ports/` are the ports zone, the rest of
+    `application/` is the application, `driving-adapters/` and `driven-adapters/` are the driving
+    and driven zones. B7 judges them like the per-feature zones, and a file outside the three
+    folders, such as a worker entry, may import any of them, so B4 does not flag the wiring.
+  - A folder named for a port-layout zone makes the scope a port-layout scope. A scope that lists
+    one of them and a feature folder exits 2 with a message naming the scope and the two kinds, and
+    writes nothing.
+  - `bindingOwners` and `readAllowance` accept a file under `src/driven-adapters/`; their refusals
+    now name both the per-feature path and the port-layout path.
+  - The rules file gains no key. The zone paths of both layouts are one table in `rules.ts`, and B6
+    reads whether the target is an adapter from that table. The per-feature layout's verdicts and
+    ledger entries are unchanged.
+
 ## 0.9.0
 
 ### Minor Changes
