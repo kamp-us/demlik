@@ -14,7 +14,7 @@ import {
   type LibraryType,
 } from "./schema.js";
 
-// The libraries a repo declares, read once: the rules file's four keys beside what the repo says
+// The libraries a repo declares, read once: the rules file's five keys beside what the repo says
 // about itself (which directories are packages, and what each is named). Every question the
 // judgments ask about a library, a package or a specifier is answered here and nowhere else.
 export type Libraries = {
@@ -35,6 +35,7 @@ const NO_RULES: LibraryRules = {
   libraries: {},
   libraryRoots: [],
   worldLibraries: [],
+  allowImportNames: {},
 };
 
 // What a rules file that declares no library key reads as: no library, no root and no world

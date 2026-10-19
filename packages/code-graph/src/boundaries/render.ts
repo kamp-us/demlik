@@ -169,7 +169,9 @@ const IMPURE_FIX_LINES = [
 
 const LIBRARY_FIX_LINES = [
   "  Declare every package under a library root in `libraries`, import only the library types a",
-  "  type's `imports` lists, and import a library that names `importedFrom` only from those zones.",
+  "  type's `imports` lists, and import a library that names `importedFrom` only from those zones. A",
+  "  library that may take only some names of another is licensed in `allowImportNames`, per importer",
+  "  and imported library.",
 ];
 
 const SHAPE_FIX_LINES = [

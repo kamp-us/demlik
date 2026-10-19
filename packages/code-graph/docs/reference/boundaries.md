@@ -37,7 +37,7 @@ src/billing/
 ```
 
 In the port layout the scope is one hexagon, with its zones straight under
-`src/`. A scope declares it by listing the folders as its features:
+`src/`. A scope declares it by listing all three folders as its features:
 
 ```json
 {
@@ -56,11 +56,19 @@ src/
 ```
 
 A folder named `application`, `driving-adapters` or `driven-adapters` is a zone
-of the scope's hexagon, and any other name is a feature as before. A scope that
-lists both kinds exits 2 with a message naming the scope and the two kinds, and
-writes nothing. The `for-<verb>-<noun>` folders below a port directory and the
-technology folders below an adapter directory only group files; no rule reads
-them.
+of the scope's hexagon, and any other name is a feature as before. The port
+layout needs all three folders, because a folder the scope does not list would
+leave its files unjudged. Each of these exits 2 with one line naming the scope
+and writes nothing:
+
+- A scope that lists both kinds, port folders and feature folders.
+- A scope that lists some of the three folders but not all of them. The message
+  names the folders it leaves out, whether or not they exist.
+- A scope that lists no port folder while its `src/` holds one. The message
+  names the folders it leaves out.
+
+The `for-<verb>-<noun>` folders below a port directory and the technology
+folders below an adapter directory only group files; no rule reads them.
 
 The zone paths of the two layouts, which every rule below reads:
 
@@ -156,6 +164,7 @@ Library types describe which package types may import each other.
 | `libraries` | Package directory to type; each directory must hold `package.json` |
 | `libraryRoots` | Directories whose packages must all be declared |
 | `worldLibraries` | Package globs forbidden in pure libraries, including subpaths |
+| `allowImportNames` | Importer directory, to imported library directory, to the names the importer may take although its type does not list that library's type |
 
 Types may import themselves only when listed. `importedFrom` accepts `driven`,
 `configurator` (outside features), or `any`. Omitting it allows any location.
@@ -164,7 +173,7 @@ Library-to-library imports are configurator imports.
 | Rule | Kind | Violation |
 |---|---|---|
 | B11 | `library-undeclared` | A package under a library root has no declared type |
-| B12 | `library-imports-up` | A library imports a type its own type does not allow |
+| B12 | `library-imports-up` | A library imports a type its own type does not allow, and takes a name its `allowImportNames` does not license |
 | B14 | `adapter-library-imported-outside-driven` | An import violates the target type's `importedFrom` list |
 
 Imports resolve by workspace package name, including subpaths. Relative
@@ -176,6 +185,46 @@ The report's library census lists types, undeclared packages, and unjudged
 imports into undeclared workspace packages. Nested files belong to the
 nearest declared library. Packages outside declared feature/library scopes
 are not read for these file-level rules.
+
+### Licensing some names of a library
+
+B12 judges an import by the target library's type, so a type may import all of
+a library or none of it. `allowImportNames` licenses some names of a library to
+one importer whose type does not list the library's type. The key is ESLint's
+`no-restricted-imports` option, kept as it spells it:
+
+```json
+{
+  "allowImportNames": {
+    "apps/mobile": { "packages/orders-contract": ["OrderDraft"] }
+  }
+}
+```
+
+Both directories are `libraries` keys, and each list is non-empty. A rules file
+without the key runs as before.
+
+- A file is no B12 when the allowance lists every name it imports from the
+  library, summed over all its imports of it: the root specifier and its
+  subpaths, type-only imports included. `import { A as B }` takes `A`,
+  and `export { A } from` takes `A`.
+- A default import, `import * as ns`, `export * from`, `import()`,
+  `import x = require()` and `import "m"` take no readable name, so they are
+  B12 whatever the list says.
+- The entry is as without the allowance: one per importing file and library,
+  so a file that takes a licensed and an unlicensed name is one entry. A
+  client's own barrel that re-exports the library is one crossing at the
+  barrel; the judgment does not follow it to the files behind.
+- The licence waives B12 only. A library whose type lists `importedFrom` is
+  still judged by B14.
+
+Four declarations are refused with exit 2 and nothing written, each in one
+line naming `allowImportNames` and the entry: an importer that is no declared
+library, an imported library that is no declared library, an importer whose
+type already lists the imported library's type (the allowance would enforce
+nothing), and a name the importer never imports from that library. The last is
+judged where the scope is loaded, so a refactor that stops importing a licensed
+name turns the run red until the declaration is edited.
 
 ## Application shape and tests
 

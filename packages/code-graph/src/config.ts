@@ -2,7 +2,7 @@ import fs from "node:fs";
 import type { z } from "zod";
 import { deployableDeclarationIssue } from "./boundaries/deployables/declaration.js";
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
-import { type BoundaryRules, BoundaryRulesSchema, mixedLayoutIssue } from "./boundaries/rules.js";
+import { type BoundaryRules, BoundaryRulesSchema, layoutIssue } from "./boundaries/rules.js";
 import { shapeDeclarationIssue } from "./boundaries/shape/declaration.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
@@ -163,8 +163,8 @@ function featureDeclarationIssue(rules: BoundaryRules): string | null {
       }
       seen.add(feature);
     }
-    const mixed = mixedLayoutIssue(scope, features);
-    if (mixed !== null) return mixed;
+    const layout = layoutIssue(scope, features);
+    if (layout !== null) return layout;
   }
   return null;
 }

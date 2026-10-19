@@ -86,34 +86,33 @@ const HEXAGONAL_ZONES = {
 
 type HexagonalZone = keyof typeof HEXAGONAL_ZONES;
 
-// The port layout has no `index.ts` for a file outside the hexagon to go through: the composition
-// root imports its use cases and its ports as well as its adapters.
+// The zones the port layout places a file in. It has no `index` row, because there is no `index.ts`
+// for a file outside the hexagon to go through, and no `unknown` row, because every file under its
+// three folders is in a zone.
+type PortZone = Exclude<HexagonalZone, "index" | "unknown">;
+
+// A file outside the hexagon imports its use cases and its ports as well as its adapters.
 const PORT_ZONES = {
-  ...HEXAGONAL_ZONES,
   ports: { ...HEXAGONAL_ZONES.ports, openToOutside: true },
   application: { ...HEXAGONAL_ZONES.application, openToOutside: true },
-} as const satisfies Record<HexagonalZone, ZoneRule>;
+  driving: HEXAGONAL_ZONES.driving,
+  driven: HEXAGONAL_ZONES.driven,
+} as const satisfies Record<PortZone, ZoneRule>;
 
 // How a scope lays out its hexagon: one per feature folder (`src/<feature>/`), or one for the whole
 // scope with its zones straight under `src/` (Cockburn's port shape).
 type Layout = "per-feature" | "port";
 
-type LayoutRow = {
+type LayoutRow<Name extends HexagonalZone> = {
   // Where the layout's files sit, as a message names it.
   readonly root: string;
   // Each zone's folder, or file, below the hexagon. A file is in the first zone whose folder it sits
   // under, so a folder inside another is listed before it.
-  readonly zones: readonly (readonly [folder: string, zone: HexagonalZone])[];
+  readonly zones: readonly (readonly [folder: string, zone: Name])[];
   // The folders that hold adapters, whether or not a zone names the file inside: B6 judges an import
   // into one.
   readonly adapters: readonly string[];
-  readonly rules: Record<HexagonalZone, ZoneRule>;
-  // The hexagon a file `src/<top>/<rest>` sits in, and its path inside it.
-  readonly place: (
-    top: string,
-    rest: readonly string[],
-    scope: string,
-  ) => { readonly feature: string; readonly inside: readonly string[] };
+  readonly rules: Record<Name, ZoneRule>;
 };
 
 const LAYOUTS = {
@@ -128,7 +127,6 @@ const LAYOUTS = {
     ],
     adapters: ["adapters"],
     rules: HEXAGONAL_ZONES,
-    place: (top, rest) => ({ feature: top, inside: rest }),
   },
   port: {
     root: "src/",
@@ -141,9 +139,8 @@ const LAYOUTS = {
     ],
     adapters: ["driving-adapters", "driven-adapters"],
     rules: PORT_ZONES,
-    place: (top, rest, scope) => ({ feature: scope, inside: [top, ...rest] }),
   },
-} as const satisfies Record<Layout, LayoutRow>;
+} as const satisfies { "per-feature": LayoutRow<HexagonalZone>; port: LayoutRow<PortZone> };
 
 // Where the driven zone sits in each layout, for the messages that refuse a file outside it.
 export const DRIVEN_HOMES = Object.entries(LAYOUTS)
@@ -163,41 +160,103 @@ function layoutOf(folders: readonly string[]): Layout {
   return folders.some((folder) => PORT_FOLDERS.has(folder)) ? "port" : "per-feature";
 }
 
-// Why a scope's `features` are both layouts at once, or null.
-export function mixedLayoutIssue(scope: string, folders: readonly string[]): string | null {
+// Why a scope's `features` are not one whole layout, or null: they are both layouts at once, or they
+// are the port layout with a folder left out, which would leave that folder's files unjudged.
+export function layoutIssue(scope: string, folders: readonly string[]): string | null {
   const port = folders.filter((folder) => PORT_FOLDERS.has(folder));
+  if (port.length === 0) return null;
   const features = folders.filter((folder) => !PORT_FOLDERS.has(folder));
-  if (port.length === 0 || features.length === 0) return null;
+  const whole = [...PORT_FOLDERS].join(", ");
+  if (features.length > 0) {
+    return (
+      `"features" in "${scope}" lists the port-layout folder(s) ${port.join(", ")} and the feature ` +
+      `folder(s) ${features.join(", ")}: a scope is one layout, so list only ${whole}, or only feature folders.`
+    );
+  }
+  const left = [...PORT_FOLDERS].filter((folder) => !port.includes(folder));
+  if (left.length === 0) return null;
   return (
-    `"features" in "${scope}" lists the port-layout folder(s) ${port.join(", ")} and the feature ` +
-    `folder(s) ${features.join(", ")}: a scope is one layout, so list only ` +
-    `${[...PORT_FOLDERS].join(", ")}, or only feature folders.`
+    `"features" in "${scope}" lists the port-layout folder(s) ${port.join(", ")} and leaves out ` +
+    `${left.join(", ")}: the port layout is one hexagon of ${whole}, so list all three, or only feature folders.`
+  );
+}
+
+// Why a scope's `src/` holds a port-layout folder its `features` do not list, or null. `held` is the
+// names of the entries directly under the scope's `src/`.
+export function unlistedPortFolderIssue(
+  scope: string,
+  folders: readonly string[],
+  held: readonly string[],
+): string | null {
+  const left = [...PORT_FOLDERS].filter(
+    (folder) => held.includes(folder) && !folders.includes(folder),
+  );
+  if (left.length === 0) return null;
+  return (
+    `"features" in "${scope}" leaves out the port-layout folder(s) ${left.join(", ")} that ` +
+    `${inScope(scope, "src")}/ holds: list ${[...PORT_FOLDERS].join(", ")} together, or rename the folder(s).`
   );
 }
 
 // `entry` is the zone's root below the hexagon: a file, or a folder.
-type Zone = {
-  readonly name: HexagonalZone;
+type Zone<Name extends HexagonalZone = HexagonalZone> = {
+  readonly name: Name;
   readonly entry: string;
   readonly rule: ZoneRule;
   readonly adapter: boolean;
 };
 
-function zoneOf(layout: Layout, inside: readonly string[]): Zone {
-  const row: LayoutRow = LAYOUTS[layout];
-  const [top = "", next] = inside;
-  const adapter = inside.length > 1 && row.adapters.includes(top);
-  const path = inside.join("/");
-  const home = row.zones.find(([folder]) => path === folder || path.startsWith(`${folder}/`));
-  if (home !== undefined) {
-    const [entry, name] = home;
-    return { name, entry, rule: row.rules[name], adapter };
-  }
-  const entry = adapter && next !== undefined ? `${top}/${next}` : top;
-  return { name: "unknown", entry, rule: row.rules.unknown, adapter };
+function inAdapters(
+  row: { readonly adapters: readonly string[] },
+  inside: readonly string[],
+): boolean {
+  return inside.length > 1 && row.adapters.includes(inside[0] ?? "");
 }
 
-export type FeatureFile = { readonly feature: string; readonly zone: Zone };
+// The zone a path below the hexagon is in, or null when no folder the layout lists holds it.
+function zoneIn<Name extends HexagonalZone>(
+  row: LayoutRow<Name>,
+  inside: readonly string[],
+): Zone<Name> | null {
+  const path = inside.join("/");
+  const home = row.zones.find(([folder]) => path === folder || path.startsWith(`${folder}/`));
+  if (home === undefined) return null;
+  const [entry, name] = home;
+  return { name, entry, rule: row.rules[name], adapter: inAdapters(row, inside) };
+}
+
+// A per-feature entry no zone names: a file or folder directly under the feature (B10), or under its
+// `adapters/`. Only this layout has them; a port scope lists all three of its folders, and each holds
+// every file below it.
+function unknownEntry(inside: readonly string[]): Zone {
+  const [top = "", next] = inside;
+  const adapter = inAdapters(LAYOUTS["per-feature"], inside);
+  const entry = adapter && next !== undefined ? `${top}/${next}` : top;
+  return { name: "unknown", entry, rule: HEXAGONAL_ZONES.unknown, adapter };
+}
+
+// A file in a hexagon, and the zone it is in. The layout tags it: a port scope's zones never include
+// `index` or `unknown`.
+export type FeatureFile =
+  | { readonly layout: "per-feature"; readonly feature: string; readonly zone: Zone }
+  | { readonly layout: "port"; readonly feature: string; readonly zone: Zone<PortZone> };
+
+// The hexagon a file `src/<top>/<rest>` sits in, by layout. A port-layout scope is one hexagon, the
+// scope, and its path inside it starts at `top`.
+const FILE_OF = {
+  "per-feature": (top, rest) => ({
+    layout: "per-feature",
+    feature: top,
+    zone: zoneIn(LAYOUTS["per-feature"], rest) ?? unknownEntry(rest),
+  }),
+  port: (top, rest, scope) => {
+    const zone = zoneIn(LAYOUTS.port, [top, ...rest]);
+    return zone === null ? null : { layout: "port", feature: scope, zone };
+  },
+} as const satisfies Record<
+  Layout,
+  (top: string, rest: readonly string[], scope: string) => FeatureFile | null
+>;
 
 export type ScopeZoning = {
   readonly layout: Layout;
@@ -216,14 +275,12 @@ export function scopeZoning(rules: BoundaryRules, scope: string): ScopeZoning {
   };
 }
 
-// The feature a scope-relative file sits in and its zone there, or null outside every feature. A
-// port-layout scope is one feature: the hexagon is the scope.
+// The feature a scope-relative file sits in and its zone there, or null outside every feature.
 export function featureFileOf(file: string, zoning: ScopeZoning): FeatureFile | null {
   const [src, top, ...rest] = file.split("/");
   if (src !== "src" || top === undefined || rest.length === 0) return null;
   if (!zoning.features.has(top)) return null;
-  const { feature, inside } = LAYOUTS[zoning.layout].place(top, rest, zoning.scope);
-  return { feature, zone: zoneOf(zoning.layout, inside) };
+  return FILE_OF[zoning.layout](top, rest, zoning.scope);
 }
 
 export type FeaturePlace = { readonly kind: "feature" } & FeatureFile;

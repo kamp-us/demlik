@@ -3,6 +3,7 @@ import type { SiteRow } from "./deployables/census.js";
 import { type BindingSite, type Deployables, isWorkerMain } from "./deployables/deployables.js";
 import { judgeDeployables } from "./deployables/judge.js";
 import type { ImpureUse } from "./impure-uses.js";
+import type { NamedFile } from "./libraries/allowance.js";
 import { type Libraries, ownerOf } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
 import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
@@ -24,7 +25,8 @@ import { type RootReach, rootReachOf, testReachViolations } from "./zones/test-r
 import { isTestFile, judgedInTestFile } from "./zones/test-role.js";
 
 export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
-  ShapeFacts & {
+  ShapeFacts &
+  NamedFile & {
     readonly impureUses: readonly ImpureUse[];
     // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
     // `import { type Stats }` as a value import; a module row of `IMPURE_GLOBALS` asks this.
@@ -124,7 +126,11 @@ function violationOf(ctx: EdgeContext): BoundaryViolation | null {
   return to.kind === "feature" ? crossingFrom(ctx, edge.target, to) : null;
 }
 
-function unknownZone(scope: string, place: FeaturePlace): BoundaryViolation {
+// B10's entry for a file in a per-feature hexagon that no zone holds. A port scope has none: it lists
+// all three of its folders, and each holds every file below it.
+function unknownEntryOf(scope: string, place: Place): BoundaryViolation | null {
+  if (place.kind !== "feature" || place.layout !== "per-feature") return null;
+  if (place.zone.name !== "unknown") return null;
   return {
     kind: "unknown-zone",
     from: inScope(scope, `src/${place.feature}/${place.zone.entry}`),
@@ -261,10 +267,8 @@ export function analyzeBoundaries(
     const fromPlace = placeOf(module.file, ctx.zoning);
     // A test file sits in no zone, so an entry that holds only test files is no entry.
     const isTest = isTestFile(inputs.shape.tests, scope, module.file);
-    if (!isTest && fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
-      const entry = unknownZone(scope, fromPlace);
-      unknownEntries.set(entry.from, entry);
-    }
+    const unknown = isTest ? null : unknownEntryOf(scope, fromPlace);
+    if (unknown !== null) unknownEntries.set(unknown.from, unknown);
     const found = analyzeModule(ctx, module, fromPlace);
     violations.push(...found.violations);
     sites.push(...found.sites);
