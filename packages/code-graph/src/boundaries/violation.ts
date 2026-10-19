@@ -121,9 +121,8 @@ export type BoundaryViolation =
       readonly typeOnly: boolean;
     }
   | {
-      // A worker binding its owning worker declares, used in a file outside a hexagonal feature's
-      // `adapters/driven/`: `specifier` is the binding's name in the config, one entry per file per
-      // binding.
+      // A worker binding its owning worker declares, used in a file outside a hexagon's driven
+      // zone: `specifier` is the binding's name in the config, one entry per file per binding.
       readonly kind: "binding-outside-driven-adapter";
       readonly from: string;
       readonly to: null;

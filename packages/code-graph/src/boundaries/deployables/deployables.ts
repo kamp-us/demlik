@@ -52,7 +52,7 @@ export type BindingSite = { readonly binding: string; readonly line: number };
 
 // The facts of one file the deployable rules read, as `analyzeBoundaries` hands them over.
 // `file` is scope-relative and `from` repo-relative, as the ledger writes it; `driven` is whether
-// the file sits in a hexagonal feature's `adapters/driven/`, `isMain` whether it is the `main` of the
+// the file sits in a hexagon's driven zone, `isMain` whether it is the `main` of the
 // worker its bindings are judged against, and `owners` the scope's `bindingOwners`.
 export type DeployableFile = {
   readonly scope: string;

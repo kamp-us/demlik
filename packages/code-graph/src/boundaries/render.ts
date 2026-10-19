@@ -155,12 +155,16 @@ const FIX_LINES = [
 const HEXAGONAL_FIX_LINES = [
   "  In a hexagonal feature, keep application/ off its own adapters/, let adapters/driving/ reach",
   "  the core only through ports.ts and index.ts, and keep the feature to index.ts, ports.ts,",
-  "  application/, adapters/driving/ and adapters/driven/.",
+  "  application/, adapters/driving/ and adapters/driven/. A scope whose features are application,",
+  "  driving-adapters and driven-adapters is one hexagon in the port layout, zones straight under",
+  "  src/: application/ (its application/driving-ports/ and application/driven-ports/ are the",
+  "  ports), driving-adapters/ and driven-adapters/, under the same rules.",
 ];
 
 const IMPURE_FIX_LINES = [
   "  Reach the outside world (any process.<member>, fetch, the clock, node:fs) only in",
-  "  adapters/driven/, and keep a pure library free of it and of `worldLibraries`.",
+  "  adapters/driven/ (driven-adapters/ in the port layout), and keep a pure library free of it and",
+  "  of `worldLibraries`.",
 ];
 
 const LIBRARY_FIX_LINES = [
@@ -170,14 +174,16 @@ const LIBRARY_FIX_LINES = [
 
 const SHAPE_FIX_LINES = [
   "  Keep an entry file (a library's src/index.ts, a feature's index.ts) to named re-exports, and an",
-  "  application/ file to its own ports.ts and application/, another feature's index.ts, lib, a",
-  "  library whose type `applicationMayImport` lists and a `pureDependencies` package.",
+  "  application/ file to its own ports (ports.ts, or the port folders of the port layout) and",
+  "  application/, another feature's index.ts, lib, a library whose type `applicationMayImport`",
+  "  lists and a `pureDependencies` package.",
 ];
 
 const DEPLOYABLE_FIX_LINES = [
-  "  Use a worker binding only in a feature's adapters/driven/ or in its worker's wrangler main",
-  "  (`bindingOwners` narrows one to exact driven files), break a loop of workers that bind each",
-  "  other, and reach another workspace by its package name, never a relative path.",
+  "  Use a worker binding only in a feature's adapters/driven/ (driven-adapters/ in the port layout)",
+  "  or in its worker's wrangler main (`bindingOwners` narrows one to exact driven files), break a",
+  "  loop of workers that bind each other, and reach another workspace by its package name, never a",
+  "  relative path.",
 ];
 
 const TEST_FIX_LINES = [

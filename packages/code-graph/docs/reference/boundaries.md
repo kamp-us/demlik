@@ -24,7 +24,8 @@ Undeclared rules do not create a verdict.
 Scope paths are repository-relative. Feature names are folders directly under
 that scope's `src/`. Shared helper folders default to `lib`.
 
-A declared feature uses this layout, the only one:
+A scope uses one of two layouts, picked by the folders `features` lists. In
+the per-feature layout each declared feature is its own hexagon:
 
 ```text
 src/billing/
@@ -34,6 +35,42 @@ src/billing/
   adapters/driving/    HTTP, RPC, cron, and other callers
   adapters/driven/     storage and other external operations
 ```
+
+In the port layout the scope is one hexagon, with its zones straight under
+`src/`. A scope declares it by listing the folders as its features:
+
+```json
+{
+  "features": { "services/mail": ["application", "driving-adapters", "driven-adapters"] }
+}
+```
+
+```text
+src/
+  application/
+    driving-ports/     port types the driving adapters call
+    driven-ports/      port types the driven adapters implement
+                       everything else: use cases
+  driving-adapters/    HTTP, RPC, cron, and other callers
+  driven-adapters/     storage and other external operations
+```
+
+A folder named `application`, `driving-adapters` or `driven-adapters` is a zone
+of the scope's hexagon, and any other name is a feature as before. A scope that
+lists both kinds exits 2 with a message naming the scope and the two kinds, and
+writes nothing. The `for-<verb>-<noun>` folders below a port directory and the
+technology folders below an adapter directory only group files; no rule reads
+them.
+
+The zone paths of the two layouts, which every rule below reads:
+
+| Zone | Per-feature layout | Port layout |
+|---|---|---|
+| Entry | `index.ts` | none |
+| Ports | `ports.ts` | `application/driving-ports/`, `application/driven-ports/` |
+| Application | `application/` | the rest of `application/` |
+| Driving | `adapters/driving/` | `driving-adapters/` |
+| Driven | `adapters/driven/` | `driven-adapters/` |
 
 | Rule | Kind | Violation |
 |---|---|---|
@@ -54,12 +91,20 @@ A wiring file outside features and helpers may import hexagonal adapters.
 It still cannot import `application/` or `ports.ts`. Cross-feature imports
 remain limited to `index.ts`.
 
+The port layout has no `index.ts` to go through, so a wiring file outside the
+three folders, such as a worker's entry, may import any of its zones. It has no
+other feature to import, so B1 does not arise, and every file under the three
+folders is in a zone, so B10 does not arise. A report lists the three folders
+as the scope's features.
+
 ## Impure globals
 
 An impure global is a recognized reference to the outside world. B7 `impure`
 is the one rule for it, and the place comes from the entry's `from` path.
 `index.ts`, `ports.ts`, `application/`, `adapters/driving/` and a library
-whose type is `pure: true` may not use one. `adapters/driven/` may.
+whose type is `pure: true` may not use one. `adapters/driven/` may. In the
+port layout, `application/` (its port directories included) and
+`driving-adapters/` may not, and `driven-adapters/` may.
 
 | Impure global | Recognized use |
 |---|---|
@@ -212,7 +257,9 @@ wiring is accepted by name with `--accept-crossings --reason`.
 
 With `decidedBy`, the driving file must also make a runtime import from a
 library of a listed type. Without it, any driving file may use the listed
-reads. Empty lists are invalid; the scope must have hexagonal features.
+reads. Empty lists are invalid; the scope must have hexagonal features. Each
+`driven` file sits in a driven zone: `adapters/driven/`, or `driven-adapters/`
+in the port layout.
 
 A recognized storage write in a listed file always blocks the allowance.
 The B8 report names its first write site. ORM writes and `unknown` access
@@ -230,7 +277,8 @@ declares read allowances, because write detection would be incomplete.
 | B19 | `relative-import-crosses-workspace` | A relative import points into another package directory |
 
 `bindingOwners` can further limit a binding to exact scope-relative driven
-files. It requires B17 and a scope declaring features.
+files, under `adapters/driven/` or, in the port layout, `driven-adapters/`. It
+requires B17 and a scope declaring features.
 
 B17 reads the nearest top-level Wrangler config and recognizes `env`, `.env`
 receivers, and one alias level. Arbitrary receiver names, deeper aliases,
