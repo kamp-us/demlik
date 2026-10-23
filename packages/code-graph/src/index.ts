@@ -54,6 +54,7 @@ import { renderSmells } from "./render/smells.js";
 import { renderSummary } from "./render/summary.js";
 import { renderTree } from "./render/tree.js";
 import type { Graph } from "./schema.js";
+import { prepareSmellGate, runSmellLedgerGate, smellGateNeedsEdges } from "./smells/gate.js";
 import { isPlanAxis, type PlanAxis } from "./smells/plan.js";
 import { prepareUnreachableGate, runUnreachableGate } from "./unreachable/gate.js";
 
@@ -113,6 +114,8 @@ defineProgram()
     const repoRoot = findRepoRoot(rootAbsolute);
     const unreachableGate = prepareUnreachableGate(opts, rootAbsolute, repoRoot, cleanExit);
     if (unreachableGate.kind === "refused") return;
+    const smellGate = prepareSmellGate(opts, rootAbsolute, repoRoot, cleanExit);
+    if (smellGate.kind === "refused") return;
 
     if (opts.layers === true) {
       const code = runLayerGate({
@@ -199,7 +202,8 @@ defineProgram()
       opts.html === true ||
       opts.cycles === true ||
       wantCrossRuntime ||
-      wantInterfaceWidth;
+      wantInterfaceWidth ||
+      smellGateNeedsEdges(smellGate);
     const scope: EdgeScope = opts.deep === true ? "deep" : "package";
 
     if (opts.plan !== true && opts.by !== undefined && opts.by !== "rot") {
@@ -247,6 +251,11 @@ defineProgram()
     if (unreachableGate.kind === "prepared") {
       const out = { emit, report: cleanExit, json, pretty };
       exitWith(runUnreachableGate(unreachableGate.gate, graph, out));
+      return;
+    }
+
+    if (smellGate.kind === "prepared") {
+      exitWith(runSmellLedgerGate(smellGate.gate, graph, { emit, json, pretty }));
       return;
     }
 

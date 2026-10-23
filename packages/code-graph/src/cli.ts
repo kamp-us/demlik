@@ -47,6 +47,7 @@ export type Opts = {
   acceptCrossings?: boolean;
   reason?: string;
   acceptDead?: boolean;
+  acceptSmells?: boolean;
   deadOnly?: boolean;
   migrateCeilings?: boolean;
   api?: string;
@@ -84,9 +85,16 @@ function graphOptions(command: Command): Command {
       "every function and top-level declaration (type alias, interface, enum, class, constant) named <name>, as JSON: kind, file, line, exported flag and uses; implies the edge pass",
     )
     .option("--html", "emit a self-contained HTML report (human view); implies the edge pass")
-    .option("--ci", "CI gate: exit non-zero per --fail-on / --max policy")
+    .option(
+      "--ci",
+      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on',
+    )
     .option("--fail-on <level>", "CI severity to fail on: high | warn", "high")
     .option("--max <n>", "CI: fail if total smell count exceeds <n>")
+    .option(
+      "--accept-smells",
+      'record today\'s smells of the rules smell-ledger.json gates: add every one the ledger does not name (entries keyed by rule and repo-relative target), raise each recorded one that grew to its measured value, each carrying --reason "<why>" (required), and lower and prune as --ci does; exits 2 when no rule is gated; not with --ci',
+    )
     .option("--thresholds <file>", "JSON file of partial threshold overrides merged over defaults");
 }
 
@@ -149,7 +157,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--reason <text>",
-      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay",
+      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay",
     )
     .option(
       "--migrate-ceilings",
