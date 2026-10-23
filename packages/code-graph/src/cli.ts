@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { Command } from "commander";
 import { entryExportPresetNames } from "./kinds/presets.js";
 
@@ -8,6 +9,7 @@ export type Opts = {
   plan?: boolean;
   smells?: boolean;
   tree?: boolean;
+  hexagon?: boolean;
   by?: string;
   file?: string;
   edges?: boolean;
@@ -60,6 +62,19 @@ export function cleanExit(message: string): void {
   process.exitCode = 2;
 }
 
+export function outputTo(destination: string | undefined): (payload: string) => void {
+  return (payload) => {
+    if (destination !== undefined) {
+      fs.writeFileSync(destination, payload);
+      process.stderr.write(
+        `code-graph: wrote ${Buffer.byteLength(payload)} bytes to ${destination}\n`,
+      );
+      return;
+    }
+    process.stdout.write(payload);
+  };
+}
+
 // Sets the process exit code a run resolved to; 0 leaves whatever is already set.
 export function exitWith(code: number): void {
   if (code !== 0) process.exitCode = code;
@@ -72,6 +87,7 @@ function graphOptions(command: Command): Command {
     .option("--by <axis>", "plan ranking axis: rot | impact | complexity | size", "rot")
     .option("--smells", "emit all smells grouped by kind (human; --json for Smell[])")
     .option("--tree", "emit an indented file → function tree with inline smell markers")
+    .option("--hexagon", "emit one feature's Ports & Adapters (human; --json for data)")
     .option("--file <f>", "emit one module + its functions")
     .option("--edges", "run the opt-in edge pass (calls/calledBy/importedBy/chain + edge smells)")
     .option(

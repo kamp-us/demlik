@@ -364,6 +364,7 @@ code-graph <path> [flags]
 | `--plan [--by rot\|impact\|complexity\|size]` | Ranked `PlanRow[]` (human table, top 20). `--json` → full `PlanRow[]`. fanIn shows `—`/`null` unless the edge pass ran; **`--by impact` without edges is refused** (clean stderr, non-zero exit) — it needs the call graph |
 | `--smells` | All smells grouped by kind (human). `--json` → `Smell[]` |
 | `--tree` | Indented `file → function  L12-48  loc=36 cx=8 nest=3 [smell markers]` |
+| `--hexagon` | One feature's Ports & Adapters inventory (§14), human text; `--json` for data |
 | `--file <f>` | One module + its functions only. Warns if `<f>` is in `parseFailures` |
 | `--blast <id>` | Direct + transitive callers of `<id>`: list of `{ callerId, file, line, depth }` + `callChainDepth`. **Lists DISTINCT external callers only** — the target's own self-recursion is excluded from `callers` (so `callers.length` equals the target's `fanIn`) and surfaced separately as `recursiveSelfCalls` (count of self-call sites), shown as a `recursive: N self-calls` note in the human render. If a **bare name** matches >1 function, prints all candidate ids and exits non-zero. Output carries `scope`; in `package` scope sets `crossPackageCallersOmitted: true` and warns to re-run with `--deep` |
 | `--find <name>` | Name lookup over both node sets (§6 A1): every `FunctionNode` and `DeclarationNode` whose `name` is exactly `<name>`, printed as JSON `{ name, scope, matches }` (`--pretty` indents it). Each match is `{ id, name, kind, file, line, isExported, uses }`, sorted by (file, line, id); `line` is a function's `startLine` or a declaration's `line`. A declaration's `uses` are C6's; a function's are its `calledBy` sites as `{ file, line }` (the caller's file), one per (file, line). **Several matches are data, not an error:** exit 0 whatever the count, and no match prints `matches: []` with a stderr warning. Runs the edge pass (like `--blast`) |
@@ -827,3 +828,62 @@ It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `
 - `docs/reference/library.md` gains an "API" section for `@demlik/code-graph/api`: the exports of §13.7, the map and policy shapes, and one example.
 
 Each child documents the part it builds: the view child `--api` and `readPublishedApi`, the diff child `--api-base` and `diffPublishedApi`, the ratchet child `--api-policy`, `readChangesetsSince` and `ratchetApiDiff`.
+
+## 14. Feature hexagon (`--hexagon`)
+
+`code-graph <featureDir> --hexagon` reads syntax through the oxc seam, without a
+tsconfig, type checker, model call or configuration. It reads only this allowlist:
+
+- **Port:** a direct `export type ForX = <function type>` or
+  `export type ForX = <type reference>`, with `For` followed by a capital letter.
+  The alias itself is non-generic; a generic port alias is listed as not read.
+  A generic function type (`<T>(x: T) => T`) is a plain port and is preserved. Port expressions print as written, without resolving
+  aliases, scopes, imported types or substituting generic arguments.
+- **Bag:** a direct `export type Name = { member: Type; ... }` or
+  `export interface Name { member: Type; ... }`, declared once and non-generic.
+  Every member must be a plain property signature with a written type; `readonly`
+  and optional `?` properties are allowed. Computed keys, duplicate members,
+  interface extensions, index/call/construct signatures, methods and accessors
+  are not read. Neither are parenthesized, mapped, conditional, intersection,
+  union or aliased bag shapes. Property types themselves remain as written.
+- **Factory:** a direct module-level `export function createX` with a body, or
+  `export const createX =` an arrow or function expression in `application/*.ts`.
+  Its exported binding name supplies `X`, including for named function expressions.
+  Export lists, re-exports, default exports and namespace forms are not factories.
+
+The factory in the file named after the feature directory takes precedence,
+then factories with readable `X` and `XDriven` bags, then file/name order.
+`X` supplies Commands; `XDriven` supplies External systems. With no factory,
+print `Factory: not found`, leave both sections empty, and list every readable bag
+under Other bags. Do not infer a feature from the directory name; JSON `feature`
+is `null` when no factory is found.
+
+Print sections in order: Commands, External systems, Other bags, Ports declared
+in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections print
+`none`; JSON uses empty arrays. Members keep their written names, optional `?`
+and types. If a member's entire written type is exactly the name of a readable
+port, also print that port's written expression. Only that exact match counts a
+port as used. Aliases, nested references, qualified names and generic
+instantiations do not count; unreadable bags do not consume ports.
+
+Every module export in `ports.ts` outside the allowlist appears under Not read
+as `file:line Name: reason` (`notRead` objects in JSON). Export lists and re-exports
+are listed by their exported names, wildcard exports as `*`, default declarations
+by their declared name (or `default`). Each declaration in a merge is listed.
+No partial bag is read. Syntax errors or unreadable source files produce a
+`<source>` entry at line 1, without guessing declarations. Adapter contents are
+not parsed. Unsupported shapes never cause a non-zero exit.
+
+Use cases list every visible `application/*.ts` file and its directly exported
+functions in the same forms as factories, without the `createX` name restriction.
+Adapter files are visible `.ts`/`.tsx` files recursively under `adapters/driving/`
+and `adapters/driven/`. Standard source exclusions (§6 A3) apply, with tests
+included. File keys are relative to the feature directory. Bags, members, ports,
+functions and file lists sort lexically. Not read sorts by file, numeric line,
+name, then reason; JSON object keys use the existing stable serializer. No
+timestamps or absolute paths enter a successful report. `--pretty` and `--out`
+work as on other views. No options or library subpaths are added.
+
+Only missing `ports.ts` or an unreadable selected directory exits 2, with a clear
+stderr message naming the path and no report. Cyclic bag aliases are Not read;
+readable properties referring to bags are printed without traversing them.

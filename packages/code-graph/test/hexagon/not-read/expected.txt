@@ -1,0 +1,74 @@
+Factory: not found
+
+Commands
+  none
+
+External systems
+  none
+
+Other bags
+  Warehouse
+    generic: ForGeneric<string>
+    implicit: ForImplicit
+    nested: Promise<ForUnused>
+    read?: ForReading = () => string
+    scoped: Remote.ForUnused
+    shadowed: <ForUnused>(value: ForUnused) => void
+  WarehouseDriven
+    read: ForReading = () => string
+
+Ports declared in ports.ts but in no bag
+  ForScoped: Remote.ForReading
+  ForUnused: () => void
+
+Use cases
+  application/factories.ts: helper
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:5 ForGeneric: generic port
+  ports.ts:6 ForDefaulted: generic port
+  ports.ts:7 ForImplicit: generic port
+  ports.ts:19 Renamed: export list
+  ports.ts:20 ForExternal: re-export
+  ports.ts:21 RemotePorts: re-export
+  ports.ts:22 *: re-export
+  ports.ts:23 GenericBag: generic bag
+  ports.ts:24 GenericInstance: bag alias
+  ports.ts:25 Parenthesized: parenthesized type
+  ports.ts:26 Merged: multiple declarations
+  ports.ts:27 Merged: multiple declarations
+  ports.ts:28 ForCallable: call signature
+  ports.ts:29 Calling: call signature
+  ports.ts:30 Constructing: construct signature
+  ports.ts:31 Indexed: index signature
+  ports.ts:32 Mapped: mapped type
+  ports.ts:33 Conditional: conditional type
+  ports.ts:34 Intersection: intersection type
+  ports.ts:35 Union: union type
+  ports.ts:36 Alias: bag alias
+  ports.ts:37 DefaultBag: default export
+  ports.ts:38 Overridden: interface extends
+  ports.ts:39 Duplicate: duplicate member
+  ports.ts:40 Scoped: not a port or plain bag
+  ports.ts:41 OptionalMethod: method or accessor
+  ports.ts:42 Getter: method or accessor
+  ports.ts:43 Setter: method or accessor
+  ports.ts:44 CyclicA: bag alias
+  ports.ts:45 CyclicB: bag alias
+  ports.ts:46 MissingType: property without type
+  ports.ts:47 Computed: computed property
+  ports.ts:48 Scope: namespace declaration
+  ports.ts:49 createValue: value declaration
+  ports.ts:50 createFunction: not a port or bag declaration
+  ports.ts:51 Imported: not a port or bag declaration
+  ports.ts:52 GlobalPorts: unsupported export
+  ports.ts:53 Scope: unsupported export
+  ports.ts:54 Escaped: multiple declarations
+  ports.ts:55 Escaped: multiple declarations
+  ports.ts:56 "./ports": module declaration

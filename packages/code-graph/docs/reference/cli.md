@@ -18,6 +18,7 @@ The default output is a JSON summary of counts, health, and refactor targets.
 | `--by <axis>` | Plan order: `rot` (default), `impact`, `complexity`, or `size` |
 | `--smells` | Findings grouped by kind; `--json` returns the finding list |
 | `--tree` | File/function tree with line ranges, metrics, and findings |
+| `--hexagon` | One feature's Ports & Adapters, human text; `--json` returns the inventory |
 | `--file <file>` | One module and its functions |
 | `--blast <id>` | Direct and transitive callers of a function |
 | `--find <name>` | Every function and top-level declaration with that name, as JSON |
@@ -33,6 +34,39 @@ Each match has `id`, `name`, `kind`, `file`, `line`, `isExported`, and `uses`, a
 list of `{ file, line }`. A function's uses are its call sites. A declaration's
 are every place the type checker resolves to it. Several matches exit 0. No
 match prints an empty list, warns on stderr, and exits 0.
+
+## Feature hexagon
+
+`code-graph <featureDir> --hexagon` reads `ports.ts`, immediate `application/*.ts`
+files, and adapter files recursively under `adapters/driving/` and
+`adapters/driven/`. It needs no tsconfig or model. `--json`, `--pretty` and `--out`
+work as on other views.
+
+Sections appear in this order: Commands, External systems, Other bags, Ports
+declared in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections
+print `none`. JSON fields are `feature`, `commands`, `externalSystems`,
+`otherBags`, `unbaggedPorts`, `useCases`, `adapters` and `notRead`.
+
+Only direct exported `ForX` function/reference type aliases and non-generic bags
+of plain typed properties are read. Optional properties are allowed. The factory
+must be a direct exported function declaration or `const` arrow/function
+expression at module top level in `application/*.ts`. Its exported binding name
+`createX` selects `X` and `XDriven`. Export lists, namespaces and re-exports are
+not factories. Without a factory, print `Factory: not found` and put every
+readable bag under Other bags; JSON `feature` is `null`.
+
+Every other export in `ports.ts` appears in Not read as `file:line Name: reason`.
+There is no alias, inheritance, intersection or scope expansion. Port expressions
+and property types stay as written. A port is used only when a readable bag
+member's entire type is exactly its name. Use cases list each file's direct
+exported functions. Standard source filters include tests. Lists and JSON keys
+are deterministic.
+
+Only missing `ports.ts` and unreadable selected directories exit 2. Unsupported
+shapes and source failures are listed under Not read and exit 0.
+The complete allowlist and ordering rules are in
+[SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
+
 
 ## Function headers
 

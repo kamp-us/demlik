@@ -1,0 +1,45 @@
+Hexagon: Warehouse
+
+Commands
+  add: ForAdding = (name: string, count?: number) => Promise<string>
+  list: ForListing = () => readonly string[]
+  remove: ForRemoving = (id: string) => void
+
+External systems
+  load: ForLoading = (
+  key: string,
+) => Promise<string | null>
+  log: ForLogging
+  save: ForSaving = <T>(value: T) => Promise<T>
+  write: ForWriting = StoreCall<string>
+
+Other bags
+  Empty
+    none
+  Metadata
+    count: number
+  Storage
+    clear: (key: string) => void
+    load: ForLoading = (
+  key: string,
+) => Promise<string | null>
+    stat: ForReadingStats = () => number
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/a-helper.ts: createNoise, normalize
+  application/rules.ts: none
+  application/z-feature.ts: createWarehouse, validate
+
+Adapters
+  driving
+    adapters/driving/cli.ts
+    adapters/driving/http.ts
+  driven
+    adapters/driven/logger.ts
+    adapters/driven/storage/sql.ts
+
+Not read
+  none
