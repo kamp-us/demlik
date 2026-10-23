@@ -71,3 +71,4 @@ Not read
   ports.ts:53 Scope: unsupported export
   ports.ts:54 Escaped: multiple declarations
   ports.ts:55 Escaped: multiple declarations
+  ports.ts:56 "./ports": module declaration

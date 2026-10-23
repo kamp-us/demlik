@@ -39,7 +39,13 @@ function exportEntries(syntax: SyntaxFile) {
   });
 }
 
-function otherExports(node: SyntaxNode, syntax: SyntaxFile) {
+function otherExports(
+  node: SyntaxNode,
+  syntax: SyntaxFile,
+): { node: SyntaxNode; name: string; reason: string }[] {
+  if (node.type === "TSModuleDeclaration") {
+    return [{ node, name: syntax.textOf(node.id), reason: "module declaration" }];
+  }
   const name =
     node.type === "TSExportAssignment"
       ? node.expression
