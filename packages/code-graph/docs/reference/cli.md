@@ -286,9 +286,10 @@ conventions apply alongside active presets.
 
 | Flag | Policy |
 |---|---|
-| `--ci` | Fail on high-severity smells by default |
+| `--ci` | Fail on high-severity smells by default; with a smell ledger, check gated smells against `smell-ledger.json` |
 | `--fail-on <level>` | `high` (default) or `warn`; `warn` fails on any smell |
 | `--max <n>` | Also fail if the total smell count exceeds `n` |
+| `--accept-smells` | Add unrecorded smells of the gated rules to `smell-ledger.json` |
 | `--comments --ci` | Check ratios against `comment-ceilings.json` |
 | `--collapse --ci` | Check shared-block counts against `collapse-ceilings.json` |
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
@@ -297,7 +298,7 @@ conventions apply alongside active presets.
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
 | `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
 | `--dead-only` | With `--unreachable --ci`: gate only `dead` findings |
-| `--reason <text>` | Required, non-empty reason for `--accept-crossings` or `--accept-dead` |
+| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead` or `--accept-smells` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
 The ordinary smell gate is syntax-only unless call analysis is also requested.
@@ -356,6 +357,66 @@ code-graph packages/core --unreachable --accept-dead --reason "baseline"   # onc
 code-graph packages/core --unreachable --ci                                # in CI
 ```
 
+### The smell ledger
+
+A plain `--ci` judges every smell in the tree. The smell ledger lets a repo gate
+the rules it chooses at today's count: old smells may only shrink, and a new one
+fails. `smell-ledger.json` sits at the repo root, beside the other ledgers:
+
+```json
+{
+  "entries": [
+    {
+      "reason": "split in the core sweep",
+      "rule": "big-file",
+      "target": "packages/core/src/host.ts",
+      "value": 900
+    }
+  ],
+  "gated": ["big-file"]
+}
+```
+
+- `gated` names the rules the repo gates, from the ten smell rules. No rule is
+  gated until named. While the file is absent or `gated` is empty, `--ci` is the
+  plain gate above, with the same output and exit codes.
+- Once a rule is gated, `--ci` reads the ledger instead of `--fail-on` and
+  `--max`. Only smells of gated rules count, at any severity. A smell of another
+  rule neither fails nor is recorded.
+- An entry is keyed by `(rule, target)`. `target` is relative to the repo root:
+  a function's id (`<file>:<name>`, never its start line), a module's file, or a
+  directory's path. `value` is the measure it may not exceed, such as a file's
+  line count. `reason` is required.
+- `--ci` exits 1 on a smell the ledger does not name, and on a recorded smell
+  whose value grew. It lists each, with the recorded and measured value.
+- `--ci` writes improvements back: an entry whose smell shrank is lowered to the
+  new value, and an entry whose smell is gone is pruned. Both are printed.
+- `--accept-smells --reason "<why>"` is the only way the ledger grows. It adds
+  every unrecorded smell of a gated rule, and raises every recorded one that grew
+  to its measured value. It also lowers and prunes as `--ci` does.
+- A run changes only entries under the analyzed path, so `code-graph .` and
+  `code-graph packages/core` judge `packages/core` the same way.
+- `high-fan-in`, `deep-call-chain`, `dependency-cycle` and `cross-boundary-import`
+  are measured only by the edge pass. Gating one turns the edge pass on, so its
+  entries are always measured, never pruned unmeasured.
+- A function renamed, or a file moved, is a new smell, and its old entry is
+  pruned. A second function of the same name in one file renames the first id
+  (`#<n>` is added).
+- `--json` prints `{ passed, scope, gated, unrecorded, worsened, lowered, pruned }`
+  for `--ci`, and `{ scope, gated, accepted, raised, lowered, pruned, reason }`
+  for `--accept-smells`.
+- Exit 2, with one line on stderr and nothing written: an unreadable or
+  schema-invalid `smell-ledger.json`, including a rule name that is not a smell
+  rule; `--accept-smells` without a non-empty `--reason`, with `--ci`, with no
+  rule gated, or beside `--unreachable`, `--boundaries`, `--comments`,
+  `--collapse` or `--layers`.
+
+```sh
+echo '{ "gated": ["big-file"] }' > smell-ledger.json                        # name the rule
+code-graph packages/core --accept-smells --reason "split in the core sweep"  # once
+code-graph packages/core --ci                                                # in CI
+```
+
 ## Output and hotspots
 
 | Flag | Behavior |
@@ -370,7 +431,8 @@ code-graph packages/core --unreachable --ci                                # in 
 
 `--out` keeps script-wrapper banners out of JSON and HTML. The write confirmation
 goes to stderr. The ordinary smell `--ci` verdict always goes to stdout, even
-when `--json` or `--out` is supplied.
+when `--json` or `--out` is supplied. The smell ledger verdict follows `--json`
+and `--out`.
 
 `--graph` includes requested analysis tables. Without it, an analysis flag
 selects that analysis's report. Standalone modes take precedence over graph

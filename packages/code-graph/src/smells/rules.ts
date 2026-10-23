@@ -38,7 +38,12 @@ export type RawSmell = {
   severity: "warn" | "high";
 };
 
+// Which pass gives a rule its facts: `syntax` rules are measured by every run, `edges` rules only
+// by a run with the edge pass, and a run without it reports none of their smells.
+export type MeasuredBy = "syntax" | "edges";
+
 export type Rule = {
+  measuredBy: MeasuredBy;
   evaluate: (ctx: RuleContext) => RawSmell[];
 };
 
@@ -48,6 +53,7 @@ function severity(value: number, threshold: number): "warn" | "high" {
 
 export const RULES = {
   "long-function": {
+    measuredBy: "syntax",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       const t = thresholds.longFunctionLoc;
@@ -63,6 +69,7 @@ export const RULES = {
     },
   },
   "deep-nesting": {
+    measuredBy: "syntax",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       const t = thresholds.deepNesting;
@@ -78,6 +85,7 @@ export const RULES = {
     },
   },
   "high-complexity": {
+    measuredBy: "syntax",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       const t = thresholds.highComplexity;
@@ -93,6 +101,7 @@ export const RULES = {
     },
   },
   "dense-undocumented": {
+    measuredBy: "syntax",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       const t = thresholds.highComplexity;
@@ -108,6 +117,7 @@ export const RULES = {
     },
   },
   "big-file": {
+    measuredBy: "syntax",
     evaluate: ({ module, thresholds }) => {
       if (!module) return [];
       const t = thresholds.bigFileLoc;
@@ -123,6 +133,7 @@ export const RULES = {
     },
   },
   "high-fan-in": {
+    measuredBy: "edges",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       if (fn.calledByCount === null) return [];
@@ -139,6 +150,7 @@ export const RULES = {
     },
   },
   "deep-call-chain": {
+    measuredBy: "edges",
     evaluate: ({ fn, thresholds }) => {
       if (!fn) return [];
       if (fn.callChainDepth === null) return [];
@@ -155,6 +167,7 @@ export const RULES = {
     },
   },
   "directory-sprawl": {
+    measuredBy: "syntax",
     evaluate: ({ directory, thresholds }) => {
       if (!directory) return [];
       const t = thresholds.directorySprawl;
@@ -170,6 +183,7 @@ export const RULES = {
     },
   },
   "dependency-cycle": {
+    measuredBy: "edges",
     evaluate: ({ module, thresholds }) => {
       if (!module || module.cycleSize === null) return [];
       const t = thresholds.dependencyCycle;
@@ -185,6 +199,7 @@ export const RULES = {
     },
   },
   "cross-boundary-import": {
+    measuredBy: "edges",
     evaluate: ({ module, thresholds }) => {
       if (!module || module.crossBoundaryOutCount === null) return [];
       const t = thresholds.crossBoundaryImports;
