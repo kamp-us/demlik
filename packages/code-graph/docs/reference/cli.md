@@ -18,6 +18,7 @@ The default output is a JSON summary of counts, health, and refactor targets.
 | `--by <axis>` | Plan order: `rot` (default), `impact`, `complexity`, or `size` |
 | `--smells` | Findings grouped by kind; `--json` returns the finding list |
 | `--tree` | File/function tree with line ranges, metrics, and findings |
+| `--hexagon` | One feature's Ports & Adapters, human text; `--json` returns the inventory |
 | `--file <file>` | One module and its functions |
 | `--blast <id>` | Direct and transitive callers of a function |
 | `--find <name>` | Every function and top-level declaration with that name, as JSON |
@@ -33,6 +34,34 @@ Each match has `id`, `name`, `kind`, `file`, `line`, `isExported`, and `uses`, a
 list of `{ file, line }`. A function's uses are its call sites. A declaration's
 are every place the type checker resolves to it. Several matches exit 0. No
 match prints an empty list, warns on stderr, and exits 0.
+
+## Feature hexagon
+
+`code-graph <featureDir> --hexagon` reads `ports.ts`, immediate `application/*.ts`
+files, and adapter files recursively under `adapters/driving/` and
+`adapters/driven/`. It needs no tsconfig or model. `--json`, `--pretty` and `--out`
+work as on other views.
+
+Sections appear in this order: Commands, External systems, Other bags, Ports
+declared in ports.ts but in no bag, Use cases, Adapters. Empty sections print
+`none`. JSON fields are `feature`, `commands`, `externalSystems`, `otherBags`,
+`unbaggedPorts`, `useCases` and `adapters`; empty lists are `[]`.
+
+The exported factory `createX` supplies the feature name; `X` and `XDriven` are
+the driving and driven bags. The factory in `application/<directory-name>.ts`
+takes precedence, then factories with matching bags, then file/name order.
+Without a factory, the directory name becomes PascalCase. Other exported object
+aliases and interfaces are listed as bags, including data objects. Local
+intersections and interface inheritance are expanded. Members keep their written
+types and local function signatures; imported references and generic
+instantiations stay as written. Unbagged ports are local `For` type aliases
+followed by a capital letter that no bag references, directly or through local
+aliases. Use cases list each file's exported functions. Standard source filters
+apply, including tests. Lists and JSON keys are sorted deterministically.
+
+Missing `ports.ts`, unreadable selected files, syntax errors, and cyclic bags
+exit 2 with a path or bag name on stderr and no partial output.
+The complete extraction contract is [SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
 
 ## Function headers
 

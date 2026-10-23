@@ -364,6 +364,7 @@ code-graph <path> [flags]
 | `--plan [--by rot\|impact\|complexity\|size]` | Ranked `PlanRow[]` (human table, top 20). `--json` → full `PlanRow[]`. fanIn shows `—`/`null` unless the edge pass ran; **`--by impact` without edges is refused** (clean stderr, non-zero exit) — it needs the call graph |
 | `--smells` | All smells grouped by kind (human). `--json` → `Smell[]` |
 | `--tree` | Indented `file → function  L12-48  loc=36 cx=8 nest=3 [smell markers]` |
+| `--hexagon` | One feature's Ports & Adapters inventory (§14), human text; `--json` for data |
 | `--file <f>` | One module + its functions only. Warns if `<f>` is in `parseFailures` |
 | `--blast <id>` | Direct + transitive callers of `<id>`: list of `{ callerId, file, line, depth }` + `callChainDepth`. **Lists DISTINCT external callers only** — the target's own self-recursion is excluded from `callers` (so `callers.length` equals the target's `fanIn`) and surfaced separately as `recursiveSelfCalls` (count of self-call sites), shown as a `recursive: N self-calls` note in the human render. If a **bare name** matches >1 function, prints all candidate ids and exits non-zero. Output carries `scope`; in `package` scope sets `crossPackageCallersOmitted: true` and warns to re-run with `--deep` |
 | `--find <name>` | Name lookup over both node sets (§6 A1): every `FunctionNode` and `DeclarationNode` whose `name` is exactly `<name>`, printed as JSON `{ name, scope, matches }` (`--pretty` indents it). Each match is `{ id, name, kind, file, line, isExported, uses }`, sorted by (file, line, id); `line` is a function's `startLine` or a declaration's `line`. A declaration's `uses` are C6's; a function's are its `calledBy` sites as `{ file, line }` (the caller's file), one per (file, line). **Several matches are data, not an error:** exit 0 whatever the count, and no match prints `matches: []` with a stderr warning. Runs the edge pass (like `--blast`) |
@@ -827,3 +828,37 @@ It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `
 - `docs/reference/library.md` gains an "API" section for `@demlik/code-graph/api`: the exports of §13.7, the map and policy shapes, and one example.
 
 Each child documents the part it builds: the view child `--api` and `readPublishedApi`, the diff child `--api-base` and `diffPublishedApi`, the ratchet child `--api-policy`, `readChangesetsSince` and `ratchetApiDiff`.
+
+## 14. Feature hexagon (`--hexagon`)
+
+`code-graph <featureDir> --hexagon` reads syntax through the oxc seam, without a
+tsconfig, type checker, model call or configuration. It prints these sections in order:
+Commands, External systems, Other bags, Ports declared in ports.ts but in no bag,
+Use cases, Adapters. Empty sections print `none`; JSON uses empty arrays.
+
+The feature name is the suffix of an exported `createX` function under
+`application/*.ts`. Prefer the file named after the feature directory; otherwise
+prefer a factory whose `X` and `XDriven` bags exist, then sort by file and name.
+With no factory, use the directory basename converted to PascalCase. `X` is the
+driving bag and `XDriven` the driven bag.
+
+Every exported object type alias or interface in `ports.ts` is a bag, including
+data-only objects. Expand local object aliases, intersections and interface
+extensions; leave imported types unexpanded. List each member with its written
+type and, when it names a local non-instantiated function type, that function's
+written signature or alias expression. Preserve generic instantiations and imported port references
+as written, without guessing their signatures. Unbagged ports are local type
+aliases named `For` followed by a capital letter, absent from every bag's type
+references (including references reached through local aliases).
+
+Use cases list every visible `application/*.ts` file and its exported functions;
+adapter files are visible `.ts`/`.tsx` files recursively under `adapters/driving/`
+and `adapters/driven/`. Standard source exclusions (§6 A3) apply, with tests
+included. File keys are relative to the feature directory. Bags, members, ports,
+functions and file lists are deduplicated and sorted lexically; JSON object keys
+use the existing stable serializer. No timestamps or absolute paths enter a
+successful report. `--pretty` and `--out` work as on other views.
+
+Missing `ports.ts`, unreadable selected files and syntax errors exit 2 with a
+clear stderr message naming the path and no partial report. Cyclic local bag
+definitions are refused. No new library subpath is published.

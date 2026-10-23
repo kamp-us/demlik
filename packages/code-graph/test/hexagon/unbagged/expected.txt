@@ -1,0 +1,22 @@
+Hexagon: Unbagged
+
+Commands
+  none
+
+External systems
+  none
+
+Other bags
+  none
+
+Ports declared in ports.ts but in no bag
+  ForWatching: (id: string) => AsyncIterable<string>
+
+Use cases
+  none
+
+Adapters
+  driving
+    none
+  driven
+    none

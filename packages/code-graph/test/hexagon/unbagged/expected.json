@@ -1,0 +1,1 @@
+{"adapters":{"driven":[],"driving":[]},"commands":[],"externalSystems":[],"feature":"Unbagged","otherBags":[],"unbaggedPorts":[{"name":"ForWatching","type":"(id: string) => AsyncIterable<string>"}],"useCases":[]}

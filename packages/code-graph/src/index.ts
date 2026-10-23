@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { runApiFlags } from "./api/cli.js";
 import { runBoundaryGate } from "./boundaries/gate.js";
-import { cleanExit, defineProgram, exitWith, type Opts } from "./cli.js";
+import { cleanExit, defineProgram, exitWith, type Opts, outputTo } from "./cli.js";
 import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
 import { runCommentGate } from "./comments/gate.js";
@@ -31,6 +31,7 @@ import {
   loadCheapProject,
   loadEdgeProject,
 } from "./extract/project.js";
+import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
 import { renderHotspots } from "./hotspots/render.js";
 import { runLayerGate } from "./layers/gate.js";
@@ -87,16 +88,7 @@ defineProgram()
     const pretty = opts.pretty === true;
     const json = opts.json === true;
 
-    const emit = (payload: string): void => {
-      if (typeof opts.out === "string") {
-        fs.writeFileSync(opts.out, payload);
-        process.stderr.write(
-          `code-graph: wrote ${Buffer.byteLength(payload)} bytes to ${opts.out}\n`,
-        );
-        return;
-      }
-      process.stdout.write(payload);
-    };
+    const emit = outputTo(opts.out);
 
     const apiRun = runApiFlags(opts, {
       rootAbsolute,
@@ -109,6 +101,10 @@ defineProgram()
     if (apiRun !== null) {
       void apiRun.then(exitWith);
       return;
+    }
+
+    if (opts.hexagon === true) {
+      return runHexagon(rootAbsolute, { json, pretty, emit, report: cleanExit });
     }
 
     const repoRoot = findRepoRoot(rootAbsolute);
