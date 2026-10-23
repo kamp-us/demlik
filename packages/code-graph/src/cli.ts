@@ -46,6 +46,8 @@ export type Opts = {
   writeCeilings?: boolean;
   acceptCrossings?: boolean;
   reason?: string;
+  acceptDead?: boolean;
+  deadOnly?: boolean;
   migrateCeilings?: boolean;
   api?: string;
   apiBase?: string;
@@ -95,7 +97,18 @@ function analysisOptions(command: Command): Command {
       "resolve env.<BINDING>.<method>() to the target worker (implies edges)",
     )
     .option("--kinds", "classify each node entry|effect|auth|plain (implies --cross-runtime)")
-    .option("--unreachable", "exported symbols with no path from any entry (implies --kinds)")
+    .option(
+      "--unreachable",
+      "exported symbols with no path from any entry (implies --kinds); with --ci, gates them against unreachable-ledger.json at the repo root instead of gating smells: fails on a finding (dead or only-called-from-tests) the ledger does not name for this scope, and prunes this scope's entries whose finding is gone",
+    )
+    .option(
+      "--accept-dead",
+      'with --unreachable: add every finding unreachable-ledger.json does not name yet for this scope (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
+    )
+    .option(
+      "--dead-only",
+      "with --unreachable --ci: gate only `dead` findings; an `only-called-from-tests` finding neither fails the run nor is pruned from the ledger",
+    )
     .option("--unguarded", "effect nodes reachable from an entry with no auth on the path")
     .option(
       "--clusters",
@@ -134,7 +147,10 @@ function featureOptions(command: Command): Command {
       "--accept-crossings",
       'with --boundaries: add every crossing boundary-ledger.json does not name yet, each carrying --reason "<why>" (required)',
     )
-    .option("--reason <text>", "with --boundaries --accept-crossings: why these crossings stay")
+    .option(
+      "--reason <text>",
+      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay",
+    )
     .option(
       "--migrate-ceilings",
       "with --boundaries: seed boundary-ledger.json from today's crossings (impure uses, library crossings B11, B12 and B14, shape crossings B15-B16, deployable crossings B17-B19 and test crossings B20 included) and delete boundary-ceilings.json; refuses if any scope's import crossings exceed its recorded count (library, shape, deployable and test crossings are not counted)",

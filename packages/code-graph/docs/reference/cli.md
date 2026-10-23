@@ -292,18 +292,67 @@ conventions apply alongside active presets.
 | `--comments --ci` | Check ratios against `comment-ceilings.json` |
 | `--collapse --ci` | Check shared-block counts against `collapse-ceilings.json` |
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
+| `--unreachable --ci` | Check unreachable exports against `unreachable-ledger.json` |
 | `--write-ceilings` | With comments: rewrite ratios. With collapse: record this scope's count |
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
-| `--reason <text>` | Required, non-empty reason for accepting crossings |
+| `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
+| `--dead-only` | With `--unreachable --ci`: gate only `dead` findings |
+| `--reason <text>` | Required, non-empty reason for `--accept-crossings` or `--accept-dead` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
 The ordinary smell gate is syntax-only unless call analysis is also requested.
-Boundary, comment, and collapse gates use their own policies. Layers always
-gate, without needing `--ci`.
+Boundary, comment, collapse, and unreachable gates use their own policies.
+Layers always gate, without needing `--ci`.
 
 Boundary `--ci` can rewrite the ledger when it prunes resolved crossings.
 `--boundaries --write-ceilings` is retired. Acceptance, migration, and boundary
 CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundaries.md).
+
+### The unreachable ledger
+
+`--unreachable --ci` gates the `--unreachable` findings, and never the smells.
+`unreachable-ledger.json` sits at the repo root, beside `boundary-ledger.json`:
+
+```json
+{
+  "entries": [
+    {
+      "id": "src/shell/execute.ts:inWords",
+      "kind": "dead",
+      "reason": "kept for the move",
+      "scope": "packages/core"
+    }
+  ]
+}
+```
+
+- An entry is keyed by `(scope, kind, id)`. `scope` is the analyzed path relative
+  to the repo root (`.` for the root itself). `kind` is `dead` or
+  `only-called-from-tests`. `id` is the finding's scope-relative id. `reason` is
+  required.
+- `--unreachable --accept-dead --reason "<why>"` adds every finding of this scope
+  that the ledger does not name yet. It also drops this scope's entries whose
+  finding is gone.
+- `--unreachable --ci` exits 1 on a finding of this scope that the ledger does not
+  name, and lists each one. It never fails on an entry whose finding is gone: it
+  rewrites the ledger without that entry and prints it, so the ledger only shrinks.
+- Entries of other scopes are never read or changed by a run.
+- Both kinds are gated by default. `--dead-only` gates only `dead`: an
+  `only-called-from-tests` finding neither fails the run nor is pruned.
+- A finding whose kind changes is a new finding, and its old entry is pruned.
+- Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
+  `test-support-surface`) are not findings and never enter the ledger.
+- `--json` prints `{ passed, scope, gated, unrecorded, pruned }` for `--ci`, and
+  `{ scope, accepted, pruned, reason }` for `--accept-dead`.
+- Exit 2, with one line on stderr and nothing written: `--accept-dead` without a
+  non-empty `--reason`, with `--ci`, or without `--unreachable`; `--dead-only`
+  without `--unreachable --ci`; `--reason` on `--unreachable` without
+  `--accept-dead`; and an unreadable or schema-invalid `unreachable-ledger.json`.
+
+```sh
+code-graph packages/core --unreachable --accept-dead --reason "baseline"   # once
+code-graph packages/core --unreachable --ci                                # in CI
+```
 
 ## Output and hotspots
 
