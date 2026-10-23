@@ -336,7 +336,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 - `--unreachable --ci` exits 1 on a finding of this scope that the ledger does not
   name, and lists each one. It never fails on an entry whose finding is gone: it
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
-- Entries of other scopes are never read or changed by a run.
+- A run changes only entries of its own scope, but it reads and validates the
+  whole file first: a bad entry in any scope exits 2.
 - Both kinds are gated by default. `--dead-only` gates only `dead`: an
   `only-called-from-tests` finding neither fails the run nor is pruned.
 - A finding whose kind changes is a new finding, and its old entry is pruned.
@@ -347,7 +348,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 - Exit 2, with one line on stderr and nothing written: `--accept-dead` without a
   non-empty `--reason`, with `--ci`, or without `--unreachable`; `--dead-only`
   without `--unreachable --ci`; `--reason` on `--unreachable` without
-  `--accept-dead`; and an unreadable or schema-invalid `unreachable-ledger.json`.
+  `--accept-dead`, unless `--boundaries` is also given (the boundary gate judges
+  `--reason` then); and an unreadable or schema-invalid `unreachable-ledger.json`.
 
 ```sh
 code-graph packages/core --unreachable --accept-dead --reason "baseline"   # once
