@@ -45,7 +45,7 @@ import {
   renderUnreachable,
 } from "./render/analysis.js";
 import { renderBlast } from "./render/blast.js";
-import { evaluateCi, type FailOn, isFailOn } from "./render/ci.js";
+import { runSmellGate } from "./render/ci.js";
 import { renderFile } from "./render/file.js";
 import { renderGraph } from "./render/graph.js";
 import { renderHtml } from "./render/html.js";
@@ -55,6 +55,7 @@ import { renderSummary } from "./render/summary.js";
 import { renderTree } from "./render/tree.js";
 import type { Graph } from "./schema.js";
 import { isPlanAxis, type PlanAxis } from "./smells/plan.js";
+import { prepareUnreachableGate, runUnreachableGate } from "./unreachable/gate.js";
 
 defineProgram()
   .action((targetPath: string, opts: Opts, command: Command) => {
@@ -108,6 +109,10 @@ defineProgram()
       void apiRun.then(exitWith);
       return;
     }
+
+    const repoRoot = findRepoRoot(rootAbsolute);
+    const unreachableGate = prepareUnreachableGate(opts, rootAbsolute, repoRoot, cleanExit);
+    if (unreachableGate.kind === "refused") return;
 
     if (opts.layers === true) {
       const code = runLayerGate({
@@ -207,7 +212,6 @@ defineProgram()
 
     let graph: Graph;
     if (wantEdges) {
-      const repoRoot = findRepoRoot(rootAbsolute);
       let loaded: LoadedEdgeProject;
       try {
         loaded = loadEdgeProject(rootAbsolute, scope, repoRoot);
@@ -240,29 +244,14 @@ defineProgram()
       graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds, data, fields);
     }
 
+    if (unreachableGate.kind === "prepared") {
+      const out = { emit, report: cleanExit, json, pretty };
+      exitWith(runUnreachableGate(unreachableGate.gate, graph, out));
+      return;
+    }
+
     if (opts.ci === true) {
-      const requested = opts.failOn ?? "high";
-      let failOn: FailOn = "high";
-      if (isFailOn(requested)) {
-        failOn = requested;
-      } else {
-        process.stderr.write(
-          `warning: unknown --fail-on "${requested}"; falling back to "high".\n`,
-        );
-      }
-      let max: number | null = null;
-      if (opts.max !== undefined) {
-        const trimmed = opts.max.trim();
-        if (!/^\d+$/.test(trimmed)) {
-          process.stderr.write(`error: --max expects a non-negative integer, got "${opts.max}".\n`);
-          process.exitCode = 2;
-          return;
-        }
-        max = Number.parseInt(trimmed, 10);
-      }
-      const { passed, report } = evaluateCi(graph, failOn, max);
-      process.stdout.write(`${report}\n`);
-      if (!passed) process.exitCode = 1;
+      exitWith(runSmellGate(graph, opts.failOn, opts.max));
       return;
     }
 

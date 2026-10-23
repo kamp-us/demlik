@@ -41,3 +41,31 @@ export function evaluateCi(graph: Graph, failOn: FailOn, max: number | null): Ci
     report: `code-graph CI: PASS — ${total} smells, ${high} high-severity (fail-on=${failOn}${maxNote}).`,
   };
 }
+
+function failOnOf(requested: string): FailOn {
+  if (isFailOn(requested)) return requested;
+  process.stderr.write(`warning: unknown --fail-on "${requested}"; falling back to "high".\n`);
+  return "high";
+}
+
+// The smell gate a plain `--ci` runs: reads `--fail-on` and `--max` as given, prints the verdict on
+// stdout and returns the exit code (2 for a `--max` that is not a non-negative integer).
+export function runSmellGate(
+  graph: Graph,
+  failOn: string | undefined,
+  max: string | undefined,
+): number {
+  const policy = failOnOf(failOn ?? "high");
+  let ceiling: number | null = null;
+  if (max !== undefined) {
+    const trimmed = max.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      process.stderr.write(`error: --max expects a non-negative integer, got "${max}".\n`);
+      return 2;
+    }
+    ceiling = Number.parseInt(trimmed, 10);
+  }
+  const { passed, report } = evaluateCi(graph, policy, ceiling);
+  process.stdout.write(`${report}\n`);
+  return passed ? 0 : 1;
+}
