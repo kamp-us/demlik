@@ -85,7 +85,7 @@ function featureName(root: string, units: SourceUnit[], bags: HexagonBag[]): str
 export function readHexagon(root: string): Hexagon {
   const portsPath = path.join(root, "ports.ts");
   if (!fs.existsSync(portsPath)) throw new Error(`missing ports.ts: ${portsPath}`);
-  const { bags, unbaggedPorts } = readPorts(readUnit(root, "ports.ts").syntax);
+  const { bags, unbaggedPorts } = readPorts(readUnit(root, "ports.ts").syntax, portsPath);
   const files = listSourceFiles(root)
     .map((file) => toRelative(root, file))
     .sort(lexical);

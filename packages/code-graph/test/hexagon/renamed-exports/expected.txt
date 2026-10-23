@@ -1,0 +1,22 @@
+Hexagon: Warehouse
+
+Commands
+  read: ForRead = () => string
+
+External systems
+  save: ForSave = (value: string) => void
+
+Other bags
+  none
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/factories.ts: createAlphabet, createWarehouse
+
+Adapters
+  driving
+    none
+  driven
+    none

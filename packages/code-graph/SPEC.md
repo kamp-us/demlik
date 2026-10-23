@@ -843,11 +843,14 @@ With no factory, use the directory basename converted to PascalCase. `X` is the
 driving bag and `XDriven` the driven bag.
 
 Every exported object type alias or interface in `ports.ts` is a bag, including
-data-only objects. Expand local object aliases, intersections and interface
-extensions; leave imported types unexpanded. List each member with its written
+data-only objects. Use their exported names, including renamed exports. Expand
+parenthesized objects, local object aliases, intersections, merged interfaces and
+interface extensions; leave imported types unexpanded. List each member with its written
 type and, when it names a local non-instantiated function type, that function's
-written signature or alias expression. Preserve generic instantiations and imported port references
-as written, without guessing their signatures. Unbagged ports are local type
+written signature or alias expression. Preserve generic member types and imported
+port references as written, without guessing their signatures. Generic bags,
+local generic bag instantiations and bags with index signatures exit 2, naming
+the file, line and declaration that cannot be read. Unbagged ports are local type
 aliases named `For` followed by a capital letter, absent from every bag's type
 references (including references reached through local aliases).
 

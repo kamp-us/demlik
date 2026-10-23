@@ -40,6 +40,32 @@ describe("--hexagon", () => {
     }
   });
 
+  it.each([
+    "renamed-exports",
+    "parenthesized",
+    "merged-interfaces",
+    "interface-port",
+  ])("prints the exact inventory for %s", (name) => {
+    const root = path.join(fixtures, name);
+    const result = run(root);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(fs.readFileSync(path.join(root, "expected.txt"), "utf8"));
+  });
+
+  it.each([
+    ["generic-bag", "1: cannot read Base: generic bag"],
+    ["index-signature", "3: cannot read Warehouse: index-signature bag"],
+  ])("refuses %s with an exact diagnostic and no report", (name, detail) => {
+    const root = path.join(fixtures, name);
+    for (const flags of [[], ["--json"]]) {
+      const result = run(root, ...flags);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe(`code-graph: ${path.join(root, "ports.ts")}:${detail}\n`);
+    }
+  });
+
   it.each([[], ["--json"]])("names missing ports.ts with no output (%j)", (...flags) => {
     const root = path.join(fixtures, "missing");
     const result = run(root, ...flags);
