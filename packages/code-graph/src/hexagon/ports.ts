@@ -10,13 +10,18 @@ export function lexical(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function declaredName(syntax: SyntaxFile, node: SyntaxNode | null, fallback: string): string {
+  const id = node === null ? null : nodeField(node, "id");
+  return node === null || id === null ? fallback : nameText(syntax, node, id);
+}
+
 function exportEntries(syntax: SyntaxFile) {
   return syntax.program.body.flatMap((statement) => {
     const node = nodeField(statement, "declaration");
-    const id = node === null ? null : nodeField(node, "id");
     if (statement.type === "ExportDefaultDeclaration") {
-      const name = id === null ? "default" : syntax.textOf(id);
-      return [{ node: statement, name, reason: "default export" }];
+      return [
+        { node: statement, name: declaredName(syntax, node, "default"), reason: "default export" },
+      ];
     }
     if (statement.type === "ExportAllDeclaration") {
       const name = statement.exported === null ? "*" : syntax.textOf(statement.exported);
@@ -30,7 +35,7 @@ function exportEntries(syntax: SyntaxFile) {
         reason: statement.source === null ? "export list" : "re-export",
       }));
     }
-    return declarationEntries(node, id === null ? syntax.textOf(node) : syntax.textOf(id), syntax);
+    return declarationEntries(node, declaredName(syntax, node, syntax.textOf(node)), syntax);
   });
 }
 
@@ -150,7 +155,9 @@ function declarationCounts(syntax: SyntaxFile): Map<string, number> {
   for (const statement of syntax.program.body) {
     const node = nodeField(statement, "declaration") ?? statement;
     const id = nodeField(node, "id");
-    if (id !== null) counts.set(syntax.textOf(id), (counts.get(syntax.textOf(id)) ?? 0) + 1);
+    if (id === null) continue;
+    const name = nameText(syntax, node, id);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   return counts;
 }

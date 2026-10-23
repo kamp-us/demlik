@@ -69,3 +69,5 @@ Not read
   ports.ts:51 Imported: not a port or bag declaration
   ports.ts:52 GlobalPorts: unsupported export
   ports.ts:53 Scope: unsupported export
+  ports.ts:54 Escaped: multiple declarations
+  ports.ts:55 Escaped: multiple declarations

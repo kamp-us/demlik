@@ -51,3 +51,5 @@ export function createFunction() {}
 export import Imported = Scope.Bag;
 export as namespace GlobalPorts;
 export = Scope;
+export interface Escaped { read: ForUnused }
+export interface \u0045scaped { count: number }
