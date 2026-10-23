@@ -18,7 +18,6 @@ Other bags
     read: ForReading = () => string
 
 Ports declared in ports.ts but in no bag
-  ForGeneric: (value: T) => T
   ForScoped: Remote.ForReading
   ForUnused: () => void
 
@@ -32,8 +31,9 @@ Adapters
     none
 
 Not read
-  ports.ts:6 ForDefaulted: defaulted generic alias
-  ports.ts:7 ForImplicit: generic port requires explicit arguments
+  ports.ts:5 ForGeneric: generic port
+  ports.ts:6 ForDefaulted: generic port
+  ports.ts:7 ForImplicit: generic port
   ports.ts:19 Renamed: export list
   ports.ts:20 ForExternal: re-export
   ports.ts:21 RemotePorts: re-export

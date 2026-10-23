@@ -16,7 +16,6 @@ Other bags
 
 Ports declared in ports.ts but in no bag
   ForAliased: () => void
-  ForGeneric: (value: T) => T
   ForNested: () => void
   ForScoped: () => void
   ForShadowed: () => void
@@ -32,4 +31,4 @@ Adapters
     none
 
 Not read
-  none
+  ports.ts:6 ForGeneric: generic port

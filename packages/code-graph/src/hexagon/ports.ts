@@ -90,22 +90,6 @@ function memberReason(member: SyntaxNode): string | null {
   return null;
 }
 
-function genericReason(node: SyntaxNode, syntax: SyntaxFile): string | null {
-  if (node.type !== "TSTypeAliasDeclaration" || node.typeParameters === null) return null;
-  const parameters = node.typeParameters.params;
-  if (parameters.some((parameter) => parameter.default !== null)) return "defaulted generic alias";
-  let implicit = false;
-  syntax.forEachTsDescendant(syntax.program, (reference) => {
-    if (reference.type !== "TSTypeReference" || reference.typeName.type !== "Identifier") return;
-    if (
-      reference.typeName.name === node.id.name &&
-      reference.typeArguments?.params.length !== parameters.length
-    )
-      implicit = true;
-  });
-  return implicit ? "generic port requires explicit arguments" : null;
-}
-
 function isPort(node: SyntaxNode): boolean {
   if (node.type !== "TSTypeAliasDeclaration") return false;
   return (
@@ -130,7 +114,7 @@ function bagReason(node: SyntaxNode, body: SyntaxNode, syntax: SyntaxFile): stri
 }
 
 function declarationReason(node: SyntaxNode, syntax: SyntaxFile): string | null {
-  if (isPort(node)) return genericReason(node, syntax);
+  if (isPort(node)) return nodeField(node, "typeParameters") === null ? null : "generic port";
   if (node.type !== "TSTypeAliasDeclaration" && node.type !== "TSInterfaceDeclaration")
     return SHAPES[node.type] ?? "not a port or bag declaration";
   return bagReason(

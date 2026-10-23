@@ -836,9 +836,8 @@ tsconfig, type checker, model call or configuration. It reads only this allowlis
 
 - **Port:** a direct `export type ForX = <function type>` or
   `export type ForX = <type reference>`, with `For` followed by a capital letter.
-  The alias is non-generic, or has no default type parameters and every reference
-  to it in `ports.ts` supplies all type arguments explicitly. Generic function
-  types are preserved. Port expressions print as written, without resolving
+  The alias itself is non-generic; a generic port alias is listed as not read.
+  A generic function type (`<T>(x: T) => T`) is a plain port and is preserved. Port expressions print as written, without resolving
   aliases, scopes, imported types or substituting generic arguments.
 - **Bag:** a direct `export type Name = { member: Type; ... }` or
   `export interface Name { member: Type; ... }`, declared once and non-generic.
