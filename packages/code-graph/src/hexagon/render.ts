@@ -17,7 +17,7 @@ function section(title: string, lines: string[], empty = "  none"): string {
 export function renderHexagon(report: Hexagon, json: boolean, pretty: boolean): string {
   if (json) return stableStringify(report, pretty);
   return [
-    `Hexagon: ${report.feature}`,
+    report.feature === null ? "Factory: not found" : `Hexagon: ${report.feature}`,
     section("Commands", membersText(report.commands)),
     section("External systems", membersText(report.externalSystems)),
     section(
@@ -50,5 +50,9 @@ export function renderHexagon(report: Hexagon, json: boolean, pretty: boolean): 
         "    none",
       ),
     ]),
+    section(
+      "Not read",
+      report.notRead.map((item) => `  ${item.file}:${item.line} ${item.name}: ${item.reason}`),
+    ),
   ].join("\n\n");
 }

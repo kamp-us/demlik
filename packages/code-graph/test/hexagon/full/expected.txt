@@ -19,7 +19,7 @@ Other bags
   Metadata
     count: number
   Storage
-    clear: (key: string): void
+    clear: (key: string) => void
     load: ForLoading = (
   key: string,
 ) => Promise<string | null>
@@ -40,3 +40,6 @@ Adapters
   driven
     adapters/driven/logger.ts
     adapters/driven/storage/sql.ts
+
+Not read
+  none

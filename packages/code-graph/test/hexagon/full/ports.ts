@@ -11,13 +11,14 @@ export type ForLoading = (
   key: string,
 ) => Promise<string | null>;
 
-type Base = { readonly load: ForLoading };
-type Stats = { readonly stat: ForReadingStats };
-export interface Storage extends Base, Stats {
-  clear(key: string): void;
+export interface Storage {
+  readonly load: ForLoading;
+  readonly stat: ForReadingStats;
+  clear: (key: string) => void;
 }
 export type Empty = {};
-export type WarehouseDriven = Base & {
+export type WarehouseDriven = {
+  readonly load: ForLoading;
   readonly save: ForSaving;
   readonly write: ForWriting;
   readonly log: ForLogging;

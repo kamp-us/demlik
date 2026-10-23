@@ -43,25 +43,30 @@ files, and adapter files recursively under `adapters/driving/` and
 work as on other views.
 
 Sections appear in this order: Commands, External systems, Other bags, Ports
-declared in ports.ts but in no bag, Use cases, Adapters. Empty sections print
-`none`. JSON fields are `feature`, `commands`, `externalSystems`, `otherBags`,
-`unbaggedPorts`, `useCases` and `adapters`; empty lists are `[]`.
+declared in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections
+print `none`. JSON fields are `feature`, `commands`, `externalSystems`,
+`otherBags`, `unbaggedPorts`, `useCases`, `adapters` and `notRead`.
 
-The exported factory `createX` supplies the feature name; `X` and `XDriven` are
-the driving and driven bags. The factory in `application/<directory-name>.ts`
-takes precedence, then factories with matching bags, then file/name order.
-Without a factory, the directory name becomes PascalCase. Other exported object
-aliases and interfaces are listed as bags, including data objects. Local
-intersections and interface inheritance are expanded. Members keep their written
-types and local function signatures; imported references and generic
-instantiations stay as written. Unbagged ports are local `For` type aliases
-followed by a capital letter that no bag references, directly or through local
-aliases. Use cases list each file's exported functions. Standard source filters
-apply, including tests. Lists and JSON keys are sorted deterministically.
+Only direct exported `ForX` function/reference type aliases and non-generic bags
+of plain typed properties are read. Optional properties are allowed. The factory
+must be a direct exported function declaration or `const` arrow/function
+expression at module top level in `application/*.ts`. Its exported binding name
+`createX` selects `X` and `XDriven`. Export lists, namespaces and re-exports are
+not factories. Without a factory, print `Factory: not found` and put every
+readable bag under Other bags; JSON `feature` is `null`.
 
-Missing `ports.ts`, unreadable selected files, syntax errors, and cyclic bags
-exit 2 with a path or bag name on stderr and no partial output.
-The complete extraction contract is [SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
+Every other export in `ports.ts` appears in Not read as `file:line Name: reason`.
+There is no alias, inheritance, intersection or scope expansion. Port expressions
+and property types stay as written. A port is used only when a readable bag
+member's entire type is exactly its name. Use cases list each file's direct
+exported functions. Standard source filters include tests. Lists and JSON keys
+are deterministic.
+
+Only missing `ports.ts` and unreadable selected directories exit 2. Unsupported
+shapes and source failures are listed under Not read and exit 0.
+The complete allowlist and ordering rules are in
+[SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
+
 
 ## Function headers
 

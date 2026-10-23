@@ -1,4 +1,4 @@
-Hexagon: Unbagged
+Factory: not found
 
 Commands
   none
@@ -7,9 +7,19 @@ External systems
   none
 
 Other bags
-  none
+  Watcher
+    aliased: Alias
+    generic: ForGeneric<string>
+    nested: Promise<ForNested>
+    scoped: Remote.ForScoped
+    shadowed: <ForShadowed>(value: ForShadowed) => void
 
 Ports declared in ports.ts but in no bag
+  ForAliased: () => void
+  ForGeneric: (value: T) => T
+  ForNested: () => void
+  ForScoped: () => void
+  ForShadowed: () => void
   ForWatching: (id: string) => AsyncIterable<string>
 
 Use cases
@@ -20,3 +30,6 @@ Adapters
     none
   driven
     none
+
+Not read
+  none

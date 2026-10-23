@@ -3,16 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 const packageDir = fileURLToPath(new URL("../../", import.meta.url));
 const fixtures = path.join(packageDir, "test/hexagon");
 const cli = path.join(packageDir, "src/index.ts");
-let temporary = "";
-
-beforeAll(() => {
-  temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-hexagon-")));
-});
+const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hexagon-")));
 
 afterAll(() => fs.rmSync(temporary, { recursive: true, force: true }));
 
@@ -23,8 +19,17 @@ function run(root: string, ...flags: string[]) {
   });
 }
 
+function feature(source: string): string {
+  const root = fs.mkdtempSync(path.join(temporary, "feature-"));
+  fs.cpSync(path.join(fixtures, "full"), root, { recursive: true });
+  fs.rmSync(path.join(root, "application"), { recursive: true });
+  fs.mkdirSync(path.join(root, "application"));
+  fs.writeFileSync(path.join(root, "application/factory.ts"), source);
+  return root;
+}
+
 describe("--hexagon", () => {
-  it.each(["full", "unbagged"])("prints exact text and sorted JSON for %s, repeatably", (name) => {
+  it.each(["full", "unbagged", "not-read"])("prints %s deterministically", (name) => {
     const root = path.join(fixtures, name);
     for (const [extension, flags] of [
       ["txt", []],
@@ -41,29 +46,24 @@ describe("--hexagon", () => {
   });
 
   it.each([
-    "renamed-exports",
-    "parenthesized",
-    "merged-interfaces",
-    "interface-port",
-  ])("prints the exact inventory for %s", (name) => {
-    const root = path.join(fixtures, name);
-    const result = run(root);
+    ["export function createWarehouse() {}", "Warehouse"],
+    ["export const createWarehouse = () => ({})", "Warehouse"],
+    ["export const createWarehouse = function createInternal() {}", "Warehouse"],
+    ["export const helper = function createWarehouse() {}", null],
+    ["function createWarehouse() {} export { createWarehouse }", null],
+    ["function local() {} export { local as createWarehouse }", null],
+    ["export { createWarehouse } from 'outside'", null],
+    ["export * as createWarehouse from 'outside'", null],
+    ["export namespace Scope { export function createWarehouse() {} }", null],
+    ["export default function createWarehouse() {}", null],
+    ["export let createWarehouse = () => ({})", null],
+  ])("selects only direct factory exports: %s", (source, expected) => {
+    const result = run(feature(source), "--json");
     expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(fs.readFileSync(path.join(root, "expected.txt"), "utf8"));
-  });
-
-  it.each([
-    ["generic-bag", "1: cannot read Base: generic bag"],
-    ["index-signature", "3: cannot read Warehouse: index-signature bag"],
-  ])("refuses %s with an exact diagnostic and no report", (name, detail) => {
-    const root = path.join(fixtures, name);
-    for (const flags of [[], ["--json"]]) {
-      const result = run(root, ...flags);
-      expect(result.status).toBe(2);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toBe(`code-graph: ${path.join(root, "ports.ts")}:${detail}\n`);
-    }
+    const report = JSON.parse(result.stdout);
+    expect(report.feature).toBe(expected);
+    if (expected === null)
+      expect(report.otherBags.map((bag: { name: string }) => bag.name)).toContain("Warehouse");
   });
 
   it.each([[], ["--json"]])("names missing ports.ts with no output (%j)", (...flags) => {
@@ -74,34 +74,39 @@ describe("--hexagon", () => {
     expect(result.stderr).toBe(`code-graph: missing ports.ts: ${path.join(root, "ports.ts")}\n`);
   });
 
+  it.each(["ports.ts", "application/factory.ts"])("lists invalid %s", (file) => {
+    const root = feature("");
+    fs.writeFileSync(path.join(root, file), "export type Broken =");
+    const result = run(root, "--json");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).notRead).toEqual([
+      { file, line: 1, name: "<source>", reason: "cannot parse source" },
+    ]);
+  });
+
+  it("fails on an unreadable application directory", () => {
+    const root = feature("");
+    fs.rmSync(path.join(root, "application"), { recursive: true });
+    fs.writeFileSync(path.join(root, "application"), "");
+    const result = run(root);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      `code-graph: cannot read directory: ${path.join(root, "application")}\n`,
+    );
+  });
+
   it("writes pretty JSON through --out, with no stdout document", () => {
     const destination = path.join(temporary, "hexagon.json");
-    const root = path.join(fixtures, "full");
-    const result = run(root, "--json", "--pretty", "--out", destination);
+    const root = path.join(fixtures, "not-read");
     const expected = JSON.parse(fs.readFileSync(path.join(root, "expected.json"), "utf8"));
     const text = `${JSON.stringify(expected, null, 2)}\n`;
+    const result = run(root, "--json", "--pretty", "--out", destination);
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("");
     expect(fs.readFileSync(destination, "utf8")).toBe(text);
     expect(result.stderr).toBe(
       `code-graph: wrote ${Buffer.byteLength(text)} bytes to ${destination}\n`,
     );
-  });
-
-  it.each([
-    ["ports.ts", "export type Broken =", "cannot parse"],
-    ["application/broken.ts", "export function broken( {", "cannot parse"],
-    ["adapters/driven/broken.ts", "export const broken =", "cannot parse"],
-    ["ports.ts", "export type A = B; export type B = A;", "cyclic bag in ports.ts: A"],
-  ])("refuses invalid source in %s (%s)", (file, source, message) => {
-    const root = fs.mkdtempSync(path.join(temporary, "invalid-"));
-    fs.cpSync(path.join(fixtures, "full"), root, { recursive: true });
-    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    fs.writeFileSync(path.join(root, file), source);
-    const result = run(root, "--json");
-    expect(result.status).toBe(2);
-    expect(result.stdout).toBe("");
-    const detail = message === "cannot parse" ? `${message} ${path.join(root, file)}` : message;
-    expect(result.stderr).toBe(`code-graph: ${detail}\n`);
   });
 });

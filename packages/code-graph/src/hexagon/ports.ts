@@ -4,247 +4,193 @@ import { nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 export type HexagonMember = { name: string; type: string; signature: string | null };
 export type HexagonBag = { name: string; members: HexagonMember[] };
 export type HexagonPort = { name: string; type: string };
+export type NotRead = { file: string; line: number; name: string; reason: string };
 
 export function lexical(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function referenceName(node: SyntaxNode): string | null {
-  const name =
-    node.type === "TSTypeReference"
-      ? nodeField(node, "typeName")
-      : node.type === "TSInterfaceHeritage"
-        ? nodeField(node, "expression")
-        : null;
-  return name?.type === "Identifier" ? name.name : null;
-}
-
-function localTypes(syntax: SyntaxFile): Map<string, SyntaxNode[]> {
-  const types = new Map<string, SyntaxNode[]>();
-  for (const statement of syntax.program.body) {
-    const node = nodeField(statement, "declaration") ?? statement;
-    if (node.type !== "TSTypeAliasDeclaration" && node.type !== "TSInterfaceDeclaration") continue;
-    const declarations = types.get(node.id.name) ?? [];
-    declarations.push(node);
-    types.set(node.id.name, declarations);
-  }
-  return types;
-}
-
-function functionType(
-  node: SyntaxNode,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  seen = new Set<string>(),
-): SyntaxNode | null {
-  if (node.type === "TSTypeAliasDeclaration" || node.type === "TSParenthesizedType") {
-    return functionType(node.typeAnnotation, types, seen);
-  }
-  if (node.type === "TSFunctionType") return node;
-  const name = referenceName(node);
-  if (name === null || seen.has(name) || nodeField(node, "typeArguments") !== null) return null;
-  const target = types.get(name)?.[0];
-  if (target === undefined) return null;
-  return (
-    functionType(target, types, new Set([...seen, name])) ??
-    (/^For[A-Z]/.test(name) ? nodeField(target, "typeAnnotation") : null)
-  );
-}
-
-function memberOf(
-  node: SyntaxNode,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-): HexagonMember | null {
-  if (node.type !== "TSPropertySignature" && node.type !== "TSMethodSignature") return null;
-  const name = nameText(syntax, node, node.key) + (node.optional ? "?" : "");
-  if (node.type === "TSMethodSignature") {
-    const type = syntax.text.slice(node.key.end, node.end).replace(/[;,]$/, "");
-    return { name, type, signature: null };
-  }
-  const type = node.typeAnnotation?.typeAnnotation;
-  if (type === undefined) return { name, type: "unknown", signature: null };
-  const signature = functionType(type, types);
-  return {
-    name,
-    type: syntax.textOf(type),
-    signature: signature === null ? null : syntax.textOf(signature),
-  };
-}
-
-function objectMembers(
-  node: SyntaxNode,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  file: string,
-  seen = new Set<string>(),
-): HexagonMember[] | null {
-  if (node.type === "TSParenthesizedType") {
-    return objectMembers(node.typeAnnotation, syntax, types, file, seen);
-  }
-  if (node.type === "TSTypeAliasDeclaration") {
-    const members = objectMembers(node.typeAnnotation, syntax, types, file, seen);
-    if (members !== null && node.typeParameters !== null) {
-      unreadable(node, syntax, file, "generic bag");
-    }
-    return members;
-  }
-  const name = referenceName(node);
-  if (name !== null) return referenceMembers(name, node, syntax, types, file, seen);
-  if (node.type === "TSIntersectionType") {
-    return intersectionMembers(node, syntax, types, file, seen);
-  }
-  if (node.type === "TSInterfaceDeclaration") {
-    return interfaceMembers(node, syntax, types, file, seen);
-  }
-  if (node.type !== "TSTypeLiteral") return null;
-  return bagMembers(node.members, syntax, types, file);
-}
-
-function referenceMembers(
-  name: string,
-  node: SyntaxNode,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  file: string,
-  seen: Set<string>,
-): HexagonMember[] | null {
-  if (seen.has(name)) throw new Error(`cyclic bag in ports.ts: ${name}`);
-  const target = types.get(name);
-  if (target === undefined) return null;
-  const parts = target.map((declaration) =>
-    objectMembers(declaration, syntax, types, file, new Set([...seen, name])),
-  );
-  const members = parts.every((part) => part === null) ? null : parts.flatMap((part) => part ?? []);
-  if (members !== null && nodeField(node, "typeArguments") !== null) {
-    unreadable(node, syntax, file, "generic bag instantiation");
-  }
-  return members;
-}
-
-function interfaceMembers(
-  node: Extract<SyntaxNode, { type: "TSInterfaceDeclaration" }>,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  file: string,
-  seen: Set<string>,
-): HexagonMember[] {
-  if (node.typeParameters !== null) unreadable(node, syntax, file, "generic bag");
-  const inherited = node.extends.flatMap(
-    (base) => objectMembers(base, syntax, types, file, seen) ?? [],
-  );
-  return [...inherited, ...bagMembers(node.body.body, syntax, types, file)];
-}
-
-function intersectionMembers(
-  node: Extract<SyntaxNode, { type: "TSIntersectionType" }>,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  file: string,
-  seen: Set<string>,
-): HexagonMember[] | null {
-  const parts = node.types.map((part) => objectMembers(part, syntax, types, file, seen));
-  return parts.every((part) => part === null) ? null : parts.flatMap((part) => part ?? []);
-}
-
-function unreadable(node: SyntaxNode, syntax: SyntaxFile, file: string, shape: string): never {
-  let declaration: SyntaxNode | undefined = node;
-  while (declaration !== undefined) {
-    if (
-      declaration.type === "TSTypeAliasDeclaration" ||
-      declaration.type === "TSInterfaceDeclaration"
-    ) {
-      throw new Error(
-        `${file}:${syntax.startLine(node)}: cannot read ${declaration.id.name}: ${shape}`,
-      );
-    }
-    declaration = syntax.parentOf(declaration);
-  }
-  throw new Error(`${file}:${syntax.startLine(node)}: cannot read ${shape}`);
-}
-
-function bagMembers(
-  nodes: SyntaxNode[],
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  file: string,
-): HexagonMember[] {
-  return nodes.flatMap((node) => {
-    if (node.type === "TSIndexSignature") unreadable(node, syntax, file, "index-signature bag");
-    return memberOf(node, syntax, types) ?? [];
-  });
-}
-
-function exportedTypes(syntax: SyntaxFile): { local: string; name: string }[] {
+function exportEntries(syntax: SyntaxFile) {
   return syntax.program.body.flatMap((statement) => {
-    if (statement.type !== "ExportNamedDeclaration" || statement.source !== null) return [];
-    const declaration = statement.declaration;
-    if (
-      declaration?.type === "TSTypeAliasDeclaration" ||
-      declaration?.type === "TSInterfaceDeclaration"
-    ) {
-      return [{ local: declaration.id.name, name: declaration.id.name }];
+    const node = nodeField(statement, "declaration");
+    const id = node === null ? null : nodeField(node, "id");
+    if (statement.type === "ExportDefaultDeclaration") {
+      const name = id === null ? "default" : syntax.textOf(id);
+      return [{ node: statement, name, reason: "default export" }];
     }
-    return statement.specifiers.map((specifier) => ({
-      local: specifier.local.type === "Identifier" ? specifier.local.name : specifier.local.value,
-      name:
-        specifier.exported.type === "Identifier"
-          ? specifier.exported.name
-          : specifier.exported.value,
-    }));
+    if (statement.type === "ExportAllDeclaration") {
+      const name = statement.exported === null ? "*" : syntax.textOf(statement.exported);
+      return [{ node: statement, name, reason: "re-export" }];
+    }
+    if (statement.type !== "ExportNamedDeclaration") return otherExports(statement, syntax);
+    if (node === null) {
+      return statement.specifiers.map((specifier) => ({
+        node: specifier,
+        name: syntax.textOf(specifier.exported),
+        reason: statement.source === null ? "export list" : "re-export",
+      }));
+    }
+    return declarationEntries(node, id === null ? syntax.textOf(node) : syntax.textOf(id), syntax);
   });
 }
 
-function referencedTypes(
-  node: SyntaxNode,
-  syntax: SyntaxFile,
-  types: ReadonlyMap<string, SyntaxNode[]>,
-  seen: Set<string>,
-): void {
-  const name = referenceName(node);
-  if (name !== null && !seen.has(name)) {
-    seen.add(name);
-    const target = types.get(name);
-    for (const declaration of target ?? []) referencedTypes(declaration, syntax, types, seen);
-  }
-  for (const child of syntax.children(node)) referencedTypes(child, syntax, types, seen);
+function otherExports(node: SyntaxNode, syntax: SyntaxFile) {
+  const name =
+    node.type === "TSExportAssignment"
+      ? node.expression
+      : node.type === "TSNamespaceExportDeclaration"
+        ? node.id
+        : null;
+  return name === null ? [] : [{ node, name: syntax.textOf(name), reason: "unsupported export" }];
 }
 
-export function readPorts(
-  syntax: SyntaxFile,
-  file: string,
-): {
-  bags: HexagonBag[];
-  unbaggedPorts: HexagonPort[];
-} {
-  const types = localTypes(syntax);
-  const exported = new Map(exportedTypes(syntax).map(({ local, name }) => [name, local]));
-  const bags: HexagonBag[] = [];
-  const used = new Set<string>();
-  for (const [name, local] of exported) {
-    const declarations = types.get(local);
-    if (declarations === undefined) continue;
-    const parts = declarations.map((node) =>
-      objectMembers(node, syntax, types, file, new Set([local])),
-    );
-    if (parts.every((part) => part === null)) continue;
-    const members = parts.flatMap((part) => part ?? []);
-    for (const node of declarations) referencedTypes(node, syntax, types, used);
-    const unique = new Map(members.map((member) => [JSON.stringify(member), member]));
-    bags.push({
-      name,
-      members: [...unique.values()].sort(
-        (a, b) => lexical(a.name, b.name) || lexical(a.type, b.type),
-      ),
-    });
-  }
-  const unbaggedPorts = [...types]
-    .flatMap(([name, declarations]) =>
-      declarations.flatMap((node) =>
-        node.type === "TSTypeAliasDeclaration" && /^For[A-Z]/.test(name) && !used.has(name)
-          ? [{ name, type: syntax.textOf(node.typeAnnotation) }]
-          : [],
-      ),
+function declarationEntries(node: SyntaxNode, name: string, syntax: SyntaxFile) {
+  if (node.type !== "VariableDeclaration") return [{ node, name, reason: "" }];
+  return node.declarations.map((binding) => ({
+    node: binding,
+    name: nameText(syntax, binding, binding.id),
+    reason: "value declaration",
+  }));
+}
+
+const SHAPES: Readonly<Record<string, string>> = {
+  TSMappedType: "mapped type",
+  TSConditionalType: "conditional type",
+  TSIntersectionType: "intersection type",
+  TSUnionType: "union type",
+  TSParenthesizedType: "parenthesized type",
+  TSTypeReference: "bag alias",
+  TSIndexSignature: "index signature",
+  TSCallSignatureDeclaration: "call signature",
+  TSConstructSignatureDeclaration: "construct signature",
+  TSMethodSignature: "method or accessor",
+  TSModuleDeclaration: "namespace declaration",
+};
+
+function plainMembers(node: SyntaxNode): SyntaxNode[] | null {
+  if (node.type === "TSInterfaceDeclaration") return node.body.body;
+  return node.type === "TSTypeLiteral" ? node.members : null;
+}
+
+function memberReason(member: SyntaxNode): string | null {
+  if (member.type !== "TSPropertySignature") return SHAPES[member.type] ?? "non-property member";
+  if (member.computed) return "computed property";
+  if (member.typeAnnotation === null) return "property without type";
+  return null;
+}
+
+function genericReason(node: SyntaxNode, syntax: SyntaxFile): string | null {
+  if (node.type !== "TSTypeAliasDeclaration" || node.typeParameters === null) return null;
+  const parameters = node.typeParameters.params;
+  if (parameters.some((parameter) => parameter.default !== null)) return "defaulted generic alias";
+  let implicit = false;
+  syntax.forEachTsDescendant(syntax.program, (reference) => {
+    if (reference.type !== "TSTypeReference" || reference.typeName.type !== "Identifier") return;
+    if (
+      reference.typeName.name === node.id.name &&
+      reference.typeArguments?.params.length !== parameters.length
+    )
+      implicit = true;
+  });
+  return implicit ? "generic port requires explicit arguments" : null;
+}
+
+function isPort(node: SyntaxNode): boolean {
+  if (node.type !== "TSTypeAliasDeclaration") return false;
+  return (
+    /^For[A-Z]/.test(node.id.name) &&
+    ["TSFunctionType", "TSTypeReference"].includes(node.typeAnnotation.type)
+  );
+}
+
+function bagReason(node: SyntaxNode, body: SyntaxNode, syntax: SyntaxFile): string | null {
+  if (nodeField(node, "typeParameters") !== null) return "generic bag";
+  if (node.type === "TSInterfaceDeclaration" && node.extends.length > 0) return "interface extends";
+  const members = plainMembers(body);
+  if (members === null) return SHAPES[body.type] ?? "not a port or plain bag";
+  const names = members.map((member) => {
+    const key = nodeField(member, "key");
+    return key === null ? "" : nameText(syntax, member, key);
+  });
+  return (
+    members.map(memberReason).find((reason) => reason !== null) ??
+    (new Set(names).size !== names.length ? "duplicate member" : null)
+  );
+}
+
+function declarationReason(node: SyntaxNode, syntax: SyntaxFile): string | null {
+  if (isPort(node)) return genericReason(node, syntax);
+  if (node.type !== "TSTypeAliasDeclaration" && node.type !== "TSInterfaceDeclaration")
+    return SHAPES[node.type] ?? "not a port or bag declaration";
+  return bagReason(
+    node,
+    node.type === "TSTypeAliasDeclaration" ? node.typeAnnotation : node,
+    syntax,
+  );
+}
+
+function readMembers(nodes: SyntaxNode[], syntax: SyntaxFile): HexagonMember[] {
+  return nodes
+    .flatMap((member) =>
+      member.type === "TSPropertySignature" && member.typeAnnotation !== null
+        ? [
+            {
+              name: nameText(syntax, member, member.key) + (member.optional ? "?" : ""),
+              type: syntax.textOf(member.typeAnnotation.typeAnnotation),
+              signature: null,
+            },
+          ]
+        : [],
     )
     .sort((a, b) => lexical(a.name, b.name));
-  return { bags: bags.sort((a, b) => lexical(a.name, b.name)), unbaggedPorts };
+}
+
+function declarationCounts(syntax: SyntaxFile): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const statement of syntax.program.body) {
+    const node = nodeField(statement, "declaration") ?? statement;
+    const id = nodeField(node, "id");
+    if (id !== null) counts.set(syntax.textOf(id), (counts.get(syntax.textOf(id)) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function readPorts(syntax: SyntaxFile | null, notRead: NotRead[]) {
+  const bags: HexagonBag[] = [];
+  const ports: HexagonPort[] = [];
+  if (syntax === null) return { bags, unbaggedPorts: ports };
+  const counts = declarationCounts(syntax);
+  for (const { node, name, reason: exportReason } of exportEntries(syntax)) {
+    const reason =
+      exportReason ||
+      ((counts.get(name) ?? 0) > 1 ? "multiple declarations" : declarationReason(node, syntax));
+    if (reason !== null) {
+      notRead.push({ file: "ports.ts", line: syntax.startLine(node), name, reason });
+      continue;
+    }
+    const body = node.type === "TSTypeAliasDeclaration" ? node.typeAnnotation : node;
+    const members = plainMembers(body);
+    if (members === null) {
+      ports.push({ name, type: syntax.textOf(body) });
+    } else {
+      bags.push({ name, members: readMembers(members, syntax) });
+    }
+  }
+  return summarizePorts(bags, ports);
+}
+
+function summarizePorts(bags: HexagonBag[], ports: HexagonPort[]) {
+  const signatures = new Map(ports.map((port) => [port.name, port.type]));
+  const used = new Set<string>();
+  for (const bag of bags)
+    for (const member of bag.members) {
+      used.add(member.type);
+      member.signature = signatures.get(member.type) ?? null;
+    }
+  return {
+    bags: bags.sort((a, b) => lexical(a.name, b.name)),
+    unbaggedPorts: ports
+      .filter((port) => !used.has(port.name))
+      .sort((a, b) => lexical(a.name, b.name)),
+  };
 }

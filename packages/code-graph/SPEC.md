@@ -832,36 +832,59 @@ Each child documents the part it builds: the view child `--api` and `readPublish
 ## 14. Feature hexagon (`--hexagon`)
 
 `code-graph <featureDir> --hexagon` reads syntax through the oxc seam, without a
-tsconfig, type checker, model call or configuration. It prints these sections in order:
-Commands, External systems, Other bags, Ports declared in ports.ts but in no bag,
-Use cases, Adapters. Empty sections print `none`; JSON uses empty arrays.
+tsconfig, type checker, model call or configuration. It reads only this allowlist:
 
-The feature name is the suffix of an exported `createX` function under
-`application/*.ts`. Prefer the file named after the feature directory; otherwise
-prefer a factory whose `X` and `XDriven` bags exist, then sort by file and name.
-With no factory, use the directory basename converted to PascalCase. `X` is the
-driving bag and `XDriven` the driven bag.
+- **Port:** a direct `export type ForX = <function type>` or
+  `export type ForX = <type reference>`, with `For` followed by a capital letter.
+  The alias is non-generic, or has no default type parameters and every reference
+  to it in `ports.ts` supplies all type arguments explicitly. Generic function
+  types are preserved. Port expressions print as written, without resolving
+  aliases, scopes, imported types or substituting generic arguments.
+- **Bag:** a direct `export type Name = { member: Type; ... }` or
+  `export interface Name { member: Type; ... }`, declared once and non-generic.
+  Every member must be a plain property signature with a written type; `readonly`
+  and optional `?` properties are allowed. Computed keys, duplicate members,
+  interface extensions, index/call/construct signatures, methods and accessors
+  are not read. Neither are parenthesized, mapped, conditional, intersection,
+  union or aliased bag shapes. Property types themselves remain as written.
+- **Factory:** a direct module-level `export function createX` with a body, or
+  `export const createX =` an arrow or function expression in `application/*.ts`.
+  Its exported binding name supplies `X`, including for named function expressions.
+  Export lists, re-exports, default exports and namespace forms are not factories.
 
-Every exported object type alias or interface in `ports.ts` is a bag, including
-data-only objects. Use their exported names, including renamed exports. Expand
-parenthesized objects, local object aliases, intersections, merged interfaces and
-interface extensions; leave imported types unexpanded. List each member with its written
-type and, when it names a local non-instantiated function type, that function's
-written signature or alias expression. Preserve generic member types and imported
-port references as written, without guessing their signatures. Generic bags,
-local generic bag instantiations and bags with index signatures exit 2, naming
-the file, line and declaration that cannot be read. Unbagged ports are local type
-aliases named `For` followed by a capital letter, absent from every bag's type
-references (including references reached through local aliases).
+The factory in the file named after the feature directory takes precedence,
+then factories with readable `X` and `XDriven` bags, then file/name order.
+`X` supplies Commands; `XDriven` supplies External systems. With no factory,
+print `Factory: not found`, leave both sections empty, and list every readable bag
+under Other bags. Do not infer a feature from the directory name; JSON `feature`
+is `null` when no factory is found.
 
-Use cases list every visible `application/*.ts` file and its exported functions;
-adapter files are visible `.ts`/`.tsx` files recursively under `adapters/driving/`
+Print sections in order: Commands, External systems, Other bags, Ports declared
+in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections print
+`none`; JSON uses empty arrays. Members keep their written names, optional `?`
+and types. If a member's entire written type is exactly the name of a readable
+port, also print that port's written expression. Only that exact match counts a
+port as used. Aliases, nested references, qualified names and generic
+instantiations do not count; unreadable bags do not consume ports.
+
+Every module export in `ports.ts` outside the allowlist appears under Not read
+as `file:line Name: reason` (`notRead` objects in JSON). Export lists and re-exports
+are listed by their exported names, wildcard exports as `*`, default declarations
+by their declared name (or `default`). Each declaration in a merge is listed.
+No partial bag is read. Syntax errors or unreadable source files produce a
+`<source>` entry at line 1, without guessing declarations. Adapter contents are
+not parsed. Unsupported shapes never cause a non-zero exit.
+
+Use cases list every visible `application/*.ts` file and its directly exported
+functions in the same forms as factories, without the `createX` name restriction.
+Adapter files are visible `.ts`/`.tsx` files recursively under `adapters/driving/`
 and `adapters/driven/`. Standard source exclusions (§6 A3) apply, with tests
 included. File keys are relative to the feature directory. Bags, members, ports,
-functions and file lists are deduplicated and sorted lexically; JSON object keys
-use the existing stable serializer. No timestamps or absolute paths enter a
-successful report. `--pretty` and `--out` work as on other views.
+functions and file lists sort lexically. Not read sorts by file, numeric line,
+name, then reason; JSON object keys use the existing stable serializer. No
+timestamps or absolute paths enter a successful report. `--pretty` and `--out`
+work as on other views. No options or library subpaths are added.
 
-Missing `ports.ts`, unreadable selected files and syntax errors exit 2 with a
-clear stderr message naming the path and no partial report. Cyclic local bag
-definitions are refused. No new library subpath is published.
+Only missing `ports.ts` or an unreadable selected directory exits 2, with a clear
+stderr message naming the path and no report. Cyclic bag aliases are Not read;
+readable properties referring to bags are printed without traversing them.
