@@ -1,0 +1,322 @@
+{
+  "@demlik/tea:./paginate#PaginatorPolicy": {
+    "signature": "3fb638c8121154452437ad5b7b17308747480e1c5ad5cb2565fda21ae857fb2f",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::PaginatorPolicy::new"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#defaultPaginatorPolicy": {
+    "signature": "8324e1b41d3cee26d786a60b8b3f59781f2f7d771e8debae4e669d88cd6ff7eb",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::default_paginator_policy"]
+    },
+    "cases": ["paginate.default"]
+  },
+  "@demlik/tea:./paginate#PaginatorState": {
+    "signature": "b9ee81d06631cb1f272b419a31d31161f227bc7553ca11cc7aab2a836f1660e3",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginator::init_paginator",
+        "demlik_tea::paginate::paginator::start"
+      ]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#initPaginator": {
+    "signature": "9209d599eaa33d38718d3402fae195e7200d78e1f08262099e21dacac849cab0",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::init_paginator"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#start": {
+    "signature": "3b24f31fbd65d68acfede3d1594865dc8b7bfd5f6b68f1ecfac0540b055c794a",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::start"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#recordPage": {
+    "signature": "1911b0b5490d71b56b12380e03a47fc6cb5088ff0f201912b0a66f02da84a842",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::record_page"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#drain": {
+    "signature": "7ec16920e9b735ed60e20bbb4e3a8528a49446329325edc3fb1e331c21ac41e5",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::drain"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#resume": {
+    "signature": "3bd6f5292f8536c8c89ff2edd85d86c203ce3fc4515331858fdb583e0dc732ae",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::resume"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./paginate#isDone": {
+    "signature": "f06127e000890a4cef74d5392c2dab61b20d28713023d8ea2d7f73aaad0278b7",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginator.rs",
+      "symbols": ["demlik_tea::paginate::paginator::is_done"]
+    },
+    "cases": ["paginate.valve"]
+  },
+  "@demlik/tea:./work-queue#QueueItemStatus": {
+    "signature": "a459b32aac2e04632846dd1f55020e00fed98f5c25698445945a55b61754e077",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": [
+        "demlik_tea::work_queue::enqueue_op",
+        "demlik_tea::work_queue::claim_next_op"
+      ]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#QueueItem": {
+    "signature": "38882678e42acab8926532ee586f5ccbe5d771639a84f14a91349de49cb37e70",
+    "rust": {
+      "file": "crates/tea/src/work_queue/mod.rs",
+      "symbols": ["demlik_tea::work_queue::QueueItem::new"]
+    },
+    "cases": ["queue.pure-array-alias"]
+  },
+  "@demlik/tea:./work-queue#EnqueueInput": {
+    "signature": "0adaba76c402b357224f078d80529d7b77b5fb075f45e8d9144f0b7aa29bc68b",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::enqueue_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#createQueue": {
+    "signature": "638d2be67702823fa95af8ddb44505ad56b892d0918122a1e12fea82a4a2aeb2",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": [
+        "demlik_tea::work_queue::create_queue",
+        "demlik_tea::work_queue::QueueClient::with_sources"
+      ]
+    },
+    "cases": ["queue.native-defaults", "queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:52c1fa635acde6bed4839273c8e8c914f50dc41e26e7d0400a6f9c12f9d57db2": {
+    "signature": "52c1fa635acde6bed4839273c8e8c914f50dc41e26e7d0400a6f9c12f9d57db2",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": ["demlik_tea::work_queue::QueueClient::enqueue"]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:9e72637f65a1d78959175e1e2727c0cdf0c7ac4237aae431288439ef18bd169e": {
+    "signature": "9e72637f65a1d78959175e1e2727c0cdf0c7ac4237aae431288439ef18bd169e",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": ["demlik_tea::work_queue::QueueClient::claim_next"]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:b7b9bbdda962d235d9d23f7c1e5680b2a401562163c68d08a813a90e9fa64b2d": {
+    "signature": "b7b9bbdda962d235d9d23f7c1e5680b2a401562163c68d08a813a90e9fa64b2d",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": [
+        "demlik_tea::work_queue::QueueClient::mark_done",
+        "demlik_tea::work_queue::QueueClient::mark_cancelled",
+        "demlik_tea::work_queue::QueueClient::remove_item",
+        "demlik_tea::work_queue::QueueClient::retry_item"
+      ]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:b707e4d979da03d8b28d1e2e702404d8638166e23eaee8663a328e3a13e90c80": {
+    "signature": "b707e4d979da03d8b28d1e2e702404d8638166e23eaee8663a328e3a13e90c80",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": ["demlik_tea::work_queue::QueueClient::mark_failed"]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:010d23af909b49728d2582c948568b00c8f3da957bfaebda65cebc28e1d4e28b": {
+    "signature": "010d23af909b49728d2582c948568b00c8f3da957bfaebda65cebc28e1d4e28b",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": [
+        "demlik_tea::work_queue::QueueClient::reset_running_to_pending"
+      ]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:6f9a307548616bf026e284dc11431fdec5745e271976270685558be9147987ef": {
+    "signature": "6f9a307548616bf026e284dc11431fdec5745e271976270685558be9147987ef",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": ["demlik_tea::work_queue::QueueClient::bind_output"]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:published:2f958dbe87fa39996d156c6d83bd615a9d74dd19b306a55299989de6f1b49e49": {
+    "signature": "2f958dbe87fa39996d156c6d83bd615a9d74dd19b306a55299989de6f1b49e49",
+    "rust": {
+      "file": "crates/tea/src/work_queue/store.rs",
+      "symbols": ["demlik_tea::work_queue::QueueClient::list"]
+    },
+    "cases": ["queue.store-lifecycle"]
+  },
+  "@demlik/tea:./work-queue#createQueue/member:src/runtime-types.d.ts#Store:5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f": {
+    "signature": "5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::load"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"],
+    "canonical": "@demlik/tea:.#Store/member:published:5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f"
+  },
+  "@demlik/tea:./work-queue#createQueue/member:src/runtime-types.d.ts#Store:7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056": {
+    "signature": "7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::save"]
+    },
+    "cases": ["storage.memory-replace-detaches-old-reference"],
+    "canonical": "@demlik/tea:.#Store/member:published:7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056"
+  },
+  "@demlik/tea:./work-queue#createQueue/member:src/runtime-types.d.ts#Store:c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01": {
+    "signature": "c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"],
+    "canonical": "@demlik/tea:.#Store/member:published:c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01"
+  },
+  "@demlik/tea:./work-queue#QueueAdapter": {
+    "signature": "b37544501392c1cc72c7374c30b810bb28f704df5e35a64db5da9df1a3471c64",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": [
+        "demlik_tea::work_queue::QueueAdapter::enqueue",
+        "demlik_tea::work_queue::QueueAdapter::claim",
+        "demlik_tea::work_queue::QueueAdapter::mark_done",
+        "demlik_tea::work_queue::QueueAdapter::patch"
+      ]
+    },
+    "cases": ["queue.lifecycle-true", "queue.identity-patch"]
+  },
+  "@demlik/tea:./work-queue#QueueAdapter/member:published:5a132450b7b3d007b982ef4c753e8c9f721eba2ddd7ac60b1623c5cc83aae7dc": {
+    "signature": "5a132450b7b3d007b982ef4c753e8c9f721eba2ddd7ac60b1623c5cc83aae7dc",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::QueueAdapter::enqueue"]
+    },
+    "cases": ["queue.lifecycle-true"]
+  },
+  "@demlik/tea:./work-queue#QueueAdapter/member:published:8de21612039851aac8724a2b0cff5fa7ae21b3d3a3edf84d8b5aea5534389981": {
+    "signature": "8de21612039851aac8724a2b0cff5fa7ae21b3d3a3edf84d8b5aea5534389981",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::QueueAdapter::claim"]
+    },
+    "cases": ["queue.lifecycle-true"]
+  },
+  "@demlik/tea:./work-queue#QueueAdapter/member:published:463ad157fcefdc02db5999b5687303cdefd8efb90660e1ef8954066e7fe3cc97": {
+    "signature": "463ad157fcefdc02db5999b5687303cdefd8efb90660e1ef8954066e7fe3cc97",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::QueueAdapter::mark_done"]
+    },
+    "cases": ["queue.lifecycle-true"]
+  },
+  "@demlik/tea:./work-queue#QueueAdapter/member:published:f502937908188cf323f950f4c163c3957db29ea16a5f3e5cb156c4e292dbeb93": {
+    "signature": "f502937908188cf323f950f4c163c3957db29ea16a5f3e5cb156c4e292dbeb93",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::QueueAdapter::patch"]
+    },
+    "cases": ["queue.identity-patch"]
+  },
+  "@demlik/tea:./work-queue#QueueAdapter/member:published:e0a89f670c82cfe498f3bd8bfecd7f88e6dbcf3de811fa0969ec157b1ffa9c46": {
+    "signature": "e0a89f670c82cfe498f3bd8bfecd7f88e6dbcf3de811fa0969ec157b1ffa9c46",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::QueueAdapter::patch"]
+    },
+    "cases": ["queue.identity-patch"]
+  },
+  "@demlik/tea:./work-queue#queueAdapter": {
+    "signature": "fbfbb6b3062056cdc5a134a7d573c8c6c6884a2f24f39d26f354d4420e228333",
+    "rust": {
+      "file": "crates/tea/src/work_queue/adapter.rs",
+      "symbols": ["demlik_tea::work_queue::queue_adapter"]
+    },
+    "cases": ["queue.lifecycle-true"]
+  },
+  "@demlik/tea:./work-queue#enqueueOp": {
+    "signature": "ea53cf7bce14f4e72f6e2f3e5e5d434891855a9dcf963b334da91fbbeb8a097b",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::enqueue_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#claimNextOp": {
+    "signature": "df311cf9de8dedd716ec8ab3fe936ca034867e8f6500699eb8a153980b1d156d",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::claim_next_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#markDoneOp": {
+    "signature": "5fc1a8680712a4980116d5d4d32c0baacbdb1ec03a8fceca464c273e19176250",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::mark_done_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#patchItemOp": {
+    "signature": "70ea43cf525e8ce47cdb8bd35554814621756a900f2c51c4468d86b99c9c7979",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::patch_item_op"]
+    },
+    "cases": ["queue.duplicates"]
+  },
+  "@demlik/tea:./work-queue#patchItemOp/member:published:e0a89f670c82cfe498f3bd8bfecd7f88e6dbcf3de811fa0969ec157b1ffa9c46": {
+    "signature": "e0a89f670c82cfe498f3bd8bfecd7f88e6dbcf3de811fa0969ec157b1ffa9c46",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::patch_item_op"]
+    },
+    "cases": ["queue.duplicates"]
+  },
+  "@demlik/tea:./work-queue#resetRunningOp": {
+    "signature": "6761b6a9bff84b02c5e391c57b7fd799ee5107e46b22bec8cba0653e292aba7a",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::reset_running_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./work-queue#removeOp": {
+    "signature": "54f6806f5976d444c0b8bed08db97494a828a75cd01ec8b850a2deed512c4f36",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::remove_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  }
+}

@@ -15,6 +15,7 @@ serde-value.workspace = true
 indexmap.workspace = true
 ryu-js.workspace = true
 fastrand.workspace = true
+getrandom.workspace = true
 futures.workspace = true
 tokio.workspace = true
 

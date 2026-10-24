@@ -16,6 +16,7 @@ indexmap = { version = "2", features = ["serde"] }
 libm = "0.2"
 ryu-js = "1.0"
 fastrand = { version = "2.5", features = ["js"] }
+getrandom = { version = "0.4.3", features = ["wasm_js"] }
 futures = "0.3"
 libc = "0.2"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs", "io-util"] }

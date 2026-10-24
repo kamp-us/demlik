@@ -6,12 +6,14 @@ pub mod file_store;
 pub mod idempotency;
 mod js_math;
 pub mod js_record;
+pub mod paginate;
 pub mod ports;
 pub mod resilience;
 pub mod retry_backoff;
 pub mod runtime;
 pub mod storage;
 pub mod timing;
+pub mod work_queue;
 pub use core::{
     Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_updates, replay,
 };
