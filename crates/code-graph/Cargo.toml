@@ -11,6 +11,7 @@ license = "Apache-2.0"
 indexmap.workspace = true
 icu_collator = "=2.1.1"
 regress = { version = "=0.12.0", features = ["utf16"] }
+ryu-js = "=1.0.3"
 oxc_resolver = "=11.24.2"
 oxc_allocator = "=0.151.0"
 oxc_ast = { version = "=0.151.0", features = ["serialize"] }

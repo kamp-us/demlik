@@ -2,6 +2,7 @@
 
 use std::fmt::Write;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use serde_json::value::RawValue;
 
@@ -132,5 +133,186 @@ impl<'de> Deserialize<'de> for JsString {
             }
         }
         Ok(Self(units))
+    }
+}
+
+pub type JsObject = IndexMap<JsString, JsValue>;
+
+/// The pinned pristine Object.prototype, separate from a JSON object's own properties.
+pub fn has_object_prototype_property(key: &JsString) -> bool {
+    [
+        "constructor",
+        "__defineGetter__",
+        "__defineSetter__",
+        "hasOwnProperty",
+        "__lookupGetter__",
+        "__lookupSetter__",
+        "isPrototypeOf",
+        "propertyIsEnumerable",
+        "toString",
+        "valueOf",
+        "__proto__",
+        "toLocaleString",
+    ]
+    .iter()
+    .any(|name| key == name)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum JsValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(JsString),
+    Array(Vec<JsValue>),
+    Object(JsObject),
+}
+
+/// Own keys in Object.keys/JSON.stringify order: array indices, then insertion order.
+pub fn object_keys<V>(object: &IndexMap<JsString, V>) -> Vec<&JsString> {
+    fn array_index(key: &JsString) -> Option<u32> {
+        let units = key.units();
+        if units.is_empty() || units.len() > 10 || units.len() > 1 && units[0] == u16::from(b'0') {
+            return None;
+        }
+        let mut value = 0u64;
+        for &unit in units {
+            if !(u16::from(b'0')..=u16::from(b'9')).contains(&unit) {
+                return None;
+            }
+            value = value * 10 + u64::from(unit - u16::from(b'0'));
+        }
+        (value < u64::from(u32::MAX)).then_some(value as u32)
+    }
+    let mut indices = Vec::new();
+    let mut others = Vec::new();
+    for key in object.keys() {
+        if let Some(index) = array_index(key) {
+            indices.push((index, key));
+        } else {
+            others.push(key);
+        }
+    }
+    indices.sort_by_key(|(index, _)| *index);
+    indices
+        .into_iter()
+        .map(|(_, key)| key)
+        .chain(others)
+        .collect()
+}
+
+impl JsValue {
+    pub fn parse(text: &str) -> Result<Self, serde_json::Error> {
+        let mut deserializer = serde_json::Deserializer::from_str(text);
+        deserializer.disable_recursion_limit();
+        let value = Self::deserialize(&mut deserializer)?;
+        deserializer.end()?;
+        Ok(value)
+    }
+    pub fn as_object(&self) -> Option<&JsObject> {
+        if let Self::Object(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn as_array(&self) -> Option<&[Self]> {
+        if let Self::Array(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn as_string(&self) -> Option<&JsString> {
+        if let Self::String(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn as_number(&self) -> Option<f64> {
+        if let Self::Number(value) = self {
+            Some(*value)
+        } else {
+            None
+        }
+    }
+    pub fn as_bool(&self) -> Option<bool> {
+        if let Self::Bool(value) = self {
+            Some(*value)
+        } else {
+            None
+        }
+    }
+    pub fn get(&self, key: &str) -> Option<&Self> {
+        self.as_object()?.get(&JsString::from(key))
+    }
+    fn write_json(&self, out: &mut String) {
+        match self {
+            Self::Null => out.push_str("null"),
+            Self::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+            Self::Number(value) if !value.is_finite() => out.push_str("null"),
+            Self::Number(value) => out.push_str(ryu_js::Buffer::new().format(*value)),
+            Self::String(value) => out.push_str(
+                &serde_json::to_string(value).expect("JavaScript strings serialize losslessly"),
+            ),
+            Self::Array(values) => {
+                out.push('[');
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    value.write_json(out);
+                }
+                out.push(']');
+            }
+            Self::Object(object) => {
+                out.push('{');
+                for (index, key) in object_keys(object).into_iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    out.push_str(
+                        &serde_json::to_string(key).expect("JavaScript keys serialize losslessly"),
+                    );
+                    out.push(':');
+                    object[key].write_json(out);
+                }
+                out.push('}');
+            }
+        }
+    }
+}
+impl<'de> Deserialize<'de> for JsValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let raw = raw.get();
+        match raw.as_bytes()[0] {
+            b'n' => Ok(Self::Null),
+            b't' => Ok(Self::Bool(true)),
+            b'f' => Ok(Self::Bool(false)),
+            b'"' => serde_json::from_str(raw)
+                .map(Self::String)
+                .map_err(D::Error::custom),
+            b'[' => serde_json::from_str(raw)
+                .map(Self::Array)
+                .map_err(D::Error::custom),
+            b'{' => serde_json::from_str(raw)
+                .map(Self::Object)
+                .map_err(D::Error::custom),
+            _ => raw
+                .parse::<f64>()
+                .map(Self::Number)
+                .map_err(D::Error::custom),
+        }
+    }
+}
+impl Serialize for JsValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut json = String::new();
+        self.write_json(&mut json);
+        RawValue::from_string(json)
+            .expect("JavaScript JSON values serialize valid JSON")
+            .serialize(serializer)
     }
 }

@@ -129,6 +129,7 @@ dependencies = [
  "oxc_resolver",
  "oxc_span",
  "regress",
+ "ryu-js",
  "serde",
  "serde_json",
 ]
