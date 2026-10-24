@@ -183,11 +183,22 @@ try {
     );
     await writeFile(file, original.replace(mutation.before, mutation.after));
     const targetDirectory = path.join(root, "target/parity/mutation-build");
-    execFileSync(cargo, ["build", "--locked", "--package", "demlik-parity"], {
-      cwd: directory,
-      env: { ...process.env, CARGO_TARGET_DIR: targetDirectory },
-      stdio: "pipe",
-    });
+    execFileSync(
+      cargo,
+      [
+        "build",
+        "--locked",
+        "--package",
+        "demlik-parity",
+        "--bin",
+        "demlik-parity",
+      ],
+      {
+        cwd: directory,
+        env: { ...process.env, CARGO_TARGET_DIR: targetDirectory },
+        stdio: "pipe",
+      },
+    );
     if (mutation.suite === "runtime") {
       execFileSync(
         cargo,
@@ -211,6 +222,8 @@ try {
       process.execPath,
       [
         path.join(here, "run.mjs"),
+        "--mutation-suite",
+        mutation.suite ?? "base",
         "--rust-bin",
         path.join(targetDirectory, "debug/demlik-parity"),
         ...(mutation.suite === "runtime"

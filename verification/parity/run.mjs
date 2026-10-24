@@ -10,6 +10,7 @@ import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { runtimeParity } from "./runtime.mjs";
+import { runtimeContractParity } from "./runtime-contracts.mjs";
 import { timingParity } from "./timing-run.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +19,25 @@ const args = process.argv.slice(2);
 const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
+const contractBinaryArgument = args.indexOf("--contract-bin");
 const reportArgument = args.indexOf("--report");
+const mutationArgument = args.indexOf("--mutation-suite");
+const mutationSuite =
+  mutationArgument === -1 ? undefined : args[mutationArgument + 1];
+if (mutationArgument !== -1) {
+  assert.ok(
+    ["base", "runtime"].includes(mutationSuite),
+    "unknown mutation suite",
+  );
+  assert.ok(
+    binaryArgument !== -1,
+    "mutation suites require a separately built source-copy binary",
+  );
+  assert.ok(
+    !args.includes("--complete"),
+    "the completion gate requires every suite",
+  );
+}
 const reportFile =
   reportArgument === -1
     ? path.join(root, "target/parity/report.json")
@@ -156,83 +175,115 @@ for (let index = 0; index < cases.length; index++) {
 const differentialFailures = failures.length;
 let suiteFailures = 0;
 let storageProcesses = null;
-try {
-  const processReport = path.join(
-    path.dirname(reportFile),
-    reportArgument === -1
-      ? "storage-process.json"
-      : `${path.basename(reportFile, ".json")}-storage-process.json`,
-  );
-  execFileSync(process.execPath, [path.join(here, "storage-process.mjs")], {
-    cwd: root,
-    env: {
-      ...process.env,
-      PARITY_RUST_BIN: binary,
-      PARITY_STORAGE_REPORT: processReport,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 45_000,
-  });
-  storageProcesses = {
-    ...JSON.parse(await readFile(processReport, "utf8")),
-    reportFile: processReport,
-  };
-  assert.equal(storageProcesses.results.length, 2);
-} catch (error) {
-  suiteFailures++;
-  failures.push({
-    id: "storage.process-verification",
-    operation: "tea.storage.processes",
-    message: error.message,
-  });
+if (!mutationSuite) {
+  try {
+    const processReport = path.join(
+      path.dirname(reportFile),
+      reportArgument === -1
+        ? "storage-process.json"
+        : `${path.basename(reportFile, ".json")}-storage-process.json`,
+    );
+    execFileSync(process.execPath, [path.join(here, "storage-process.mjs")], {
+      cwd: root,
+      env: {
+        ...process.env,
+        PARITY_RUST_BIN: binary,
+        PARITY_STORAGE_REPORT: processReport,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 45_000,
+    });
+    storageProcesses = {
+      ...JSON.parse(await readFile(processReport, "utf8")),
+      reportFile: processReport,
+    };
+    assert.equal(storageProcesses.results.length, 2);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "storage.process-verification",
+      operation: "tea.storage.processes",
+      message: error.message,
+    });
+  }
 }
 let runtime = { cases: 0, passed: 0, nativeEvidence: {} };
-try {
-  runtime = await runtimeParity(cargo, {
-    binary:
-      runtimeBinaryArgument === -1
-        ? undefined
-        : path.resolve(args[runtimeBinaryArgument + 1]),
-    reportFile:
-      reportArgument === -1
-        ? undefined
-        : path.join(
-            path.dirname(reportFile),
-            `${path.basename(reportFile, ".json")}-runtime.json`,
-          ),
-  });
-  failures.push(...runtime.failures);
-} catch (error) {
-  suiteFailures++;
-  failures.push({
-    id: "runtime.verification",
-    operation: "tea.runtime",
-    message: error.message,
-  });
+if (!mutationSuite || mutationSuite === "runtime") {
+  try {
+    runtime = await runtimeParity(cargo, {
+      binary:
+        runtimeBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[runtimeBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-runtime.json`,
+            ),
+    });
+    failures.push(...runtime.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "runtime.verification",
+      operation: "tea.runtime",
+      message: error.message,
+    });
+  }
+}
+let runtimeContracts = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    runtimeContracts = await runtimeContractParity(cargo, {
+      binary:
+        contractBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[contractBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-runtime-contract.json`,
+            ),
+    });
+    failures.push(...runtimeContracts.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "runtime-contract.verification",
+      operation: "tea.runtime.contracts",
+      message: error.message,
+    });
+  }
 }
 let timing = { cases: 0, passed: 0, nativeEvidence: {} };
-try {
-  timing = await timingParity(cargo, {
-    binary:
-      timingBinaryArgument === -1
-        ? undefined
-        : path.resolve(args[timingBinaryArgument + 1]),
-    reportFile:
-      reportArgument === -1
-        ? undefined
-        : path.join(
-            path.dirname(reportFile),
-            `${path.basename(reportFile, ".json")}-timing.json`,
-          ),
-  });
-  failures.push(...timing.failures);
-} catch (error) {
-  suiteFailures++;
-  failures.push({
-    id: "timing.verification",
-    operation: "tea.timing",
-    message: error.message,
-  });
+if (!mutationSuite) {
+  try {
+    timing = await timingParity(cargo, {
+      binary:
+        timingBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[timingBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-timing.json`,
+            ),
+    });
+    failures.push(...timing.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "timing.verification",
+      operation: "tea.timing",
+      message: error.message,
+    });
+  }
 }
 let graph = {
   passed: 0,
@@ -240,18 +291,21 @@ let graph = {
   suites: [],
   nativeEvidence: {},
 };
-try {
-  graph = await graphParity(cargo);
-} catch (error) {
-  suiteFailures++;
-  failures.push({
-    id: "graph.verification",
-    operation: "code_graph.project-and-semantics",
-    message: error.message,
-  });
+if (!mutationSuite) {
+  try {
+    graph = await graphParity(cargo);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "graph.verification",
+      operation: "code_graph.project-and-semantics",
+      message: error.message,
+    });
+  }
 }
 const report = {
   scope: "implemented operations only; full port is incomplete",
+  selection: mutationSuite ? `mutation:${mutationSuite}` : "all",
   reference: scope.reference,
   referenceChanges,
   node: process.version,
@@ -269,12 +323,18 @@ const report = {
     .update(await readFile(path.join(root, "Cargo.lock")))
     .digest("hex"),
   cases:
-    cases.length + graph.passed + runtime.cases + timing.cases + suiteFailures,
+    cases.length +
+    graph.passed +
+    runtime.cases +
+    timing.cases +
+    runtimeContracts.cases +
+    suiteFailures,
   passed:
     cases.length +
     graph.passed +
     runtime.passed +
-    timing.passed -
+    timing.passed +
+    runtimeContracts.passed -
     differentialFailures,
   failures,
   operations: [
@@ -282,12 +342,18 @@ const report = {
       ...cases.map((test) => test.operation),
       ...(runtime.passed ? ["tea.runtime"] : []),
       ...(timing.passed ? ["tea.timing"] : []),
+      ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
   graph: { ...graph, nativeEvidence: undefined },
   runtime: { ...runtime, nativeEvidence: undefined },
   timing: { ...timing, nativeEvidence: undefined, failures: undefined },
+  runtimeContracts: {
+    ...runtimeContracts,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
   storageProcesses,
   rustBinarySha256: createHash("sha256")
     .update(await readFile(binary))
@@ -307,6 +373,7 @@ const report = {
     ...graph.nativeEvidence,
     ...runtime.nativeEvidence,
     ...timing.nativeEvidence,
+    ...runtimeContracts.nativeEvidence,
   },
   infrastructureDiagnostics: Object.fromEntries(
     cases.flatMap((test, index) => {
@@ -333,6 +400,6 @@ if (args.includes("--complete")) {
 }
 await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(
-  `${JSON.stringify({ ...report, driverDiagnostics: { streams: driverDiagnostics.length }, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, infrastructureDiagnostics: { cases: Object.keys(report.infrastructureDiagnostics).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
+  `${JSON.stringify({ ...report, driverDiagnostics: { streams: driverDiagnostics.length }, timing: { ...report.timing, driverDiagnostics: { streams: report.timing.driverDiagnostics?.length ?? 0 } }, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, infrastructureDiagnostics: { cases: Object.keys(report.infrastructureDiagnostics).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
 );
 if (failures.length) process.exitCode = 1;

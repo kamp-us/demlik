@@ -5,14 +5,15 @@
   "scripts": {
     "verify": "node run.mjs",
     "verify:complete": "node run.mjs --complete",
-    "verify:mutations": "node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs",
+    "verify:mutations": "node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node runtime-contracts.mjs --mutation-check",
     "verify:storage-process": "node storage-process.mjs",
     "verify:timing": "node timing-run.mjs",
     "verify:timing:coverage": "node timing-coverage.mjs",
     "verify:timing:mutations": "node timing-mutations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check .",
-    "lint:worktree": "biome check ."
+    "lint:worktree": "biome check .",
+    "verify:runtime-contract": "node runtime-contracts.mjs"
   },
   "dependencies": {
     "zod": "catalog:"

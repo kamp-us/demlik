@@ -47,9 +47,9 @@ assert.ok(
 );
 assert.equal(process.version, "v22.21.1");
 assert.ok(process.versions.v8.startsWith("12.4."));
-const manifest = createRequire(import.meta.url).resolve(
-  "@typescript/native-preview/package.json",
-);
+const manifest = createRequire(
+  new URL("../../packages/code-graph/package.json", import.meta.url),
+).resolve("@typescript/native-preview/package.json");
 const compiler = await ts.tsgoBinary();
 assert.equal(compiler.version, "7.0.0-dev.20260707.2");
 const root = fs.realpathSync(

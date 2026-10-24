@@ -18,12 +18,15 @@ The implementations live beside each other in `packages/` and `crates/`.
    Runtime traces run through TypeScript Promise, TypeScript Effect, and both
    native Rust profiles. `target/parity/runtime.json` records their state,
    command, persistence and public commit order, including handler failure.
+   `target/parity/runtime-contract.json` adds typed-command success, declared
+   failure, defects, malformed output, undefined values and forged callbacks in
+   both profiles, with complete mismatch evidence and compiled call receipts.
    Independent-process storage checks also run by default, with bounded child
    watchdogs. `target/parity/storage-process.json` records competing CAS writers,
    process restart, dead PID-lock recovery and deletion in both languages.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
-   `target/parity/mutations.json`, `timing-mutations.json` and `ledger-mutations.json`.
+   `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json` and `runtime-contract-mutation.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
@@ -45,7 +48,8 @@ To use an isolated Rust installation, set `CARGO` to its cargo executable and
 configure the usual `CARGO_HOME`, `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` variables.
 The runner also accepts `--rust-bin <path>` and `--report <path>` for testing a
 separately built binary. Use `--runtime-bin <path>` to exercise a separately built
-native runtime example, or `--timing-bin <path>` for the timing driver. Generated cases use the recorded seed `0x5eed1234`.
+native runtime example, `--contract-bin <path>` for typed command contracts,
+or `--timing-bin <path>` for the timing driver. Generated cases use the recorded seed `0x5eed1234`.
 
 Add shared JSON cases under `cases/`, with a unique `id`, an `operation`, `input`,
 and an optional independent `expected` value. The two drivers must invoke their

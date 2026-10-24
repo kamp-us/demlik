@@ -3277,5 +3277,20 @@
       ]
     },
     "cases": ["graph.ledger.writer-dedup-and-lone-values"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#loadEdgeProject": {
+    "signature": "a9f6cd99d841b552e422132eb8c83695ccd1e955edba7267a99f8b5066568e07",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::load_edge_project"]
+    },
+    "cases": [
+      "graph.edges.aliases-factory-const-args-recursive-depth",
+      "graph.edges.alias-type-shorthand-callback-and-module-test-roots",
+      "graph.edges.runtime-vs-type-bindings-and-literal-value-positions",
+      "graph.edges.default-library-and-package-declaration-origins",
+      "graph.edges.workspace-callee-outside-loaded-scope",
+      "graph.edges.overloaded-default-merged-and-underscore-symbols"
+    ]
   }
 }
