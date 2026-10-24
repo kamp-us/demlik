@@ -114,7 +114,7 @@ fn machine() -> Machine<'static, Model, Msg, Cmd, Sub, ()> {
                 commands,
             )
         }),
-        subscriptions: Box::new(|_| vec![]),
+        subscriptions: demlik_tea::core::subscriptions(|_| vec![]),
     }
 }
 #[tokio::test(flavor = "current_thread")]
@@ -230,6 +230,301 @@ async fn storeless_counter_has_an_eager_local_launch_and_a_sendable_remote_produ
             assert_eq!(runtime.result().unwrap().n, 5);
             assert_eq!(runtime.done().await.unwrap().n, 5);
             runtime.stop().await;
+        })
+        .await;
+}
+
+#[derive(Clone)]
+struct TerminalStore {
+    inner: Saved,
+    entered: Rc<tokio::sync::Notify>,
+    release: Rc<tokio::sync::Notify>,
+    first: Rc<std::cell::Cell<bool>>,
+    fail: bool,
+}
+impl Store<Model> for TerminalStore {
+    type Raw = Option<(u32, bool)>;
+    type Error = &'static str;
+    async fn load(&self) -> Result<Self::Raw, Self::Error> {
+        self.inner.load().await
+    }
+    async fn save(&self, state: &Model) -> Result<(), Self::Error> {
+        if state.done {
+            if !self.first.replace(true) {
+                self.entered.notify_one();
+                self.release.notified().await;
+            }
+            if self.fail {
+                return Err("terminal save refused");
+            }
+        }
+        self.inner.save(state).await
+    }
+    fn migrate(&self, raw: Self::Raw) -> Migrated<Model> {
+        self.inner.migrate(raw)
+    }
+}
+fn terminal_machine() -> Machine<'static, Model, Msg, Cmd, Sub, ()> {
+    let mut machine = machine();
+    let update = machine.update;
+    machine.update = Update::reducer(move |state: &Model, msg: &Msg| {
+        let mut next = update.apply(state, msg).unwrap();
+        if matches!(msg, Msg::Finish) {
+            next.commands.push(Cmd::Batch);
+        }
+        next
+    });
+    machine
+}
+struct HeldEffects {
+    entered: Rc<tokio::sync::Notify>,
+    release: Rc<tokio::sync::Notify>,
+}
+impl Interpreter<Cmd> for HeldEffects {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        _: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async {
+            self.entered.notify_one();
+            self.release.notified().await;
+            Ok(vec![])
+        }))
+    }
+}
+fn terminal_store(fail: bool) -> TerminalStore {
+    TerminalStore {
+        inner: Saved {
+            cell: Rc::new(RefCell::new(None)),
+            log: Rc::new(RefCell::new(vec![])),
+        },
+        entered: Rc::new(tokio::sync::Notify::new()),
+        release: Rc::new(tokio::sync::Notify::new()),
+        first: Rc::new(std::cell::Cell::new(false)),
+        fail,
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn terminal_queries_distinguish_pending_save_saved_state_and_waiting_commit() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for profile in [Profile::Promise, Profile::Effect] {
+                let store = terminal_store(false);
+                let entered = Rc::new(tokio::sync::Notify::new());
+                let release = Rc::new(tokio::sync::Notify::new());
+                let calls = Rc::new(std::cell::Cell::new(0));
+                let predicate_calls = Rc::clone(&calls);
+                let mut options = Options::new(profile);
+                options.store = Some(Persistence::new(store.clone()));
+                options.terminal = Some(Rc::new(move |state: &Model| {
+                    predicate_calls.set(predicate_calls.get() + 1);
+                    state.done
+                }));
+                let runtime = launch(
+                    terminal_machine(),
+                    (),
+                    HeldEffects {
+                        entered: Rc::clone(&entered),
+                        release: Rc::clone(&release),
+                    },
+                    NoSubscriptions::new(),
+                    options,
+                );
+                runtime.ready().await.unwrap();
+                assert_eq!(
+                    calls.get(),
+                    0,
+                    "installing state must not invoke the terminal predicate"
+                );
+                let before = {
+                    let runtime = runtime.clone();
+                    tokio::task::spawn_local(async move { runtime.done().await })
+                };
+                tokio::task::yield_now().await;
+                let before_install = calls.get();
+                runtime.producer().emit(Msg::Finish).unwrap();
+                store.entered.notified().await;
+                assert!(runtime.get_state().unwrap().done);
+                assert_eq!(store.load().await.unwrap(), Some((0, false)));
+                assert_eq!(
+                    calls.get(),
+                    before_install,
+                    "pending install is not a terminal query"
+                );
+                assert!(runtime.result().is_none());
+                assert_eq!(
+                    calls.get(),
+                    before_install,
+                    "pending result short-circuits its predicate"
+                );
+                let during = {
+                    let runtime = runtime.clone();
+                    tokio::task::spawn_local(async move { runtime.done().await })
+                };
+                tokio::task::yield_now().await;
+                assert!(!before.is_finished());
+                assert!(!during.is_finished());
+                store.release.notify_one();
+                entered.notified().await;
+                assert!(
+                    runtime.result().unwrap().done,
+                    "saved result is visible while its command is held"
+                );
+                assert!(
+                    runtime.done().await.unwrap().done,
+                    "a new query can read the saved terminal state"
+                );
+                assert!(
+                    !before.is_finished(),
+                    "already waiting done resolves at commit callbacks"
+                );
+                release.notify_one();
+                runtime.idle().await.unwrap();
+                assert!(before.await.unwrap().unwrap().done);
+                assert!(during.await.unwrap().unwrap().done);
+                assert_eq!(store.load().await.unwrap(), Some((0, true)));
+                runtime.stop().await;
+            }
+        })
+        .await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn failed_terminal_save_rejects_earlier_current_and_later_waiters_without_committing() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for profile in [Profile::Promise, Profile::Effect] {
+                let store = terminal_store(true);
+                let commits = Rc::new(std::cell::Cell::new(0));
+                let count = Rc::clone(&commits);
+                let mut options = Options::new(profile);
+                options.store = Some(Persistence::new(store.clone()));
+                options.terminal = Some(Rc::new(|state: &Model| state.done));
+                options.on_commit.push(Rc::new(move |msg: Option<&Msg>, _| {
+                    if msg.is_some() {
+                        count.set(count.get() + 1);
+                    }
+                }));
+                let runtime = launch(
+                    terminal_machine(),
+                    (),
+                    demlik_tea::runtime::NoInterpreter::<&'static str>::new(),
+                    NoSubscriptions::new(),
+                    options,
+                );
+                runtime.ready().await.unwrap();
+                let before = {
+                    let runtime = runtime.clone();
+                    tokio::task::spawn_local(async move { runtime.done().await })
+                };
+                tokio::task::yield_now().await;
+                runtime.producer().emit(Msg::Finish).unwrap();
+                store.entered.notified().await;
+                let during = {
+                    let runtime = runtime.clone();
+                    tokio::task::spawn_local(async move { runtime.done().await })
+                };
+                tokio::task::yield_now().await;
+                store.release.notify_one();
+                runtime.idle().await.unwrap();
+                assert!(runtime.result().is_none());
+                for outcome in [
+                    before.await.unwrap(),
+                    during.await.unwrap(),
+                    runtime.done().await,
+                ] {
+                    let error = outcome
+                        .err()
+                        .expect("terminal save failure must reject done");
+                    assert!(matches!(
+                        &*error,
+                        demlik_tea::runtime::RuntimeError::Save("terminal save refused")
+                    ));
+                }
+                assert_eq!(commits.get(), 0);
+                assert_eq!(store.load().await.unwrap(), Some((0, false)));
+                let reports = runtime.reports();
+                assert_eq!(reports.len(), 1);
+                assert_eq!(reports[0].phase, demlik_tea::runtime::ErrorPhase::FollowUp);
+                runtime.stop().await;
+            }
+        })
+        .await;
+}
+
+struct TracedSubscriptions(Log);
+impl demlik_tea::runtime::Subscriptions<Sub, Msg> for TracedSubscriptions {
+    type Error = &'static str;
+    fn start(
+        &self,
+        sub: Sub,
+        _: demlik_tea::runtime::Producer<Msg>,
+    ) -> Result<Option<demlik_tea::runtime::SubscriptionWork<Self::Error>>, Self::Error> {
+        let label = format!("{}:{}", sub.kind(), sub.deps()["n"].as_u64().unwrap());
+        self.0.borrow_mut().push(format!("start:{label}"));
+        let log = Rc::clone(&self.0);
+        Ok(Some(demlik_tea::runtime::SubscriptionWork::new(
+            move || async move {
+                log.borrow_mut().push(format!("dispose:{label}"));
+                Ok(())
+            },
+        )))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn failed_deps_keep_their_running_type_while_siblings_reconcile_and_cleanup_starts_first() {
+    use demlik_tea::core::{SubEntry, SubscriptionEntries};
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let mut machine = machine();
+            machine.subscriptions = Box::new(SubscriptionEntries::new(vec![
+                SubEntry::new("fragile", |state: &Model| {
+                    if state.n == 1 {
+                        panic!("deps failed");
+                    }
+                    Some(serde_json::json!({"n":state.n}))
+                }),
+                SubEntry::new("steady", |state: &Model| {
+                    Some(serde_json::json!({"n":state.n}))
+                }),
+                SubEntry::new("removed", |state: &Model| {
+                    (state.n == 0).then(|| serde_json::json!({"n":0}))
+                }),
+            ]));
+            let log = Rc::new(RefCell::new(vec![]));
+            let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine,
+                (),
+                Effects(Rc::clone(&log)),
+                TracedSubscriptions(Rc::clone(&log)),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            assert!(runtime.dispatch_once(Msg::Added { by: 1 }).await.is_err());
+            assert_eq!(runtime.get_state().unwrap().n, 1);
+            assert_eq!(runtime.gate(), demlik_tea::runtime::Gate::Open);
+            assert_eq!(
+                &*log.borrow(),
+                &[
+                    "start:fragile:0",
+                    "start:steady:0",
+                    "start:removed:0",
+                    "dispose:steady:0",
+                    "dispose:removed:0",
+                    "start:steady:1",
+                ]
+            );
+            runtime.stop().await;
+            assert_eq!(
+                log.borrow()
+                    .iter()
+                    .filter(|line| line.as_str() == "dispose:fragile:0")
+                    .count(),
+                1
+            );
         })
         .await;
 }

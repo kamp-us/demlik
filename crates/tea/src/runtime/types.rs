@@ -72,6 +72,9 @@ pub enum RuntimeError<SE, HE> {
         pending: usize,
         timeout: Duration,
     },
+    Projection {
+        failures: Vec<crate::core::ProjectionFailure>,
+    },
     MissingSubscription {
         kind: String,
     },
@@ -93,6 +96,7 @@ impl<SE, HE> RuntimeError<SE, HE> {
             Self::DrainTimeout { .. } => "DrainTimeoutNotice",
             Self::DisposeTimeout { .. } => "DisposeTimeoutNotice",
             Self::MissingSubscription { .. } => "MissingSubscriptionRunner",
+            Self::Projection { .. } => "SubscriptionProjectionError",
         }
     }
     pub fn discarded(&self) -> bool {

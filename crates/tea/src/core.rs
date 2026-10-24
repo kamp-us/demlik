@@ -1,3 +1,9 @@
+mod subscriptions;
+pub use subscriptions::{
+    ProjectionError, ProjectionFailure, SubEntry, SubEvaluation, SubscriptionEntries,
+    SubscriptionProjection, Subscriptions, subscriptions,
+};
+
 use std::collections::HashSet;
 use std::fmt;
 
@@ -179,7 +185,6 @@ impl fmt::Display for NoCellError {
 impl std::error::Error for NoCellError {}
 
 pub type Init<'a, S, C, X> = Box<dyn Fn(Option<S>, &X) -> Step<S, C> + 'a>;
-pub type Subscriptions<'a, S, U> = Box<dyn Fn(&S) -> Vec<U> + 'a>;
 
 pub struct Machine<'a, S, M, C, U, X = ()> {
     pub init: Init<'a, S, C, X>,
@@ -228,7 +233,9 @@ pub fn replay<S: Tagged, M: Tagged, C, U: Subscription, X>(
     let mut commands = initial.commands;
     commands.extend(folded.commands);
     let mut seen = HashSet::new();
-    let subs = (machine.subscriptions)(&folded.state)
+    let subs = machine
+        .subscriptions
+        .desired(&folded.state)
         .into_iter()
         .filter(|sub| seen.insert(sub.id().clone()))
         .collect();

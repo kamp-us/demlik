@@ -43,7 +43,7 @@ fn a_prediction_fold_accepts_borrowed_non_clone_non_send_non_serializable_state(
                 )
             }) as demlik_tea::core::Cell<'_, State, Msg, ()>,
         )])),
-        subscriptions: Box::new(|_| {
+        subscriptions: demlik_tea::core::subscriptions(|_| {
             panic!("a prediction fold must bypass subscription projection")
         }),
     };

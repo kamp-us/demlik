@@ -404,6 +404,7 @@ struct Initial<S, C> {
     commands: Vec<C>,
 }
 struct Running<HE> {
+    kind: String,
     cancel: Arc<Cancel>,
     cleanup: Cleanup<'static, HE>,
     source_done: Option<oneshot::Receiver<()>>,
@@ -766,23 +767,36 @@ impl<
         });
     }
     fn reconcile(self: &Rc<Self>, state: &S) -> Answer<SE, HE> {
-        let desired =
-            std::panic::catch_unwind(AssertUnwindSafe(|| (self.machine.subscriptions)(state)))
-                .map_err(|payload| Rc::new(RuntimeError::Panic(PanicCause::new(payload))))?;
+        let evaluation = self.machine.subscriptions.evaluate(state);
+        let unread = evaluation
+            .failures
+            .iter()
+            .filter_map(|failure| failure.kind.as_deref())
+            .collect::<std::collections::HashSet<_>>();
+        let keep_all = evaluation
+            .failures
+            .iter()
+            .any(|failure| failure.kind.is_none());
         let mut wanted = IndexMap::new();
-        for sub in desired {
+        for sub in evaluation.desired {
             wanted.insert(sub.id().clone(), sub);
         }
         let removed = self
             .running
             .borrow()
-            .keys()
-            .filter(|id| !wanted.contains_key(*id))
-            .cloned()
+            .iter()
+            .filter(|(id, running)| {
+                !wanted.contains_key(*id) && !keep_all && !unread.contains(running.kind.as_str())
+            })
+            .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
         self.stop_subs(removed);
         let starting = self.producer.mailbox.gate() == Gate::Open;
-        let mut first = None;
+        let mut first = (!evaluation.failures.is_empty()).then(|| {
+            Rc::new(RuntimeError::Projection {
+                failures: evaluation.failures,
+            })
+        });
         if starting {
             for (id, sub) in wanted {
                 if self.running.borrow().contains_key(&id) {
@@ -815,14 +829,15 @@ impl<
                         continue;
                     }
                 };
-                self.start_sub(id, work);
+                self.start_sub(id, kind, work);
             }
         }
         first.map_or(Ok(()), Err)
     }
-    fn start_sub(self: &Rc<Self>, id: SubId, work: SubscriptionWork<HE>) {
+    fn start_sub(self: &Rc<Self>, id: SubId, kind: String, work: SubscriptionWork<HE>) {
         let cancel = Arc::new(Cancel::new());
         let mut running = Running {
+            kind,
             cancel: Arc::clone(&cancel),
             cleanup: work.cleanup,
             source_done: None,
@@ -863,27 +878,31 @@ impl<
             let token = self.token();
             self.disposals.borrow_mut().insert(token, ());
             let env = Rc::clone(self);
-            let cleanup = std::panic::catch_unwind(AssertUnwindSafe(running.cleanup));
+            let mut cleanup = match std::panic::catch_unwind(AssertUnwindSafe(running.cleanup)) {
+                Ok(cleanup) => AssertUnwindSafe(cleanup).catch_unwind().boxed_local(),
+                Err(payload) => futures::future::ready(Err(payload)).boxed_local(),
+            };
+            // A Promise disposal starts on the reconciliation stack. Poll the
+            // native future once here so its synchronous prefix has the same order.
+            let first = cleanup.as_mut().now_or_never();
             tokio::task::spawn_local(async move {
-                if let Some(done) = running.source_done {
-                    let _ = done.await;
-                }
-                match cleanup {
-                    Ok(cleanup) => match AssertUnwindSafe(cleanup).catch_unwind().await {
-                        Ok(Ok(())) => {}
-                        Ok(Err(error)) => env.core.report(
-                            Rc::new(RuntimeError::Handler(error)),
-                            ErrorPhase::SubCleanup,
-                        ),
-                        Err(payload) => env.core.report(
-                            Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
-                            ErrorPhase::SubCleanup,
-                        ),
-                    },
+                let result = match first {
+                    Some(result) => result,
+                    None => cleanup.await,
+                };
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => env.core.report(
+                        Rc::new(RuntimeError::Handler(error)),
+                        ErrorPhase::SubCleanup,
+                    ),
                     Err(payload) => env.core.report(
                         Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
                         ErrorPhase::SubCleanup,
                     ),
+                }
+                if let Some(done) = running.source_done {
+                    let _ = done.await;
                 }
                 env.disposals.borrow_mut().shift_remove(&token);
                 env.disposal_changed.notify_waiters();
