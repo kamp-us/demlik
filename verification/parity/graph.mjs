@@ -13,6 +13,11 @@ const suites = [
   { name: "project", driver: "project_driver", script: "graph-project.mts" },
   { name: "semantic", driver: "semantic_driver", script: "graph-semantic.mts" },
   { name: "syntax", driver: "syntax_driver", script: "graph-syntax.mts" },
+  {
+    name: "structure",
+    driver: "structure_driver",
+    script: "graph-structure.mts",
+  },
 ];
 
 export async function graphParity(cargo) {

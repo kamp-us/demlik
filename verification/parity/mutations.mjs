@@ -12,6 +12,15 @@ const reportDirectory = path.join(root, "target/parity");
 const cargo = process.env.CARGO ?? "cargo";
 const mutations = [
   {
+    name: "runtime-terminal-result-ignores-save",
+    suite: "runtime",
+    file: "crates/tea/src/runtime/engine.rs",
+    before:
+      "if !matches!(view.saved, SaveStatus::Saved) {\n            return None;\n        }",
+    after: "if false {\n            return None;\n        }",
+    witness: "runtime.promise.held-save",
+  },
+  {
     name: "runtime-announces-before-command",
     suite: "runtime",
     file: "crates/tea/src/runtime/engine.rs",
@@ -101,6 +110,14 @@ const mutations = [
   },
 ];
 const results = [];
+const onlyArgument = process.argv.indexOf("--only");
+const selected =
+  onlyArgument === -1
+    ? mutations
+    : mutations.filter(
+        (mutation) => mutation.name === process.argv[onlyArgument + 1],
+      );
+assert.ok(selected.length, "unknown mutation name");
 try {
   await mkdir(reportDirectory, { recursive: true });
   execFileSync(process.execPath, [path.join(here, "run.mjs")], {
@@ -117,7 +134,7 @@ try {
       recursive: true,
     });
   }
-  for (const mutation of mutations) {
+  for (const mutation of selected) {
     const file = path.join(directory, mutation.file);
     const original = await readFile(file, "utf8");
     assert.equal(
@@ -197,7 +214,12 @@ try {
     await writeFile(file, original);
   }
   await writeFile(
-    path.join(reportDirectory, "mutations.json"),
+    path.join(
+      reportDirectory,
+      onlyArgument === -1
+        ? "mutations.json"
+        : `mutations-${selected[0].name}.json`,
+    ),
     `${JSON.stringify(results, null, 2)}\n`,
   );
   process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);

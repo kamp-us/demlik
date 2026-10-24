@@ -16,6 +16,8 @@ const scenarios = [
   "handler-failure",
   "no-store",
   "terminal-boot",
+  "held-save",
+  "failed-save",
 ];
 const cases = ["promise", "effect"].flatMap((profile) =>
   scenarios.map((scenario) => ({
@@ -74,6 +76,7 @@ export async function runtimeParity(cargo, options = {}) {
       input,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
+      timeout: 30_000,
     });
     const answers = output
       .trim()
@@ -107,8 +110,9 @@ export async function runtimeParity(cargo, options = {}) {
           `${language}: ${test.id}: ${JSON.stringify(answer.error)}`,
         );
         const state = {
-          n:
-            test.input.scenario === "terminal-boot"
+          n: ["held-save", "failed-save"].includes(test.input.scenario)
+            ? 0
+            : test.input.scenario === "terminal-boot"
               ? 7
               : test.input.scenario === "restored"
                 ? 20
@@ -126,24 +130,56 @@ export async function runtimeParity(cargo, options = {}) {
         );
         assert.deepEqual(
           answer.output.result,
-          state.done ? state : null,
+          state.done && test.input.scenario !== "failed-save" ? state : null,
           `${language}: saved terminal result`,
         );
         assert.deepEqual(
           answer.output.done,
-          state.done ? state : null,
+          state.done && test.input.scenario !== "failed-save" ? state : null,
           `${language}: terminal completion`,
         );
         assert.deepEqual(
           answer.output.saved,
+          test.input.scenario === "no-store"
+            ? null
+            : test.input.scenario === "failed-save"
+              ? { n: 0, done: false }
+              : state,
+        );
+        assert.deepEqual(
+          answer.output.afterStop.saved,
           test.input.scenario === "no-store" ? null : state,
         );
-        assert.deepEqual(answer.output.afterStop.saved, answer.output.saved);
         assert.equal(
           answer.output.failure,
-          test.input.scenario === "handler-failure" ? "handler" : null,
+          test.input.scenario === "handler-failure"
+            ? "handler"
+            : test.input.scenario === "failed-save"
+              ? "save"
+              : null,
         );
         assert.deepEqual(answer.output.reports, []);
+        if (["held-save", "failed-save"].includes(test.input.scenario)) {
+          assert.deepEqual(
+            answer.output.pendingSave,
+            {
+              state: { n: 0, done: true },
+              result: null,
+              saved: { n: 0, done: false },
+              doneStatus: "pending",
+              trace: ["save:0", "commit:boot:0", "save:0"],
+            },
+            `${language}: pending save visibility`,
+          );
+          assert.equal(
+            answer.output.doneFailure,
+            test.input.scenario === "failed-save" ? "save" : null,
+          );
+          assert.deepEqual(
+            answer.output.doneState,
+            test.input.scenario === "held-save" ? state : null,
+          );
+        }
         if (test.input.scenario === "serial")
           assert.deepEqual(
             answer.output.trace,

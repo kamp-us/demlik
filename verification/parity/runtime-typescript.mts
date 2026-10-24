@@ -16,6 +16,8 @@ const inputSchema = z.object({
     "handler-failure",
     "no-store",
     "terminal-boot",
+    "held-save",
+    "failed-save",
   ]),
 });
 type Input = z.infer<typeof inputSchema>;
@@ -26,6 +28,28 @@ type Msg =
   | { type: "Finish" };
 type Command = { type: "Batch" } | { type: "Last" } | { type: "Fail" };
 const boom = new Error("intentional handler failure");
+const saveBoom = new Error("intentional save failure");
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function failureOf(error: unknown): "handler" | "save" {
+  if (error === boom) return "handler";
+  if (
+    error === saveBoom ||
+    (typeof error === "object" &&
+      error !== null &&
+      "cause" in error &&
+      error.cause === saveBoom)
+  )
+    return "save";
+  throw error;
+}
 
 async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   const exit = await Effect.runPromiseExit(effect);
@@ -36,6 +60,11 @@ async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 async function execute(input: Input) {
   const trace: string[] = [];
   const reports: string[] = [];
+  const entered = deferred();
+  const released = deferred();
+  let held = false;
+  const controlsSave =
+    input.scenario === "held-save" || input.scenario === "failed-save";
   const loaded: Model | null =
     input.scenario === "restored"
       ? { n: 5, done: false }
@@ -48,6 +77,12 @@ async function execute(input: Input) {
     migrate: (raw) => inner.migrate(raw),
     async save(state) {
       trace.push(`save:${state.n}`);
+      if (controlsSave && state.done && !held) {
+        held = true;
+        entered.resolve();
+        await released.promise;
+        if (input.scenario === "failed-save") throw saveBoom;
+      }
       await inner.save(state);
     },
   };
@@ -151,12 +186,44 @@ async function execute(input: Input) {
     stop = () => Effect.runPromise(Scope.close(scope, Exit.void));
   }
   let failure: string | null = null;
+  let pendingSave: unknown = null;
+  let doneFailure: string | null = null;
+  let doneState: Model | null = null;
   if (input.scenario !== "terminal-boot") {
-    try {
-      await dispatch({ type: "Start" });
-    } catch (error) {
-      assert.equal(error, boom, "unexpected dispatch failure");
-      failure = "handler";
+    const dispatched = dispatch(
+      controlsSave ? { type: "Finish" } : { type: "Start" },
+    ).then(() => null, failureOf);
+    if (controlsSave) {
+      await entered.promise;
+      let doneStatus = "pending";
+      const waiter = done().then(
+        (state) => {
+          doneStatus = "resolved";
+          return { state, failure: null };
+        },
+        (error: unknown) => {
+          doneStatus = "rejected";
+          return { state: null, failure: failureOf(error) };
+        },
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      pendingSave = {
+        state: getState(),
+        result: result() ?? null,
+        saved: await inner.load(),
+        doneStatus,
+        trace: [...trace],
+      };
+      released.resolve();
+      failure = await dispatched;
+      const settled = await waiter;
+      doneFailure = settled.failure;
+      doneState = settled.state;
+      if (input.scenario === "failed-save") {
+        await assert.rejects(done(), (error) => failureOf(error) === "save");
+      }
+    } else {
+      failure = await dispatched;
     }
   }
   const terminal = result() ?? null;
@@ -165,6 +232,9 @@ async function execute(input: Input) {
     state: getState(),
     result: terminal,
     done: completed,
+    pendingSave,
+    doneFailure,
+    doneState,
     saved: input.scenario === "no-store" ? null : await inner.load(),
     trace: [...trace],
     failure,
