@@ -8,6 +8,16 @@ import {
   asRng,
   backoffDelay,
 } from "../../packages/tea/src/retry-backoff/index.ts";
+import {
+  commandBuilderInput,
+  commandContractInput,
+  commandHelpersInput,
+  commandParseInput,
+  executeCommandBuilders,
+  executeCommandContract,
+  executeCommandHelpers,
+  executeCommandInput,
+} from "./commands.mts";
 import { coreInput, executeCore } from "./core.mts";
 import { policyOperations } from "./policies.mts";
 import {
@@ -50,6 +60,16 @@ const graphInput = z.object({
 
 const operations: Record<string, (input: unknown) => unknown> = {
   ...policyOperations(number, encodeNumber),
+  "tea.command.contract": operation(
+    commandContractInput,
+    executeCommandContract,
+  ),
+  "tea.command.builders": operation(
+    commandBuilderInput,
+    executeCommandBuilders,
+  ),
+  "tea.command.input": operation(commandParseInput, executeCommandInput),
+  "tea.command.helpers": operation(commandHelpersInput, executeCommandHelpers),
   "tea.core.machine": operation(coreInput, executeCore),
   "tea.retry.state": operation(retryStateInput, executeRetryState),
   "tea.retry.probe": operation(probeInput, executeProbe),

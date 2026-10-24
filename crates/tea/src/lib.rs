@@ -1,3 +1,4 @@
+pub mod command;
 pub mod core;
 pub mod data;
 pub mod idempotency;

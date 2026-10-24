@@ -60,6 +60,20 @@ const mutations = [
     after: "next_component: 1,",
     witness: "scc.cycle-with-caller",
   },
+  {
+    name: "command-output-validation-bypassed",
+    file: "crates/tea/src/command.rs",
+    before: '(definition.parse_output)(returned["value"].clone())',
+    after: 'Ok::<_, SchemaError>(returned["value"].clone())',
+    witness: "command.parsed-output-strip",
+  },
+  {
+    name: "command-dispatch-provenance-bypassed",
+    file: "crates/tea/src/command.rs",
+    before: "minted.ptr_eq(&Arc::downgrade(&message.0))",
+    after: "minted.strong_count() > 0",
+    witness: "command.dispatch-mint-provenance",
+  },
 ];
 const results = [];
 try {

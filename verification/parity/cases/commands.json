@@ -1,0 +1,1274 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "command.replay-builders-without-stamp",
+      "operation": "tea.command.builders",
+      "input": {
+        "input": {
+          "url": " /users ",
+          "extra": 1
+        },
+        "value": {
+          "body": "x"
+        },
+        "error": {
+          "_tag": "timeout",
+          "afterMs": 10
+        }
+      },
+      "expected": {
+        "cmd": {
+          "url": " /users ",
+          "extra": 1,
+          "type": "fetch"
+        },
+        "roundTrip": {
+          "url": " /users ",
+          "extra": 1,
+          "type": "fetch"
+        },
+        "ok": {
+          "type": "fetch_ok",
+          "cmd": {
+            "url": " /users ",
+            "extra": 1,
+            "type": "fetch"
+          },
+          "value": {
+            "body": "x"
+          }
+        },
+        "err": {
+          "type": "fetch_err",
+          "cmd": {
+            "url": " /users ",
+            "extra": 1,
+            "type": "fetch"
+          },
+          "error": {
+            "_tag": "timeout",
+            "afterMs": 10
+          }
+        },
+        "declaration": {
+          "cmdType": "fetch",
+          "okType": "fetch_ok",
+          "errType": "fetch_err",
+          "errorTags": ["timeout", "not_found"]
+        }
+      }
+    },
+    {
+      "id": "command.replay-builders-explicit-zero-stamp",
+      "operation": "tea.command.builders",
+      "input": {
+        "input": {
+          "url": "/"
+        },
+        "value": null,
+        "error": {
+          "_tag": "not_found",
+          "detail": null
+        },
+        "at": 0
+      }
+    },
+    {
+      "id": "command.input-transform-and-strip",
+      "operation": "tea.command.input",
+      "input": {
+        "value": {
+          "url": " /users ",
+          "ignored": true
+        }
+      },
+      "expected": {
+        "cmd": {
+          "url": "/users",
+          "type": "fetch"
+        }
+      }
+    },
+    {
+      "id": "command.input-refuses-malformed",
+      "operation": "tea.command.input",
+      "input": {
+        "value": {
+          "url": 42
+        }
+      },
+      "expected": {
+        "issues": [
+          {
+            "path": "url",
+            "message": "Expected url string"
+          }
+        ]
+      }
+    },
+    {
+      "id": "command.parsed-output-strip",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": {
+            "body": "kept",
+            "extra": "removed"
+          }
+        }
+      },
+      "expected": {
+        "settled": {
+          "type": "fetch_ok",
+          "cmd": {
+            "type": "fetch",
+            "url": "/"
+          },
+          "value": {
+            "body": "kept"
+          },
+          "at": 7
+        },
+        "followUps": [
+          {
+            "type": "fetch_ok",
+            "cmd": {
+              "type": "fetch",
+              "url": "/"
+            },
+            "value": {
+              "body": "kept"
+            },
+            "at": 7
+          }
+        ],
+        "clockCalls": 1,
+        "dispatchResults": []
+      }
+    },
+    {
+      "id": "command.output-transform",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "trim",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": " trimmed "
+        }
+      }
+    },
+    {
+      "id": "command.malformed-output",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": {
+            "body": 42
+          }
+        }
+      },
+      "expected": {
+        "settled": {
+          "type": "fetch_err",
+          "cmd": {
+            "type": "fetch",
+            "url": "/"
+          },
+          "error": {
+            "_tag": "malformed_result",
+            "issues": [
+              {
+                "path": "body",
+                "message": "Expected body string"
+              }
+            ]
+          },
+          "at": 7
+        },
+        "followUps": [
+          {
+            "type": "fetch_err",
+            "cmd": {
+              "type": "fetch",
+              "url": "/"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "body",
+                  "message": "Expected body string"
+                }
+              ]
+            },
+            "at": 7
+          }
+        ],
+        "clockCalls": 1,
+        "dispatchResults": []
+      }
+    },
+    {
+      "id": "command.malformed-nested-paths",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "nested",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": {}
+        }
+      }
+    },
+    {
+      "id": "command.declared-failure-preserves-data",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout",
+            "afterMs": 250,
+            "cause": null,
+            "data": [
+              1,
+              false,
+              {
+                "peer": "a"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "command.declared-not-found",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "not_found",
+            "url": "/gone"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.undeclared-failure",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "oops",
+            "detail": {
+              "count": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "command.failure-missing-tag",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "reason": "offline"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.failure-string",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": "offline"
+        }
+      }
+    },
+    {
+      "id": "command.failure-null",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": null
+        }
+      }
+    },
+    {
+      "id": "command.failure-numeric-tag",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": 4
+          }
+        }
+      }
+    },
+    {
+      "id": "command.failure-array",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": [
+            {
+              "_tag": "timeout"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "command.non-outcome-number",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": 42
+      }
+    },
+    {
+      "id": "command.returned-own-ok",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "type": "fetch_ok",
+          "value": {
+            "body": "forged"
+          },
+          "at": 123
+        }
+      }
+    },
+    {
+      "id": "command.returned-own-err",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "type": "fetch_err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.returned-other-message",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "type": "progress"
+        }
+      }
+    },
+    {
+      "id": "command.returned-list",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": [
+          {
+            "type": "a"
+          },
+          {
+            "type": "b"
+          }
+        ]
+      }
+    },
+    {
+      "id": "command.ok-missing-value",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok"
+        }
+      }
+    },
+    {
+      "id": "command.err-missing-error",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err"
+        }
+      }
+    },
+    {
+      "id": "command.unknown-outcome-tag",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Done",
+          "value": {}
+        }
+      }
+    },
+    {
+      "id": "command.nothing-returned",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7
+      }
+    },
+    {
+      "id": "command.null-returned",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": null
+      }
+    },
+    {
+      "id": "command.async-schema-breach",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "async",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": {
+            "body": "x"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.plain-message-pass-through",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "plain"
+        },
+        "at": 7,
+        "returned": {
+          "type": "follow",
+          "payload": {
+            "x": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "command.plain-list-pass-through",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "plain"
+        },
+        "at": 7,
+        "returned": [
+          {
+            "type": "first"
+          },
+          {
+            "type": "second"
+          }
+        ]
+      }
+    },
+    {
+      "id": "command.plain-nothing",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "plain"
+        },
+        "at": 7
+      }
+    },
+    {
+      "id": "command.plain-null",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "plain"
+        },
+        "at": 7,
+        "returned": null
+      }
+    },
+    {
+      "id": "command.dispatch-mint-provenance",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": {
+            "body": "x"
+          }
+        },
+        "dispatch": [
+          {
+            "source": "minted"
+          },
+          {
+            "source": "copy"
+          },
+          {
+            "source": "foreign"
+          },
+          {
+            "source": "message",
+            "message": {
+              "type": "progress"
+            }
+          },
+          {
+            "source": "message",
+            "message": {
+              "type": "fetch_err",
+              "error": {
+                "_tag": "timeout"
+              },
+              "at": 7
+            }
+          },
+          {
+            "source": "message",
+            "message": {
+              "type": "other_ok"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "command.plain-dispatch-any-message",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "plain"
+        },
+        "at": 7,
+        "returned": {
+          "type": "plain_ok"
+        },
+        "dispatch": [
+          {
+            "source": "message",
+            "message": {
+              "type": "plain_ok",
+              "at": 999
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "command.last-definition-wins",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "body",
+            "errorTags": ["old"]
+          },
+          {
+            "name": "fetch",
+            "schema": "trim",
+            "errorTags": ["new"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": " x "
+        }
+      }
+    },
+    {
+      "id": "command.last-definition-controls-failures",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": ["old"]
+          },
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": ["new"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "old",
+            "reason": "discarded definition"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.empty-declared-failures",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": []
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.success-null-value",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": null
+        }
+      }
+    },
+    {
+      "id": "command.success-array-value-is-one-settlement",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": ["timeout", "not_found"]
+          }
+        ],
+        "cmd": {
+          "type": "fetch",
+          "url": "/"
+        },
+        "at": 7,
+        "returned": {
+          "_tag": "Ok",
+          "value": [1, 2]
+        }
+      }
+    },
+    {
+      "id": "command.helpers-missing",
+      "operation": "tea.command.helpers",
+      "input": {
+        "groups": [
+          [
+            {
+              "type": "a"
+            },
+            {
+              "type": "b"
+            }
+          ],
+          [],
+          [
+            {
+              "type": "c"
+            }
+          ]
+        ],
+        "condition": false,
+        "ok": null,
+        "error": {
+          "_tag": "timeout"
+        }
+      },
+      "expected": {
+        "none": [],
+        "batch": [
+          {
+            "type": "a"
+          },
+          {
+            "type": "b"
+          },
+          {
+            "type": "c"
+          }
+        ],
+        "when": [],
+        "whenDefined": [],
+        "buildCalls": 0,
+        "ok": {
+          "_tag": "Ok",
+          "value": null
+        },
+        "err": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.helpers-zero",
+      "operation": "tea.command.helpers",
+      "input": {
+        "groups": [
+          [
+            {
+              "type": "a"
+            },
+            {
+              "type": "b"
+            }
+          ],
+          [],
+          [
+            {
+              "type": "c"
+            }
+          ]
+        ],
+        "condition": true,
+        "ok": null,
+        "error": {
+          "_tag": "timeout"
+        },
+        "value": 0
+      },
+      "expected": {
+        "none": [],
+        "batch": [
+          {
+            "type": "a"
+          },
+          {
+            "type": "b"
+          },
+          {
+            "type": "c"
+          }
+        ],
+        "when": [
+          {
+            "type": "conditional"
+          }
+        ],
+        "whenDefined": [
+          {
+            "type": "picked",
+            "value": 0
+          }
+        ],
+        "buildCalls": 1,
+        "ok": {
+          "_tag": "Ok",
+          "value": null
+        },
+        "err": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.helpers-null",
+      "operation": "tea.command.helpers",
+      "input": {
+        "groups": [
+          [
+            {
+              "type": "a"
+            },
+            {
+              "type": "b"
+            }
+          ],
+          [],
+          [
+            {
+              "type": "c"
+            }
+          ]
+        ],
+        "condition": false,
+        "ok": null,
+        "error": {
+          "_tag": "timeout"
+        },
+        "value": null
+      },
+      "expected": {
+        "none": [],
+        "batch": [
+          {
+            "type": "a"
+          },
+          {
+            "type": "b"
+          },
+          {
+            "type": "c"
+          }
+        ],
+        "when": [],
+        "whenDefined": [
+          {
+            "type": "picked",
+            "value": null
+          }
+        ],
+        "buildCalls": 1,
+        "ok": {
+          "_tag": "Ok",
+          "value": null
+        },
+        "err": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.helpers-false",
+      "operation": "tea.command.helpers",
+      "input": {
+        "groups": [
+          [
+            {
+              "type": "a"
+            },
+            {
+              "type": "b"
+            }
+          ],
+          [],
+          [
+            {
+              "type": "c"
+            }
+          ]
+        ],
+        "condition": true,
+        "ok": null,
+        "error": {
+          "_tag": "timeout"
+        },
+        "value": false
+      },
+      "expected": {
+        "none": [],
+        "batch": [
+          {
+            "type": "a"
+          },
+          {
+            "type": "b"
+          },
+          {
+            "type": "c"
+          }
+        ],
+        "when": [
+          {
+            "type": "conditional"
+          }
+        ],
+        "whenDefined": [
+          {
+            "type": "picked",
+            "value": false
+          }
+        ],
+        "buildCalls": 1,
+        "ok": {
+          "_tag": "Ok",
+          "value": null
+        },
+        "err": {
+          "_tag": "Err",
+          "error": {
+            "_tag": "timeout"
+          }
+        }
+      }
+    },
+    {
+      "id": "command.dispatch-null-is-observable",
+      "operation": "tea.command.contract",
+      "input": {
+        "definitions": [
+          {
+            "name": "fetch",
+            "schema": "identity",
+            "errorTags": []
+          }
+        ],
+        "cmd": {
+          "type": "fetch"
+        },
+        "at": 0,
+        "dispatch": [
+          {
+            "source": "message",
+            "message": null
+          }
+        ]
+      }
+    }
+  ]
+}

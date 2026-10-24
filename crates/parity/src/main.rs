@@ -12,6 +12,7 @@ macro_rules! observe {
         returned
     }};
 }
+mod commands;
 mod core;
 mod policies;
 mod retry;
@@ -114,6 +115,10 @@ fn execute(case: &Case) -> Result<Observation, String> {
         | "tea.policies.idempotency" => {
             policies::execute(&case.operation, case.input.clone(), &mut calls)
         }
+        "tea.command.contract" => commands::contract(case.input.clone(), &mut calls),
+        "tea.command.builders" => commands::builders(case.input.clone(), &mut calls),
+        "tea.command.input" => commands::parse_input(case.input.clone(), &mut calls),
+        "tea.command.helpers" => commands::helpers(case.input.clone(), &mut calls),
         "tea.core.machine" => core::execute(case.input.clone(), &mut calls),
         "tea.retry.state" => retry::state(case.input.clone(), &mut calls),
         "tea.retry.probe" => retry::probe(case.input.clone(), &mut calls),

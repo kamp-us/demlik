@@ -144,5 +144,243 @@
       "scc.unlisted-target",
       "scale.scc-20000-node-chain"
     ]
+  },
+  "@demlik/tea:.#Cmd": {
+    "signature": "9cf1a55ad7bc41a02b4fc47fa81e3467072de6aa9f74d88ee00734e671ba1b95",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::new",
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<Fetch>::ok",
+        "demlik_tea::command::CmdDef::<Fetch>::err",
+        "demlik_tea::command::none",
+        "demlik_tea::command::batch",
+        "demlik_tea::command::when",
+        "demlik_tea::command::when_defined"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#CmdDef": {
+    "signature": "e6340ae3712f4f499c7f4240e7facfdecdaa22117caf1649a663826ba3ca4ce4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::new",
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<Fetch>::ok",
+        "demlik_tea::command::CmdDef::<Fetch>::err"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ]
+  },
+  "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ]
+  },
+  "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ]
+  },
+  "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ]
+  },
+  "@demlik/tea:.#Outcome": {
+    "signature": "2eb9ecf581e9ba0c22f500f2fe03c23bc30037ba9bfefb7824e4c51b300ced19",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::Outcome::ok",
+        "demlik_tea::command::Outcome::err"
+      ]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Outcome/member:published:36fe54b76cbff5d9743bb0b0d7c66644e8c221c31b0d1d1cb2f3db9dbd084ca7": {
+    "signature": "36fe54b76cbff5d9743bb0b0d7c66644e8c221c31b0d1d1cb2f3db9dbd084ca7",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::Outcome::ok"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#Outcome/member:published:9ab1154f4737b7667519063897ef4f19e443bb0bf78f6bec736d059ee8d4f06c": {
+    "signature": "9ab1154f4737b7667519063897ef4f19e443bb0bf78f6bec736d059ee8d4f06c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::Outcome::err"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#OutcomeHelpers": {
+    "signature": "75625d438e919191c1499ed09759e2328aefd0cac7893b0640db957c465d014a",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::Outcome::ok",
+        "demlik_tea::command::Outcome::err"
+      ]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#OutcomeHelpers/member:published:9f075aac7563431a926f0eb4c95db871cf3bcd94ce30d702a63f80e97ae387f3": {
+    "signature": "9f075aac7563431a926f0eb4c95db871cf3bcd94ce30d702a63f80e97ae387f3",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::Outcome::ok"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#OutcomeHelpers/member:published:f2cda85864b594544d70df39e49a6db37b1926e67fe8d43be46295870872c1f1": {
+    "signature": "f2cda85864b594544d70df39e49a6db37b1926e67fe8d43be46295870872c1f1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::Outcome::err"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ]
+  },
+  "@demlik/tea:.#MalformedResult": {
+    "signature": "16795a4dbe84c0f00e60b34079e58d3728793b631d3474ecafd170a67512c166",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdContract::settle"]
+    },
+    "cases": ["command.malformed-output", "command.malformed-nested-paths"]
+  },
+  "@demlik/tea:.#AsyncSchemaError": {
+    "signature": "b43afead7fa32ffff0c74eb6b6f342fd582957d64d8c4fbc3ed8cba1c39d1014",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdContract::settle"]
+    },
+    "cases": ["command.async-schema-breach"]
+  },
+  "@demlik/tea:.#OutcomeContractError": {
+    "signature": "f16df4af3ba4b6f1bc9b0626cb1aac089a9555cda86020e4d7146e2c770829d7",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdContract::settle",
+        "demlik_tea::command::CmdContract::check_dispatch"
+      ]
+    },
+    "cases": ["command.returned-own-ok", "command.dispatch-mint-provenance"]
+  },
+  "@demlik/tea:.#UndeclaredFailureError": {
+    "signature": "3fc6d86d7f948a508caf320fb41d462ef523a1760848ea3d05f946e3cf4de26f",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdContract::settle"]
+    },
+    "cases": [
+      "command.undeclared-failure",
+      "command.failure-null",
+      "command.failure-missing-tag",
+      "command.empty-declared-failures"
+    ]
   }
 }
