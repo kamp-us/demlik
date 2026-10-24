@@ -12,6 +12,10 @@ use demlik_code_graph::project::SourceUnit;
 use demlik_code_graph::project::{EdgeScope, list_repo, load_cheap_project, load_edge_project};
 use demlik_code_graph::syntax::bindings::pattern_names;
 use demlik_code_graph::syntax::headers::function_header;
+use demlik_code_graph::syntax::imports::{
+    ImportKind, import_declaration_specifiers, import_literals, imported_names_of, resolve_imports,
+    runtime_specifiers,
+};
 
 #[test]
 fn parses_tsx_modules_with_utf16_spans_comments_and_observable_syntax_errors() {
@@ -299,4 +303,110 @@ fn parses_nested_expressions_beyond_serde_jsons_default_container_limit() {
             .count(),
         160
     );
+}
+
+#[test]
+fn classifies_import_reach_names_ambient_modules_and_dynamic_literals() {
+    let source = concat!(
+        "import { type A, type B as C } from 'types';\n",
+        "import value, { named as local } from 'mixed';\n",
+        "import type Old = require('old');\n",
+        "export { type A } from 'types';\n",
+        "declare module 'ambient' { import './relative'; import { Remote } from 'remote'; }\n",
+        "const lazy = () => import(`dynamic`); type Imported = import('shape').Value;\n",
+        "import ''; import '\\ud800';\n",
+    );
+    let syntax = parse_type_script(Path::new("imports.ts"), source).unwrap();
+    let literals = import_literals(&syntax);
+    assert_eq!(literals.len(), 8);
+    assert_eq!(
+        (literals[0].kind, literals[0].type_only, literals[0].runtime),
+        (ImportKind::Static, false, false)
+    );
+    assert!(!literals[2].type_only);
+    assert!(!literals[2].runtime);
+    assert_eq!(literals[4].specifier, "remote");
+    assert!(!literals[4].runtime);
+    assert_eq!(literals[5].specifier.units(), [0xd800]);
+    assert_eq!(literals[6].kind, ImportKind::Dynamic);
+    assert!(!literals[7].runtime);
+    let taken = imported_names_of(&syntax);
+    let types = demlik_code_graph::text::JsString::from("types");
+    assert_eq!(
+        taken
+            .get(&types)
+            .unwrap()
+            .names
+            .iter()
+            .map(|name| name.to_utf8().unwrap())
+            .collect::<Vec<_>>(),
+        ["A", "B"]
+    );
+    assert!(!taken.get(&types).unwrap().unreadable);
+    let opened: Vec<_> = runtime_specifiers(&syntax)
+        .iter()
+        .map(|name| name.to_lossy())
+        .collect();
+    assert_eq!(opened, ["mixed", "\u{fffd}", "dynamic"]);
+    assert!(
+        import_declaration_specifiers(&syntax)
+            .iter()
+            .any(|name| name.units().is_empty())
+    );
+    assert!(
+        serde_json::to_string(&literals)
+            .unwrap()
+            .contains(r#""specifier":"\ud800""#)
+    );
+}
+
+#[test]
+fn resolves_import_targets_only_for_loaded_external_modules() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("demlik-imports-{}-{unique}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("tsconfig.json"),
+        r#"{"compilerOptions":{"baseUrl":".","paths":{"@app/*":["*"]}}}"#,
+    )
+    .unwrap();
+    fs::write(root.join("entry.ts"), "import { value } from '@app/value.js'; import './script'; import './meta'; export { value } from './value'; const later = import('./value');").unwrap();
+    fs::write(root.join("value.ts"), "export const value = 1;").unwrap();
+    fs::write(root.join("script.ts"), "const globalValue = 2;").unwrap();
+    fs::write(root.join("meta.ts"), "const url = import.meta.url;").unwrap();
+    let loaded = load_cheap_project(&root, None).unwrap();
+    let graph = resolve_imports(&root, &loaded.source_files, &root.join("tsconfig.json"));
+    let edges = &graph.import_edges_by_file["entry.ts"];
+    assert_eq!(edges.len(), 5);
+    assert_eq!(
+        edges
+            .iter()
+            .find(|edge| edge.specifier == "./script")
+            .unwrap()
+            .target,
+        None
+    );
+    assert_eq!(
+        edges
+            .iter()
+            .find(|edge| edge.specifier == "./meta")
+            .unwrap()
+            .target
+            .as_deref(),
+        Some("meta.ts")
+    );
+    assert_eq!(
+        edges
+            .iter()
+            .find(|edge| edge.specifier == "@app/value.js")
+            .unwrap()
+            .target
+            .as_deref(),
+        Some("value.ts")
+    );
+    assert_eq!(graph.imported_by_file["value.ts"], ["entry.ts"]);
+    fs::remove_dir_all(root).unwrap();
 }

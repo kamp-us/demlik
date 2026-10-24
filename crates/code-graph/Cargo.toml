@@ -17,4 +17,4 @@ oxc_ast_visit = { version = "=0.151.0", features = ["serialize"] }
 oxc_parser = "=0.151.0"
 oxc_span = "=0.151.0"
 serde.workspace = true
-serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_json = { workspace = true, features = ["unbounded_depth", "raw_value"] }
