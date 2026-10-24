@@ -3,9 +3,15 @@ name = "demlik-code-graph"
 description = "Source analysis, graph queries and architecture rules."
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+rust-version = "1.95"
 repository.workspace = true
 license = "Apache-2.0"
 
 [dependencies]
 indexmap.workspace = true
+icu_collator = "=2.1.1"
+oxc_resolver = "=11.24.2"
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
