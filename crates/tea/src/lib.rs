@@ -2,6 +2,7 @@ pub mod core;
 pub mod data;
 mod js_math;
 pub mod retry_backoff;
+pub mod storage;
 pub use core::{
     Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_updates, replay,
 };

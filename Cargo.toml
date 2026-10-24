@@ -16,5 +16,7 @@ indexmap = { version = "2", features = ["serde"] }
 libm = "0.2"
 ryu-js = "1.0"
 fastrand = { version = "2.5", features = ["js"] }
+futures = "0.3"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs", "io-util"] }
 demlik-tea = { path = "crates/tea" }
 demlik-code-graph = { path = "crates/code-graph" }
