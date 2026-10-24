@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - verification/parity
 
 # Every dependency specifier in a workspace package.json is `catalog:`, `catalog:<name>` or
 # `workspace:` — `fabrika guard catalog-guard check` enforces it in CI (#358). A pin lives here

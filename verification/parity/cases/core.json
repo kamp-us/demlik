@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "core.fresh-init",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "replay",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": []
+      },
+      "expected": {
+        "state": {
+          "type": "ready",
+          "count": 2
+        },
+        "cmds": [
+          {
+            "type": "boot",
+            "count": 2
+          }
+        ],
+        "subs": [
+          {
+            "id": "{\"deps\":{\"count\":2},\"type\":\"pulse\"}",
+            "type": "pulse",
+            "deps": {
+              "count": 2
+            }
+          }
+        ],
+        "initCalls": 1,
+        "depsCalls": 2
+      }
+    },
+    {
+      "id": "core.restored-init-commands",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "replay",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 2
+          }
+        ],
+        "loaded": {
+          "type": "ready",
+          "count": 4
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "ready",
+          "count": 16
+        },
+        "cmds": [
+          {
+            "type": "resume",
+            "count": 14
+          },
+          {
+            "type": "added",
+            "count": 2
+          }
+        ],
+        "subs": [
+          {
+            "id": "{\"deps\":{\"count\":16},\"type\":\"pulse\"}",
+            "type": "pulse",
+            "deps": {
+              "count": 16
+            }
+          }
+        ],
+        "initCalls": 1,
+        "depsCalls": 2
+      }
+    },
+    {
+      "id": "core.ordered-commands-and-terminal-subs",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "replay",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 3
+          },
+          {
+            "type": "finish"
+          }
+        ]
+      },
+      "expected": {
+        "state": {
+          "type": "done",
+          "count": 5
+        },
+        "cmds": [
+          {
+            "type": "boot",
+            "count": 2
+          },
+          {
+            "type": "added",
+            "count": 3
+          },
+          {
+            "type": "finished",
+            "count": 5
+          }
+        ],
+        "subs": [],
+        "initCalls": 1,
+        "depsCalls": 2
+      }
+    },
+    {
+      "id": "core.fold-bypasses-init-and-subs-reducer",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "reducer",
+        "mode": "fold",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 5
+          }
+        ],
+        "base": {
+          "type": "ready",
+          "count": 10
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "ready",
+          "count": 15
+        },
+        "initCalls": 0,
+        "depsCalls": 0
+      }
+    },
+    {
+      "id": "core.empty-fold-identity-reducer",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "reducer",
+        "mode": "fold",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [],
+        "base": {
+          "type": "done",
+          "count": 17
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "done",
+          "count": 17
+        },
+        "initCalls": 0,
+        "depsCalls": 0
+      }
+    },
+    {
+      "id": "core.fold-bypasses-init-and-subs-transitions",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "fold",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 5
+          }
+        ],
+        "base": {
+          "type": "ready",
+          "count": 10
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "ready",
+          "count": 15
+        },
+        "initCalls": 0,
+        "depsCalls": 0
+      }
+    },
+    {
+      "id": "core.empty-fold-identity-transitions",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "fold",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [],
+        "base": {
+          "type": "done",
+          "count": 17
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "done",
+          "count": 17
+        },
+        "initCalls": 0,
+        "depsCalls": 0
+      }
+    },
+    {
+      "id": "core.terminal-refusal",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "transitions",
+        "mode": "replay",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 1
+          }
+        ],
+        "loaded": {
+          "type": "done",
+          "count": 4
+        }
+      },
+      "expected": {
+        "refusal": {
+          "name": "NoCellError",
+          "_tag": "NoCellError",
+          "message": "@demlik/tea: no update cell for msg.type \"add\" in state \"done\" \u2014 the machine's update does not handle this Msg (an unknown wire msg.type, or a missing cell reached by bypassing the mapped types). This state accepts no Msg at all.",
+          "msgType": "add",
+          "stateName": "done",
+          "acceptedTypes": []
+        },
+        "initCalls": 1,
+        "depsCalls": 0
+      }
+    },
+    {
+      "id": "core.reducer-ignores-state-tag",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "reducer",
+        "mode": "fold",
+        "initialCount": 2,
+        "restoredBump": 10,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 5
+          }
+        ],
+        "base": {
+          "type": "done",
+          "count": 10
+        }
+      },
+      "expected": {
+        "state": {
+          "type": "done",
+          "count": 15
+        },
+        "initCalls": 0,
+        "depsCalls": 0
+      }
+    }
+  ]
+}

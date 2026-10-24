@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "scc.cycle-with-caller",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": ["a", "b", "c"],
+        "adjacency": {
+          "a": ["b"],
+          "b": ["a"],
+          "c": ["b"]
+        }
+      },
+      "expected": {
+        "components": [["b", 0], ["a", 0], ["c", 1]]
+      }
+    },
+    {
+      "id": "scc.empty",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": [],
+        "adjacency": {}
+      },
+      "expected": {
+        "components": []
+      }
+    },
+    {
+      "id": "scc.self-loop",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": ["a"],
+        "adjacency": {
+          "a": ["a"]
+        }
+      },
+      "expected": {
+        "components": [["a", 0]]
+      }
+    },
+    {
+      "id": "scc.disconnected",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": ["c", "a", "b"],
+        "adjacency": {}
+      },
+      "expected": {
+        "components": [["c", 0], ["a", 1], ["b", 2]]
+      }
+    },
+    {
+      "id": "scc.unlisted-target",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": ["a"],
+        "adjacency": {
+          "a": ["external"]
+        }
+      },
+      "expected": {
+        "components": [["external", 0], ["a", 1]]
+      }
+    },
+    {
+      "id": "scc.unicode",
+      "operation": "code_graph.scc",
+      "input": {
+        "nodes": ["\ud83d\ude00", "\u00e7"],
+        "adjacency": {
+          "\ud83d\ude00": ["\u00e7"],
+          "\u00e7": ["\ud83d\ude00"]
+        }
+      },
+      "expected": {
+        "components": [["\u00e7", 0], ["\ud83d\ude00", 0]]
+      }
+    },
+    {
+      "id": "scc.members-in-input-order",
+      "operation": "code_graph.scc_members",
+      "input": {
+        "nodes": ["a", "a", "b", "c"],
+        "adjacency": {
+          "a": ["b"],
+          "b": ["a"],
+          "c": ["b"]
+        }
+      },
+      "expected": {
+        "members": [[0, ["a", "a", "b"]], [1, ["c"]]]
+      }
+    },
+    {
+      "id": "scc.members-omit-unlisted-target",
+      "operation": "code_graph.scc_members",
+      "input": {
+        "nodes": ["a"],
+        "adjacency": {
+          "a": ["external"]
+        }
+      },
+      "expected": {
+        "members": [[1, ["a"]]]
+      }
+    }
+  ]
+}

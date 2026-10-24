@@ -1,0 +1,16 @@
+[package]
+name = "demlik-tea"
+description = "Durable, replayable state machines with effects represented as data."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license = "MIT"
+
+[dependencies]
+serde.workspace = true
+libm.workspace = true
+serde_json.workspace = true
+indexmap.workspace = true
+ryu-js.workspace = true
+fastrand.workspace = true

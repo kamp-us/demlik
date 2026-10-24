@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "retry-state.init",
+      "operation": "tea.retry.state",
+      "input": {
+        "failures": [],
+        "budget": {
+          "kind": "count",
+          "maxAttempts": 3
+        }
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 0
+          }
+        ],
+        "allowed": true
+      }
+    },
+    {
+      "id": "retry-state.count-edge",
+      "operation": "tea.retry.state",
+      "input": {
+        "failures": [
+          {
+            "error": "first"
+          },
+          {
+            "error": {
+              "_tag": "network"
+            }
+          },
+          {
+            "error": null
+          }
+        ],
+        "budget": {
+          "kind": "count",
+          "maxAttempts": 3
+        }
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 0
+          },
+          {
+            "attempt": 1,
+            "lastError": "first"
+          },
+          {
+            "attempt": 2,
+            "lastError": {
+              "_tag": "network"
+            }
+          },
+          {
+            "attempt": 3,
+            "lastError": null
+          }
+        ],
+        "allowed": false
+      }
+    },
+    {
+      "id": "retry-state.duration-origin-preserved",
+      "operation": "tea.retry.state",
+      "input": {
+        "failures": [
+          {
+            "error": "first",
+            "atMs": 100
+          },
+          {
+            "error": "second",
+            "atMs": 140
+          },
+          {
+            "error": "third"
+          }
+        ],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100
+        },
+        "nowMs": 199
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 0
+          },
+          {
+            "attempt": 1,
+            "lastError": "first",
+            "firstFailureAtMs": 100
+          },
+          {
+            "attempt": 2,
+            "lastError": "second",
+            "firstFailureAtMs": 100
+          },
+          {
+            "attempt": 3,
+            "lastError": "third",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": true,
+        "elapsedMs": 99
+      }
+    },
+    {
+      "id": "retry-state.duration-expired",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 1,
+          "lastError": "offline",
+          "firstFailureAtMs": 100
+        },
+        "failures": [],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100
+        },
+        "nowMs": 200
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 1,
+            "lastError": "offline",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": false,
+        "elapsedMs": 100
+      }
+    },
+    {
+      "id": "retry-state.both-count-exhausted",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 1,
+          "lastError": "offline",
+          "firstFailureAtMs": 100
+        },
+        "failures": [],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100,
+          "maxAttempts": 1
+        },
+        "nowMs": 100
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 1,
+            "lastError": "offline",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": false,
+        "elapsedMs": 0
+      }
+    },
+    {
+      "id": "retry-state.zero-duration",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 1,
+          "lastError": "offline",
+          "firstFailureAtMs": 100
+        },
+        "failures": [],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 0
+        },
+        "nowMs": 100
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 1,
+            "lastError": "offline",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": false,
+        "elapsedMs": 0
+      }
+    },
+    {
+      "id": "retry-state.backwards-clock",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 1,
+          "lastError": "offline",
+          "firstFailureAtMs": 100
+        },
+        "failures": [],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100
+        },
+        "nowMs": 90
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 1,
+            "lastError": "offline",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": true,
+        "elapsedMs": 0
+      }
+    },
+    {
+      "id": "retry-state.missing-clock",
+      "operation": "tea.retry.state",
+      "input": {
+        "failures": [
+          {
+            "error": "offline",
+            "atMs": 100
+          }
+        ],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100
+        }
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 0
+          },
+          {
+            "attempt": 1,
+            "lastError": "offline",
+            "firstFailureAtMs": 100
+          }
+        ],
+        "allowed": false
+      }
+    },
+    {
+      "id": "retry-state.missing-origin",
+      "operation": "tea.retry.state",
+      "input": {
+        "failures": [
+          {
+            "error": "offline"
+          }
+        ],
+        "budget": {
+          "kind": "duration",
+          "maxElapsedMs": 100
+        },
+        "nowMs": 105
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 0
+          },
+          {
+            "attempt": 1,
+            "lastError": "offline"
+          }
+        ],
+        "allowed": false
+      }
+    },
+    {
+      "id": "retry-state.unbounded",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 999
+        },
+        "failures": [],
+        "budget": {
+          "kind": "unbounded"
+        }
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 999
+          }
+        ],
+        "allowed": true
+      }
+    },
+    {
+      "id": "retry-probe.0",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": true,
+        "samples": [0.0]
+      },
+      "expected": {
+        "draws": 1,
+        "accepted": true
+      }
+    },
+    {
+      "id": "retry-probe.1",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": true,
+        "samples": [0.9999999999999999]
+      },
+      "expected": {
+        "draws": 1,
+        "accepted": true
+      }
+    },
+    {
+      "id": "retry-probe.2",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": true,
+        "samples": [1]
+      },
+      "expected": {
+        "draws": 1,
+        "accepted": false,
+        "error": {
+          "name": "RangeError",
+          "message": "asRng: generator returned 1, outside the [0, 1) contract"
+        }
+      }
+    },
+    {
+      "id": "retry-probe.3",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": true,
+        "samples": [-0.1]
+      },
+      "expected": {
+        "draws": 1,
+        "accepted": false,
+        "error": {
+          "name": "RangeError",
+          "message": "asRng: generator returned -0.1, outside the [0, 1) contract"
+        }
+      }
+    },
+    {
+      "id": "retry-probe.4",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": false,
+        "samples": [5]
+      },
+      "expected": {
+        "draws": 0,
+        "accepted": true
+      }
+    }
+  ]
+}

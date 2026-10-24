@@ -1,0 +1,14 @@
+[package]
+name = "demlik-parity"
+description = "Cross-language verification driver for Demlik's public contracts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+publish = false
+
+[dependencies]
+demlik-tea.workspace = true
+demlik-code-graph.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "demlik-code-graph"
+description = "Source analysis, graph queries and architecture rules."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+indexmap.workspace = true

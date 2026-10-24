@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "retry.first-attempt",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 100,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.negative-attempt",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": -4,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 100,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.second-attempt",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 1,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 200,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.third-attempt",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 400,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.cap",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 4,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 500,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.overflow-cap",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2048,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 500,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.zero-base-overflow",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2048,
+        "curve": {
+          "baseMs": 0,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 0,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.fractional-attempt",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0.5,
+        "curve": {
+          "baseMs": 16,
+          "factor": 4,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 32,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.cap-below-base",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 25,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 25,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.full-jitter",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "full"
+        },
+        "random": [0.25]
+      },
+      "expected": {
+        "value": 100,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.equal-jitter",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "equal"
+        },
+        "random": [0.25]
+      },
+      "expected": {
+        "value": 250,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.full-jitter-zero",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "full"
+        },
+        "random": [0]
+      },
+      "expected": {
+        "value": 0,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.equal-jitter-floor",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 2,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "equal"
+        },
+        "random": [0]
+      },
+      "expected": {
+        "value": 200,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.full-jitter-capped",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 4,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "full"
+        },
+        "random": [0.5]
+      },
+      "expected": {
+        "value": 250,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.equal-jitter-capped",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 4,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "equal"
+        },
+        "random": [0.5]
+      },
+      "expected": {
+        "value": 375,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.subnormal-full",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": 5e-324,
+          "factor": 1,
+          "capMs": 5e-324,
+          "jitter": "full"
+        },
+        "random": [0.5]
+      },
+      "expected": {
+        "value": 0,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.subnormal-equal",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": 5e-324,
+          "factor": 1,
+          "capMs": 5e-324,
+          "jitter": "equal"
+        },
+        "random": [0.5]
+      },
+      "expected": {
+        "value": 0,
+        "randomDraws": 1
+      }
+    },
+    {
+      "id": "retry.negative-infinity",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": {
+          "$number": "-Infinity"
+        },
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": 100,
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.negative-zero",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": {
+            "$number": "-0"
+          },
+          "factor": 2,
+          "capMs": 500,
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": {
+          "$number": "-0"
+        },
+        "randomDraws": 0
+      }
+    },
+    {
+      "id": "retry.nan-cap",
+      "operation": "tea.retry.backoff",
+      "input": {
+        "attempt": 0,
+        "curve": {
+          "baseMs": 100,
+          "factor": 2,
+          "capMs": {
+            "$number": "NaN"
+          },
+          "jitter": "none"
+        },
+        "random": []
+      },
+      "expected": {
+        "value": {
+          "$number": "NaN"
+        },
+        "randomDraws": 0
+      }
+    }
+  ]
+}

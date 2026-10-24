@@ -1,0 +1,22 @@
+{
+  "name": "@demlik/parity",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node run.mjs",
+    "verify:complete": "node run.mjs --complete",
+    "verify:mutations": "node mutations.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "biome check .",
+    "lint:worktree": "biome check ."
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

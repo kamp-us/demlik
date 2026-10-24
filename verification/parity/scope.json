@@ -1,0 +1,22 @@
+{
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "objective": "Native Rust siblings for the full @demlik/tea and @demlik/code-graph public capability set, with 1:1 observable behavior and a new idiomatic Rust API.",
+  "exclude": ["@demlik/structure-sweep", "@demlik/backlog-sweep"],
+  "workflow": "Local implementation and verification. No issue, PR, push, publication, merge or deployment is needed for this local goal.",
+  "acceptance": [
+    "Preserve TypeScript behavior against the pinned source and dependency reference.",
+    "Rust calls native implementations, with no TypeScript forwarding or fixture-answer replay.",
+    "Every public export, nested callable, CLI entry, wildcard export and asset has an explicit Rust mapping and passing evidence.",
+    "Verify success, refusal and failure behavior, typed contracts, serialization, ordering, persistence, recovery, cancellation and realistic consumers.",
+    "Demonstrate detection of representative behavioral regressions on disposable source copies.",
+    "Pass relevant Rust and TypeScript checks and independent local review. Keep the goal incomplete while material gaps remain."
+  ],
+  "foundationAcceptance": [
+    "Create the sibling Cargo workspace and a reusable cross-language runner with explicit failure accounting.",
+    "Port retry/backoff and iterative SCC with independent examples, generated cases and regression controls.",
+    "Port pure reducer/transition stepping, initialization, folds, replay, subscription identity and terminal refusal behavior.",
+    "Keep pure models free from blanket Clone, Send, serialization or runtime requirements.",
+    "Reject a full-parity claim until live public capability discovery has passing mappings."
+  ],
+  "status": "Full port in progress; the foundation alone does not satisfy the objective."
+}
