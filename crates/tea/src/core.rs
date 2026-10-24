@@ -1,3 +1,5 @@
+mod identity;
+pub use identity::{AuthoredMachine, Identity};
 mod subscriptions;
 pub use subscriptions::{
     ProjectionError, ProjectionFailure, SubEntry, SubEvaluation, SubscriptionEntries,

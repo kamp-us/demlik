@@ -73,6 +73,7 @@ impl<'a, T, E> CommandWork<'a, T, E> {
 }
 type DetachWork<E> = Rc<dyn Fn(LocalBoxFuture<'static, Result<(), E>>)>;
 pub struct CommandContext<M, E> {
+    pub(crate) ports: super::ports::PortEmitter,
     pub(crate) producer: Producer<M>,
     pub(crate) edge: CommandEdge,
     pub(crate) guard: DispatchGuard<M>,
@@ -82,6 +83,7 @@ pub struct CommandContext<M, E> {
 impl<M, E> Clone for CommandContext<M, E> {
     fn clone(&self) -> Self {
         Self {
+            ports: self.ports.clone(),
             producer: self.producer.clone(),
             edge: self.edge.clone(),
             guard: self.guard.clone(),
@@ -91,6 +93,9 @@ impl<M, E> Clone for CommandContext<M, E> {
     }
 }
 impl<M: Tagged, E> CommandContext<M, E> {
+    pub fn emit<T: 'static>(&self, port: &crate::ports::Port<T>, value: T) {
+        self.ports.emit(port, &value);
+    }
     pub fn dispatch(&self, message: M) -> Result<(), DispatchRefused> {
         if let Err(error) = self.guard.check(&message) {
             let error = Arc::new(error);

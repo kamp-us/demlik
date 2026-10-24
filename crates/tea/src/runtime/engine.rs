@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
@@ -10,14 +10,17 @@ use indexmap::IndexMap;
 use tokio::sync::{Notify, oneshot};
 
 use crate::command::{CommandEdge, CommandFamily};
+use crate::core::{AuthoredMachine, Identity};
 use crate::storage::PanicCause;
 use crate::{Machine, Step, SubId, Subscription, Tagged};
 
+use super::listeners::Listeners;
 use super::persistence::Backend;
 use super::queue::{Job, Mailbox, Notice, Origin};
 use super::types::*;
 use super::work::{Cancel, Cleanup, WorkFailure, perform};
 use super::{CommandContext, Interpreter, Producer, SubscriptionWork, Subscriptions};
+use super::{NoEvent, Telemetry, TelemetryEvent};
 
 type Answer<SE, HE> = Result<(), Failure<SE, HE>>;
 type Receipt<SE, HE> = oneshot::Sender<Answer<SE, HE>>;
@@ -31,9 +34,10 @@ struct View<S, SE, HE> {
     state: Option<Arc<S>>,
     saved: SaveStatus<SE, HE>,
 }
-type Observer<S, M> = Rc<dyn Fn(&M, &S)>;
-type Boot<S> = Rc<dyn Fn(&S)>;
-struct Core<S, M, SE, HE> {
+type Observer<S, M> = dyn Fn(&M, &S);
+type Boot<S> = dyn Fn(&S);
+struct Core<S, M, SE, HE, E> {
+    ports: Rc<super::ports::PortRegistry>,
     view: RefCell<View<S, SE, HE>>,
     ready: RefCell<Option<Answer<SE, HE>>>,
     ready_changed: Notify,
@@ -46,13 +50,18 @@ struct Core<S, M, SE, HE> {
     sink: Option<ErrorSink<SE, HE>>,
     terminal: Option<Terminal<S>>,
     commits: Vec<Commit<S, M>>,
-    listeners: RefCell<BTreeMap<u64, Rc<dyn Fn()>>>,
-    observers: RefCell<BTreeMap<u64, Observer<S, M>>>,
-    boots: RefCell<BTreeMap<u64, Boot<S>>>,
+    listeners: Rc<Listeners<dyn Fn()>>,
+    observers: Rc<Listeners<Observer<S, M>>>,
+    boots: Rc<Listeners<Boot<S>>>,
     booted: Cell<bool>,
-    next_listener: Cell<u64>,
+    events: Rc<super::events::SemanticEvents<S, M, E>>,
+    telemetry: Option<Telemetry<HE>>,
+    telemetry_seq: Cell<f64>,
+    clock: Rc<dyn Fn() -> f64>,
 }
-impl<S, M, SE, HE> Core<S, M, SE, HE> {
+impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
+    Core<S, M, SE, HE, E>
+{
     fn state(&self) -> Option<Arc<S>> {
         self.view.borrow().state.clone()
     }
@@ -85,33 +94,9 @@ impl<S, M, SE, HE> Core<S, M, SE, HE> {
         }
     }
     fn fanout<T>(&self, items: impl IntoIterator<Item = T>, phase: ErrorPhase, call: impl Fn(T)) {
-        for item in items {
-            if let Err(payload) = std::panic::catch_unwind(AssertUnwindSafe(|| call(item))) {
-                self.report(
-                    Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
-                    phase,
-                );
-            }
-        }
-    }
-    fn fanout_live<T: Clone>(
-        &self,
-        items: &RefCell<BTreeMap<u64, T>>,
-        phase: ErrorPhase,
-        call: impl Fn(T),
-    ) {
-        use std::ops::Bound::{Excluded, Unbounded};
-        let mut after = None;
-        loop {
-            let next = items
-                .borrow()
-                .range((after.map_or(Unbounded, Excluded), Unbounded))
-                .next()
-                .map(|(id, item)| (*id, item.clone()));
-            let Some((id, item)) = next else { return };
-            after = Some(id);
-            self.fanout([item], phase, &call);
-        }
+        super::listeners::fanout(items, call, |cause| {
+            self.report(Rc::new(RuntimeError::Panic(cause)), phase)
+        });
     }
     fn holds(&self, state: &S) -> bool {
         self.terminal
@@ -159,51 +144,100 @@ impl<S, M, SE, HE> Core<S, M, SE, HE> {
             }
         }
     }
-    fn committed(&self, message: Option<&M>, state: &S) {
-        self.fanout_live(&self.listeners, ErrorPhase::Listener, |listener| listener());
+    fn committed(self: &Rc<Self>, message: Option<&M>, state: &S) {
+        self.listeners.fanout(
+            |listener| listener(),
+            |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Listener),
+        );
         if let Some(message) = message {
-            self.fanout_live(&self.observers, ErrorPhase::Observer, |observer| {
-                observer(message, state)
-            });
+            self.observers.fanout(
+                |observer| observer(message, state),
+                |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Observer),
+            );
         } else {
             self.booted.set(true);
-            self.fanout_live(&self.boots, ErrorPhase::Boot, |handler| handler(state));
+            self.boots.fanout(
+                |handler| handler(state),
+                |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Boot),
+            );
         }
         self.fanout(self.commits.iter(), ErrorPhase::Observer, |commit| {
             commit(message, state)
         });
-        if self.done.borrow().is_empty() {
-            return;
+        if let Some(message) = message {
+            self.events.committed(message, state, |cause| {
+                self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Event)
+            });
         }
-        let saved = matches!(self.view.borrow().saved, SaveStatus::Saved);
-        if saved && self.holds(state) {
+        let waiting = !self.done.borrow().is_empty();
+        if waiting && matches!(self.view.borrow().saved, SaveStatus::Saved) && self.holds(state) {
             let current = self.state().expect("committed state is installed");
             for waiter in self.done.borrow_mut().drain(..) {
                 let _ = waiter.send(Ok(Arc::clone(&current)));
             }
         }
+        if let Some(message) = message {
+            self.publish_telemetry(message);
+        }
+    }
+    fn publish_telemetry(self: &Rc<Self>, message: &M)
+    where
+        M: Tagged,
+    {
+        let Some(sink) = &self.telemetry else { return };
+        let seq = self.telemetry_seq.get() + 1.0;
+        self.telemetry_seq.set(seq);
+        let event = TelemetryEvent {
+            seq,
+            msg_type: message.tag().into(),
+            at: (self.clock)(),
+        };
+        let work = match std::panic::catch_unwind(AssertUnwindSafe(|| sink.start(event))) {
+            Ok(work) => work,
+            Err(payload) => {
+                self.report(
+                    Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
+                    ErrorPhase::Observer,
+                );
+                return;
+            }
+        };
+        let mut work = AssertUnwindSafe(work).catch_unwind().boxed_local();
+        let first = work.as_mut().now_or_never();
+        let core = Rc::clone(self);
+        tokio::task::spawn_local(async move {
+            let settled = match first {
+                Some(settled) => settled,
+                None => work.await,
+            };
+            match settled {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    core.report(Rc::new(RuntimeError::Handler(error)), ErrorPhase::Observer)
+                }
+                Err(payload) => core.report(
+                    Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
+                    ErrorPhase::Observer,
+                ),
+            }
+        });
     }
     fn finish_receipt(&self, seq: u64, result: Answer<SE, HE>) {
         if let Some(sender) = self.receipts.borrow_mut().remove(&seq) {
             let _ = sender.send(result);
         }
     }
-    fn listener_id(&self) -> u64 {
-        let id = self.next_listener.get();
-        self.next_listener.set(id + 1);
-        id
-    }
 }
 
 /// Local runtime facade. Its narrow [`Producer`] can cross threads without its callbacks.
-pub struct Runtime<S, M, SE, HE> {
-    core: Rc<Core<S, M, SE, HE>>,
+pub struct Runtime<S, M, SE, HE, E = NoEvent> {
+    core: Rc<Core<S, M, SE, HE, E>>,
     producer: Producer<M>,
     stopper: Rc<dyn Fn()>,
     profile: Profile,
     idle_cap: usize,
 }
-impl<S, M, SE, HE> Clone for Runtime<S, M, SE, HE> {
+impl<S, M, SE, HE, E> Clone for Runtime<S, M, SE, HE, E> {
     fn clone(&self) -> Self {
         Self {
             core: Rc::clone(&self.core),
@@ -214,7 +248,22 @@ impl<S, M, SE, HE> Clone for Runtime<S, M, SE, HE> {
         }
     }
 }
-impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE, HE> {
+impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
+    Runtime<S, M, SE, HE, E>
+{
+    pub fn subscribe_port<T: 'static>(
+        &self,
+        port: &crate::ports::Port<T>,
+        listener: Rc<dyn Fn(&T)>,
+    ) -> super::Unsubscribe {
+        self.core.ports.subscribe(port, listener)
+    }
+    pub fn emit_port<T: 'static>(&self, port: &crate::ports::Port<T>, value: T) {
+        self.core.ports.emit(port, &value, |cause| {
+            self.core
+                .report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::PortEmit)
+        });
+    }
     pub fn producer(&self) -> Producer<M> {
         self.producer.clone()
     }
@@ -335,29 +384,29 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
             }
         }
     }
-    pub fn subscribe(&self, listener: impl Fn() + 'static) -> Box<dyn FnOnce()> {
-        let id = self.core.listener_id();
-        self.core
-            .listeners
-            .borrow_mut()
-            .insert(id, Rc::new(listener));
-        let core = Rc::clone(&self.core);
-        Box::new(move || {
-            core.listeners.borrow_mut().remove(&id);
-        })
+    pub fn on(
+        &self,
+        kind: impl Into<crate::data::JsText>,
+        handler: Rc<dyn Fn(&E)>,
+    ) -> super::Unsubscribe {
+        self.core.events.subscribe(kind.into(), handler)
     }
-    pub fn observe(&self, observer: impl Fn(&M, &S) + 'static) -> Box<dyn FnOnce()> {
-        let id = self.core.listener_id();
-        self.core
-            .observers
-            .borrow_mut()
-            .insert(id, Rc::new(observer));
-        let core = Rc::clone(&self.core);
-        Box::new(move || {
-            core.observers.borrow_mut().remove(&id);
-        })
+    pub fn subscribe(&self, listener: impl Fn() + 'static) -> super::Unsubscribe {
+        self.subscribe_shared(Rc::new(listener))
     }
-    pub fn on_boot(&self, handler: impl Fn(&S) + 'static) -> Box<dyn FnOnce()> {
+    pub fn subscribe_shared(&self, listener: Rc<dyn Fn()>) -> super::Unsubscribe {
+        self.core.listeners.add(listener)
+    }
+    pub fn observe(&self, observer: impl Fn(&M, &S) + 'static) -> super::Unsubscribe {
+        self.observe_shared(Rc::new(observer))
+    }
+    pub fn observe_shared(&self, observer: Rc<Observer<S, M>>) -> super::Unsubscribe {
+        self.core.observers.add(observer)
+    }
+    pub fn on_boot(&self, handler: impl Fn(&S) + 'static) -> super::Unsubscribe {
+        self.on_boot_shared(Rc::new(handler))
+    }
+    pub fn on_boot_shared(&self, handler: Rc<dyn Fn(&S)>) -> super::Unsubscribe {
         if self.core.booted.get() {
             if let Some(state) = self.core.state() {
                 self.core
@@ -365,12 +414,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
             }
             return Box::new(|| {});
         }
-        let id = self.core.listener_id();
-        self.core.boots.borrow_mut().insert(id, Rc::new(handler));
-        let core = Rc::clone(&self.core);
-        Box::new(move || {
-            core.boots.borrow_mut().remove(&id);
-        })
+        self.core.boots.add(handler)
     }
 }
 fn refusal<SE, HE>(error: super::DispatchRefused) -> Failure<SE, HE> {
@@ -414,13 +458,14 @@ struct Signals<SE, HE> {
     parent: Option<Receipt<SE, HE>>,
     barrier: Option<Receipt<SE, HE>>,
 }
-struct Env<S, M, C, U, X, SE, HE, I, R> {
+struct Env<S, M, C, U, X, SE, HE, I, R, E> {
     machine: Machine<'static, S, M, C, U, X>,
+    identity: Option<Identity<'static, S, M>>,
     input: X,
     interpreter: I,
     subscriptions: R,
     store: Option<Rc<dyn Backend<S, SE>>>,
-    core: Rc<Core<S, M, SE, HE>>,
+    core: Rc<Core<S, M, SE, HE, E>>,
     producer: Producer<M>,
     edge: CommandEdge,
     profile: Profile,
@@ -444,7 +489,8 @@ impl<
     HE: fmt::Debug + 'static,
     I: Interpreter<C, Error = HE> + 'static,
     R: Subscriptions<U, M, Error = HE> + 'static,
-> Env<S, M, C, U, X, SE, HE, I, R>
+    E: Tagged + 'static,
+> Env<S, M, C, U, X, SE, HE, I, R, E>
 {
     fn token(&self) -> u64 {
         let token = self.next_work.get();
@@ -528,9 +574,25 @@ impl<
     async fn step(self: Rc<Self>, message: Arc<M>) -> Answer<SE, HE> {
         let state = self.core.state().expect("dispatch waits for boot");
         let transition = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-            self.machine.update.apply(&state, &message)
+            if self
+                .identity
+                .as_ref()
+                .is_some_and(|identity| identity.misaddressed(&state, &message))
+            {
+                self.core.report(
+                    Rc::new(RuntimeError::IdentityDrop(IdentityDropNotice {
+                        msg_type: message.tag().into(),
+                    })),
+                    ErrorPhase::IdentityDrop,
+                );
+                return Ok(None);
+            }
+            self.machine.update.apply(&state, &message).map(Some)
         })) {
-            Ok(result) => result.map_err(|error| Rc::new(RuntimeError::NoCell(error)))?,
+            Ok(result) => match result.map_err(|error| Rc::new(RuntimeError::NoCell(error)))? {
+                Some(transition) => transition,
+                None => return Ok(()),
+            },
             Err(payload) => {
                 let error = Rc::new(RuntimeError::Panic(PanicCause::new(payload)));
                 self.core.report(Rc::clone(&error), ErrorPhase::Reduce);
@@ -659,6 +721,15 @@ impl<
         let reporter = Rc::clone(&self);
         let detached = Rc::clone(&self);
         let context = CommandContext {
+            ports: super::ports::PortEmitter {
+                registry: Rc::clone(&self.core.ports),
+                report: {
+                    let core = Rc::clone(&self.core);
+                    Rc::new(move |cause| {
+                        core.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::PortEmit)
+                    })
+                },
+            },
             producer: self.producer.clone(),
             edge: self.edge.clone(),
             guard,
@@ -1016,13 +1087,15 @@ pub fn launch<
     HE: fmt::Debug + 'static,
     I: Interpreter<C, Error = HE> + 'static,
     R: Subscriptions<U, M, Error = HE> + 'static,
+    E: Tagged + 'static,
 >(
-    machine: Machine<'static, S, M, C, U, X>,
+    machine: impl Into<AuthoredMachine<'static, S, M, C, U, X>>,
     input: X,
     interpreter: I,
     subscriptions: R,
-    options: Options<S, M, SE, HE>,
-) -> Runtime<S, M, SE, HE> {
+    options: Options<S, M, SE, HE, E>,
+) -> Runtime<S, M, SE, HE, E> {
+    let (machine, identity) = machine.into().into_parts();
     let Options {
         profile,
         store,
@@ -1033,6 +1106,8 @@ pub fn launch<
         dispose_timeout,
         idle_cap,
         supervision,
+        events,
+        telemetry,
     } = options;
     let store = store.map(|store| store.open());
     let initial = if store.is_none() {
@@ -1045,6 +1120,7 @@ pub fn launch<
         None
     };
     let core = Rc::new(Core {
+        ports: Rc::new(super::ports::PortRegistry::default()),
         view: RefCell::new(View {
             state: initial.as_ref().map(|initial| Arc::clone(&initial.state)),
             saved: if store.is_none() {
@@ -1064,11 +1140,14 @@ pub fn launch<
         sink: on_error,
         terminal,
         commits: on_commit,
-        listeners: RefCell::new(BTreeMap::new()),
-        observers: RefCell::new(BTreeMap::new()),
-        boots: RefCell::new(BTreeMap::new()),
+        listeners: Listeners::new(),
+        observers: Listeners::new(),
+        boots: Listeners::new(),
         booted: Cell::new(false),
-        next_listener: Cell::new(0),
+        events: super::events::SemanticEvents::new(events),
+        telemetry,
+        telemetry_seq: Cell::new(0.0),
+        clock: Rc::clone(&clock),
     });
     let producer = Producer {
         mailbox: Arc::new(Mailbox::new()),
@@ -1077,6 +1156,7 @@ pub fn launch<
     let edge = CommandEdge::new(move || clock());
     let env = Rc::new(Env {
         machine,
+        identity,
         input,
         interpreter,
         subscriptions,
@@ -1144,12 +1224,13 @@ pub async fn run<
     HE: fmt::Debug + 'static,
     I: Interpreter<C, Error = HE> + 'static,
     R: Subscriptions<U, M, Error = HE> + 'static,
+    E: Tagged + 'static,
 >(
-    machine: Machine<'static, S, M, C, U, X>,
+    machine: impl Into<AuthoredMachine<'static, S, M, C, U, X>>,
     input: X,
     interpreter: I,
     subscriptions: R,
-    options: Options<S, M, SE, HE>,
-) -> Runtime<S, M, SE, HE> {
+    options: Options<S, M, SE, HE, E>,
+) -> Runtime<S, M, SE, HE, E> {
     launch(machine, input, interpreter, subscriptions, options)
 }
