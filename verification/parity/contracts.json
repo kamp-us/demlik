@@ -382,5 +382,584 @@
       "command.failure-missing-tag",
       "command.empty-declared-failures"
     ]
+  },
+  "@demlik/tea:./resilience#initCircuit": {
+    "signature": "d772387ccb4c7015b75a22f63383e9ee5676ad1139d03731eb25f796c988c619",
+    "rust": {
+      "file": "crates/tea/src/resilience/circuit_breaker.rs",
+      "symbols": ["demlik_tea::resilience::circuit_breaker::init_circuit"]
+    },
+    "cases": ["policies.circuit-cooldown-probe-and-late-results"]
+  },
+  "@demlik/tea:./resilience#onSuccess": {
+    "signature": "11e4caaa2d8698474d0495cd2d462d8fa7e02f7d61c51a3ff42d1716e687efee",
+    "rust": {
+      "file": "crates/tea/src/resilience/circuit_breaker.rs",
+      "symbols": ["demlik_tea::resilience::circuit_breaker::on_success"]
+    },
+    "cases": [
+      "policies.circuit-cooldown-probe-and-late-results",
+      "policies.circuit-success-retains-negative-zero"
+    ]
+  },
+  "@demlik/tea:./resilience#onFailure": {
+    "signature": "50328b70de5c3ec4de0dc2a8a9479182a2e34ab5a65f7fd37c0ec03fc527b7cf",
+    "rust": {
+      "file": "crates/tea/src/resilience/circuit_breaker.rs",
+      "symbols": ["demlik_tea::resilience::circuit_breaker::on_failure"]
+    },
+    "cases": ["policies.circuit-cooldown-probe-and-late-results"]
+  },
+  "@demlik/tea:./resilience#canPass": {
+    "signature": "45f77de13267c49a184ac1f3f634d2368f8edfdb3ceb069689cb9aee4f53c117",
+    "rust": {
+      "file": "crates/tea/src/resilience/circuit_breaker.rs",
+      "symbols": ["demlik_tea::resilience::circuit_breaker::can_pass"]
+    },
+    "cases": [
+      "policies.circuit-cooldown-probe-and-late-results",
+      "policies.circuit-zero-cap-entry-probe"
+    ]
+  },
+  "@demlik/tea:./resilience#initBucket": {
+    "signature": "62c197aa4fe0ec7d61d3c0d2a06910e878919b76cd1fb681b979576b13816e4a",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::init_bucket"]
+    },
+    "cases": [
+      "policies.bucket-denial-keeps-refill-and-clock-skew",
+      "policies.bucket-nan-propagation",
+      "policies.bucket-signed-zero-tie"
+    ]
+  },
+  "@demlik/tea:./resilience#refill": {
+    "signature": "03dd8b29e9fd8f69eab48ea86cac93bf9b86d7e1b16bd1461978e6cf57599705",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::refill"]
+    },
+    "cases": [
+      "policies.bucket-denial-keeps-refill-and-clock-skew",
+      "policies.bucket-signed-zero-tie"
+    ]
+  },
+  "@demlik/tea:./resilience#tryConsume": {
+    "signature": "7f5d77d1bf55647617655540aba0f29263e2f033d24384434ff08a28ff6fc1bb",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::try_consume"]
+    },
+    "cases": [
+      "policies.bucket-denial-keeps-refill-and-clock-skew",
+      "policies.bucket-nan-propagation",
+      "policies.bucket-signed-zero-tie"
+    ]
+  },
+  "@demlik/tea:./resilience#initWindow": {
+    "signature": "75423414e028160f29ccb7d8db8339c36ca78727a4e99ee9a7734a866abe6590",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::init_window"]
+    },
+    "cases": ["policies.window-half-open-expiry-and-read-only-remaining"]
+  },
+  "@demlik/tea:./resilience#record": {
+    "signature": "359fdc007a208053976bceead768d24158d3e9a1861046cf472fb83d433b4347",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::record"]
+    },
+    "cases": [
+      "policies.window-half-open-expiry-and-read-only-remaining",
+      "policies.window-nan-cutoff-and-limit"
+    ]
+  },
+  "@demlik/tea:./resilience#remaining": {
+    "signature": "2aaef563de8c81eaa6953e2f3f53bf1acc8b16f45b83e23741d07f4298f26539",
+    "rust": {
+      "file": "crates/tea/src/resilience/rate_limit.rs",
+      "symbols": ["demlik_tea::resilience::rate_limit::remaining"]
+    },
+    "cases": [
+      "policies.window-half-open-expiry-and-read-only-remaining",
+      "policies.window-nan-cutoff-and-limit"
+    ]
+  },
+  "@demlik/tea:./resilience#initCache": {
+    "signature": "3d5ff6d7ee38894049e0761158d2739c21dc8fabda0a3dbdae65aca3293e8614",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::init_cache"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-overwrite-refreshes-expiry",
+      "policies.cache-pristine-inherited-properties",
+      "policies.cache-injected-prototype-and-spread-reset",
+      "policies.cache-null-projection-is-a-typeerror"
+    ]
+  },
+  "@demlik/tea:./resilience#get": {
+    "signature": "8178a45dd0ba91b8d9081b0fc40f62c7c3109f975d015fb69b4ff1cd55a96bf0",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::get"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-overwrite-refreshes-expiry",
+      "policies.cache-pristine-inherited-properties",
+      "policies.cache-injected-prototype-and-spread-reset",
+      "policies.cache-own-prototype-key-is-data-until-eviction-copy",
+      "policies.cache-null-projection-is-a-typeerror"
+    ]
+  },
+  "@demlik/tea:./resilience#has": {
+    "signature": "7204668a257b52e5f7fc11bda592ddc242c7a86eb1da78a066ee5d4e419733fb",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::has"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-overwrite-refreshes-expiry",
+      "policies.cache-pristine-inherited-properties",
+      "policies.cache-injected-prototype-and-spread-reset",
+      "policies.cache-own-prototype-key-is-data-until-eviction-copy"
+    ]
+  },
+  "@demlik/tea:./resilience#set": {
+    "signature": "6bedb18c617ec8d98fab47779c8a04fd39ea78da7a7f9cddd9b8a4aa436f1cf4",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::set"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-overwrite-refreshes-expiry",
+      "policies.cache-injected-prototype-and-spread-reset",
+      "policies.cache-own-prototype-key-is-data-until-eviction-copy",
+      "policies.cache-null-projection-is-a-typeerror"
+    ]
+  },
+  "@demlik/tea:./resilience#remove": {
+    "signature": "ed78fdff8178b23941c54da301fafef36f0e2052ad40bca92334df4c4c243ff5",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::remove"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-injected-prototype-and-spread-reset"
+    ]
+  },
+  "@demlik/tea:./resilience#evictExpired": {
+    "signature": "c41533bf6ea72097312c0fa0d32651d8706745339b96fb9b6016a720a8d78f94",
+    "rust": {
+      "file": "crates/tea/src/resilience/cache.rs",
+      "symbols": ["demlik_tea::resilience::cache::evict_expired"]
+    },
+    "cases": [
+      "policies.cache-half-open-ttl-null-failure-and-removal",
+      "policies.cache-own-prototype-key-is-data-until-eviction-copy"
+    ]
+  },
+  "@demlik/tea:./idempotency#initStore": {
+    "signature": "57047bb3f22255f2b00e686b4b978bc5a2805f4501ad8e243dbc2692d5eae155",
+    "rust": {
+      "file": "crates/tea/src/idempotency.rs",
+      "symbols": ["demlik_tea::idempotency::init_store"]
+    },
+    "cases": [
+      "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "policies.idempotency-capacity-zero",
+      "policies.idempotency-injected-prototype-coercion-and-reset",
+      "policies.idempotency-null-projection-presence-and-recall-differ"
+    ]
+  },
+  "@demlik/tea:./idempotency#seen": {
+    "signature": "be466aaeea51fb7966df7506b2988ee090de4d79156a285eebc928b917991fa3",
+    "rust": {
+      "file": "crates/tea/src/idempotency.rs",
+      "symbols": ["demlik_tea::idempotency::seen"]
+    },
+    "cases": [
+      "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "policies.idempotency-capacity-zero",
+      "policies.idempotency-injected-prototype-coercion-and-reset",
+      "policies.idempotency-own-prototype-key-overwrite",
+      "policies.idempotency-null-projection-presence-and-recall-differ"
+    ]
+  },
+  "@demlik/tea:./idempotency#recall": {
+    "signature": "f04424439e2440179d8116b34ae21b7e49db8b288a28273b51cfcc8739d7959e",
+    "rust": {
+      "file": "crates/tea/src/idempotency.rs",
+      "symbols": ["demlik_tea::idempotency::recall"]
+    },
+    "cases": [
+      "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "policies.idempotency-capacity-zero",
+      "policies.idempotency-injected-prototype-coercion-and-reset",
+      "policies.idempotency-own-prototype-key-overwrite",
+      "policies.idempotency-null-projection-presence-and-recall-differ"
+    ]
+  },
+  "@demlik/tea:./idempotency#evictExpired": {
+    "signature": "1064faf57b7ec38680b62717ce6055eca0b25c315a81075d95d9380c627c0d88",
+    "rust": {
+      "file": "crates/tea/src/idempotency.rs",
+      "symbols": ["demlik_tea::idempotency::evict_expired"]
+    },
+    "cases": [
+      "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "policies.idempotency-injected-prototype-coercion-and-reset"
+    ]
+  },
+  "@demlik/tea:./idempotency#remember": {
+    "signature": "7b34ffcf21f587c7340164624fd68e419f31e92005bb0a0933a2fdfb34d61c54",
+    "rust": {
+      "file": "crates/tea/src/idempotency.rs",
+      "symbols": ["demlik_tea::idempotency::remember"]
+    },
+    "cases": [
+      "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "policies.idempotency-capacity-zero",
+      "policies.idempotency-injected-prototype-coercion-and-reset",
+      "policies.idempotency-own-prototype-key-overwrite",
+      "policies.idempotency-null-projection-presence-and-recall-differ"
+    ]
+  },
+  "@demlik/code-graph:./project#discoverPackageRoots": {
+    "signature": "df806ced264bcb8cbc2641d665f85a9e3135ae2953cb35f76cbc19f1203ba369",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::discover_package_roots"]
+    },
+    "cases": ["graph.project.walk-sources", "graph.project.shared-package-list"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#discoverPackageRoots": {
+    "signature": "210e64c2ebae7db7b814d55c4c95e5afafdbcb913bd071cc710965f26575d166",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::discover_package_roots"]
+    },
+    "cases": ["graph.project.walk-sources", "graph.project.shared-package-list"]
+  },
+  "@demlik/code-graph:./dist/project.js#discoverPackageRoots": {
+    "signature": "210e64c2ebae7db7b814d55c4c95e5afafdbcb913bd071cc710965f26575d166",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::discover_package_roots"]
+    },
+    "cases": ["graph.project.walk-sources", "graph.project.shared-package-list"]
+  },
+  "@demlik/code-graph:./project#findRepoRoot": {
+    "signature": "5e77ca7e17376b2cb81418f3e07f5468a097a268a14a60ee0394fdabdf723134",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::find_repo_root"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#findRepoRoot": {
+    "signature": "0600756d636d09d36f0000774ec5d583bcea2da9b731fa861bc48a69b82ea76d",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::find_repo_root"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/project.js#findRepoRoot": {
+    "signature": "0600756d636d09d36f0000774ec5d583bcea2da9b731fa861bc48a69b82ea76d",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::find_repo_root"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./project#listSourceFiles": {
+    "signature": "362c11eca844c51277b4b578beefa2b30ca8e0362cd855b4348e7c34fafc1e8d",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_source_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#listSourceFiles": {
+    "signature": "8ad625f71a829741a2824ef065e0df12b92e0fefce29a0509b32eee7a7d29d9a",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_source_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/project.js#listSourceFiles": {
+    "signature": "8ad625f71a829741a2824ef065e0df12b92e0fefce29a0509b32eee7a7d29d9a",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_source_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./project#listVisibleFiles": {
+    "signature": "432813b72a006d24cec80cfc3e117f1231a1f5a74a02e868e33502283fa26936",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_visible_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#listVisibleFiles": {
+    "signature": "f01ea73b15f0e6a5834268ecb85349f8d0573c709def4bc9a7ad83c5977344f4",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_visible_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./dist/project.js#listVisibleFiles": {
+    "signature": "f01ea73b15f0e6a5834268ecb85349f8d0573c709def4bc9a7ad83c5977344f4",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_visible_files"]
+    },
+    "cases": [
+      "graph.project.walk-sources",
+      "graph.project.git-visible",
+      "graph.project.missing-directory"
+    ]
+  },
+  "@demlik/code-graph:./project#resolveEdgeTsConfig": {
+    "signature": "209e07e0b284ac66e4d0221b2e2fc50e74da243ba49dc72139ad6ad3eee062d6",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::resolve_edge_ts_config"]
+    },
+    "cases": [
+      "graph.project.package-config",
+      "graph.project.deep-config",
+      "graph.project.missing-edge-config"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#resolveEdgeTsConfig": {
+    "signature": "dae144a5435d406723733e867dd8f63e8ae07f3486bc90ce23121739e499471d",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::resolve_edge_ts_config"]
+    },
+    "cases": [
+      "graph.project.package-config",
+      "graph.project.deep-config",
+      "graph.project.missing-edge-config"
+    ]
+  },
+  "@demlik/code-graph:./dist/project.js#resolveEdgeTsConfig": {
+    "signature": "dae144a5435d406723733e867dd8f63e8ae07f3486bc90ce23121739e499471d",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::resolve_edge_ts_config"]
+    },
+    "cases": [
+      "graph.project.package-config",
+      "graph.project.deep-config",
+      "graph.project.missing-edge-config"
+    ]
+  },
+  "@demlik/code-graph:./project#toRelative": {
+    "signature": "7b944233f1c05a9bab91019b58fc563d6df2c84a1163af50372842a613a71346",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::to_relative"]
+    },
+    "cases": ["graph.project.lexical-relative"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#toRelative": {
+    "signature": "8dcb29f454afe30fb7e884f524b7c438a523c9324381cb59b5083b32efdb6694",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::to_relative"]
+    },
+    "cases": ["graph.project.lexical-relative"]
+  },
+  "@demlik/code-graph:./dist/project.js#toRelative": {
+    "signature": "8dcb29f454afe30fb7e884f524b7c438a523c9324381cb59b5083b32efdb6694",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::to_relative"]
+    },
+    "cases": ["graph.project.lexical-relative"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#findNearestTsConfig": {
+    "signature": "7ab03e37c5a7066a20d5c555c051d624e4c9dc2c93159ff66860c3df0346e913",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::find_nearest_tsconfig"]
+    },
+    "cases": ["graph.project.walk-sources", "graph.project.shared-package-list"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#listRepo": {
+    "signature": "3f8ffe29160b53ad18f4ec6014166dba6c64b57443c075ce2b3cc2c6b9197c9e",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::list_repo"]
+    },
+    "cases": ["graph.project.shared-package-list", "graph.project.git-visible"]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#createModuleResolver": {
+    "signature": "47e2010de9cfadbcc0c33214fa7a45426576d57b3af611652f9f197168a19735",
+    "rust": {
+      "file": "crates/code-graph/src/engine/oxc.rs",
+      "symbols": [
+        "demlik_code_graph::engine::oxc::create_module_resolver",
+        "demlik_code_graph::engine::oxc::ModuleResolver::resolve"
+      ]
+    },
+    "cases": [
+      "graph.project.explicit-resolution",
+      "graph.project.missing-tsconfig",
+      "graph.project.malformed-tsconfig"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#createNearestTsconfigResolver": {
+    "signature": "1eebec2528d0d5f36b065c50f2a1c0e846df8597dcd31f742f1feb90eda00073",
+    "rust": {
+      "file": "crates/code-graph/src/engine/oxc.rs",
+      "symbols": [
+        "demlik_code_graph::engine::oxc::create_nearest_tsconfig_resolver",
+        "demlik_code_graph::engine::oxc::NearestTsconfigResolver::resolve",
+        "demlik_code_graph::engine::oxc::NearestTsconfigResolver::locate"
+      ]
+    },
+    "cases": [
+      "graph.project.nearest-resolution",
+      "graph.project.references-workspace"
+    ]
+  },
+  "@demlik/code-graph:./resolve#loadInProcessGraph": {
+    "signature": "10f3cdeedc62dc7d7cc41f353557c7353cbac7147ae024fb9186d82dd5f5a298",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": ["demlik_code_graph::resolve::load_in_process_graph"]
+    },
+    "cases": [
+      "graph.semantic.barrel-origins",
+      "graph.semantic.program-isolation",
+      "graph.semantic.missing-config"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-A3CG23AL.js#loadInProcessGraph": {
+    "signature": "f15303bba1704ccc378ae94a17915c7bc3090bd1d63ac5a4878b83471e4ed333",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": ["demlik_code_graph::resolve::load_in_process_graph"]
+    },
+    "cases": [
+      "graph.semantic.barrel-origins",
+      "graph.semantic.program-isolation",
+      "graph.semantic.missing-config"
+    ]
+  },
+  "@demlik/code-graph:./dist/resolve.js#loadInProcessGraph": {
+    "signature": "f15303bba1704ccc378ae94a17915c7bc3090bd1d63ac5a4878b83471e4ed333",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": ["demlik_code_graph::resolve::load_in_process_graph"]
+    },
+    "cases": [
+      "graph.semantic.barrel-origins",
+      "graph.semantic.program-isolation",
+      "graph.semantic.missing-config"
+    ]
+  },
+  "@demlik/code-graph:./resolve#InProcessGraph/member:published:60c0c0b2adf74ef36eb03ff24e52a18e4e82ee15074192da81394ad6f5dc9723": {
+    "signature": "60c0c0b2adf74ef36eb03ff24e52a18e4e82ee15074192da81394ad6f5dc9723",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": [
+        "demlik_code_graph::resolve::InProcessGraph::resolve_export_origin"
+      ]
+    },
+    "cases": [
+      "graph.semantic.barrel-origins",
+      "graph.semantic.program-isolation"
+    ]
+  },
+  "@demlik/code-graph:./resolve#InProcessGraph/member:published:7de0658e0df9cdcdbe6b41fa40c6a9429890d5779c39d32a5f90ab5e4596bd4f": {
+    "signature": "7de0658e0df9cdcdbe6b41fa40c6a9429890d5779c39d32a5f90ab5e4596bd4f",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": [
+        "demlik_code_graph::resolve::InProcessGraph::resolve_module_export"
+      ]
+    },
+    "cases": [
+      "graph.semantic.declaration-names-lines",
+      "graph.semantic.disposal"
+    ]
+  },
+  "@demlik/code-graph:./resolve#InProcessGraph/member:published:3ffa28ece0d86da66aeec4ee61abafbb92e2cd2500a06efc949cacbed628d1a1": {
+    "signature": "3ffa28ece0d86da66aeec4ee61abafbb92e2cd2500a06efc949cacbed628d1a1",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": [
+        "demlik_code_graph::resolve::InProcessGraph::resolve_publishing_subpaths"
+      ]
+    },
+    "cases": ["graph.semantic.barrel-origins", "graph.semantic.disposal"]
+  },
+  "@demlik/code-graph:./resolve#InProcessGraph/member:published:b1b3706f772c667ea991ce4300bfa53af10f80338a1064f5c07388c315b08174": {
+    "signature": "b1b3706f772c667ea991ce4300bfa53af10f80338a1064f5c07388c315b08174",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": ["demlik_code_graph::resolve::InProcessGraph::dispose"]
+    },
+    "cases": ["graph.semantic.disposal", "graph.semantic.dispose-before-lookup"]
+  },
+  "@demlik/code-graph:./resolve#InProcessGraph": {
+    "signature": "9f19fc3859682e71601b7ac638d0dcc865c7c841cd155c7f7d67f29333bb5a0b",
+    "rust": {
+      "file": "crates/code-graph/src/resolve.rs",
+      "symbols": [
+        "demlik_code_graph::resolve::InProcessGraph::resolve_export_origin",
+        "demlik_code_graph::resolve::InProcessGraph::resolve_module_export",
+        "demlik_code_graph::resolve::InProcessGraph::resolve_publishing_subpaths",
+        "demlik_code_graph::resolve::InProcessGraph::dispose"
+      ]
+    },
+    "cases": ["graph.semantic.barrel-origins", "graph.semantic.disposal"]
   }
 }

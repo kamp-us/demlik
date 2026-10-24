@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
+import { graphParity } from "./graph.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -139,6 +140,22 @@ for (let index = 0; index < cases.length; index++) {
     });
   }
 }
+const differentialFailures = failures.length;
+let graph = {
+  passed: 0,
+  rejectedInvalidInputs: 0,
+  suites: [],
+  nativeEvidence: {},
+};
+try {
+  graph = await graphParity(cargo);
+} catch (error) {
+  failures.push({
+    id: "graph.verification",
+    operation: "code_graph.project-and-semantics",
+    message: error.message,
+  });
+}
 const report = {
   scope: "implemented operations only; full port is incomplete",
   reference: scope.reference,
@@ -157,23 +174,32 @@ const report = {
   cargoLockSha256: createHash("sha256")
     .update(await readFile(path.join(root, "Cargo.lock")))
     .digest("hex"),
-  cases: cases.length,
-  passed: cases.length - failures.length,
+  cases: cases.length + graph.passed + failures.length - differentialFailures,
+  passed: cases.length + graph.passed - differentialFailures,
   failures,
-  operations: [...new Set(cases.map((test) => test.operation))],
+  operations: [
+    ...new Set([
+      ...cases.map((test) => test.operation),
+      ...graph.suites.map((suite) => `code_graph.${suite.name}`),
+    ]),
+  ],
+  graph: { ...graph, nativeEvidence: undefined },
   rustBinarySha256: createHash("sha256")
     .update(await readFile(binary))
     .digest("hex"),
   generatedSeed: 0x5eed1234,
   policyGeneratedSeed: POLICY_SEED,
-  nativeEvidence: Object.fromEntries(
-    cases.map((test, index) => [
-      test.id,
-      failures.some((failure) => failure.id === test.id)
-        ? []
-        : (rust[index].observedCalls ?? []),
-    ]),
-  ),
+  nativeEvidence: {
+    ...Object.fromEntries(
+      cases.map((test, index) => [
+        test.id,
+        failures.some((failure) => failure.id === test.id)
+          ? []
+          : (rust[index].observedCalls ?? []),
+      ]),
+    ),
+    ...graph.nativeEvidence,
+  },
 };
 await mkdir(path.dirname(reportFile), { recursive: true });
 if (args.includes("--complete")) {

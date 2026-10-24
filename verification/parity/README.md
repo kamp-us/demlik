@@ -7,6 +7,10 @@ The implementations live beside each other in `packages/` and `crates/`.
 1. Install dependencies with `pnpm install --frozen-lockfile` and `cargo fetch --locked`.
 2. Run `pnpm parity` to compare the implemented operations. Results are written to
    `target/parity/report.json`; every unsupported operation or driver error fails.
+   Graph project discovery and semantic resolution run against shared temporary
+   projects and the pinned native TypeScript compiler. Their reports are under
+   `target/parity/graph-*.json`. Deliberate invalid driver inputs are counted
+   separately from library behavior cases.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
    `target/parity/mutations.json`.

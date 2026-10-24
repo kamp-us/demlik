@@ -6,8 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 
-import { tsgoBinary } from "../../src/engine/tsgo.js";
-import { loadInProcessGraph } from "../../src/resolve.js";
+import { tsgoBinary } from "../../packages/code-graph/src/engine/tsgo.js";
+import { loadInProcessGraph } from "../../packages/code-graph/src/resolve.js";
 
 const stepSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -44,14 +44,18 @@ type Result = z.infer<typeof resultSchema>;
 const binary = process.argv[2];
 assert.ok(
   binary,
-  "usage: pnpm exec node --import tsx test/rust/semantic-resolution.ts <native-driver> [evidence.json]",
+  "usage: node --import tsx verification/parity/graph-semantic.mts <native-driver> [evidence.json]",
 );
 assert.equal(process.version, "v22.21.1");
 assert.ok(process.versions.v8.startsWith("12.4."));
 const compiler = await tsgoBinary();
 assert.equal(compiler.version, "7.0.0-dev.20260707.2");
-const manifest = createRequire(import.meta.url).resolve("@typescript/native-preview/package.json");
-const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "demlik-semantic-parity-")));
+const manifest = createRequire(
+  new URL("../../packages/code-graph/package.json", import.meta.url),
+).resolve("@typescript/native-preview/package.json");
+const root = fs.realpathSync(
+  fs.mkdtempSync(path.join(os.tmpdir(), "demlik-semantic-parity-")),
+);
 const cases: Case[] = [];
 const config = JSON.stringify({
   compilerOptions: {
@@ -72,21 +76,37 @@ function write(relative: string, text: string): string {
 }
 
 function add(id: string, input: Input): void {
-  cases.push({ id, operation: "code_graph.semantic", input: inputSchema.parse(input) });
+  cases.push({
+    id,
+    operation: "code_graph.semantic",
+    input: inputSchema.parse(input),
+  });
 }
 
 function reference(item: Case): Result {
   const input = inputSchema.parse(item.input);
-  const graph = loadInProcessGraph(input.root, { scope: input.scope, repoRoot: input.repoRoot });
+  const graph = loadInProcessGraph(input.root, {
+    scope: input.scope,
+    repoRoot: input.repoRoot,
+  });
   if (graph === null)
-    return { id: item.id, ok: true, output: { loaded: false, answers: [] }, observedCalls: [] };
+    return {
+      id: item.id,
+      ok: true,
+      output: { loaded: false, answers: [] },
+      observedCalls: [],
+    };
   try {
     const answers = input.steps.map((step) => {
       try {
         let answer: unknown;
         switch (step.kind) {
           case "origin":
-            answer = graph.resolveExportOrigin(step.fromFile, step.specifier, step.name);
+            answer = graph.resolveExportOrigin(
+              step.fromFile,
+              step.specifier,
+              step.name,
+            );
             break;
           case "module":
             answer = graph.resolveModuleExport(step.file, step.name);
@@ -101,10 +121,18 @@ function reference(item: Case): Result {
         }
         return { ok: true, answer };
       } catch (error) {
-        return { ok: false, error: { kind: "query_error", message: (error as Error).message } };
+        return {
+          ok: false,
+          error: { kind: "query_error", message: (error as Error).message },
+        };
       }
     });
-    return { id: item.id, ok: true, output: { loaded: true, answers }, observedCalls: [] };
+    return {
+      id: item.id,
+      ok: true,
+      output: { loaded: true, answers },
+      observedCalls: [],
+    };
   } finally {
     graph.dispose();
   }
@@ -124,22 +152,55 @@ try {
     "barrel/consumer.ts",
     "import { renamed } from './barrel';\nexport const value = renamed();\n",
   );
-  const global = write("barrel/global.ts", "declare const globalOnly: number;\n");
+  const global = write(
+    "barrel/global.ts",
+    "declare const globalOnly: number;\n",
+  );
   const absent = path.join(root, "barrel/absent.ts");
   add("barrel-origins", {
     root: path.dirname(origin),
     steps: [
-      { kind: "origin", fromFile: consumer, specifier: "./barrel", name: "renamed" },
-      { kind: "origin", fromFile: consumer, specifier: "./barrel", name: "default" },
+      {
+        kind: "origin",
+        fromFile: consumer,
+        specifier: "./barrel",
+        name: "renamed",
+      },
+      {
+        kind: "origin",
+        fromFile: consumer,
+        specifier: "./barrel",
+        name: "default",
+      },
       { kind: "module", file: barrel, name: "renamed" },
-      { kind: "origin", fromFile: barrel, specifier: "./origin", name: "realName" },
-      { kind: "origin", fromFile: consumer, specifier: "./missing", name: "renamed" },
-      { kind: "origin", fromFile: consumer, specifier: "./barrel", name: "absent" },
+      {
+        kind: "origin",
+        fromFile: barrel,
+        specifier: "./origin",
+        name: "realName",
+      },
+      {
+        kind: "origin",
+        fromFile: consumer,
+        specifier: "./missing",
+        name: "renamed",
+      },
+      {
+        kind: "origin",
+        fromFile: consumer,
+        specifier: "./barrel",
+        name: "absent",
+      },
       { kind: "module", file: global, name: "globalOnly" },
       { kind: "module", file: absent, name: "missing" },
       {
         kind: "publishing",
-        entries: { "./barrel": barrel, "./unpublished": global, "./missing": absent, ".": origin },
+        entries: {
+          "./barrel": barrel,
+          "./unpublished": global,
+          "./missing": absent,
+          ".": origin,
+        },
         name: "realName",
       },
     ],
@@ -176,7 +237,15 @@ try {
   add("declaration-names-lines", {
     root: path.dirname(declarations),
     steps: [
-      ...["run", "Merged", "bound", "__internal", "default", "π", "unicode-alias"].map((name) => ({
+      ...[
+        "run",
+        "Merged",
+        "bound",
+        "__internal",
+        "default",
+        "π",
+        "unicode-alias",
+      ].map((name) => ({
         kind: "module" as const,
         file: declarations,
         name,
@@ -216,20 +285,40 @@ try {
     "aliases/node_modules/typed-package/index.d.ts",
     "/** external API */\nexport declare const remote: number;\n",
   );
-  write("aliases/node_modules/typed-package/implementation.js", "export const remote = 2;\n");
+  write(
+    "aliases/node_modules/typed-package/implementation.js",
+    "export const remote = 2;\n",
+  );
   write(
     "aliases/node_modules/typed-package/package.json",
     JSON.stringify({
       name: "typed-package",
-      exports: { ".": { types: "./index.d.ts", import: "./implementation.js" } },
+      exports: {
+        ".": { types: "./index.d.ts", import: "./implementation.js" },
+      },
     }),
   );
   add("compiler-module-resolution", {
     root: path.join(root, "aliases"),
     steps: [
-      { kind: "origin", fromFile: aliasConsumer, specifier: "@app/value", name: "product" },
-      { kind: "origin", fromFile: aliasConsumer, specifier: "@app/value", name: "Product" },
-      { kind: "origin", fromFile: aliasConsumer, specifier: "typed-package", name: "remote" },
+      {
+        kind: "origin",
+        fromFile: aliasConsumer,
+        specifier: "@app/value",
+        name: "product",
+      },
+      {
+        kind: "origin",
+        fromFile: aliasConsumer,
+        specifier: "@app/value",
+        name: "Product",
+      },
+      {
+        kind: "origin",
+        fromFile: aliasConsumer,
+        specifier: "typed-package",
+        name: "remote",
+      },
       { kind: "module", file: typedPackage, name: "remote" },
       { kind: "module", file: aliasSource, name: "Product" },
     ],
@@ -248,9 +337,24 @@ try {
   add("program-isolation", {
     root: path.dirname(augmentation),
     steps: [
-      { kind: "origin", fromFile: augmentation, specifier: "./origin", name: "injected" },
-      { kind: "origin", fromFile: isolationConsumer, specifier: "./origin", name: "injected" },
-      { kind: "origin", fromFile: augmentation, specifier: "./origin", name: "injected" },
+      {
+        kind: "origin",
+        fromFile: augmentation,
+        specifier: "./origin",
+        name: "injected",
+      },
+      {
+        kind: "origin",
+        fromFile: isolationConsumer,
+        specifier: "./origin",
+        name: "injected",
+      },
+      {
+        kind: "origin",
+        fromFile: augmentation,
+        specifier: "./origin",
+        name: "injected",
+      },
     ],
   });
 
@@ -284,13 +388,19 @@ try {
   });
 
   write("malformed-config/tsconfig.json", '{ "compilerOptions": ');
-  const malformedConfigFile = write("malformed-config/entry.ts", "export const available = 1;\n");
+  const malformedConfigFile = write(
+    "malformed-config/entry.ts",
+    "export const available = 1;\n",
+  );
   add("malformed-config-behavior", {
     root: path.dirname(malformedConfigFile),
     steps: [{ kind: "module", file: malformedConfigFile, name: "available" }],
   });
   write("malformed-source/tsconfig.json", "{}");
-  const malformedSource = write("malformed-source/entry.ts", "export function broken( {\n");
+  const malformedSource = write(
+    "malformed-source/entry.ts",
+    "export function broken( {\n",
+  );
   add("malformed-source-behavior", {
     root: path.dirname(malformedSource),
     steps: [
@@ -316,29 +426,57 @@ try {
   });
 
   write("surrogate/tsconfig.json", "{}");
-  const surrogateOrigin = write("surrogate/origin.ts", "export const value = 1;\n");
+  const surrogateOrigin = write(
+    "surrogate/origin.ts",
+    "export const value = 1;\n",
+  );
   const surrogateConsumer = write(
     "surrogate/consumer.ts",
     "import unused from '\\ud800';\nimport { value } from './origin';\nexport const result = value;\n",
   );
   add("unpaired-surrogate-specifier", {
     root: path.dirname(surrogateOrigin),
-    steps: [{ kind: "origin", fromFile: surrogateConsumer, specifier: "./origin", name: "value" }],
+    steps: [
+      {
+        kind: "origin",
+        fromFile: surrogateConsumer,
+        specifier: "./origin",
+        name: "value",
+      },
+    ],
   });
 
   const expected = cases.map(reference);
   const graphOutput = z.object({
     loaded: z.boolean(),
-    answers: z.array(z.object({ ok: z.boolean(), answer: z.unknown().optional() })),
+    answers: z.array(
+      z.object({ ok: z.boolean(), answer: z.unknown().optional() }),
+    ),
   });
   const first = graphOutput.parse(expected[0].output);
   assert.deepEqual(first.answers[0].answer, { file: origin, name: "realName" });
   assert.deepEqual(first.answers[1].answer, { file: origin, name: "default" });
-  assert.deepEqual(first.answers[2].answer, { file: origin, name: "realName", line: 2 });
+  assert.deepEqual(first.answers[2].answer, {
+    file: origin,
+    name: "realName",
+    line: 2,
+  });
   const named = graphOutput.parse(expected[1].output);
-  assert.deepEqual(named.answers[0].answer, { file: declarations, name: "run", line: 5 });
-  assert.deepEqual(named.answers[1].answer, { file: declarations, name: "Merged", line: 8 });
-  assert.deepEqual(named.answers[4].answer, { file: declarations, name: "Named", line: 12 });
+  assert.deepEqual(named.answers[0].answer, {
+    file: declarations,
+    name: "run",
+    line: 5,
+  });
+  assert.deepEqual(named.answers[1].answer, {
+    file: declarations,
+    name: "Merged",
+    line: 8,
+  });
+  assert.deepEqual(named.answers[4].answer, {
+    file: declarations,
+    name: "Named",
+    line: 12,
+  });
 
   const invalid = [
     '{"id":"missing-input","operation":"code_graph.semantic","input":{}}',
@@ -370,7 +508,11 @@ try {
     const { observedCalls: _actualCalls, ...actualResult } = actual[index];
     assert.deepEqual(actualResult, expectedResult, cases[index].id);
     assert.ok(actual[index].observedCalls.length > 0);
-    assert.ok(actual[index].observedCalls.every((name) => name.startsWith("demlik_code_graph::")));
+    assert.ok(
+      actual[index].observedCalls.every((name) =>
+        name.startsWith("demlik_code_graph::"),
+      ),
+    );
   }
   for (const answer of actual.slice(cases.length)) {
     assert.equal(answer.ok, false);
@@ -387,23 +529,34 @@ try {
     "javascript",
   ]) {
     assert.ok(
-      fs.readdirSync(path.join(root, directory)).every((file) => !file.startsWith(".code-graph-")),
+      fs
+        .readdirSync(path.join(root, directory))
+        .every((file) => !file.startsWith(".code-graph-")),
       "virtual configs must not be written to the source tree",
     );
   }
   const graphCalls = actual
     .flatMap((answer) => answer.observedCalls)
-    .filter((name) => name.startsWith("demlik_code_graph::resolve::InProcessGraph::"));
+    .filter((name) =>
+      name.startsWith("demlik_code_graph::resolve::InProcessGraph::"),
+    );
   const evidence = {
-    reference: { node: process.version, v8: process.versions.v8, nativeCompiler: compiler },
+    reference: {
+      node: process.version,
+      v8: process.versions.v8,
+      nativeCompiler: compiler,
+    },
     passed: cases.length,
     steps: graphCalls.length,
     queries: graphCalls.filter((name) => !name.endsWith("::dispose")).length,
     rejectedInvalidInputs: invalid.length,
-    nativeApis: [...new Set(actual.flatMap((answer) => answer.observedCalls))].sort(),
+    nativeApis: [
+      ...new Set(actual.flatMap((answer) => answer.observedCalls)),
+    ].sort(),
     cases: actual,
   };
-  if (process.argv[3]) fs.writeFileSync(process.argv[3], `${JSON.stringify(evidence, null, 2)}\n`);
+  if (process.argv[3])
+    fs.writeFileSync(process.argv[3], `${JSON.stringify(evidence, null, 2)}\n`);
   console.log(JSON.stringify({ ...evidence, cases: undefined }, null, 2));
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

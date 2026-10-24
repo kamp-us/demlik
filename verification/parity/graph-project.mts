@@ -5,8 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 
-import { createModuleResolver, createNearestTsconfigResolver } from "../../src/engine/oxc.js";
-import { findNearestTsConfig, listRepo } from "../../src/extract/project.js";
+import {
+  createModuleResolver,
+  createNearestTsconfigResolver,
+} from "../../packages/code-graph/src/engine/oxc.js";
+import {
+  findNearestTsConfig,
+  listRepo,
+} from "../../packages/code-graph/src/extract/project.js";
 import {
   discoverPackageRoots,
   findRepoRoot,
@@ -14,7 +20,7 @@ import {
   listVisibleFiles,
   resolveEdgeTsConfig,
   toRelative,
-} from "../../src/project.js";
+} from "../../packages/code-graph/src/project.js";
 
 type Case = { id: string; operation: string; input: Record<string, unknown> };
 type Answer = {
@@ -46,11 +52,17 @@ const resolverInput = z.object({
 const binary = process.argv[2];
 assert.ok(
   binary,
-  "usage: pnpm exec tsx test/rust/project-resolution.ts <native-driver> [evidence.json]",
+  "usage: node --import tsx verification/parity/graph-project.mts <native-driver> [evidence.json]",
 );
-assert.equal(process.version, "v22.21.1", "use the agreed Node 22.21.1 reference");
+assert.equal(
+  process.version,
+  "v22.21.1",
+  "use the agreed Node 22.21.1 reference",
+);
 assert.ok(process.versions.v8.startsWith("12.4."));
-const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "demlik-project-parity-")));
+const root = fs.realpathSync(
+  fs.mkdtempSync(path.join(os.tmpdir(), "demlik-project-parity-")),
+);
 const cases: Case[] = [];
 
 function write(relative: string, body = "export {};\n"): void {
@@ -69,7 +81,9 @@ function reference(item: Case): Answer {
         const listing = input.sharedListing ? listRepo(input.root) : undefined;
         output = {
           visible: listVisibleFiles(selected, () => true, listing),
-          sources: listSourceFiles(selected).map((file) => toRelative(selected, file)),
+          sources: listSourceFiles(selected).map((file) =>
+            toRelative(selected, file),
+          ),
           packageRoots: discoverPackageRoots(selected, listing),
           repoRoot: findRepoRoot(selected),
           nearestTsConfig: findNearestTsConfig(selected),
@@ -87,7 +101,9 @@ function reference(item: Case): Answer {
         break;
       }
       case "code_graph.resolve.module": {
-        const input = resolverInput.extend({ tsConfigPath: z.string() }).parse(item.input);
+        const input = resolverInput
+          .extend({ tsConfigPath: z.string() })
+          .parse(item.input);
         const resolver = createModuleResolver(input.tsConfigPath);
         output = {
           resolutions: input.specifiers.map((specifier: string) =>
@@ -152,21 +168,37 @@ try {
   write("walk/tsconfig.json", "{}");
   write("walk/packages/app/tsconfig.json", "{}");
   cases.push(
-    { id: "walk-sources", operation: "code_graph.project.list", input: { root: walk } },
+    {
+      id: "walk-sources",
+      operation: "code_graph.project.list",
+      input: { root: walk },
+    },
     {
       id: "shared-package-list",
       operation: "code_graph.project.list",
-      input: { root: walk, scope: path.join(walk, "packages/app"), sharedListing: true },
+      input: {
+        root: walk,
+        scope: path.join(walk, "packages/app"),
+        sharedListing: true,
+      },
     },
     {
       id: "package-config",
       operation: "code_graph.project.config",
-      input: { root: path.join(walk, "packages/app/src"), repoRoot: walk, scope: "package" },
+      input: {
+        root: path.join(walk, "packages/app/src"),
+        repoRoot: walk,
+        scope: "package",
+      },
     },
     {
       id: "deep-config",
       operation: "code_graph.project.config",
-      input: { root: path.join(walk, "packages/app/src"), repoRoot: walk, scope: "deep" },
+      input: {
+        root: path.join(walk, "packages/app/src"),
+        repoRoot: walk,
+        scope: "deep",
+      },
     },
     {
       id: "lexical-relative",
@@ -179,7 +211,12 @@ try {
   );
 
   const git = path.join(root, "git");
-  for (const file of ["src/kept.ts", "coverage/visible.ts", "ignored/leak.ts", "gone.ts"])
+  for (const file of [
+    "src/kept.ts",
+    "coverage/visible.ts",
+    "ignored/leak.ts",
+    "gone.ts",
+  ])
     write(`git/${file}`);
   write("git/.gitignore", "ignored/\n");
   execFileSync("git", ["init", "-q"], { cwd: git });
@@ -192,7 +229,10 @@ try {
   });
 
   const resolver = path.join(root, "resolution");
-  write("resolution/tsconfig.json", '{ "extends": "./base.json", "include": ["src"] }');
+  write(
+    "resolution/tsconfig.json",
+    '{ "extends": "./base.json", "include": ["src"] }',
+  );
   write(
     "resolution/base.json",
     '{ // inherited JSONC\n "compilerOptions": { "baseUrl": ".", "paths": { "@app/*": ["src/*"] } },\n }',
@@ -214,7 +254,11 @@ try {
     JSON.stringify({
       name: "widget",
       exports: {
-        ".": { types: "./types/index.d.ts", import: "./esm/index.js", default: "./esm/index.js" },
+        ".": {
+          types: "./types/index.d.ts",
+          import: "./esm/index.js",
+          default: "./esm/index.js",
+        },
         "./feature": "./src/feature.ts",
       },
     }),
@@ -238,7 +282,11 @@ try {
     {
       id: "explicit-resolution",
       operation: "code_graph.resolve.module",
-      input: { fromFile, tsConfigPath: path.join(resolver, "tsconfig.json"), specifiers },
+      input: {
+        fromFile,
+        tsConfigPath: path.join(resolver, "tsconfig.json"),
+        specifiers,
+      },
     },
     {
       id: "nearest-resolution",
@@ -275,7 +323,9 @@ try {
     '{ "name": "@work/lib", "exports": { ".": "./src/index.ts" } }',
   );
   write("references/packages/lib/src/index.ts");
-  fs.mkdirSync(path.join(root, "references/node_modules/@work"), { recursive: true });
+  fs.mkdirSync(path.join(root, "references/node_modules/@work"), {
+    recursive: true,
+  });
   fs.symlinkSync(
     path.join(root, "references/packages/lib"),
     path.join(root, "references/node_modules/@work/lib"),
@@ -307,7 +357,10 @@ try {
     {
       id: "malformed-nearest",
       operation: "code_graph.resolve.nearest",
-      input: { fromFile: path.join(root, "malformed/src/main.ts"), specifiers: ["./target"] },
+      input: {
+        fromFile: path.join(root, "malformed/src/main.ts"),
+        specifiers: ["./target"],
+      },
     },
     {
       id: "missing-directory",
@@ -356,14 +409,20 @@ try {
   );
   const resolvedAnswer = z
     .object({ resolutions: z.array(z.string().nullable()) })
-    .parse(references.find((answer) => answer.id === "explicit-resolution")?.output);
+    .parse(
+      references.find((answer) => answer.id === "explicit-resolution")?.output,
+    );
   assert.deepEqual(walkAnswer.sources, expectedSources);
   assert.deepEqual(gitAnswer.sources, ["coverage/visible.ts", "src/kept.ts"]);
-  assert.deepEqual(walkAnswer.packageRoots, ["", "packages/app", "packages/lib"]);
+  assert.deepEqual(walkAnswer.packageRoots, [
+    "",
+    "packages/app",
+    "packages/lib",
+  ]);
   assert.deepEqual(
     resolvedAnswer.resolutions.slice(0, 4),
-    ["src/helper.ts", "src/helper.ts", "src/view.tsx", "src/module.mts"].map((file) =>
-      path.join(resolver, file),
+    ["src/helper.ts", "src/helper.ts", "src/view.tsx", "src/module.mts"].map(
+      (file) => path.join(resolver, file),
     ),
   );
 
@@ -389,8 +448,15 @@ try {
     const { observedCalls: _actualCalls, ...actualResult } = actual;
     const { observedCalls: _expectedCalls, ...expectedResult } = expected;
     assert.deepEqual(actualResult, expectedResult, cases[index].id);
-    assert.ok(actual.observedCalls.length > 0, `${actual.id}: no native calls observed`);
-    assert.ok(actual.observedCalls.every((name) => name.startsWith("demlik_code_graph::")));
+    assert.ok(
+      actual.observedCalls.length > 0,
+      `${actual.id}: no native calls observed`,
+    );
+    assert.ok(
+      actual.observedCalls.every((name) =>
+        name.startsWith("demlik_code_graph::"),
+      ),
+    );
   }
   for (const answer of answers.slice(cases.length)) {
     assert.equal(answer.ok, false);
@@ -405,10 +471,13 @@ try {
     },
     passed: cases.length,
     rejectedInvalidInputs: invalid.length,
-    nativeApis: [...new Set(answers.flatMap((answer) => answer.observedCalls))].sort(),
+    nativeApis: [
+      ...new Set(answers.flatMap((answer) => answer.observedCalls)),
+    ].sort(),
     cases: answers,
   };
-  if (process.argv[3]) fs.writeFileSync(process.argv[3], `${JSON.stringify(evidence, null, 2)}\n`);
+  if (process.argv[3])
+    fs.writeFileSync(process.argv[3], `${JSON.stringify(evidence, null, 2)}\n`);
   console.log(JSON.stringify({ ...evidence, cases: undefined }, null, 2));
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
