@@ -1,5 +1,8 @@
 //! OXC module resolution using the same pinned engine and options as TypeScript.
 
+mod parser;
+pub use parser::{ParseFailure, parse_type_script};
+
 use std::path::{Path, PathBuf};
 
 pub use oxc_resolver::ResolveError;

@@ -3,7 +3,7 @@ name = "demlik-code-graph"
 description = "Source analysis, graph queries and architecture rules."
 version.workspace = true
 edition.workspace = true
-rust-version = "1.95"
+rust-version = "1.96"
 repository.workspace = true
 license = "Apache-2.0"
 
@@ -11,5 +11,10 @@ license = "Apache-2.0"
 indexmap.workspace = true
 icu_collator = "=2.1.1"
 oxc_resolver = "=11.24.2"
+oxc_allocator = "=0.151.0"
+oxc_ast = { version = "=0.151.0", features = ["serialize"] }
+oxc_ast_visit = { version = "=0.151.0", features = ["serialize"] }
+oxc_parser = "=0.151.0"
+oxc_span = "=0.151.0"
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }

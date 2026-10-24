@@ -4,14 +4,21 @@ use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::rc::Rc;
 use std::sync::LazyLock;
 
+use crate::engine::oxc::{ParseFailure, parse_type_script};
+use crate::syntax::SyntaxFile;
 use icu_collator::{Collator, CollatorBorrowed};
 
 static FILE_COLLATOR: LazyLock<CollatorBorrowed<'static>> = LazyLock::new(|| {
     Collator::try_new(Default::default(), Default::default())
         .expect("compiled root collation is available")
 });
+
+pub(crate) fn locale_compare(left: &str, right: &str) -> std::cmp::Ordering {
+    FILE_COLLATOR.compare(left, right)
+}
 
 const WALK_PRUNE: &[&str] = &[
     ".claude",
@@ -272,4 +279,89 @@ pub fn find_repo_root(start: &Path) -> PathBuf {
         .find(|directory| directory.join("pnpm-workspace.yaml").exists())
         .unwrap_or(start)
         .to_path_buf()
+}
+
+#[derive(Debug)]
+pub struct SourceUnit {
+    pub absolute_path: PathBuf,
+    pub file: String,
+    pub syntax: SyntaxFile,
+}
+
+#[derive(Debug)]
+pub struct LoadedProject {
+    pub root_absolute: PathBuf,
+    pub source_files: Vec<Rc<SourceUnit>>,
+    pub parse_failures: Vec<String>,
+}
+
+pub fn load_cheap_project(
+    root: &Path,
+    listing: Option<&RepoListing>,
+) -> Result<LoadedProject, ParseFailure> {
+    let mut source_files = Vec::new();
+    let mut parse_failures = Vec::new();
+    for file in list_visible_files(root, source_file, listing) {
+        let absolute_path = root.join(&file);
+        let Ok(bytes) = fs::read(&absolute_path) else {
+            parse_failures.push(file);
+            continue;
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+        match parse_type_script(&absolute_path, text) {
+            Ok(syntax) => source_files.push(Rc::new(SourceUnit {
+                absolute_path,
+                file,
+                syntax,
+            })),
+            Err(ParseFailure::Syntax(_)) => parse_failures.push(file),
+            Err(error) => return Err(error),
+        }
+    }
+    parse_failures.sort_by(|left, right| FILE_COLLATOR.compare(left, right));
+    Ok(LoadedProject {
+        root_absolute: root.to_path_buf(),
+        source_files,
+        parse_failures,
+    })
+}
+
+#[derive(Debug)]
+pub struct LoadedEdgeProject {
+    pub project: LoadedProject,
+    pub ts_config_path: PathBuf,
+    pub scope: EdgeScope,
+}
+
+#[derive(Debug)]
+pub enum ProjectLoadError {
+    MissingTsConfig(MissingTsConfig),
+    Parse(ParseFailure),
+}
+
+impl fmt::Display for ProjectLoadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingTsConfig(error) => error.fmt(formatter),
+            Self::Parse(error) => error.fmt(formatter),
+        }
+    }
+}
+impl std::error::Error for ProjectLoadError {}
+
+pub fn load_edge_project(
+    root: &Path,
+    scope: EdgeScope,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+) -> Result<LoadedEdgeProject, ProjectLoadError> {
+    let ts_config_path = resolve_edge_ts_config(root, scope, repo_root)
+        .map_err(ProjectLoadError::MissingTsConfig)?;
+    let project = load_cheap_project(root, listing).map_err(ProjectLoadError::Parse)?;
+    Ok(LoadedEdgeProject {
+        project,
+        ts_config_path,
+        scope,
+    })
 }
