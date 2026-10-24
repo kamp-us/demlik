@@ -14,3 +14,4 @@ pub mod schema;
 pub mod smells;
 pub mod syntax;
 pub mod text;
+pub mod validation;
