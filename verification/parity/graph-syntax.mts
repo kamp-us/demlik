@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { z as Zod } from "../../packages/code-graph/node_modules/zod/index.js";
+import { z } from "zod";
 
 import { discoverFunctions } from "../../packages/code-graph/src/extract/functions.js";
 import {
@@ -25,15 +24,12 @@ import {
 } from "../../packages/code-graph/src/syntax/file.js";
 import { functionHeader } from "../../packages/code-graph/src/syntax/headers.js";
 
-const { z }: { z: typeof Zod } = createRequire(
-  new URL("../../packages/code-graph/package.json", import.meta.url),
-)("zod");
 const inputSchema = z.object({
   root: z.string(),
   includeNodes: z.boolean().optional(),
   sharedListing: z.boolean().optional(),
 });
-type Input = Zod.infer<typeof inputSchema>;
+type Input = z.infer<typeof inputSchema>;
 type Case = { id: string; operation: "code_graph.syntax"; input: Input };
 const resultSchema = z.object({
   id: z.string().nullable(),
@@ -45,7 +41,7 @@ const resultSchema = z.object({
 const binary = process.argv[2];
 assert.ok(
   binary,
-  "usage: pnpm --filter @demlik/code-graph exec node --import tsx ../../verification/parity/code-graph-syntax.ts <native-driver> [evidence.json]",
+  "usage: pnpm --filter @demlik/code-graph exec node --import tsx ../../verification/parity/graph-syntax.mts <native-driver> [evidence.json]",
 );
 assert.equal(process.version, "v22.21.1");
 assert.ok(process.versions.v8.startsWith("12.4."));
