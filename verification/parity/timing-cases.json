@@ -1,0 +1,4264 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "timing.debounce-edges-00",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": false,
+          "trailing": false
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-edges-01",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": false,
+          "trailing": true
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-edges-10",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": false
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-edges-11",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-lone",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-empty-tuple",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": []
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-flush-reopens",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "invoke",
+            "args": ["next"]
+          },
+          {
+            "op": "advance",
+            "to": 130
+          },
+          {
+            "op": "advance",
+            "to": 230
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-cancel-reopens",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "invoke",
+            "args": ["dropped"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "invoke",
+            "args": ["next"]
+          },
+          {
+            "op": "advance",
+            "to": 130
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-idle-controls",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-sustained",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [0]
+          },
+          {
+            "op": "advance",
+            "to": 20
+          },
+          {
+            "op": "invoke",
+            "args": [20]
+          },
+          {
+            "op": "advance",
+            "to": 70
+          },
+          {
+            "op": "invoke",
+            "args": [70]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": [110]
+          },
+          {
+            "op": "advance",
+            "to": 150
+          },
+          {
+            "op": "invoke",
+            "args": [150]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "invoke",
+            "args": [200]
+          },
+          {
+            "op": "advance",
+            "to": 400
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-reentrant-leading",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [2]
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-reentrant-trailing",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [3]
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-reentrant-trailing-flush",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [3]
+              },
+              {
+                "op": "flush"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-cancel-inside-callback",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "cancel"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "flush"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-leading-throw",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "throw",
+                "value": {
+                  "code": "HANDLER_FAILED",
+                  "detail": [1, 2]
+                }
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "invoke",
+            "args": [3]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-trailing-throw",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "throw",
+                "value": "trailing failed"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "invoke",
+            "args": [3]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-arm-failure-1",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true
+        },
+        "failArmAt": 1,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": ["after"]
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-arm-failure-2",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "options": {
+          "leading": true
+        },
+        "failArmAt": 2,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": ["after"]
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-negative",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": -100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-minuszero",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": {
+          "$number": "-0"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-zero",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 0,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-submillisecond",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 0.9,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-one",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 1,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-fraction",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 1.9,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-max",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 2147483647,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-over",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 2147483648,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-infinity",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": {
+          "$number": "Infinity"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-negative-infinity",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": {
+          "$number": "-Infinity"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-delay-nan",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": {
+          "$number": "NaN"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-edges-00",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": false,
+          "trailing": false
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-edges-01",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": false,
+          "trailing": true
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-edges-10",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": false
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-edges-11",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["c"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "advance",
+            "to": 260
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-lone",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-empty-tuple",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": []
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-flush-reopens",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "invoke",
+            "args": ["next"]
+          },
+          {
+            "op": "advance",
+            "to": 130
+          },
+          {
+            "op": "advance",
+            "to": 230
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-cancel-reopens",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "invoke",
+            "args": ["dropped"]
+          },
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "invoke",
+            "args": ["next"]
+          },
+          {
+            "op": "advance",
+            "to": 130
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-idle-controls",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-sustained",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [0]
+          },
+          {
+            "op": "advance",
+            "to": 20
+          },
+          {
+            "op": "invoke",
+            "args": [20]
+          },
+          {
+            "op": "advance",
+            "to": 70
+          },
+          {
+            "op": "invoke",
+            "args": [70]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": [110]
+          },
+          {
+            "op": "advance",
+            "to": 150
+          },
+          {
+            "op": "invoke",
+            "args": [150]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "invoke",
+            "args": [200]
+          },
+          {
+            "op": "advance",
+            "to": 400
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-reentrant-leading",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [2]
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-reentrant-trailing",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [3]
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-reentrant-trailing-flush",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "invoke",
+                "args": [3]
+              },
+              {
+                "op": "flush"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-cancel-inside-callback",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "cancel"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "flush"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-leading-throw",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 1,
+            "actions": [
+              {
+                "op": "throw",
+                "value": {
+                  "code": "HANDLER_FAILED",
+                  "detail": [1, 2]
+                }
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "invoke",
+            "args": [3]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-trailing-throw",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true,
+          "trailing": true
+        },
+        "reactions": [
+          {
+            "when": 2,
+            "actions": [
+              {
+                "op": "throw",
+                "value": "trailing failed"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "op": "invoke",
+            "args": [1]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": [2]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "invoke",
+            "args": [3]
+          },
+          {
+            "op": "advance",
+            "to": 200
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-arm-failure-1",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true
+        },
+        "failArmAt": 1,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": ["after"]
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-arm-failure-2",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "options": {
+          "leading": true
+        },
+        "failArmAt": 2,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["one"]
+          },
+          {
+            "op": "advance",
+            "to": 10
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "invoke",
+            "args": ["after"]
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-negative",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": -100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-minuszero",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": {
+          "$number": "-0"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-zero",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 0,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-submillisecond",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 0.9,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-one",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 1,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-fraction",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 1.9,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-max",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 2147483647,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-over",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 2147483648,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-infinity",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": {
+          "$number": "Infinity"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-negative-infinity",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": {
+          "$number": "-Infinity"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-delay-nan",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": {
+          "$number": "NaN"
+        },
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["a"]
+          },
+          {
+            "op": "invoke",
+            "args": ["b"]
+          },
+          {
+            "op": "advance",
+            "to": 3
+          },
+          {
+            "op": "flush"
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.debounce-worked-example",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "debounce",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["first"]
+          },
+          {
+            "op": "advance",
+            "to": 60
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 159
+          },
+          {
+            "op": "advance",
+            "to": 160
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      },
+      "expect": {
+        "fires": [
+          {
+            "at": 160,
+            "args": ["last"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.throttle-worked-example",
+      "operation": "timing.wrapper",
+      "input": {
+        "kind": "throttle",
+        "ms": 100,
+        "actions": [
+          {
+            "op": "invoke",
+            "args": ["first"]
+          },
+          {
+            "op": "advance",
+            "to": 40
+          },
+          {
+            "op": "invoke",
+            "args": ["last"]
+          },
+          {
+            "op": "advance",
+            "to": 100
+          },
+          {
+            "op": "advance",
+            "to": 200
+          }
+        ]
+      },
+      "expect": {
+        "fires": [
+          {
+            "at": 0,
+            "args": ["first"]
+          },
+          {
+            "at": 100,
+            "args": ["last"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-pass-through",
+      "operation": "timing.input",
+      "input": {
+        "config": {},
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": 1
+            },
+            "at": 10
+          },
+          {
+            "op": "flush",
+            "at": 99
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "roundTrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-half-open-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": 100
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "blocked",
+            "at": 99
+          },
+          {
+            "op": "input",
+            "value": "edge",
+            "at": 100
+          },
+          {
+            "op": "input",
+            "value": "regressed",
+            "at": 99
+          },
+          {
+            "op": "input",
+            "value": "next",
+            "at": 200
+          },
+          {
+            "op": "flush",
+            "at": 999
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-settle-last",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 50
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "last",
+            "at": 10
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 60
+          },
+          {
+            "op": "flush",
+            "at": 100
+          },
+          {
+            "op": "roundTrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-early-settle-message",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 100
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 1
+          },
+          {
+            "op": "subs"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-rate-floor",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": 100,
+          "debounceMs": 10
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 10
+          },
+          {
+            "op": "input",
+            "value": "last",
+            "at": 20
+          },
+          {
+            "op": "flush",
+            "at": 30
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 110
+          },
+          {
+            "op": "flush",
+            "at": 120
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-dedupe-null-and-half-open",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 50,
+          "cacheKey": "string"
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": null,
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 49
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 50
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 51
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-structured-explicit-key",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "field",
+          "field": "id"
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "one"
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "b",
+              "text": "two"
+            },
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "changed"
+            },
+            "at": 2
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "after"
+            },
+            "at": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-dedupe-before-pending",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 10,
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 10
+          },
+          {
+            "op": "input",
+            "value": "pending",
+            "at": 20
+          },
+          {
+            "op": "input",
+            "value": "cached",
+            "at": 21
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 30
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-reserved-cache-keys",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": "value",
+            "at": 2
+          },
+          {
+            "op": "input",
+            "value": "constructor",
+            "at": 3
+          },
+          {
+            "op": "input",
+            "value": "toString",
+            "at": 4
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-undefined-input",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "$undefined": true
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "$undefined": true
+            },
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": false,
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-nan-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": {
+            "$number": "NaN"
+          }
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "b",
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": "c",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "d",
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-infinite-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": {
+            "$number": "Infinity"
+          }
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "b",
+            "at": 100
+          },
+          {
+            "op": "input",
+            "value": "c",
+            "at": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "d",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-nan-settle",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": {
+            "$number": "NaN"
+          }
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.knob-zero-and-negative-settle",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": -1
+        },
+        "free": false,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": 1,
+            "at": 0
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-pass-through",
+      "operation": "timing.input",
+      "input": {
+        "config": {},
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": 1
+            },
+            "at": 10
+          },
+          {
+            "op": "flush",
+            "at": 99
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "roundTrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-half-open-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": 100
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "blocked",
+            "at": 99
+          },
+          {
+            "op": "input",
+            "value": "edge",
+            "at": 100
+          },
+          {
+            "op": "input",
+            "value": "regressed",
+            "at": 99
+          },
+          {
+            "op": "input",
+            "value": "next",
+            "at": 200
+          },
+          {
+            "op": "flush",
+            "at": 999
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-settle-last",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 50
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "last",
+            "at": 10
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 60
+          },
+          {
+            "op": "flush",
+            "at": 100
+          },
+          {
+            "op": "roundTrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-early-settle-message",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 100
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 1
+          },
+          {
+            "op": "subs"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-rate-floor",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": 100,
+          "debounceMs": 10
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 10
+          },
+          {
+            "op": "input",
+            "value": "last",
+            "at": 20
+          },
+          {
+            "op": "flush",
+            "at": 30
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 110
+          },
+          {
+            "op": "flush",
+            "at": 120
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-dedupe-null-and-half-open",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 50,
+          "cacheKey": "string"
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": null,
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 49
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 50
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": null,
+            "at": 51
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-structured-explicit-key",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "field",
+          "field": "id"
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "one"
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "b",
+              "text": "two"
+            },
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "changed"
+            },
+            "at": 2
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "id": "a",
+              "text": "after"
+            },
+            "at": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-dedupe-before-pending",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 10,
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "flush",
+            "at": 10
+          },
+          {
+            "op": "input",
+            "value": "pending",
+            "at": 20
+          },
+          {
+            "op": "input",
+            "value": "cached",
+            "at": 21
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 30
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-reserved-cache-keys",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": "value",
+            "at": 2
+          },
+          {
+            "op": "input",
+            "value": "constructor",
+            "at": 3
+          },
+          {
+            "op": "input",
+            "value": "toString",
+            "at": 4
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "__proto__",
+            "at": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-undefined-input",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 100,
+          "cacheKey": "string"
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "$undefined": true
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "$undefined": true
+            },
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": false,
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-nan-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": {
+            "$number": "NaN"
+          }
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "b",
+            "at": 1
+          },
+          {
+            "op": "input",
+            "value": "c",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "d",
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-infinite-rate",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "throttleMs": {
+            "$number": "Infinity"
+          }
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": "b",
+            "at": 100
+          },
+          {
+            "op": "input",
+            "value": "c",
+            "at": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": "d",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-nan-settle",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": {
+            "$number": "NaN"
+          }
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": 0
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.free-zero-and-negative-settle",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": -1
+        },
+        "free": true,
+        "id": "search:settle",
+        "actions": [
+          {
+            "op": "input",
+            "value": 1,
+            "at": 0
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.cache-ttl-88",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": -1,
+          "cacheKey": "json"
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 1
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.cache-ttl-89",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": 0,
+          "cacheKey": "json"
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 1
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.cache-ttl-90",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": {
+            "$number": "NaN"
+          },
+          "cacheKey": "json"
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 1
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.cache-ttl-91",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "cacheTtlMs": {
+            "$number": "Infinity"
+          },
+          "cacheKey": "json"
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 0
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 1
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "input",
+            "value": {
+              "a": 1
+            },
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.roundtrip-pending-nan",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 10
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": "a",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "subs"
+          },
+          {
+            "op": "flush",
+            "at": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.roundtrip-pending-undefined",
+      "operation": "timing.input",
+      "input": {
+        "config": {
+          "debounceMs": 10
+        },
+        "actions": [
+          {
+            "op": "input",
+            "value": {
+              "$undefined": true
+            },
+            "at": 0
+          },
+          {
+            "op": "roundTrip"
+          },
+          {
+            "op": "flush",
+            "at": 10
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-none",
+      "operation": "timing.deadline",
+      "input": {
+        "now": 100,
+        "mode": "none",
+        "list": [
+          {
+            "id": "late",
+            "atMs": 90
+          },
+          {
+            "id": "soon",
+            "atMs": 110,
+            "name": "search"
+          },
+          {
+            "id": "later",
+            "atMs": 200,
+            "name": ""
+          }
+        ],
+        "queries": [90, 100, 500],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 101
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-default",
+      "operation": "timing.deadline",
+      "input": {
+        "now": 100,
+        "mode": "default",
+        "list": [
+          {
+            "id": "late",
+            "atMs": 90
+          },
+          {
+            "id": "soon",
+            "atMs": 110,
+            "name": "search"
+          },
+          {
+            "id": "later",
+            "atMs": 200,
+            "name": ""
+          }
+        ],
+        "queries": [90, 100, 500],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 101
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-seam",
+      "operation": "timing.deadline",
+      "input": {
+        "now": 100,
+        "mode": "seam",
+        "list": [
+          {
+            "id": "late",
+            "atMs": 90
+          },
+          {
+            "id": "soon",
+            "atMs": 110,
+            "name": "search"
+          },
+          {
+            "id": "later",
+            "atMs": 200,
+            "name": ""
+          }
+        ],
+        "queries": [90, 100, 500],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 101
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-record",
+      "operation": "timing.deadline",
+      "input": {
+        "now": 100,
+        "mode": "record",
+        "list": [
+          {
+            "id": "late",
+            "atMs": 90
+          },
+          {
+            "id": "soon",
+            "atMs": 110,
+            "name": "search"
+          },
+          {
+            "id": "later",
+            "atMs": 200,
+            "name": ""
+          }
+        ],
+        "queries": [90, 100, 500],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 101
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-inline",
+      "operation": "timing.deadline",
+      "input": {
+        "now": 100,
+        "mode": "inline",
+        "list": [
+          {
+            "id": "late",
+            "atMs": 90
+          },
+          {
+            "id": "soon",
+            "atMs": 110,
+            "name": "search"
+          },
+          {
+            "id": "later",
+            "atMs": 200,
+            "name": ""
+          }
+        ],
+        "queries": [90, 100, 500],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 101
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "advance",
+            "to": 110
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 300
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-empty",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "default",
+        "list": [],
+        "queries": [0],
+        "actions": [
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "advance",
+            "to": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-stable-tie",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "first",
+            "atMs": 10
+          },
+          {
+            "id": "second",
+            "atMs": 10
+          }
+        ],
+        "queries": [0, 10, 20]
+      }
+    },
+    {
+      "id": "timing.deadline-nan-first",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "0",
+            "atMs": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "id": "1",
+            "atMs": -100
+          }
+        ],
+        "queries": [
+          0,
+          {
+            "$number": "NaN"
+          },
+          {
+            "$number": "Infinity"
+          }
+        ],
+        "mode": "default",
+        "actions": [
+          {
+            "op": "advance",
+            "to": 2
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-nan-later",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "0",
+            "atMs": 10
+          },
+          {
+            "id": "1",
+            "atMs": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "id": "2",
+            "atMs": 5
+          }
+        ],
+        "queries": [
+          0,
+          {
+            "$number": "NaN"
+          },
+          {
+            "$number": "Infinity"
+          }
+        ],
+        "mode": "default",
+        "actions": [
+          {
+            "op": "advance",
+            "to": 2
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-infinity",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "0",
+            "atMs": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "id": "1",
+            "atMs": 5
+          }
+        ],
+        "queries": [
+          0,
+          {
+            "$number": "NaN"
+          },
+          {
+            "$number": "Infinity"
+          }
+        ],
+        "mode": "default",
+        "actions": [
+          {
+            "op": "advance",
+            "to": 2
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-negative-infinity",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "0",
+            "atMs": {
+              "$number": "-Infinity"
+            }
+          },
+          {
+            "id": "1",
+            "atMs": 5
+          }
+        ],
+        "queries": [
+          0,
+          {
+            "$number": "NaN"
+          },
+          {
+            "$number": "Infinity"
+          }
+        ],
+        "mode": "default",
+        "actions": [
+          {
+            "op": "advance",
+            "to": 2
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-minus-zero",
+      "operation": "timing.deadline",
+      "input": {
+        "list": [
+          {
+            "id": "0",
+            "atMs": {
+              "$number": "-0"
+            }
+          },
+          {
+            "id": "1",
+            "atMs": 0
+          }
+        ],
+        "queries": [
+          0,
+          {
+            "$number": "NaN"
+          },
+          {
+            "$number": "Infinity"
+          }
+        ],
+        "mode": "default",
+        "actions": [
+          {
+            "op": "advance",
+            "to": 2
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-partial-arm-default",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "default",
+        "failArmAt": 2,
+        "list": [
+          {
+            "id": "a",
+            "atMs": 5
+          },
+          {
+            "id": "b",
+            "atMs": 10
+          },
+          {
+            "id": "c",
+            "atMs": 20
+          }
+        ],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-partial-arm-seam",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "seam",
+        "failArmAt": 2,
+        "list": [
+          {
+            "id": "a",
+            "atMs": 5
+          },
+          {
+            "id": "b",
+            "atMs": 10
+          },
+          {
+            "id": "c",
+            "atMs": 20
+          }
+        ],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-partial-arm-record",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "record",
+        "failArmAt": 2,
+        "list": [
+          {
+            "id": "a",
+            "atMs": 5
+          },
+          {
+            "id": "b",
+            "atMs": 10
+          },
+          {
+            "id": "c",
+            "atMs": 20
+          }
+        ],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-partial-arm-inline",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "inline",
+        "failArmAt": 2,
+        "list": [
+          {
+            "id": "a",
+            "atMs": 5
+          },
+          {
+            "id": "b",
+            "atMs": 10
+          },
+          {
+            "id": "c",
+            "atMs": 20
+          }
+        ],
+        "actions": [
+          {
+            "op": "advance",
+            "to": 30
+          },
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-cancel-failure-prefix",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "record",
+        "failCancelAt": 2,
+        "list": [
+          {
+            "id": "a",
+            "atMs": 5
+          },
+          {
+            "id": "b",
+            "atMs": 10
+          },
+          {
+            "id": "c",
+            "atMs": 20
+          }
+        ],
+        "actions": [
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "fire",
+            "index": 1
+          },
+          {
+            "op": "fire",
+            "index": 2
+          },
+          {
+            "op": "cancel"
+          },
+          {
+            "op": "fire",
+            "index": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "timing.deadline-utf16-id",
+      "operation": "timing.deadline",
+      "input": {
+        "mode": "record",
+        "list": [
+          {
+            "id": {
+              "$utf16": [55296]
+            },
+            "atMs": 10,
+            "name": "guard"
+          }
+        ],
+        "queries": [0],
+        "actions": [
+          {
+            "op": "fire",
+            "index": 0
+          },
+          {
+            "op": "cancel"
+          }
+        ]
+      }
+    }
+  ]
+}

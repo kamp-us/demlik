@@ -99,6 +99,17 @@ impl<E> JsRecord<E> {
             prototype: Prototype::Object,
         }
     }
+    /// Restore JSON's own entries without pretending their payloads have been
+    /// parsed as `E`. Reads retain JS coercion through the existing data path.
+    pub fn from_data(entries: IndexMap<JsText, PlainData>) -> Self {
+        Self {
+            own: entries
+                .into_iter()
+                .map(|(key, value)| (key, RecordValue::Data(value)))
+                .collect(),
+            prototype: Prototype::Object,
+        }
+    }
     pub fn own_entries(&self) -> impl Iterator<Item = (&JsText, &RecordValue<E>)> {
         self.own.iter()
     }

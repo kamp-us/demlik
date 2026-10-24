@@ -7,6 +7,9 @@
     "verify:complete": "node run.mjs --complete",
     "verify:mutations": "node mutations.mjs",
     "verify:storage-process": "node storage-process.mjs",
+    "verify:timing": "node timing-run.mjs",
+    "verify:timing:coverage": "node timing-coverage.mjs",
+    "verify:timing:mutations": "node timing-mutations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check .",
     "lint:worktree": "biome check ."
