@@ -10,12 +10,14 @@ import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { runtimeParity } from "./runtime.mjs";
+import { timingParity } from "./timing-run.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const args = process.argv.slice(2);
 const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
+const timingBinaryArgument = args.indexOf("--timing-bin");
 const reportArgument = args.indexOf("--report");
 const reportFile =
   reportArgument === -1
@@ -208,6 +210,30 @@ try {
     message: error.message,
   });
 }
+let timing = { cases: 0, passed: 0, nativeEvidence: {} };
+try {
+  timing = await timingParity(cargo, {
+    binary:
+      timingBinaryArgument === -1
+        ? undefined
+        : path.resolve(args[timingBinaryArgument + 1]),
+    reportFile:
+      reportArgument === -1
+        ? undefined
+        : path.join(
+            path.dirname(reportFile),
+            `${path.basename(reportFile, ".json")}-timing.json`,
+          ),
+  });
+  failures.push(...timing.failures);
+} catch (error) {
+  suiteFailures++;
+  failures.push({
+    id: "timing.verification",
+    operation: "tea.timing",
+    message: error.message,
+  });
+}
 let graph = {
   passed: 0,
   rejectedInvalidInputs: 0,
@@ -242,18 +268,26 @@ const report = {
   cargoLockSha256: createHash("sha256")
     .update(await readFile(path.join(root, "Cargo.lock")))
     .digest("hex"),
-  cases: cases.length + graph.passed + runtime.cases + suiteFailures,
-  passed: cases.length + graph.passed + runtime.passed - differentialFailures,
+  cases:
+    cases.length + graph.passed + runtime.cases + timing.cases + suiteFailures,
+  passed:
+    cases.length +
+    graph.passed +
+    runtime.passed +
+    timing.passed -
+    differentialFailures,
   failures,
   operations: [
     ...new Set([
       ...cases.map((test) => test.operation),
       ...(runtime.passed ? ["tea.runtime"] : []),
+      ...(timing.passed ? ["tea.timing"] : []),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
   graph: { ...graph, nativeEvidence: undefined },
   runtime: { ...runtime, nativeEvidence: undefined },
+  timing: { ...timing, nativeEvidence: undefined, failures: undefined },
   storageProcesses,
   rustBinarySha256: createHash("sha256")
     .update(await readFile(binary))
@@ -272,6 +306,7 @@ const report = {
     ),
     ...graph.nativeEvidence,
     ...runtime.nativeEvidence,
+    ...timing.nativeEvidence,
   },
   infrastructureDiagnostics: Object.fromEntries(
     cases.flatMap((test, index) => {

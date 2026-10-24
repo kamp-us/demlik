@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
+  { name: "ledger", driver: "ledger_driver", script: "graph-ledger.mts" },
   { name: "project", driver: "project_driver", script: "graph-project.mts" },
   { name: "semantic", driver: "semantic_driver", script: "graph-semantic.mts" },
   { name: "syntax", driver: "syntax_driver", script: "graph-syntax.mts" },

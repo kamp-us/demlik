@@ -1513,5 +1513,1769 @@
       "retry-draws.unprobed-use",
       "retry-draws.probe-is-not-per-draw-validation"
     ]
+  },
+  "@demlik/tea:./resilience#DeadlineSub": {
+    "signature": "49777eb52da1c2b5c69dc4c6e77002c01581824aa4a271b274205e05d5e83799",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#DeadlinesSub": {
+    "signature": "906df56e6f26c06f2957c33c82686ef237ed2bf2b1344ac8b573773cd0112614",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlines": {
+    "signature": "69157efad53cf0ca657859df7a96951c9325b7bd4d886e24a63f9c10e58f963d",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlinesSub": {
+    "signature": "3a2e010b82f9b64826356684c47cd238445b49f04b59d2f96ac6223602458500",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlinesSub/member:published:e6fa02df8695a3cfa5113cf3e05f0c4aa78a93b3f295f971885b3c59cdba652a": {
+    "signature": "e6fa02df8695a3cfa5113cf3e05f0c4aa78a93b3f295f971885b3c59cdba652a",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlinesSub/member:src/pure/core.d.ts#DepKeyedSub:2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80": {
+    "signature": "2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#DeadlineOpts": {
+    "signature": "dddb1b6b9ce28179c11a04a3e79e1c41e40f0341b2155c0b5f5b2e54304e4ac9",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::Deadline::with_options"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#DeadlineExceeded": {
+    "signature": "766c5d3cb6c2eb573c883f032a3fe691ddd778f643c8b4d511017ebdee2df44d",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_exceeded"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#DeadlineMsgType": {
+    "signature": "eb47b03402ccfe5e22b697b8d06c37c43b62fabfb3add22f6bc7141b50485f32",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_msg_type"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlineSub": {
+    "signature": "6bf25232c7e3cb4cc1ec3848d01ed310cf832701a24246f8eee941fdfbfd2f2f",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#ArmTimer": {
+    "signature": "4a532f09d3683473234f877427914173f36cf29b3f0c0da3e00d62b5dc0ac0e0",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#ArmTimer/member:published:dd47c34c8fb2414f387d109ea92162bf8355b10ad8902f6e5dcf2087ac6b315a": {
+    "signature": "dd47c34c8fb2414f387d109ea92162bf8355b10ad8902f6e5dcf2087ac6b315a",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#ArmTimer/member:published:2ee5cc367a12e366b28eacb3d20ac95c9e03aa93c24c502dd5ae01f69e4a96bc": {
+    "signature": "2ee5cc367a12e366b28eacb3d20ac95c9e03aa93c24c502dd5ae01f69e4a96bc",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#ArmTimer/member:published:bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501": {
+    "signature": "bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": [
+        "demlik_tea::resilience::deadline::DeadlineSubscription::cancel"
+      ]
+    },
+    "cases": ["timing.deadline-record"]
+  },
+  "@demlik/tea:./resilience#subscribeWith": {
+    "signature": "687651a230410a7e691eec532d2fe0f191db3761ffe6c1b8e4b5d47568be822a",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#subscribeWith/member:published:c8645a645151d9012ef83a3df33f552705a3b9e01d74e0f211fd1cc9d0f474b9": {
+    "signature": "c8645a645151d9012ef83a3df33f552705a3b9e01d74e0f211fd1cc9d0f474b9",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#subscribeWith/member:published:abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978": {
+    "signature": "abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_with"]
+    },
+    "cases": ["timing.deadline-inline"]
+  },
+  "@demlik/tea:./resilience#subscribeWith/member:src/pure/core.d.ts#Dispose:169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d": {
+    "signature": "169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": [
+        "demlik_tea::resilience::deadline::DeadlineSubscription::cancel"
+      ]
+    },
+    "cases": ["timing.deadline-record"]
+  },
+  "@demlik/tea:./resilience#setTimeoutArmTimer": {
+    "signature": "11dc8ac2a5ef9ac42ba13ebcad0c2457877c459b5095f7c1b2b2c0859eef7cb3",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::set_timeout_arm_timer"]
+    },
+    "cases": ["timing.deadline-seam"]
+  },
+  "@demlik/tea:./resilience#subscribeDeadline": {
+    "signature": "76ef737d76d51d6e46cf30a096955470dd8eb9de6c4cbb620d4ee974e107e157",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#subscribeDeadline/member:published:b973d27ab21156bde4bb25d0e1b9e22ddceea7e40eaae2acdebbc7ad29fcce84": {
+    "signature": "b973d27ab21156bde4bb25d0e1b9e22ddceea7e40eaae2acdebbc7ad29fcce84",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#subscribeDeadline/member:published:abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978": {
+    "signature": "abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#subscribeDeadline/member:src/pure/core.d.ts#Dispose:169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d": {
+    "signature": "169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": [
+        "demlik_tea::resilience::deadline::DeadlineSubscription::cancel"
+      ]
+    },
+    "cases": ["timing.deadline-record"]
+  },
+  "@demlik/tea:./resilience#deadlineExceeded": {
+    "signature": "fe08ca20f65741a670c2ae5886bcd9c8d4e4ad59997a80caa2a09ee53ceca6da",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_exceeded"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#deadlineMsgType": {
+    "signature": "5d6c0cc1bed740143e5b160b12d92d8736adffcdccedf977b1baf99620efcb65",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_msg_type"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./resilience#nextTimer": {
+    "signature": "4633ab4456d0234573b5b60abe4a867242e065a51afb81ed2c150c26258b8940",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::next_timer"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#Debounced": {
+    "signature": "7d66c48726d28dec482d7d264d0bf83a6f7aaf1e0201b7411d8909d0923a2097",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": [
+        "demlik_tea::timing::debounce",
+        "demlik_tea::timing::Debounced::invoke",
+        "demlik_tea::timing::Debounced::cancel",
+        "demlik_tea::timing::Debounced::flush"
+      ]
+    },
+    "cases": ["timing.debounce-flush-reopens", "timing.debounce-cancel-reopens"]
+  },
+  "@demlik/tea:./timing#Debounced/member:published:a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e": {
+    "signature": "a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::invoke"]
+    },
+    "cases": ["timing.debounce-flush-reopens"]
+  },
+  "@demlik/tea:./timing#Debounced/member:published:4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472": {
+    "signature": "4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::cancel"]
+    },
+    "cases": ["timing.debounce-cancel-reopens"]
+  },
+  "@demlik/tea:./timing#Debounced/member:published:4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b": {
+    "signature": "4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::flush"]
+    },
+    "cases": ["timing.debounce-flush-reopens"]
+  },
+  "@demlik/tea:./timing#debounce": {
+    "signature": "e42c221ac25142f1804813ae8c96d197e9aa01f2e394f0f3ae74a854e45e295b",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::debounce"]
+    },
+    "cases": ["timing.debounce-worked-example"]
+  },
+  "@demlik/tea:./timing#debounce/member:published:7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8": {
+    "signature": "7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::invoke"]
+    },
+    "cases": ["timing.debounce-worked-example"]
+  },
+  "@demlik/tea:./timing#Throttled": {
+    "signature": "cbdc11dbd1b9f04255bbed7d77622bd60b59cc4a836f657811f5aaf88cfbda16",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": [
+        "demlik_tea::timing::throttle",
+        "demlik_tea::timing::Throttled::invoke",
+        "demlik_tea::timing::Throttled::cancel",
+        "demlik_tea::timing::Throttled::flush"
+      ]
+    },
+    "cases": ["timing.throttle-flush-reopens", "timing.throttle-cancel-reopens"]
+  },
+  "@demlik/tea:./timing#Throttled/member:published:a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e": {
+    "signature": "a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": ["demlik_tea::timing::Throttled::invoke"]
+    },
+    "cases": ["timing.throttle-flush-reopens"]
+  },
+  "@demlik/tea:./timing#Throttled/member:published:4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472": {
+    "signature": "4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": ["demlik_tea::timing::Throttled::cancel"]
+    },
+    "cases": ["timing.throttle-cancel-reopens"]
+  },
+  "@demlik/tea:./timing#Throttled/member:published:4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b": {
+    "signature": "4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": ["demlik_tea::timing::Throttled::flush"]
+    },
+    "cases": ["timing.throttle-flush-reopens"]
+  },
+  "@demlik/tea:./timing#throttle": {
+    "signature": "64b59c37bf9e2f8339acc8e27ddc17e9933de86b923ac78c03c5579c0103f3cf",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": ["demlik_tea::timing::throttle"]
+    },
+    "cases": ["timing.throttle-worked-example"]
+  },
+  "@demlik/tea:./timing#throttle/member:published:7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8": {
+    "signature": "7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8",
+    "rust": {
+      "file": "crates/tea/src/timing/throttle.rs",
+      "symbols": ["demlik_tea::timing::Throttled::invoke"]
+    },
+    "cases": ["timing.throttle-worked-example"]
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig": {
+    "signature": "59ba4a7964129b2da319a314fb3cb6517f618bfd4fbb049c04ae897b702f0c8b",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputConfig::new",
+        "demlik_tea::timing::throttled_input::ThrottledInputConfig::with_cache"
+      ]
+    },
+    "cases": ["timing.knob-pass-through", "timing.knob-structured-explicit-key"]
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#ThrottledInputConfig/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache": {
+    "signature": "3106a0d46f0b0e67e98222b9d6b2882549a4338bb7c7312e27c13727e90150ea",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputConfig::new"
+      ]
+    },
+    "cases": ["timing.knob-pass-through"]
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/internal/timing/throttled-input/index.d.ts#ThrottledInputGates:e588c7cc8a68868eb70d69e18e30093fbef1d1308df96a57f1af4ac8f5e914cc": {
+    "signature": "e588c7cc8a68868eb70d69e18e30093fbef1d1308df96a57f1af4ac8f5e914cc",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::input"
+      ]
+    },
+    "cases": ["timing.knob-structured-explicit-key"]
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#ThrottledInputNoCache/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache": {
+    "signature": "8767a3e5467b63902a0ceb56e1170b0c0d5805a62adec2a7e056bb23ba5ef5cb",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputConfig::with_cache"
+      ]
+    },
+    "cases": ["timing.knob-structured-explicit-key"]
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:published:a62443c2e8033a64db410358c9c6a2381727e62d5149499d46833f5462039600": {
+    "signature": "a62443c2e8033a64db410358c9c6a2381727e62d5149499d46833f5462039600",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::input"
+      ]
+    },
+    "cases": ["timing.knob-structured-explicit-key"]
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/internal/timing/throttled-input/index.d.ts#ThrottledInputGates:e588c7cc8a68868eb70d69e18e30093fbef1d1308df96a57f1af4ac8f5e914cc": {
+    "signature": "e588c7cc8a68868eb70d69e18e30093fbef1d1308df96a57f1af4ac8f5e914cc",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::input"
+      ]
+    },
+    "cases": ["timing.knob-structured-explicit-key"]
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#ThrottledInputWithCache/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#ThrottledInput": {
+    "signature": "d4a9f876f5e6d82003b148ee64e8f8a1882e462c4ea017cf53831221e44fdb0e",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::init_throttled_input",
+        "demlik_tea::timing::throttled_input::ThrottledInput::restore_data"
+      ]
+    },
+    "cases": ["timing.free-pass-through", "timing.roundtrip-pending-nan"]
+  },
+  "@demlik/tea:./timing#PendingInput": {
+    "signature": "19e9c02e927fcb7b483a0a2532b1b8290ddb02fb2d3c99b6c487598988b54943",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::input"]
+    },
+    "cases": ["timing.free-settle-last"]
+  },
+  "@demlik/tea:./timing#ThrottledInputSub": {
+    "signature": "4f24752f762f79af415cd4e94de7e68d84ef205495aafa596ebb09d7c3d05c61",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::subs_for"]
+    },
+    "cases": ["timing.free-settle-last"]
+  },
+  "@demlik/tea:./timing#initThrottledInput": {
+    "signature": "45c7d0783468420a2f9e5734d34d658c8648829802366eeb6e30732c0f62ff8d",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::init_throttled_input"]
+    },
+    "cases": ["timing.free-pass-through"]
+  },
+  "@demlik/tea:./timing#input": {
+    "signature": "0cf433dc4a01450caf52027aede15093577362f9656a4ccc2ee7d652030f847b",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::input"]
+    },
+    "cases": [
+      "timing.free-pass-through",
+      "timing.free-half-open-rate",
+      "timing.free-structured-explicit-key"
+    ]
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#input/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#onFlush": {
+    "signature": "0df08a8b9e42d9e7a1e271b499d867b2198463cffec9f396058b37baa7c9cfb1",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::on_flush"]
+    },
+    "cases": ["timing.free-rate-floor"]
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#onFlush/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#subsFor": {
+    "signature": "0098a4d4e079386fb00138181aed5adf6163293d55880d976bf457a9b9385a19",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::subs_for"]
+    },
+    "cases": ["timing.free-rate-floor"]
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#subsFor/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob": {
+    "signature": "08dc06768ca6052dca1c004dc81a54bd6ad0615c57c107b0ee6c5aad9c5c7b60",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::create_throttled_input",
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::init",
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::input",
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::on_flush",
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::subs"
+      ]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:published:3653ebe56644498d7d6d301a860556b8ec3bc49ca21dd22ea2ef19f35fe67afa": {
+    "signature": "3653ebe56644498d7d6d301a860556b8ec3bc49ca21dd22ea2ef19f35fe67afa",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::init"
+      ]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:published:dbabf5c8bd0d8815d9612d846975fb992a0fa5fde39b592513ab18b68c780243": {
+    "signature": "dbabf5c8bd0d8815d9612d846975fb992a0fa5fde39b592513ab18b68c780243",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::input"
+      ]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:published:8c5e133d4c0f417dc08880ccc1b207c540b88ccf4f0bb544c7c69351f57fde3e": {
+    "signature": "8c5e133d4c0f417dc08880ccc1b207c540b88ccf4f0bb544c7c69351f57fde3e",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::on_flush"
+      ]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:published:ad67cdaee80e8a4740dcf15185b09a395a9f1d4c6a6d7beba7766998aedbcfe9": {
+    "signature": "ad67cdaee80e8a4740dcf15185b09a395a9f1d4c6a6d7beba7766998aedbcfe9",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": [
+        "demlik_tea::timing::throttled_input::ThrottledInputKnob::subs"
+      ]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#ThrottledInputKnob/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#createThrottledInput": {
+    "signature": "2f97ae4b642368eaff8a2e5fbb032c849747a41f48fc872ba01b47cdcdd88e54",
+    "rust": {
+      "file": "crates/tea/src/timing/throttled_input.rs",
+      "symbols": ["demlik_tea::timing::throttled_input::create_throttled_input"]
+    },
+    "cases": ["timing.knob-rate-floor"]
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./timing#createThrottledInput/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./timing#ThrottledInputSettled": {
+    "signature": "3eae45f2872fe08985535fc52c2ff832aee74e161258892ef2ed0e02d1057ff2",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_exceeded"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#throttledInputSettled": {
+    "signature": "fe08ca20f65741a670c2ae5886bcd9c8d4e4ad59997a80caa2a09ee53ceca6da",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadline_exceeded"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#subscribeThrottledInput": {
+    "signature": "95b8aeb68a76bf91aaca8f92b02b6cdae20832344f281c736a76904031b9a1bc",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#subscribeThrottledInput/member:published:b973d27ab21156bde4bb25d0e1b9e22ddceea7e40eaae2acdebbc7ad29fcce84": {
+    "signature": "b973d27ab21156bde4bb25d0e1b9e22ddceea7e40eaae2acdebbc7ad29fcce84",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#subscribeThrottledInput/member:published:abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978": {
+    "signature": "abb33232e98024b71f9c7f1dbad0889f9adbcdd30a1b1d5d44bd8ab9489e9978",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::subscribe_deadline"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./timing#subscribeThrottledInput/member:src/pure/core.d.ts#Dispose:169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d": {
+    "signature": "169b918b9570c8973b277f6c685e3d61bb201386e38add39e56526bac68b644d",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": [
+        "demlik_tea::resilience::deadline::DeadlineSubscription::cancel"
+      ]
+    },
+    "cases": ["timing.deadline-record"]
+  },
+  "@demlik/code-graph:./boundaries#LEDGER_FILENAME": {
+    "signature": "40fef640fdbc1fdb40f5730aad445b1f3c58a7583f8eab00ae3d0b4ecfaee27f",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::LEDGER_FILENAME"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#BOUNDARY_KINDS": {
+    "signature": "c9480341dd9793c815b3467dcbfa2726454e14e6a042076ff1d0681a48b67b86",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::BOUNDARY_KINDS"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#ledgerTargetOf": {
+    "signature": "dc2c1eef801a61c84e2a407c916697eec69d00838a0bf07ac1405e0c3cabfacb",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_target_of"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#ledgerKey": {
+    "signature": "af8082a0feb9d6f2dfdf581c293b2240b25e147d67cc07a9dc40c15fd74d93ef",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_key"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#boundaryLedgerOf": {
+    "signature": "1a930eea1acd7fd48b79f9193658618fd7077bbaa8c447606d7e801136bc2d34",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::boundary_ledger_of"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#parseBoundaryLedger": {
+    "signature": "0a79a44df33e2b44221bd967fe6ecd166fbb5eae702e05b6a6cb89917c814c8f",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::parse_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.shape-0",
+      "graph.ledger.shape-1",
+      "graph.ledger.shape-2",
+      "graph.ledger.shape-3",
+      "graph.ledger.shape-4",
+      "graph.ledger.shape-5"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#readBoundaryLedger": {
+    "signature": "781372436d60ffb1a30b1ba4b874232b324fb5088eb1b3379580e1887964c30a",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::read_boundary_ledger"]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#serializeBoundaryLedger": {
+    "signature": "34c760919029896999daad76af6c9fd2aabe417e1890d866ef1f252f522f9f07",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::serialize_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#writeBoundaryLedger": {
+    "signature": "9ea69e219f4bb2c266e9b566cd8fc7f9f1b0a6dd0b2d998ad0489fc4a27badbf",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::write_boundary_ledger"
+      ]
+    },
+    "cases": ["graph.ledger.writer-dedup-and-lone-values"]
+  },
+  "@demlik/code-graph:./boundaries#rekeyBoundaryLedger": {
+    "signature": "748e41cebfbeb642835044a36370f3cbe3cbcf59aec2b0f8eca62683d1905a40",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./boundaries#rekeyBoundaryLedgerFile": {
+    "signature": "01638064522ba7ba1be488f588436770cc87e1f8adebdb0aa0e5ea3b7fc4cf97",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger_file"
+      ]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#BOUNDARY_KINDS": {
+    "signature": "b386db2057dea707b54f381f91da39094fa6ed28b4c2e203ed77286e92f91146",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::BOUNDARY_KINDS"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#LEDGER_FILENAME": {
+    "signature": "2bdce6f1898e4621261033599271469c80cd070bd02129ff5464f258de1e1dbd",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::LEDGER_FILENAME"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#boundaryLedgerOf": {
+    "signature": "153673e36c615a00747e29c5a00f89cb785761e33f5d27b0f3a4fb2e64bae5d7",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::boundary_ledger_of"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#ledgerKey": {
+    "signature": "87a34570dc4d0c12ab08eaa93d8f8f72710a2d4915585f59c0172841a05599f6",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_key"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#ledgerTargetOf": {
+    "signature": "89c02e9d37b9379a72a2186523311094ff7684d9e576527e0f81d46a2f5f302d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_target_of"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#parseBoundaryLedger": {
+    "signature": "14d9d991b55b69de34d9a7aba735c249e66c74bbe8dfd614d9344c61dcf3860d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::parse_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.shape-0",
+      "graph.ledger.shape-1",
+      "graph.ledger.shape-2",
+      "graph.ledger.shape-3",
+      "graph.ledger.shape-4",
+      "graph.ledger.shape-5"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#readBoundaryLedger": {
+    "signature": "0743c67a8af5e791cfdf2853da937392abceb138fec017e091ea4e14089f7155",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::read_boundary_ledger"]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#rekeyBoundaryLedger": {
+    "signature": "15681ab232b1445cec6da64ed621b50cdac8a9bb5a8326151f306f2c2971e34d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#rekeyBoundaryLedgerFile": {
+    "signature": "6afe2f2c4e4caad5f637a03e02bcc7e3c7ba83c22a48342513910c5b6b1d7c35",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger_file"
+      ]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#serializeBoundaryLedger": {
+    "signature": "d8daf15551212ea6e235a7c93c97628b51a22f5728003f3739beb17891a31568",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::serialize_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/boundaries.js#writeBoundaryLedger": {
+    "signature": "f0163e74b19b9263a5b1990086ccf4712425260897cfe61906ea06d36a0edec2",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::write_boundary_ledger"
+      ]
+    },
+    "cases": ["graph.ledger.writer-dedup-and-lone-values"]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#BOUNDARY_KINDS": {
+    "signature": "b386db2057dea707b54f381f91da39094fa6ed28b4c2e203ed77286e92f91146",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::BOUNDARY_KINDS"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#LEDGER_FILENAME": {
+    "signature": "2bdce6f1898e4621261033599271469c80cd070bd02129ff5464f258de1e1dbd",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::LEDGER_FILENAME"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#boundaryLedgerOf": {
+    "signature": "153673e36c615a00747e29c5a00f89cb785761e33f5d27b0f3a4fb2e64bae5d7",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::boundary_ledger_of"]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#ledgerKey": {
+    "signature": "87a34570dc4d0c12ab08eaa93d8f8f72710a2d4915585f59c0172841a05599f6",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_key"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#ledgerTargetOf": {
+    "signature": "89c02e9d37b9379a72a2186523311094ff7684d9e576527e0f81d46a2f5f302d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::ledger_target_of"]
+    },
+    "cases": [
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order",
+      "graph.ledger.tuple-escaping"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#parseBoundaryLedger": {
+    "signature": "14d9d991b55b69de34d9a7aba735c249e66c74bbe8dfd614d9344c61dcf3860d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::parse_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.shape-0",
+      "graph.ledger.shape-1",
+      "graph.ledger.shape-2",
+      "graph.ledger.shape-3",
+      "graph.ledger.shape-4",
+      "graph.ledger.shape-5"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#readBoundaryLedger": {
+    "signature": "0743c67a8af5e791cfdf2853da937392abceb138fec017e091ea4e14089f7155",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": ["demlik_code_graph::boundaries::ledger::read_boundary_ledger"]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#rekeyBoundaryLedger": {
+    "signature": "15681ab232b1445cec6da64ed621b50cdac8a9bb5a8326151f306f2c2971e34d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#rekeyBoundaryLedgerFile": {
+    "signature": "6afe2f2c4e4caad5f637a03e02bcc7e3c7ba83c22a48342513910c5b6b1d7c35",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::rekey_boundary_ledger_file"
+      ]
+    },
+    "cases": [
+      "graph.ledger.absent",
+      "graph.ledger.invalid-json",
+      "graph.ledger.invalid-schema",
+      "graph.ledger.canonical-noop",
+      "graph.ledger.move-importer-and-target",
+      "graph.ledger.move-to-existing-key-counts-zero"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#serializeBoundaryLedger": {
+    "signature": "d8daf15551212ea6e235a7c93c97628b51a22f5728003f3739beb17891a31568",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::serialize_boundary_ledger"
+      ]
+    },
+    "cases": [
+      "graph.ledger.empty",
+      "graph.ledger.prefer-first-reason",
+      "graph.ledger.empty-reason-counts-as-present",
+      "graph.ledger.file-identity-ignores-specifier",
+      "graph.ledger.bare-identity-uses-specifier",
+      "graph.ledger.unicode-order"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#writeBoundaryLedger": {
+    "signature": "f0163e74b19b9263a5b1990086ccf4712425260897cfe61906ea06d36a0edec2",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/ledger.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::ledger::write_boundary_ledger"
+      ]
+    },
+    "cases": ["graph.ledger.writer-dedup-and-lone-values"]
   }
 }
