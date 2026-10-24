@@ -528,3 +528,79 @@ async fn failed_deps_keep_their_running_type_while_siblings_reconcile_and_cleanu
         })
         .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn callback_failures_are_data_and_live_unsubscription_preserves_fanout_order() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            type Unsubscribe = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+            let log = Rc::new(RefCell::new(vec![]));
+            let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(),
+                (),
+                Effects(Rc::clone(&log)),
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            let own: Unsubscribe = Rc::new(RefCell::new(None));
+            let sibling: Unsubscribe = Rc::new(RefCell::new(None));
+            let own_in = Rc::clone(&own);
+            let sibling_in = Rc::clone(&sibling);
+            let first_log = Rc::clone(&log);
+            let nested_runtime = runtime.clone();
+            *own.borrow_mut() = Some(runtime.subscribe(move || {
+                first_log.borrow_mut().push("first".into());
+                own_in.borrow_mut().take().unwrap()();
+                sibling_in.borrow_mut().take().unwrap()();
+                let added = Rc::clone(&first_log);
+                let _unsubscribe = nested_runtime
+                    .subscribe(move || added.borrow_mut().push("added-during-fanout".into()));
+            }));
+            let skipped_log = Rc::clone(&log);
+            *sibling.borrow_mut() =
+                Some(runtime.subscribe(move || {
+                    skipped_log.borrow_mut().push("deleted-before-turn".into())
+                }));
+            let _bad = runtime.subscribe(|| panic!("listener defect"));
+            let last_log = Rc::clone(&log);
+            let _last = runtime.subscribe(move || last_log.borrow_mut().push("survivor".into()));
+            let _bad_observer = runtime.observe(|_, _| panic!("observer defect"));
+            let observer_log = Rc::clone(&log);
+            let _observer = runtime.observe(move |_, state| {
+                observer_log
+                    .borrow_mut()
+                    .push(format!("observe:{}", state.n))
+            });
+            let _late_boot = runtime.on_boot(|_| panic!("boot defect"));
+            runtime.dispatch(Msg::Added { by: 1 }).await.unwrap();
+            assert_eq!(
+                &*log.borrow(),
+                &["first", "survivor", "added-during-fanout", "observe:1"]
+            );
+            log.borrow_mut().clear();
+            runtime.dispatch(Msg::Added { by: 1 }).await.unwrap();
+            assert_eq!(
+                &*log.borrow(),
+                &["survivor", "added-during-fanout", "observe:2"]
+            );
+            assert_eq!(
+                runtime
+                    .reports()
+                    .iter()
+                    .map(|report| report.phase)
+                    .collect::<Vec<_>>(),
+                vec![
+                    demlik_tea::runtime::ErrorPhase::Boot,
+                    demlik_tea::runtime::ErrorPhase::Listener,
+                    demlik_tea::runtime::ErrorPhase::Observer,
+                    demlik_tea::runtime::ErrorPhase::Listener,
+                    demlik_tea::runtime::ErrorPhase::Observer,
+                ]
+            );
+            runtime.stop().await;
+        })
+        .await;
+}

@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
@@ -46,9 +46,9 @@ struct Core<S, M, SE, HE> {
     sink: Option<ErrorSink<SE, HE>>,
     terminal: Option<Terminal<S>>,
     commits: Vec<Commit<S, M>>,
-    listeners: RefCell<IndexMap<u64, Rc<dyn Fn()>>>,
-    observers: RefCell<IndexMap<u64, Observer<S, M>>>,
-    boots: RefCell<IndexMap<u64, Boot<S>>>,
+    listeners: RefCell<BTreeMap<u64, Rc<dyn Fn()>>>,
+    observers: RefCell<BTreeMap<u64, Observer<S, M>>>,
+    boots: RefCell<BTreeMap<u64, Boot<S>>>,
     booted: Cell<bool>,
     next_listener: Cell<u64>,
 }
@@ -73,6 +73,17 @@ impl<S, M, SE, HE> Core<S, M, SE, HE> {
             eprintln!("@demlik/tea: {:?}: {}", phase, error.name());
         }
     }
+    fn notices(&self, mailbox: &Mailbox<M>) {
+        let notices = mailbox.with(|queue| queue.notices.drain(..).collect::<Vec<_>>());
+        for Notice::Refused(error) in notices {
+            let phase = match &error {
+                super::DispatchRefused::Contract(_) => ErrorPhase::Interpret,
+                super::DispatchRefused::Stopping { .. } => ErrorPhase::Discard,
+                super::DispatchRefused::Stopped { .. } => ErrorPhase::FollowUp,
+            };
+            self.report(refusal(error), phase);
+        }
+    }
     fn fanout<T>(&self, items: impl IntoIterator<Item = T>, phase: ErrorPhase, call: impl Fn(T)) {
         for item in items {
             if let Err(payload) = std::panic::catch_unwind(AssertUnwindSafe(|| call(item))) {
@@ -81,6 +92,25 @@ impl<S, M, SE, HE> Core<S, M, SE, HE> {
                     phase,
                 );
             }
+        }
+    }
+    fn fanout_live<T: Clone>(
+        &self,
+        items: &RefCell<BTreeMap<u64, T>>,
+        phase: ErrorPhase,
+        call: impl Fn(T),
+    ) {
+        use std::ops::Bound::{Excluded, Unbounded};
+        let mut after = None;
+        loop {
+            let next = items
+                .borrow()
+                .range((after.map_or(Unbounded, Excluded), Unbounded))
+                .next()
+                .map(|(id, item)| (*id, item.clone()));
+            let Some((id, item)) = next else { return };
+            after = Some(id);
+            self.fanout([item], phase, &call);
         }
     }
     fn holds(&self, state: &S) -> bool {
@@ -130,32 +160,14 @@ impl<S, M, SE, HE> Core<S, M, SE, HE> {
         }
     }
     fn committed(&self, message: Option<&M>, state: &S) {
-        self.fanout(
-            self.listeners
-                .borrow()
-                .values()
-                .cloned()
-                .collect::<Vec<_>>(),
-            ErrorPhase::Listener,
-            |listener| listener(),
-        );
+        self.fanout_live(&self.listeners, ErrorPhase::Listener, |listener| listener());
         if let Some(message) = message {
-            self.fanout(
-                self.observers
-                    .borrow()
-                    .values()
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                ErrorPhase::Observer,
-                |observer| observer(message, state),
-            );
+            self.fanout_live(&self.observers, ErrorPhase::Observer, |observer| {
+                observer(message, state)
+            });
         } else {
             self.booted.set(true);
-            self.fanout(
-                self.boots.borrow().values().cloned().collect::<Vec<_>>(),
-                ErrorPhase::Boot,
-                |handler| handler(state),
-            );
+            self.fanout_live(&self.boots, ErrorPhase::Boot, |handler| handler(state));
         }
         self.fanout(self.commits.iter(), ErrorPhase::Observer, |commit| {
             commit(message, state)
@@ -213,18 +225,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
         self.core.result()
     }
     pub fn reports(&self) -> Vec<Report<SE, HE>> {
-        let notices = self
-            .producer
-            .mailbox
-            .with(|queue| queue.notices.drain(..).collect::<Vec<_>>());
-        for Notice::Refused(error) in notices {
-            let phase = match &error {
-                super::DispatchRefused::Contract(_) => ErrorPhase::Interpret,
-                super::DispatchRefused::Stopping { .. } => ErrorPhase::Discard,
-                super::DispatchRefused::Stopped { .. } => ErrorPhase::FollowUp,
-            };
-            self.core.report(refusal(error), phase);
-        }
+        self.core.notices(&self.producer.mailbox);
         self.core.reports.borrow().clone()
     }
     pub fn gate(&self) -> Gate {
@@ -342,7 +343,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
             .insert(id, Rc::new(listener));
         let core = Rc::clone(&self.core);
         Box::new(move || {
-            core.listeners.borrow_mut().shift_remove(&id);
+            core.listeners.borrow_mut().remove(&id);
         })
     }
     pub fn observe(&self, observer: impl Fn(&M, &S) + 'static) -> Box<dyn FnOnce()> {
@@ -353,7 +354,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
             .insert(id, Rc::new(observer));
         let core = Rc::clone(&self.core);
         Box::new(move || {
-            core.observers.borrow_mut().shift_remove(&id);
+            core.observers.borrow_mut().remove(&id);
         })
     }
     pub fn on_boot(&self, handler: impl Fn(&S) + 'static) -> Box<dyn FnOnce()> {
@@ -368,7 +369,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static> Runtime<S, M, SE
         self.core.boots.borrow_mut().insert(id, Rc::new(handler));
         let core = Rc::clone(&self.core);
         Box::new(move || {
-            core.boots.borrow_mut().shift_remove(&id);
+            core.boots.borrow_mut().remove(&id);
         })
     }
 }
@@ -450,31 +451,6 @@ impl<
         self.next_work.set(token + 1);
         token
     }
-    fn notice(&self) {
-        let notices = self
-            .producer
-            .mailbox
-            .with(|queue| queue.notices.drain(..).collect::<Vec<_>>());
-        for notice in notices {
-            match notice {
-                Notice::Refused(super::DispatchRefused::Contract(error)) => {
-                    self.core.report(
-                        Rc::new(RuntimeError::Contract(error)),
-                        ErrorPhase::Interpret,
-                    );
-                }
-                Notice::Refused(error) => {
-                    let error = refusal(error);
-                    let phase = if error.discarded() {
-                        ErrorPhase::Discard
-                    } else {
-                        ErrorPhase::FollowUp
-                    };
-                    self.core.report(error, phase);
-                }
-            }
-        }
-    }
     async fn boot(self: Rc<Self>, initial: Option<Initial<S, C>>) -> Answer<SE, HE> {
         let initial = match initial {
             Some(initial) => initial,
@@ -503,7 +479,6 @@ impl<
         self.producer.mailbox.completed(1);
         loop {
             let changed = self.producer.mailbox.changed.notified();
-            self.notice();
             let job = self.producer.mailbox.with(|queue| queue.jobs.pop_front());
             let Some(job) = job else {
                 if self.core.stop_done.get() && self.in_flight.borrow().is_empty() {
@@ -1073,9 +1048,9 @@ pub fn launch<
         sink: on_error,
         terminal,
         commits: on_commit,
-        listeners: RefCell::new(IndexMap::new()),
-        observers: RefCell::new(IndexMap::new()),
-        boots: RefCell::new(IndexMap::new()),
+        listeners: RefCell::new(BTreeMap::new()),
+        observers: RefCell::new(BTreeMap::new()),
+        boots: RefCell::new(BTreeMap::new()),
         booted: Cell::new(false),
         next_listener: Cell::new(0),
     });
@@ -1105,6 +1080,19 @@ pub fn launch<
         barriers: RefCell::new(HashMap::new()),
     });
     let worker = Rc::clone(&env);
+    let notice_owner = Rc::downgrade(&core);
+    let notice_queue = Arc::clone(&producer.mailbox);
+    tokio::task::spawn_local(async move {
+        loop {
+            let changed = notice_queue.changed.notified();
+            let Some(owner) = notice_owner.upgrade() else {
+                return;
+            };
+            owner.notices(&notice_queue);
+            drop(owner);
+            changed.await;
+        }
+    });
     tokio::task::spawn_local(async move {
         worker.worker(initial).await;
     });
