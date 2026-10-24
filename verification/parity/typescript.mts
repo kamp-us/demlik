@@ -9,6 +9,7 @@ import {
   backoffDelay,
 } from "../../packages/tea/src/retry-backoff/index.ts";
 import { coreInput, executeCore } from "./core.mts";
+import { policyOperations } from "./policies.mts";
 import {
   executeProbe,
   executeRetryState,
@@ -48,6 +49,7 @@ const graphInput = z.object({
 });
 
 const operations: Record<string, (input: unknown) => unknown> = {
+  ...policyOperations(number, encodeNumber),
   "tea.core.machine": operation(coreInput, executeCore),
   "tea.retry.state": operation(retryStateInput, executeRetryState),
   "tea.retry.probe": operation(probeInput, executeProbe),

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
+import { policyCases } from "./policies-generated.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -64,7 +65,7 @@ for (const file of (await readdir(path.join(here, "cases"))).sort()) {
   assert.equal(corpus.version, 1, `unsupported corpus version in ${file}`);
   cases.push(...corpus.cases);
 }
-cases.push(...generatedCases());
+cases.push(...generatedCases(), ...policyCases());
 assert.ok(
   cases.length > 0,
   "the parity corpus must exercise at least one operation",

@@ -1,6 +1,8 @@
 pub mod core;
 pub mod data;
+pub mod idempotency;
 mod js_math;
+pub mod resilience;
 pub mod retry_backoff;
 pub mod storage;
 pub use core::{

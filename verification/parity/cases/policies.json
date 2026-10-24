@@ -1,0 +1,1119 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "policies.circuit-cooldown-probe-and-late-results",
+      "operation": "tea.policies.circuit",
+      "input": {
+        "policy": {
+          "failureThreshold": 2,
+          "cooldownMs": 10,
+          "halfOpenMaxProbes": 1
+        },
+        "steps": [
+          {
+            "event": "failure",
+            "nowMs": 0
+          },
+          {
+            "event": "failure",
+            "nowMs": 5
+          },
+          {
+            "event": "success"
+          },
+          {
+            "event": "failure",
+            "nowMs": 8
+          },
+          {
+            "event": "pass",
+            "nowMs": 14
+          },
+          {
+            "event": "pass",
+            "nowMs": 15
+          },
+          {
+            "event": "pass",
+            "nowMs": 15
+          },
+          {
+            "event": "failure",
+            "nowMs": 16
+          },
+          {
+            "event": "pass",
+            "nowMs": 26
+          },
+          {
+            "event": "success"
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "phase": "closed",
+              "failures": 0
+            }
+          },
+          {
+            "state": {
+              "phase": "closed",
+              "failures": 1
+            }
+          },
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 5
+            }
+          },
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 5
+            }
+          },
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 5
+            }
+          },
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 5
+            },
+            "allowed": false
+          },
+          {
+            "state": {
+              "phase": "half_open",
+              "probes": 1
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "phase": "half_open",
+              "probes": 1
+            },
+            "allowed": false
+          },
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 16
+            }
+          },
+          {
+            "state": {
+              "phase": "half_open",
+              "probes": 1
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "phase": "closed",
+              "failures": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.bucket-denial-keeps-refill-and-clock-skew",
+      "operation": "tea.policies.bucket",
+      "input": {
+        "capacity": 2,
+        "refillPerSec": 1,
+        "nowMs": 0,
+        "steps": [
+          {
+            "event": "consume",
+            "nowMs": 0,
+            "n": 2
+          },
+          {
+            "event": "consume",
+            "nowMs": 500
+          },
+          {
+            "event": "refill",
+            "nowMs": 0
+          },
+          {
+            "event": "consume",
+            "nowMs": 500
+          },
+          {
+            "event": "refill",
+            "nowMs": 2500
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "tokens": 2,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 0
+            }
+          },
+          {
+            "state": {
+              "tokens": 0,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 0
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "tokens": 0.5,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 500
+            },
+            "allowed": false
+          },
+          {
+            "state": {
+              "tokens": 0.5,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 0
+            }
+          },
+          {
+            "state": {
+              "tokens": 0,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 500
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "tokens": 2,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 2500
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.window-half-open-expiry-and-read-only-remaining",
+      "operation": "tea.policies.window",
+      "input": {
+        "windowMs": 10,
+        "limit": 2,
+        "steps": [
+          {
+            "event": "record",
+            "nowMs": 0
+          },
+          {
+            "event": "record",
+            "nowMs": 1
+          },
+          {
+            "event": "record",
+            "nowMs": 9
+          },
+          {
+            "event": "remaining",
+            "nowMs": 10
+          },
+          {
+            "event": "record",
+            "nowMs": 10
+          },
+          {
+            "event": "record",
+            "nowMs": 11
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "hits": [],
+              "windowMs": 10,
+              "limit": 2
+            }
+          },
+          {
+            "state": {
+              "hits": [0],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "hits": [0, 1],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "hits": [0, 1],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "allowed": false
+          },
+          {
+            "state": {
+              "hits": [0, 1],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "remaining": 1
+          },
+          {
+            "state": {
+              "hits": [1, 10],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "hits": [10, 11],
+              "windowMs": 10,
+              "limit": 2
+            },
+            "allowed": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.cache-half-open-ttl-null-failure-and-removal",
+      "operation": "tea.policies.cache",
+      "input": {
+        "steps": [
+          {
+            "event": "set",
+            "key": "a",
+            "value": {
+              "_tag": "timeout"
+            },
+            "nowMs": 0,
+            "ttlMs": 10
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 9
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 10
+          },
+          {
+            "event": "set",
+            "key": "b",
+            "value": null,
+            "nowMs": 5,
+            "ttlMs": 20
+          },
+          {
+            "event": "evict",
+            "nowMs": 10
+          },
+          {
+            "event": "read",
+            "key": "b",
+            "nowMs": 24
+          },
+          {
+            "event": "remove",
+            "key": "missing"
+          },
+          {
+            "event": "read",
+            "key": "b",
+            "nowMs": 25
+          },
+          {
+            "event": "remove",
+            "key": "b"
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "expiresAtMs": 10
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "expiresAtMs": 10
+                }
+              }
+            },
+            "present": true,
+            "found": true,
+            "value": {
+              "_tag": "timeout"
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "expiresAtMs": 10
+                }
+              }
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "expiresAtMs": 10
+                },
+                "b": {
+                  "value": null,
+                  "expiresAtMs": 25
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "b": {
+                  "value": null,
+                  "expiresAtMs": 25
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "b": {
+                  "value": null,
+                  "expiresAtMs": 25
+                }
+              }
+            },
+            "present": true,
+            "found": true,
+            "value": null
+          },
+          {
+            "state": {
+              "entries": {
+                "b": {
+                  "value": null,
+                  "expiresAtMs": 25
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "b": {
+                  "value": null,
+                  "expiresAtMs": 25
+                }
+              }
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+      "operation": "tea.policies.idempotency",
+      "input": {
+        "options": {
+          "capacity": 2,
+          "ttlMs": 10
+        },
+        "steps": [
+          {
+            "event": "remember",
+            "key": "a",
+            "value": {
+              "_tag": "timeout"
+            },
+            "nowMs": 0
+          },
+          {
+            "event": "remember",
+            "key": "b",
+            "value": null,
+            "nowMs": 1
+          },
+          {
+            "event": "read",
+            "key": "b",
+            "nowMs": 1
+          },
+          {
+            "event": "remember",
+            "key": "a",
+            "value": "updated",
+            "nowMs": 2
+          },
+          {
+            "event": "remember",
+            "key": "c",
+            "value": 3,
+            "nowMs": 3
+          },
+          {
+            "event": "read",
+            "key": "b",
+            "nowMs": 3
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 11
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 12
+          },
+          {
+            "event": "remember",
+            "key": "d",
+            "value": 4,
+            "nowMs": 12
+          },
+          {
+            "event": "evict",
+            "nowMs": 13
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "atMs": 0
+                }
+              },
+              "order": ["a"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "atMs": 0
+                },
+                "b": {
+                  "value": null,
+                  "atMs": 1
+                }
+              },
+              "order": ["a", "b"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": {
+                    "_tag": "timeout"
+                  },
+                  "atMs": 0
+                },
+                "b": {
+                  "value": null,
+                  "atMs": 1
+                }
+              },
+              "order": ["a", "b"],
+              "capacity": 2,
+              "ttlMs": 10
+            },
+            "present": true,
+            "found": true,
+            "value": null
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "updated",
+                  "atMs": 2
+                },
+                "b": {
+                  "value": null,
+                  "atMs": 1
+                }
+              },
+              "order": ["b", "a"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "updated",
+                  "atMs": 2
+                },
+                "c": {
+                  "value": 3,
+                  "atMs": 3
+                }
+              },
+              "order": ["a", "c"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "updated",
+                  "atMs": 2
+                },
+                "c": {
+                  "value": 3,
+                  "atMs": 3
+                }
+              },
+              "order": ["a", "c"],
+              "capacity": 2,
+              "ttlMs": 10
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "updated",
+                  "atMs": 2
+                },
+                "c": {
+                  "value": 3,
+                  "atMs": 3
+                }
+              },
+              "order": ["a", "c"],
+              "capacity": 2,
+              "ttlMs": 10
+            },
+            "present": true,
+            "found": true,
+            "value": "updated"
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "updated",
+                  "atMs": 2
+                },
+                "c": {
+                  "value": 3,
+                  "atMs": 3
+                }
+              },
+              "order": ["a", "c"],
+              "capacity": 2,
+              "ttlMs": 10
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {
+                "c": {
+                  "value": 3,
+                  "atMs": 3
+                },
+                "d": {
+                  "value": 4,
+                  "atMs": 12
+                }
+              },
+              "order": ["c", "d"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "d": {
+                  "value": 4,
+                  "atMs": 12
+                }
+              },
+              "order": ["d"],
+              "capacity": 2,
+              "ttlMs": 10
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.bucket-nan-propagation",
+      "operation": "tea.policies.bucket",
+      "input": {
+        "capacity": 2,
+        "refillPerSec": 1,
+        "nowMs": 0,
+        "steps": [
+          {
+            "event": "consume",
+            "nowMs": {
+              "$number": "NaN"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "tokens": 2,
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": 0
+            }
+          },
+          {
+            "state": {
+              "tokens": {
+                "$number": "NaN"
+              },
+              "capacity": 2,
+              "refillPerSec": 1,
+              "lastRefillMs": {
+                "$number": "NaN"
+              }
+            },
+            "allowed": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.bucket-signed-zero-tie",
+      "operation": "tea.policies.bucket",
+      "input": {
+        "capacity": {
+          "$number": "-0"
+        },
+        "refillPerSec": 0,
+        "nowMs": 0,
+        "steps": [
+          {
+            "event": "refill",
+            "nowMs": 0
+          },
+          {
+            "event": "consume",
+            "nowMs": {
+              "$number": "-0"
+            },
+            "n": {
+              "$number": "-0"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "tokens": {
+                "$number": "-0"
+              },
+              "capacity": {
+                "$number": "-0"
+              },
+              "refillPerSec": 0,
+              "lastRefillMs": 0
+            }
+          },
+          {
+            "state": {
+              "tokens": {
+                "$number": "-0"
+              },
+              "capacity": {
+                "$number": "-0"
+              },
+              "refillPerSec": 0,
+              "lastRefillMs": 0
+            }
+          },
+          {
+            "state": {
+              "tokens": 0,
+              "capacity": {
+                "$number": "-0"
+              },
+              "refillPerSec": 0,
+              "lastRefillMs": {
+                "$number": "-0"
+              }
+            },
+            "allowed": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.circuit-zero-cap-entry-probe",
+      "operation": "tea.policies.circuit",
+      "input": {
+        "initial": {
+          "phase": "open",
+          "openedAtMs": 0
+        },
+        "policy": {
+          "failureThreshold": 1,
+          "cooldownMs": 10,
+          "halfOpenMaxProbes": 0
+        },
+        "steps": [
+          {
+            "event": "pass",
+            "nowMs": 10
+          },
+          {
+            "event": "pass",
+            "nowMs": 11
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "phase": "open",
+              "openedAtMs": 0
+            }
+          },
+          {
+            "state": {
+              "phase": "half_open",
+              "probes": 1
+            },
+            "allowed": true
+          },
+          {
+            "state": {
+              "phase": "half_open",
+              "probes": 1
+            },
+            "allowed": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.circuit-success-retains-negative-zero",
+      "operation": "tea.policies.circuit",
+      "input": {
+        "initial": {
+          "phase": "closed",
+          "failures": {
+            "$number": "-0"
+          }
+        },
+        "steps": [
+          {
+            "event": "success"
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "phase": "closed",
+              "failures": {
+                "$number": "-0"
+              }
+            }
+          },
+          {
+            "state": {
+              "phase": "closed",
+              "failures": {
+                "$number": "-0"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.window-nan-cutoff-and-limit",
+      "operation": "tea.policies.window",
+      "input": {
+        "initial": {
+          "hits": [0, 5],
+          "windowMs": 10,
+          "limit": {
+            "$number": "NaN"
+          }
+        },
+        "windowMs": 10,
+        "limit": {
+          "$number": "NaN"
+        },
+        "steps": [
+          {
+            "event": "record",
+            "nowMs": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "event": "remaining",
+            "nowMs": 0
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "hits": [0, 5],
+              "windowMs": 10,
+              "limit": {
+                "$number": "NaN"
+              }
+            }
+          },
+          {
+            "state": {
+              "hits": [],
+              "windowMs": 10,
+              "limit": {
+                "$number": "NaN"
+              }
+            },
+            "allowed": false
+          },
+          {
+            "state": {
+              "hits": [],
+              "windowMs": 10,
+              "limit": {
+                "$number": "NaN"
+              }
+            },
+            "remaining": {
+              "$number": "NaN"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.cache-overwrite-refreshes-expiry",
+      "operation": "tea.policies.cache",
+      "input": {
+        "steps": [
+          {
+            "event": "set",
+            "key": "a",
+            "value": "old",
+            "nowMs": 0,
+            "ttlMs": 10
+          },
+          {
+            "event": "set",
+            "key": "a",
+            "value": "new",
+            "nowMs": 5,
+            "ttlMs": 10
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 10
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "old",
+                  "expiresAtMs": 10
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "new",
+                  "expiresAtMs": 15
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "a": {
+                  "value": "new",
+                  "expiresAtMs": 15
+                }
+              }
+            },
+            "present": true,
+            "found": true,
+            "value": "new"
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.idempotency-capacity-zero",
+      "operation": "tea.policies.idempotency",
+      "input": {
+        "options": {
+          "capacity": 0
+        },
+        "steps": [
+          {
+            "event": "remember",
+            "key": "a",
+            "value": null,
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "a",
+            "nowMs": 0
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "capacity": 0
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "capacity": 0
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "capacity": 0
+            },
+            "present": false,
+            "found": false
+          }
+        ]
+      }
+    }
+  ]
+}

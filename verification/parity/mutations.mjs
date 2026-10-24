@@ -12,6 +12,41 @@ const reportDirectory = path.join(root, "target/parity");
 const cargo = process.env.CARGO ?? "cargo";
 const mutations = [
   {
+    name: "circuit-excludes-cooldown-edge",
+    file: "crates/tea/src/resilience/circuit_breaker.rs",
+    before: "now_ms - opened_at_ms >= policy.cooldown_ms",
+    after: "now_ms - opened_at_ms > policy.cooldown_ms",
+    witness: "policies.circuit-cooldown-probe-and-late-results",
+  },
+  {
+    name: "bucket-discards-nan",
+    file: "crates/tea/src/resilience/rate_limit.rs",
+    before: "js_min(bucket.capacity, replenished)",
+    after: "bucket.capacity.min(replenished)",
+    witness: "policies.bucket-nan-propagation",
+  },
+  {
+    name: "window-retains-cutoff-hit",
+    file: "crates/tea/src/resilience/rate_limit.rs",
+    before: "*hit > cutoff",
+    after: "*hit >= cutoff",
+    witness: "policies.window-half-open-expiry-and-read-only-remaining",
+  },
+  {
+    name: "cache-retains-expiry-edge",
+    file: "crates/tea/src/resilience/cache.rs",
+    before: "now_ms >= self.expires_at_ms",
+    after: "now_ms > self.expires_at_ms",
+    witness: "policies.cache-half-open-ttl-null-failure-and-removal",
+  },
+  {
+    name: "idempotency-overwrite-does-not-refresh-order",
+    file: "crates/tea/src/idempotency.rs",
+    before: "next.order.retain(|old| old != &key);\n    next.order.push(key);",
+    after: "if !next.order.contains(&key) { next.order.push(key); }",
+    witness: "policies.idempotency-overwrite-ttl-lru-and-failure-data",
+  },
+  {
     name: "backoff-ignores-cap",
     file: "crates/tea/src/retry_backoff.rs",
     before: "js_min(curve.cap_ms, exponential)",

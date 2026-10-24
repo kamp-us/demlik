@@ -13,6 +13,7 @@ macro_rules! observe {
     }};
 }
 mod core;
+mod policies;
 mod retry;
 
 #[derive(Deserialize)]
@@ -106,6 +107,13 @@ struct Observation {
 fn execute(case: &Case) -> Result<Observation, String> {
     let mut calls = Vec::new();
     let output = match case.operation.as_str() {
+        "tea.policies.circuit"
+        | "tea.policies.bucket"
+        | "tea.policies.window"
+        | "tea.policies.cache"
+        | "tea.policies.idempotency" => {
+            policies::execute(&case.operation, case.input.clone(), &mut calls)
+        }
         "tea.core.machine" => core::execute(case.input.clone(), &mut calls),
         "tea.retry.state" => retry::state(case.input.clone(), &mut calls),
         "tea.retry.probe" => retry::probe(case.input.clone(), &mut calls),
