@@ -10,6 +10,30 @@ pub trait Tagged {
     fn tag(&self) -> &str;
 }
 
+pub trait Message: Tagged {
+    const TYPES: &'static [&'static str];
+}
+
+/// Declare enum messages and their tags from one list.
+#[macro_export]
+macro_rules! messages {
+    ($(#[$attribute:meta])* $visibility:vis enum $name:ident {
+        $($variant:ident $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?
+    }) => {
+        $(#[$attribute])* $visibility enum $name {
+            $($variant $({ $($field: $field_type),* })?),*
+        }
+        impl $crate::Tagged for $name {
+            fn tag(&self) -> &str {
+                match self { $(Self::$variant $({ $($field: _),* })? => stringify!($variant)),* }
+            }
+        }
+        impl $crate::core::Message for $name {
+            const TYPES: &'static [&'static str] = &[$(stringify!($variant)),*];
+        }
+    };
+}
+
 #[derive(Debug, Serialize)]
 pub struct Step<S, C> {
     pub state: S,
@@ -33,19 +57,49 @@ pub type Cell<'a, S, M, C> = Box<dyn Fn(&S, &M) -> Step<S, C> + 'a>;
 pub type Row<'a, S, M, C> = IndexMap<String, Cell<'a, S, M, C>>;
 
 pub enum Update<'a, S, M, C> {
-    Reducer(Row<'a, S, M, C>),
-    Transitions(IndexMap<String, Row<'a, S, M, C>>),
+    RawReducer(Row<'a, S, M, C>),
+    RawTransitions(IndexMap<String, Row<'a, S, M, C>>),
+    Exhaustive {
+        cell: Cell<'a, S, M, C>,
+        accepted_types: &'static [&'static str],
+    },
+}
+
+impl<'a, S, M: Message, C> Update<'a, S, M, C> {
+    /// A pure function over enum messages uses Rust's exhaustive match checking.
+    /// Raw tables are available for external wire dispatch through `RawReducer`.
+    ///
+    /// ```compile_fail,E0004
+    /// use demlik_tea::{messages, Step, Update};
+    /// messages! { enum Msg { Added, Reset } }
+    /// let update: Update<'_, (), Msg, ()> = Update::reducer(|_, msg| match msg {
+    ///     Msg::Added => Step::new((), vec![]),
+    /// });
+    /// ```
+    pub fn reducer(cell: impl Fn(&S, &M) -> Step<S, C> + 'a) -> Self {
+        Self::Exhaustive {
+            cell: Box::new(cell),
+            accepted_types: M::TYPES,
+        }
+    }
 }
 
 impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
     fn row(&self, state: &S) -> Option<&Row<'_, S, M, C>> {
         match self {
-            Self::Reducer(row) => Some(row),
-            Self::Transitions(rows) => rows.get(state.tag()),
+            Self::RawReducer(row) => Some(row),
+            Self::RawTransitions(rows) => rows.get(state.tag()),
+            Self::Exhaustive { .. } => None,
         }
     }
 
     pub fn accepted_types(&self, state: Option<&S>) -> Vec<String> {
+        if state.is_none() {
+            return vec![];
+        }
+        if let Self::Exhaustive { accepted_types, .. } = self {
+            return accepted_types.iter().map(|kind| (*kind).into()).collect();
+        }
         state
             .and_then(|state| self.row(state))
             .map(|row| row.keys().cloned().collect())
@@ -53,6 +107,9 @@ impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
     }
 
     pub fn apply(&self, state: &S, message: &M) -> Result<Step<S, C>, NoCellError> {
+        if let Self::Exhaustive { cell, .. } = self {
+            return Ok(cell(state, message));
+        }
         match self.row(state).and_then(|row| row.get(message.tag())) {
             Some(cell) => Ok(cell(state, message)),
             None => Err(NoCellError::new(

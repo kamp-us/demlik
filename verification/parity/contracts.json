@@ -3,7 +3,7 @@
     "signature": "eec6e4055055f27104896e83ca4d2a67fdf3b8178c54f6954a9127c9e915b70e",
     "rust": {
       "file": "crates/tea/src/core.rs",
-      "symbol": "core::replay"
+      "symbols": ["demlik_tea::core::replay"]
     },
     "cases": [
       "core.fresh-init",
@@ -16,7 +16,7 @@
     "signature": "930e07f0f709a7abe44baf45a17a8fb2ea9774376817df297263737183a8e48d",
     "rust": {
       "file": "crates/tea/src/core.rs",
-      "symbol": "core::fold_msgs"
+      "symbols": ["demlik_tea::core::fold_msgs"]
     },
     "cases": [
       "core.fold-bypasses-init-and-subs-reducer",
@@ -29,7 +29,7 @@
     "signature": "cb217af9395e28ee09eb012b8c9cf1e721a0c831f3698d8d87759e72ea420886",
     "rust": {
       "file": "crates/tea/src/retry_backoff.rs",
-      "symbol": "retry_backoff::backoff_delay"
+      "symbols": ["demlik_tea::retry_backoff::backoff_delay"]
     },
     "cases": [
       "retry.first-attempt",
@@ -43,7 +43,7 @@
     "signature": "5eae3a714e8764af61a88667d78830c6bed20ef610163ad0a4437dd742ee1297",
     "rust": {
       "file": "crates/tea/src/retry_backoff.rs",
-      "symbol": "retry_backoff::init_retry"
+      "symbols": ["demlik_tea::retry_backoff::init_retry"]
     },
     "cases": ["retry-state.init"]
   },
@@ -51,7 +51,11 @@
     "signature": "bc9b6e7044e6d3815e993decaa1319b6875770eb4860d2cfc161ecd1baf7fd60",
     "rust": {
       "file": "crates/tea/src/retry_backoff.rs",
-      "symbol": "retry_backoff::record_failure / record_failure_at / TimedRetryState::record_failure"
+      "symbols": [
+        "demlik_tea::retry_backoff::record_failure",
+        "demlik_tea::retry_backoff::record_failure_at",
+        "demlik_tea::retry_backoff::TimedRetryState::record_failure"
+      ]
     },
     "cases": ["retry-state.count-edge", "retry-state.duration-origin-preserved"]
   },
@@ -59,7 +63,7 @@
     "signature": "30702c6ff8121175608791d3cfc95a637113db180ce6d20706f19e1a4c4d0d00",
     "rust": {
       "file": "crates/tea/src/retry_backoff.rs",
-      "symbol": "retry_backoff::retry_elapsed_ms"
+      "symbols": ["demlik_tea::retry_backoff::retry_elapsed_ms"]
     },
     "cases": ["retry-state.backwards-clock", "retry-state.duration-expired"]
   },
@@ -67,7 +71,10 @@
     "signature": "c27a3453096b831f0a4faaf81d07b1a92b84b8ebf826b5257a566e8bdf294ec0",
     "rust": {
       "file": "crates/tea/src/retry_backoff.rs",
-      "symbol": "retry_backoff::should_retry / should_retry_timed"
+      "symbols": [
+        "demlik_tea::retry_backoff::should_retry",
+        "demlik_tea::retry_backoff::should_retry_timed"
+      ]
     },
     "cases": [
       "retry-state.count-edge",
@@ -75,16 +82,14 @@
       "retry-state.duration-expired",
       "retry-state.both-count-exhausted",
       "retry-state.zero-duration",
-      "retry-state.unbounded",
-      "retry-state.missing-clock",
-      "retry-state.missing-origin"
+      "retry-state.unbounded"
     ]
   },
   "@demlik/code-graph:./scc#sccMembers": {
     "signature": "77cff8d263ac11bf85006ef15cc9ea8c2a5535923c79c009ae9f794bad18fa99",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::scc_members"
+      "symbols": ["demlik_code_graph::scc::scc_members"]
     },
     "cases": ["scc.members-in-input-order", "scc.members-omit-unlisted-target"]
   },
@@ -92,7 +97,7 @@
     "signature": "37eb7dff3528f431af1843395585cf2019e049c7bbe07075ec3a1890202fe312",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::strongly_connected_components"
+      "symbols": ["demlik_code_graph::scc::strongly_connected_components"]
     },
     "cases": [
       "scc.cycle-with-caller",
@@ -104,7 +109,7 @@
     "signature": "12c742ccf8610bdd52135d84a6ed9d471701486cda4838fbd131d2e653259da2",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::scc_members"
+      "symbols": ["demlik_code_graph::scc::scc_members"]
     },
     "cases": ["scc.members-in-input-order", "scc.members-omit-unlisted-target"]
   },
@@ -112,7 +117,7 @@
     "signature": "e1875ddd2d312b268e2c5fe4287403b37f53a8614280810a3a31ece0fe2fe9f6",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::strongly_connected_components"
+      "symbols": ["demlik_code_graph::scc::strongly_connected_components"]
     },
     "cases": [
       "scc.cycle-with-caller",
@@ -124,7 +129,7 @@
     "signature": "12c742ccf8610bdd52135d84a6ed9d471701486cda4838fbd131d2e653259da2",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::scc_members"
+      "symbols": ["demlik_code_graph::scc::scc_members"]
     },
     "cases": ["scc.members-in-input-order", "scc.members-omit-unlisted-target"]
   },
@@ -132,7 +137,7 @@
     "signature": "e1875ddd2d312b268e2c5fe4287403b37f53a8614280810a3a31ece0fe2fe9f6",
     "rust": {
       "file": "crates/code-graph/src/scc.rs",
-      "symbol": "scc::strongly_connected_components"
+      "symbols": ["demlik_code_graph::scc::strongly_connected_components"]
     },
     "cases": [
       "scc.cycle-with-caller",

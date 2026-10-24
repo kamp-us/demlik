@@ -1,5 +1,6 @@
 {
   "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceEngine": { "node": "v22.21.1", "v8": "12.4.254.21-node.33" },
   "objective": "Native Rust siblings for the full @demlik/tea and @demlik/code-graph public capability set, with 1:1 observable behavior and a new idiomatic Rust API.",
   "exclude": ["@demlik/structure-sweep", "@demlik/backlog-sweep"],
   "workflow": "Local implementation and verification. No issue, PR, push, publication, merge or deployment is needed for this local goal.",

@@ -163,13 +163,25 @@ pub const DEFAULT_RETRY_POLICY: RetryPolicy = RetryPolicy {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(bound(deserialize = "E: Deserialize<'de>"))]
 pub struct RetryState<E> {
     pub attempt: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_error: Option<E>,
+}
+
+fn deserialize_present<'de, D: serde::Deserializer<'de>, E: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<E>, D::Error> {
+    E::deserialize(deserializer).map(Some)
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(bound(deserialize = "E: Deserialize<'de>"))]
 pub struct TimedRetryState<E> {
     #[serde(flatten)]
     pub retry: RetryState<E>,

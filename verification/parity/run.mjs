@@ -24,6 +24,16 @@ const binary =
 const require = createRequire(import.meta.url);
 const cargo = process.env.CARGO ?? "cargo";
 const scope = JSON.parse(await readFile(path.join(here, "scope.json"), "utf8"));
+assert.equal(
+  process.version,
+  scope.referenceEngine.node,
+  "run the pinned Node reference engine (pnpm selects the repository toolchain)",
+);
+assert.equal(
+  process.versions.v8,
+  scope.referenceEngine.v8,
+  "the strict numeric reference requires the recorded V8 implementation",
+);
 const referenceChanges = execFileSync(
   "git",
   [
@@ -134,6 +144,8 @@ const report = {
   referenceChanges,
   node: process.version,
   v8: process.versions.v8,
+  platform: process.platform,
+  architecture: process.arch,
   cargo: execFileSync(cargo, ["--version"], {
     cwd: root,
     encoding: "utf8",
@@ -152,14 +164,23 @@ const report = {
     .update(await readFile(binary))
     .digest("hex"),
   generatedSeed: 0x5eed1234,
+  nativeEvidence: Object.fromEntries(
+    cases.map((test, index) => [
+      test.id,
+      failures.some((failure) => failure.id === test.id)
+        ? []
+        : (rust[index].observedCalls ?? []),
+    ]),
+  ),
 };
 await mkdir(path.dirname(reportFile), { recursive: true });
 if (args.includes("--complete")) {
   report.coverage = await checkCoverage(
-    new Set(
-      cases
-        .filter((test) => !failures.some((failure) => failure.id === test.id))
-        .map((test) => test.id),
+    new Map(
+      Object.entries(report.nativeEvidence).map(([id, calls]) => [
+        id,
+        new Set(calls),
+      ]),
     ),
   );
   if (report.coverage.gaps.length || referenceChanges.length)
@@ -167,6 +188,6 @@ if (args.includes("--complete")) {
 }
 await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(
-  `${JSON.stringify({ ...report, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
+  `${JSON.stringify({ ...report, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
 );
 if (failures.length) process.exitCode = 1;

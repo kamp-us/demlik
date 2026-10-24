@@ -285,6 +285,49 @@
         "initCalls": 0,
         "depsCalls": 0
       }
+    },
+    {
+      "id": "core.overflow-keeps-numeric-sub-identity",
+      "operation": "tea.core.machine",
+      "input": {
+        "form": "reducer",
+        "mode": "replay",
+        "initialCount": 1e308,
+        "restoredBump": 0,
+        "msgs": [
+          {
+            "type": "add",
+            "by": 1e308
+          }
+        ]
+      },
+      "expected": {
+        "state": {
+          "type": "ready",
+          "count": null
+        },
+        "cmds": [
+          {
+            "type": "boot",
+            "count": 1e308
+          },
+          {
+            "type": "added",
+            "count": 1e308
+          }
+        ],
+        "subs": [
+          {
+            "id": "{\"deps\":{\"count\":Infinity},\"type\":\"pulse\"}",
+            "type": "pulse",
+            "deps": {
+              "count": null
+            }
+          }
+        ],
+        "initCalls": 1,
+        "depsCalls": 2
+      }
     }
   ]
 }

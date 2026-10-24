@@ -1,9 +1,17 @@
 use std::io::{self, BufRead};
 
-use demlik_code_graph::scc::{scc_members, strongly_connected_components};
-use demlik_tea::retry_backoff::{BackoffCurve, Jitter, as_rng, backoff_delay};
+use demlik_tea::retry_backoff::{BackoffCurve, Jitter};
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+// The evidence names the public path the compiler resolved and the case actually called.
+macro_rules! observe {
+    ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{
+        let returned = $function($($argument),*);
+        $calls.push(stringify!($function));
+        returned
+    }};
+}
 mod core;
 mod retry;
 
@@ -90,11 +98,17 @@ struct GraphInput {
     adjacency: std::collections::HashMap<String, Vec<String>>,
 }
 
-fn execute(case: &Case) -> Result<Value, String> {
-    match case.operation.as_str() {
-        "tea.core.machine" => core::execute(case.input.clone()),
-        "tea.retry.state" => retry::state(case.input.clone()),
-        "tea.retry.probe" => retry::probe(case.input.clone()),
+struct Observation {
+    output: Value,
+    calls: Vec<&'static str>,
+}
+
+fn execute(case: &Case) -> Result<Observation, String> {
+    let mut calls = Vec::new();
+    let output = match case.operation.as_str() {
+        "tea.core.machine" => core::execute(case.input.clone(), &mut calls),
+        "tea.retry.state" => retry::state(case.input.clone(), &mut calls),
+        "tea.retry.probe" => retry::probe(case.input.clone(), &mut calls),
         "tea.retry.backoff" => {
             let input: BackoffInput =
                 serde_json::from_value(case.input.clone()).map_err(|error| error.to_string())?;
@@ -107,7 +121,9 @@ fn execute(case: &Case) -> Result<Value, String> {
             let mut consumed = 0;
             let mut exhausted = false;
             let value = {
-                let mut rng = as_rng(
+                let mut rng = observe!(
+                    calls,
+                    demlik_tea::retry_backoff::as_rng,
                     || {
                         let value = input.random.get(consumed).copied();
                         consumed += 1;
@@ -122,7 +138,13 @@ fn execute(case: &Case) -> Result<Value, String> {
                     false,
                 )
                 .map_err(|error| error.to_string())?;
-                backoff_delay(input.attempt.value(), &curve, &mut rng)
+                observe!(
+                    calls,
+                    demlik_tea::retry_backoff::backoff_delay,
+                    input.attempt.value(),
+                    &curve,
+                    &mut rng
+                )
             };
             if exhausted {
                 return Err("recorded random draws exhausted".into());
@@ -132,25 +154,38 @@ fn execute(case: &Case) -> Result<Value, String> {
         "code_graph.scc" | "code_graph.scc_members" => {
             let input: GraphInput =
                 serde_json::from_value(case.input.clone()).map_err(|error| error.to_string())?;
-            let components = strongly_connected_components(&input.nodes, &input.adjacency);
+            let components = observe!(
+                calls,
+                demlik_code_graph::scc::strongly_connected_components,
+                &input.nodes,
+                &input.adjacency
+            );
             if case.operation == "code_graph.scc_members" {
-                let members = scc_members(&input.nodes, &components)
-                    .into_iter()
-                    .collect::<Vec<_>>();
+                let members = observe!(
+                    calls,
+                    demlik_code_graph::scc::scc_members,
+                    &input.nodes,
+                    &components
+                )
+                .into_iter()
+                .collect::<Vec<_>>();
                 Ok(json!({ "members": members }))
             } else {
                 Ok(json!({ "components": components.into_iter().collect::<Vec<_>>() }))
             }
         }
         operation => Err(format!("unsupported operation: {operation}")),
-    }
+    }?;
+    Ok(Observation { output, calls })
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     for line in io::stdin().lock().lines() {
         let case: Case = serde_json::from_str(&line?)?;
         let response = match execute(&case) {
-            Ok(output) => json!({ "id": case.id, "ok": true, "output": output }),
+            Ok(result) => {
+                json!({ "id": case.id, "ok": true, "output": result.output, "observedCalls": result.calls })
+            }
             Err(message) => {
                 json!({ "id": case.id, "ok": false, "error": { "kind": "driver_error", "message": message } })
             }

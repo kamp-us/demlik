@@ -11,6 +11,7 @@ license = "MIT"
 serde.workspace = true
 libm.workspace = true
 serde_json.workspace = true
+serde-value.workspace = true
 indexmap.workspace = true
 ryu-js.workspace = true
 fastrand.workspace = true

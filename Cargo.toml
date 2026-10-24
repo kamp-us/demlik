@@ -11,6 +11,7 @@ repository = "https://github.com/kamp-us/demlik"
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order", "float_roundtrip"] }
+serde-value = "0.7"
 indexmap = { version = "2", features = ["serde"] }
 libm = "0.2"
 ryu-js = "1.0"

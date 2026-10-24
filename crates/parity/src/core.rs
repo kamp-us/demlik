@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use demlik_tea::core::Row;
-use demlik_tea::{Machine, Step, Sub, Tagged, Update, fold_msgs, replay};
+use demlik_tea::{Machine, Step, Sub, Tagged, Update};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -38,6 +38,11 @@ impl Tagged for Msg {
 struct Cmd {
     #[serde(rename = "type")]
     kind: &'static str,
+    count: f64,
+}
+
+#[derive(Serialize)]
+struct PulseDeps {
     count: f64,
 }
 
@@ -103,7 +108,7 @@ fn row() -> Row<'static, State, Msg, Cmd> {
     ])
 }
 
-pub fn execute(input: Value) -> Result<Value, String> {
+pub fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
     let input: Input = serde_json::from_value(input).map_err(|error| error.to_string())?;
     let init_calls = Cell::new(0);
     let deps_calls = Cell::new(0);
@@ -130,17 +135,19 @@ pub fn execute(input: Value) -> Result<Value, String> {
             Step::new(state, vec![Cmd { kind, count }])
         }),
         update: match input.form {
-            Form::Reducer => Update::Reducer(row()),
-            Form::Transitions => {
-                Update::Transitions([("ready".into(), row()), ("done".into(), Row::new())].into())
-            }
+            Form::Reducer => Update::RawReducer(row()),
+            Form::Transitions => Update::RawTransitions(
+                [("ready".into(), row()), ("done".into(), Row::new())].into(),
+            ),
         },
         subscriptions: Box::new(|state: &State| {
             deps_calls.set(deps_calls.get() + 2);
             if state.kind == "ready" {
                 vec![
-                    Sub::new("pulse", json!({ "count": state.count })),
-                    Sub::new("pulse", json!({ "count": state.count })),
+                    Sub::new("pulse", PulseDeps { count: state.count })
+                        .expect("numeric dependencies are serializable"),
+                    Sub::new("pulse", PulseDeps { count: state.count })
+                        .expect("numeric dependencies are serializable"),
                 ]
             } else {
                 vec![]
@@ -148,8 +155,18 @@ pub fn execute(input: Value) -> Result<Value, String> {
         }),
     };
     let result = match input.mode {
-        Mode::Replay => replay(&machine, input.loaded, &(), input.msgs).map(|result| json!(result)),
-        Mode::Fold => fold_msgs(
+        Mode::Replay => observe!(
+            calls,
+            demlik_tea::core::replay,
+            &machine,
+            input.loaded,
+            &(),
+            input.msgs
+        )
+        .map(|result| json!(result)),
+        Mode::Fold => observe!(
+            calls,
+            demlik_tea::core::fold_msgs,
             &machine,
             input.base.unwrap_or(State {
                 kind: "ready".into(),

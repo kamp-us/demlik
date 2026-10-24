@@ -84,7 +84,13 @@ pub fn sub_id_of(kind: &str, deps: &PlainData) -> SubId {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct SubId(pub String);
+pub struct SubId(String);
+
+impl SubId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl fmt::Display for SubId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -92,28 +98,138 @@ impl fmt::Display for SubId {
     }
 }
 
-pub trait Subscription {
+mod private {
+    pub trait Sealed {}
+}
+
+/// Subscription identity is derived by the library's validated constructor.
+///
+/// ```compile_fail,E0277
+/// use demlik_tea::{Subscription, SubId};
+/// struct Forged;
+/// impl Subscription for Forged {
+///     fn id(&self) -> &SubId { unimplemented!() }
+/// }
+/// ```
+pub trait Subscription: private::Sealed {
     fn id(&self) -> &SubId;
 }
 
-#[derive(Debug, Clone, serde::Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Sub<D = Value> {
-    pub id: SubId,
+    id: SubId,
     #[serde(rename = "type")]
-    pub kind: String,
-    pub deps: D,
+    kind: String,
+    deps: D,
 }
 
-impl Sub<Value> {
-    pub fn new(kind: impl Into<String>, deps: Value) -> Self {
+impl<D: Serialize> Sub<D> {
+    pub fn new(kind: impl Into<String>, deps: D) -> Result<Self, DependencyError> {
         let kind = kind.into();
-        let id = sub_id_of(&kind, &PlainData::from(&deps));
-        Self { id, kind, deps }
+        let id = sub_id_of(&kind, &plain_data(&deps)?);
+        Ok(Self { id, kind, deps })
     }
 }
+
+impl<D> Sub<D> {
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+    pub fn deps(&self) -> &D {
+        &self.deps
+    }
+    pub fn into_parts(self) -> (SubId, String, D) {
+        (self.id, self.kind, self.deps)
+    }
+}
+
+impl<'de, D: serde::Deserialize<'de> + Serialize> serde::Deserialize<'de> for Sub<D> {
+    fn deserialize<T: serde::Deserializer<'de>>(deserializer: T) -> Result<Self, T::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire<D> {
+            id: SubId,
+            #[serde(rename = "type")]
+            kind: String,
+            deps: D,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        let sub = Self::new(wire.kind, wire.deps).map_err(serde::de::Error::custom)?;
+        if wire.id != sub.id {
+            return Err(serde::de::Error::custom(format!(
+                "subscription identity mismatch: received {}, derived {}",
+                wire.id, sub.id
+            )));
+        }
+        Ok(sub)
+    }
+}
+
+impl<D> private::Sealed for Sub<D> {}
 
 impl<D> Subscription for Sub<D> {
     fn id(&self) -> &SubId {
         &self.id
     }
+}
+
+#[derive(Debug)]
+pub enum DependencyError {
+    Serialization(serde_value::SerializerError),
+    ObjectKey,
+}
+impl fmt::Display for DependencyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(error) => {
+                write!(f, "cannot serialize subscription dependencies: {error}")
+            }
+            Self::ObjectKey => f.write_str("subscription dependency object keys must be strings"),
+        }
+    }
+}
+impl std::error::Error for DependencyError {}
+
+/// Preserve floating-point dependency values before their JSON transport encoding.
+pub fn plain_data<T: Serialize>(value: &T) -> Result<PlainData, DependencyError> {
+    use serde_value::Value as V;
+    fn convert(value: V) -> Result<PlainData, DependencyError> {
+        Ok(match value {
+            V::Unit | V::Option(None) => PlainData::Null,
+            V::Bool(value) => PlainData::Bool(value),
+            V::String(value) => PlainData::String(value),
+            V::Char(value) => PlainData::String(value.to_string()),
+            V::U8(value) => PlainData::Number(f64::from(value)),
+            V::U16(value) => PlainData::Number(f64::from(value)),
+            V::U32(value) => PlainData::Number(f64::from(value)),
+            V::U64(value) => PlainData::Number(value as f64),
+            V::I8(value) => PlainData::Number(f64::from(value)),
+            V::I16(value) => PlainData::Number(f64::from(value)),
+            V::I32(value) => PlainData::Number(f64::from(value)),
+            V::I64(value) => PlainData::Number(value as f64),
+            V::F32(value) => PlainData::Number(f64::from(value)),
+            V::F64(value) => PlainData::Number(value),
+            V::Option(Some(value)) | V::Newtype(value) => convert(*value)?,
+            V::Seq(values) => {
+                PlainData::Array(values.into_iter().map(convert).collect::<Result<_, _>>()?)
+            }
+            V::Bytes(values) => PlainData::Array(
+                values
+                    .into_iter()
+                    .map(|value| PlainData::Number(f64::from(value)))
+                    .collect(),
+            ),
+            V::Map(values) => PlainData::Object(
+                values
+                    .into_iter()
+                    .map(|(key, value)| {
+                        let V::String(key) = key else {
+                            return Err(DependencyError::ObjectKey);
+                        };
+                        Ok((key, convert(value)?))
+                    })
+                    .collect::<Result<_, _>>()?,
+            ),
+        })
+    }
+    convert(serde_value::to_value(value).map_err(DependencyError::Serialization)?)
 }

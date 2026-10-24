@@ -371,6 +371,30 @@
         "draws": 0,
         "accepted": true
       }
+    },
+    {
+      "id": "retry-state.restored-null-error",
+      "operation": "tea.retry.state",
+      "input": {
+        "initial": {
+          "attempt": 1,
+          "lastError": null
+        },
+        "failures": [],
+        "budget": {
+          "kind": "count",
+          "maxAttempts": 3
+        }
+      },
+      "expected": {
+        "states": [
+          {
+            "attempt": 1,
+            "lastError": null
+          }
+        ],
+        "allowed": true
+      }
     }
   ]
 }
