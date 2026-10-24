@@ -1,3 +1,4 @@
+use crate::js_math::{max as js_max, min as js_min};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -78,24 +79,4 @@ pub fn record(window: &SlidingWindow, now_ms: f64) -> (SlidingWindow, bool) {
 
 pub fn remaining(window: &SlidingWindow, now_ms: f64) -> f64 {
     js_max(0.0, window.limit - window.live_hits(now_ms).count() as f64)
-}
-
-// JS min/max propagate NaN and choose opposite signs at a zero tie.
-fn js_min(left: f64, right: f64) -> f64 {
-    if left.is_nan() || right.is_nan() {
-        f64::NAN
-    } else if left == 0.0 && right == 0.0 {
-        if left.is_sign_negative() || right.is_sign_negative() {
-            -0.0
-        } else {
-            0.0
-        }
-    } else if left < right {
-        left
-    } else {
-        right
-    }
-}
-fn js_max(left: f64, right: f64) -> f64 {
-    -js_min(-left, -right)
 }

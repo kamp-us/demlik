@@ -1,4 +1,6 @@
-export function policyCases(seed = 0x7011c1e5) {
+export const POLICY_SEED = 0x7011c1e5;
+
+export function policyCases(seed = POLICY_SEED) {
   let state = seed >>> 0;
   const random = () => {
     state ^= state << 13;
@@ -41,7 +43,23 @@ export function policyCases(seed = 0x7011c1e5) {
     negativeInfinity,
     negativeZero,
   ];
-  const keys = ["a", "b", "hot", "cold", "", "0", "10", "unicode😀"];
+  const keys = [
+    "a",
+    "b",
+    "hot",
+    "cold",
+    "",
+    "0",
+    "10",
+    "unicode😀",
+    "__proto__",
+    "toString",
+    "constructor",
+    "value",
+    "atMs",
+    "expiresAtMs",
+    "hasOwnProperty",
+  ];
   const values = [
     null,
     { _tag: "timeout", afterMs: 5 },
@@ -51,8 +69,76 @@ export function policyCases(seed = 0x7011c1e5) {
     0,
     ["nested"],
   ];
+  values.push(
+    { value: "nested", expiresAtMs: "0xA", atMs: [10] },
+    { value: null, expiresAtMs: null, atMs: "\ufeff0b1010" },
+    {
+      value: { nested: 1 },
+      expiresAtMs: { toString: "not callable" },
+      atMs: [],
+    },
+    JSON.parse('{"__proto__":{"payload":"own data"}}'),
+  );
   const cases = [];
   for (let index = 0; index < 100; index++) {
+    const coerced = pick([
+      "",
+      " -0 ",
+      "1.e2",
+      "\u0085",
+      "\ufeff0b1010",
+      "0x20000000000001",
+      "0x20000000000003",
+      `0x${"f".repeat(256)}`,
+      "0o77777777777777777777",
+      "+0x10",
+      "Infinity",
+      "-Infinity",
+      "inf",
+      true,
+      false,
+      null,
+      [],
+      [null],
+      [1],
+      ["2"],
+      [[1]],
+      [1, 2],
+      {},
+      { valueOf: 10 },
+      { toString: "not callable" },
+    ]);
+    const coercedOperation = index % 2 === 0 ? "cache" : "idempotency";
+    cases.push({
+      id: `generated.policies.coercion.${seed}.${index}`,
+      operation: `tea.policies.${coercedOperation}`,
+      input: {
+        ...(coercedOperation === "idempotency"
+          ? { options: { ttlMs: pick(times) } }
+          : {}),
+        steps: [
+          coercedOperation === "cache"
+            ? {
+                event: "set",
+                key: "__proto__",
+                value: { value: "projected", expiresAtMs: coerced },
+                nowMs: 0,
+                ttlMs: 100,
+              }
+            : {
+                event: "remember",
+                key: "__proto__",
+                value: { value: "projected", atMs: coerced },
+                nowMs: 0,
+              },
+          ...Array.from({ length: 10 }, () => ({
+            event: "read",
+            key: "value",
+            nowMs: pick(times),
+          })),
+        ],
+      },
+    });
     cases.push({
       id: `generated.policies.circuit.${seed}.${index}`,
       operation: "tea.policies.circuit",

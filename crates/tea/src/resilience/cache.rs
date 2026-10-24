@@ -1,5 +1,6 @@
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+
+use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -7,33 +8,58 @@ pub struct CacheEntry<V> {
     pub value: V,
     pub expires_at_ms: f64,
 }
-impl<V> CacheEntry<V> {
-    fn expired(&self, now_ms: f64) -> bool {
-        now_ms >= self.expires_at_ms
+impl<V: Serialize> RecordEntry for CacheEntry<V> {
+    type Value = V;
+    const TIMESTAMP_KEY: &'static str = "expiresAtMs";
+    fn payload(&self) -> &V {
+        &self.value
+    }
+    fn timestamp(&self) -> f64 {
+        self.expires_at_ms
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TtlCache<V> {
-    pub entries: IndexMap<String, CacheEntry<V>>,
+    pub entries: JsRecord<CacheEntry<V>>,
 }
 
 pub fn init_cache<V>() -> TtlCache<V> {
     TtlCache {
-        entries: IndexMap::new(),
+        entries: JsRecord::default(),
     }
 }
 
-pub fn get<'a, V>(cache: &'a TtlCache<V>, key: &str, now_ms: f64) -> Option<&'a V> {
-    cache
-        .entries
-        .get(key)
-        .filter(|entry| !entry.expired(now_ms))
-        .map(|entry| &entry.value)
+fn live<'a, V: Serialize>(
+    cache: &'a TtlCache<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<Option<Resolved<'a, CacheEntry<V>>>, JsAccessError> {
+    let entry = cache.entries.resolve(key)?;
+    if entry.missing() || now_ms >= entry.timestamp()? {
+        Ok(None)
+    } else {
+        Ok(Some(entry))
+    }
 }
 
-pub fn has<V>(cache: &TtlCache<V>, key: &str, now_ms: f64) -> bool {
-    get(cache, key, now_ms).is_some()
+pub fn get<'a, V: Serialize>(
+    cache: &'a TtlCache<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
+    match live(cache, key, now_ms)? {
+        Some(entry) => entry.payload(),
+        None => Ok(None),
+    }
+}
+
+pub fn has<V: Serialize>(
+    cache: &TtlCache<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<bool, JsAccessError> {
+    Ok(live(cache, key, now_ms)?.is_some())
 }
 
 pub fn set<V: Clone>(
@@ -43,25 +69,33 @@ pub fn set<V: Clone>(
     now_ms: f64,
     ttl_ms: f64,
 ) -> TtlCache<V> {
-    let mut next = cache.clone();
-    next.entries.insert(
+    let mut entries = cache.entries.spread();
+    entries.assign(
         key.into(),
-        CacheEntry {
+        RecordValue::Entry(CacheEntry {
             value,
             expires_at_ms: now_ms + ttl_ms,
-        },
+        }),
     );
-    next
+    TtlCache { entries }
 }
 
 pub fn remove<V: Clone>(cache: &TtlCache<V>, key: &str) -> TtlCache<V> {
-    let mut next = cache.clone();
-    next.entries.shift_remove(key);
-    next
+    let mut entries = cache.entries.spread();
+    entries.delete(key);
+    TtlCache { entries }
 }
 
-pub fn evict_expired<V: Clone>(cache: &TtlCache<V>, now_ms: f64) -> TtlCache<V> {
-    let mut next = cache.clone();
-    next.entries.retain(|_, entry| !entry.expired(now_ms));
-    next
+pub fn evict_expired<V: Clone + Serialize>(
+    cache: &TtlCache<V>,
+    now_ms: f64,
+) -> Result<TtlCache<V>, JsAccessError> {
+    let mut entries = JsRecord::default();
+    for (key, entry) in cache.entries.own_entries() {
+        if now_ms >= Resolved::from(entry).timestamp()? {
+            continue;
+        }
+        entries.assign(key.clone(), entry.clone());
+    }
+    Ok(TtlCache { entries })
 }

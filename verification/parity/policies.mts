@@ -17,6 +17,23 @@ export function policyOperations(
       );
     return value;
   }
+  // Record parsing must preserve an own __proto__ key created by JSON.parse.
+  function record<T>(entry: z.ZodType<T>) {
+    return z
+      .custom<Record<string, unknown>>(
+        (value) =>
+          value !== null && typeof value === "object" && !Array.isArray(value),
+        "Expected a record",
+      )
+      .transform(Object.entries)
+      .pipe(z.array(z.tuple([z.string(), entry])))
+      .transform((entries) => Object.fromEntries(entries));
+  }
+  const jsonSchema = z.json();
+  const jsonData = z.custom<z.infer<typeof jsonSchema>>(
+    (value) => jsonSchema.safeParse(value).success,
+    "Expected JSON data",
+  );
   const circuitState = z.discriminatedUnion("phase", [
     z.object({ phase: z.literal("closed"), failures: number }),
     z.object({ phase: z.literal("open"), openedAtMs: number }),
@@ -75,10 +92,7 @@ export function policyOperations(
   const cacheInput = z.object({
     initial: z
       .object({
-        entries: z.record(
-          z.string(),
-          z.object({ value: z.json(), expiresAtMs: number }),
-        ),
+        entries: record(z.object({ value: jsonData, expiresAtMs: number })),
       })
       .optional(),
     steps: z.array(
@@ -86,7 +100,7 @@ export function policyOperations(
         z.object({
           event: z.literal("set"),
           key: z.string(),
-          value: z.json(),
+          value: jsonData,
           nowMs: number,
           ttlMs: number,
         }),
@@ -102,10 +116,7 @@ export function policyOperations(
       .optional(),
     initial: z
       .object({
-        entries: z.record(
-          z.string(),
-          z.object({ value: z.json(), atMs: number }),
-        ),
+        entries: record(z.object({ value: jsonData, atMs: number })),
         order: z.array(z.string()),
         capacity: number.optional(),
         ttlMs: number.optional(),
@@ -116,11 +127,15 @@ export function policyOperations(
         z.object({
           event: z.literal("remember"),
           key: z.string(),
-          value: z.json(),
+          value: jsonData,
           nowMs: number,
         }),
         z.object({ event: z.literal("evict"), nowMs: number }),
-        z.object({ event: z.literal("read"), key: z.string(), nowMs: number }),
+        z.object({
+          event: z.enum(["read", "presence"]),
+          key: z.string(),
+          nowMs: number,
+        }),
       ]),
     ),
   });
@@ -130,26 +145,40 @@ export function policyOperations(
       let state: idem.IdempotencyStore<unknown> =
         input.initial ?? idem.initStore(input.options);
       const trace: unknown[] = [{ state }];
-      for (const step of input.steps) {
-        switch (step.event) {
-          case "remember":
-            state = idem.remember(state, step.key, step.value, step.nowMs);
-            break;
-          case "evict":
-            state = idem.evictExpired(state, step.nowMs);
-            break;
-          case "read": {
-            const value = idem.recall(state, step.key, step.nowMs);
-            trace.push({
-              state,
-              present: idem.seen(state, step.key, step.nowMs),
-              found: value !== undefined,
-              ...(value === undefined ? {} : { value }),
-            });
-            continue;
+      try {
+        for (const step of input.steps) {
+          switch (step.event) {
+            case "remember":
+              state = idem.remember(state, step.key, step.value, step.nowMs);
+              break;
+            case "evict":
+              state = idem.evictExpired(state, step.nowMs);
+              break;
+            case "presence":
+              trace.push({
+                state,
+                present: idem.seen(state, step.key, step.nowMs),
+              });
+              continue;
+            case "read": {
+              const value = idem.recall(state, step.key, step.nowMs);
+              trace.push({
+                state,
+                present: idem.seen(state, step.key, step.nowMs),
+                found: value !== undefined,
+                ...(value === undefined ? {} : { value }),
+              });
+              continue;
+            }
           }
+          trace.push({ state });
         }
-        trace.push({ state });
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        return encode({
+          trace,
+          refusal: { name: error.name, message: error.message },
+        });
       }
       return encode({ trace });
     },
@@ -157,35 +186,43 @@ export function policyOperations(
       const input = cacheInput.parse(raw);
       let state: cache.TtlCache<unknown> = input.initial ?? cache.initCache();
       const trace: unknown[] = [{ state }];
-      for (const step of input.steps) {
-        switch (step.event) {
-          case "set":
-            state = cache.set(
-              state,
-              step.key,
-              step.value,
-              step.nowMs,
-              step.ttlMs,
-            );
-            break;
-          case "remove":
-            state = cache.remove(state, step.key);
-            break;
-          case "evict":
-            state = cache.evictExpired(state, step.nowMs);
-            break;
-          case "read": {
-            const value = cache.get(state, step.key, step.nowMs);
-            trace.push({
-              state,
-              present: cache.has(state, step.key, step.nowMs),
-              found: value !== undefined,
-              ...(value === undefined ? {} : { value }),
-            });
-            continue;
+      try {
+        for (const step of input.steps) {
+          switch (step.event) {
+            case "set":
+              state = cache.set(
+                state,
+                step.key,
+                step.value,
+                step.nowMs,
+                step.ttlMs,
+              );
+              break;
+            case "remove":
+              state = cache.remove(state, step.key);
+              break;
+            case "evict":
+              state = cache.evictExpired(state, step.nowMs);
+              break;
+            case "read": {
+              const value = cache.get(state, step.key, step.nowMs);
+              trace.push({
+                state,
+                present: cache.has(state, step.key, step.nowMs),
+                found: value !== undefined,
+                ...(value === undefined ? {} : { value }),
+              });
+              continue;
+            }
           }
+          trace.push({ state });
         }
-        trace.push({ state });
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        return encode({
+          trace,
+          refusal: { name: error.name, message: error.message },
+        });
       }
       return encode({ trace });
     },

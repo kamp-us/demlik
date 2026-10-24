@@ -1,3 +1,4 @@
+use crate::js_math::min as js_min;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -261,20 +262,4 @@ pub fn next_delay_ms<E, F: FnMut() -> f64>(
     rng: &mut Rng<F>,
 ) -> f64 {
     backoff_delay(state.attempt, curve, rng)
-}
-
-fn js_min(left: f64, right: f64) -> f64 {
-    if left.is_nan() || right.is_nan() {
-        f64::NAN
-    } else if left == 0.0 && right == 0.0 {
-        if left.is_sign_negative() || right.is_sign_negative() {
-            -0.0
-        } else {
-            0.0
-        }
-    } else if left < right {
-        left
-    } else {
-        right
-    }
 }

@@ -357,3 +357,23 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
 
     s * z
 }
+
+// JS min/max propagate NaN and choose opposite signs at a zero tie.
+pub(crate) fn min(left: f64, right: f64) -> f64 {
+    if left.is_nan() || right.is_nan() {
+        f64::NAN
+    } else if left == 0.0 && right == 0.0 {
+        if left.is_sign_negative() || right.is_sign_negative() {
+            -0.0
+        } else {
+            0.0
+        }
+    } else if left < right {
+        left
+    } else {
+        right
+    }
+}
+pub(crate) fn max(left: f64, right: f64) -> f64 {
+    -min(-left, -right)
+}

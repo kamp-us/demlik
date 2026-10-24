@@ -1,5 +1,6 @@
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+
+use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,16 +17,21 @@ pub struct IdempotencyEntry<V> {
     pub value: V,
     pub at_ms: f64,
 }
-impl<V> IdempotencyEntry<V> {
-    fn expired(&self, now_ms: f64, ttl_ms: Option<f64>) -> bool {
-        ttl_ms.is_some_and(|ttl| now_ms - self.at_ms >= ttl)
+impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
+    type Value = V;
+    const TIMESTAMP_KEY: &'static str = "atMs";
+    fn payload(&self) -> &V {
+        &self.value
+    }
+    fn timestamp(&self) -> f64 {
+        self.at_ms
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdempotencyStore<V> {
-    pub entries: IndexMap<String, IdempotencyEntry<V>>,
+    pub entries: JsRecord<IdempotencyEntry<V>>,
     pub order: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capacity: Option<f64>,
@@ -35,62 +41,90 @@ pub struct IdempotencyStore<V> {
 
 pub fn init_store<V>(options: StoreOptions) -> IdempotencyStore<V> {
     IdempotencyStore {
-        entries: IndexMap::new(),
+        entries: JsRecord::default(),
         order: Vec::new(),
         capacity: options.capacity,
         ttl_ms: options.ttl_ms,
     }
 }
 
-pub fn seen<V>(store: &IdempotencyStore<V>, key: &str, now_ms: f64) -> bool {
-    recall(store, key, now_ms).is_some()
-}
-
-pub fn recall<'a, V>(store: &'a IdempotencyStore<V>, key: &str, now_ms: f64) -> Option<&'a V> {
-    store
-        .entries
-        .get(key)
-        .filter(|entry| !entry.expired(now_ms, store.ttl_ms))
-        .map(|entry| &entry.value)
-}
-
-pub fn evict_expired<V: Clone>(store: &IdempotencyStore<V>, now_ms: f64) -> IdempotencyStore<V> {
-    if store.ttl_ms.is_none() {
-        return store.clone();
+fn live<'a, V: Serialize>(
+    store: &'a IdempotencyStore<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<Option<Resolved<'a, IdempotencyEntry<V>>>, JsAccessError> {
+    let entry = store.entries.resolve(key)?;
+    if entry.missing() {
+        return Ok(None);
     }
+    if let Some(ttl) = store.ttl_ms {
+        if now_ms - entry.timestamp()? >= ttl {
+            return Ok(None);
+        }
+    }
+    Ok(Some(entry))
+}
+
+pub fn seen<V: Serialize>(
+    store: &IdempotencyStore<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<bool, JsAccessError> {
+    Ok(live(store, key, now_ms)?.is_some())
+}
+
+pub fn recall<'a, V: Serialize>(
+    store: &'a IdempotencyStore<V>,
+    key: &str,
+    now_ms: f64,
+) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
+    match live(store, key, now_ms)? {
+        Some(entry) => entry.payload(),
+        None => Ok(None),
+    }
+}
+
+pub fn evict_expired<V: Clone + Serialize>(
+    store: &IdempotencyStore<V>,
+    now_ms: f64,
+) -> Result<IdempotencyStore<V>, JsAccessError> {
+    let Some(ttl) = store.ttl_ms else {
+        return Ok(store.clone());
+    };
     let mut next = IdempotencyStore {
-        entries: IndexMap::new(),
+        entries: JsRecord::default(),
         order: Vec::new(),
         capacity: store.capacity,
         ttl_ms: store.ttl_ms,
     };
     for key in &store.order {
-        if let Some(entry) = store
-            .entries
-            .get(key)
-            .filter(|entry| !entry.expired(now_ms, store.ttl_ms))
-        {
-            next.entries.insert(key.clone(), entry.clone());
+        let entry = store.entries.resolve(key)?;
+        if entry.missing() || now_ms - entry.timestamp()? >= ttl {
+            continue;
+        }
+        if let Some(entry) = entry.into_owned() {
+            next.entries.assign(key.clone(), entry);
             next.order.push(key.clone());
         }
     }
-    next
+    Ok(next)
 }
 
-pub fn remember<V: Clone>(
+pub fn remember<V: Clone + Serialize>(
     store: &IdempotencyStore<V>,
     key: impl Into<String>,
     value: V,
     now_ms: f64,
-) -> IdempotencyStore<V> {
-    let mut next = evict_expired(store, now_ms);
+) -> Result<IdempotencyStore<V>, JsAccessError> {
+    let mut next = evict_expired(store, now_ms)?;
+    next.entries = next.entries.spread();
     let key = key.into();
-    next.entries.insert(
+    next.entries.assign(
         key.clone(),
-        IdempotencyEntry {
+        RecordValue::Entry(IdempotencyEntry {
             value,
             at_ms: now_ms,
-        },
+        }),
     );
     next.order.retain(|old| old != &key);
     next.order.push(key);
@@ -100,8 +134,8 @@ pub fn remember<V: Clone>(
                 break;
             }
             let oldest = next.order.remove(0);
-            next.entries.shift_remove(&oldest);
+            next.entries.delete(&oldest);
         }
     }
-    next
+    Ok(next)
 }

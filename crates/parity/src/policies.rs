@@ -2,9 +2,21 @@ use super::{Number, encode_number};
 use demlik_tea::resilience::circuit_breaker::{
     CircuitPolicy, CircuitState, DEFAULT_CIRCUIT_POLICY,
 };
+use demlik_tea::{
+    PlainData,
+    js_record::{JsAccessError, JsRead, JsRecord},
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+macro_rules! accepted {
+    ($trace:ident, $call:expr) => {
+        match $call {
+            Ok(value) => value,
+            Err(error) => return Ok(refusal($trace, error)),
+        }
+    };
+}
 #[derive(Deserialize)]
 #[serde(
     tag = "phase",
@@ -306,19 +318,20 @@ struct CacheInitial {
 impl CacheInitial {
     fn state(self) -> demlik_tea::resilience::cache::TtlCache<Value> {
         demlik_tea::resilience::cache::TtlCache {
-            entries: self
-                .entries
-                .into_iter()
-                .map(|(key, entry)| {
-                    (
-                        key,
-                        demlik_tea::resilience::cache::CacheEntry {
-                            value: entry.value,
-                            expires_at_ms: entry.expires_at_ms.value(),
-                        },
-                    )
-                })
-                .collect(),
+            entries: JsRecord::from_own(
+                self.entries
+                    .into_iter()
+                    .map(|(key, entry)| {
+                        (
+                            key,
+                            demlik_tea::resilience::cache::CacheEntry {
+                                value: entry.value,
+                                expires_at_ms: entry.expires_at_ms.value(),
+                            },
+                        )
+                    })
+                    .collect(),
+            ),
         }
     }
 }
@@ -351,18 +364,32 @@ struct CacheInput {
     initial: Option<CacheInitial>,
     steps: Vec<CacheStep>,
 }
+fn plain_value(value: &PlainData) -> Value {
+    match value {
+        PlainData::Null | PlainData::Undefined => Value::Null,
+        PlainData::Bool(value) => json!(value),
+        PlainData::Number(value) => encode_number(*value),
+        PlainData::String(value) => json!(value),
+        PlainData::Array(values) => Value::Array(values.iter().map(plain_value).collect()),
+        PlainData::Object(values) => Value::Object(
+            values
+                .iter()
+                .map(|(key, value)| (key.clone(), plain_value(value)))
+                .collect(),
+        ),
+    }
+}
+fn read_value(value: JsRead<'_, Value>) -> Value {
+    match value {
+        JsRead::Stored(value) => value.clone(),
+        JsRead::Projected(value) => plain_value(&value),
+    }
+}
+fn refusal(trace: Vec<Value>, error: JsAccessError) -> Value {
+    json!({"trace":trace, "refusal":error})
+}
 fn cache_value(state: &demlik_tea::resilience::cache::TtlCache<Value>) -> Value {
-    let entries: serde_json::Map<_, _> = state
-        .entries
-        .iter()
-        .map(|(key, entry)| {
-            (
-                key.clone(),
-                json!({"value":entry.value, "expiresAtMs":encode_number(entry.expires_at_ms)}),
-            )
-        })
-        .collect();
-    json!({"entries":entries})
+    json!({"entries":plain_value(&state.entries.to_plain_data().expect("JSON entries serialize"))})
 }
 fn cache(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
     let input: CacheInput = serde_json::from_value(input).map_err(|error| error.to_string())?;
@@ -393,31 +420,40 @@ fn cache(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
                 state = observe!(calls, demlik_tea::resilience::cache::remove, &state, &key)
             }
             CacheStep::Evict { now_ms } => {
-                state = observe!(
-                    calls,
-                    demlik_tea::resilience::cache::evict_expired,
-                    &state,
-                    now_ms.value()
+                state = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::resilience::cache::evict_expired,
+                        &state,
+                        now_ms.value()
+                    )
                 )
             }
             CacheStep::Read { key, now_ms } => {
-                let value = observe!(
-                    calls,
-                    demlik_tea::resilience::cache::get,
-                    &state,
-                    &key,
-                    now_ms.value()
+                let value = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::resilience::cache::get,
+                        &state,
+                        &key,
+                        now_ms.value()
+                    )
                 );
-                let present = observe!(
-                    calls,
-                    demlik_tea::resilience::cache::has,
-                    &state,
-                    &key,
-                    now_ms.value()
+                let present = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::resilience::cache::has,
+                        &state,
+                        &key,
+                        now_ms.value()
+                    )
                 );
                 let mut observation = json!({"state":cache_value(&state), "present":present, "found":value.is_some()});
                 if let Some(value) = value {
-                    observation["value"] = value.clone();
+                    observation["value"] = read_value(value);
                 }
                 trace.push(observation);
                 continue;
@@ -451,19 +487,20 @@ struct IdempotencyInitial {
 impl IdempotencyInitial {
     fn state(self) -> demlik_tea::idempotency::IdempotencyStore<Value> {
         demlik_tea::idempotency::IdempotencyStore {
-            entries: self
-                .entries
-                .into_iter()
-                .map(|(key, entry)| {
-                    (
-                        key,
-                        demlik_tea::idempotency::IdempotencyEntry {
-                            value: entry.value,
-                            at_ms: entry.at_ms.value(),
-                        },
-                    )
-                })
-                .collect(),
+            entries: JsRecord::from_own(
+                self.entries
+                    .into_iter()
+                    .map(|(key, entry)| {
+                        (
+                            key,
+                            demlik_tea::idempotency::IdempotencyEntry {
+                                value: entry.value,
+                                at_ms: entry.at_ms.value(),
+                            },
+                        )
+                    })
+                    .collect(),
+            ),
             order: self.order,
             capacity: self.capacity.map(Number::value),
             ttl_ms: self.ttl_ms.map(Number::value),
@@ -485,6 +522,10 @@ enum IdempotencyStep {
     Evict {
         now_ms: Number,
     },
+    Presence {
+        key: String,
+        now_ms: Number,
+    },
     Read {
         key: String,
         now_ms: Number,
@@ -497,17 +538,7 @@ struct IdempotencyInput {
     steps: Vec<IdempotencyStep>,
 }
 fn idempotency_value(state: &demlik_tea::idempotency::IdempotencyStore<Value>) -> Value {
-    let entries: serde_json::Map<_, _> = state
-        .entries
-        .iter()
-        .map(|(key, entry)| {
-            (
-                key.clone(),
-                json!({"value":entry.value, "atMs":encode_number(entry.at_ms)}),
-            )
-        })
-        .collect();
-    let mut value = json!({"entries":entries,"order":state.order});
+    let mut value = json!({"entries":plain_value(&state.entries.to_plain_data().expect("JSON entries serialize")),"order":state.order});
     if let Some(capacity) = state.capacity {
         value["capacity"] = encode_number(capacity);
     }
@@ -534,41 +565,67 @@ fn idempotency(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
     for step in input.steps {
         match step {
             IdempotencyStep::Remember { key, value, now_ms } => {
-                state = observe!(
-                    calls,
-                    demlik_tea::idempotency::remember,
-                    &state,
-                    key,
-                    value,
-                    now_ms.value()
+                state = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::idempotency::remember,
+                        &state,
+                        key,
+                        value,
+                        now_ms.value()
+                    )
                 )
             }
             IdempotencyStep::Evict { now_ms } => {
-                state = observe!(
-                    calls,
-                    demlik_tea::idempotency::evict_expired,
-                    &state,
-                    now_ms.value()
+                state = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::idempotency::evict_expired,
+                        &state,
+                        now_ms.value()
+                    )
                 )
             }
-            IdempotencyStep::Read { key, now_ms } => {
-                let value = observe!(
-                    calls,
-                    demlik_tea::idempotency::recall,
-                    &state,
-                    &key,
-                    now_ms.value()
+            IdempotencyStep::Presence { key, now_ms } => {
+                let present = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::idempotency::seen,
+                        &state,
+                        &key,
+                        now_ms.value()
+                    )
                 );
-                let present = observe!(
-                    calls,
-                    demlik_tea::idempotency::seen,
-                    &state,
-                    &key,
-                    now_ms.value()
+                trace.push(json!({"state":idempotency_value(&state), "present":present}));
+                continue;
+            }
+            IdempotencyStep::Read { key, now_ms } => {
+                let value = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::idempotency::recall,
+                        &state,
+                        &key,
+                        now_ms.value()
+                    )
+                );
+                let present = accepted!(
+                    trace,
+                    observe!(
+                        calls,
+                        demlik_tea::idempotency::seen,
+                        &state,
+                        &key,
+                        now_ms.value()
+                    )
                 );
                 let mut observation = json!({"state":idempotency_value(&state),"present":present,"found":value.is_some()});
                 if let Some(value) = value {
-                    observation["value"] = value.clone();
+                    observation["value"] = read_value(value);
                 }
                 trace.push(observation);
                 continue;

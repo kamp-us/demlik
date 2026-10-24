@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
-import { policyCases } from "./policies-generated.mjs";
+import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -165,6 +165,7 @@ const report = {
     .update(await readFile(binary))
     .digest("hex"),
   generatedSeed: 0x5eed1234,
+  policyGeneratedSeed: POLICY_SEED,
   nativeEvidence: Object.fromEntries(
     cases.map((test, index) => [
       test.id,

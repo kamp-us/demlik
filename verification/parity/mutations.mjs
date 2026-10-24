@@ -12,6 +12,21 @@ const reportDirectory = path.join(root, "target/parity");
 const cargo = process.env.CARGO ?? "cargo";
 const mutations = [
   {
+    name: "record-spread-retains-prototype",
+    file: "crates/tea/src/js_record.rs",
+    before: "own: self.own.clone(),\n            prototype: Prototype::Object,",
+    after:
+      "own: self.own.clone(),\n            prototype: self.prototype.clone(),",
+    witness: "policies.cache-injected-prototype-and-spread-reset",
+  },
+  {
+    name: "record-prototype-assignment-becomes-own-data",
+    file: "crates/tea/src/js_record.rs",
+    before: "&& setter_visible",
+    after: "&& false",
+    witness: "policies.cache-injected-prototype-and-spread-reset",
+  },
+  {
     name: "circuit-excludes-cooldown-edge",
     file: "crates/tea/src/resilience/circuit_breaker.rs",
     before: "now_ms - opened_at_ms >= policy.cooldown_ms",
@@ -35,8 +50,8 @@ const mutations = [
   {
     name: "cache-retains-expiry-edge",
     file: "crates/tea/src/resilience/cache.rs",
-    before: "now_ms >= self.expires_at_ms",
-    after: "now_ms > self.expires_at_ms",
+    before: "if entry.missing() || now_ms >= entry.timestamp()?",
+    after: "if entry.missing() || now_ms > entry.timestamp()?",
     witness: "policies.cache-half-open-ttl-null-failure-and-removal",
   },
   {

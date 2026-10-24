@@ -1114,6 +1114,589 @@
           }
         ]
       }
+    },
+    {
+      "id": "policies.cache-pristine-inherited-properties",
+      "operation": "tea.policies.cache",
+      "input": {
+        "steps": [
+          {
+            "event": "read",
+            "key": "toString",
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "constructor",
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "hasOwnProperty",
+            "nowMs": 0
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.cache-injected-prototype-and-spread-reset",
+      "operation": "tea.policies.cache",
+      "input": {
+        "steps": [
+          {
+            "event": "set",
+            "key": "__proto__",
+            "value": {
+              "value": "projected",
+              "expiresAtMs": "0xA"
+            },
+            "nowMs": 0,
+            "ttlMs": 20
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 1
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 9
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 10
+          },
+          {
+            "event": "read",
+            "key": "expiresAtMs",
+            "nowMs": 1
+          },
+          {
+            "event": "remove",
+            "key": "missing"
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 1
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 1
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": true,
+            "value": {
+              "value": "projected",
+              "expiresAtMs": "0xA"
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": true,
+            "value": "projected"
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": false,
+            "found": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.cache-own-prototype-key-is-data-until-eviction-copy",
+      "operation": "tea.policies.cache",
+      "input": {
+        "initial": {
+          "entries": {
+            "__proto__": {
+              "value": "seed",
+              "expiresAtMs": 50
+            }
+          }
+        },
+        "steps": [
+          {
+            "event": "set",
+            "key": "__proto__",
+            "value": "updated",
+            "nowMs": 1,
+            "ttlMs": 100
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 2
+          },
+          {
+            "event": "evict",
+            "nowMs": 2
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 2
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": "seed",
+                  "expiresAtMs": 50
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": "updated",
+                  "expiresAtMs": 101
+                }
+              }
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": "updated",
+                  "expiresAtMs": 101
+                }
+              }
+            },
+            "present": true,
+            "found": true,
+            "value": "updated"
+          },
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            },
+            "present": true,
+            "found": true,
+            "value": "updated"
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.idempotency-injected-prototype-coercion-and-reset",
+      "operation": "tea.policies.idempotency",
+      "input": {
+        "options": {
+          "ttlMs": 5
+        },
+        "steps": [
+          {
+            "event": "read",
+            "key": "toString",
+            "nowMs": 0
+          },
+          {
+            "event": "remember",
+            "key": "__proto__",
+            "value": {
+              "value": null,
+              "atMs": [10]
+            },
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 1
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 14
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 15
+          },
+          {
+            "event": "remember",
+            "key": "normal",
+            "value": 42,
+            "nowMs": 1
+          },
+          {
+            "event": "evict",
+            "nowMs": 2
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 2
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "ttlMs": 5
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": [],
+              "ttlMs": 5
+            },
+            "present": true,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"],
+              "ttlMs": 5
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"],
+              "ttlMs": 5
+            },
+            "present": true,
+            "found": true,
+            "value": {
+              "value": null,
+              "atMs": [10]
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"],
+              "ttlMs": 5
+            },
+            "present": true,
+            "found": true,
+            "value": null
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"],
+              "ttlMs": 5
+            },
+            "present": false,
+            "found": false
+          },
+          {
+            "state": {
+              "entries": {
+                "normal": {
+                  "value": 42,
+                  "atMs": 1
+                }
+              },
+              "order": ["__proto__", "normal"],
+              "ttlMs": 5
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "normal": {
+                  "value": 42,
+                  "atMs": 1
+                }
+              },
+              "order": ["__proto__", "normal"],
+              "ttlMs": 5
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "normal": {
+                  "value": 42,
+                  "atMs": 1
+                }
+              },
+              "order": ["__proto__", "normal"],
+              "ttlMs": 5
+            },
+            "present": true,
+            "found": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.idempotency-own-prototype-key-overwrite",
+      "operation": "tea.policies.idempotency",
+      "input": {
+        "initial": {
+          "entries": {
+            "__proto__": {
+              "value": null,
+              "atMs": 0
+            }
+          },
+          "order": ["__proto__"],
+          "capacity": 2
+        },
+        "steps": [
+          {
+            "event": "remember",
+            "key": "__proto__",
+            "value": "updated",
+            "nowMs": 1
+          },
+          {
+            "event": "read",
+            "key": "__proto__",
+            "nowMs": 2
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": null,
+                  "atMs": 0
+                }
+              },
+              "order": ["__proto__"],
+              "capacity": 2
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": "updated",
+                  "atMs": 1
+                }
+              },
+              "order": ["__proto__"],
+              "capacity": 2
+            }
+          },
+          {
+            "state": {
+              "entries": {
+                "__proto__": {
+                  "value": "updated",
+                  "atMs": 1
+                }
+              },
+              "order": ["__proto__"],
+              "capacity": 2
+            },
+            "present": true,
+            "found": true,
+            "value": "updated"
+          }
+        ]
+      }
+    },
+    {
+      "id": "policies.cache-null-projection-is-a-typeerror",
+      "operation": "tea.policies.cache",
+      "input": {
+        "steps": [
+          {
+            "event": "set",
+            "key": "__proto__",
+            "value": null,
+            "nowMs": 0,
+            "ttlMs": 10
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 0
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {}
+            }
+          },
+          {
+            "state": {
+              "entries": {}
+            }
+          }
+        ],
+        "refusal": {
+          "name": "TypeError",
+          "message": "Cannot read properties of null (reading 'expiresAtMs')"
+        }
+      }
+    },
+    {
+      "id": "policies.idempotency-null-projection-presence-and-recall-differ",
+      "operation": "tea.policies.idempotency",
+      "input": {
+        "steps": [
+          {
+            "event": "remember",
+            "key": "__proto__",
+            "value": null,
+            "nowMs": 0
+          },
+          {
+            "event": "presence",
+            "key": "value",
+            "nowMs": 0
+          },
+          {
+            "event": "read",
+            "key": "value",
+            "nowMs": 0
+          }
+        ]
+      },
+      "expected": {
+        "trace": [
+          {
+            "state": {
+              "entries": {},
+              "order": []
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"]
+            }
+          },
+          {
+            "state": {
+              "entries": {},
+              "order": ["__proto__"]
+            },
+            "present": true
+          }
+        ],
+        "refusal": {
+          "name": "TypeError",
+          "message": "Cannot read properties of null (reading 'value')"
+        }
+      }
     }
   ]
 }
