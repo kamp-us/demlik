@@ -4,15 +4,19 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
 
+mod encoder;
+mod json;
+pub use json::{JsText, JsonData, decode_json, stringify_json};
+
 #[derive(Clone, Debug)]
 pub enum PlainData {
     Null,
     Undefined,
     Bool(bool),
     Number(f64),
-    String(String),
+    String(JsText),
     Array(Vec<Self>),
-    Object(IndexMap<String, Self>),
+    Object(IndexMap<JsText, Self>),
 }
 
 impl From<&Value> for PlainData {
@@ -21,12 +25,12 @@ impl From<&Value> for PlainData {
             Value::Null => Self::Null,
             Value::Bool(value) => Self::Bool(*value),
             Value::Number(value) => Self::Number(value.as_f64().expect("JSON number fits f64")),
-            Value::String(value) => Self::String(value.clone()),
+            Value::String(value) => Self::String(value.clone().into()),
             Value::Array(values) => Self::Array(values.iter().map(Self::from).collect()),
             Value::Object(values) => Self::Object(
                 values
                     .iter()
-                    .map(|(key, value)| (key.clone(), Self::from(value)))
+                    .map(|(key, value)| (key.clone().into(), Self::from(value)))
                     .collect(),
             ),
         }
@@ -59,7 +63,7 @@ pub fn structural_hash(value: &PlainData) -> String {
                 .keys()
                 .filter(|key| !matches!(values[*key], PlainData::Undefined))
                 .collect::<Vec<_>>();
-            keys.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
+            keys.sort_by(|left, right| left.as_units().cmp(right.as_units()));
             format!(
                 "{{{}}}",
                 keys.into_iter()
@@ -169,11 +173,11 @@ impl<'de, D: serde::Deserialize<'de> + Serialize> serde::Deserialize<'de> for Su
 impl<D> private::Sealed for Sub<D> {}
 
 impl<D> Subscription for Sub<D> {
-    fn kind(&self) -> &str {
-        &self.kind
-    }
     fn id(&self) -> &SubId {
         &self.id
+    }
+    fn kind(&self) -> &str {
+        &self.kind
     }
 }
 
@@ -195,46 +199,6 @@ impl fmt::Display for DependencyError {
 impl std::error::Error for DependencyError {}
 
 /// Preserve floating-point dependency values before their JSON transport encoding.
-pub fn plain_data<T: Serialize>(value: &T) -> Result<PlainData, DependencyError> {
-    use serde_value::Value as V;
-    fn convert(value: V) -> Result<PlainData, DependencyError> {
-        Ok(match value {
-            V::Unit | V::Option(None) => PlainData::Null,
-            V::Bool(value) => PlainData::Bool(value),
-            V::String(value) => PlainData::String(value),
-            V::Char(value) => PlainData::String(value.to_string()),
-            V::U8(value) => PlainData::Number(f64::from(value)),
-            V::U16(value) => PlainData::Number(f64::from(value)),
-            V::U32(value) => PlainData::Number(f64::from(value)),
-            V::U64(value) => PlainData::Number(value as f64),
-            V::I8(value) => PlainData::Number(f64::from(value)),
-            V::I16(value) => PlainData::Number(f64::from(value)),
-            V::I32(value) => PlainData::Number(f64::from(value)),
-            V::I64(value) => PlainData::Number(value as f64),
-            V::F32(value) => PlainData::Number(f64::from(value)),
-            V::F64(value) => PlainData::Number(value),
-            V::Option(Some(value)) | V::Newtype(value) => convert(*value)?,
-            V::Seq(values) => {
-                PlainData::Array(values.into_iter().map(convert).collect::<Result<_, _>>()?)
-            }
-            V::Bytes(values) => PlainData::Array(
-                values
-                    .into_iter()
-                    .map(|value| PlainData::Number(f64::from(value)))
-                    .collect(),
-            ),
-            V::Map(values) => PlainData::Object(
-                values
-                    .into_iter()
-                    .map(|(key, value)| {
-                        let V::String(key) = key else {
-                            return Err(DependencyError::ObjectKey);
-                        };
-                        Ok((key, convert(value)?))
-                    })
-                    .collect::<Result<_, _>>()?,
-            ),
-        })
-    }
-    convert(serde_value::to_value(value).map_err(DependencyError::Serialization)?)
+pub fn plain_data<T: Serialize + ?Sized>(value: &T) -> Result<PlainData, DependencyError> {
+    value.serialize(encoder::Encoder::new())
 }

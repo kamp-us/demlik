@@ -1,3 +1,4 @@
+use crate::data::JsText;
 use serde::{Deserialize, Serialize};
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
@@ -32,7 +33,7 @@ impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
 #[serde(rename_all = "camelCase")]
 pub struct IdempotencyStore<V> {
     pub entries: JsRecord<IdempotencyEntry<V>>,
-    pub order: Vec<String>,
+    pub order: Vec<JsText>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capacity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -50,7 +51,7 @@ pub fn init_store<V>(options: StoreOptions) -> IdempotencyStore<V> {
 
 fn live<'a, V: Serialize>(
     store: &'a IdempotencyStore<V>,
-    key: &str,
+    key: &JsText,
     now_ms: f64,
 ) -> Result<Option<Resolved<'a, IdempotencyEntry<V>>>, JsAccessError> {
     let entry = store.entries.resolve(key)?;
@@ -67,18 +68,18 @@ fn live<'a, V: Serialize>(
 
 pub fn seen<V: Serialize>(
     store: &IdempotencyStore<V>,
-    key: &str,
+    key: impl Into<JsText>,
     now_ms: f64,
 ) -> Result<bool, JsAccessError> {
-    Ok(live(store, key, now_ms)?.is_some())
+    Ok(live(store, &key.into(), now_ms)?.is_some())
 }
 
 pub fn recall<'a, V: Serialize>(
     store: &'a IdempotencyStore<V>,
-    key: &str,
+    key: impl Into<JsText>,
     now_ms: f64,
 ) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
-    match live(store, key, now_ms)? {
+    match live(store, &key.into(), now_ms)? {
         Some(entry) => entry.payload(),
         None => Ok(None),
     }
@@ -112,7 +113,7 @@ pub fn evict_expired<V: Clone + Serialize>(
 
 pub fn remember<V: Clone + Serialize>(
     store: &IdempotencyStore<V>,
-    key: impl Into<String>,
+    key: impl Into<JsText>,
     value: V,
     now_ms: f64,
 ) -> Result<IdempotencyStore<V>, JsAccessError> {

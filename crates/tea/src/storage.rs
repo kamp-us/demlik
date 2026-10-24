@@ -8,6 +8,27 @@ use futures::{FutureExt, future::LocalBoxFuture};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::PlainData;
+
+pub trait Nullish {
+    fn is_nullish(&self) -> bool;
+}
+impl Nullish for Value {
+    fn is_nullish(&self) -> bool {
+        self.is_null()
+    }
+}
+impl Nullish for PlainData {
+    fn is_nullish(&self) -> bool {
+        matches!(self, Self::Null | Self::Undefined)
+    }
+}
+impl<T> Nullish for Option<T> {
+    fn is_nullish(&self) -> bool {
+        self.is_none()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Refusal {
     #[serde(rename = "_tag")]
@@ -18,6 +39,11 @@ pub fn refuse(reason: impl Into<String>) -> Refusal {
     Refusal {
         tag: "refusal",
         reason: reason.into(),
+    }
+}
+impl Refusal {
+    pub fn tag(&self) -> &'static str {
+        self.tag
     }
 }
 
@@ -48,6 +74,19 @@ pub trait Store<S> {
     fn load(&self) -> impl Future<Output = Result<Self::Raw, Self::Error>>;
     fn save(&self, state: &S) -> impl Future<Output = Result<(), Self::Error>>;
     fn migrate(&self, raw: Self::Raw) -> Migrated<S>;
+    fn restore_failure(&self, cause: RestoreCause<Self::Error>) -> StoreRefusedError<Self::Error>
+    where
+        Self::Error: fmt::Display,
+    {
+        let description = match &cause {
+            RestoreCause::Load(error) => error.to_string(),
+            RestoreCause::Panic(error) => error.summary.clone(),
+        };
+        StoreRefusedError {
+            reason: format!("the saved state could not be read ({description})"),
+            cause: Some(cause),
+        }
+    }
     fn fencing(&self) -> Option<&dyn Fencing<S, Raw = Self::Raw, Error = Self::Error>> {
         None
     }
@@ -69,6 +108,11 @@ impl PanicCause {
             .downcast_ref::<String>()
             .cloned()
             .or_else(|| payload.downcast_ref::<&str>().map(|value| (*value).into()))
+            .or_else(|| {
+                payload
+                    .downcast_ref::<Box<dyn std::error::Error + Send>>()
+                    .map(ToString::to_string)
+            })
             .unwrap_or_else(|| "non-string panic".into());
         Self {
             summary,
@@ -102,6 +146,30 @@ pub struct StoreRefusedError<E> {
     pub reason: String,
     pub cause: Option<RestoreCause<E>>,
 }
+impl<E> StoreRefusedError<E> {
+    pub fn name(&self) -> &'static str {
+        "StoreRefusedError"
+    }
+    pub fn tag(&self) -> &'static str {
+        "store_refused"
+    }
+}
+impl<E: Serialize> Serialize for StoreRefusedError<E> {
+    fn serialize<T: serde::Serializer>(&self, serializer: T) -> Result<T::Ok, T::Error> {
+        use serde::ser::SerializeMap;
+        let mut fields = serializer.serialize_map(None)?;
+        fields.serialize_entry("name", self.name())?;
+        fields.serialize_entry("_tag", self.tag())?;
+        fields.serialize_entry("message", &self.to_string())?;
+        fields.serialize_entry("reason", &self.reason)?;
+        match &self.cause {
+            Some(RestoreCause::Load(cause)) => fields.serialize_entry("cause", cause)?,
+            Some(RestoreCause::Panic(cause)) => fields.serialize_entry("cause", &cause.summary)?,
+            None => {}
+        }
+        fields.end()
+    }
+}
 impl<E> fmt::Display for StoreRefusedError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -117,20 +185,17 @@ pub async fn restore<S, P: Store<S>>(store: &P) -> Result<Option<S>, StoreRefuse
 where
     P::Error: fmt::Display,
 {
-    let raw = match AssertUnwindSafe(store.load()).catch_unwind().await {
+    let raw = match AssertUnwindSafe(async { store.load().await })
+        .catch_unwind()
+        .await
+    {
         Ok(Ok(raw)) => raw,
         Ok(Err(error)) => {
-            return Err(StoreRefusedError {
-                reason: format!("the saved state could not be read ({error})"),
-                cause: Some(RestoreCause::Load(error)),
-            });
+            return Err(store.restore_failure(RestoreCause::Load(error)));
         }
         Err(payload) => {
             let panic = PanicCause::new(payload);
-            return Err(StoreRefusedError {
-                reason: format!("the saved state could not be read ({})", panic.summary),
-                cause: Some(RestoreCause::Panic(panic)),
-            });
+            return Err(store.restore_failure(RestoreCause::Panic(panic)));
         }
     };
     match std::panic::catch_unwind(AssertUnwindSafe(|| store.migrate(raw))) {
@@ -142,19 +207,16 @@ where
         }),
         Err(payload) => {
             let panic = PanicCause::new(payload);
-            Err(StoreRefusedError {
-                reason: format!("the saved state could not be read ({})", panic.summary),
-                cause: Some(RestoreCause::Panic(panic)),
-            })
+            Err(store.restore_failure(RestoreCause::Panic(panic)))
         }
     }
 }
 
-pub fn schema_migrate<S, E>(
-    parse: impl Fn(Value) -> Result<S, E>,
-) -> impl Fn(Value) -> Migrated<S> {
+pub fn schema_migrate<R: Nullish, S, E>(
+    parse: impl Fn(R) -> Result<S, E>,
+) -> impl Fn(R) -> Migrated<S> {
     move |raw| {
-        if raw.is_null() {
+        if raw.is_nullish() {
             return Migrated::Fresh;
         }
         match parse(raw) {
@@ -163,17 +225,17 @@ pub fn schema_migrate<S, E>(
         }
     }
 }
-pub fn schema_migrate_with_upcast<S, P, U, E, F>(
+pub fn schema_migrate_with_upcast<R: Nullish, Q, S, P, U, E, F>(
     parse: P,
     upcast: U,
-) -> impl Fn(Value) -> Migrated<S>
+) -> impl Fn(R) -> Migrated<S>
 where
-    P: Fn(Value) -> Result<S, E>,
-    U: Fn(Value) -> Result<Value, F>,
+    P: Fn(Q) -> Result<S, E>,
+    U: Fn(R) -> Result<Q, F>,
     F: fmt::Display,
 {
     move |raw| {
-        if raw.is_null() {
+        if raw.is_nullish() {
             return Migrated::Fresh;
         }
         let value = match std::panic::catch_unwind(AssertUnwindSafe(|| upcast(raw))) {
@@ -197,19 +259,45 @@ where
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct StoreConflictError {
     pub expected_version: f64,
     pub actual_version: f64,
+}
+impl StoreConflictError {
+    pub fn name(&self) -> &'static str {
+        "StoreConflictError"
+    }
+    pub fn tag(&self) -> &'static str {
+        "store_conflict"
+    }
+}
+impl Serialize for StoreConflictError {
+    fn serialize<T: serde::Serializer>(&self, serializer: T) -> Result<T::Ok, T::Error> {
+        use serde::ser::SerializeStruct;
+        let mut fields = serializer.serialize_struct("StoreConflictError", 5)?;
+        fields.serialize_field("name", self.name())?;
+        fields.serialize_field("_tag", self.tag())?;
+        fields.serialize_field("message", &self.to_string())?;
+        fields.serialize_field("expectedVersion", &self.expected_version)?;
+        fields.serialize_field("actualVersion", &self.actual_version)?;
+        fields.end()
+    }
+}
+pub(crate) fn number_string(value: f64) -> String {
+    if value == 0.0 {
+        "0".into()
+    } else {
+        ryu_js::Buffer::new().format(value).into()
+    }
 }
 impl fmt::Display for StoreConflictError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "@demlik/tea: store conflict — expected version {}, found {}. Another process has written this state; this run is no longer the single writer and has stopped.",
-            ryu_js::Buffer::new().format(self.expected_version),
-            ryu_js::Buffer::new().format(self.actual_version)
+            number_string(self.expected_version),
+            number_string(self.actual_version)
         )
     }
 }
@@ -229,6 +317,28 @@ impl fmt::Display for MemoryStoreError {
     }
 }
 impl std::error::Error for MemoryStoreError {}
+impl MemoryStoreError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Conflict(error) => error.name(),
+            Self::Poisoned => "MemoryStoreError",
+        }
+    }
+    pub fn tag(&self) -> &'static str {
+        match self {
+            Self::Conflict(error) => error.tag(),
+            Self::Poisoned => "memory_store_poisoned",
+        }
+    }
+}
+impl Serialize for MemoryStoreError {
+    fn serialize<T: serde::Serializer>(&self, serializer: T) -> Result<T::Ok, T::Error> {
+        match self {
+            Self::Conflict(error) => error.serialize(serializer),
+            Self::Poisoned => serde_json::json!({ "name": self.name(), "_tag": self.tag(), "message": self.to_string() }).serialize(serializer),
+        }
+    }
+}
 
 struct Cell<S> {
     state: Option<S>,

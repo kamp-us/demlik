@@ -1,0 +1,1330 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "storage.memory-alias-live-and-snapshot",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "seed": {
+            "count": 1,
+            "items": []
+          }
+        },
+        "initial": "seed",
+        "actions": [
+          {
+            "op": "load",
+            "as": "loaded"
+          },
+          {
+            "op": "snapshot",
+            "reference": "seed"
+          },
+          {
+            "op": "same",
+            "left": "seed",
+            "right": "loaded"
+          },
+          {
+            "op": "mutate",
+            "reference": "seed",
+            "path": ["count"],
+            "value": 2
+          },
+          {
+            "op": "mutate",
+            "reference": "seed",
+            "path": ["items"],
+            "push": true,
+            "value": "x"
+          },
+          {
+            "op": "load"
+          },
+          {
+            "op": "migrate",
+            "reference": "loaded",
+            "as": "migrated"
+          },
+          {
+            "op": "same",
+            "left": "loaded",
+            "right": "migrated"
+          }
+        ]
+      },
+      "expected": {
+        "fenced": false,
+        "observations": [
+          {
+            "op": "load",
+            "raw": {
+              "count": 2,
+              "items": ["x"]
+            }
+          },
+          {
+            "op": "snapshot",
+            "raw": {
+              "count": 1,
+              "items": []
+            }
+          },
+          {
+            "op": "same",
+            "same": true
+          },
+          {
+            "op": "mutate"
+          },
+          {
+            "op": "mutate"
+          },
+          {
+            "op": "load",
+            "raw": {
+              "count": 2,
+              "items": ["x"]
+            }
+          },
+          {
+            "op": "migrate",
+            "raw": {
+              "count": 2,
+              "items": ["x"]
+            }
+          },
+          {
+            "op": "same",
+            "same": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-replace-detaches-old-reference",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "a": {
+            "count": 1
+          },
+          "b": {
+            "count": 10
+          }
+        },
+        "initial": "a",
+        "actions": [
+          {
+            "op": "load",
+            "as": "old"
+          },
+          {
+            "op": "save",
+            "reference": "b"
+          },
+          {
+            "op": "mutate",
+            "reference": "old",
+            "path": ["count"],
+            "value": 2
+          },
+          {
+            "op": "load",
+            "as": "new"
+          },
+          {
+            "op": "same",
+            "left": "old",
+            "right": "new"
+          },
+          {
+            "op": "same",
+            "left": "b",
+            "right": "new"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-fencing-stale-no-overwrite",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "winner": {
+            "count": 1
+          },
+          "loser": {
+            "count": 2
+          }
+        },
+        "fenced": true,
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "saveFenced",
+            "reference": "winner",
+            "expected": 0
+          },
+          {
+            "op": "saveFenced",
+            "reference": "loser",
+            "expected": 0
+          },
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "saveFenced",
+            "reference": "loser",
+            "expected": 1
+          },
+          {
+            "op": "loadFenced"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-base-save-advances-fence",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "seed": [1],
+          "next": [2]
+        },
+        "initial": "seed",
+        "fenced": true,
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "save",
+            "reference": "next"
+          },
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "saveFenced",
+            "reference": "seed",
+            "expected": 0
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-schema-parse-transforms-new-reference",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "seed": {
+            "count": 3,
+            "extra": true
+          }
+        },
+        "initial": "seed",
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "migrate",
+            "reference": "seed",
+            "as": "parsed"
+          },
+          {
+            "op": "same",
+            "left": "seed",
+            "right": "parsed"
+          },
+          {
+            "op": "mutate",
+            "reference": "seed",
+            "path": ["count"],
+            "value": 4
+          },
+          {
+            "op": "snapshot",
+            "reference": "parsed"
+          },
+          {
+            "op": "migrate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-schema-rejects-saved-bytes",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "bad": {
+            "other": 4
+          }
+        },
+        "initial": "bad",
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "migrate",
+            "reference": "bad"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-explicit-refusal",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "seed": {
+            "count": 1
+          }
+        },
+        "parse": "refuse",
+        "actions": [
+          {
+            "op": "migrate",
+            "reference": "seed"
+          },
+          {
+            "op": "migrate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.memory-array-reference",
+      "operation": "tea.storage.memory",
+      "input": {
+        "objects": {
+          "seed": [1]
+        },
+        "initial": "seed",
+        "actions": [
+          {
+            "op": "load",
+            "as": "loaded"
+          },
+          {
+            "op": "mutate",
+            "reference": "loaded",
+            "path": [],
+            "push": true,
+            "value": 2
+          },
+          {
+            "op": "same",
+            "left": "seed",
+            "right": "loaded"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.schema-fresh",
+      "operation": "tea.storage.schema",
+      "input": {}
+    },
+    {
+      "id": "storage.schema-null",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": null
+      }
+    },
+    {
+      "id": "storage.schema-trim-strip",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": {
+          "count": 5,
+          "label": "  hi  ",
+          "extra": true
+        }
+      }
+    },
+    {
+      "id": "storage.schema-reject",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": {
+          "count": "5",
+          "label": "hi"
+        }
+      }
+    },
+    {
+      "id": "storage.schema-legacy",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": {
+          "count": 5
+        },
+        "upcast": "legacy"
+      }
+    },
+    {
+      "id": "storage.schema-upcast-error",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": 1,
+        "upcast": "error"
+      }
+    },
+    {
+      "id": "storage.schema-upcast-thrown-error",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": 1,
+        "upcast": "throw"
+      }
+    },
+    {
+      "id": "storage.schema-upcast-invalid",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": 1,
+        "upcast": "invalid"
+      }
+    },
+    {
+      "id": "storage.schema-null-skips-throw",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": null,
+        "upcast": "throw",
+        "schema": "throw"
+      }
+    },
+    {
+      "id": "storage.schema-parser-throw-is-observable",
+      "operation": "tea.storage.schema",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "schema": "throw"
+      }
+    },
+    {
+      "id": "storage.restore-fresh",
+      "operation": "tea.storage.restore",
+      "input": {}
+    },
+    {
+      "id": "storage.restore-state",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "storage.restore-false",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": false
+      }
+    },
+    {
+      "id": "storage.restore-schema-reject",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "migrate": "schema"
+      }
+    },
+    {
+      "id": "storage.restore-schema-transform",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1,
+          "label": " x ",
+          "extra": 3
+        },
+        "migrate": "schema"
+      }
+    },
+    {
+      "id": "storage.restore-upcast-throws",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "migrate": "schema",
+        "upcast": "throw"
+      }
+    },
+    {
+      "id": "storage.restore-refusal",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "migrate": "refuse"
+      }
+    },
+    {
+      "id": "storage.restore-migration-throw",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "migrate": "throw"
+      }
+    },
+    {
+      "id": "storage.restore-plain-tag-model",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 1
+        },
+        "migrate": "plainRefusal"
+      }
+    },
+    {
+      "id": "storage.restore-load-error",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "error",
+          "message": "disk unavailable"
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-error",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "error",
+          "message": "disk unavailable"
+        }
+      }
+    },
+    {
+      "id": "storage.restore-load-string",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "value",
+          "value": "disk unavailable"
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-string",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "value",
+          "value": "disk unavailable"
+        }
+      }
+    },
+    {
+      "id": "storage.restore-load-null",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "value",
+          "value": null
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-null",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "value",
+          "value": null
+        }
+      }
+    },
+    {
+      "id": "storage.restore-load-object",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "value",
+          "value": {
+            "code": "BROKEN",
+            "detail": [1, 2]
+          }
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-object",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "value",
+          "value": {
+            "code": "BROKEN",
+            "detail": [1, 2]
+          }
+        }
+      }
+    },
+    {
+      "id": "storage.restore-load-number",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "value",
+          "value": 1e22
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-number",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "value",
+          "value": 1e22
+        }
+      }
+    },
+    {
+      "id": "storage.restore-load-already-refused",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "loadFault": {
+          "kind": "refused",
+          "reason": "original reason",
+          "cause": {
+            "kind": "value",
+            "value": {
+              "bytes": "untouched"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "storage.restore-migration-already-refused",
+      "operation": "tea.storage.restore",
+      "input": {
+        "raw": {
+          "count": 9
+        },
+        "migrate": "throw",
+        "migrateFault": {
+          "kind": "refused",
+          "reason": "original reason",
+          "cause": {
+            "kind": "value",
+            "value": {
+              "bytes": "untouched"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "storage.file-absent",
+      "operation": "tea.storage.file",
+      "input": {
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "restore"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-write-reload-delete",
+      "operation": "tea.storage.file",
+      "input": {
+        "actions": [
+          {
+            "op": "save",
+            "json": "{\"count\":7,\"label\":\"a\"}"
+          },
+          {
+            "op": "readFiles"
+          },
+          {
+            "op": "load"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-invalid-json-refuses-without-write",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"bad\":",
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-invalid-utf8-replacement",
+      "operation": "tea.storage.file",
+      "input": {
+        "bytes": [34, 255, 34],
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-schema-refusal-no-write",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"old\":3}",
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-schema-transform",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"count\":3,\"extra\":true}",
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-explicit-refusal",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"count\":3}",
+        "parse": "refuse",
+        "actions": [
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-lone-surrogates",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"\\ud800\":\"\\udc00\",\"normal\":\"ok\"}",
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "restore"
+          },
+          {
+            "op": "save",
+            "json": "{\"\\ud800\":\"\\udc00\",\"normal\":\"ok\"}"
+          },
+          {
+            "op": "readFiles"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-overflow-and-unsafe-number",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"count\":1e400,\"unsafe\":9007199254740993}",
+        "actions": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "save",
+            "json": "{\"count\":1e400,\"unsafe\":9007199254740993}"
+          },
+          {
+            "op": "readFiles"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-undefined-save-refusal",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"original\":true}",
+        "actions": [
+          {
+            "op": "save"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-fenced-cas-no-overwrite",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "saveFenced",
+            "json": "{\"winner\":true}",
+            "expected": 0
+          },
+          {
+            "op": "saveFenced",
+            "json": "{\"loser\":true}",
+            "expected": 0
+          },
+          {
+            "op": "readFiles"
+          },
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "loadFenced"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-base-save-keeps-version",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "actions": [
+          {
+            "op": "saveFenced",
+            "json": "1",
+            "expected": 0
+          },
+          {
+            "op": "save",
+            "json": "2"
+          },
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-unfenced-delete-removes-stamp",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "4",
+        "fence": "9",
+        "actions": [
+          {
+            "op": "delete"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-dead-lock-reclaimed",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "actions": [
+          {
+            "op": "deadLock"
+          },
+          {
+            "op": "saveFenced",
+            "json": "{\"count\":1}",
+            "expected": 0
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-delete-stamp-before-state-error",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "fence": "5",
+        "actions": [
+          {
+            "op": "stateDirectory"
+          },
+          {
+            "op": "delete"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-54",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "1trailing",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-55",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "1.5",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-56",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "1e3",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-57",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "-0",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-58",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "\ufeff +2\n",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-59",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "0x10",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-60",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "-1",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-61",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-62",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "NaN",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-63",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "9007199254740992",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-stamp-64",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{\"count\":1}",
+        "fence": "9007199254740991",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-maxsafe-stamp-next-becomes-unreadable",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "fence": "9007199254740991",
+        "actions": [
+          {
+            "op": "saveFenced",
+            "json": "1",
+            "expected": 9007199254740991
+          },
+          {
+            "op": "readFiles"
+          },
+          {
+            "op": "loadFenced"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-load-version-before-state",
+      "operation": "tea.storage.file",
+      "input": {
+        "fenced": true,
+        "raw": "{broken",
+        "fence": "bad",
+        "actions": [
+          {
+            "op": "loadFenced"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.helpers-errors-preserve-data",
+      "operation": "tea.storage.helpers",
+      "input": {
+        "reason": "saved bytes unknown",
+        "cause": {
+          "raw": [1, 2]
+        },
+        "expected": 0,
+        "actual": 1
+      }
+    },
+    {
+      "id": "storage.helpers-errors-js-numbers",
+      "operation": "tea.storage.helpers",
+      "input": {
+        "reason": "do not overwrite",
+        "cause": null,
+        "expected": {
+          "$number": "NaN"
+        },
+        "actual": {
+          "$number": "-0"
+        }
+      }
+    },
+    {
+      "id": "storage.memory-nan-refuses-and-negativezero-matches",
+      "operation": "tea.storage.memory",
+      "input": {
+        "fenced": true,
+        "objects": {
+          "seed": {
+            "count": 1
+          }
+        },
+        "actions": [
+          {
+            "op": "saveFenced",
+            "reference": "seed",
+            "expected": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "saveFenced",
+            "reference": "seed",
+            "expected": {
+              "$number": "-0"
+            }
+          },
+          {
+            "op": "loadFenced"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-migrate-caller-parser",
+      "operation": "tea.storage.file",
+      "input": {
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "migrate",
+            "json": "{\"count\":3,\"extra\":true}"
+          },
+          {
+            "op": "migrate",
+            "json": "{\"bad\":true}"
+          },
+          {
+            "op": "migrate",
+            "json": "null"
+          },
+          {
+            "op": "migrate"
+          }
+        ]
+      }
+    },
+    {
+      "id": "storage.file-schema-overflow-refusal",
+      "operation": "tea.storage.file",
+      "input": {
+        "raw": "{\"count\":1e400}",
+        "parse": "strict",
+        "actions": [
+          {
+            "op": "restore"
+          },
+          {
+            "op": "readFiles"
+          }
+        ]
+      }
+    }
+  ]
+}

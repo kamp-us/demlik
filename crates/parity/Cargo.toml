@@ -12,3 +12,4 @@ demlik-tea.workspace = true
 demlik-code-graph.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true

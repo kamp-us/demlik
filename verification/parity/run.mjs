@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -79,13 +79,22 @@ assert.equal(
   "case IDs must be unique",
 );
 const input = `${cases.map((test) => JSON.stringify({ id: test.id, operation: test.operation, input: test.input })).join("\n")}\n`;
+const driverDiagnostics = [];
 function run(command, commandArgs) {
-  const output = execFileSync(command, commandArgs, {
+  const result = spawnSync(command, commandArgs, {
     cwd: root,
     input,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, `driver failed: ${result.stderr}`);
+  if (result.stderr)
+    driverDiagnostics.push({
+      language: command === binary ? "Rust" : "TypeScript",
+      stderr: result.stderr,
+    });
+  const output = result.stdout;
   const responses = output
     .trim()
     .split("\n")
@@ -219,6 +228,7 @@ const report = {
     .digest("hex"),
   generatedSeed: 0x5eed1234,
   policyGeneratedSeed: POLICY_SEED,
+  driverDiagnostics,
   nativeEvidence: {
     ...Object.fromEntries(
       cases.map((test, index) => [
@@ -231,6 +241,15 @@ const report = {
     ...graph.nativeEvidence,
     ...runtime.nativeEvidence,
   },
+  infrastructureDiagnostics: Object.fromEntries(
+    cases.flatMap((test, index) => {
+      const reference = typescript[index].observedDiagnostics ?? [];
+      const native = rust[index].observedDiagnostics ?? [];
+      return reference.length || native.length
+        ? [[test.id, { reference, native }]]
+        : [];
+    }),
+  ),
 };
 await mkdir(path.dirname(reportFile), { recursive: true });
 if (args.includes("--complete")) {
@@ -247,6 +266,6 @@ if (args.includes("--complete")) {
 }
 await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(
-  `${JSON.stringify({ ...report, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
+  `${JSON.stringify({ ...report, driverDiagnostics: { streams: driverDiagnostics.length }, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, infrastructureDiagnostics: { cases: Object.keys(report.infrastructureDiagnostics).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
 );
 if (failures.length) process.exitCode = 1;

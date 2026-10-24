@@ -12,10 +12,18 @@ macro_rules! observe {
         returned
     }};
 }
+macro_rules! observe_async {
+    ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{
+        let returned = $function($($argument),*).await;
+        $calls.push(stringify!($function));
+        returned
+    }};
+}
 mod commands;
 mod core;
 mod policies;
 mod retry;
+mod storage;
 
 #[derive(Deserialize)]
 struct Case {
@@ -103,11 +111,19 @@ struct GraphInput {
 struct Observation {
     output: Value,
     calls: Vec<&'static str>,
+    diagnostics: Vec<Value>,
 }
 
-fn execute(case: &Case) -> Result<Observation, String> {
+async fn execute(case: &Case) -> Result<Observation, String> {
     let mut calls = Vec::new();
+    let mut diagnostics = Vec::new();
     let output = match case.operation.as_str() {
+        "tea.storage.memory" => storage::memory(case.input.clone(), &mut calls).await,
+        "tea.storage.schema" => storage::schema(case.input.clone(), &mut calls),
+        "tea.storage.restore" => storage::restore_case(case.input.clone(), &mut calls).await,
+        "tea.storage.file" => storage::file(case.input.clone(), &mut calls, &mut diagnostics).await,
+        "tea.storage.data" => storage::data(case.input.clone(), &mut calls),
+        "tea.storage.helpers" => storage::helpers(case.input.clone(), &mut calls),
         "tea.policies.circuit"
         | "tea.policies.bucket"
         | "tea.policies.window"
@@ -189,15 +205,26 @@ fn execute(case: &Case) -> Result<Observation, String> {
         }
         operation => Err(format!("unsupported operation: {operation}")),
     }?;
-    Ok(Observation { output, calls })
+    Ok(Observation {
+        output,
+        calls,
+        diagnostics,
+    })
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|argument| argument == "--storage-exit") {
+        return Ok(());
+    }
+    tokio::task::LocalSet::new().run_until(main_loop()).await
+}
+async fn main_loop() -> Result<(), Box<dyn std::error::Error>> {
     for line in io::stdin().lock().lines() {
         let case: Case = serde_json::from_str(&line?)?;
-        let response = match execute(&case) {
+        let response = match execute(&case).await {
             Ok(result) => {
-                json!({ "id": case.id, "ok": true, "output": result.output, "observedCalls": result.calls })
+                json!({ "id": case.id, "ok": true, "output": result.output, "observedCalls": result.calls, "observedDiagnostics": result.diagnostics })
             }
             Err(message) => {
                 json!({ "id": case.id, "ok": false, "error": { "kind": "driver_error", "message": message } })

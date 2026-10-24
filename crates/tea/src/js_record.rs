@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeMap};
 
 use crate::PlainData;
+use crate::data::{JsText, JsonData};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct JsAccessError {
@@ -68,7 +69,7 @@ enum Prototype<E> {
 /// also see the pristine Object.prototype or the object assigned to __proto__.
 #[derive(Clone, Debug)]
 pub struct JsRecord<E> {
-    own: IndexMap<String, RecordValue<E>>,
+    own: IndexMap<JsText, RecordValue<E>>,
     prototype: Prototype<E>,
 }
 impl<E> Default for JsRecord<E> {
@@ -82,6 +83,14 @@ impl<E> Default for JsRecord<E> {
 impl<E> JsRecord<E> {
     /// JSON parsing creates an own __proto__ property rather than invoking its setter.
     pub fn from_own(entries: IndexMap<String, E>) -> Self {
+        Self::from_text_entries(
+            entries
+                .into_iter()
+                .map(|(key, value)| (key.into(), value))
+                .collect(),
+        )
+    }
+    pub fn from_text_entries(entries: IndexMap<JsText, E>) -> Self {
         Self {
             own: entries
                 .into_iter()
@@ -90,10 +99,10 @@ impl<E> JsRecord<E> {
             prototype: Prototype::Object,
         }
     }
-    pub fn own_entries(&self) -> impl Iterator<Item = (&String, &RecordValue<E>)> {
+    pub fn own_entries(&self) -> impl Iterator<Item = (&JsText, &RecordValue<E>)> {
         self.own.iter()
     }
-    pub(crate) fn assign(&mut self, key: String, value: RecordValue<E>) {
+    pub(crate) fn assign(&mut self, key: JsText, value: RecordValue<E>) {
         let setter_visible = match &self.prototype {
             Prototype::Null => false,
             Prototype::Injected(value) => {
@@ -101,7 +110,7 @@ impl<E> JsRecord<E> {
             }
             Prototype::Object => true,
         };
-        if key == "__proto__" && !self.own.contains_key(&key) && setter_visible {
+        if key.as_utf8() == Some("__proto__") && !self.own.contains_key(&key) && setter_visible {
             match value {
                 RecordValue::Data(PlainData::Null) => self.prototype = Prototype::Null,
                 RecordValue::Data(
@@ -117,7 +126,7 @@ impl<E> JsRecord<E> {
             self.own.insert(key, value);
         }
     }
-    pub(crate) fn delete(&mut self, key: &str) {
+    pub(crate) fn delete(&mut self, key: &JsText) {
         self.own.shift_remove(key);
     }
 }
@@ -137,7 +146,20 @@ impl<E: Serialize> JsRecord<E> {
 }
 impl<E: Serialize> Serialize for JsRecord<E> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(None)?;
+        if self.own.keys().all(|key| key.as_utf8().is_some()) {
+            let mut map = serializer.serialize_map(None)?;
+            for (key, value) in &self.own {
+                if matches!(
+                    value,
+                    RecordValue::Builtin(_) | RecordValue::Data(PlainData::Undefined)
+                ) {
+                    continue;
+                }
+                map.serialize_entry(key.as_utf8().expect("checked UTF-8 key"), value)?;
+            }
+            return map.end();
+        }
+        let mut values = IndexMap::new();
         for (key, value) in &self.own {
             if matches!(
                 value,
@@ -145,14 +167,17 @@ impl<E: Serialize> Serialize for JsRecord<E> {
             ) {
                 continue;
             }
-            map.serialize_entry(key, value)?;
+            values.insert(
+                key.clone(),
+                crate::data::plain_data(value).map_err(serde::ser::Error::custom)?,
+            );
         }
-        map.end()
+        JsonData(&PlainData::Object(values)).serialize(serializer)
     }
 }
 impl<'de, E: Deserialize<'de>> Deserialize<'de> for JsRecord<E> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        IndexMap::<String, E>::deserialize(deserializer).map(Self::from_own)
+        IndexMap::<JsText, E>::deserialize(deserializer).map(Self::from_text_entries)
     }
 }
 
@@ -214,7 +239,7 @@ impl<'a, E: RecordEntry> Resolved<'a, E> {
     }
 }
 impl<E> JsRecord<E> {
-    pub(crate) fn resolve(&self, key: &str) -> Result<Resolved<'_, E>, JsAccessError>
+    pub(crate) fn resolve(&self, key: &JsText) -> Result<Resolved<'_, E>, JsAccessError>
     where
         E: RecordEntry,
     {
@@ -223,8 +248,10 @@ impl<E> JsRecord<E> {
         }
         if let Prototype::Injected(value) = &self.prototype {
             let inherited = match value.as_ref() {
-                RecordValue::Entry(entry) if key == "value" => Some(plain(entry.payload())?),
-                RecordValue::Entry(entry) if key == E::TIMESTAMP_KEY => {
+                RecordValue::Entry(entry) if key.as_utf8() == Some("value") => {
+                    Some(plain(entry.payload())?)
+                }
+                RecordValue::Entry(entry) if key.as_utf8() == Some(E::TIMESTAMP_KEY) => {
                     Some(PlainData::Number(entry.timestamp()))
                 }
                 RecordValue::Data(PlainData::Object(values)) => values.get(key).cloned(),
@@ -237,14 +264,14 @@ impl<E> JsRecord<E> {
         if matches!(self.prototype, Prototype::Null) {
             return Ok(Resolved::Missing);
         }
-        if key == "__proto__" {
+        if key.as_utf8() == Some("__proto__") {
             return Ok(match &self.prototype {
                 Prototype::Object => Resolved::ObjectPrototype,
                 Prototype::Injected(value) => value.as_ref().into(),
                 Prototype::Null => Resolved::Missing,
             });
         }
-        Ok(match builtin(key) {
+        Ok(match key.as_utf8().and_then(builtin) {
             Some(name) => Resolved::Builtin(name),
             None => Resolved::Missing,
         })
@@ -285,50 +312,14 @@ fn property(value: &PlainData, name: &str) -> Result<PlainData, JsAccessError> {
 }
 
 fn plain(value: &impl Serialize) -> Result<PlainData, JsAccessError> {
-    fn convert(value: serde_value::Value) -> Result<PlainData, JsAccessError> {
-        use serde_value::Value as V;
-        Ok(match value {
-            V::Unit | V::Option(None) => PlainData::Null,
-            V::Option(Some(value)) | V::Newtype(value) => convert(*value)?,
-            V::Bool(value) => PlainData::Bool(value),
-            V::I8(value) => PlainData::Number(f64::from(value)),
-            V::I16(value) => PlainData::Number(f64::from(value)),
-            V::I32(value) => PlainData::Number(f64::from(value)),
-            V::I64(value) => PlainData::Number(value as f64),
-            V::U8(value) => PlainData::Number(f64::from(value)),
-            V::U16(value) => PlainData::Number(f64::from(value)),
-            V::U32(value) => PlainData::Number(f64::from(value)),
-            V::U64(value) => PlainData::Number(value as f64),
-            V::F32(value) => PlainData::Number(f64::from(value)),
-            V::F64(value) => PlainData::Number(value),
-            V::Char(value) => PlainData::String(value.to_string()),
-            V::String(value) => PlainData::String(value),
-            V::Bytes(values) => PlainData::Array(
-                values
-                    .into_iter()
-                    .map(|value| PlainData::Number(f64::from(value)))
-                    .collect(),
-            ),
-            V::Seq(values) => {
-                PlainData::Array(values.into_iter().map(convert).collect::<Result<_, _>>()?)
-            }
-            V::Map(values) => PlainData::Object(
-                values
-                    .into_iter()
-                    .map(|(key, value)| match key {
-                        V::String(key) => Ok((key, convert(value)?)),
-                        _ => Err(JsAccessError::type_error(
-                            "JS data records require string keys",
-                        )),
-                    })
-                    .collect::<Result<_, _>>()?,
-            ),
-        })
-    }
-    convert(
-        serde_value::to_value(value)
-            .map_err(|error| JsAccessError::type_error(error.to_string()))?,
-    )
+    crate::data::plain_data(value).map_err(|error| match error {
+        crate::data::DependencyError::ObjectKey => {
+            JsAccessError::type_error("JS data records require string keys")
+        }
+        crate::data::DependencyError::Serialization(error) => {
+            JsAccessError::type_error(error.to_string())
+        }
+    })
 }
 
 fn number(value: &PlainData) -> Result<f64, JsAccessError> {
@@ -343,8 +334,11 @@ fn number(value: &PlainData) -> Result<f64, JsAccessError> {
             }
         }
         PlainData::Number(value) => *value,
-        PlainData::String(value) => string_number(value),
-        PlainData::Array(_) => string_number(&string(value)?),
+        PlainData::String(value) => value.as_utf8().map(string_number).unwrap_or(f64::NAN),
+        PlainData::Array(_) => string(value)?
+            .as_utf8()
+            .map(string_number)
+            .unwrap_or(f64::NAN),
         PlainData::Object(values) => {
             if values.contains_key("toString") {
                 return Err(JsAccessError::type_error(
@@ -355,11 +349,11 @@ fn number(value: &PlainData) -> Result<f64, JsAccessError> {
         }
     })
 }
-fn string(value: &PlainData) -> Result<String, JsAccessError> {
+fn string(value: &PlainData) -> Result<JsText, JsAccessError> {
     Ok(match value {
         PlainData::Undefined => "undefined".into(),
         PlainData::Null => "null".into(),
-        PlainData::Bool(value) => value.to_string(),
+        PlainData::Bool(value) => value.to_string().into(),
         PlainData::Number(value) => {
             if *value == 0.0 {
                 "0".into()
@@ -368,17 +362,18 @@ fn string(value: &PlainData) -> Result<String, JsAccessError> {
             }
         }
         PlainData::String(value) => value.clone(),
-        PlainData::Array(values) => values
-            .iter()
-            .map(|value| {
-                if matches!(value, PlainData::Null | PlainData::Undefined) {
-                    Ok(String::new())
-                } else {
-                    string(value)
+        PlainData::Array(values) => {
+            let mut units = Vec::new();
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    units.push(44);
                 }
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .join(","),
+                if !matches!(value, PlainData::Null | PlainData::Undefined) {
+                    units.extend_from_slice(string(value)?.as_units());
+                }
+            }
+            JsText::from_units(units)
+        }
         PlainData::Object(values) => {
             if values.contains_key("toString") {
                 return Err(JsAccessError::type_error(
@@ -470,26 +465,4 @@ fn string_number(value: &str) -> f64 {
         return f64::NAN;
     }
     value.parse().unwrap_or(f64::NAN)
-}
-
-struct JsonData<'a>(&'a PlainData);
-impl Serialize for JsonData<'_> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.0 {
-            PlainData::Null | PlainData::Undefined => serializer.serialize_none(),
-            PlainData::Bool(value) => serializer.serialize_bool(*value),
-            PlainData::Number(value) => serializer.serialize_f64(*value),
-            PlainData::String(value) => serializer.serialize_str(value),
-            PlainData::Array(values) => serializer.collect_seq(values.iter().map(JsonData)),
-            PlainData::Object(values) => {
-                let mut map = serializer.serialize_map(None)?;
-                for (key, value) in values {
-                    if !matches!(value, PlainData::Undefined) {
-                        map.serialize_entry(key, &JsonData(value))?;
-                    }
-                }
-                map.end()
-            }
-        }
-    }
 }

@@ -26,6 +26,7 @@ import {
   probeInput,
   retryStateInput,
 } from "./retry.mts";
+import { storageDiagnostics, storageOperations } from "./storage.mts";
 
 const specialNumbers = {
   NaN: Number.NaN,
@@ -70,6 +71,7 @@ const operations: Record<string, (input: unknown) => unknown> = {
   ),
   "tea.command.input": operation(commandParseInput, executeCommandInput),
   "tea.command.helpers": operation(commandHelpersInput, executeCommandHelpers),
+  ...storageOperations,
   "tea.core.machine": operation(coreInput, executeCore),
   "tea.retry.state": operation(retryStateInput, executeRetryState),
   "tea.retry.probe": operation(probeInput, executeProbe),
@@ -127,7 +129,13 @@ for await (const line of createInterface({ input: process.stdin })) {
   try {
     const execute = operations[test.operation];
     if (!execute) throw new Error(`unsupported operation: ${test.operation}`);
-    response = { id: test.id, ok: true, output: execute(test.input) };
+    storageDiagnostics.length = 0;
+    response = {
+      id: test.id,
+      ok: true,
+      output: await execute(test.input),
+      observedDiagnostics: storageDiagnostics.splice(0),
+    };
   } catch (error) {
     response = {
       id: test.id,

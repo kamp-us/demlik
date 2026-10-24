@@ -374,7 +374,14 @@ fn plain_value(value: &PlainData) -> Value {
         PlainData::Object(values) => Value::Object(
             values
                 .iter()
-                .map(|(key, value)| (key.clone(), plain_value(value)))
+                .map(|(key, value)| {
+                    (
+                        key.as_utf8()
+                            .expect("policy JSON protocol requires UTF-8 keys")
+                            .to_owned(),
+                        plain_value(value),
+                    )
+                })
                 .collect(),
         ),
     }
@@ -501,7 +508,7 @@ impl IdempotencyInitial {
                     })
                     .collect(),
             ),
-            order: self.order,
+            order: self.order.into_iter().map(Into::into).collect(),
             capacity: self.capacity.map(Number::value),
             ttl_ms: self.ttl_ms.map(Number::value),
         }

@@ -1179,5 +1179,304 @@
       "graph.syntax.shared-visible-listing",
       "graph.syntax.existing-code-graph-source-consumers"
     ]
+  },
+  "@demlik/tea:.#Store": {
+    "signature": "ba9ffaf0a2d41a39a223655d39923cae88e70d4f86e5bcec888e967a9a1a2578",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::Store::load",
+        "demlik_tea::storage::Store::save",
+        "demlik_tea::storage::Store::migrate"
+      ]
+    },
+    "cases": [
+      "storage.memory-alias-live-and-snapshot",
+      "storage.memory-replace-detaches-old-reference"
+    ]
+  },
+  "@demlik/tea:.#Store/member:published:5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f": {
+    "signature": "5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::load"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"]
+  },
+  "@demlik/tea:.#Store/member:published:7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056": {
+    "signature": "7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::save"]
+    },
+    "cases": ["storage.memory-replace-detaches-old-reference"]
+  },
+  "@demlik/tea:.#Store/member:published:c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01": {
+    "signature": "c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"]
+  },
+  "@demlik/tea:.#Refusal": {
+    "signature": "3d37c79c4c77e5500b9c0d977450471aae32d45a97587dcfdab4f048ea058880",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::refuse"]
+    },
+    "cases": ["storage.helpers-errors-preserve-data"]
+  },
+  "@demlik/tea:.#refuse": {
+    "signature": "dab4b724e97637fea528c10ead6e806387f436e5cffe12e94d38334d0548431a",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::refuse"]
+    },
+    "cases": ["storage.helpers-errors-preserve-data"]
+  },
+  "@demlik/tea:.#StoreRefusedError": {
+    "signature": "d814eb778c065659239764dd3a8c434303be5ca7a33b279c3c3e7cb29a6149d8",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::StoreRefusedError::name",
+        "demlik_tea::storage::StoreRefusedError::tag"
+      ]
+    },
+    "cases": ["storage.helpers-errors-preserve-data"]
+  },
+  "@demlik/tea:.#FencedStore": {
+    "signature": "fe4506cfb33ecaec2c3553c2936538ff8cf9e603a489fc57bcde573884a8299d",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::Fencing::load_fenced",
+        "demlik_tea::storage::Fencing::save_fenced"
+      ]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:.#FencedStore/member:published:11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909": {
+    "signature": "11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::load_fenced"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:.#FencedStore/member:published:ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983": {
+    "signature": "ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::save_fenced"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:.#DeletableStore": {
+    "signature": "c0c0fa70a65859a6c214255630bb0ab3c9a8c7ff47dd87899dcc1e91af18e7f5",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::DeletableStore::delete"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:.#DeletableStore/member:published:692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b": {
+    "signature": "692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::DeletableStore::delete"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:.#isFencedStore": {
+    "signature": "cd6ec8ac1a31b4fa8c5146c28525f1608024fa621da1ccf9e90542921a562ca1",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::is_fenced_store"]
+    },
+    "cases": [
+      "storage.memory-alias-live-and-snapshot",
+      "storage.memory-fencing-stale-no-overwrite"
+    ]
+  },
+  "@demlik/tea:.#StoreConflictError": {
+    "signature": "76af1a7899e32e477a7e05c30b5d18cf51a4e41f22adf0465670f4fcefd51136",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::StoreConflictError::name",
+        "demlik_tea::storage::StoreConflictError::tag"
+      ]
+    },
+    "cases": ["storage.helpers-errors-preserve-data"]
+  },
+  "@demlik/tea:.#schemaMigrate": {
+    "signature": "7c626478a70aa022c0f743233382d87080aacb021d8b48c65b879fbf54bd38bd",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::schema_migrate",
+        "demlik_tea::storage::schema_migrate_with_upcast"
+      ]
+    },
+    "cases": [
+      "storage.schema-trim-strip",
+      "storage.schema-legacy",
+      "storage.schema-reject"
+    ]
+  },
+  "@demlik/tea:.#schemaMigrate/member:published:a7c9693faaaca57c55ef58a3ef83b91437ddd072eb222c7dd2e0e85864a2282d": {
+    "signature": "a7c9693faaaca57c55ef58a3ef83b91437ddd072eb222c7dd2e0e85864a2282d",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::schema_migrate_with_upcast"]
+    },
+    "cases": ["storage.schema-legacy", "storage.schema-upcast-thrown-error"]
+  },
+  "@demlik/tea:.#schemaMigrate/member:published:af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895": {
+    "signature": "af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::schema_migrate_with_upcast"]
+    },
+    "cases": ["storage.schema-legacy", "storage.schema-upcast-thrown-error"]
+  },
+  "@demlik/tea:./mem#memoryStore": {
+    "signature": "1387e275fadabd762d406e2f9d1ee864cda422b51baee241496da47b6d6b0a85",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": [
+        "demlik_tea::storage::memory_store",
+        "demlik_tea::storage::MemoryStore::with_parser"
+      ]
+    },
+    "cases": [
+      "storage.memory-alias-live-and-snapshot",
+      "storage.memory-schema-parse-transforms-new-reference"
+    ]
+  },
+  "@demlik/tea:./mem#memoryStore/member:published:af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895": {
+    "signature": "af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#DeletableStore:692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b": {
+    "signature": "692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::DeletableStore::delete"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#FencedStore:11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909": {
+    "signature": "11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::load_fenced"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#FencedStore:ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983": {
+    "signature": "ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::save_fenced"]
+    },
+    "cases": ["storage.memory-fencing-stale-no-overwrite"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#Store:5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f": {
+    "signature": "5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::load"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#Store:7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056": {
+    "signature": "7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::save"]
+    },
+    "cases": ["storage.memory-replace-detaches-old-reference"]
+  },
+  "@demlik/tea:./mem#memoryStore/member:src/runtime-types.d.ts#Store:c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01": {
+    "signature": "c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.memory-alias-live-and-snapshot"]
+  },
+  "@demlik/tea:./node#fileStore": {
+    "signature": "9600edf5b3c34dd1382f65324779f17d1154fa583288054774109aa5d106ec38",
+    "rust": {
+      "file": "crates/tea/src/file_store.rs",
+      "symbols": ["demlik_tea::file_store::file_store"]
+    },
+    "cases": [
+      "storage.file-write-reload-delete",
+      "storage.file-fenced-cas-no-overwrite"
+    ]
+  },
+  "@demlik/tea:./node#fileStore/member:published:af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895": {
+    "signature": "af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.file-migrate-caller-parser"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#DeletableStore:692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b": {
+    "signature": "692978e6e5ac18c656d0ae044f20cb75b556b010a9728571d5329c8cc208799b",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::DeletableStore::delete"]
+    },
+    "cases": ["storage.file-fenced-cas-no-overwrite"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#FencedStore:11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909": {
+    "signature": "11e65f67fede6b9a74e2b21ff7a1b6c3b1f5c4954d9d86cfa590586866d96909",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::load_fenced"]
+    },
+    "cases": ["storage.file-fenced-cas-no-overwrite"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#FencedStore:ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983": {
+    "signature": "ed8c126b1bd2d4c2eae0c5a08e8d503665075daf2546e7a481bfe5bd19947983",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Fencing::save_fenced"]
+    },
+    "cases": ["storage.file-fenced-cas-no-overwrite"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#Store:5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f": {
+    "signature": "5c97fe8076f0b604e62e51148755ae75cb483d1ec9fdad228eca53869725509f",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::load"]
+    },
+    "cases": ["storage.file-write-reload-delete"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#Store:7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056": {
+    "signature": "7eb8f151e9bd3d4a2b529590f9e85d9e3d1b09e270d2f995c3d22c7e011e4056",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::save"]
+    },
+    "cases": ["storage.file-write-reload-delete"]
+  },
+  "@demlik/tea:./node#fileStore/member:src/runtime-types.d.ts#Store:c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01": {
+    "signature": "c9951016a575f2f4f726a4a89c83f2735582f5ec93711fe5b20bd6e619e76e01",
+    "rust": {
+      "file": "crates/tea/src/storage.rs",
+      "symbols": ["demlik_tea::storage::Store::migrate"]
+    },
+    "cases": ["storage.file-migrate-caller-parser"]
   }
 }

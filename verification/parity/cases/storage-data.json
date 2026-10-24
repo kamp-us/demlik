@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "storage.data-lone-value",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "\"\\ud800\""
+      }
+    },
+    {
+      "id": "storage.data-lone-key",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"\\udc00\":\"\\ud800\"}"
+      }
+    },
+    {
+      "id": "storage.data-utf16-key-order",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"\\ud800\":1,\"\ud83d\ude00\":2,\"\ue000\":3,\"a\":4}"
+      }
+    },
+    {
+      "id": "storage.data-numeric-object-key-order",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"10\":\"ten\",\"2\":\"two\",\"01\":\"one\",\"a\":3}"
+      }
+    },
+    {
+      "id": "storage.data-overflow",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"positive\":1e400,\"negative\":-1e400,\"tiny\":1e-400,\"minusZero\":-0,\"unsafe\":9007199254740993}"
+      }
+    },
+    {
+      "id": "storage.data-reserved-raw-marker",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"$serde_json::private::RawValue\":\"1e400\",\"$demlik::PlainData\":\"undefined\"}"
+      }
+    },
+    {
+      "id": "storage.data-escaped-characters",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"s\":\"a\\n\\t\\u0000\\u2028\\u2029\\\"\\\\\"}"
+      }
+    },
+    {
+      "id": "storage.data-duplicate-key",
+      "operation": "tea.storage.data",
+      "input": {
+        "json": "{\"a\":1,\"b\":2,\"a\":3}"
+      }
+    }
+  ]
+}

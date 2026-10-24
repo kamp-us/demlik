@@ -31,6 +31,37 @@ const mutations = [
     witness: "runtime.promise.serial",
   },
   {
+    name: "memory-load-discards-shared-cell",
+    file: "crates/tea/src/storage.rs",
+    before: ".state\n            .clone())",
+    after: ".state\n            .as_ref().and_then(|_| None))",
+    witness: "storage.memory-alias-live-and-snapshot",
+  },
+  {
+    name: "schema-invalid-state-boots-fresh",
+    file: "crates/tea/src/storage.rs",
+    before:
+      'match parse(raw) {\n            Ok(state) => Migrated::State(state),\n            Err(_) => Migrated::Refused(refuse("the saved state does not match the schema")),',
+    after:
+      "match parse(raw) {\n            Ok(state) => Migrated::State(state),\n            Err(_) => Migrated::Fresh,",
+    witness: "storage.schema-reject",
+  },
+  {
+    name: "file-cas-accepts-stale-writer",
+    file: "crates/tea/src/file_store.rs",
+    before: "if actual_version != expected_version {",
+    after: "if false {",
+    witness: "storage.file-fenced-cas-no-overwrite",
+  },
+  {
+    name: "file-save-never-renames-state",
+    file: "crates/tea/src/file_store.rs",
+    before:
+      'fs::rename(&temp, &*self.path)\n            .await\n            .map_err(|error| FileStoreError::io("rename", &self.path, error))?;',
+    after: "let _ = &temp;",
+    witness: "storage.file-write-reload-delete",
+  },
+  {
     name: "record-spread-retains-prototype",
     file: "crates/tea/src/js_record.rs",
     before: "own: self.own.clone(),\n            prototype: Prototype::Object,",

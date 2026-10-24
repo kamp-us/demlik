@@ -140,6 +140,7 @@ dependencies = [
  "demlik-tea",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -149,6 +150,7 @@ dependencies = [
  "fastrand",
  "futures",
  "indexmap",
+ "libc",
  "libm",
  "ryu-js",
  "serde",

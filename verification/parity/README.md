@@ -45,3 +45,19 @@ and an optional independent `expected` value. The two drivers must invoke their
 real library APIs. Keep nonfinite numbers and negative zero in the explicit
 `{"$number":"NaN"}`, `Infinity`, `-Infinity`, or `-0` representation. Add a new
 operation in both typed drivers before claiming its behavior is covered.
+
+Storage cases call the real asynchronous adapters. Memory observations retain
+their loaded references until the response is serialized; explicit snapshots
+are separate actions. File cases retain raw JSON/IO diagnostics in the report's
+`infrastructureDiagnostics`, while comparison checks error kind/code and exact
+source-owned refusal, conflict and stamp messages. JSON text inside the protocol
+and explicit UTF-16 unit arrays cover strings and keys JSON.parse accepts even
+when a UTF-8-only JSON value representation cannot hold them.
+
+Run `pnpm --filter @demlik/parity verify:storage-process` after building the Rust
+driver to exercise both implementations across actual child processes: six
+competing CAS writers, restart reads, a verified terminated PID lock, and delete.
+Results are written to `target/parity/storage-process.json`. This checks local
+process restart and writer exclusion, without claiming fsync or atomic commit
+of state and its separate fence stamp. Native lock probing is currently Unix;
+non-Unix contention returns an explicit unsupported-process-probe error.

@@ -1,3 +1,4 @@
+use crate::data::JsText;
 use serde::{Deserialize, Serialize};
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
@@ -32,7 +33,7 @@ pub fn init_cache<V>() -> TtlCache<V> {
 
 fn live<'a, V: Serialize>(
     cache: &'a TtlCache<V>,
-    key: &str,
+    key: &JsText,
     now_ms: f64,
 ) -> Result<Option<Resolved<'a, CacheEntry<V>>>, JsAccessError> {
     let entry = cache.entries.resolve(key)?;
@@ -45,10 +46,10 @@ fn live<'a, V: Serialize>(
 
 pub fn get<'a, V: Serialize>(
     cache: &'a TtlCache<V>,
-    key: &str,
+    key: impl Into<JsText>,
     now_ms: f64,
 ) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
-    match live(cache, key, now_ms)? {
+    match live(cache, &key.into(), now_ms)? {
         Some(entry) => entry.payload(),
         None => Ok(None),
     }
@@ -56,15 +57,15 @@ pub fn get<'a, V: Serialize>(
 
 pub fn has<V: Serialize>(
     cache: &TtlCache<V>,
-    key: &str,
+    key: impl Into<JsText>,
     now_ms: f64,
 ) -> Result<bool, JsAccessError> {
-    Ok(live(cache, key, now_ms)?.is_some())
+    Ok(live(cache, &key.into(), now_ms)?.is_some())
 }
 
 pub fn set<V: Clone>(
     cache: &TtlCache<V>,
-    key: impl Into<String>,
+    key: impl Into<JsText>,
     value: V,
     now_ms: f64,
     ttl_ms: f64,
@@ -80,9 +81,9 @@ pub fn set<V: Clone>(
     TtlCache { entries }
 }
 
-pub fn remove<V: Clone>(cache: &TtlCache<V>, key: &str) -> TtlCache<V> {
+pub fn remove<V: Clone>(cache: &TtlCache<V>, key: impl Into<JsText>) -> TtlCache<V> {
     let mut entries = cache.entries.spread();
-    entries.delete(key);
+    entries.delete(&key.into());
     TtlCache { entries }
 }
 
