@@ -456,10 +456,9 @@ impl<
             Some(initial) => initial,
             None => {
                 let store = self.store.as_ref().expect("stored boot has a store");
-                let loaded = store
-                    .restore()
-                    .await
-                    .map_err(|error| Rc::new(RuntimeError::Restore(error)))?;
+                let loaded = store.restore().await;
+                tokio::task::yield_now().await;
+                let loaded = loaded.map_err(|error| Rc::new(RuntimeError::Restore(error)))?;
                 let Step { state, commands } = (self.machine.init)(loaded, &self.input);
                 Initial {
                     state: Arc::new(state),
@@ -469,11 +468,8 @@ impl<
         };
         self.commit(initial.state, None, initial.commands).await
     }
-    async fn worker(self: Rc<Self>, initial: Option<Initial<S, C>>) {
-        let boot = AssertUnwindSafe(self.clone().boot(initial))
-            .catch_unwind()
-            .await
-            .unwrap_or_else(|payload| Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload)))));
+    async fn worker(self: Rc<Self>, boot: LocalBoxFuture<'static, Answer<SE, HE>>) {
+        let boot = boot.await;
         *self.core.ready.borrow_mut() = Some(boot.clone());
         self.core.ready_changed.notify_waiters();
         self.producer.mailbox.completed(1);
@@ -580,6 +576,7 @@ impl<
                 let saved = AssertUnwindSafe(async { store.save(&state).await })
                     .catch_unwind()
                     .await;
+                tokio::task::yield_now().await;
                 match saved {
                     Ok(Ok(())) => self.core.view.borrow_mut().saved = SaveStatus::Saved,
                     Ok(Err(error)) => {
@@ -597,6 +594,7 @@ impl<
         }
         self.reconcile(&state)?;
         let result = self.run_commands(commands).await;
+        tokio::task::yield_now().await;
         self.core.committed(message.as_deref(), &state);
         result
     }
@@ -611,7 +609,7 @@ impl<
                 barrier: None,
             }));
             let env = Rc::clone(self);
-            tokio::task::spawn_local(async move {
+            let mut call = async move {
                 let defined = command.is_defined();
                 let result = AssertUnwindSafe(env.clone().command(command, Rc::clone(&signals)))
                     .catch_unwind()
@@ -641,8 +639,14 @@ impl<
                 if let Some(tx) = signals.barrier.take() {
                     let _ = tx.send(result);
                 }
-            });
-            rx.await.expect("command task always settles its parent")?;
+            }
+            .boxed_local();
+            if call.as_mut().now_or_never().is_none() {
+                tokio::task::spawn_local(call);
+            }
+            let result = rx.await.expect("command task always settles its parent");
+            tokio::task::yield_now().await;
+            result?;
         }
         Ok(())
     }
@@ -670,17 +674,17 @@ impl<
             let Some(work) = self.interpreter.interpret(&command, context) else {
                 return Ok(());
             };
-            let token = self.token();
-            self.in_flight
-                .borrow_mut()
-                .insert(token, Some(command.tag().into()));
             let detached = work.detached;
             let mut running = Box::pin(
                 AssertUnwindSafe(perform(work, &self.cancel, self.profile == Profile::Effect))
                     .catch_unwind(),
             );
-            let result = if detached {
-                let first = futures::poll!(running.as_mut());
+            let first = futures::poll!(running.as_mut());
+            let token = self.token();
+            self.in_flight
+                .borrow_mut()
+                .insert(token, Some(command.tag().into()));
+            if detached {
                 let (tx, rx) = oneshot::channel();
                 let seq = self.producer.mailbox.barrier();
                 self.barriers.borrow_mut().insert(seq, rx);
@@ -688,13 +692,12 @@ impl<
                 if let Some(parent) = signals.borrow_mut().parent.take() {
                     let _ = parent.send(Ok(()));
                 }
-                match first {
-                    std::task::Poll::Ready(result) => result,
-                    std::task::Poll::Pending => running.await,
-                }
-            } else {
-                running.await
+            }
+            let result = match first {
+                std::task::Poll::Ready(result) => result,
+                std::task::Poll::Pending => running.await,
             };
+            tokio::task::yield_now().await;
             self.in_flight.borrow_mut().shift_remove(&token);
             self.producer.mailbox.changed.notify_waiters();
             match result {
@@ -718,6 +721,8 @@ impl<
         Ok(())
     }
     fn extra(self: &Rc<Self>, work: LocalBoxFuture<'static, Result<(), HE>>) {
+        let mut work = AssertUnwindSafe(work).catch_unwind().boxed_local();
+        let first = work.as_mut().now_or_never();
         let token = self.token();
         self.in_flight.borrow_mut().insert(token, None);
         let (tx, rx) = oneshot::channel();
@@ -725,7 +730,10 @@ impl<
         self.barriers.borrow_mut().insert(seq, rx);
         let env = Rc::clone(self);
         tokio::task::spawn_local(async move {
-            let result = AssertUnwindSafe(work).catch_unwind().await;
+            let result = match first {
+                Some(result) => result,
+                None => work.await,
+            };
             match result {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => env
@@ -850,16 +858,22 @@ impl<
                 continue;
             };
             running.cancel.cancel();
-            let token = self.token();
-            self.disposals.borrow_mut().insert(token, ());
-            let env = Rc::clone(self);
             let mut cleanup = match std::panic::catch_unwind(AssertUnwindSafe(running.cleanup)) {
                 Ok(cleanup) => AssertUnwindSafe(cleanup).catch_unwind().boxed_local(),
-                Err(payload) => futures::future::ready(Err(payload)).boxed_local(),
+                Err(payload) => {
+                    self.core.report(
+                        Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
+                        ErrorPhase::SubCleanup,
+                    );
+                    continue;
+                }
             };
             // A Promise disposal starts on the reconciliation stack. Poll the
             // native future once here so its synchronous prefix has the same order.
             let first = cleanup.as_mut().now_or_never();
+            let token = self.token();
+            self.disposals.borrow_mut().insert(token, ());
+            let env = Rc::clone(self);
             tokio::task::spawn_local(async move {
                 let result = match first {
                     Some(result) => result,
@@ -990,6 +1004,8 @@ impl<
 }
 
 /// Eager launch. The host must drive a Tokio LocalSet for the actor's lifetime.
+/// Boot's synchronous prefix runs before return; ready futures still yield at
+/// restoration, save, handler completion, and public commit boundaries.
 pub fn launch<
     S: Tagged + 'static,
     M: Tagged + 'static,
@@ -1080,6 +1096,15 @@ pub fn launch<
         barriers: RefCell::new(HashMap::new()),
     });
     let worker = Rc::clone(&env);
+    let boot_owner = Rc::clone(&env);
+    let mut boot = async move {
+        AssertUnwindSafe(boot_owner.boot(initial))
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|payload| Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload)))))
+    }
+    .boxed_local();
+    let first = boot.as_mut().now_or_never();
     let notice_owner = Rc::downgrade(&core);
     let notice_queue = Arc::clone(&producer.mailbox);
     tokio::task::spawn_local(async move {
@@ -1094,7 +1119,11 @@ pub fn launch<
         }
     });
     tokio::task::spawn_local(async move {
-        worker.worker(initial).await;
+        let boot = match first {
+            Some(result) => futures::future::ready(result).boxed_local(),
+            None => boot,
+        };
+        worker.worker(boot).await;
     });
     Runtime {
         core,

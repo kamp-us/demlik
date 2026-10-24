@@ -107,6 +107,8 @@ impl<M: Tagged, E> CommandContext<M, E> {
     pub fn edge(&self) -> &CommandEdge {
         &self.edge
     }
+    /// Starts the future's synchronous prefix now, then retains it on the tail.
+    /// This external work survives Effect handler interruption, like the tracked Promise.
     pub fn wait_until(&self, work: impl Future<Output = Result<(), E>> + 'static) {
         (self.detach)(work.boxed_local());
     }

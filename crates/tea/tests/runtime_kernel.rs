@@ -604,3 +604,663 @@ async fn callback_failures_are_data_and_live_unsubscription_preserves_fanout_ord
         })
         .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn no_cell_refuses_only_that_dispatch_and_real_reducer_panics_follow_each_supervision_policy()
+{
+    use demlik_tea::runtime::{Gate, RuntimeError, Supervision};
+    tokio::task::LocalSet::new().run_until(async {
+        for strategy in 0..3 {
+            let mut machine = machine();
+            let accepted: demlik_tea::core::Cell<'static,Model,Msg,Cmd> = Box::new(|state,msg| {
+                let Msg::Added{by}=msg else {unreachable!()};
+                Step::new(Model{n:state.n+by,done:false,local:Rc::clone(&state.local)},vec![])
+            });
+            let panics: demlik_tea::core::Cell<'static,Model,Msg,Cmd> = Box::new(|_,_| {
+                std::panic::panic_any(demlik_tea::NoCellError::new("child","nested",vec![]));
+            });
+            machine.update=Update::RawReducer(indexmap::IndexMap::from([("Added".into(),accepted),("Start".into(),panics)]));
+            let mut options:Options<Model,Msg,std::convert::Infallible,&'static str>=Options::new(Profile::Promise);
+            options.supervision=match strategy {
+                0=>Supervision::Stop,
+                1=>Supervision::Escalate,
+                _=>Supervision::Restart(Rc::new(|state:&Model,_,_|Model{n:10,done:false,local:Rc::clone(&state.local)})),
+            };
+            let runtime=launch(machine,(),demlik_tea::runtime::NoInterpreter::new(),NoSubscriptions::new(),options);
+            runtime.ready().await.unwrap();
+            assert!(matches!(&*runtime.dispatch(Msg::Finish).await.unwrap_err(),RuntimeError::NoCell(error) if error.msg_type=="Finish"&&error.accepted_types==["Added","Start"]));
+            assert_eq!(runtime.gate(),Gate::Open);assert!(runtime.reports().is_empty());
+            runtime.dispatch(Msg::Added{by:1}).await.unwrap();
+            let raised=runtime.dispatch(Msg::Start).await;
+            if strategy==2 {raised.unwrap();assert_eq!(runtime.get_state().unwrap().n,10);}else{
+                let error=raised.unwrap_err();
+                let RuntimeError::Panic(cause)=&*error else {panic!("the accepted reducer's own failure must be supervised")};
+                cause.with_payload(|payload|assert!(payload.downcast_ref::<demlik_tea::NoCellError>().is_some()));
+            }
+            assert_eq!(runtime.reports().len(),1);assert_eq!(runtime.reports()[0].phase,demlik_tea::runtime::ErrorPhase::Reduce);
+            if strategy==0 {assert_eq!(runtime.gate(),Gate::Closed);assert!(runtime.dispatch(Msg::Added{by:1}).await.is_err());}
+            else {runtime.dispatch(Msg::Added{by:1}).await.unwrap();assert_eq!(runtime.get_state().unwrap().n,if strategy==1 {2}else{11});}
+            runtime.stop().await;
+        }
+    }).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cold_run_and_effect_requests_wait_for_poll_while_promise_requests_start_at_call() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for profile in [Profile::Promise, Profile::Effect] {
+                let inits = Rc::new(std::cell::Cell::new(0));
+                let counter = Rc::clone(&inits);
+                let mut machine = machine();
+                let original = machine.init;
+                machine.init = Box::new(move |state, input| {
+                    counter.set(counter.get() + 1);
+                    original(state, input)
+                });
+                let checks = Rc::new(std::cell::Cell::new(0));
+                let counted = Rc::clone(&checks);
+                let mut options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                    Options::new(profile);
+                options.terminal = Some(Rc::new(move |state: &Model| {
+                    counted.set(counted.get() + 1);
+                    state.n >= 1
+                }));
+                let cold = demlik_tea::runtime::run(
+                    machine,
+                    (),
+                    demlik_tea::runtime::NoInterpreter::new(),
+                    NoSubscriptions::new(),
+                    options,
+                );
+                assert_eq!(inits.get(), 0);
+                let runtime = cold.await;
+                assert_eq!(inits.get(), 1);
+                assert_eq!(runtime.get_state().unwrap().n, 0);
+                runtime.ready().await.unwrap();
+                assert_eq!(checks.get(), 0);
+                let done = runtime.done();
+                assert_eq!(checks.get(), u32::from(profile == Profile::Promise));
+                let dispatch = runtime.dispatch_once(Msg::Added { by: 1 });
+                tokio::task::yield_now().await;
+                assert_eq!(
+                    runtime.get_state().unwrap().n,
+                    u32::from(profile == Profile::Promise)
+                );
+                dispatch.await.unwrap();
+                assert_eq!(done.await.unwrap().n, 1);
+                let stop = runtime.stop();
+                assert_eq!(
+                    runtime.gate(),
+                    if profile == Profile::Promise {
+                        demlik_tea::runtime::Gate::Draining
+                    } else {
+                        demlik_tea::runtime::Gate::Open
+                    }
+                );
+                stop.await;
+                assert_eq!(runtime.gate(), demlik_tea::runtime::Gate::Closed);
+            }
+        })
+        .await;
+}
+
+struct FollowHeld {
+    entered: Rc<tokio::sync::Notify>,
+    release: Rc<tokio::sync::Notify>,
+}
+impl Interpreter<Cmd> for FollowHeld {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        cmd: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async move {
+            match cmd {
+                Cmd::Batch => Ok(vec![Msg::Added { by: 2 }]),
+                Cmd::Last => {
+                    self.entered.notify_one();
+                    self.release.notified().await;
+                    Ok(vec![Msg::Finish])
+                }
+            }
+        }))
+    }
+}
+fn follow_machine() -> Machine<'static, Model, Msg, Cmd, Sub, ()> {
+    let mut machine = machine();
+    machine.update = Update::reducer(|state: &Model, msg: &Msg| {
+        let (n, done, commands) = match msg {
+            Msg::Start => (0, false, vec![Cmd::Batch]),
+            Msg::Added { by } => (state.n + by, false, vec![Cmd::Last]),
+            Msg::Finish => (state.n, true, vec![]),
+        };
+        Step::new(
+            Model {
+                n,
+                done,
+                local: Rc::clone(&state.local),
+            },
+            commands,
+        )
+    });
+    machine
+}
+#[tokio::test(flavor = "current_thread")]
+async fn dispatch_once_stops_at_its_transition_while_default_dispatch_and_idle_wait_for_held_descendants()
+ {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for profile in [Profile::Promise, Profile::Effect] {
+                for once in [true, false] {
+                    let entered = Rc::new(tokio::sync::Notify::new());
+                    let release = Rc::new(tokio::sync::Notify::new());
+                    let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                        Options::new(profile);
+                    let runtime = launch(
+                        follow_machine(),
+                        (),
+                        FollowHeld {
+                            entered: Rc::clone(&entered),
+                            release: Rc::clone(&release),
+                        },
+                        NoSubscriptions::new(),
+                        options,
+                    );
+                    runtime.ready().await.unwrap();
+                    let receipt = {
+                        let rt = runtime.clone();
+                        tokio::task::spawn_local(async move {
+                            if once {
+                                rt.dispatch_once(Msg::Start).await
+                            } else {
+                                rt.dispatch(Msg::Start).await
+                            }
+                        })
+                    };
+                    entered.notified().await;
+                    if once {
+                        assert!(receipt.is_finished());
+                    } else {
+                        assert!(!receipt.is_finished());
+                    }
+                    assert_eq!(runtime.get_state().unwrap().n, 2);
+                    assert!(!runtime.get_state().unwrap().done);
+                    let idle = runtime.idle();
+                    let mut idle = std::pin::pin!(idle);
+                    assert!(futures::poll!(idle.as_mut()).is_pending());
+                    release.notify_one();
+                    idle.await.unwrap();
+                    receipt.await.unwrap().unwrap();
+                    assert!(runtime.get_state().unwrap().done);
+                    runtime.stop().await;
+                }
+            }
+        })
+        .await;
+}
+struct Chain;
+impl Interpreter<Cmd> for Chain {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        _: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async {
+            tokio::task::yield_now().await;
+            Ok(vec![Msg::Added { by: 1 }])
+        }))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn idle_cap_reports_a_still_growing_real_queue_without_claiming_quiescence() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let mut machine = machine();
+            machine.update = Update::reducer(|state: &Model, msg: &Msg| {
+                let n = if matches!(msg, Msg::Added { .. }) {
+                    state.n + 1
+                } else {
+                    state.n
+                };
+                Step::new(
+                    Model {
+                        n,
+                        done: false,
+                        local: Rc::clone(&state.local),
+                    },
+                    if n < 3 { vec![Cmd::Batch] } else { vec![] },
+                )
+            });
+            let mut options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            options.idle_cap = 1;
+            let runtime = launch(machine, (), Chain, NoSubscriptions::new(), options);
+            runtime.ready().await.unwrap();
+            assert!(matches!(
+                &*runtime.dispatch(Msg::Start).await.unwrap_err(),
+                demlik_tea::runtime::RuntimeError::QuiescenceTimeout { cap: 1 }
+            ));
+            for _ in 0..100 {
+                if runtime.get_state().unwrap().n == 3 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+            assert_eq!(runtime.get_state().unwrap().n, 3);
+            runtime.idle().await.unwrap();
+            runtime.stop().await;
+        })
+        .await;
+}
+struct Detached {
+    entered: Rc<tokio::sync::Notify>,
+    release: Rc<tokio::sync::Notify>,
+}
+impl Interpreter<Cmd> for Detached {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        cmd: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(match cmd {
+            Cmd::Batch => CommandWork::new(async {
+                self.entered.notify_one();
+                self.release.notified().await;
+                Ok(vec![Msg::Added { by: 2 }])
+            })
+            .detached(),
+            Cmd::Last => CommandWork::new(async { Ok(vec![Msg::Added { by: 4 }]) }),
+        })
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn detached_owned_work_holds_the_actual_tail_and_enqueues_its_return_at_completion() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let entered = Rc::new(tokio::sync::Notify::new());
+            let release = Rc::new(tokio::sync::Notify::new());
+            let log = Rc::new(RefCell::new(vec![]));
+            let committed = Rc::clone(&log);
+            let mut options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            options.on_commit.push(Rc::new(move |msg, state| {
+                if msg.is_some() {
+                    committed.borrow_mut().push(state.n);
+                }
+            }));
+            let runtime = launch(
+                machine(),
+                (),
+                Detached {
+                    entered: Rc::clone(&entered),
+                    release: Rc::clone(&release),
+                },
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            runtime.dispatch_once(Msg::Start).await.unwrap();
+            entered.notified().await;
+            runtime.producer().emit(Msg::Added { by: 8 }).unwrap();
+            tokio::task::yield_now().await;
+            assert_eq!(runtime.get_state().unwrap().n, 1);
+            assert_eq!(&*log.borrow(), &[1]);
+            release.notify_one();
+            runtime.idle().await.unwrap();
+            assert_eq!(&*log.borrow(), &[1, 5, 13, 15]);
+            assert_eq!(runtime.get_state().unwrap().n, 15);
+            runtime.stop().await;
+        })
+        .await;
+}
+struct Enlists {
+    release: Rc<tokio::sync::Notify>,
+    log: Log,
+}
+impl Interpreter<Cmd> for Enlists {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        cmd: &'a Cmd,
+        ctx: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async move {
+            if matches!(cmd, Cmd::Batch) {
+                let log = Rc::clone(&self.log);
+                let release = Rc::clone(&self.release);
+                ctx.wait_until(async move {
+                    log.borrow_mut().push("extra:start".into());
+                    release.notified().await;
+                    log.borrow_mut().push("extra:done".into());
+                    Ok(())
+                });
+                assert_eq!(
+                    &*self.log.borrow(),
+                    &["extra:start"],
+                    "enlistment starts a Promise's synchronous prefix"
+                );
+            } else {
+                self.log.borrow_mut().push("next-handler".into());
+            }
+            Ok(vec![])
+        }))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn wait_until_starts_on_the_handler_stack_and_keeps_the_tail_pending_until_completion() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let release = Rc::new(tokio::sync::Notify::new());
+            let log = Rc::new(RefCell::new(vec![]));
+            let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(),
+                (),
+                Enlists {
+                    release: Rc::clone(&release),
+                    log: Rc::clone(&log),
+                },
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            runtime.dispatch_once(Msg::Start).await.unwrap();
+            assert_eq!(&*log.borrow(), &["extra:start", "next-handler"]);
+            let idle = runtime.idle();
+            let mut idle = std::pin::pin!(idle);
+            assert!(futures::poll!(idle.as_mut()).is_pending());
+            release.notify_one();
+            idle.await.unwrap();
+            assert_eq!(
+                &*log.borrow(),
+                &["extra:start", "next-handler", "extra:done"]
+            );
+            runtime.stop().await;
+        })
+        .await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn cloned_persistence_bindings_open_independent_fencing_versions_for_each_run() {
+    use demlik_tea::storage::{MemoryStoreError, memory_store};
+    #[derive(Clone)]
+    struct Shared(u32);
+    impl Tagged for Shared {
+        fn tag(&self) -> &str {
+            "shared"
+        }
+    }
+    fn shared() -> Machine<'static, Shared, Msg, Cmd, Sub, ()> {
+        Machine {
+            init: Box::new(|state, _| Step::new(state.unwrap_or(Shared(0)), vec![])),
+            update: Update::reducer(|state: &Shared, msg: &Msg| {
+                Step::new(
+                    Shared(state.0 + if let Msg::Added { by } = msg { *by } else { 0 }),
+                    vec![],
+                )
+            }),
+            subscriptions: demlik_tea::core::subscriptions(|_| vec![]),
+        }
+    }
+    tokio::task::LocalSet::new().run_until(async {
+        let store=memory_store(Some(Shared(0))).fenced();let binding=Persistence::new(store.clone());
+        let mut options:Options<Shared,Msg,MemoryStoreError,&'static str>=Options::new(Profile::Promise);options.store=Some(binding.clone());
+        let first=launch(shared(),(),demlik_tea::runtime::NoInterpreter::new(),NoSubscriptions::new(),options);first.ready().await.unwrap();
+        let mut options:Options<Shared,Msg,MemoryStoreError,&'static str>=Options::new(Profile::Promise);options.store=Some(binding);
+        let second=launch(shared(),(),demlik_tea::runtime::NoInterpreter::new(),NoSubscriptions::new(),options);second.ready().await.unwrap();
+        let stale=first.dispatch(Msg::Added{by:99}).await.unwrap_err();
+        assert!(matches!(&*stale,demlik_tea::runtime::RuntimeError::Save(MemoryStoreError::Conflict(error)) if error.expected_version==1.0&&error.actual_version==2.0));
+        second.dispatch(Msg::Added{by:2}).await.unwrap();assert_eq!(store.load().await.unwrap().unwrap().0,2);
+        first.stop().await;assert_eq!(store.load().await.unwrap().unwrap().0,2);
+        assert!(first.reports().iter().any(|report|report.phase==demlik_tea::runtime::ErrorPhase::StopSave));
+        second.stop().await;
+    }).await;
+}
+
+#[derive(Clone)]
+struct ReadySaved {
+    inner: Saved,
+    entered: Rc<tokio::sync::Notify>,
+}
+impl Store<Model> for ReadySaved {
+    type Raw = Option<(u32, bool)>;
+    type Error = &'static str;
+    async fn load(&self) -> Result<Self::Raw, Self::Error> {
+        self.inner.load().await
+    }
+    async fn save(&self, state: &Model) -> Result<(), Self::Error> {
+        self.inner.save(state).await?;
+        if state.done {
+            self.entered.notify_one();
+        }
+        Ok(())
+    }
+    fn migrate(&self, raw: Self::Raw) -> Migrated<Model> {
+        self.inner.migrate(raw)
+    }
+}
+struct PrefixEffects {
+    started: Rc<std::cell::Cell<bool>>,
+    release: Rc<tokio::sync::Notify>,
+}
+impl Interpreter<Cmd> for PrefixEffects {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        _: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async {
+            self.started.set(true);
+            self.release.notified().await;
+            Ok(vec![])
+        }))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn an_already_ready_store_save_yields_before_publishing_saved_result_or_starting_commands() {
+    use futures::FutureExt;
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let store = ReadySaved {
+                inner: Saved {
+                    cell: Rc::new(RefCell::new(None)),
+                    log: Rc::new(RefCell::new(vec![])),
+                },
+                entered: Rc::new(tokio::sync::Notify::new()),
+            };
+            let started = Rc::new(std::cell::Cell::new(false));
+            let release = Rc::new(tokio::sync::Notify::new());
+            let mut options = Options::new(Profile::Promise);
+            options.store = Some(Persistence::new(store.clone()));
+            options.terminal = Some(Rc::new(|state: &Model| state.done));
+            let runtime = launch(
+                terminal_machine(),
+                (),
+                PrefixEffects {
+                    started: Rc::clone(&started),
+                    release: Rc::clone(&release),
+                },
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            runtime.producer().emit(Msg::Finish).unwrap();
+            store.entered.notified().await;
+            assert_eq!(store.load().await.unwrap(), Some((0, true)));
+            assert!(runtime.get_state().unwrap().done);
+            assert!(!started.get());
+            assert!(runtime.result().is_none());
+            for _ in 0..100 {
+                if started.get() {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+            assert!(started.get());
+            assert!(runtime.result().is_some());
+            let idle = runtime.idle();
+            let mut idle = std::pin::pin!(idle);
+            assert!(idle.as_mut().now_or_never().is_none());
+            release.notify_one();
+            idle.await.unwrap();
+            runtime.stop().await;
+        })
+        .await;
+}
+struct FailedRelease;
+impl Interpreter<Cmd> for FailedRelease {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        _: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(
+            CommandWork::new(async { Err("body failed") }).with_cleanup(|| async {
+                tokio::task::yield_now().await;
+                Err("release failed")
+            }),
+        )
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn failed_explicit_cleanup_retains_both_its_own_cause_and_the_original_handler_failure() {
+    use demlik_tea::runtime::RuntimeError;
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Effect);
+            let runtime = launch(
+                machine(),
+                (),
+                FailedRelease,
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            let error = runtime.dispatch(Msg::Start).await.unwrap_err();
+            let RuntimeError::Cleanup {
+                prior: Some(prior),
+                cause,
+            } = &*error
+            else {
+                panic!("both failures must survive cleanup")
+            };
+            assert!(matches!(&**prior, RuntimeError::Handler("body failed")));
+            assert!(matches!(&**cause, RuntimeError::Handler("release failed")));
+            assert_eq!(runtime.get_state().unwrap().n, 1);
+            runtime.stop().await;
+        })
+        .await;
+}
+
+struct SynchronousDisposalFailure(Log);
+impl demlik_tea::runtime::Subscriptions<Sub, Msg> for SynchronousDisposalFailure {
+    type Error = &'static str;
+    fn start(
+        &self,
+        sub: Sub,
+        _: demlik_tea::runtime::Producer<Msg>,
+    ) -> Result<Option<demlik_tea::runtime::SubscriptionWork<Self::Error>>, Self::Error> {
+        let n = sub.deps()["n"].as_u64().unwrap();
+        self.0.borrow_mut().push(format!("start:{n}"));
+        Ok(Some(demlik_tea::runtime::SubscriptionWork::new(
+            move || {
+                if n == 0 {
+                    panic!("cleanup factory failed");
+                }
+                async { Ok(()) }
+            },
+        )))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn a_synchronous_cleanup_factory_failure_is_reported_before_starting_its_replacement() {
+    tokio::task::LocalSet::new().run_until(async {
+        let log=Rc::new(RefCell::new(vec![]));let reported=Rc::clone(&log);
+        let mut machine=machine();machine.subscriptions=demlik_tea::core::subscriptions(|state:&Model|vec![Sub::new("tracked",serde_json::json!({"n":state.n})).unwrap()]);
+        let mut options:Options<Model,Msg,std::convert::Infallible,&'static str>=Options::new(Profile::Promise);
+        options.on_error=Some(Rc::new(move |error,phase| {
+            assert_eq!(phase,demlik_tea::runtime::ErrorPhase::SubCleanup);
+            assert!(matches!(error,demlik_tea::runtime::RuntimeError::Panic(cause) if cause.summary=="cleanup factory failed"));
+            reported.borrow_mut().push("reported:cleanup-factory".into());
+        }));
+        let runtime=launch(machine,(),demlik_tea::runtime::NoInterpreter::new(),SynchronousDisposalFailure(Rc::clone(&log)),options);
+        runtime.ready().await.unwrap();runtime.dispatch(Msg::Added{by:1}).await.unwrap();
+        assert_eq!(&*log.borrow(),&["start:0","reported:cleanup-factory","start:1"]);
+        runtime.stop().await;
+    }).await;
+}
+
+type LocalRuntime =
+    demlik_tea::runtime::Runtime<Model, Msg, std::convert::Infallible, &'static str>;
+struct StopsInsidePrefix {
+    runtime: Rc<RefCell<Option<LocalRuntime>>>,
+    entered: Rc<tokio::sync::Notify>,
+    release: Rc<tokio::sync::Notify>,
+}
+impl Interpreter<Cmd> for StopsInsidePrefix {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        cmd: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async move {
+            if matches!(cmd, Cmd::Batch) {
+                let runtime = self.runtime.borrow().as_ref().unwrap().clone();
+                let _already_started = runtime.stop();
+                self.entered.notify_one();
+                self.release.notified().await;
+            }
+            Ok(vec![])
+        }))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn stop_inside_handler_prefix_counts_only_work_that_has_already_returned_its_promise() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let slot = Rc::new(RefCell::new(None));
+            let entered = Rc::new(tokio::sync::Notify::new());
+            let release = Rc::new(tokio::sync::Notify::new());
+            let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(),
+                (),
+                StopsInsidePrefix {
+                    runtime: Rc::clone(&slot),
+                    entered: Rc::clone(&entered),
+                    release: Rc::clone(&release),
+                },
+                NoSubscriptions::new(),
+                options,
+            );
+            *slot.borrow_mut() = Some(runtime.clone());
+            runtime.ready().await.unwrap();
+            let receipt = {
+                let runtime = runtime.clone();
+                tokio::task::spawn_local(async move { runtime.dispatch_once(Msg::Start).await })
+            };
+            entered.notified().await;
+            assert_eq!(runtime.gate(), demlik_tea::runtime::Gate::Draining);
+            assert!(
+                !runtime.reports().iter().any(|report| matches!(
+                    &*report.error,
+                    demlik_tea::runtime::RuntimeError::RuntimeDiscarded { .. }
+                )),
+                "callHandler starts the prefix before trackInFlight receives its Promise"
+            );
+            release.notify_one();
+            runtime.stop().await;
+            receipt.await.unwrap().unwrap();
+            slot.borrow_mut().take();
+        })
+        .await;
+}

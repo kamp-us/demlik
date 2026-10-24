@@ -467,3 +467,229 @@ async fn send_producer_refusal_reaches_the_sink_while_serial_handler_is_held() {
         })
         .await;
 }
+
+struct FailingSource {
+    fail: Rc<Notify>,
+    closing: Rc<Notify>,
+    release: Rc<Notify>,
+    log: Log,
+}
+impl Subscriptions<Sub, Msg> for FailingSource {
+    type Error = &'static str;
+    fn start(
+        &self,
+        _: Sub,
+        _: demlik_tea::runtime::Producer<Msg>,
+    ) -> Result<Option<SubscriptionWork<Self::Error>>, Self::Error> {
+        self.log.borrow_mut().push("source:start".into());
+        let fail = Rc::clone(&self.fail);
+        let closing = Rc::clone(&self.closing);
+        let release = Rc::clone(&self.release);
+        let log = Rc::clone(&self.log);
+        Ok(Some(
+            SubscriptionWork::new(move || async move {
+                log.borrow_mut().push("source:cleanup:start".into());
+                closing.notify_one();
+                release.notified().await;
+                log.borrow_mut().push("source:cleanup:done".into());
+                Ok(())
+            })
+            .with_source(async move {
+                fail.notified().await;
+                Err("unmapped source failure")
+            }),
+        ))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn an_unmapped_subscription_source_failure_stops_the_run_and_awaits_explicit_cleanup() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for profile in [Profile::Promise, Profile::Effect] {
+                let log = Rc::new(RefCell::new(vec![]));
+                let fail = Rc::new(Notify::new());
+                let closing = Rc::new(Notify::new());
+                let release = Rc::new(Notify::new());
+                let options: Options<State, Msg, std::convert::Infallible, &'static str> =
+                    Options::new(profile);
+                let runtime = launch(
+                    machine(false, true),
+                    (),
+                    demlik_tea::runtime::NoInterpreter::new(),
+                    FailingSource {
+                        fail: Rc::clone(&fail),
+                        closing: Rc::clone(&closing),
+                        release: Rc::clone(&release),
+                        log: Rc::clone(&log),
+                    },
+                    options,
+                );
+                runtime.ready().await.unwrap();
+                fail.notify_one();
+                closing.notified().await;
+                assert_ne!(runtime.gate(), Gate::Open);
+                assert!(runtime.producer().emit(Msg::Queued).is_err());
+                let stop = runtime.stop();
+                let mut stop = std::pin::pin!(stop);
+                assert!(futures::poll!(stop.as_mut()).is_pending());
+                assert_eq!(&*log.borrow(), &["source:start", "source:cleanup:start"]);
+                release.notify_one();
+                stop.await;
+                assert_eq!(
+                    &*log.borrow(),
+                    &[
+                        "source:start",
+                        "source:cleanup:start",
+                        "source:cleanup:done"
+                    ]
+                );
+                let reports = runtime.reports();
+                assert!(reports.iter().any(|report| report.phase == ErrorPhase::Sub
+                    && matches!(
+                        &*report.error,
+                        RuntimeError::Handler("unmapped source failure")
+                    )));
+                assert_eq!(runtime.get_state().unwrap().0, 0);
+                assert_eq!(runtime.gate(), Gate::Closed);
+            }
+        })
+        .await;
+}
+struct EagerSource(Log);
+impl Subscriptions<Sub, Msg> for EagerSource {
+    type Error = &'static str;
+    fn start(
+        &self,
+        _: Sub,
+        _: demlik_tea::runtime::Producer<Msg>,
+    ) -> Result<Option<SubscriptionWork<Self::Error>>, Self::Error> {
+        self.0.borrow_mut().push("sub:start".into());
+        Ok(Some(SubscriptionWork::new(|| async { Ok(()) })))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn eager_storeless_launch_starts_subscription_and_first_handler_prefix_before_returning() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let log = Rc::new(RefCell::new(vec![]));
+            let handler = Held::new(Rc::clone(&log));
+            let options: Options<State, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(true, true),
+                (),
+                handler.clone(),
+                EagerSource(Rc::clone(&log)),
+                options,
+            );
+            assert_eq!(&*log.borrow(), &["sub:start", "body:start"]);
+            assert_eq!(runtime.get_state().unwrap().0, 0);
+            let ready = runtime.ready();
+            let mut ready = std::pin::pin!(ready);
+            assert!(futures::poll!(ready.as_mut()).is_pending());
+            handler.release.notify_one();
+            ready.await.unwrap();
+            runtime.idle().await.unwrap();
+            runtime.stop().await;
+        })
+        .await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn eager_stored_launch_starts_load_but_keeps_initial_state_and_save_deferred_until_await() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let log = Rc::new(RefCell::new(vec![]));
+            let store = Saved::new(Rc::clone(&log));
+            let runtime = launch(
+                machine(false, false),
+                (),
+                Held::new(Rc::clone(&log)),
+                demlik_tea::runtime::NoSubscriptions::new(),
+                options(Profile::Promise, store.clone()),
+            );
+            assert_eq!(&*log.borrow(), &["load:start", "load:done"]);
+            assert!(runtime.get_state().is_none());
+            assert_eq!(store.calls.get(), 0);
+            runtime.ready().await.unwrap();
+            assert_eq!(store.calls.get(), 1);
+            runtime.stop().await;
+        })
+        .await;
+}
+
+struct Immediate(Log);
+impl Interpreter<Cmd> for Immediate {
+    type Error = &'static str;
+    fn interpret<'a>(
+        &'a self,
+        cmd: &'a Cmd,
+        _: CommandContext<Msg, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        Some(CommandWork::new(async move {
+            self.0.borrow_mut().push(cmd.tag().into());
+            Ok(if matches!(cmd, Cmd::Hold) {
+                vec![Msg::Late]
+            } else {
+                vec![]
+            })
+        }))
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn an_already_ready_handler_still_yields_before_next_handler_commit_or_followup_fold() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let log: Log = Rc::new(RefCell::new(vec![]));
+            let committed = Rc::clone(&log);
+            let mut options: Options<State, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            options.on_commit.push(Rc::new(move |msg: Option<&Msg>, _| {
+                committed
+                    .borrow_mut()
+                    .push(format!("commit:{}", msg.map(Tagged::tag).unwrap_or("boot")))
+            }));
+            let runtime = launch(
+                machine(true, false),
+                (),
+                Immediate(Rc::clone(&log)),
+                demlik_tea::runtime::NoSubscriptions::new(),
+                options,
+            );
+            assert_eq!(&*log.borrow(), &["hold"]);
+            assert_eq!(runtime.get_state().unwrap().0, 0);
+            runtime.ready().await.unwrap();
+            runtime.idle().await.unwrap();
+            assert_eq!(
+                &*log.borrow(),
+                &["hold", "after", "commit:boot", "commit:Late"]
+            );
+            runtime.stop().await;
+        })
+        .await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn storeless_boot_without_commands_defers_public_commit_callbacks_until_await() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let log: Log = Rc::new(RefCell::new(vec![]));
+            let committed = Rc::clone(&log);
+            let mut options: Options<State, Msg, std::convert::Infallible, &'static str> =
+                Options::new(Profile::Promise);
+            options.on_commit.push(Rc::new(move |_, _| {
+                committed.borrow_mut().push("commit".into())
+            }));
+            let runtime = launch(
+                machine(false, false),
+                (),
+                demlik_tea::runtime::NoInterpreter::new(),
+                demlik_tea::runtime::NoSubscriptions::new(),
+                options,
+            );
+            assert_eq!(runtime.get_state().unwrap().0, 0);
+            assert!(log.borrow().is_empty());
+            runtime.ready().await.unwrap();
+            assert_eq!(&*log.borrow(), &["commit"]);
+            runtime.stop().await;
+        })
+        .await;
+}
