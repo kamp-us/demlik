@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 const suites = [
   { name: "project", driver: "project_driver", script: "graph-project.mts" },
   { name: "semantic", driver: "semantic_driver", script: "graph-semantic.mts" },
+  { name: "syntax", driver: "syntax_driver", script: "graph-syntax.mts" },
 ];
 
 export async function graphParity(cargo) {
@@ -71,6 +72,7 @@ export async function graphParity(cargo) {
       reference: report.reference,
       steps: report.steps,
       queries: report.queries,
+      functions: report.functions,
       rustBinarySha256: createHash("sha256")
         .update(await readFile(binary))
         .digest("hex"),

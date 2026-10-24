@@ -9,11 +9,13 @@ import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
+import { runtimeParity } from "./runtime.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const args = process.argv.slice(2);
 const binaryArgument = args.indexOf("--rust-bin");
+const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const reportArgument = args.indexOf("--report");
 const reportFile =
   reportArgument === -1
@@ -141,6 +143,31 @@ for (let index = 0; index < cases.length; index++) {
   }
 }
 const differentialFailures = failures.length;
+let suiteFailures = 0;
+let runtime = { cases: 0, passed: 0, nativeEvidence: {} };
+try {
+  runtime = await runtimeParity(cargo, {
+    binary:
+      runtimeBinaryArgument === -1
+        ? undefined
+        : path.resolve(args[runtimeBinaryArgument + 1]),
+    reportFile:
+      reportArgument === -1
+        ? undefined
+        : path.join(
+            path.dirname(reportFile),
+            `${path.basename(reportFile, ".json")}-runtime.json`,
+          ),
+  });
+  failures.push(...runtime.failures);
+} catch (error) {
+  suiteFailures++;
+  failures.push({
+    id: "runtime.verification",
+    operation: "tea.runtime",
+    message: error.message,
+  });
+}
 let graph = {
   passed: 0,
   rejectedInvalidInputs: 0,
@@ -150,6 +177,7 @@ let graph = {
 try {
   graph = await graphParity(cargo);
 } catch (error) {
+  suiteFailures++;
   failures.push({
     id: "graph.verification",
     operation: "code_graph.project-and-semantics",
@@ -174,16 +202,18 @@ const report = {
   cargoLockSha256: createHash("sha256")
     .update(await readFile(path.join(root, "Cargo.lock")))
     .digest("hex"),
-  cases: cases.length + graph.passed + failures.length - differentialFailures,
-  passed: cases.length + graph.passed - differentialFailures,
+  cases: cases.length + graph.passed + runtime.cases + suiteFailures,
+  passed: cases.length + graph.passed + runtime.passed - differentialFailures,
   failures,
   operations: [
     ...new Set([
       ...cases.map((test) => test.operation),
+      ...(runtime.passed ? ["tea.runtime"] : []),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
   graph: { ...graph, nativeEvidence: undefined },
+  runtime: { ...runtime, nativeEvidence: undefined },
   rustBinarySha256: createHash("sha256")
     .update(await readFile(binary))
     .digest("hex"),
@@ -199,6 +229,7 @@ const report = {
       ]),
     ),
     ...graph.nativeEvidence,
+    ...runtime.nativeEvidence,
   },
 };
 await mkdir(path.dirname(reportFile), { recursive: true });

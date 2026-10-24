@@ -961,5 +961,223 @@
       ]
     },
     "cases": ["graph.semantic.barrel-origins", "graph.semantic.disposal"]
+  },
+  "@demlik/tea:./promise#run": {
+    "signature": "4d620c5089f3e5672c8bebcdd48e6b9ac16badb418e5658e07fea94066d7313f",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::launch"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.restored",
+      "runtime.promise.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#run": {
+    "signature": "197124b0444c5c9b3f2965171dc40817b69a81c5cdba7678c85d9f26dadd93fb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::run"]
+    },
+    "cases": [
+      "runtime.effect.serial",
+      "runtime.effect.restored",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb": {
+    "signature": "c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c": {
+    "signature": "95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::observe"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70": {
+    "signature": "3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::on_boot"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef": {
+    "signature": "346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::stop"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#Runtime/member:published:73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2": {
+    "signature": "73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::get_state"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#Runtime/member:published:60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c": {
+    "signature": "60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::result"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:.#Runtime/member:published:11a7bcd39f81834c86c2b70c059296a0a76cf871a3dd2d94592d30c910430205": {
+    "signature": "11a7bcd39f81834c86c2b70c059296a0a76cf871a3dd2d94592d30c910430205",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::done"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:6d783f343f7082d6db1b13b3148091b1cfda445985cebcbe8b74b0b581c20a6c": {
+    "signature": "6d783f343f7082d6db1b13b3148091b1cfda445985cebcbe8b74b0b581c20a6c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c": {
+    "signature": "95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::observe"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70": {
+    "signature": "3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::on_boot"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:726310a4104e7abc5ec6ee3623a7a977aef241bb36d21faf3fea255bf2acddff": {
+    "signature": "726310a4104e7abc5ec6ee3623a7a977aef241bb36d21faf3fea255bf2acddff",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::stop"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectRuntime/member:published:73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2": {
+    "signature": "73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::get_state"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectRuntime/member:published:60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c": {
+    "signature": "60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::result"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/tea:./effect#EffectRuntime/member:published:9a750a5dff6c5e611b6dd315421c2496d9700dbafe44a7b4910e50f5bda06175": {
+    "signature": "9a750a5dff6c5e611b6dd315421c2496d9700dbafe44a7b4910e50f5bda06175",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::done"]
+    },
+    "cases": [
+      "runtime.promise.serial",
+      "runtime.promise.handler-failure",
+      "runtime.effect.serial",
+      "runtime.effect.handler-failure"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#loadCheapProject": {
+    "signature": "bfec77d27ed98827d32f8dc95e90f908517af34abbfd09defa393163705f8e53",
+    "rust": {
+      "file": "crates/code-graph/src/project.rs",
+      "symbols": ["demlik_code_graph::project::load_cheap_project"]
+    },
+    "cases": [
+      "graph.syntax.ordinary-project-and-metrics",
+      "graph.syntax.shared-visible-listing",
+      "graph.syntax.existing-code-graph-source-consumers"
+    ]
   }
 }

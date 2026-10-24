@@ -19,7 +19,12 @@ const manifestSchema = z.object({
 });
 const configSchema = z.object({ entry: z.record(z.string(), z.string()) });
 const warnings: string[] = [];
-const capabilities: { id: string; kind: string; signature: string }[] = [];
+const capabilities: {
+  id: string;
+  kind: string;
+  signature: string;
+  declaration?: string;
+}[] = [];
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
 for (const directory of ["tea", "code-graph"]) {
@@ -84,7 +89,12 @@ for (const directory of ["tea", "code-graph"]) {
             const signature = hash(node.getText(source));
             const id = `${owner}/member:${origin}:${signature}`;
             if (!capabilities.some((capability) => capability.id === id))
-              capabilities.push({ id, kind: "callable-member", signature });
+              capabilities.push({
+                id,
+                kind: "callable-member",
+                signature,
+                declaration: node.getText(source),
+              });
           }
           ts.forEachChild(node, visit);
         }

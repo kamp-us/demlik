@@ -12,6 +12,16 @@ const reportDirectory = path.join(root, "target/parity");
 const cargo = process.env.CARGO ?? "cargo";
 const mutations = [
   {
+    name: "runtime-announces-before-command",
+    suite: "runtime",
+    file: "crates/tea/src/runtime/engine.rs",
+    before:
+      "let result = self.run_commands(commands).await;\n        self.core.committed(message.as_deref(), &state);",
+    after:
+      "self.core.committed(message.as_deref(), &state);\n        let result = self.run_commands(commands).await;",
+    witness: "runtime.promise.serial",
+  },
+  {
     name: "record-spread-retains-prototype",
     file: "crates/tea/src/js_record.rs",
     before: "own: self.own.clone(),\n            prototype: Prototype::Object,",
@@ -122,6 +132,24 @@ try {
       env: { ...process.env, CARGO_TARGET_DIR: targetDirectory },
       stdio: "pipe",
     });
+    if (mutation.suite === "runtime") {
+      execFileSync(
+        cargo,
+        [
+          "build",
+          "--locked",
+          "--package",
+          "demlik-tea",
+          "--example",
+          "runtime_driver",
+        ],
+        {
+          cwd: directory,
+          env: { ...process.env, CARGO_TARGET_DIR: targetDirectory },
+          stdio: "pipe",
+        },
+      );
+    }
     const reportFile = path.join(reportDirectory, `${mutation.name}.json`);
     const result = spawnSync(
       process.execPath,
@@ -129,6 +157,12 @@ try {
         path.join(here, "run.mjs"),
         "--rust-bin",
         path.join(targetDirectory, "debug/demlik-parity"),
+        ...(mutation.suite === "runtime"
+          ? [
+              "--runtime-bin",
+              path.join(targetDirectory, "debug/examples/runtime_driver"),
+            ]
+          : []),
         "--report",
         reportFile,
       ],
