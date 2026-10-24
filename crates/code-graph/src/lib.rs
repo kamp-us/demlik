@@ -2,4 +2,5 @@
 
 pub mod engine;
 pub mod project;
+pub mod resolve;
 pub mod scc;

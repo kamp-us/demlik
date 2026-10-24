@@ -103,7 +103,7 @@ pub fn list_repo(root: &Path) -> RepoListing {
     }
 }
 
-fn absolute_lexical(path: &Path) -> PathBuf {
+pub(crate) fn absolute_lexical(path: &Path) -> PathBuf {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {

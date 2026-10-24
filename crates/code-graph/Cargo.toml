@@ -11,7 +11,5 @@ license = "Apache-2.0"
 indexmap.workspace = true
 icu_collator = "=2.1.1"
 oxc_resolver = "=11.24.2"
-
-[dev-dependencies]
 serde.workspace = true
 serde_json.workspace = true
