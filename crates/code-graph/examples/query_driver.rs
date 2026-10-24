@@ -67,7 +67,7 @@ impl KindInput {
         match self {
             Self::Entry { guards, reach } => NodeKind::Entry {
                 evidence: vec!["adapter-entry".into()],
-                guards,
+                guards: guards.into_iter().map(JsString::from).collect(),
                 reach: match reach {
                     Reach::Public => EntryReach::Public,
                     Reach::ServiceBinding => EntryReach::ServiceBinding,

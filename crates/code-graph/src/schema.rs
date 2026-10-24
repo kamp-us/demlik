@@ -217,15 +217,15 @@ impl EntryReach {
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum NodeKind {
     Entry {
-        evidence: Vec<String>,
-        guards: Vec<String>,
+        evidence: Vec<crate::text::JsString>,
+        guards: Vec<crate::text::JsString>,
         reach: EntryReach,
     },
     Auth {
-        evidence: Vec<String>,
+        evidence: Vec<crate::text::JsString>,
     },
     Effect {
-        evidence: Vec<String>,
+        evidence: Vec<crate::text::JsString>,
     },
     Plain,
 }

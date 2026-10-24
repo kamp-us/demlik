@@ -1,0 +1,136 @@
+{
+  "rules": {
+    "entryNames": {
+      "worker-handler": ["^(fetch|email)$"],
+      "platform-trigger": ["^(scheduled|queue|tail|trace)$"],
+      "graphql-resolver": ["^(resolve|subscribe)$"],
+      "durable-object-lifecycle": ["^(alarm|webSocketMessage|webSocketClose)$"]
+    },
+    "entryBaseClasses": {
+      "worker-entrypoint-method": ["^(WorkerEntrypoint|DurableObject)$"]
+    },
+    "entryReach": {
+      "service-binding": [
+        "^(worker-entrypoint-method|cross-service-callee|durable-object-class)$"
+      ],
+      "platform": ["^platform-trigger$"]
+    },
+    "entryGuardProperties": {
+      "pothos-auth-scopes": ["^authScopes$"]
+    },
+    "entryFilePatterns": {
+      "cli-command": ["(^|/)src/commands/"]
+    },
+    "entryExportConventions": {},
+    "entryExportPresets": [],
+    "testSupportFilePatterns": {
+      "test-directory": ["(^|/)tests?/", "(^|/)__tests__/", "(^|/)e2e[^/]*/"],
+      "test-helper-module": [
+        "(^|/)test-helpers?/",
+        "(^|/)test-utils?/",
+        "(^|/)fixtures?/",
+        "(^|/)test-helper\\.tsx?$",
+        "(^|/)test-db\\.tsx?$",
+        "\\.fixture\\.tsx?$"
+      ]
+    },
+    "authNames": {
+      "auth-gate": [
+        "^require(Auth|Session|SessionToken)$",
+        "^verify(ApiKey|AccessToken|SharedSecret)$",
+        "^authorize[A-Z][A-Za-z]*$"
+      ]
+    },
+    "authCallees": {
+      "calls-auth-gate": [
+        "^require(Auth|Session|SessionToken)$",
+        "^verify(ApiKey|AccessToken|SharedSecret)$",
+        "^authorize[A-Z][A-Za-z]*$"
+      ]
+    },
+    "effectDeclarations": {
+      "db-write": [
+        "^drizzle-orm:[A-Za-z]*(Database|Transaction)\\.(insert|update|delete|execute|batch)$",
+        "^[^:]+:D1Database\\.(prepare|batch|exec)$",
+        "^pg:(Client|ClientBase|Pool|PoolClient)\\.query$",
+        "^better-sqlite3:(Database\\.(exec|transaction)|Statement\\.run)$"
+      ],
+      "object-store-write": [
+        "^[^:]+:([A-Za-z0-9]*Bucket|KVNamespace)\\.(put|delete|createMultipartUpload)$"
+      ],
+      "queue-send": ["^[^:]+:Queue\\.(send|sendBatch)$"],
+      "workflow-spawn": ["^[^:]+:Workflow\\.(create|createBatch)$"],
+      "network-call": ["^[^:]+:([A-Za-z0-9]+\\.)?fetch$"]
+    }
+  },
+  "presets": {
+    "nextjs": {
+      "dependency": "next",
+      "conventions": {
+        "nextjs/app-file": {
+          "files": "{,src/}app/**/{page,layout,route,loading,error,global-error,not-found,template,default}.{js,jsx,ts,tsx}",
+          "exports": ["default"]
+        },
+        "nextjs/app-metadata": {
+          "files": "{,src/}app/**/{page,layout}.{js,jsx,ts,tsx}",
+          "exports": [
+            "generateMetadata",
+            "metadata",
+            "generateViewport",
+            "viewport"
+          ]
+        },
+        "nextjs/app-static-params": {
+          "files": "{,src/}app/**/{page,layout,route}.{js,jsx,ts,tsx}",
+          "exports": ["generateStaticParams"]
+        },
+        "nextjs/app-segment-config": {
+          "files": "{,src/}app/**/{page,layout,route}.{js,jsx,ts,tsx}",
+          "exports": [
+            "dynamic",
+            "dynamicParams",
+            "revalidate",
+            "fetchCache",
+            "runtime",
+            "preferredRegion",
+            "maxDuration"
+          ]
+        },
+        "nextjs/app-route-handler": {
+          "files": "{,src/}app/**/route.{js,jsx,ts,tsx}",
+          "exports": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        "nextjs/app-metadata-file": {
+          "files": "{,src/}app/**/{opengraph-image,twitter-image,icon,apple-icon,sitemap,robots,manifest}.{js,jsx,ts,tsx}",
+          "exports": ["default", "generateImageMetadata", "generateSitemaps"]
+        },
+        "nextjs/pages": {
+          "files": "{,src/}pages/**/*.{js,jsx,ts,tsx}",
+          "exports": [
+            "default",
+            "getServerSideProps",
+            "getStaticProps",
+            "getStaticPaths",
+            "config"
+          ]
+        },
+        "nextjs/middleware": {
+          "files": "{,src/}{middleware,proxy}.{js,jsx,ts,tsx}",
+          "exports": ["middleware", "proxy", "default", "config"]
+        },
+        "nextjs/instrumentation": {
+          "files": "{,src/}instrumentation.{js,jsx,ts,tsx}",
+          "exports": ["register", "onRequestError", "default", "config"]
+        }
+      }
+    }
+  }
+}

@@ -48,6 +48,9 @@ impl NativeNode {
     pub(crate) fn type_only_import_clause(&self) -> bool {
         (self.node.data >> 24) & 3 == 1
     }
+    pub(crate) fn is_extends_clause(&self) -> bool {
+        self.is_kind("HeritageClause") && (self.node.data >> 24) & 1 == 0
+    }
     pub(crate) fn required_node(&self, field: &str) -> Result<Self, TsgoError> {
         self.node(field)?.ok_or_else(|| {
             TsgoError::protocol(format!(
