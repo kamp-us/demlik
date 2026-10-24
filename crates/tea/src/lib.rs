@@ -6,6 +6,7 @@ mod js_math;
 pub mod js_record;
 pub mod resilience;
 pub mod retry_backoff;
+pub mod runtime;
 pub mod storage;
 pub use core::{
     Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_updates, replay,

@@ -109,10 +109,12 @@ mod private {
 /// struct Forged;
 /// impl Subscription for Forged {
 ///     fn id(&self) -> &SubId { unimplemented!() }
+///     fn kind(&self) -> &str { "forged" }
 /// }
 /// ```
 pub trait Subscription: private::Sealed {
     fn id(&self) -> &SubId;
+    fn kind(&self) -> &str;
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,6 +169,9 @@ impl<'de, D: serde::Deserialize<'de> + Serialize> serde::Deserialize<'de> for Su
 impl<D> private::Sealed for Sub<D> {}
 
 impl<D> Subscription for Sub<D> {
+    fn kind(&self) -> &str {
+        &self.kind
+    }
     fn id(&self) -> &SubId {
         &self.id
     }
