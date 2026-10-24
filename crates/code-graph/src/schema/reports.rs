@@ -8,6 +8,14 @@ pub enum UnreachableCategory {
     Dead,
     OnlyCalledFromTests,
 }
+impl UnreachableCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dead => "dead",
+            Self::OnlyCalledFromTests => "only-called-from-tests",
+        }
+    }
+}
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnreachableSymbol {
@@ -23,6 +31,15 @@ pub enum WithheldReason {
     ReferencedInNonTestFile,
     PublicEntrySurface,
     TestSupportSurface,
+}
+impl WithheldReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ReferencedInNonTestFile => "referenced-in-non-test-file",
+            Self::PublicEntrySurface => "public-entry-surface",
+            Self::TestSupportSurface => "test-support-surface",
+        }
+    }
 }
 #[derive(Debug, Serialize)]
 pub struct WithheldSymbol {

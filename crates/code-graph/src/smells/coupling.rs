@@ -33,10 +33,14 @@ pub fn boundary_of(file: &str, package_roots: &[String]) -> String {
     best.into()
 }
 pub fn value_edges(modules: &[ModuleNode]) -> Vec<ValueEdge> {
+    value_edges_of(modules.iter())
+}
+pub(crate) fn value_edges_of<'a>(modules: impl Iterator<Item = &'a ModuleNode>) -> Vec<ValueEdge> {
+    let modules: Vec<_> = modules.collect();
     let known: HashSet<_> = modules.iter().map(|module| module.file.as_str()).collect();
     let mut seen = HashSet::new();
     let mut edges = Vec::new();
-    for module in modules {
+    for module in &modules {
         for edge in &module.import_edges {
             let Some(target) = &edge.target else {
                 continue;

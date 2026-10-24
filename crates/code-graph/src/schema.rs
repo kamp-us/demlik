@@ -202,12 +202,15 @@ pub struct Edges {
     pub call_chain_depth: usize,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EntryReach {
     Public,
     ServiceBinding,
     Platform,
+}
+impl EntryReach {
+    pub const ALL: [Self; 3] = [Self::Public, Self::ServiceBinding, Self::Platform];
 }
 
 #[derive(Debug, Serialize)]

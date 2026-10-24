@@ -1,5 +1,6 @@
 //! Structural graph extraction from parsed source files.
 
+pub mod analysis;
 pub mod assemble;
 pub mod callee;
 pub mod chain_depth;
