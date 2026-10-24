@@ -73,15 +73,26 @@ export function executeRetryState(input: z.infer<typeof retryStateInput>) {
   };
 }
 
-export const probeInput = z.object({
-  probe: z.boolean(),
-  samples: z.array(z.number()).min(1),
-});
+export const probeInput = z
+  .object({
+    probe: z.boolean(),
+    samples: z.array(z.number()).min(1),
+    sampleCount: z.number().int().nonnegative().default(0),
+  })
+  .refine(
+    (input) => input.samples.length >= input.sampleCount + Number(input.probe),
+    "recorded random draws exhausted",
+  );
 export function executeProbe(input: z.infer<typeof probeInput>) {
   let draws = 0;
   try {
-    asRng(() => input.samples[draws++], input.probe);
-    return { draws, accepted: true };
+    const rng = asRng(() => input.samples[draws++], input.probe);
+    const values = Array.from({ length: input.sampleCount }, () => rng());
+    return {
+      draws,
+      accepted: true,
+      ...(input.sampleCount > 0 ? { values } : {}),
+    };
   } catch (error) {
     if (!(error instanceof RangeError)) throw error;
     return {

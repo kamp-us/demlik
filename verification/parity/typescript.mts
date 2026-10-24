@@ -11,10 +11,12 @@ import {
 import {
   commandBuilderInput,
   commandContractInput,
+  commandDependencyInput,
   commandHelpersInput,
   commandParseInput,
   executeCommandBuilders,
   executeCommandContract,
+  executeCommandDependency,
   executeCommandHelpers,
   executeCommandInput,
 } from "./commands.mts";
@@ -70,6 +72,10 @@ const operations: Record<string, (input: unknown) => unknown> = {
     executeCommandBuilders,
   ),
   "tea.command.input": operation(commandParseInput, executeCommandInput),
+  "tea.command.dependency": operation(
+    commandDependencyInput,
+    executeCommandDependency,
+  ),
   "tea.command.helpers": operation(commandHelpersInput, executeCommandHelpers),
   ...storageOperations,
   "tea.core.machine": operation(coreInput, executeCore),

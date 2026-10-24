@@ -12,6 +12,14 @@ const reportDirectory = path.join(root, "target/parity");
 const cargo = process.env.CARGO ?? "cargo";
 const mutations = [
   {
+    name: "command-input-encoded-before-identity",
+    file: "crates/tea/src/command.rs",
+    before: "plain_data(&self.input)",
+    after:
+      "plain_data(&serde_json::to_value(&self.input).map_err(<S::Error as serde::ser::Error>::custom)?)",
+    witness: "command.dependency-infinity",
+  },
+  {
     name: "runtime-terminal-result-ignores-save",
     suite: "runtime",
     file: "crates/tea/src/runtime/engine.rs",
@@ -25,9 +33,9 @@ const mutations = [
     suite: "runtime",
     file: "crates/tea/src/runtime/engine.rs",
     before:
-      "let result = self.run_commands(commands).await;\n        self.core.committed(message.as_deref(), &state);",
+      "let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;\n        self.core.committed(message.as_deref(), &state);",
     after:
-      "self.core.committed(message.as_deref(), &state);\n        let result = self.run_commands(commands).await;",
+      "self.core.committed(message.as_deref(), &state);\n        let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;",
     witness: "runtime.promise.serial",
   },
   {

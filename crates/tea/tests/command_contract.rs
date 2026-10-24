@@ -1,10 +1,45 @@
-use demlik_tea::Tagged;
 use demlik_tea::command::{
     Cmd, CmdContract, CmdDef, CommandContractError, CommandEdge, CommandFamily, CommandSpec,
     Completion, ContractValue, EngineStamp, Outcome, SchemaError, Settled, WireDefinition,
 };
+use demlik_tea::{Subscription, Tagged};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+#[test]
+fn command_inputs_keep_nonfinite_dependencies_until_the_json_boundary() {
+    #[derive(Serialize, Deserialize)]
+    struct Input {
+        n: f64,
+    }
+    struct Floating;
+    impl CommandSpec for Floating {
+        type Input = Input;
+        type RawOutput = ();
+        type Output = ();
+        type Error = FetchError;
+        const NAME: &'static str = "floating";
+        const ERROR_TAGS: &'static [&'static str] = &["timeout"];
+        fn parse_input(value: Value) -> Result<Input, SchemaError> {
+            serde_json::from_value(value).map_err(SchemaError::from)
+        }
+        fn parse_output(_: ()) -> Result<(), SchemaError> {
+            Ok(())
+        }
+    }
+    let command = CmdDef::<Floating>::new()
+        .build(Input { n: f64::INFINITY })
+        .unwrap();
+    let subscription = demlik_tea::Sub::new("watch", &command).unwrap();
+    assert_eq!(
+        subscription.id().as_str(),
+        "{\"deps\":{\"n\":Infinity,\"type\":\"floating\"},\"type\":\"watch\"}"
+    );
+    assert_eq!(
+        serde_json::to_string(&command).unwrap(),
+        "{\"n\":null,\"type\":\"floating\"}"
+    );
+}
 
 #[derive(Serialize, Deserialize)]
 struct FetchInput {

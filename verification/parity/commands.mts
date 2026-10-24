@@ -4,8 +4,23 @@ import {
   cmdContractOver,
   followUps,
   Outcome,
+  subIdOf,
   validateSync,
 } from "../../packages/tea/src/pure/core.ts";
+
+export const commandDependencyInput = z.object({ json: z.string() });
+export function executeCommandDependency(
+  input: z.infer<typeof commandDependencyInput>,
+) {
+  const schema = z.record(z.string(), z.unknown());
+  const definition = Cmd.define("floating", {
+    input: schema,
+    ok: z.undefined(),
+    err: [],
+  });
+  const command = definition(schema.parse(JSON.parse(input.json)));
+  return { id: subIdOf("watch", command), json: JSON.stringify(command) };
+}
 
 type Schema<T = unknown> = Parameters<typeof validateSync<T>>[0];
 

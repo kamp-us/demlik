@@ -153,6 +153,37 @@ for (let index = 0; index < cases.length; index++) {
 }
 const differentialFailures = failures.length;
 let suiteFailures = 0;
+let storageProcesses = null;
+try {
+  const processReport = path.join(
+    path.dirname(reportFile),
+    reportArgument === -1
+      ? "storage-process.json"
+      : `${path.basename(reportFile, ".json")}-storage-process.json`,
+  );
+  execFileSync(process.execPath, [path.join(here, "storage-process.mjs")], {
+    cwd: root,
+    env: {
+      ...process.env,
+      PARITY_RUST_BIN: binary,
+      PARITY_STORAGE_REPORT: processReport,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 45_000,
+  });
+  storageProcesses = {
+    ...JSON.parse(await readFile(processReport, "utf8")),
+    reportFile: processReport,
+  };
+  assert.equal(storageProcesses.results.length, 2);
+} catch (error) {
+  suiteFailures++;
+  failures.push({
+    id: "storage.process-verification",
+    operation: "tea.storage.processes",
+    message: error.message,
+  });
+}
 let runtime = { cases: 0, passed: 0, nativeEvidence: {} };
 try {
   runtime = await runtimeParity(cargo, {
@@ -223,6 +254,7 @@ const report = {
   ],
   graph: { ...graph, nativeEvidence: undefined },
   runtime: { ...runtime, nativeEvidence: undefined },
+  storageProcesses,
   rustBinarySha256: createHash("sha256")
     .update(await readFile(binary))
     .digest("hex"),

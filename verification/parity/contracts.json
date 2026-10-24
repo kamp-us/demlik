@@ -157,7 +157,8 @@
         "demlik_tea::command::none",
         "demlik_tea::command::batch",
         "demlik_tea::command::when",
-        "demlik_tea::command::when_defined"
+        "demlik_tea::command::when_defined",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
       ]
     },
     "cases": [
@@ -165,7 +166,9 @@
       "command.replay-builders-explicit-zero-stamp",
       "command.helpers-missing",
       "command.helpers-zero",
-      "command.helpers-null"
+      "command.helpers-null",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
     ]
   },
   "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
@@ -224,23 +227,31 @@
         "demlik_tea::command::CmdDef::<Fetch>::new",
         "demlik_tea::command::CmdDef::<Fetch>::build",
         "demlik_tea::command::CmdDef::<Fetch>::ok",
-        "demlik_tea::command::CmdDef::<Fetch>::err"
+        "demlik_tea::command::CmdDef::<Fetch>::err",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
       ]
     },
     "cases": [
       "command.replay-builders-without-stamp",
-      "command.replay-builders-explicit-zero-stamp"
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
     ]
   },
   "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
     "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
     "rust": {
       "file": "crates/tea/src/command.rs",
-      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::build"]
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
     },
     "cases": [
       "command.replay-builders-without-stamp",
-      "command.replay-builders-explicit-zero-stamp"
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
     ]
   },
   "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
@@ -1478,5 +1489,29 @@
       "symbols": ["demlik_tea::storage::Store::migrate"]
     },
     "cases": ["storage.file-migrate-caller-parser"]
+  },
+  "@demlik/tea:./retry-backoff#Rng": {
+    "signature": "5df73237f4d9d735ec4805d7c36c82423a72e33c46c62f1060dd95615ca0ff22",
+    "rust": {
+      "file": "crates/tea/src/retry_backoff.rs",
+      "symbols": ["demlik_tea::retry_backoff::Rng::sample"]
+    },
+    "cases": [
+      "retry-draws.probe-consumes-before-use",
+      "retry-draws.unprobed-use",
+      "retry-draws.probe-is-not-per-draw-validation"
+    ]
+  },
+  "@demlik/tea:./retry-backoff#Rng/member:published:1481ec8cfb9fb3611938163aaa224055085f9de290f22bb28fd497c8225b1167": {
+    "signature": "1481ec8cfb9fb3611938163aaa224055085f9de290f22bb28fd497c8225b1167",
+    "rust": {
+      "file": "crates/tea/src/retry_backoff.rs",
+      "symbols": ["demlik_tea::retry_backoff::Rng::sample"]
+    },
+    "cases": [
+      "retry-draws.probe-consumes-before-use",
+      "retry-draws.unprobed-use",
+      "retry-draws.probe-is-not-per-draw-validation"
+    ]
   }
 }

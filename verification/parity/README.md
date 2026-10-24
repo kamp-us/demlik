@@ -14,6 +14,9 @@ The implementations live beside each other in `packages/` and `crates/`.
    Runtime traces run through TypeScript Promise, TypeScript Effect, and both
    native Rust profiles. `target/parity/runtime.json` records their state,
    command, persistence and public commit order, including handler failure.
+   Independent-process storage checks also run by default, with bounded child
+   watchdogs. `target/parity/storage-process.json` records competing CAS writers,
+   process restart, dead PID-lock recovery and deletion in both languages.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
    `target/parity/mutations.json`.

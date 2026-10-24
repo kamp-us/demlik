@@ -12,6 +12,13 @@ const require = createRequire(import.meta.url);
 const binary =
   process.env.PARITY_RUST_BIN ?? path.join(root, "target/debug/demlik-parity");
 const directory = await mkdtemp(path.join(tmpdir(), "demlik-storage-process-"));
+const children = new Set();
+const reportFile =
+  process.env.PARITY_STORAGE_REPORT ??
+  path.join(root, "target/parity/storage-process.json");
+process.once("SIGTERM", () => {
+  for (const child of children) child.kill("SIGKILL");
+});
 const scope = JSON.parse(await readFile(path.join(here, "scope.json"), "utf8"));
 assert.equal(process.version, scope.referenceEngine.node);
 assert.equal(process.versions.v8, scope.referenceEngine.v8);
@@ -21,6 +28,12 @@ function run(command, args, input) {
       cwd: root,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    children.add(child);
+    const deadline = setTimeout(() => {
+      stderr += "storage child exceeded its 15s watchdog";
+      child.kill("SIGKILL");
+    }, 15_000);
+    deadline.unref();
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (text) => {
@@ -31,6 +44,8 @@ function run(command, args, input) {
     });
     child.once("error", reject);
     child.once("close", (code) => {
+      clearTimeout(deadline);
+      children.delete(child);
       try {
         assert.equal(code, 0, `child failed: ${stderr}`);
         const response = JSON.parse(stdout);
@@ -124,10 +139,11 @@ try {
   }
   await mkdir(path.join(root, "target/parity"), { recursive: true });
   await writeFile(
-    path.join(root, "target/parity/storage-process.json"),
+    reportFile,
     `${JSON.stringify({ node: process.version, v8: process.versions.v8, platform: process.platform, results }, null, 2)}\n`,
   );
   process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
 } finally {
+  for (const child of children) child.kill("SIGKILL");
   await rm(directory, { recursive: true, force: true });
 }

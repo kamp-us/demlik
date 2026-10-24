@@ -9,7 +9,7 @@ use std::{
 use serde::{Serialize, ser::SerializeMap};
 use serde_json::{Value, json};
 
-use crate::Tagged;
+use crate::{PlainData, Tagged, data::plain_data};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct Issue {
@@ -90,12 +90,13 @@ impl<D: CommandSpec> Tagged for Cmd<D> {
 }
 impl<D: CommandSpec> Serialize for Cmd<D> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut input = serde_json::to_value(&self.input).map_err(serde::ser::Error::custom)?;
-        let input = input
-            .as_object_mut()
-            .ok_or_else(|| serde::ser::Error::custom("command input must be a record"))?;
-        input.insert("type".into(), Value::String(D::NAME.into()));
-        input.serialize(serializer)
+        let PlainData::Object(mut input) =
+            plain_data(&self.input).map_err(serde::ser::Error::custom)?
+        else {
+            return Err(serde::ser::Error::custom("command input must be a record"));
+        };
+        input.insert("type".into(), PlainData::String(D::NAME.into()));
+        PlainData::Object(input).serialize(serializer)
     }
 }
 impl<'de, D: CommandSpec> serde::Deserialize<'de> for Cmd<D>
@@ -292,8 +293,8 @@ impl<D: CommandSpec> CmdDef<D> {
         D::ERROR_TAGS
     }
     pub fn build(&self, input: D::Input) -> Result<Cmd<D>, CommandContractError> {
-        let value = serde_json::to_value(&input).map_err(CommandContractError::serialization)?;
-        if !value.is_object() || value.get("type").is_some() {
+        let value = plain_data(&input).map_err(CommandContractError::serialization)?;
+        if !matches!(&value, PlainData::Object(record) if !record.contains_key("type")) {
             return Err(CommandContractError::Input {
                 cmd_type: D::NAME.into(),
                 issues: vec![Issue::new(
@@ -569,7 +570,7 @@ pub enum CommandContractError {
     NullDispatch,
 }
 impl CommandContractError {
-    fn serialization(error: serde_json::Error) -> Self {
+    fn serialization(error: impl fmt::Display) -> Self {
         Self::Serialization {
             message: error.to_string(),
         }

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "retry-draws.probe-consumes-before-use",
+      "operation": "tea.retry.probe",
+      "input": {
+        "probe": true,
+        "samples": [0.1, 0.25, 0.75],
+        "sampleCount": 2
+      },
+      "expected": { "draws": 3, "accepted": true, "values": [0.25, 0.75] }
+    },
+    {
+      "id": "retry-draws.unprobed-use",
+      "operation": "tea.retry.probe",
+      "input": { "probe": false, "samples": [0.25, 0.75], "sampleCount": 2 },
+      "expected": { "draws": 2, "accepted": true, "values": [0.25, 0.75] }
+    },
+    {
+      "id": "retry-draws.probe-is-not-per-draw-validation",
+      "operation": "tea.retry.probe",
+      "input": { "probe": true, "samples": [0.25, 2], "sampleCount": 1 },
+      "expected": { "draws": 2, "accepted": true, "values": [2] }
+    }
+  ]
+}

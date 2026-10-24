@@ -153,9 +153,14 @@ pub fn state(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Strin
 struct ProbeInput {
     probe: bool,
     samples: Vec<f64>,
+    #[serde(default, rename = "sampleCount")]
+    sample_count: usize,
 }
 pub fn probe(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
     let input: ProbeInput = serde_json::from_value(input).map_err(|error| error.to_string())?;
+    if input.sample_count.saturating_add(usize::from(input.probe)) > input.samples.len() {
+        return Err("recorded random draws exhausted".into());
+    }
     let mut draws = 0;
     let result = observe!(
         calls,
@@ -168,7 +173,16 @@ pub fn probe(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Strin
         input.probe,
     );
     match result {
-        Ok(_) => Ok(json!({ "draws": draws, "accepted": true })),
+        Ok(mut rng) => {
+            let values = (0..input.sample_count)
+                .map(|_| observe!(calls, demlik_tea::retry_backoff::Rng::sample, &mut rng))
+                .collect::<Vec<_>>();
+            let mut output = json!({ "draws": draws, "accepted": true });
+            if input.sample_count > 0 {
+                output["values"] = json!(values);
+            }
+            Ok(output)
+        }
         Err(error) => Ok(
             json!({ "draws": draws, "accepted": false, "error": { "name": "RangeError", "message": error.to_string() } }),
         ),

@@ -1,10 +1,10 @@
 use std::cell::Cell;
 
-use demlik_tea::Tagged;
 use demlik_tea::command::{
     Cmd, CommandContractError, CommandSpec, ContractValue, Issue, Outcome, SchemaError,
     WireDefinition,
 };
+use demlik_tea::{PlainData, Tagged};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -176,6 +176,42 @@ impl Tagged for WireFailure {
     }
 }
 struct Fetch;
+struct DataCommand;
+impl CommandSpec for DataCommand {
+    type Input = PlainData;
+    type RawOutput = ();
+    type Output = ();
+    type Error = WireFailure;
+    const NAME: &'static str = "floating";
+    const ERROR_TAGS: &'static [&'static str] = &[];
+    fn parse_input(value: Value) -> Result<PlainData, SchemaError> {
+        Ok(PlainData::from(&value))
+    }
+    fn parse_output(_: ()) -> Result<(), SchemaError> {
+        Ok(())
+    }
+}
+pub fn dependency(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
+    let raw = input
+        .get("json")
+        .and_then(Value::as_str)
+        .ok_or("json text is required")?;
+    let input =
+        observe!(calls, demlik_tea::data::decode_json, raw).map_err(|error| error.to_string())?;
+    let definition = observe!(calls, demlik_tea::command::CmdDef::<DataCommand>::new);
+    let command = observe!(
+        calls,
+        demlik_tea::command::CmdDef::<DataCommand>::build,
+        &definition,
+        input
+    )
+    .map_err(|error| error.to_string())?;
+    let subscription = observe!(calls, demlik_tea::Sub::new, "watch", &command)
+        .map_err(|error| error.to_string())?;
+    let id = observe!(calls, demlik_tea::Subscription::id, &subscription);
+    let json = serde_json::to_string(&command).map_err(|error| error.to_string())?;
+    Ok(json!({"id":id,"json":json}))
+}
 impl CommandSpec for Fetch {
     type Input = Value;
     type RawOutput = Value;

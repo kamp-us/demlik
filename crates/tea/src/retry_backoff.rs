@@ -21,6 +21,11 @@ pub struct BackoffCurve {
 pub struct Rng<F> {
     source: F,
 }
+impl<F: FnMut() -> f64> Rng<F> {
+    pub fn sample(&mut self) -> f64 {
+        (self.source)()
+    }
+}
 
 #[derive(Debug)]
 pub struct RngRangeError {
@@ -80,8 +85,8 @@ pub fn backoff_delay<F: FnMut() -> f64>(
     };
     match curve.jitter {
         Jitter::None => delay,
-        Jitter::Full => js_min(delay, (rng.source)() * delay),
-        Jitter::Equal => js_min(delay, delay / 2.0 + (rng.source)() * (delay / 2.0)),
+        Jitter::Full => js_min(delay, rng.sample() * delay),
+        Jitter::Equal => js_min(delay, delay / 2.0 + rng.sample() * (delay / 2.0)),
     }
 }
 

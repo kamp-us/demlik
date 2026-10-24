@@ -132,6 +132,7 @@ async fn execute(case: &Case) -> Result<Observation, String> {
             policies::execute(&case.operation, case.input.clone(), &mut calls)
         }
         "tea.command.contract" => commands::contract(case.input.clone(), &mut calls),
+        "tea.command.dependency" => commands::dependency(case.input.clone(), &mut calls),
         "tea.command.builders" => commands::builders(case.input.clone(), &mut calls),
         "tea.command.input" => commands::parse_input(case.input.clone(), &mut calls),
         "tea.command.helpers" => commands::helpers(case.input.clone(), &mut calls),
