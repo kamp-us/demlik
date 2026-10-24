@@ -2,8 +2,11 @@
 
 mod ast;
 mod channel;
+mod tree;
+pub use tree::{NativeFile, NativeNode, NativeSymbol};
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,6 +20,12 @@ use ast::{Node, SourceFile};
 use channel::Channel;
 
 pub const NATIVE_PREVIEW_PIN: &str = "7.0.0-dev.20260707.2";
+pub(crate) fn native_kind(name: &str) -> u32 {
+    ast::kind_named(name).expect("pinned compiler defines the requested syntax kind")
+}
+pub(crate) fn native_flag(name: &str) -> u32 {
+    ast::flag_named(name).expect("pinned compiler defines the requested node flag")
+}
 
 #[derive(Debug)]
 pub enum TsgoError {
@@ -226,6 +235,7 @@ struct Snapshot {
 struct Project {
     id: String,
     config_file_name: String,
+    compiler_options: Value,
 }
 
 #[derive(Deserialize)]
@@ -260,6 +270,17 @@ pub struct TypeSession {
     ordinal: u64,
 }
 
+pub struct ProgramInput<'a> {
+    pub root_files: &'a [PathBuf],
+    pub include_config_files: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigFiles {
+    file_names: Vec<PathBuf>,
+}
+
 pub fn open_type_session(
     binary: &TsgoBinary,
     ts_config_path: &Path,
@@ -284,6 +305,36 @@ impl TypeSession {
         file: &Path,
         read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
     ) -> Result<T, TsgoError> {
+        self.with_compilation(
+            ProgramInput {
+                root_files: &[file.to_path_buf()],
+                include_config_files: false,
+            },
+            read,
+        )
+    }
+
+    pub fn with_compilation<T>(
+        &mut self,
+        input: ProgramInput<'_>,
+        read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
+    ) -> Result<T, TsgoError> {
+        let mut files = if input.include_config_files {
+            serde_json::from_value::<ConfigFiles>(
+                self.channel
+                    .json("parseConfigFile", json!({ "file": self.config }))?,
+            )?
+            .file_names
+        } else {
+            Vec::new()
+        };
+        files.extend_from_slice(input.root_files);
+        files.sort_by(|left, right| {
+            left.to_string_lossy()
+                .encode_utf16()
+                .cmp(right.to_string_lossy().encode_utf16())
+        });
+        files.dedup();
         let config = self
             .config
             .parent()
@@ -296,7 +347,7 @@ impl TypeSession {
         self.ordinal += 1;
         let config_name = config.to_string_lossy().into_owned();
         let body = serde_json::to_string(
-            &json!({ "extends": self.config, "files": [file], "include": [] }),
+            &json!({ "extends": self.config, "files": files, "include": [] }),
         )?;
         self.channel.virtual_files.insert(config_name.clone(), body);
         let opened = self
@@ -318,6 +369,12 @@ impl TypeSession {
                 snapshot: snapshot.snapshot,
                 project: project.id,
                 sources: HashMap::new(),
+                owner: Rc::new(()),
+                symbols: HashMap::new(),
+                compiler_options: project.compiler_options,
+                root_libraries: None,
+                library_kinds: HashMap::new(),
+                declaration_nodes: HashMap::new(),
             }),
             None => Err(TsgoError::protocol(format!(
                 "tsgo opened no project for {config_name}"
@@ -373,10 +430,254 @@ pub struct TypeProgram<'a> {
     snapshot: u64,
     project: String,
     sources: HashMap<String, Rc<SourceFile>>,
+    owner: Rc<()>,
+    symbols: HashMap<u64, Rc<RefCell<Symbol>>>,
+    compiler_options: Value,
+    root_libraries: Option<HashSet<String>>,
+    library_kinds: HashMap<String, Option<LibraryKind>>,
+    declaration_nodes: HashMap<u64, Vec<NativeNode>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryKind {
+    Root,
+    Referenced,
 }
 
 impl TypeProgram<'_> {
-    fn source_file(&mut self, file: &Path) -> Result<Option<Rc<SourceFile>>, TsgoError> {
+    pub fn source_file(&mut self, file: &Path) -> Result<Option<NativeFile>, TsgoError> {
+        Ok(self.source_data(file)?.map(|source| NativeFile {
+            source,
+            owner: self.owner.clone(),
+        }))
+    }
+    fn check_node(&self, node: &NativeNode) -> Result<(), TsgoError> {
+        if node.belongs_to(&self.owner) {
+            Ok(())
+        } else {
+            Err(TsgoError::protocol(
+                "native AST node belongs to a different compilation",
+            ))
+        }
+    }
+    fn check_symbol(&self, symbol: &NativeSymbol) -> Result<(), TsgoError> {
+        if Rc::ptr_eq(&self.owner, &symbol.owner) {
+            Ok(())
+        } else {
+            Err(TsgoError::protocol(
+                "native symbol belongs to a different compilation",
+            ))
+        }
+    }
+    fn record_symbol(&mut self, symbol: Symbol) -> NativeSymbol {
+        let data = if let Some(held) = self.symbols.get(&symbol.id) {
+            held.replace(symbol);
+            held.clone()
+        } else {
+            let id = symbol.id;
+            let data = Rc::new(RefCell::new(symbol));
+            self.symbols.insert(id, data.clone());
+            data
+        };
+        NativeSymbol {
+            owner: self.owner.clone(),
+            data,
+        }
+    }
+    pub fn symbol_at(&mut self, node: &NativeNode) -> Result<Option<NativeSymbol>, TsgoError> {
+        self.check_node(node)?;
+        let symbol = self.raw_symbol_at(&node.file.source, node.node)?;
+        Ok(symbol.map(|symbol| self.record_symbol(symbol)))
+    }
+    pub fn symbols_at(
+        &mut self,
+        nodes: &[NativeNode],
+    ) -> Result<Vec<Option<NativeSymbol>>, TsgoError> {
+        if nodes.is_empty() {
+            return Ok(Vec::new());
+        }
+        for node in nodes {
+            self.check_node(node)?;
+        }
+        let symbols: Vec<Option<Symbol>> = serde_json::from_value(self.channel.json("getSymbolsAtLocations", json!({ "snapshot": self.snapshot, "project": self.project, "locations": nodes.iter().map(NativeNode::id).collect::<Vec<_>>() }))?)?;
+        if symbols.len() != nodes.len() {
+            return Err(TsgoError::protocol(
+                "native symbol batch returned the wrong result count",
+            ));
+        }
+        Ok(symbols
+            .into_iter()
+            .map(|symbol| symbol.map(|symbol| self.record_symbol(symbol)))
+            .collect())
+    }
+    pub fn alias_target(
+        &mut self,
+        symbol: &NativeSymbol,
+    ) -> Result<Option<NativeSymbol>, TsgoError> {
+        self.check_symbol(symbol)?;
+        if symbol.flags() & 2_097_152 == 0 {
+            return Ok(None);
+        }
+        let id = symbol.data.borrow().id;
+        let target: Option<Symbol> = serde_json::from_value(self.channel.json(
+            "getAliasedSymbol",
+            json!({ "snapshot": self.snapshot, "project": self.project, "symbol": id }),
+        )?)?;
+        Ok(target.map(|symbol| self.record_symbol(symbol)))
+    }
+    pub fn shorthand_value_symbol(
+        &mut self,
+        node: &NativeNode,
+    ) -> Result<Option<NativeSymbol>, TsgoError> {
+        self.check_node(node)?;
+        let symbol: Option<Symbol> = serde_json::from_value(self.channel.json(
+            "getShorthandAssignmentValueSymbol",
+            json!({ "snapshot": self.snapshot, "project": self.project, "location": node.id() }),
+        )?)?;
+        Ok(symbol.map(|symbol| self.record_symbol(symbol)))
+    }
+    pub fn declarations(&mut self, symbol: &NativeSymbol) -> Result<Vec<NativeNode>, TsgoError> {
+        self.check_symbol(symbol)?;
+        let id = symbol.data.borrow().id;
+        if let Some(declarations) = self.declaration_nodes.get(&id) {
+            return Ok(declarations.clone());
+        }
+        let handles = symbol.data.borrow().declarations.clone();
+        let mut declarations = Vec::new();
+        for handle in handles {
+            let mut parts = handle.splitn(3, '.');
+            let index: u32 = parts
+                .next()
+                .and_then(|part| part.parse().ok())
+                .ok_or_else(|| {
+                    TsgoError::protocol("native declaration handle has an invalid index")
+                })?;
+            let kind: u32 = parts
+                .next()
+                .and_then(|part| part.parse().ok())
+                .ok_or_else(|| {
+                    TsgoError::protocol("native declaration handle has an invalid kind")
+                })?;
+            let path = parts.next().ok_or_else(|| {
+                TsgoError::protocol("native declaration handle has no source path")
+            })?;
+            let Some(file) = self.source_file(Path::new(path))? else {
+                continue;
+            };
+            let node = file.source.node(index)?;
+            if node.kind != kind {
+                return Err(TsgoError::protocol(
+                    "native declaration handle kind does not match its AST node",
+                ));
+            }
+            declarations.push(NativeNode { file, node });
+        }
+        self.declaration_nodes.insert(id, declarations.clone());
+        Ok(declarations)
+    }
+    pub fn exports_of(
+        &mut self,
+        symbol: &NativeSymbol,
+    ) -> Result<indexmap::IndexMap<String, NativeSymbol>, TsgoError> {
+        self.check_symbol(symbol)?;
+        let id = symbol.data.borrow().id;
+        let symbols: Vec<Symbol> = serde_json::from_value(self.channel.json(
+            "getExportsOfModule",
+            json!({ "snapshot": self.snapshot, "project": self.project, "symbol": id }),
+        )?)?;
+        Ok(symbols
+            .into_iter()
+            .map(|symbol| {
+                let symbol = self.record_symbol(symbol);
+                (symbol.name(), symbol)
+            })
+            .collect())
+    }
+    pub fn source_file_names(&mut self) -> Result<Vec<PathBuf>, TsgoError> {
+        let names: Option<Vec<PathBuf>> = serde_json::from_value(self.channel.json(
+            "getSourceFileNames",
+            json!({ "snapshot": self.snapshot, "project": self.project }),
+        )?)?;
+        Ok(names.unwrap_or_default())
+    }
+    pub fn library_kind(&mut self, file: &NativeFile) -> Result<Option<LibraryKind>, TsgoError> {
+        if !Rc::ptr_eq(&file.owner, &self.owner) {
+            return Err(TsgoError::protocol(
+                "native source file belongs to a different compilation",
+            ));
+        }
+        if let Some(kind) = self.library_kinds.get(&file.source.path) {
+            return Ok(*kind);
+        }
+        if self.root_libraries.is_none() {
+            let named = self
+                .compiler_options
+                .get("lib")
+                .map(|names| serde_json::from_value::<Vec<String>>(names.clone()))
+                .transpose()?;
+            let roots = if let Some(named) = named {
+                named.into_iter().map(|name| name.to_lowercase()).collect()
+            } else {
+                self.source_file_names()?
+                    .into_iter()
+                    .filter_map(|file| {
+                        file.file_name()
+                            .map(|name| name.to_string_lossy().to_lowercase())
+                    })
+                    .filter(|name| {
+                        let Some(middle) = name
+                            .strip_prefix("lib.")
+                            .and_then(|name| name.strip_suffix(".ts"))
+                        else {
+                            return false;
+                        };
+                        matches!(middle, "d" | "es6")
+                            || middle.strip_suffix(".full.d").is_some_and(|target| {
+                                !target.is_empty()
+                                    && target.chars().all(|character| {
+                                        character.is_ascii_lowercase() || character.is_ascii_digit()
+                                    })
+                            })
+                    })
+                    .collect()
+            };
+            self.root_libraries = Some(roots);
+        }
+        let metadata = self.channel.json(
+            "getSourceFileMetadata",
+            json!({ "snapshot": self.snapshot, "project": self.project, "file": file.source.path }),
+        )?;
+        let kind = if metadata
+            .get("isDefaultLibrary")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            let name = file
+                .file_name()
+                .file_name()
+                .ok_or_else(|| TsgoError::protocol("native source has no file name"))?
+                .to_string_lossy()
+                .to_lowercase();
+            Some(
+                if self
+                    .root_libraries
+                    .as_ref()
+                    .expect("root libraries initialized")
+                    .contains(&name)
+                {
+                    LibraryKind::Root
+                } else {
+                    LibraryKind::Referenced
+                },
+            )
+        } else {
+            None
+        };
+        self.library_kinds.insert(file.source.path.clone(), kind);
+        Ok(kind)
+    }
+
+    fn source_data(&mut self, file: &Path) -> Result<Option<Rc<SourceFile>>, TsgoError> {
         let key = file.to_string_lossy();
         if let Some(source) = self.sources.get(key.as_ref()) {
             return Ok(Some(source.clone()));
@@ -394,7 +695,11 @@ impl TypeProgram<'_> {
         Ok(Some(source))
     }
 
-    fn symbol_at(&mut self, source: &SourceFile, node: Node) -> Result<Option<Symbol>, TsgoError> {
+    fn raw_symbol_at(
+        &mut self,
+        source: &SourceFile,
+        node: Node,
+    ) -> Result<Option<Symbol>, TsgoError> {
         let value = self.channel.json("getSymbolAtLocation", json!({ "snapshot": self.snapshot, "project": self.project, "location": source.handle(node) }))?;
         Ok(serde_json::from_value(value)?)
     }
@@ -437,7 +742,7 @@ impl TypeProgram<'_> {
             let path = parts
                 .next()
                 .ok_or_else(|| TsgoError::protocol("declaration handle has no source path"))?;
-            let Some(source) = self.source_file(Path::new(path))? else {
+            let Some(source) = self.source_data(Path::new(path))? else {
                 continue;
             };
             let declaration = source.node(index)?;
@@ -455,10 +760,10 @@ impl TypeProgram<'_> {
         file: &Path,
         name: &str,
     ) -> Result<Option<Declaration>, TsgoError> {
-        let Some(source) = self.source_file(file)? else {
+        let Some(source) = self.source_data(file)? else {
             return Ok(None);
         };
-        let Some(module) = self.symbol_at(&source, source.node(1)?)? else {
+        let Some(module) = self.raw_symbol_at(&source, source.node(1)?)? else {
             return Ok(None);
         };
         self.exported_declaration(module, name)
@@ -470,13 +775,13 @@ impl TypeProgram<'_> {
         specifier: &str,
         name: &str,
     ) -> Result<Option<Declaration>, TsgoError> {
-        let Some(source) = self.source_file(file)? else {
+        let Some(source) = self.source_data(file)? else {
             return Ok(None);
         };
         let Some(literal) = source.imported_module(specifier)? else {
             return Ok(None);
         };
-        let Some(module) = self.symbol_at(&source, literal)? else {
+        let Some(module) = self.raw_symbol_at(&source, literal)? else {
             return Ok(None);
         };
         self.exported_declaration(module, name)

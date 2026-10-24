@@ -1,17 +1,25 @@
 use super::directories::build_directories;
-use super::functions::{discover_functions, is_test_file};
+use super::edges::{EdgeResult, resolve_edges};
+use super::functions::{DiscoveredFunction, discover_functions, is_test_file};
 use super::metrics::{compute_function_metrics, module_comment_lines, module_loc};
-use crate::declarations::discover::build_declaration_nodes;
-use crate::project::{LoadedProject, locale_compare, to_relative};
-use crate::schema::{
-    FunctionNode, Graph, ModuleNode, Provenance, Severity, Stats, Summary, ThresholdError,
-    Thresholds,
+use crate::checker::context::{TypeContextInput, with_type_context};
+use crate::declarations::discover::{build_declaration_nodes, discover_declarations};
+use crate::declarations::uses::resolve_declaration_uses;
+use crate::engine::tsgo::{TsgoBinary, TsgoError};
+use crate::project::{
+    EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots, locale_compare,
+    to_relative,
 };
+use crate::schema::{
+    Edges, FunctionNode, Graph, ModuleNode, Provenance, Severity, Stats, Summary, ThresholdError,
+    Thresholds, UseSite,
+};
+use crate::smells::coupling::coupling_by_file;
 use crate::smells::evaluate::{compare_flat_smells, smells_for_function, smells_for_module};
 use crate::smells::health::{HealthInput, health_band};
 use crate::smells::plan::{PlanAxis, rank_plan};
 use crate::syntax::headers::function_header;
-use crate::syntax::imports::import_declaration_specifiers;
+use crate::syntax::imports::{import_declaration_specifiers, resolve_imports};
 use indexmap::IndexMap;
 use std::io;
 
@@ -24,12 +32,14 @@ pub struct NodeFields {
 pub enum AssemblyError {
     WorkingDirectory(io::Error),
     Threshold(ThresholdError),
+    Compiler(TsgoError),
 }
 impl std::fmt::Display for AssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WorkingDirectory(error) => error.fmt(formatter),
             Self::Threshold(error) => error.fmt(formatter),
+            Self::Compiler(error) => error.fmt(formatter),
         }
     }
 }
@@ -38,6 +48,7 @@ impl std::error::Error for AssemblyError {
         match self {
             Self::WorkingDirectory(error) => Some(error),
             Self::Threshold(error) => Some(error),
+            Self::Compiler(error) => Some(error),
         }
     }
 }
@@ -48,17 +59,123 @@ pub fn assemble_graph(
     thresholds: Thresholds,
     fields: NodeFields,
 ) -> Result<Graph, AssemblyError> {
+    build(loaded, thresholds, fields, None, None)
+}
+
+struct EdgeBundle {
+    result: EdgeResult,
+    declaration_uses: IndexMap<String, Vec<UseSite>>,
+    scope: EdgeScope,
+    ts_config: String,
+}
+fn report_unjoined(unjoined: &[String], what: &str) {
+    if unjoined.is_empty() {
+        return;
+    }
+    let shown = unjoined
+        .iter()
+        .take(5)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = if unjoined.len() > 5 { ", ..." } else { "" };
+    eprintln!(
+        "code-graph: warning: {} {what}: {shown}{more}",
+        unjoined.len()
+    );
+}
+
+pub fn assemble_graph_with_edges(
+    loaded: &LoadedEdgeProject,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+) -> Result<Graph, AssemblyError> {
+    thresholds.validate().map_err(AssemblyError::Threshold)?;
+    let functions = discover_functions(&loaded.project.source_files).functions;
+    let ids: Vec<_> = functions
+        .iter()
+        .map(|function| function.id.clone())
+        .collect();
+    let imports = resolve_imports(
+        &loaded.project.root_absolute,
+        &loaded.project.source_files,
+        &loaded.ts_config_path,
+    );
+    let (result, declaration_uses) = with_type_context(
+        binary,
+        TypeContextInput {
+            project: &loaded.project,
+            ts_config_path: &loaded.ts_config_path,
+            functions: &functions,
+        },
+        |context| {
+            report_unjoined(
+                &context.unjoined,
+                "function(s) have no node in tsgo's tree, so their calls are not resolved",
+            );
+            let result = resolve_edges(context, imports, &ids)?;
+            let uses = resolve_declaration_uses(
+                context,
+                &discover_declarations(&loaded.project.source_files),
+            )?;
+            report_unjoined(
+                &uses.unjoined,
+                "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+            );
+            Ok((result, uses.uses_by_id))
+        },
+    )
+    .map_err(AssemblyError::Compiler)?;
+    build(
+        &loaded.project,
+        thresholds,
+        fields,
+        Some(EdgeBundle {
+            result,
+            declaration_uses,
+            scope: loaded.scope,
+            ts_config: loaded.ts_config_path.to_string_lossy().into_owned(),
+        }),
+        Some(functions),
+    )
+}
+
+fn build(
+    loaded: &LoadedProject,
+    thresholds: Thresholds,
+    fields: NodeFields,
+    mut edges: Option<EdgeBundle>,
+    discovered: Option<Vec<DiscoveredFunction>>,
+) -> Result<Graph, AssemblyError> {
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let root = to_relative(
         &std::env::current_dir().map_err(AssemblyError::WorkingDirectory)?,
         &loaded.root_absolute,
     );
-    let functions: Vec<_> = discover_functions(&loaded.source_files)
-        .functions
+    let functions: Vec<_> = discovered
+        .unwrap_or_else(|| discover_functions(&loaded.source_files).functions)
         .into_iter()
         .map(|discovered| {
             let metrics = compute_function_metrics(&discovered);
             let header = fields.headers.then(|| function_header(discovered.node()));
+            let measured = edges.as_mut().map(|bundle| Edges {
+                calls: bundle
+                    .result
+                    .calls_by_id
+                    .shift_remove(&discovered.id)
+                    .unwrap_or_default(),
+                called_by: bundle
+                    .result
+                    .called_by_id
+                    .shift_remove(&discovered.id)
+                    .unwrap_or_default(),
+                call_chain_depth: bundle
+                    .result
+                    .chain_depth_by_id
+                    .shift_remove(&discovered.id)
+                    .unwrap_or(0),
+            });
             let mut function = FunctionNode {
                 id: discovered.id,
                 name: discovered.name,
@@ -72,7 +189,7 @@ pub fn assemble_graph(
                 complexity: metrics.complexity,
                 is_exported: discovered.is_exported,
                 is_test: discovered.is_test,
-                edges: None,
+                edges: measured,
                 node_kind: None,
                 smells: Vec::new(),
                 header,
@@ -96,22 +213,58 @@ pub fn assemble_graph(
                 .shift_remove(unit.file.as_str())
                 .unwrap_or_default();
             function_ids.sort_by(|left, right| locale_compare(left, right));
-            let mut module = ModuleNode {
+            let (imports, imported_by, import_edges) = if let Some(bundle) = edges.as_mut() {
+                (
+                    bundle
+                        .result
+                        .imports_by_file
+                        .shift_remove(&unit.file)
+                        .unwrap_or_default(),
+                    bundle
+                        .result
+                        .imported_by_file
+                        .shift_remove(&unit.file)
+                        .unwrap_or_default(),
+                    bundle
+                        .result
+                        .import_edges_by_file
+                        .shift_remove(&unit.file)
+                        .unwrap_or_default(),
+                )
+            } else {
+                (
+                    import_declaration_specifiers(&unit.syntax),
+                    Vec::new(),
+                    Vec::new(),
+                )
+            };
+            ModuleNode {
                 file: unit.file.clone(),
                 loc: module_loc(&unit.syntax),
                 comment_lines: module_comment_lines(&unit.syntax),
                 function_ids,
-                imports: import_declaration_specifiers(&unit.syntax),
-                imported_by: Vec::new(),
-                import_edges: Vec::new(),
+                imports,
+                imported_by,
+                import_edges,
                 is_test: is_test_file(&unit.file),
                 smells: Vec::new(),
-            };
-            module.smells = smells_for_module(&module, &thresholds, None);
-            module
+            }
         })
         .collect();
     modules.sort_by(|left, right| locale_compare(&left.file, &right.file));
+    let coupling = edges.as_ref().map(|_| {
+        coupling_by_file(
+            &modules,
+            &discover_package_roots(&loaded.root_absolute, None),
+        )
+    });
+    for module in &mut modules {
+        module.smells = smells_for_module(
+            module,
+            &thresholds,
+            coupling.as_ref().and_then(|facts| facts.get(&module.file)),
+        );
+    }
     let directories = build_directories(&modules, &thresholds);
     let mut smells: Vec<_> = functions
         .iter()
@@ -176,7 +329,12 @@ pub fn assemble_graph(
     };
     Ok(Graph {
         root: if root.is_empty() { ".".into() } else { root },
-        provenance: Provenance::Cheap,
+        provenance: edges
+            .as_ref()
+            .map_or(Provenance::Cheap, |bundle| Provenance::Edges {
+                ts_config: bundle.ts_config.clone(),
+                scope: bundle.scope,
+            }),
         thresholds,
         summary,
         cross_runtime: None,
@@ -185,7 +343,10 @@ pub fn assemble_graph(
         interface_width: None,
         data: None,
         functions,
-        declarations: build_declaration_nodes(&loaded.source_files, None),
+        declarations: build_declaration_nodes(
+            &loaded.source_files,
+            edges.as_ref().map(|bundle| &bundle.declaration_uses),
+        ),
         modules,
         directories,
         smells,

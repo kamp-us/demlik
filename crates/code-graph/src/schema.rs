@@ -181,10 +181,10 @@ pub struct Smell {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CallSite {
-    pub callee_id: String,
+    pub callee_id: crate::text::JsString,
     pub line: usize,
     pub const_args: Vec<String>,
-    pub declaration: Option<String>,
+    pub declaration: Option<crate::text::JsString>,
 }
 
 #[derive(Debug, Serialize)]

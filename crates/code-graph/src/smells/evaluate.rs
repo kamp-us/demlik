@@ -8,10 +8,7 @@ use crate::schema::{
 };
 use std::cmp::Ordering;
 
-pub struct CouplingFacts {
-    pub cycle_size: usize,
-    pub cross_boundary_out_count: usize,
-}
+pub use super::coupling::CouplingFacts;
 fn compare_smells(left: &Smell, right: &Smell) -> Ordering {
     locale_compare(left.kind.as_str(), right.kind.as_str())
         .then_with(|| {

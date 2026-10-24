@@ -1,3 +1,4 @@
+pub mod coupling;
 pub mod evaluate;
 pub mod health;
 pub mod plan;

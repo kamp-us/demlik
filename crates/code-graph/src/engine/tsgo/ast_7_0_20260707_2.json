@@ -1,0 +1,1608 @@
+{
+  "nativePreviewVersion": "7.0.0-dev.20260707.2",
+  "protocolVersion": 5,
+  "generatedFrom": [
+    "dist/api/node/protocol.generated.js",
+    "dist/ast/index.js",
+    "dist/ast/is.js"
+  ],
+  "kinds": {
+    "Unknown": 0,
+    "EndOfFile": 1,
+    "SingleLineCommentTrivia": 2,
+    "MultiLineCommentTrivia": 3,
+    "NewLineTrivia": 4,
+    "WhitespaceTrivia": 5,
+    "ConflictMarkerTrivia": 6,
+    "NonTextFileMarkerTrivia": 7,
+    "NumericLiteral": 8,
+    "BigIntLiteral": 9,
+    "StringLiteral": 10,
+    "JsxText": 11,
+    "JsxTextAllWhiteSpaces": 12,
+    "RegularExpressionLiteral": 13,
+    "NoSubstitutionTemplateLiteral": 14,
+    "TemplateHead": 15,
+    "TemplateMiddle": 16,
+    "TemplateTail": 17,
+    "OpenBraceToken": 18,
+    "CloseBraceToken": 19,
+    "OpenParenToken": 20,
+    "CloseParenToken": 21,
+    "OpenBracketToken": 22,
+    "CloseBracketToken": 23,
+    "DotToken": 24,
+    "DotDotDotToken": 25,
+    "SemicolonToken": 26,
+    "CommaToken": 27,
+    "QuestionDotToken": 28,
+    "LessThanToken": 29,
+    "LessThanSlashToken": 30,
+    "GreaterThanToken": 31,
+    "LessThanEqualsToken": 32,
+    "GreaterThanEqualsToken": 33,
+    "EqualsEqualsToken": 34,
+    "ExclamationEqualsToken": 35,
+    "EqualsEqualsEqualsToken": 36,
+    "ExclamationEqualsEqualsToken": 37,
+    "EqualsGreaterThanToken": 38,
+    "PlusToken": 39,
+    "MinusToken": 40,
+    "AsteriskToken": 41,
+    "AsteriskAsteriskToken": 42,
+    "SlashToken": 43,
+    "PercentToken": 44,
+    "PlusPlusToken": 45,
+    "MinusMinusToken": 46,
+    "LessThanLessThanToken": 47,
+    "GreaterThanGreaterThanToken": 48,
+    "GreaterThanGreaterThanGreaterThanToken": 49,
+    "AmpersandToken": 50,
+    "BarToken": 51,
+    "CaretToken": 52,
+    "ExclamationToken": 53,
+    "TildeToken": 54,
+    "AmpersandAmpersandToken": 55,
+    "BarBarToken": 56,
+    "QuestionToken": 57,
+    "ColonToken": 58,
+    "AtToken": 59,
+    "QuestionQuestionToken": 60,
+    "BacktickToken": 61,
+    "HashToken": 62,
+    "EqualsToken": 63,
+    "PlusEqualsToken": 64,
+    "MinusEqualsToken": 65,
+    "AsteriskEqualsToken": 66,
+    "AsteriskAsteriskEqualsToken": 67,
+    "SlashEqualsToken": 68,
+    "PercentEqualsToken": 69,
+    "LessThanLessThanEqualsToken": 70,
+    "GreaterThanGreaterThanEqualsToken": 71,
+    "GreaterThanGreaterThanGreaterThanEqualsToken": 72,
+    "AmpersandEqualsToken": 73,
+    "BarEqualsToken": 74,
+    "BarBarEqualsToken": 75,
+    "AmpersandAmpersandEqualsToken": 76,
+    "QuestionQuestionEqualsToken": 77,
+    "CaretEqualsToken": 78,
+    "Identifier": 79,
+    "PrivateIdentifier": 80,
+    "JSDocCommentTextToken": 81,
+    "BreakKeyword": 82,
+    "CaseKeyword": 83,
+    "CatchKeyword": 84,
+    "ClassKeyword": 85,
+    "ConstKeyword": 86,
+    "ContinueKeyword": 87,
+    "DebuggerKeyword": 88,
+    "DefaultKeyword": 89,
+    "DeleteKeyword": 90,
+    "DoKeyword": 91,
+    "ElseKeyword": 92,
+    "EnumKeyword": 93,
+    "ExportKeyword": 94,
+    "ExtendsKeyword": 95,
+    "FalseKeyword": 96,
+    "FinallyKeyword": 97,
+    "ForKeyword": 98,
+    "FunctionKeyword": 99,
+    "IfKeyword": 100,
+    "ImportKeyword": 101,
+    "InKeyword": 102,
+    "InstanceOfKeyword": 103,
+    "NewKeyword": 104,
+    "NullKeyword": 105,
+    "ReturnKeyword": 106,
+    "SuperKeyword": 107,
+    "SwitchKeyword": 108,
+    "ThisKeyword": 109,
+    "ThrowKeyword": 110,
+    "TrueKeyword": 111,
+    "TryKeyword": 112,
+    "TypeOfKeyword": 113,
+    "VarKeyword": 114,
+    "VoidKeyword": 115,
+    "WhileKeyword": 116,
+    "WithKeyword": 117,
+    "ImplementsKeyword": 118,
+    "InterfaceKeyword": 119,
+    "LetKeyword": 120,
+    "PackageKeyword": 121,
+    "PrivateKeyword": 122,
+    "ProtectedKeyword": 123,
+    "PublicKeyword": 124,
+    "StaticKeyword": 125,
+    "YieldKeyword": 126,
+    "AbstractKeyword": 127,
+    "AccessorKeyword": 128,
+    "AsKeyword": 129,
+    "AssertsKeyword": 130,
+    "AssertKeyword": 131,
+    "AnyKeyword": 132,
+    "AsyncKeyword": 133,
+    "AwaitKeyword": 134,
+    "BooleanKeyword": 135,
+    "ConstructorKeyword": 136,
+    "DeclareKeyword": 137,
+    "GetKeyword": 138,
+    "ImmediateKeyword": 139,
+    "InferKeyword": 140,
+    "IntrinsicKeyword": 141,
+    "IsKeyword": 142,
+    "KeyOfKeyword": 143,
+    "ModuleKeyword": 144,
+    "NamespaceKeyword": 145,
+    "NeverKeyword": 146,
+    "OutKeyword": 147,
+    "ReadonlyKeyword": 148,
+    "RequireKeyword": 149,
+    "NumberKeyword": 150,
+    "ObjectKeyword": 151,
+    "SatisfiesKeyword": 152,
+    "SetKeyword": 153,
+    "StringKeyword": 154,
+    "SymbolKeyword": 155,
+    "TypeKeyword": 156,
+    "UndefinedKeyword": 157,
+    "UniqueKeyword": 158,
+    "UnknownKeyword": 159,
+    "UsingKeyword": 160,
+    "FromKeyword": 161,
+    "GlobalKeyword": 162,
+    "BigIntKeyword": 163,
+    "OverrideKeyword": 164,
+    "OfKeyword": 165,
+    "DeferKeyword": 166,
+    "QualifiedName": 167,
+    "ComputedPropertyName": 168,
+    "TypeParameter": 169,
+    "Parameter": 170,
+    "Decorator": 171,
+    "PropertySignature": 172,
+    "PropertyDeclaration": 173,
+    "MethodSignature": 174,
+    "MethodDeclaration": 175,
+    "ClassStaticBlockDeclaration": 176,
+    "Constructor": 177,
+    "GetAccessor": 178,
+    "SetAccessor": 179,
+    "CallSignature": 180,
+    "ConstructSignature": 181,
+    "IndexSignature": 182,
+    "TypePredicate": 183,
+    "TypeReference": 184,
+    "FunctionType": 185,
+    "ConstructorType": 186,
+    "TypeQuery": 187,
+    "TypeLiteral": 188,
+    "ArrayType": 189,
+    "TupleType": 190,
+    "OptionalType": 191,
+    "RestType": 192,
+    "UnionType": 193,
+    "IntersectionType": 194,
+    "ConditionalType": 195,
+    "InferType": 196,
+    "ParenthesizedType": 197,
+    "ThisType": 198,
+    "TypeOperator": 199,
+    "IndexedAccessType": 200,
+    "MappedType": 201,
+    "LiteralType": 202,
+    "NamedTupleMember": 203,
+    "TemplateLiteralType": 204,
+    "TemplateLiteralTypeSpan": 205,
+    "ImportType": 206,
+    "ObjectBindingPattern": 207,
+    "ArrayBindingPattern": 208,
+    "BindingElement": 209,
+    "ArrayLiteralExpression": 210,
+    "ObjectLiteralExpression": 211,
+    "PropertyAccessExpression": 212,
+    "ElementAccessExpression": 213,
+    "CallExpression": 214,
+    "NewExpression": 215,
+    "TaggedTemplateExpression": 216,
+    "TypeAssertionExpression": 217,
+    "ParenthesizedExpression": 218,
+    "FunctionExpression": 219,
+    "ArrowFunction": 220,
+    "DeleteExpression": 221,
+    "TypeOfExpression": 222,
+    "VoidExpression": 223,
+    "AwaitExpression": 224,
+    "PrefixUnaryExpression": 225,
+    "PostfixUnaryExpression": 226,
+    "BinaryExpression": 227,
+    "ConditionalExpression": 228,
+    "TemplateExpression": 229,
+    "YieldExpression": 230,
+    "SpreadElement": 231,
+    "ClassExpression": 232,
+    "OmittedExpression": 233,
+    "ExpressionWithTypeArguments": 234,
+    "AsExpression": 235,
+    "NonNullExpression": 236,
+    "MetaProperty": 237,
+    "SyntheticExpression": 238,
+    "SatisfiesExpression": 239,
+    "TemplateSpan": 240,
+    "SemicolonClassElement": 241,
+    "Block": 242,
+    "EmptyStatement": 243,
+    "VariableStatement": 244,
+    "ExpressionStatement": 245,
+    "IfStatement": 246,
+    "DoStatement": 247,
+    "WhileStatement": 248,
+    "ForStatement": 249,
+    "ForInStatement": 250,
+    "ForOfStatement": 251,
+    "ContinueStatement": 252,
+    "BreakStatement": 253,
+    "ReturnStatement": 254,
+    "WithStatement": 255,
+    "SwitchStatement": 256,
+    "LabeledStatement": 257,
+    "ThrowStatement": 258,
+    "TryStatement": 259,
+    "DebuggerStatement": 260,
+    "VariableDeclaration": 261,
+    "VariableDeclarationList": 262,
+    "FunctionDeclaration": 263,
+    "ClassDeclaration": 264,
+    "InterfaceDeclaration": 265,
+    "TypeAliasDeclaration": 266,
+    "EnumDeclaration": 267,
+    "ModuleDeclaration": 268,
+    "ModuleBlock": 269,
+    "CaseBlock": 270,
+    "NamespaceExportDeclaration": 271,
+    "ImportEqualsDeclaration": 272,
+    "ImportDeclaration": 273,
+    "ImportClause": 274,
+    "NamespaceImport": 275,
+    "NamedImports": 276,
+    "ImportSpecifier": 277,
+    "ExportAssignment": 278,
+    "ExportDeclaration": 279,
+    "NamedExports": 280,
+    "NamespaceExport": 281,
+    "ExportSpecifier": 282,
+    "MissingDeclaration": 283,
+    "ExternalModuleReference": 284,
+    "JsxElement": 285,
+    "JsxSelfClosingElement": 286,
+    "JsxOpeningElement": 287,
+    "JsxClosingElement": 288,
+    "JsxFragment": 289,
+    "JsxOpeningFragment": 290,
+    "JsxClosingFragment": 291,
+    "JsxAttribute": 292,
+    "JsxAttributes": 293,
+    "JsxSpreadAttribute": 294,
+    "JsxExpression": 295,
+    "JsxNamespacedName": 296,
+    "CaseClause": 297,
+    "DefaultClause": 298,
+    "HeritageClause": 299,
+    "CatchClause": 300,
+    "ImportAttributes": 301,
+    "ImportAttribute": 302,
+    "PropertyAssignment": 303,
+    "ShorthandPropertyAssignment": 304,
+    "SpreadAssignment": 305,
+    "EnumMember": 306,
+    "SourceFile": 307,
+    "JSDocTypeExpression": 308,
+    "JSDocNameReference": 309,
+    "JSDocAllType": 310,
+    "JSDocNullableType": 311,
+    "JSDocNonNullableType": 312,
+    "JSDocOptionalType": 313,
+    "JSDocVariadicType": 314,
+    "JSDoc": 315,
+    "JSDocText": 316,
+    "JSDocTypeLiteral": 317,
+    "JSDocSignature": 318,
+    "JSDocLink": 319,
+    "JSDocLinkCode": 320,
+    "JSDocLinkPlain": 321,
+    "JSDocUnknownTag": 322,
+    "JSDocAugmentsTag": 323,
+    "JSDocImplementsTag": 324,
+    "JSDocDeprecatedTag": 325,
+    "JSDocPublicTag": 326,
+    "JSDocPrivateTag": 327,
+    "JSDocProtectedTag": 328,
+    "JSDocReadonlyTag": 329,
+    "JSDocOverrideTag": 330,
+    "JSDocCallbackTag": 331,
+    "JSDocOverloadTag": 332,
+    "JSDocParameterTag": 333,
+    "JSDocReturnTag": 334,
+    "JSDocThisTag": 335,
+    "JSDocTypeTag": 336,
+    "JSDocTemplateTag": 337,
+    "JSDocTypedefTag": 338,
+    "JSDocSeeTag": 339,
+    "JSDocPropertyTag": 340,
+    "JSDocThrowsTag": 341,
+    "JSDocSatisfiesTag": 342,
+    "JSDocImportTag": 343,
+    "SyntaxList": 344,
+    "JSTypeAliasDeclaration": 345,
+    "JSImportDeclaration": 346,
+    "NotEmittedStatement": 347,
+    "PartiallyEmittedExpression": 348,
+    "SyntheticReferenceExpression": 349,
+    "NotEmittedTypeElement": 350,
+    "Count": 351,
+    "FirstAssignment": 63,
+    "LastAssignment": 78,
+    "FirstCompoundAssignment": 64,
+    "LastCompoundAssignment": 78,
+    "FirstReservedWord": 82,
+    "LastReservedWord": 117,
+    "FirstKeyword": 82,
+    "LastKeyword": 166,
+    "FirstFutureReservedWord": 118,
+    "LastFutureReservedWord": 126,
+    "FirstTypeNode": 183,
+    "LastTypeNode": 206,
+    "FirstPunctuation": 18,
+    "LastPunctuation": 78,
+    "FirstToken": 0,
+    "LastToken": 166,
+    "FirstLiteralToken": 8,
+    "LastLiteralToken": 14,
+    "FirstTemplateToken": 14,
+    "LastTemplateToken": 17,
+    "FirstBinaryOperator": 29,
+    "LastBinaryOperator": 78,
+    "FirstStatement": 244,
+    "LastStatement": 260,
+    "FirstNode": 167,
+    "FirstJSDocNode": 308,
+    "LastJSDocNode": 343,
+    "FirstJSDocTagNode": 322,
+    "LastJSDocTagNode": 343,
+    "FirstContextualKeyword": 127,
+    "LastContextualKeyword": 166,
+    "LastUnaryOperator": 54,
+    "FirstTriviaToken": 2,
+    "LastTriviaToken": 6
+  },
+  "kindNames": {
+    "0": "FirstToken",
+    "1": "EndOfFile",
+    "2": "FirstTriviaToken",
+    "3": "MultiLineCommentTrivia",
+    "4": "NewLineTrivia",
+    "5": "WhitespaceTrivia",
+    "6": "LastTriviaToken",
+    "7": "NonTextFileMarkerTrivia",
+    "8": "FirstLiteralToken",
+    "9": "BigIntLiteral",
+    "10": "StringLiteral",
+    "11": "JsxText",
+    "12": "JsxTextAllWhiteSpaces",
+    "13": "RegularExpressionLiteral",
+    "14": "FirstTemplateToken",
+    "15": "TemplateHead",
+    "16": "TemplateMiddle",
+    "17": "LastTemplateToken",
+    "18": "FirstPunctuation",
+    "19": "CloseBraceToken",
+    "20": "OpenParenToken",
+    "21": "CloseParenToken",
+    "22": "OpenBracketToken",
+    "23": "CloseBracketToken",
+    "24": "DotToken",
+    "25": "DotDotDotToken",
+    "26": "SemicolonToken",
+    "27": "CommaToken",
+    "28": "QuestionDotToken",
+    "29": "FirstBinaryOperator",
+    "30": "LessThanSlashToken",
+    "31": "GreaterThanToken",
+    "32": "LessThanEqualsToken",
+    "33": "GreaterThanEqualsToken",
+    "34": "EqualsEqualsToken",
+    "35": "ExclamationEqualsToken",
+    "36": "EqualsEqualsEqualsToken",
+    "37": "ExclamationEqualsEqualsToken",
+    "38": "EqualsGreaterThanToken",
+    "39": "PlusToken",
+    "40": "MinusToken",
+    "41": "AsteriskToken",
+    "42": "AsteriskAsteriskToken",
+    "43": "SlashToken",
+    "44": "PercentToken",
+    "45": "PlusPlusToken",
+    "46": "MinusMinusToken",
+    "47": "LessThanLessThanToken",
+    "48": "GreaterThanGreaterThanToken",
+    "49": "GreaterThanGreaterThanGreaterThanToken",
+    "50": "AmpersandToken",
+    "51": "BarToken",
+    "52": "CaretToken",
+    "53": "ExclamationToken",
+    "54": "LastUnaryOperator",
+    "55": "AmpersandAmpersandToken",
+    "56": "BarBarToken",
+    "57": "QuestionToken",
+    "58": "ColonToken",
+    "59": "AtToken",
+    "60": "QuestionQuestionToken",
+    "61": "BacktickToken",
+    "62": "HashToken",
+    "63": "FirstAssignment",
+    "64": "FirstCompoundAssignment",
+    "65": "MinusEqualsToken",
+    "66": "AsteriskEqualsToken",
+    "67": "AsteriskAsteriskEqualsToken",
+    "68": "SlashEqualsToken",
+    "69": "PercentEqualsToken",
+    "70": "LessThanLessThanEqualsToken",
+    "71": "GreaterThanGreaterThanEqualsToken",
+    "72": "GreaterThanGreaterThanGreaterThanEqualsToken",
+    "73": "AmpersandEqualsToken",
+    "74": "BarEqualsToken",
+    "75": "BarBarEqualsToken",
+    "76": "AmpersandAmpersandEqualsToken",
+    "77": "QuestionQuestionEqualsToken",
+    "78": "LastBinaryOperator",
+    "79": "Identifier",
+    "80": "PrivateIdentifier",
+    "81": "JSDocCommentTextToken",
+    "82": "FirstKeyword",
+    "83": "CaseKeyword",
+    "84": "CatchKeyword",
+    "85": "ClassKeyword",
+    "86": "ConstKeyword",
+    "87": "ContinueKeyword",
+    "88": "DebuggerKeyword",
+    "89": "DefaultKeyword",
+    "90": "DeleteKeyword",
+    "91": "DoKeyword",
+    "92": "ElseKeyword",
+    "93": "EnumKeyword",
+    "94": "ExportKeyword",
+    "95": "ExtendsKeyword",
+    "96": "FalseKeyword",
+    "97": "FinallyKeyword",
+    "98": "ForKeyword",
+    "99": "FunctionKeyword",
+    "100": "IfKeyword",
+    "101": "ImportKeyword",
+    "102": "InKeyword",
+    "103": "InstanceOfKeyword",
+    "104": "NewKeyword",
+    "105": "NullKeyword",
+    "106": "ReturnKeyword",
+    "107": "SuperKeyword",
+    "108": "SwitchKeyword",
+    "109": "ThisKeyword",
+    "110": "ThrowKeyword",
+    "111": "TrueKeyword",
+    "112": "TryKeyword",
+    "113": "TypeOfKeyword",
+    "114": "VarKeyword",
+    "115": "VoidKeyword",
+    "116": "WhileKeyword",
+    "117": "LastReservedWord",
+    "118": "FirstFutureReservedWord",
+    "119": "InterfaceKeyword",
+    "120": "LetKeyword",
+    "121": "PackageKeyword",
+    "122": "PrivateKeyword",
+    "123": "ProtectedKeyword",
+    "124": "PublicKeyword",
+    "125": "StaticKeyword",
+    "126": "LastFutureReservedWord",
+    "127": "FirstContextualKeyword",
+    "128": "AccessorKeyword",
+    "129": "AsKeyword",
+    "130": "AssertsKeyword",
+    "131": "AssertKeyword",
+    "132": "AnyKeyword",
+    "133": "AsyncKeyword",
+    "134": "AwaitKeyword",
+    "135": "BooleanKeyword",
+    "136": "ConstructorKeyword",
+    "137": "DeclareKeyword",
+    "138": "GetKeyword",
+    "139": "ImmediateKeyword",
+    "140": "InferKeyword",
+    "141": "IntrinsicKeyword",
+    "142": "IsKeyword",
+    "143": "KeyOfKeyword",
+    "144": "ModuleKeyword",
+    "145": "NamespaceKeyword",
+    "146": "NeverKeyword",
+    "147": "OutKeyword",
+    "148": "ReadonlyKeyword",
+    "149": "RequireKeyword",
+    "150": "NumberKeyword",
+    "151": "ObjectKeyword",
+    "152": "SatisfiesKeyword",
+    "153": "SetKeyword",
+    "154": "StringKeyword",
+    "155": "SymbolKeyword",
+    "156": "TypeKeyword",
+    "157": "UndefinedKeyword",
+    "158": "UniqueKeyword",
+    "159": "UnknownKeyword",
+    "160": "UsingKeyword",
+    "161": "FromKeyword",
+    "162": "GlobalKeyword",
+    "163": "BigIntKeyword",
+    "164": "OverrideKeyword",
+    "165": "OfKeyword",
+    "166": "LastContextualKeyword",
+    "167": "FirstNode",
+    "168": "ComputedPropertyName",
+    "169": "TypeParameter",
+    "170": "Parameter",
+    "171": "Decorator",
+    "172": "PropertySignature",
+    "173": "PropertyDeclaration",
+    "174": "MethodSignature",
+    "175": "MethodDeclaration",
+    "176": "ClassStaticBlockDeclaration",
+    "177": "Constructor",
+    "178": "GetAccessor",
+    "179": "SetAccessor",
+    "180": "CallSignature",
+    "181": "ConstructSignature",
+    "182": "IndexSignature",
+    "183": "FirstTypeNode",
+    "184": "TypeReference",
+    "185": "FunctionType",
+    "186": "ConstructorType",
+    "187": "TypeQuery",
+    "188": "TypeLiteral",
+    "189": "ArrayType",
+    "190": "TupleType",
+    "191": "OptionalType",
+    "192": "RestType",
+    "193": "UnionType",
+    "194": "IntersectionType",
+    "195": "ConditionalType",
+    "196": "InferType",
+    "197": "ParenthesizedType",
+    "198": "ThisType",
+    "199": "TypeOperator",
+    "200": "IndexedAccessType",
+    "201": "MappedType",
+    "202": "LiteralType",
+    "203": "NamedTupleMember",
+    "204": "TemplateLiteralType",
+    "205": "TemplateLiteralTypeSpan",
+    "206": "LastTypeNode",
+    "207": "ObjectBindingPattern",
+    "208": "ArrayBindingPattern",
+    "209": "BindingElement",
+    "210": "ArrayLiteralExpression",
+    "211": "ObjectLiteralExpression",
+    "212": "PropertyAccessExpression",
+    "213": "ElementAccessExpression",
+    "214": "CallExpression",
+    "215": "NewExpression",
+    "216": "TaggedTemplateExpression",
+    "217": "TypeAssertionExpression",
+    "218": "ParenthesizedExpression",
+    "219": "FunctionExpression",
+    "220": "ArrowFunction",
+    "221": "DeleteExpression",
+    "222": "TypeOfExpression",
+    "223": "VoidExpression",
+    "224": "AwaitExpression",
+    "225": "PrefixUnaryExpression",
+    "226": "PostfixUnaryExpression",
+    "227": "BinaryExpression",
+    "228": "ConditionalExpression",
+    "229": "TemplateExpression",
+    "230": "YieldExpression",
+    "231": "SpreadElement",
+    "232": "ClassExpression",
+    "233": "OmittedExpression",
+    "234": "ExpressionWithTypeArguments",
+    "235": "AsExpression",
+    "236": "NonNullExpression",
+    "237": "MetaProperty",
+    "238": "SyntheticExpression",
+    "239": "SatisfiesExpression",
+    "240": "TemplateSpan",
+    "241": "SemicolonClassElement",
+    "242": "Block",
+    "243": "EmptyStatement",
+    "244": "FirstStatement",
+    "245": "ExpressionStatement",
+    "246": "IfStatement",
+    "247": "DoStatement",
+    "248": "WhileStatement",
+    "249": "ForStatement",
+    "250": "ForInStatement",
+    "251": "ForOfStatement",
+    "252": "ContinueStatement",
+    "253": "BreakStatement",
+    "254": "ReturnStatement",
+    "255": "WithStatement",
+    "256": "SwitchStatement",
+    "257": "LabeledStatement",
+    "258": "ThrowStatement",
+    "259": "TryStatement",
+    "260": "LastStatement",
+    "261": "VariableDeclaration",
+    "262": "VariableDeclarationList",
+    "263": "FunctionDeclaration",
+    "264": "ClassDeclaration",
+    "265": "InterfaceDeclaration",
+    "266": "TypeAliasDeclaration",
+    "267": "EnumDeclaration",
+    "268": "ModuleDeclaration",
+    "269": "ModuleBlock",
+    "270": "CaseBlock",
+    "271": "NamespaceExportDeclaration",
+    "272": "ImportEqualsDeclaration",
+    "273": "ImportDeclaration",
+    "274": "ImportClause",
+    "275": "NamespaceImport",
+    "276": "NamedImports",
+    "277": "ImportSpecifier",
+    "278": "ExportAssignment",
+    "279": "ExportDeclaration",
+    "280": "NamedExports",
+    "281": "NamespaceExport",
+    "282": "ExportSpecifier",
+    "283": "MissingDeclaration",
+    "284": "ExternalModuleReference",
+    "285": "JsxElement",
+    "286": "JsxSelfClosingElement",
+    "287": "JsxOpeningElement",
+    "288": "JsxClosingElement",
+    "289": "JsxFragment",
+    "290": "JsxOpeningFragment",
+    "291": "JsxClosingFragment",
+    "292": "JsxAttribute",
+    "293": "JsxAttributes",
+    "294": "JsxSpreadAttribute",
+    "295": "JsxExpression",
+    "296": "JsxNamespacedName",
+    "297": "CaseClause",
+    "298": "DefaultClause",
+    "299": "HeritageClause",
+    "300": "CatchClause",
+    "301": "ImportAttributes",
+    "302": "ImportAttribute",
+    "303": "PropertyAssignment",
+    "304": "ShorthandPropertyAssignment",
+    "305": "SpreadAssignment",
+    "306": "EnumMember",
+    "307": "SourceFile",
+    "308": "FirstJSDocNode",
+    "309": "JSDocNameReference",
+    "310": "JSDocAllType",
+    "311": "JSDocNullableType",
+    "312": "JSDocNonNullableType",
+    "313": "JSDocOptionalType",
+    "314": "JSDocVariadicType",
+    "315": "JSDoc",
+    "316": "JSDocText",
+    "317": "JSDocTypeLiteral",
+    "318": "JSDocSignature",
+    "319": "JSDocLink",
+    "320": "JSDocLinkCode",
+    "321": "JSDocLinkPlain",
+    "322": "FirstJSDocTagNode",
+    "323": "JSDocAugmentsTag",
+    "324": "JSDocImplementsTag",
+    "325": "JSDocDeprecatedTag",
+    "326": "JSDocPublicTag",
+    "327": "JSDocPrivateTag",
+    "328": "JSDocProtectedTag",
+    "329": "JSDocReadonlyTag",
+    "330": "JSDocOverrideTag",
+    "331": "JSDocCallbackTag",
+    "332": "JSDocOverloadTag",
+    "333": "JSDocParameterTag",
+    "334": "JSDocReturnTag",
+    "335": "JSDocThisTag",
+    "336": "JSDocTypeTag",
+    "337": "JSDocTemplateTag",
+    "338": "JSDocTypedefTag",
+    "339": "JSDocSeeTag",
+    "340": "JSDocPropertyTag",
+    "341": "JSDocThrowsTag",
+    "342": "JSDocSatisfiesTag",
+    "343": "LastJSDocTagNode",
+    "344": "SyntaxList",
+    "345": "JSTypeAliasDeclaration",
+    "346": "JSImportDeclaration",
+    "347": "NotEmittedStatement",
+    "348": "PartiallyEmittedExpression",
+    "349": "SyntheticReferenceExpression",
+    "350": "NotEmittedTypeElement",
+    "351": "Count"
+  },
+  "nodeFlags": {
+    "None": 0,
+    "Let": 1,
+    "Const": 2,
+    "Using": 4,
+    "Reparsed": 8,
+    "Synthesized": 16,
+    "OptionalChain": 32,
+    "ExportContext": 64,
+    "ContainsThis": 128,
+    "HasImplicitReturn": 256,
+    "HasExplicitReturn": 512,
+    "DisallowInContext": 1024,
+    "YieldContext": 2048,
+    "DecoratorContext": 4096,
+    "AwaitContext": 8192,
+    "DisallowConditionalTypesContext": 16384,
+    "ThisNodeHasError": 32768,
+    "JavaScriptFile": 65536,
+    "ThisNodeOrAnySubNodesHasError": 131072,
+    "HasAsyncFunctions": 262144,
+    "PossiblyContainsDynamicImport": 524288,
+    "PossiblyContainsImportMeta": 1048576,
+    "HasJSDoc": 2097152,
+    "JSDoc": 4194304,
+    "Ambient": 8388608,
+    "InWithStatement": 16777216,
+    "JsonFile": 33554432,
+    "PossiblyContainsDeprecatedTag": 67108864,
+    "Unreachable": 134217728,
+    "ReparserTransformedLiteral": 268435456,
+    "BlockScoped": 7,
+    "Constant": 6,
+    "AwaitUsing": 6,
+    "ReachabilityCheckFlags": 768,
+    "ReachabilityAndEmitFlags": 262912,
+    "ContextFlags": 25263104,
+    "TypeExcludesFlags": 10240,
+    "PermanentlySetIncrementalFlags": 1572864,
+    "IdentifierHasExtendedUnicodeEscape": 128,
+    "IdentifierIsInJSDocNamespace": 262144,
+    "NestedNamespace": 32
+  },
+  "childProperties": {
+    "167": [
+      "left",
+      "right"
+    ],
+    "168": [
+      "expression"
+    ],
+    "169": [
+      "modifiers",
+      "name",
+      "constraint",
+      "expression",
+      "defaultType"
+    ],
+    "170": [
+      "modifiers",
+      "dotDotDotToken",
+      "name",
+      "questionToken",
+      "type",
+      "initializer"
+    ],
+    "171": [
+      "expression"
+    ],
+    "172": [
+      "modifiers",
+      "name",
+      "postfixToken",
+      "type",
+      "initializer"
+    ],
+    "173": [
+      "modifiers",
+      "name",
+      "postfixToken",
+      "type",
+      "initializer"
+    ],
+    "174": [
+      "modifiers",
+      "name",
+      "postfixToken",
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "175": [
+      "modifiers",
+      "asteriskToken",
+      "name",
+      "postfixToken",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "176": [
+      "modifiers",
+      "body"
+    ],
+    "177": [
+      "modifiers",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "178": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "179": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "180": [
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "181": [
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "182": [
+      "modifiers",
+      "parameters",
+      "type"
+    ],
+    "183": [
+      "assertsModifier",
+      "parameterName",
+      "type"
+    ],
+    "184": [
+      "typeName",
+      "typeArguments"
+    ],
+    "185": [
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "186": [
+      "modifiers",
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "187": [
+      "exprName",
+      "typeArguments"
+    ],
+    "188": [
+      "members"
+    ],
+    "189": [
+      "elementType"
+    ],
+    "190": [
+      "elements"
+    ],
+    "191": [
+      "type"
+    ],
+    "192": [
+      "type"
+    ],
+    "193": [
+      "types"
+    ],
+    "194": [
+      "types"
+    ],
+    "195": [
+      "checkType",
+      "extendsType",
+      "trueType",
+      "falseType"
+    ],
+    "196": [
+      "typeParameter"
+    ],
+    "197": [
+      "type"
+    ],
+    "199": [
+      "type"
+    ],
+    "200": [
+      "objectType",
+      "indexType"
+    ],
+    "201": [
+      "readonlyToken",
+      "typeParameter",
+      "nameType",
+      "questionToken",
+      "type",
+      "members"
+    ],
+    "202": [
+      "literal"
+    ],
+    "203": [
+      "dotDotDotToken",
+      "name",
+      "questionToken",
+      "type"
+    ],
+    "204": [
+      "head",
+      "templateSpans"
+    ],
+    "205": [
+      "type",
+      "literal"
+    ],
+    "206": [
+      "argument",
+      "attributes",
+      "qualifier",
+      "typeArguments"
+    ],
+    "207": [
+      "elements"
+    ],
+    "208": [
+      "elements"
+    ],
+    "209": [
+      "dotDotDotToken",
+      "propertyName",
+      "name",
+      "initializer"
+    ],
+    "210": [
+      "elements"
+    ],
+    "211": [
+      "properties"
+    ],
+    "212": [
+      "expression",
+      "questionDotToken",
+      "name"
+    ],
+    "213": [
+      "expression",
+      "questionDotToken",
+      "argumentExpression"
+    ],
+    "214": [
+      "expression",
+      "questionDotToken",
+      "typeArguments",
+      "arguments"
+    ],
+    "215": [
+      "expression",
+      "typeArguments",
+      "arguments"
+    ],
+    "216": [
+      "tag",
+      "questionDotToken",
+      "typeArguments",
+      "template"
+    ],
+    "217": [
+      "type",
+      "expression"
+    ],
+    "218": [
+      "expression"
+    ],
+    "219": [
+      "modifiers",
+      "asteriskToken",
+      "name",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "220": [
+      "modifiers",
+      "typeParameters",
+      "parameters",
+      "type",
+      "equalsGreaterThanToken",
+      "body"
+    ],
+    "221": [
+      "expression"
+    ],
+    "222": [
+      "expression"
+    ],
+    "223": [
+      "expression"
+    ],
+    "224": [
+      "expression"
+    ],
+    "225": [
+      "operand"
+    ],
+    "226": [
+      "operand"
+    ],
+    "227": [
+      "modifiers",
+      "left",
+      "type",
+      "operatorToken",
+      "right"
+    ],
+    "228": [
+      "condition",
+      "questionToken",
+      "whenTrue",
+      "colonToken",
+      "whenFalse"
+    ],
+    "229": [
+      "head",
+      "templateSpans"
+    ],
+    "230": [
+      "asteriskToken",
+      "expression"
+    ],
+    "231": [
+      "expression"
+    ],
+    "232": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "heritageClauses",
+      "members"
+    ],
+    "234": [
+      "expression",
+      "typeArguments"
+    ],
+    "235": [
+      "expression",
+      "type"
+    ],
+    "236": [
+      "expression"
+    ],
+    "237": [
+      "name"
+    ],
+    "238": [
+      "tupleNameSource"
+    ],
+    "239": [
+      "expression",
+      "type"
+    ],
+    "240": [
+      "expression",
+      "literal"
+    ],
+    "242": [
+      "statements"
+    ],
+    "244": [
+      "modifiers",
+      "declarationList"
+    ],
+    "245": [
+      "expression"
+    ],
+    "246": [
+      "expression",
+      "thenStatement",
+      "elseStatement"
+    ],
+    "247": [
+      "statement",
+      "expression"
+    ],
+    "248": [
+      "expression",
+      "statement"
+    ],
+    "249": [
+      "initializer",
+      "condition",
+      "incrementor",
+      "statement"
+    ],
+    "250": [
+      "awaitModifier",
+      "initializer",
+      "expression",
+      "statement"
+    ],
+    "251": [
+      "awaitModifier",
+      "initializer",
+      "expression",
+      "statement"
+    ],
+    "252": [
+      "label"
+    ],
+    "253": [
+      "label"
+    ],
+    "254": [
+      "expression"
+    ],
+    "255": [
+      "expression",
+      "statement"
+    ],
+    "256": [
+      "expression",
+      "caseBlock"
+    ],
+    "257": [
+      "label",
+      "statement"
+    ],
+    "258": [
+      "expression"
+    ],
+    "259": [
+      "tryBlock",
+      "catchClause",
+      "finallyBlock"
+    ],
+    "261": [
+      "name",
+      "exclamationToken",
+      "type",
+      "initializer"
+    ],
+    "262": [
+      "declarations"
+    ],
+    "263": [
+      "modifiers",
+      "asteriskToken",
+      "name",
+      "typeParameters",
+      "parameters",
+      "type",
+      "body"
+    ],
+    "264": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "heritageClauses",
+      "members"
+    ],
+    "265": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "heritageClauses",
+      "members"
+    ],
+    "266": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "type"
+    ],
+    "267": [
+      "modifiers",
+      "name",
+      "members"
+    ],
+    "268": [
+      "modifiers",
+      "name",
+      "body"
+    ],
+    "269": [
+      "statements"
+    ],
+    "270": [
+      "clauses"
+    ],
+    "271": [
+      "modifiers",
+      "name"
+    ],
+    "272": [
+      "modifiers",
+      "name",
+      "moduleReference"
+    ],
+    "273": [
+      "modifiers",
+      "importClause",
+      "moduleSpecifier",
+      "attributes"
+    ],
+    "274": [
+      "name",
+      "namedBindings"
+    ],
+    "275": [
+      "name"
+    ],
+    "276": [
+      "elements"
+    ],
+    "277": [
+      "propertyName",
+      "name"
+    ],
+    "278": [
+      "modifiers",
+      "type",
+      "expression"
+    ],
+    "279": [
+      "modifiers",
+      "exportClause",
+      "moduleSpecifier",
+      "attributes"
+    ],
+    "280": [
+      "elements"
+    ],
+    "281": [
+      "name"
+    ],
+    "282": [
+      "propertyName",
+      "name"
+    ],
+    "283": [
+      "modifiers"
+    ],
+    "284": [
+      "expression"
+    ],
+    "285": [
+      "openingElement",
+      "children",
+      "closingElement"
+    ],
+    "286": [
+      "tagName",
+      "typeArguments",
+      "attributes"
+    ],
+    "287": [
+      "tagName",
+      "typeArguments",
+      "attributes"
+    ],
+    "288": [
+      "tagName"
+    ],
+    "289": [
+      "openingFragment",
+      "children",
+      "closingFragment"
+    ],
+    "292": [
+      "name",
+      "initializer"
+    ],
+    "293": [
+      "properties"
+    ],
+    "294": [
+      "expression"
+    ],
+    "295": [
+      "dotDotDotToken",
+      "expression"
+    ],
+    "296": [
+      "namespace",
+      "name"
+    ],
+    "297": [
+      "expression",
+      "statements"
+    ],
+    "298": [
+      "expression",
+      "statements"
+    ],
+    "299": [
+      "types"
+    ],
+    "300": [
+      "variableDeclaration",
+      "block"
+    ],
+    "301": [
+      "attributes"
+    ],
+    "302": [
+      "name",
+      "value"
+    ],
+    "303": [
+      "modifiers",
+      "name",
+      "postfixToken",
+      "type",
+      "initializer"
+    ],
+    "304": [
+      "modifiers",
+      "name",
+      "postfixToken",
+      "type",
+      "equalsToken",
+      "objectAssignmentInitializer"
+    ],
+    "305": [
+      "expression"
+    ],
+    "306": [
+      "name",
+      "initializer"
+    ],
+    "307": [
+      "statements",
+      "endOfFileToken"
+    ],
+    "308": [
+      "type"
+    ],
+    "309": [
+      "name"
+    ],
+    "311": [
+      "type"
+    ],
+    "312": [
+      "type"
+    ],
+    "313": [
+      "type"
+    ],
+    "314": [
+      "type"
+    ],
+    "315": [
+      "comment",
+      "tags"
+    ],
+    "317": [
+      "jsdocPropertyTags"
+    ],
+    "318": [
+      "typeParameters",
+      "parameters",
+      "type"
+    ],
+    "319": [
+      "name"
+    ],
+    "320": [
+      "name"
+    ],
+    "321": [
+      "name"
+    ],
+    "322": [
+      "tagName",
+      "comment"
+    ],
+    "323": [
+      "tagName",
+      "className",
+      "comment"
+    ],
+    "324": [
+      "tagName",
+      "className",
+      "comment"
+    ],
+    "325": [
+      "tagName",
+      "comment"
+    ],
+    "326": [
+      "tagName",
+      "comment"
+    ],
+    "327": [
+      "tagName",
+      "comment"
+    ],
+    "328": [
+      "tagName",
+      "comment"
+    ],
+    "329": [
+      "tagName",
+      "comment"
+    ],
+    "330": [
+      "tagName",
+      "comment"
+    ],
+    "331": [
+      "tagName",
+      "typeExpression",
+      "name",
+      "comment"
+    ],
+    "332": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "333": [
+      "tagName",
+      "name",
+      "typeExpression",
+      "comment"
+    ],
+    "334": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "335": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "336": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "337": [
+      "tagName",
+      "constraint",
+      "typeParameters",
+      "comment"
+    ],
+    "338": [
+      "tagName",
+      "typeExpression",
+      "name",
+      "comment"
+    ],
+    "339": [
+      "tagName",
+      "nameExpression",
+      "comment"
+    ],
+    "340": [
+      "tagName",
+      "name",
+      "typeExpression",
+      "comment"
+    ],
+    "341": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "342": [
+      "tagName",
+      "typeExpression",
+      "comment"
+    ],
+    "343": [
+      "tagName",
+      "importClause",
+      "moduleSpecifier",
+      "attributes",
+      "comment"
+    ],
+    "344": [
+      "children"
+    ],
+    "345": [
+      "modifiers",
+      "name",
+      "typeParameters",
+      "type"
+    ],
+    "346": [
+      "modifiers",
+      "importClause",
+      "moduleSpecifier",
+      "attributes"
+    ],
+    "348": [
+      "expression"
+    ],
+    "349": [
+      "expression",
+      "thisArg"
+    ]
+  },
+  "statementKinds": [
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250,
+    251,
+    252,
+    253,
+    254,
+    255,
+    256,
+    257,
+    258,
+    259,
+    260,
+    263,
+    264,
+    265,
+    266,
+    267,
+    268,
+    271,
+    272,
+    273,
+    278,
+    279,
+    283,
+    347
+  ]
+}

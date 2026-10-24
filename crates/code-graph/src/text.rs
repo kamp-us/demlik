@@ -25,6 +25,18 @@ impl JsString {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+    pub fn starts_with(&self, prefix: &str) -> bool {
+        let mut units = self.0.iter();
+        prefix
+            .encode_utf16()
+            .all(|expected| units.next() == Some(&expected))
+    }
+    pub fn push_str(&mut self, text: &str) {
+        self.0.extend(text.encode_utf16());
+    }
+    pub fn extend(&mut self, text: &Self) {
+        self.0.extend_from_slice(&text.0);
+    }
 }
 
 impl From<&str> for JsString {
@@ -45,6 +57,11 @@ impl PartialEq<str> for JsString {
 impl PartialEq<&str> for JsString {
     fn eq(&self, other: &&str) -> bool {
         self == *other
+    }
+}
+impl PartialEq<String> for JsString {
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_str()
     }
 }
 

@@ -1,8 +1,9 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use demlik_code_graph::extract::assemble::{NodeFields, assemble_graph};
-use demlik_code_graph::project::load_cheap_project;
+use demlik_code_graph::engine::tsgo::TsgoBinary;
+use demlik_code_graph::extract::assemble::{NodeFields, assemble_graph, assemble_graph_with_edges};
+use demlik_code_graph::project::{EdgeScope, load_cheap_project, load_edge_project};
 use demlik_code_graph::schema::{Health, Thresholds};
 
 #[test]
@@ -106,4 +107,82 @@ fn round_trips_javascript_strings_without_losing_unpaired_code_units() {
     assert_eq!(decoded, value);
     assert!(value.to_utf8().is_err());
     assert!(serde_json::from_str::<JsString>("42").is_err());
+}
+
+#[test]
+fn assembles_real_measured_edges_uses_and_package_coupling_facts() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "demlik-edge-assembly-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir_all(root.join("packages/a")).unwrap();
+    fs::create_dir_all(root.join("packages/b")).unwrap();
+    fs::write(
+        root.join("tsconfig.json"),
+        r#"{"compilerOptions":{"strict":true,"types":[]}}"#,
+    )
+    .unwrap();
+    fs::write(root.join("packages/a/package.json"), r#"{"name":"a"}"#).unwrap();
+    fs::write(root.join("packages/b/package.json"), r#"{"name":"b"}"#).unwrap();
+    fs::write(root.join("packages/a/entry.ts"), "import { other } from '../b/entry';\nexport const UNUSED = 1, ZERO = 0;\nexport function leaf() { return 1; }\nexport function run() { return other(); }\n").unwrap();
+    fs::write(
+        root.join("packages/b/entry.ts"),
+        "import { leaf, UNUSED } from '../a/entry';\nexport function other() { return leaf(); }\n",
+    )
+    .unwrap();
+    let loaded = load_edge_project(&root, EdgeScope::Package, &root, None).unwrap();
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
+    let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
+    let graph = assemble_graph_with_edges(
+        &loaded,
+        Thresholds::default(),
+        &binary,
+        NodeFields::default(),
+    )
+    .unwrap();
+    assert_eq!(graph.functions.len(), 3);
+    let run = graph
+        .functions
+        .iter()
+        .find(|function| function.name == "run")
+        .unwrap();
+    assert_eq!(run.edges.as_ref().unwrap().call_chain_depth, 2);
+    assert_eq!(
+        run.edges.as_ref().unwrap().calls[0].callee_id,
+        "packages/b/entry.ts:other"
+    );
+    assert_eq!(
+        graph.modules[0].import_edges[0].target.as_deref(),
+        Some("packages/b/entry.ts")
+    );
+    assert_eq!(graph.modules[0].imported_by, ["packages/b/entry.ts"]);
+    assert_eq!(graph.smells.len(), 4);
+    assert_eq!(graph.summary.health, Health::Rotten);
+    let zero = graph
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "ZERO")
+        .unwrap();
+    assert!(zero.uses.as_ref().unwrap().is_empty());
+    let unused = graph
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "UNUSED")
+        .unwrap();
+    assert_eq!(
+        unused
+            .uses
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|site| (site.file.as_str(), site.line))
+            .collect::<Vec<_>>(),
+        [("packages/b/entry.ts", 1)]
+    );
+    fs::remove_dir_all(root).unwrap();
 }

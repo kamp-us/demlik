@@ -1,4 +1,7 @@
+use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use super::TsgoError;
 
@@ -9,6 +12,40 @@ const STRING_LITERAL: u32 = 10;
 const IMPORT_DECLARATION: u32 = 273;
 const SOURCE_FILE: u32 = 307;
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Metadata {
+    native_preview_version: String,
+    protocol_version: u32,
+    kinds: HashMap<String, u32>,
+    kind_names: HashMap<u32, String>,
+    node_flags: HashMap<String, u32>,
+    child_properties: HashMap<u32, Vec<String>>,
+    statement_kinds: HashSet<u32>,
+}
+static METADATA: LazyLock<Metadata> = LazyLock::new(|| {
+    let metadata: Metadata = serde_json::from_str(include_str!("ast_7_0_20260707_2.json"))
+        .expect("checked-in native AST metadata is valid JSON");
+    assert_eq!(metadata.native_preview_version, super::NATIVE_PREVIEW_PIN);
+    assert_eq!(metadata.protocol_version, 5);
+    metadata
+});
+pub(super) fn is_kind(kind: u32, name: &str) -> bool {
+    METADATA.kinds.get(name) == Some(&kind)
+}
+pub(super) fn kind_named(name: &str) -> Option<u32> {
+    METADATA.kinds.get(name).copied()
+}
+pub(super) fn flag_named(name: &str) -> Option<u32> {
+    METADATA.node_flags.get(name).copied()
+}
+pub(super) fn is_statement(kind: u32) -> bool {
+    METADATA.statement_kinds.contains(&kind)
+}
+pub(super) fn kind_name(kind: u32) -> Option<&'static str> {
+    METADATA.kind_names.get(&kind).map(String::as_str)
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct Node {
     pub index: u32,
@@ -16,6 +53,7 @@ pub(super) struct Node {
     pub pos: i32,
     pub end: i32,
     pub next: u32,
+    pub parent: u32,
     pub data: u32,
     pub flags: u32,
 }
@@ -29,6 +67,7 @@ pub(super) struct SourceFile {
     pub file_name: PathBuf,
     pub path: String,
     text: Vec<u16>,
+    line_starts: Vec<usize>,
 }
 
 impl SourceFile {
@@ -51,6 +90,7 @@ impl SourceFile {
             file_name: PathBuf::new(),
             path: String::new(),
             text: Vec::new(),
+            line_starts: Vec::new(),
         };
         let root = source.node(1)?;
         if root.kind != SOURCE_FILE {
@@ -58,6 +98,21 @@ impl SourceFile {
         }
         let data = source.extended + (root.data & LOW_DATA) as usize;
         source.text = source.units(word(&source.bytes, data)?)?;
+        source.line_starts = vec![0];
+        let mut position = 0;
+        while position < source.text.len() {
+            match source.text[position] {
+                13 => {
+                    if source.text.get(position + 1) == Some(&10) {
+                        position += 1;
+                    }
+                    source.line_starts.push(position + 1);
+                }
+                10 | 0x2028 | 0x2029 => source.line_starts.push(position + 1),
+                _ => {}
+            }
+            position += 1;
+        }
         source.file_name = PathBuf::from(source.string(word(&source.bytes, data + 4)?)?);
         source.path = source.string(word(&source.bytes, data + 8)?)?;
         Ok(source)
@@ -74,6 +129,7 @@ impl SourceFile {
             pos: word(&self.bytes, at + 4)? as i32,
             end: word(&self.bytes, at + 8)? as i32,
             next: word(&self.bytes, at + 12)?,
+            parent: word(&self.bytes, at + 16)?,
             data: word(&self.bytes, at + 20)?,
             flags: word(&self.bytes, at + 24)?,
         })
@@ -132,6 +188,170 @@ impl SourceFile {
         Ok(Some(child))
     }
 
+    pub fn named_child(&self, parent: Node, name: &str) -> Result<Option<Node>, TsgoError> {
+        let Some(order) = METADATA
+            .child_properties
+            .get(&parent.kind)
+            .and_then(|properties| properties.iter().position(|property| property == name))
+        else {
+            return Ok(None);
+        };
+        self.child(parent, order as u32)
+    }
+
+    fn has_children(&self, parent: Node) -> Result<bool, TsgoError> {
+        let next = parent.index as usize + 1;
+        Ok(next < self.node_count() && self.node(next as u32)?.parent == parent.index)
+    }
+    fn node_count(&self) -> usize {
+        (self.bytes.len() - self.nodes) / NODE_LEN
+    }
+    pub fn list_elements(&self, list: Node) -> Result<Vec<Node>, TsgoError> {
+        if list.kind != u32::MAX {
+            return Err(TsgoError::protocol(
+                "native AST property is not a node list",
+            ));
+        }
+        if list.data == 0 {
+            return Ok(Vec::new());
+        }
+        let mut elements = Vec::new();
+        let mut next = list.index + 1;
+        while next != 0 {
+            if elements.len() >= self.node_count() {
+                return Err(TsgoError::protocol("native AST node list contains a cycle"));
+            }
+            let child = self.node(next)?;
+            if child.kind == u32::MAX {
+                return Err(TsgoError::protocol(
+                    "native AST node list contains another list",
+                ));
+            }
+            elements.push(child);
+            next = child.next;
+        }
+        if elements.len() != list.data as usize {
+            return Err(TsgoError::protocol(
+                "native AST node list has the wrong length",
+            ));
+        }
+        Ok(elements)
+    }
+    pub fn children(&self, parent: Node) -> Result<Vec<Node>, TsgoError> {
+        if !self.has_children(parent)? {
+            return Ok(Vec::new());
+        }
+        let mut children = Vec::new();
+        let mut next = parent.index + 1;
+        let mut visited = 0;
+        while next != 0 {
+            if visited >= self.node_count() {
+                return Err(TsgoError::protocol(
+                    "native AST child list contains a cycle",
+                ));
+            }
+            visited += 1;
+            let child = self.node(next)?;
+            if child.kind == u32::MAX {
+                children.extend(self.list_elements(child)?);
+            } else if !is_kind(child.kind, "JSDoc") {
+                children.push(child);
+            }
+            next = child.next;
+        }
+        Ok(children)
+    }
+    pub fn parent(&self, node: Node) -> Result<Option<Node>, TsgoError> {
+        if node.index == 1 {
+            return Ok(None);
+        }
+        let mut parent = node.parent;
+        let mut visited = 0;
+        loop {
+            if parent == node.index {
+                return Ok(Some(self.node(1)?));
+            }
+            if visited >= self.node_count() {
+                return Err(TsgoError::protocol(
+                    "native AST parent chain contains a cycle",
+                ));
+            }
+            visited += 1;
+            let ancestor = self.node(parent)?;
+            if ancestor.kind != u32::MAX {
+                return Ok(Some(ancestor));
+            }
+            parent = ancestor.parent;
+        }
+    }
+    pub fn literal_units(&self, node: Node) -> Result<Option<Vec<u16>>, TsgoError> {
+        let string_data = [
+            "Identifier",
+            "PrivateIdentifier",
+            "JsxText",
+            "JSDocText",
+            "JSDocLink",
+            "JSDocLinkPlain",
+            "JSDocLinkCode",
+        ]
+        .iter()
+        .any(|name| is_kind(node.kind, name));
+        let extended_data = [
+            "StringLiteral",
+            "NumericLiteral",
+            "BigIntLiteral",
+            "RegularExpressionLiteral",
+            "NoSubstitutionTemplateLiteral",
+            "TemplateHead",
+            "TemplateMiddle",
+            "TemplateTail",
+            "SourceFile",
+        ]
+        .iter()
+        .any(|name| is_kind(node.kind, name));
+        if string_data {
+            self.units(node.data & LOW_DATA).map(Some)
+        } else if extended_data {
+            self.units(word(
+                &self.bytes,
+                self.extended + (node.data & LOW_DATA) as usize,
+            )?)
+            .map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+    pub fn is_declaration_file(&self) -> bool {
+        self.node(1).expect("validated source root").flags & METADATA.node_flags["Ambient"] != 0
+    }
+    pub fn node_start(&self, node: Node) -> Result<usize, TsgoError> {
+        let start = usize::try_from(node.pos).map_err(|_| {
+            TsgoError::protocol("native AST node has a synthetic negative position")
+        })?;
+        if node.pos == node.end && !is_kind(node.kind, "EndOfFile") {
+            return Ok(start);
+        }
+        let stop_comments = (308..=343).contains(&node.kind) || is_kind(node.kind, "JsxText");
+        Ok(skip_trivia(
+            &self.text,
+            start,
+            !stop_comments && node.flags & METADATA.node_flags["JSDoc"] != 0,
+            stop_comments,
+        ))
+    }
+    pub fn node_text(&self, node: Node) -> Result<String, TsgoError> {
+        let start = self.node_start(node)?;
+        let end = usize::try_from(node.end)
+            .map_err(|_| TsgoError::protocol("native AST node has a synthetic negative end"))?;
+        let units = self
+            .text
+            .get(start..end)
+            .ok_or_else(|| TsgoError::protocol("native AST node has an invalid source span"))?;
+        String::from_utf16(units).map_err(|error| {
+            TsgoError::protocol(format!("native AST source span is not Unicode: {error}"))
+        })
+    }
+
     pub fn imported_module(&self, specifier: &str) -> Result<Option<Node>, TsgoError> {
         let expected: Vec<u16> = specifier.encode_utf16().collect();
         let Some(statements) = self.child(self.node(1)?, 0)? else {
@@ -177,33 +397,12 @@ impl SourceFile {
     }
 
     pub fn declaration_line(&self, node: Node) -> Result<usize, TsgoError> {
-        let mut start = usize::try_from(node.pos)
-            .map_err(|_| TsgoError::protocol("declaration has a synthetic negative position"))?;
-        if node.pos != node.end {
-            let stop_comments = (308..=343).contains(&node.kind) || node.kind == 11;
-            start = skip_trivia(
-                &self.text,
-                start,
-                !stop_comments && node.flags & 4_194_304 != 0,
-                stop_comments,
-            );
-        }
-        let mut line = 1;
-        let mut position = 0;
-        while position < start && position < self.text.len() {
-            match self.text[position] {
-                13 => {
-                    if self.text.get(position + 1) == Some(&10) {
-                        position += 1;
-                    }
-                    line += 1;
-                }
-                10 | 0x2028 | 0x2029 => line += 1,
-                _ => {}
-            }
-            position += 1;
-        }
-        Ok(line)
+        let start = self.node_start(node)?;
+        Ok(self
+            .line_starts
+            .partition_point(|line| *line <= start)
+            .saturating_sub(1)
+            + 1)
     }
 }
 

@@ -1,6 +1,7 @@
 //! Source analysis, graph queries and architecture rules.
 
 pub mod boundaries;
+pub mod checker;
 pub mod declarations;
 pub mod engine;
 pub mod extract;
