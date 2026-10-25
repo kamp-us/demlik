@@ -14,40 +14,15 @@ use std::{
     path::{Path, PathBuf},
 };
 macro_rules! observe { ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{ let returned = $function($($argument),*); $calls.push(stringify!($function)); returned }}; }
+#[path = "support/number_input.rs"]
+mod number_input;
+use number_input::JsNumberInput as Scalar;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Case {
     id: String,
     operation: String,
     input: Box<RawValue>,
-}
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum Scalar {
-    Finite(f64),
-    Special(SpecialScalar),
-}
-#[derive(Deserialize)]
-enum SpecialScalar {
-    #[serde(rename = "NaN")]
-    Nan,
-    #[serde(rename = "Infinity")]
-    Infinity,
-    #[serde(rename = "-Infinity")]
-    NegativeInfinity,
-    #[serde(rename = "-0")]
-    NegativeZero,
-}
-impl Scalar {
-    fn value(self) -> f64 {
-        match self {
-            Self::Finite(value) => value,
-            Self::Special(SpecialScalar::Nan) => f64::NAN,
-            Self::Special(SpecialScalar::Infinity) => f64::INFINITY,
-            Self::Special(SpecialScalar::NegativeInfinity) => f64::NEG_INFINITY,
-            Self::Special(SpecialScalar::NegativeZero) => -0.0,
-        }
-    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

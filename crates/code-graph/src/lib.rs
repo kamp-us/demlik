@@ -11,6 +11,7 @@ pub mod kinds;
 pub mod layers;
 pub mod project;
 pub mod query;
+pub mod render;
 pub mod resolve;
 pub mod scc;
 pub mod schema;

@@ -59,7 +59,7 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
             .violations
             .iter()
             .map(|row| (
-                row.scope.as_str(),
+                row.scope.to_utf8().unwrap(),
                 row.direction,
                 row.measured,
                 row.ceiling,
@@ -69,7 +69,7 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
             .collect::<Vec<_>>(),
         [
             (
-                "packages/defaultHigh",
+                "packages/defaultHigh".to_owned(),
                 CeilingDirection::Exceeded,
                 100.0,
                 40.0,
@@ -77,7 +77,7 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
                 true
             ),
             (
-                "packages/exceeded",
+                "packages/exceeded".to_owned(),
                 CeilingDirection::Exceeded,
                 100.0,
                 40.0,
@@ -85,7 +85,7 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
                 false
             ),
             (
-                "packages/slack",
+                "packages/slack".to_owned(),
                 CeilingDirection::Slack,
                 50.0,
                 60.0,

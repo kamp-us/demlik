@@ -16,19 +16,27 @@ import {
   loadCommentCensus,
 } from "../../packages/code-graph/src/comments/census.js";
 import { classifyComment } from "../../packages/code-graph/src/comments/classify.js";
-import { evaluateRatchet } from "../../packages/code-graph/src/comments/ratchet.js";
+import { runCommentGate } from "../../packages/code-graph/src/comments/gate.js";
+import {
+  evaluateRatchet,
+  renderRatchet,
+} from "../../packages/code-graph/src/comments/ratchet.js";
+import { stableStringify } from "../../packages/code-graph/src/render/json.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const { positionals, values } = parseArgs({
-  options: { "policy-driver": { type: "string" } },
+  options: {
+    "policy-driver": { type: "string" },
+    "gate-driver": { type: "string" },
+  },
   allowPositionals: true,
 });
 assert.ok(positionals.length <= 2, "unexpected positional arguments");
 const baseline = positionals[0];
 assert.ok(
   baseline,
-  "usage: node --import tsx comment-mutations.mjs <baseline-native-driver> [evidence.json] [--policy-driver <native-policy-driver>]",
+  "usage: node --import tsx comment-mutations.mjs <baseline-native-driver> [evidence.json] [--policy-driver <native-policy-driver>] [--gate-driver <native-gate-driver>]",
 );
 assert.equal(process.version, "v22.21.1");
 const directory = await mkdtemp(
@@ -57,17 +65,24 @@ function call(binary, item) {
   const answer = JSON.parse(lines[0]);
   assert.equal(answer.id, item.id);
   assert.equal(answer.ok, true, JSON.stringify(answer.error));
-  const owner =
-    item.operation === "code_graph.comment_census"
-      ? "census::load_comment_census"
-      : item.operation === "code_graph.comment_policy"
-        ? "ratchet::evaluate_ratchet"
-        : item.operation === "code_graph.comment_points"
-          ? "ceilings::to_points"
-          : "classify::classify_comment";
-  assert.ok(
-    answer.observedCalls.includes(`demlik_code_graph::comments::${owner}`),
-  );
+  const owner = {
+    "code_graph.comment_census":
+      "demlik_code_graph::comments::census::load_comment_census",
+    "code_graph.comment_policy":
+      "demlik_code_graph::comments::ratchet::evaluate_ratchet",
+    "code_graph.comment_points":
+      "demlik_code_graph::comments::ceilings::to_points",
+    "code_graph.comment_classify":
+      "demlik_code_graph::comments::classify::classify_comment",
+    "code_graph.comment_gate":
+      "demlik_code_graph::comments::gate::run_comment_gate",
+    "code_graph.comment_verdict_render":
+      "demlik_code_graph::comments::ratchet::render_ratchet",
+    "code_graph.stable_json":
+      "demlik_code_graph::render::json::stable_stringify",
+  }[item.operation];
+  assert.ok(owner, item.operation);
+  assert.ok(answer.observedCalls.includes(owner));
   return answer;
 }
 const results = [];
@@ -276,6 +291,170 @@ try {
       },
     );
   }
+  if (values["gate-driver"]) {
+    const gateDriver = values["gate-driver"],
+      project = path.join(directory, "gate-project"),
+      missingRepo = path.join(directory, "gate-missing"),
+      writeRepo = path.join(directory, "gate-write");
+    await mkdir(path.join(project, "a"), { recursive: true });
+    await mkdir(missingRepo);
+    await mkdir(writeRepo);
+    await writeFile(path.join(project, "a/package.json"), "{}");
+    await writeFile(
+      path.join(project, "a/entry.ts"),
+      "// prose\nexport const value=1;",
+    );
+    const missingCase = {
+      id: "ci-missing-ceilings-is-config-refusal",
+      operation: "code_graph.comment_gate",
+      input: {
+        rootAbsolute: project,
+        repoRoot: missingRepo,
+        ci: true,
+        writeCeilings: false,
+        json: false,
+        pretty: false,
+      },
+    };
+    const writeCase = {
+      id: "write-ceilings-takes-precedence-over-ci",
+      operation: "code_graph.comment_gate",
+      input: {
+        rootAbsolute: project,
+        repoRoot: writeRepo,
+        ci: true,
+        writeCeilings: true,
+        json: false,
+        pretty: false,
+      },
+    };
+    const file = path.join(writeRepo, "comment-ceilings.json"),
+      resetWrite = () => writeFile(file, "{}");
+    const reference = (item) => {
+      const emitted = [],
+        reports = [];
+      return {
+        exitCode: runCommentGate({
+          ...item.input,
+          emit: (payload) => emitted.push(payload),
+          report: (message) => reports.push(message),
+        }),
+        emitted,
+        reports,
+      };
+    };
+    const originalMissing = call(gateDriver, missingCase);
+    assert.deepEqual(originalMissing.output, reference(missingCase));
+    assert.equal(originalMissing.output.exitCode, 2);
+    await resetWrite();
+    const writeExpected = reference(writeCase),
+      written = await readFile(file, "utf8");
+    await resetWrite();
+    const originalWrite = call(gateDriver, writeCase);
+    assert.deepEqual(originalWrite.output, writeExpected);
+    assert.equal(await readFile(file, "utf8"), written);
+    assert.equal(originalWrite.output.exitCode, 0);
+    const jsonCase = {
+      id: "nested-pretty-json-keeps-lossless-keys",
+      operation: "code_graph.stable_json",
+      input: {
+        value: JSON.parse(
+          '{"__proto__":{"hidden":1},"z":[{"\\ud800":{"b":1,"a":2}}]}',
+        ),
+        pretty: true,
+      },
+    };
+    const originalJson = call(gateDriver, jsonCase);
+    assert.equal(
+      originalJson.output,
+      stableStringify(jsonCase.input.value, true),
+    );
+    assert.ok(originalJson.output.includes("\n"));
+    assert.ok(!originalJson.output.includes('"__proto__"'));
+    const verdict = {
+      passed: false,
+      scopesChecked: 1,
+      inheritedScopes: 1,
+      defaultCeiling: 40,
+      slackPoints: 2,
+      violations: [
+        {
+          scope: "raw\ud800😀",
+          measured: 100,
+          ceiling: 40,
+          direction: "EXCEEDED",
+          delta: 60,
+          inherited: true,
+        },
+      ],
+    };
+    const rawCase = {
+        id: "raw-verdict-scope-survives-human-render",
+        operation: "code_graph.comment_verdict_render",
+        input: { verdict, json: false, pretty: false },
+      },
+      originalRaw = call(gateDriver, rawCase);
+    assert.deepEqual(originalRaw.output, renderRatchet(verdict, false, false));
+    assert.ok(originalRaw.output.stdout.includes("\ud800"));
+    mutations.push(
+      {
+        name: "comment-ci-missing-file-inherits-defaults",
+        file: "crates/code-graph/src/comments/gate.rs",
+        before: "file.exists() || args.ci",
+        after: "file.exists()",
+        item: missingCase,
+        original: originalMissing,
+        example: "comment_gate_driver",
+        verify: (answer) => assert.equal(answer.output.exitCode, 1),
+      },
+      {
+        name: "comment-ci-skips-requested-recording",
+        file: "crates/code-graph/src/comments/gate.rs",
+        before: "if args.write_ceilings {",
+        after: "if args.write_ceilings && !args.ci {",
+        item: writeCase,
+        original: originalWrite,
+        example: "comment_gate_driver",
+        setup: resetWrite,
+        verify: async (answer) => {
+          assert.equal(answer.output.exitCode, 1);
+          assert.equal(await readFile(file, "utf8"), "{}");
+        },
+      },
+      {
+        name: "comment-pretty-json-emits-compact-container",
+        file: "crates/code-graph/src/render/json.rs",
+        before:
+          "pretty_value(&normalized, &mut PrettyFormatter::new(), &mut out)?;",
+        after:
+          "pretty_value(&normalized, &mut PrettyFormatter::new(), &mut out)?; out.clear(); out.extend_from_slice(&serde_json::to_vec(&normalized)?);",
+        item: jsonCase,
+        original: originalJson,
+        example: "comment_gate_driver",
+        verify: (answer) => assert.ok(!answer.output.includes("\n")),
+      },
+      {
+        name: "comment-json-retains-prototype-assignment-key",
+        file: "crates/code-graph/src/render/json.rs",
+        before: '.filter(|(key, _)| key != "__proto__")',
+        after: ".filter(|_| true)",
+        item: jsonCase,
+        original: originalJson,
+        example: "comment_gate_driver",
+        verify: (answer) => assert.ok(answer.output.includes('"__proto__"')),
+      },
+      {
+        name: "comment-human-render-loses-raw-scope",
+        file: "crates/code-graph/src/render/text.rs",
+        before: "let mut out = value.clone();",
+        after: "let mut out = JsString::from(value.to_lossy());",
+        item: rawCase,
+        original: originalRaw,
+        example: "comment_gate_driver",
+        verify: (answer) => assert.ok(!answer.output.stdout.includes("\ud800")),
+      },
+    );
+  }
   for (const mutation of mutations) {
     const example = mutation.example ?? "comment_driver";
     const file = path.join(directory, mutation.file),
@@ -307,12 +486,13 @@ try {
         maxBuffer: 16 * 1024 * 1024,
       },
     );
+    await mutation.setup?.();
     const answer = call(
       path.join(targetDirectory, "debug/examples", example),
       mutation.item,
     );
     assert.notDeepEqual(answer.output, mutation.original.output, mutation.name);
-    mutation.verify(answer);
+    await mutation.verify(answer);
     results.push({
       name: mutation.name,
       detected: true,
