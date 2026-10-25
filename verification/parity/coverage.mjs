@@ -19,7 +19,9 @@ export function evidenceGaps(mapping, evidence) {
   const normalize = (symbol) => symbol.replace(/\s+/g, "");
   const observed = (id) =>
     new Set([...(evidence.get(id) ?? [])].map(normalize));
-  const gaps = [];
+  const gaps = (mapping.knownGaps ?? []).map(
+    (gap) => `Known parity gap: ${gap}`,
+  );
   for (const symbol of symbols) {
     if (!mapping.cases.some((id) => observed(id).has(normalize(symbol))))
       gaps.push(`No passing compiled consumer called ${symbol}`);

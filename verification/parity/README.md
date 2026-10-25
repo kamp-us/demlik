@@ -17,6 +17,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    Query traces compare reachability, unguarded paths, package interface width
    and clusters. Shared JSON traces compare exact source parse/stringify behavior
    at the data boundary, using serde and ECMAScript number formatting.
+   `target/parity/paginate-queue.json` compares pure pagination, queue transitions,
+   returned-reference mutation, recovery, and store failures.
    Timing checks compare debounce/throttle reentry, input transitions, restored
    data and deadline cleanup; their report is `target/parity/timing.json`.
    Runtime traces run through TypeScript Promise, TypeScript Effect, and both
@@ -25,12 +27,17 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/runtime-contract.json` adds typed-command success, declared
    failure, defects, malformed output, undefined values and forged callbacks in
    both profiles, with complete mismatch evidence and compiled call receipts.
+   `target/parity/runtime-hooks.json` compares identity filtering, per-run ports,
+   callback identity, events, telemetry, timer fallback and awaited host cleanup.
+   Promise drive cases use the public source helper; the native Effect convenience
+   is not treated as a TypeScript export.
    Independent-process storage checks also run by default, with bounded child
    watchdogs. `target/parity/storage-process.json` records competing CAS writers,
    process restart, dead PID-lock recovery and deletion in both languages.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
-   `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json` and `runtime-contract-mutation.json`.
+   `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
+   `runtime-hooks-mutation.json` and `paginate-queue-mutations.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
@@ -42,6 +49,12 @@ discovers exports, nested callable declarations, wildcard exports, CLI entries a
 assets, then requires a Rust mapping, an unchanged TypeScript declaration and
 passing case evidence for each entry in `contracts.json`. Evidence must record
 an actual call to the compiled public Rust path, not just a passing case name.
+A mapping with a measured unresolved `knownGaps` entry still fails completion,
+even when its other cases pass. Queue adapter concurrency currently has such a
+qualification: native futures follow Rust polling, and arbitrary caller-level
+JavaScript microtask schedules are not reproduced by a second runtime. The
+library's own dispatch, persistence and awaited cleanup ordering is compared
+explicitly.
 
 The Node reference follows CI's Node 22 line. Reports record exact engine and
 platform versions. Node 26 enables a different power algorithm by default and
@@ -53,7 +66,8 @@ configure the usual `CARGO_HOME`, `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` variables
 The runner also accepts `--rust-bin <path>` and `--report <path>` for testing a
 separately built binary. Use `--runtime-bin <path>` to exercise a separately built
 native runtime example, `--contract-bin <path>` for typed command contracts,
-or `--timing-bin <path>` for the timing driver. Generated cases use the recorded seed `0x5eed1234`.
+`--hooks-bin <path>` for runtime hooks, `--paginate-queue-bin <path>` for the
+pagination/queue driver, or `--timing-bin <path>` for timing. Generated cases use the recorded seed `0x5eed1234`.
 
 Add shared JSON cases under `cases/`, with a unique `id`, an `operation`, `input`,
 and an optional independent `expected` value. The two drivers must invoke their

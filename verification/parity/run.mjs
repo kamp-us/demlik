@@ -8,9 +8,11 @@ import { fileURLToPath } from "node:url";
 import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
+import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
+import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { timingParity } from "./timing-run.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +22,8 @@ const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
+const hooksBinaryArgument = args.indexOf("--hooks-bin");
+const paginateQueueBinaryArgument = args.indexOf("--paginate-queue-bin");
 const reportArgument = args.indexOf("--report");
 const mutationArgument = args.indexOf("--mutation-suite");
 const mutationSuite =
@@ -259,6 +263,32 @@ if (!mutationSuite) {
     });
   }
 }
+let runtimeHooks = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    runtimeHooks = await runtimeHooksParity(cargo, {
+      binary:
+        hooksBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[hooksBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-runtime-hooks.json`,
+            ),
+    });
+    failures.push(...runtimeHooks.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "runtime-hooks.verification",
+      operation: "tea.runtime.hooks",
+      message: error.message,
+    });
+  }
+}
 let timing = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -281,6 +311,32 @@ if (!mutationSuite) {
     failures.push({
       id: "timing.verification",
       operation: "tea.timing",
+      message: error.message,
+    });
+  }
+}
+let paginateQueue = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    paginateQueue = await paginateQueueParity(cargo, {
+      binary:
+        paginateQueueBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[paginateQueueBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-paginate-queue.json`,
+            ),
+    });
+    failures.push(...paginateQueue.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "paginate-queue.verification",
+      operation: "tea.paginate-and-queue",
       message: error.message,
     });
   }
@@ -328,13 +384,17 @@ const report = {
     runtime.cases +
     timing.cases +
     runtimeContracts.cases +
+    runtimeHooks.cases +
+    paginateQueue.cases +
     suiteFailures,
   passed:
     cases.length +
     graph.passed +
     runtime.passed +
     timing.passed +
-    runtimeContracts.passed -
+    runtimeContracts.passed +
+    runtimeHooks.passed +
+    paginateQueue.passed -
     differentialFailures,
   failures,
   operations: [
@@ -343,6 +403,8 @@ const report = {
       ...(runtime.passed ? ["tea.runtime"] : []),
       ...(timing.passed ? ["tea.timing"] : []),
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
+      ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
+      ...(paginateQueue.passed ? ["tea.paginate-and-queue"] : []),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
@@ -351,6 +413,16 @@ const report = {
   timing: { ...timing, nativeEvidence: undefined, failures: undefined },
   runtimeContracts: {
     ...runtimeContracts,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  paginateQueue: {
+    ...paginateQueue,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  runtimeHooks: {
+    ...runtimeHooks,
     nativeEvidence: undefined,
     failures: undefined,
   },
@@ -374,6 +446,8 @@ const report = {
     ...runtime.nativeEvidence,
     ...timing.nativeEvidence,
     ...runtimeContracts.nativeEvidence,
+    ...runtimeHooks.nativeEvidence,
+    ...paginateQueue.nativeEvidence,
   },
   infrastructureDiagnostics: Object.fromEntries(
     cases.flatMap((test, index) => {
@@ -400,6 +474,6 @@ if (args.includes("--complete")) {
 }
 await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(
-  `${JSON.stringify({ ...report, driverDiagnostics: { streams: driverDiagnostics.length }, timing: { ...report.timing, driverDiagnostics: { streams: report.timing.driverDiagnostics?.length ?? 0 } }, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, infrastructureDiagnostics: { cases: Object.keys(report.infrastructureDiagnostics).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
+  `${JSON.stringify({ ...report, driverDiagnostics: { streams: driverDiagnostics.length }, timing: { ...report.timing, driverDiagnostics: { streams: report.timing.driverDiagnostics?.length ?? 0 } }, paginateQueue: { ...report.paginateQueue, driverDiagnostics: { streams: report.paginateQueue.driverDiagnostics?.length ?? 0 } }, nativeEvidence: { cases: Object.keys(report.nativeEvidence).length }, infrastructureDiagnostics: { cases: Object.keys(report.infrastructureDiagnostics).length }, coverage: report.coverage && { ...report.coverage, gaps: report.coverage.gaps.slice(0, 5), gapCount: report.coverage.gaps.length }, failures: report.failures.slice(0, 5), failureCount: failures.length, reportFile }, null, 2)}\n`,
 );
 if (failures.length) process.exitCode = 1;

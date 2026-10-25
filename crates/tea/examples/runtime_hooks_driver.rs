@@ -1,11 +1,9 @@
 use demlik_tea::command::{CommandContractError, CommandFamily};
-use demlik_tea::core::Identity;
 use demlik_tea::data::PlainData;
-use demlik_tea::ports::{Port, define_port};
+use demlik_tea::ports::Port;
 use demlik_tea::runtime::{
-    self, CommandContext, CommandWork, DriveCancellation, DriveError, DriveOptions, DriveSignal,
-    EffectScope, Interpreter, Options, Profile, Runtime, RuntimeError, RuntimeTimer,
-    SubscriptionWork, Subscriptions, Telemetry, Unsubscribe,
+    CommandContext, CommandWork, DriveError, DriveOptions, Interpreter, Options, Profile, Runtime,
+    RuntimeError, SubscriptionWork, Subscriptions, Unsubscribe,
 };
 use demlik_tea::timing::{Timer, TimerCallback, TimerError};
 use demlik_tea::{EitherSub, Machine, Step, Sub, Tagged, TimerDeps, Update, messages};
@@ -143,7 +141,7 @@ impl Subscriptions<Desired, Msg> for Runner {
     fn start(
         &self,
         sub: Desired,
-        producer: runtime::Producer<Msg>,
+        producer: demlik_tea::runtime::Producer<Msg>,
     ) -> Result<Option<SubscriptionWork<Self::Error>>, Self::Error> {
         let log = Rc::clone(&self.log);
         if matches!(sub, EitherSub::Left(_)) {
@@ -266,11 +264,17 @@ fn boot(
             ) && s.n == 0
             {
                 vec![EitherSub::Left(
-                    observe!(deps_calls, Sub::timer, delay, Msg::Tick).unwrap(),
+                    observe!(deps_calls, demlik_tea::Sub::timer, delay, Msg::Tick).unwrap(),
                 )]
             } else if case == Case::ScopeClose {
                 vec![EitherSub::Right(
-                    observe!(deps_calls, Sub::new, "source", SourceDeps { label }).unwrap(),
+                    observe!(
+                        deps_calls,
+                        demlik_tea::Sub::new,
+                        "source",
+                        SourceDeps { label }
+                    )
+                    .unwrap(),
                 )]
             } else {
                 vec![]
@@ -281,7 +285,7 @@ fn boot(
     let addressed = Rc::clone(&log);
     let identity = observe!(
         calls,
-        Identity::new,
+        demlik_tea::core::Identity::new,
         move |s: &Model| {
             if case == Case::Identity {
                 push(&projected, "ofState");
@@ -300,13 +304,13 @@ fn boot(
             PlainData::Undefined
         },
     );
-    let authored = observe!(calls, Machine::with_identity, machine, identity);
+    let authored = observe!(calls, demlik_tea::Machine::with_identity, machine, identity);
     let profile = match script.profile {
         SelectedProfile::Promise => Profile::Promise,
         SelectedProfile::Effect => Profile::Effect,
     };
     let mut options: Options<Model, Msg, Infallible, &'static str> =
-        observe!(calls, Options::new, profile);
+        observe!(calls, demlik_tea::runtime::Options::new, profile);
     options.clock = Rc::new(|| 17.25);
     let errors = Rc::clone(&log);
     options.on_error = Some(Rc::new(move |error, phase| {
@@ -333,33 +337,41 @@ fn boot(
         options.terminal = Some(Rc::new(|s: &Model| s.n > 0));
     }
     if let Some(host) = host {
-        options.timer = Some(observe!(calls, RuntimeTimer::new, host));
+        options.timer = Some(observe!(
+            calls,
+            demlik_tea::runtime::RuntimeTimer::new,
+            host
+        ));
     }
     if case == Case::Events {
         let telemetry = Rc::clone(&log);
-        options.telemetry = Some(observe!(calls, Telemetry::new, move |event| {
-            push(
-                &telemetry,
-                format!(
-                    "telemetry:{}:{}:{}",
-                    number(event.seq),
-                    event.msg_type,
-                    number(event.at)
-                ),
-            );
-            async move {
-                if event.seq == 2.0 {
-                    Err("telemetry boom")
-                } else {
-                    Ok(())
+        options.telemetry = Some(observe!(
+            calls,
+            demlik_tea::runtime::Telemetry::new,
+            move |event| {
+                push(
+                    &telemetry,
+                    format!(
+                        "telemetry:{}:{}:{}",
+                        number(event.seq),
+                        event.msg_type,
+                        number(event.at)
+                    ),
+                );
+                async move {
+                    if event.seq == 2.0 {
+                        Err("telemetry boom")
+                    } else {
+                        Ok(())
+                    }
                 }
             }
-        }));
+        ));
     }
     let events = Rc::clone(&log);
     let options = observe!(
         calls,
-        Options::with_events,
+        demlik_tea::runtime::Options::with_events,
         options,
         move |msg: &Msg, state: &Model| {
             if case != Case::Events {
@@ -374,7 +386,7 @@ fn boot(
     );
     observe!(
         calls,
-        runtime::launch,
+        demlik_tea::runtime::launch,
         authored,
         (),
         Handler,
@@ -403,9 +415,9 @@ async fn execute(script: Script) -> Value {
         "first",
         None,
     );
-    observe_async!(calls, Runtime::ready, &runtime).unwrap();
+    observe_async!(calls, demlik_tea::runtime::Runtime::ready, &runtime).unwrap();
     if script.case == Case::ScopeClose {
-        let scope = observe!(calls, EffectScope::new);
+        let scope = observe!(calls, demlik_tea::runtime::EffectScope::new);
         let release = Rc::new(Notify::new());
         let second = boot(
             &script,
@@ -415,11 +427,23 @@ async fn execute(script: Script) -> Value {
             "second",
             Some(Rc::clone(&release)),
         );
-        observe_async!(calls, Runtime::ready, &second).unwrap();
-        observe_async!(calls, EffectScope::attach, &scope, &runtime).unwrap();
-        observe_async!(calls, EffectScope::attach, &scope, &second).unwrap();
+        observe_async!(calls, demlik_tea::runtime::Runtime::ready, &second).unwrap();
+        observe_async!(
+            calls,
+            demlik_tea::runtime::EffectScope::attach,
+            &scope,
+            &runtime
+        )
+        .unwrap();
+        observe_async!(
+            calls,
+            demlik_tea::runtime::EffectScope::attach,
+            &scope,
+            &second
+        )
+        .unwrap();
         push(&log, "host:close-start");
-        let closing = observe!(calls, EffectScope::close, &scope);
+        let closing = observe!(calls, demlik_tea::runtime::EffectScope::close, &scope);
         tokio::pin!(closing);
         assert!(futures::poll!(closing.as_mut()).is_pending());
         pump().await;
@@ -432,61 +456,76 @@ async fn execute(script: Script) -> Value {
     match script.case {
         Case::Identity => {
             let trace = Rc::clone(&log);
-            let _boot = observe!(calls, Runtime::on_boot, &runtime, move |s: &Model| push(
-                &trace,
-                format!("boot:{}", s.n)
-            ));
+            let _boot = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on_boot,
+                &runtime,
+                move |s: &Model| push(&trace, format!("boot:{}", s.n))
+            );
             let trace = Rc::clone(&log);
             let callback: Rc<dyn Fn()> = Rc::new(move || push(&trace, "changed"));
             let first = observe!(
                 calls,
-                Runtime::subscribe_shared,
+                demlik_tea::runtime::Runtime::subscribe_shared,
                 &runtime,
                 Rc::clone(&callback)
             );
             let duplicate = observe!(
                 calls,
-                Runtime::subscribe_shared,
+                demlik_tea::runtime::Runtime::subscribe_shared,
                 &runtime,
                 Rc::clone(&callback)
             );
             first();
             let _new = observe!(
                 calls,
-                Runtime::subscribe_shared,
+                demlik_tea::runtime::Runtime::subscribe_shared,
                 &runtime,
                 Rc::clone(&callback)
             );
             duplicate();
             observe_async!(
                 calls,
-                Runtime::dispatch,
+                demlik_tea::runtime::Runtime::dispatch,
                 &runtime,
                 Msg::Address { owner: 1 }
             )
             .unwrap();
             let repeat = observe!(
                 calls,
-                Runtime::subscribe_shared,
+                demlik_tea::runtime::Runtime::subscribe_shared,
                 &runtime,
                 Rc::clone(&callback)
             );
             repeat();
-            let _new = observe!(calls, Runtime::subscribe_shared, &runtime, callback);
+            let _new = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::subscribe_shared,
+                &runtime,
+                callback
+            );
             repeat();
             observe_async!(
                 calls,
-                Runtime::dispatch,
+                demlik_tea::runtime::Runtime::dispatch,
                 &runtime,
                 Msg::Address { owner: 2 }
             )
             .unwrap();
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
         }
         Case::Ports => {
             let name = format!("runtime-hooks:{}", script.id);
-            let port: Port<u32> = observe!(calls, define_port::<u32>, name.clone()).unwrap();
-            let collision = observe!(calls, define_port::<String>, name).unwrap_err();
+            let port: Port<u32> =
+                observe!(calls, demlik_tea::ports::define_port::<u32>, name.clone()).unwrap();
+            let collision =
+                observe!(calls, demlik_tea::ports::define_port::<String>, name).unwrap_err();
             push(&log, format!("collision:{}:{collision}", collision.name()));
             let second = boot(
                 &script,
@@ -496,11 +535,11 @@ async fn execute(script: Script) -> Value {
                 "second",
                 None,
             );
-            observe_async!(calls, Runtime::ready, &second).unwrap();
+            observe_async!(calls, demlik_tea::runtime::Runtime::ready, &second).unwrap();
             let trace = Rc::clone(&log);
             let _other = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &second,
                 &port,
                 Rc::new(move |value: &u32| push(&trace, format!("other:{value}")))
@@ -515,7 +554,7 @@ async fn execute(script: Script) -> Value {
             let tracked = Rc::clone(&calls);
             *own.borrow_mut() = Some(observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::new(move |value: &u32| {
@@ -525,7 +564,7 @@ async fn execute(script: Script) -> Value {
                     let trace = Rc::clone(&trace);
                     let _added = observe!(
                         tracked,
-                        Runtime::subscribe_port,
+                        demlik_tea::runtime::Runtime::subscribe_port,
                         &run,
                         &token,
                         Rc::new(move |value: &u32| push(&trace, format!("added:{value}")))
@@ -535,7 +574,7 @@ async fn execute(script: Script) -> Value {
             let trace = Rc::clone(&log);
             *removed.borrow_mut() = Some(observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::new(move |value: &u32| push(&trace, format!("removed:{value}")))
@@ -543,7 +582,7 @@ async fn execute(script: Script) -> Value {
             let trace = Rc::clone(&log);
             let _bad = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::new(move |value: &u32| {
@@ -556,14 +595,14 @@ async fn execute(script: Script) -> Value {
                 Rc::new(move |value| push(&trace, format!("same:{value}")));
             let stale = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::clone(&same)
             );
             let duplicate = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::clone(&same)
@@ -571,18 +610,36 @@ async fn execute(script: Script) -> Value {
             stale();
             let _again = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &port,
                 Rc::clone(&same)
             );
             duplicate();
-            observe!(calls, Runtime::emit_port, &runtime, &port, 1);
-            observe!(calls, Runtime::emit_port, &runtime, &port, 2);
-            observe!(calls, Runtime::emit_port, &second, &port, 3);
+            observe!(
+                calls,
+                demlik_tea::runtime::Runtime::emit_port,
+                &runtime,
+                &port,
+                1
+            );
+            observe!(
+                calls,
+                demlik_tea::runtime::Runtime::emit_port,
+                &runtime,
+                &port,
+                2
+            );
+            observe!(
+                calls,
+                demlik_tea::runtime::Runtime::emit_port,
+                &second,
+                &port,
+                3
+            );
             let replacement: Port<u32> = observe!(
                 calls,
-                define_port::<u32>,
+                demlik_tea::ports::define_port::<u32>,
                 format!("runtime-hooks:replacement:{}", script.id)
             )
             .unwrap();
@@ -591,7 +648,7 @@ async fn execute(script: Script) -> Value {
                 Rc::new(move |value| push(&trace, format!("replacement:{value}")));
             let old = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &replacement,
                 Rc::clone(&callback)
@@ -599,32 +656,47 @@ async fn execute(script: Script) -> Value {
             old();
             let _new = observe!(
                 calls,
-                Runtime::subscribe_port,
+                demlik_tea::runtime::Runtime::subscribe_port,
                 &runtime,
                 &replacement,
                 callback
             );
             old();
-            observe!(calls, Runtime::emit_port, &runtime, &replacement, 4);
-            observe_async!(calls, Runtime::stop, &second);
+            observe!(
+                calls,
+                demlik_tea::runtime::Runtime::emit_port,
+                &runtime,
+                &replacement,
+                4
+            );
+            observe_async!(calls, demlik_tea::runtime::Runtime::stop, &second);
         }
         Case::Events => {
             let trace = Rc::clone(&log);
-            let _changed = observe!(calls, Runtime::subscribe, &runtime, move || push(
-                &trace, "changed"
-            ));
+            let _changed = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::subscribe,
+                &runtime,
+                move || push(&trace, "changed")
+            );
             let trace = Rc::clone(&log);
             let _observed = observe!(
                 calls,
-                Runtime::observe,
+                demlik_tea::runtime::Runtime::observe,
                 &runtime,
                 move |msg: &Msg, s: &Model| push(&trace, format!("observe:{}:{}", msg.tag(), s.n))
             );
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
             let trace = Rc::clone(&log);
             let first = observe!(
                 calls,
-                Runtime::on,
+                demlik_tea::runtime::Runtime::on,
                 &runtime,
                 "pulse",
                 Rc::new(move |event: &Pulse| {
@@ -635,47 +707,121 @@ async fn execute(script: Script) -> Value {
             let trace = Rc::clone(&log);
             let cb: Rc<dyn Fn(&Pulse)> =
                 Rc::new(move |event| push(&trace, format!("event:second:{}", event.0)));
-            let second = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
-            let duplicate = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::ProjectCrash).unwrap();
+            let second = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
+            let duplicate = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::ProjectCrash
+            )
+            .unwrap();
             first();
             second();
             duplicate();
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
-            let old = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
+            let old = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
             old();
-            let replacement = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
+            let replacement = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
             old();
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
             replacement();
             let keeper = observe!(
                 calls,
-                Runtime::on,
+                demlik_tea::runtime::Runtime::on,
                 &runtime,
                 "pulse",
                 Rc::new(|_: &Pulse| {})
             );
-            let stale = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
-            let other = observe!(calls, Runtime::on, &runtime, "pulse", Rc::clone(&cb));
+            let stale = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
+            let other = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                Rc::clone(&cb)
+            );
             stale();
-            let _readded = observe!(calls, Runtime::on, &runtime, "pulse", cb);
+            let _readded = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on,
+                &runtime,
+                "pulse",
+                cb
+            );
             other();
-            observe_async!(calls, Runtime::dispatch, &runtime, Msg::Ping).unwrap();
+            observe_async!(
+                calls,
+                demlik_tea::runtime::Runtime::dispatch,
+                &runtime,
+                Msg::Ping
+            )
+            .unwrap();
             keeper();
         }
         Case::TimerFire | Case::TimerStop | Case::TimerOverride | Case::TimerHostCancel => {
             pump().await;
-            observe_async!(calls, Runtime::idle, &runtime).unwrap();
+            observe_async!(calls, demlik_tea::runtime::Runtime::idle, &runtime).unwrap();
             let trace = Rc::clone(&log);
-            let _boot = observe!(calls, Runtime::on_boot, &runtime, move |s: &Model| push(
-                &trace,
-                format!("boot:{}", s.n)
-            ));
+            let _boot = observe!(
+                calls,
+                demlik_tea::runtime::Runtime::on_boot,
+                &runtime,
+                move |s: &Model| push(&trace, format!("boot:{}", s.n))
+            );
             let trace = Rc::clone(&log);
             let _observed = observe!(
                 calls,
-                Runtime::observe,
+                demlik_tea::runtime::Runtime::observe,
                 &runtime,
                 move |msg: &Msg, s: &Model| push(&trace, format!("commit:{}:{}", msg.tag(), s.n))
             );
@@ -686,16 +832,20 @@ async fn execute(script: Script) -> Value {
                     || matches!(script.profile, SelectedProfile::Promise)
                 {
                     for _ in 0..4 {
-                        if observe!(calls, Runtime::get_state, &runtime).unwrap().n > 0 {
+                        if observe!(calls, demlik_tea::runtime::Runtime::get_state, &runtime)
+                            .unwrap()
+                            .n
+                            > 0
+                        {
                             break;
                         }
                         host.fire();
                         pump().await;
                     }
-                    observe_async!(calls, Runtime::done, &runtime).unwrap();
+                    observe_async!(calls, demlik_tea::runtime::Runtime::done, &runtime).unwrap();
                 }
             } else if script.case == Case::TimerOverride {
-                observe_async!(calls, Runtime::idle, &runtime).unwrap();
+                observe_async!(calls, demlik_tea::runtime::Runtime::idle, &runtime).unwrap();
             } else if script.case == Case::TimerHostCancel {
                 let host = host.as_ref().unwrap();
                 let id = host.pending.borrow().keys().next().copied().unwrap();
@@ -708,24 +858,24 @@ async fn execute(script: Script) -> Value {
             let trace = Rc::clone(&log);
             let _observer = observe!(
                 calls,
-                Runtime::observe,
+                demlik_tea::runtime::Runtime::observe,
                 &runtime,
                 move |msg: &Msg, s: &Model| push(&trace, format!("commit:{}:{}", msg.tag(), s.n))
             );
             let mut options = DriveOptions::default();
             if script.case == Case::DriveCancel {
-                let signal = observe!(calls, DriveSignal::new);
-                observe!(calls, DriveSignal::abort, &signal);
+                let signal = observe!(calls, demlik_tea::runtime::DriveSignal::new);
+                observe!(calls, demlik_tea::runtime::DriveSignal::abort, &signal);
                 options.cancellation = Some(observe!(
                     calls,
-                    DriveCancellation::new,
+                    demlik_tea::runtime::DriveCancellation::new,
                     signal,
                     |_: &Model| Msg::Cancel
                 ));
             }
             match observe_async!(
                 calls,
-                runtime::drive_to_done,
+                demlik_tea::runtime::drive_to_done,
                 &runtime,
                 Msg::Start,
                 |s: &Model| s.n >= 3,
@@ -741,8 +891,10 @@ async fn execute(script: Script) -> Value {
         Case::ScopeClose => unreachable!(),
     }
     pump().await;
-    let state = observe!(calls, Runtime::get_state, &runtime).unwrap().n;
-    observe_async!(calls, Runtime::stop, &runtime);
+    let state = observe!(calls, demlik_tea::runtime::Runtime::get_state, &runtime)
+        .unwrap()
+        .n;
+    observe_async!(calls, demlik_tea::runtime::Runtime::stop, &runtime);
     json!({"comparison":{"trace":*log.borrow(),"state":state},"observedRustCalls":*calls.borrow()})
 }
 #[tokio::main(flavor = "current_thread")]

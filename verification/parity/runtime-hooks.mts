@@ -698,6 +698,8 @@ export async function verifyRuntimeHooks(
       "examples",
       "runtime_hooks_driver",
     );
+  assert.equal(process.version, "v22.21.1");
+  assert.equal(process.versions.v8, "12.4.254.21-node.33");
   const corpus = scripts();
   const native = command(
     binary,
@@ -710,6 +712,12 @@ export async function verifyRuntimeHooks(
   assert.equal(native.length, corpus.length);
   const expectedCases = [];
   const evidence = [];
+  const failures: {
+    id: string;
+    message: string;
+    typescript: { ok: true; output: unknown };
+    rust: { ok: true; output: unknown };
+  }[] = [];
   for (let index = 0; index < corpus.length; index++) {
     const item = corpus[index],
       expected = await executeRuntimeHooks(item.script);
@@ -718,24 +726,16 @@ export async function verifyRuntimeHooks(
     try {
       assert.deepEqual(actual.comparison, expected);
     } catch (error) {
-      mkdirSync(dirname(reportPath), { recursive: true });
-      writeFileSync(
-        reportPath,
-        JSON.stringify(
-          {
-            failed: item.id,
-            script: item.script,
-            native: actual,
-            typescript: expected,
-          },
-          null,
-          2,
-        ),
-      );
-      throw error;
+      failures.push({
+        id: item.id,
+        message: error instanceof Error ? error.message : String(error),
+        typescript: { ok: true, output: expected },
+        rust: { ok: true, output: actual.comparison },
+      });
     }
     evidence.push({
       id: item.id,
+      equal: !failures.some((failure) => failure.id === item.id),
       script: item.script,
       comparison: actual.comparison,
       observedRustCalls: actual.observedRustCalls,
@@ -753,7 +753,10 @@ export async function verifyRuntimeHooks(
       sha256: createHash("sha256").update(readFileSync(binary)).digest("hex"),
     },
     compared: corpus.length,
-    controls: mutationCheck ? controls(corpus, expectedCases) : [],
+    passed: corpus.length - failures.length,
+    failures,
+    controls:
+      mutationCheck && !failures.length ? controls(corpus, expectedCases) : [],
     cases: evidence,
   };
   mkdirSync(dirname(reportPath), { recursive: true });
@@ -777,8 +780,11 @@ if (
     parsed.values["native-binary"],
     parsed.values["mutation-check"],
   );
+  if (result.failures.length) process.exitCode = 1;
   console.log(
     JSON.stringify({
+      passed: result.passed,
+      failures: result.failures.length,
       compared: result.compared,
       controls: result.controls.map((control) => ({
         id: control.id,
