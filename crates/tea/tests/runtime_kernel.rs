@@ -1013,7 +1013,7 @@ async fn cloned_persistence_bindings_open_independent_fencing_versions_for_each_
         let mut options:Options<Shared,Msg,MemoryStoreError,&'static str>=Options::new(Profile::Promise);options.store=Some(binding);
         let second=launch(shared(),(),demlik_tea::runtime::NoInterpreter::new(),NoSubscriptions::new(),options);second.ready().await.unwrap();
         let stale=first.dispatch(Msg::Added{by:99}).await.unwrap_err();
-        assert!(matches!(&*stale,demlik_tea::runtime::RuntimeError::Save(MemoryStoreError::Conflict(error)) if error.expected_version==1.0&&error.actual_version==2.0));
+        assert!(matches!(&*stale,demlik_tea::runtime::RuntimeError::Save(MemoryStoreError::Conflict(error)) if error.expected_version==demlik_tea::storage::StoredCell::Number(1.0)&&error.actual_version==demlik_tea::storage::StoredCell::Number(2.0)));
         second.dispatch(Msg::Added{by:2}).await.unwrap();assert_eq!(store.load().await.unwrap().unwrap().0,2);
         first.stop().await;assert_eq!(store.load().await.unwrap().unwrap().0,2);
         assert!(first.reports().iter().any(|report|report.phase==demlik_tea::runtime::ErrorPhase::StopSave));

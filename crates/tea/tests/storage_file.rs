@@ -7,7 +7,7 @@ use demlik_tea::file_store::file_store;
 use demlik_tea::{
     PlainData,
     data::{decode_json, stringify_json},
-    storage::{DeletableStore, Fencing, Migrated, Store},
+    storage::{DeletableStore, Fencing, Migrated, Store, StoredCell},
 };
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -79,17 +79,29 @@ async fn a_fenced_file_refuses_stale_writes_without_changing_the_winners_bytes()
     let path = directory.path("state.json");
     let first = store(&path).fenced();
     let second = store(&path).fenced();
-    assert_eq!(first.load_fenced().await.unwrap().version, 0.0);
-    assert_eq!(second.load_fenced().await.unwrap().version, 0.0);
+    assert_eq!(
+        first.load_fenced().await.unwrap().version,
+        StoredCell::Number(0.0)
+    );
+    assert_eq!(
+        second.load_fenced().await.unwrap().version,
+        StoredCell::Number(0.0)
+    );
     assert_eq!(
         first
-            .save_fenced(&decode_json(r#"{"owner":"winner"}"#).unwrap(), 0.0)
+            .save_fenced(
+                &decode_json(r#"{"owner":"winner"}"#).unwrap(),
+                StoredCell::Number(0.0)
+            )
             .await
             .unwrap(),
-        1.0
+        StoredCell::Number(1.0)
     );
     let error = second
-        .save_fenced(&decode_json(r#"{"owner":"loser"}"#).unwrap(), 0.0)
+        .save_fenced(
+            &decode_json(r#"{"owner":"loser"}"#).unwrap(),
+            StoredCell::Number(0.0),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.tag(), Some("store_conflict"));
@@ -105,7 +117,10 @@ async fn a_fenced_file_refuses_stale_writes_without_changing_the_winners_bytes()
     );
     assert!(!directory.path("state.json.fence.lock").exists());
     second.delete().await.unwrap();
-    assert_eq!(first.load_fenced().await.unwrap().version, 0.0);
+    assert_eq!(
+        first.load_fenced().await.unwrap().version,
+        StoredCell::Number(0.0)
+    );
 }
 
 #[tokio::test]
@@ -123,7 +138,7 @@ async fn malformed_and_live_lock_holders_wait_until_the_owner_releases() {
         tokio::fs::write(&lock, &holder).await.unwrap();
         let store = store(&path).fenced();
         let state = decode_json(r#"{"count":1}"#).unwrap();
-        let save = store.save_fenced(&state, 0.0);
+        let save = store.save_fenced(&state, 0.0.into());
         tokio::pin!(save);
         assert!(
             tokio::time::timeout(Duration::from_millis(35), &mut save)
@@ -138,7 +153,7 @@ async fn malformed_and_live_lock_holders_wait_until_the_owner_releases() {
                 .await
                 .unwrap()
                 .unwrap(),
-            1.0
+            StoredCell::Number(1.0)
         );
         assert!(!lock.exists());
     }
@@ -187,13 +202,13 @@ async fn an_out_of_range_numeric_pid_is_stale_even_when_hex_exceeds_u64() {
     assert_eq!(
         tokio::time::timeout(
             std::time::Duration::from_millis(150),
-            store.save_fenced(&state, 0.0)
+            store.save_fenced(&state, 0.0.into())
         )
         .await
         .expect(
             "Node Number accepts the hex PID; process.kill refuses its range, so the lock is stale"
         )
         .unwrap(),
-        1.0
+        StoredCell::Number(1.0)
     );
 }

@@ -4,7 +4,7 @@ use crate::{
     PlainData,
     data::{JsText, decode_json_text, stringify_json},
     js_record::{self, JsAccessError},
-    storage::{PanicCause, StoreConflictError},
+    storage::{PanicCause, StoreConflictError, StoredCell},
 };
 use std::{fmt, future::Future};
 mod snapshot;
@@ -23,13 +23,13 @@ pub enum TransactionError<S, E> {
 }
 pub trait DurableObjectStorage: Sized {
     type Error;
-    fn get(&self, key: JsText) -> impl Future<Output = Result<PlainData, Self::Error>>;
-    fn put(&self, key: JsText, value: PlainData) -> impl Future<Output = Result<(), Self::Error>>;
+    fn get(&self, key: JsText) -> impl Future<Output = Result<StoredCell, Self::Error>>;
+    fn put(&self, key: JsText, value: StoredCell) -> impl Future<Output = Result<(), Self::Error>>;
     fn delete(&self, keys: Vec<JsText>) -> impl Future<Output = Result<(), Self::Error>>;
     fn list(
         &self,
         prefix: JsText,
-    ) -> impl Future<Output = Result<Vec<(JsText, PlainData)>, Self::Error>>;
+    ) -> impl Future<Output = Result<Vec<(JsText, StoredCell)>, Self::Error>>;
     fn transaction<A, E, F>(
         &self,
         effect: impl FnOnce(Self) -> F,
@@ -52,7 +52,6 @@ pub enum DoStoreError<S, C> {
     Encode(C),
     Ready(C),
     Conflict(StoreConflictError),
-    InvalidVersion(PlainData),
     Fold(crate::NoCellError),
     Panic(PanicCause),
     HostClosed,
@@ -66,7 +65,6 @@ impl<S: fmt::Display, C: fmt::Display> fmt::Display for DoStoreError<S, C> {
             Self::Encode(error) => error.fmt(output),
             Self::Ready(error) => error.fmt(output),
             Self::Conflict(error) => error.fmt(output),
-            Self::InvalidVersion(_) => output.write_str("durable storage version is not a number"),
             Self::Fold(error) => error.fmt(output),
             Self::Panic(error) => output.write_str(&error.summary),
             Self::HostClosed => {
@@ -107,20 +105,40 @@ fn completion_error<S, C>(
 impl<S: fmt::Display + fmt::Debug, C: fmt::Display + fmt::Debug> std::error::Error
     for DoStoreError<S, C>
 {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Json { cause, .. } => Some(cause),
+            Self::Coercion(cause) => Some(cause),
+            Self::Conflict(cause) => Some(cause),
+            Self::Fold(cause) => Some(cause),
+            _ => None,
+        }
+    }
 }
-fn stored_json<S, C>(raw: PlainData) -> Result<PlainData, DoStoreError<S, C>> {
+fn stored_json<S, C>(raw: StoredCell) -> Result<PlainData, DoStoreError<S, C>> {
+    let raw = raw.snapshot();
     let value = js_record::string(&raw).map_err(DoStoreError::Coercion)?;
     decode_json_text(&value).map_err(|cause| DoStoreError::Json { raw, cause })
 }
-fn encoded_json(value: PlainData) -> PlainData {
-    stringify_json(&value).map_or(PlainData::Undefined, |value| {
-        PlainData::String(value.into())
+fn encoded_json(value: PlainData) -> StoredCell {
+    stringify_json(&value).map_or(StoredCell::Undefined, |value| {
+        StoredCell::String(value.into())
     })
 }
-fn version<S, C>(raw: PlainData) -> Result<f64, DoStoreError<S, C>> {
+fn version(raw: StoredCell) -> StoredCell {
     match raw {
-        PlainData::Null | PlainData::Undefined => Ok(0.0),
-        PlainData::Number(value) => Ok(value),
-        value => Err(DoStoreError::InvalidVersion(value)),
+        StoredCell::Null | StoredCell::Undefined => StoredCell::Number(0.0),
+        value => value,
     }
+}
+fn next_version(value: &StoredCell) -> Result<StoredCell, JsAccessError> {
+    let value = value.snapshot();
+    Ok(match value {
+        PlainData::String(_) | PlainData::Array(_) | PlainData::Object(_) => {
+            let mut units = js_record::string(&value)?.into_units();
+            units.push(49);
+            StoredCell::String(JsText::from_units(units))
+        }
+        _ => StoredCell::Number(js_record::number(&value)? + 1.0),
+    })
 }

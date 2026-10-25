@@ -74,7 +74,7 @@ enum Observation {
     Live {
         op: &'static str,
         raw: Option<Shared>,
-        version: Option<f64>,
+        version: Option<demlik_tea::storage::StoredCell>,
     },
 }
 impl Observation {
@@ -84,7 +84,7 @@ impl Observation {
             Self::Live { op, raw, version } => {
                 let mut value = json!({ "op": op, "raw": raw.map(|value| value.borrow().clone()) });
                 if let Some(version) = version {
-                    value["version"] = super::super::encode_number(version);
+                    value["version"] = super::normalized(&version.snapshot());
                 }
                 value
             }
@@ -189,8 +189,8 @@ where
             Action::SaveFenced { reference, expected } => {
                 let value = objects.get(&reference).and_then(Option::as_ref).ok_or("save reference is missing")?;
                 let fence = store.fencing().ok_or("store is not fenced")?;
-                let output = match observe_async!(calls, demlik_tea::storage::Fencing::save_fenced, fence, value, expected.value()) {
-                    Ok(version) => json!({ "op": "saveFenced", "version": super::super::encode_number(version) }),
+                let output = match observe_async!(calls, demlik_tea::storage::Fencing::save_fenced, fence, value, expected.value().into()) {
+                    Ok(version) => json!({ "op": "saveFenced", "version": super::normalized(&version.snapshot()) }),
                     Err(MemoryStoreError::Conflict(error)) => json!({ "op": "saveFenced", "error": super::conflict(&error) }),
                     Err(error) => return Err(error.to_string()),
                 };

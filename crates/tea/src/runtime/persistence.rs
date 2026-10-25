@@ -1,11 +1,11 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
 use futures::{FutureExt, future::LocalBoxFuture};
 
-use crate::storage::{Migrated, Store, StoreRefusedError, restore};
+use crate::storage::{Migrated, Store, StoreRefusedError, StoredCell, restore};
 
 pub(crate) trait Backend<S, E> {
     fn restore(&self) -> LocalBoxFuture<'_, Result<Option<S>, StoreRefusedError<E>>>;
@@ -13,7 +13,7 @@ pub(crate) trait Backend<S, E> {
 }
 struct Lease<P, S> {
     store: Rc<P>,
-    version: Cell<f64>,
+    version: RefCell<StoredCell>,
     state: PhantomData<fn() -> S>,
 }
 impl<S, P: Store<S>> Store<S> for Lease<P, S> {
@@ -22,7 +22,7 @@ impl<S, P: Store<S>> Store<S> for Lease<P, S> {
     async fn load(&self) -> Result<Self::Raw, Self::Error> {
         if let Some(fenced) = self.store.fencing() {
             let read = fenced.load_fenced().await?;
-            self.version.set(read.version);
+            self.version.replace(read.version);
             Ok(read.raw)
         } else {
             self.store.load().await
@@ -30,8 +30,9 @@ impl<S, P: Store<S>> Store<S> for Lease<P, S> {
     }
     async fn save(&self, state: &S) -> Result<(), Self::Error> {
         if let Some(fenced) = self.store.fencing() {
-            let version = fenced.save_fenced(state, self.version.get()).await?;
-            self.version.set(version);
+            let expected = self.version.borrow().clone();
+            let version = fenced.save_fenced(state, expected).await?;
+            self.version.replace(version);
             Ok(())
         } else {
             self.store.save(state).await
@@ -70,7 +71,7 @@ impl<S: 'static, E: fmt::Display + 'static> Persistence<S, E> {
             make: Rc::new(move || {
                 Rc::new(Lease {
                     store: Rc::clone(&store),
-                    version: Cell::new(0.0),
+                    version: RefCell::new(StoredCell::Number(0.0)),
                     state: PhantomData,
                 })
             }),

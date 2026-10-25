@@ -351,11 +351,8 @@ fn failed<C>(error: &DoStoreError<StorageFailure, C>, codec: impl Fn(&C) -> Fail
         }
         DoStoreError::Encode(error) | DoStoreError::Ready(error) => codec(error),
         DoStoreError::Conflict(error) => Failure::new(
-            json!({"kind":"conflict","expected":number(error.expected_version),"actual":number(error.actual_version),"message":error.to_string()}),
+            json!({"kind":"conflict","expected":normalized(&error.expected_version.snapshot()),"actual":normalized(&error.actual_version.snapshot()),"message":normalized(&PlainData::String(error.message().clone()))}),
         ),
-        DoStoreError::InvalidVersion(raw) => {
-            Failure::new(json!({"kind":"invalidVersion","raw":normalized(raw)}))
-        }
         DoStoreError::Fold(error) => Failure::new(no_cell(error)),
         DoStoreError::Panic(error) => {
             Failure::new(json!({"kind":"nativePanic","message":error.summary}))
@@ -1069,7 +1066,7 @@ where
                 fenced
             )
             .await
-            .map(|value| json!({"raw":normalized(&value.raw),"version":number(value.version)}))
+            .map(|value| json!({"raw":normalized(&value.raw),"version":normalized(&value.version.snapshot())}))
             .map_err(|error| failed(&error, codec))
         }
         SnapshotAction::SaveFenced { model, expected } => {
@@ -1080,10 +1077,10 @@ where
                 demlik_tea::storage::Fencing::save_fenced,
                 fenced,
                 &value,
-                expected.value()
+                expected.value().into()
             )
             .await
-            .map(number)
+            .map(|value| normalized(&value.snapshot()))
             .map_err(|error| failed(&error, codec))
         }
         SnapshotAction::HeldSave { .. } => {

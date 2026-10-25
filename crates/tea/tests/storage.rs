@@ -22,14 +22,15 @@ async fn memory_storage_preserves_shared_references_and_fences_competing_writers
             .save_fenced(&replacement, first.version)
             .await
             .unwrap(),
-        1.0
+        StoredCell::Number(1.0)
     );
     let error = store.save_fenced(&seed, second.version).await.unwrap_err();
     assert!(matches!(
         error,
         MemoryStoreError::Conflict(StoreConflictError {
-            expected_version: 0.0,
-            actual_version: 1.0
+            expected_version: StoredCell::Number(0.0),
+            actual_version: StoredCell::Number(1.0),
+            ..
         })
     ));
     assert_eq!(
@@ -39,7 +40,7 @@ async fn memory_storage_preserves_shared_references_and_fences_competing_writers
     store.delete().await.unwrap();
     let empty = store.load_fenced().await.unwrap();
     assert!(empty.raw.is_none());
-    assert_eq!(empty.version, 0.0);
+    assert_eq!(empty.version, StoredCell::Number(0.0));
 }
 
 struct RefusingStore {

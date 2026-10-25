@@ -2,7 +2,7 @@ use demlik_tea::{
     PlainData,
     data::JsText,
     durable_object::{DoStoreError, DoStoreOptions, do_store, do_store_with},
-    storage::{DeletableStore, Fencing, Migrated, Store, refuse},
+    storage::{DeletableStore, Fencing, Migrated, Store, StoredCell, refuse},
 };
 use std::{collections::BTreeMap, rc::Rc};
 #[path = "support/durable_storage.rs"]
@@ -121,14 +121,20 @@ async fn fenced_store_checks_before_encoding_and_deletes_both_cells_as_one_opera
         members: BTreeMap::new(),
         local: Rc::new(()),
     };
-    assert_eq!(store.load_fenced().await.unwrap().version, 0.0);
-    assert_eq!(store.save_fenced(&state, 0.0).await.unwrap(), 1.0);
+    assert_eq!(
+        store.load_fenced().await.unwrap().version,
+        StoredCell::Number(0.0)
+    );
+    assert_eq!(
+        store.save_fenced(&state, 0.0.into()).await.unwrap(),
+        StoredCell::Number(1.0)
+    );
     let error = store
-        .save_fenced(&state, 0.0)
+        .save_fenced(&state, 0.0.into())
         .await
         .expect_err("stale writer must refuse");
     assert!(
-        matches!(error,DoStoreError::Conflict(error)if error.expected_version==0.0&&error.actual_version==1.0)
+        matches!(error,DoStoreError::Conflict(error)if error.expected_version==StoredCell::Number(0.0)&&error.actual_version==StoredCell::Number(1.0))
     );
     assert_eq!(encoded.get(), 1, "stale writer must not invoke serializer");
     assert!(matches!(
@@ -284,7 +290,7 @@ async fn failure_after_a_staged_version_put_rolls_back_both_fenced_cells() {
         local: Rc::new(()),
     };
     assert!(matches!(
-        store.save_fenced(&state, 0.0).await,
+        store.save_fenced(&state, 0.0.into()).await,
         Err(DoStoreError::Storage {
             operation: "put",
             ..
@@ -295,7 +301,10 @@ async fn failure_after_a_staged_version_put_rolls_back_both_fenced_cells() {
         storage.inner.calls.borrow().last(),
         Some(Call::Rollback)
     ));
-    assert_eq!(store.save_fenced(&state, 0.0).await.unwrap(), 1.0);
+    assert_eq!(
+        store.save_fenced(&state, 0.0.into()).await.unwrap(),
+        StoredCell::Number(1.0)
+    );
 }
 #[tokio::test(flavor = "current_thread")]
 async fn a_failure_after_transaction_commit_keeps_the_bytes_and_refuses_a_stale_retry() {
@@ -322,7 +331,7 @@ async fn a_failure_after_transaction_commit_keeps_the_bytes_and_refuses_a_stale_
         local: Rc::new(()),
     };
     assert!(matches!(
-        store.save_fenced(&state, 0.0).await,
+        store.save_fenced(&state, 0.0.into()).await,
         Err(DoStoreError::Storage {
             operation: "transaction",
             ..
@@ -330,7 +339,7 @@ async fn a_failure_after_transaction_commit_keeps_the_bytes_and_refuses_a_stale_
     ));
     assert_eq!(storage.inner.cells().len(), 2);
     assert!(matches!(
-        store.save_fenced(&state, 0.0).await,
+        store.save_fenced(&state, 0.0.into()).await,
         Err(DoStoreError::Conflict(_))
     ));
 }
@@ -342,12 +351,12 @@ async fn a_held_transaction_hides_staged_state_and_allows_only_one_version_zero_
             storage.rule(Rule{operation:Operation::Put,key:Some("@@state".into()),stage:Stage::After,remaining:1,behavior:Behavior::Hold(Rc::clone(&gate))});
             let a=do_store_with(Rc::clone(&storage),decode,encode,DoStoreOptions::default()).fenced();
             let b=do_store_with(Rc::clone(&storage),decode,encode,DoStoreOptions::default()).fenced();
-            let first=tokio::task::spawn_local(async move{a.save_fenced(&Roster{members:BTreeMap::from([("winner".into(),"one".into())]),local:Rc::new(())},0.0).await});
+            let first=tokio::task::spawn_local(async move{a.save_fenced(&Roster{members:BTreeMap::from([("winner".into(),"one".into())]),local:Rc::new(())},0.0.into()).await});
             gate.wait(1).await;
-            let second=tokio::task::spawn_local(async move{b.save_fenced(&Roster{members:BTreeMap::from([("loser".into(),"two".into())]),local:Rc::new(())},0.0).await});
+            let second=tokio::task::spawn_local(async move{b.save_fenced(&Roster{members:BTreeMap::from([("loser".into(),"two".into())]),local:Rc::new(())},0.0.into()).await});
             storage.wait_for_transactions(2).await;
             assert!(storage.inner.cells().is_empty(),"staged state must remain invisible outside the transaction");
-            gate.release();assert_eq!(first.await.unwrap().unwrap(),1.0);
+            gate.release();assert_eq!(first.await.unwrap().unwrap(),StoredCell::Number(1.0));
             assert!(matches!(second.await.unwrap(),Err(DoStoreError::Conflict(_))));
             assert!(matches!(&storage.inner.cells()[&JsText::from("@@state")],PlainData::String(value)if value.as_utf8()==Some("{\"members\":[[\"winner\",\"one\"]]}")));
         }).await.expect("transaction handshake completes");

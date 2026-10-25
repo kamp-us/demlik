@@ -1,10 +1,13 @@
 use super::{
-    DoStoreError, DurableObjectStorage, TransactionError, encoded_json, stored_json, version,
+    DoStoreError, DurableObjectStorage, TransactionError, encoded_json, next_version, stored_json,
+    version,
 };
 use crate::{
     PlainData,
     data::{DependencyError, JsText, plain_data},
-    storage::{DeletableStore, FencedRead, Fencing, Migrated, Store, StoreConflictError},
+    storage::{
+        DeletableStore, FencedRead, Fencing, Migrated, Store, StoreConflictError, StoredCell,
+    },
 };
 use futures::{FutureExt, future::LocalBoxFuture};
 use std::{marker::PhantomData, rc::Rc};
@@ -80,7 +83,7 @@ where
                     operation: "get",
                     cause,
                 })?;
-        if matches!(raw, PlainData::Null | PlainData::Undefined) {
+        if matches!(raw, StoredCell::Null | StoredCell::Undefined) {
             return Ok(PlainData::Null);
         }
         stored_json(raw)
@@ -173,7 +176,7 @@ where
                 })?;
             Ok(FencedRead {
                 raw: self.0.load().await?,
-                version: version(raw)?,
+                version: version(raw),
             })
         }
         .boxed_local()
@@ -181,8 +184,8 @@ where
     fn save_fenced<'a>(
         &'a self,
         state: &'a S,
-        expected_version: f64,
-    ) -> LocalBoxFuture<'a, Result<f64, Self::Error>> {
+        expected_version: StoredCell,
+    ) -> LocalBoxFuture<'a, Result<StoredCell, Self::Error>> {
         async move {
             let result = self
                 .0
@@ -194,14 +197,14 @@ where
                                 operation: "get",
                                 cause,
                             },
-                        )?)?;
+                        )?);
                     if actual != expected_version {
-                        return Err(DoStoreError::Conflict(StoreConflictError {
-                            expected_version,
-                            actual_version: actual,
-                        }));
+                        return Err(DoStoreError::Conflict(
+                            StoreConflictError::new(expected_version, actual)
+                                .map_err(DoStoreError::Coercion)?,
+                        ));
                     }
-                    let next = expected_version + 1.0;
+                    let next = next_version(&expected_version).map_err(DoStoreError::Coercion)?;
                     let value = (self.0.serialize)(state).map_err(DoStoreError::Encode)?;
                     transaction
                         .put(self.0.key.clone(), encoded_json(value))
@@ -211,7 +214,7 @@ where
                             cause,
                         })?;
                     transaction
-                        .put(self.0.version_key.clone(), PlainData::Number(next))
+                        .put(self.0.version_key.clone(), next.clone())
                         .await
                         .map_err(|cause| DoStoreError::Storage {
                             operation: "put",

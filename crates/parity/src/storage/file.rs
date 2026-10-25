@@ -241,14 +241,14 @@ where
     for action in actions {
         let result: Result<Value, FileStoreError> = match action {
             Action::Load => observe_async!(calls, demlik_tea::storage::Store::load, &store).map(|raw| json!({ "op": "load", "raw": normalized(&raw) })),
-            Action::LoadFenced => observe_async!(calls, demlik_tea::storage::Fencing::load_fenced, store.fencing().ok_or("store is not fenced")?).map(|read| json!({ "op": "loadFenced", "raw": normalized(&read.raw), "version": super::super::encode_number(read.version) })),
+            Action::LoadFenced => observe_async!(calls, demlik_tea::storage::Fencing::load_fenced, store.fencing().ok_or("store is not fenced")?).map(|read| json!({ "op": "loadFenced", "raw": normalized(&read.raw), "version": super::normalized(&read.version.snapshot()) })),
             Action::Save { json: text } => {
                 let state = text.map(|text| decode_json(&text)).transpose().map_err(|error| error.to_string())?.unwrap_or(PlainData::Undefined);
                 observe_async!(calls, demlik_tea::storage::Store::save, &store, &state).map(|()| json!({ "op": "save" }))
             },
             Action::SaveFenced { json: text, expected } => {
                 let state = text.map(|text| decode_json(&text)).transpose().map_err(|error| error.to_string())?.unwrap_or(PlainData::Undefined);
-                observe_async!(calls, demlik_tea::storage::Fencing::save_fenced, store.fencing().ok_or("store is not fenced")?, &state, expected.value()).map(|version| json!({ "op": "saveFenced", "version": super::super::encode_number(version) }))
+                observe_async!(calls, demlik_tea::storage::Fencing::save_fenced, store.fencing().ok_or("store is not fenced")?, &state, expected.value().into()).map(|version| json!({ "op": "saveFenced", "version": super::normalized(&version.snapshot()) }))
             },
             Action::Delete => observe_async!(calls, demlik_tea::storage::DeletableStore::delete, &store).map(|()| json!({ "op": "delete" })),
             Action::Migrate { json: text } => {

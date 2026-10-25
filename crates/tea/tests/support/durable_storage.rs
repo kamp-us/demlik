@@ -2,6 +2,7 @@ use demlik_tea::{
     PlainData,
     data::JsText,
     durable_object::{DurableObjectStorage, TransactionError},
+    storage::StoredCell,
 };
 use std::{cell::RefCell, collections::BTreeMap, convert::Infallible, future::Future, rc::Rc};
 
@@ -32,68 +33,82 @@ impl std::fmt::Debug for Call {
 }
 #[derive(Clone)]
 pub struct MemoryStorage {
-    cells: Rc<RefCell<BTreeMap<JsText, PlainData>>>,
+    cells: Rc<RefCell<BTreeMap<JsText, StoredCell>>>,
     staged: Option<StagedWrites>,
+    clone_reads: bool,
     lock: Rc<tokio::sync::Mutex<()>>,
     changed: Rc<tokio::sync::Notify>,
     pub calls: Rc<RefCell<Vec<Call>>>,
 }
-type StagedWrites = Rc<RefCell<BTreeMap<JsText, Option<PlainData>>>>;
+type StagedWrites = Rc<RefCell<BTreeMap<JsText, Option<StoredCell>>>>;
 impl MemoryStorage {
     pub fn new() -> Self {
+        Self::with_cloned_reads(false)
+    }
+    pub fn with_cloned_reads(clone_reads: bool) -> Self {
         Self {
             cells: Rc::new(RefCell::new(BTreeMap::new())),
             staged: None,
+            clone_reads,
             lock: Rc::new(tokio::sync::Mutex::new(())),
             changed: Rc::new(tokio::sync::Notify::new()),
             calls: Rc::new(RefCell::new(Vec::new())),
         }
     }
     pub fn cells(&self) -> BTreeMap<JsText, PlainData> {
-        self.cells.borrow().clone()
+        self.cells
+            .borrow()
+            .iter()
+            .map(|(key, value)| (key.clone(), value.snapshot()))
+            .collect()
     }
     pub fn note(&self, value: PlainData) {
         self.calls.borrow_mut().push(Call::Control(value));
         self.changed.notify_waiters();
     }
-    pub fn seed(&self, key: impl Into<JsText>, value: PlainData) {
-        self.cells.borrow_mut().insert(key.into(), value);
+    pub fn seed(&self, key: impl Into<JsText>, value: impl Into<StoredCell>) {
+        self.cells.borrow_mut().insert(key.into(), value.into());
         self.changed.notify_waiters();
     }
     pub async fn wait_for_cell(&self, key: impl Into<JsText>, accept: impl Fn(&PlainData) -> bool) {
         let key = key.into();
         loop {
             let changed = self.changed.notified();
-            if accept(&self.value(&key)) {
+            if accept(&self.cell(&key).snapshot()) {
                 return;
             }
             changed.await;
         }
     }
-    fn value(&self, key: &JsText) -> PlainData {
+    pub fn cell(&self, key: &JsText) -> StoredCell {
         if let Some(staged) = &self.staged
             && let Some(value) = staged.borrow().get(key)
         {
-            return value.clone().unwrap_or(PlainData::Undefined);
+            return value.clone().unwrap_or(StoredCell::Undefined);
         }
         self.cells
             .borrow()
             .get(key)
             .cloned()
-            .unwrap_or(PlainData::Undefined)
+            .unwrap_or(StoredCell::Undefined)
     }
 }
 impl DurableObjectStorage for MemoryStorage {
     type Error = Infallible;
-    fn get(&self, key: JsText) -> impl Future<Output = Result<PlainData, Self::Error>> {
+    fn get(&self, key: JsText) -> impl Future<Output = Result<StoredCell, Self::Error>> {
         self.calls.borrow_mut().push(Call::Get(key.clone()));
-        let value = self.value(&key);
+        let value = self.cell(&key);
+        let value = if self.clone_reads {
+            StoredCell::from(value.snapshot())
+        } else {
+            value
+        };
         async move { Ok(value) }
     }
-    fn put(&self, key: JsText, value: PlainData) -> impl Future<Output = Result<(), Self::Error>> {
+    fn put(&self, key: JsText, value: StoredCell) -> impl Future<Output = Result<(), Self::Error>> {
         self.calls
             .borrow_mut()
-            .push(Call::Put(key.clone(), value.clone()));
+            .push(Call::Put(key.clone(), value.snapshot()));
         if let Some(staged) = &self.staged {
             staged.borrow_mut().insert(key, Some(value));
         } else {
@@ -116,14 +131,23 @@ impl DurableObjectStorage for MemoryStorage {
     fn list(
         &self,
         prefix: JsText,
-    ) -> impl Future<Output = Result<Vec<(JsText, PlainData)>, Self::Error>> {
+    ) -> impl Future<Output = Result<Vec<(JsText, StoredCell)>, Self::Error>> {
         self.calls.borrow_mut().push(Call::List(prefix.clone()));
         let values = self
             .cells
             .borrow()
             .iter()
             .filter(|(key, _)| key.as_units().starts_with(prefix.as_units()))
-            .map(|(key, value)| (key.clone(), value.clone()))
+            .map(|(key, value)| {
+                (
+                    key.clone(),
+                    if self.clone_reads {
+                        StoredCell::from(value.snapshot())
+                    } else {
+                        value.clone()
+                    },
+                )
+            })
             .collect();
         async move { Ok(values) }
     }

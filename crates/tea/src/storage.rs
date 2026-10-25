@@ -9,6 +9,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::PlainData;
+mod cell;
+pub use cell::{StoredArray, StoredCell, StoredObject};
 
 pub trait Nullish {
     fn is_nullish(&self) -> bool;
@@ -56,7 +58,7 @@ pub enum Migrated<S> {
 
 pub struct FencedRead<R> {
     pub raw: R,
-    pub version: f64,
+    pub version: StoredCell,
 }
 pub trait Fencing<S> {
     type Raw;
@@ -65,8 +67,8 @@ pub trait Fencing<S> {
     fn save_fenced<'a>(
         &'a self,
         state: &'a S,
-        expected_version: f64,
-    ) -> LocalBoxFuture<'a, Result<f64, Self::Error>>;
+        expected_version: StoredCell,
+    ) -> LocalBoxFuture<'a, Result<StoredCell, Self::Error>>;
 }
 pub trait Store<S> {
     type Raw;
@@ -261,10 +263,35 @@ where
 
 #[derive(Clone, Debug)]
 pub struct StoreConflictError {
-    pub expected_version: f64,
-    pub actual_version: f64,
+    pub expected_version: StoredCell,
+    pub actual_version: StoredCell,
+    message: Box<crate::data::JsText>,
 }
 impl StoreConflictError {
+    pub fn new(
+        expected_version: impl Into<StoredCell>,
+        actual_version: impl Into<StoredCell>,
+    ) -> Result<Self, crate::js_record::JsAccessError> {
+        let expected_version = expected_version.into();
+        let actual_version = actual_version.into();
+        let expected = crate::js_record::string(&expected_version.snapshot())?;
+        let actual = crate::js_record::string(&actual_version.snapshot())?;
+        let mut message = "@demlik/tea: store conflict — expected version "
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        message.extend_from_slice(expected.as_units());
+        message.extend(", found ".encode_utf16());
+        message.extend_from_slice(actual.as_units());
+        message.extend(". Another process has written this state; this run is no longer the single writer and has stopped.".encode_utf16());
+        Ok(Self {
+            expected_version,
+            actual_version,
+            message: Box::new(crate::data::JsText::from_units(message)),
+        })
+    }
+    pub fn message(&self) -> &crate::data::JsText {
+        &self.message
+    }
     pub fn name(&self) -> &'static str {
         "StoreConflictError"
     }
@@ -278,7 +305,7 @@ impl Serialize for StoreConflictError {
         let mut fields = serializer.serialize_struct("StoreConflictError", 5)?;
         fields.serialize_field("name", self.name())?;
         fields.serialize_field("_tag", self.tag())?;
-        fields.serialize_field("message", &self.to_string())?;
+        fields.serialize_field("message", &self.message)?;
         fields.serialize_field("expectedVersion", &self.expected_version)?;
         fields.serialize_field("actualVersion", &self.actual_version)?;
         fields.end()
@@ -293,12 +320,7 @@ pub(crate) fn number_string(value: f64) -> String {
 }
 impl fmt::Display for StoreConflictError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "@demlik/tea: store conflict — expected version {}, found {}. Another process has written this state; this run is no longer the single writer and has stopped.",
-            number_string(self.expected_version),
-            number_string(self.actual_version)
-        )
+        f.write_str(&String::from_utf16_lossy(self.message.as_units()))
     }
 }
 impl std::error::Error for StoreConflictError {}
@@ -306,28 +328,40 @@ impl std::error::Error for StoreConflictError {}
 #[derive(Debug)]
 pub enum MemoryStoreError {
     Conflict(StoreConflictError),
+    Coercion(crate::js_record::JsAccessError),
     Poisoned,
 }
 impl fmt::Display for MemoryStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Conflict(error) => error.fmt(f),
+            Self::Coercion(error) => error.fmt(f),
             Self::Poisoned => f.write_str("memory store cell lock poisoned"),
         }
     }
 }
-impl std::error::Error for MemoryStoreError {}
+impl std::error::Error for MemoryStoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Conflict(cause) => Some(cause),
+            Self::Coercion(cause) => Some(cause),
+            Self::Poisoned => None,
+        }
+    }
+}
 impl MemoryStoreError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Conflict(error) => error.name(),
+            Self::Coercion(error) => error.name,
             Self::Poisoned => "MemoryStoreError",
         }
     }
-    pub fn tag(&self) -> &'static str {
+    pub fn tag(&self) -> Option<&'static str> {
         match self {
-            Self::Conflict(error) => error.tag(),
-            Self::Poisoned => "memory_store_poisoned",
+            Self::Conflict(error) => Some(error.tag()),
+            Self::Coercion(_) => None,
+            Self::Poisoned => Some("memory_store_poisoned"),
         }
     }
 }
@@ -335,6 +369,7 @@ impl Serialize for MemoryStoreError {
     fn serialize<T: serde::Serializer>(&self, serializer: T) -> Result<T::Ok, T::Error> {
         match self {
             Self::Conflict(error) => error.serialize(serializer),
+            Self::Coercion(error) => error.serialize(serializer),
             Self::Poisoned => serde_json::json!({ "name": self.name(), "_tag": self.tag(), "message": self.to_string() }).serialize(serializer),
         }
     }
@@ -441,7 +476,7 @@ impl<S: Clone, F: Fn(Option<S>) -> Migrated<S>> Fencing<S> for FencedMemoryStore
             let cell = self.0.cell.lock().map_err(|_| MemoryStoreError::Poisoned)?;
             Ok(FencedRead {
                 raw: cell.state.clone(),
-                version: cell.version,
+                version: StoredCell::Number(cell.version),
             })
         }
         .boxed_local()
@@ -449,19 +484,21 @@ impl<S: Clone, F: Fn(Option<S>) -> Migrated<S>> Fencing<S> for FencedMemoryStore
     fn save_fenced<'a>(
         &'a self,
         state: &'a S,
-        expected_version: f64,
-    ) -> LocalBoxFuture<'a, Result<f64, Self::Error>> {
+        expected_version: StoredCell,
+    ) -> LocalBoxFuture<'a, Result<StoredCell, Self::Error>> {
         async move {
             let mut cell = self.0.cell.lock().map_err(|_| MemoryStoreError::Poisoned)?;
-            if cell.version != expected_version {
-                return Err(MemoryStoreError::Conflict(StoreConflictError {
-                    expected_version,
-                    actual_version: cell.version,
-                }));
+            if StoredCell::Number(cell.version) != expected_version {
+                let actual = cell.version;
+                drop(cell);
+                return Err(MemoryStoreError::Conflict(
+                    StoreConflictError::new(expected_version, actual)
+                        .map_err(MemoryStoreError::Coercion)?,
+                ));
             }
             cell.state = Some(state.clone());
             cell.version += 1.0;
-            Ok(cell.version)
+            Ok(StoredCell::Number(cell.version))
         }
         .boxed_local()
     }

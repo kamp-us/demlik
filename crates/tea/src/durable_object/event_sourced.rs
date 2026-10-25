@@ -6,7 +6,7 @@ use crate::{
     Machine, PlainData, Subscription, Tagged,
     data::JsText,
     fold_msgs, js_record, replay,
-    storage::{Migrated, Store, number_string},
+    storage::{Migrated, Store, StoredCell, number_string},
 };
 use futures::{FutureExt, future::LocalBoxFuture};
 use std::{
@@ -165,13 +165,13 @@ impl<S, M, C, U, X, P, E> Core<'_, S, M, C, U, X, P, E>
 where
     P: DurableObjectStorage + 'static,
 {
-    async fn get(&self, key: JsText) -> Result<PlainData, DoStoreError<P::Error, E>> {
+    async fn get(&self, key: JsText) -> Result<StoredCell, DoStoreError<P::Error, E>> {
         let storage = Rc::clone(&self.storage);
         request(async move { storage.get(key).await })
             .await
             .map_err(|error| request_error(error, "get"))
     }
-    async fn put(&self, key: JsText, value: PlainData) -> Result<(), DoStoreError<P::Error, E>> {
+    async fn put(&self, key: JsText, value: StoredCell) -> Result<(), DoStoreError<P::Error, E>> {
         let storage = Rc::clone(&self.storage);
         request(async move { storage.put(key, value).await })
             .await
@@ -179,7 +179,7 @@ where
     }
     async fn read_meta(&self) -> Result<f64, DoStoreError<P::Error, E>> {
         let raw = self.get(self.meta_key.clone()).await?;
-        if matches!(raw, PlainData::Null | PlainData::Undefined) {
+        if matches!(raw, StoredCell::Null | StoredCell::Undefined) {
             return Ok(0.0);
         }
         let meta = stored_json(raw)?;
@@ -192,7 +192,7 @@ where
     }
     async fn read_snapshot(&self) -> Result<(Option<Arc<S>>, f64), DoStoreError<P::Error, E>> {
         let raw = self.get(self.snapshot_key.clone()).await?;
-        if matches!(raw, PlainData::Null | PlainData::Undefined) {
+        if matches!(raw, StoredCell::Null | StoredCell::Undefined) {
             return Ok((None, 0.0));
         }
         let cell = stored_json(raw)?;
@@ -366,7 +366,7 @@ pub struct ReadEvents<'a, P, M, E> {
     parse: &'a dyn Fn(PlainData) -> Option<M>,
     prefix: JsText,
     range: EventLogRange,
-    rows: Option<std::vec::IntoIter<(JsText, PlainData)>>,
+    rows: Option<std::vec::IntoIter<(JsText, StoredCell)>>,
     done: bool,
     error: PhantomData<fn() -> E>,
 }

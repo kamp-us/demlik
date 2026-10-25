@@ -41,7 +41,7 @@ pub fn normalized(value: &PlainData) -> Value {
     }
 }
 pub fn conflict(error: &demlik_tea::storage::StoreConflictError) -> Value {
-    json!({ "name": error.name(), "_tag": error.tag(), "message": error.to_string(), "expectedVersion": super::encode_number(error.expected_version), "actualVersion": super::encode_number(error.actual_version) })
+    json!({ "name": error.name(), "_tag": error.tag(), "message": text(error.message()), "expectedVersion": normalized(&error.expected_version.snapshot()), "actualVersion": normalized(&error.actual_version.snapshot()) })
 }
 pub fn helpers(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
     use demlik_tea::storage::{RestoreCause, StoreConflictError, StoreRefusedError};
@@ -55,10 +55,8 @@ pub fn helpers(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
         serde_json::from_value(input["expected"].clone()).map_err(|error| error.to_string())?;
     let actual: super::Number =
         serde_json::from_value(input["actual"].clone()).map_err(|error| error.to_string())?;
-    let conflict = StoreConflictError {
-        expected_version: expected.value(),
-        actual_version: actual.value(),
-    };
+    let conflict = StoreConflictError::new(expected.value(), actual.value())
+        .map_err(|error| error.to_string())?;
     let _ = observe!(
         calls,
         demlik_tea::storage::StoreRefusedError::name,

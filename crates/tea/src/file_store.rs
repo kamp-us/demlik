@@ -21,7 +21,8 @@ use crate::{
     PlainData,
     data::{DependencyError, decode_json, plain_data, stringify_json},
     storage::{
-        DeletableStore, FencedRead, Fencing, Migrated, Store, StoreConflictError, number_string,
+        DeletableStore, FencedRead, Fencing, Migrated, Store, StoreConflictError, StoredCell,
+        number_string,
     },
 };
 
@@ -42,6 +43,7 @@ pub enum FileStoreError {
         raw: String,
     },
     Conflict(StoreConflictError),
+    Coercion(crate::js_record::JsAccessError),
     Serialization(DependencyError),
     Undefined,
     ProcessProbeUnsupported,
@@ -58,6 +60,7 @@ impl FileStoreError {
         match self {
             Self::Json { .. } => "SyntaxError",
             Self::Conflict(error) => error.name(),
+            Self::Coercion(error) => error.name,
             Self::Serialization(_) | Self::Undefined => "TypeError",
             _ => "Error",
         }
@@ -124,6 +127,7 @@ impl fmt::Display for FileStoreError {
             Self::Json { cause, .. } => cause.fmt(f),
             Self::Version { path, raw } => write!(f, "fileStore: version stamp at \"{}\" is not an integer: {raw}", path.display()),
             Self::Conflict(error) => error.fmt(f), Self::Serialization(error) => error.fmt(f),
+            Self::Coercion(error) => error.fmt(f),
             Self::Undefined => f.write_str("The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined"),
             Self::ProcessProbeUnsupported => f.write_str("fileStore: checking the lock owner's process requires a supported native process adapter"),
         }
@@ -135,6 +139,7 @@ impl std::error::Error for FileStoreError {
             Self::Io { cause, .. } => Some(cause),
             Self::Json { cause, .. } => Some(cause),
             Self::Conflict(cause) => Some(cause),
+            Self::Coercion(cause) => Some(cause),
             Self::Serialization(cause) => Some(cause),
             _ => None,
         }
@@ -305,7 +310,7 @@ impl<S: Serialize, F: Fn(PlainData) -> Migrated<S>> Fencing<S> for FencedFileSto
             let version = self.read_version().await?;
             Ok(FencedRead {
                 raw: self.0.load().await?,
-                version,
+                version: StoredCell::Number(version),
             })
         }
         .boxed_local()
@@ -313,8 +318,8 @@ impl<S: Serialize, F: Fn(PlainData) -> Migrated<S>> Fencing<S> for FencedFileSto
     fn save_fenced<'a>(
         &'a self,
         state: &'a S,
-        expected_version: f64,
-    ) -> LocalBoxFuture<'a, Result<f64, FileStoreError>> {
+        expected_version: StoredCell,
+    ) -> LocalBoxFuture<'a, Result<StoredCell, FileStoreError>> {
         async move {
             fs::create_dir_all(self.0.parent())
                 .await
@@ -323,13 +328,13 @@ impl<S: Serialize, F: Fn(PlainData) -> Migrated<S>> Fencing<S> for FencedFileSto
             acquire_file_lock(self.0.parent(), &lock).await?;
             let result = async {
                 let actual_version = self.read_version().await?;
-                if actual_version != expected_version {
-                    return Err(FileStoreError::Conflict(StoreConflictError {
-                        expected_version,
-                        actual_version,
-                    }));
+                if StoredCell::Number(actual_version) != expected_version {
+                    return Err(FileStoreError::Conflict(
+                        StoreConflictError::new(expected_version, actual_version)
+                            .map_err(FileStoreError::Coercion)?,
+                    ));
                 }
-                let next = expected_version + 1.0;
+                let next = actual_version + 1.0;
                 self.0.save(state).await?;
                 let fence = self.0.sidecar(".fence");
                 let temp = self
@@ -341,7 +346,7 @@ impl<S: Serialize, F: Fn(PlainData) -> Migrated<S>> Fencing<S> for FencedFileSto
                 fs::rename(&temp, &fence)
                     .await
                     .map_err(|error| FileStoreError::io("rename", &fence, error))?;
-                Ok(next)
+                Ok(StoredCell::Number(next))
             }
             .await;
             let _ = fs::remove_file(&lock).await;

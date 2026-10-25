@@ -262,7 +262,7 @@ class StorageFailure extends Error {
     super(message);
   }
 }
-class Gate {
+export class Gate {
   count = 0;
   changes: Array<() => void> = [];
   readonly released: Promise<void>;
@@ -291,7 +291,7 @@ type Rule = {
     | { kind: "fail"; message: string; value: unknown }
     | { kind: "hold"; gate: Gate };
 };
-function storageFixture(initial: Script["cells"]) {
+export function storageFixture(initial: Script["cells"], cloneReads = false) {
   const cells = new Map(
       initial.map((row) => [txt(row.key), decode(row.value)]),
     ),
@@ -351,7 +351,8 @@ function storageFixture(initial: Script["cells"]) {
     async get(key: string) {
       calls.push({ op: "get", key: normalize(key) });
       const pending = staged?.get(key);
-      return staged?.has(key) ? pending?.value : cells.get(key);
+      const value = staged?.has(key) ? pending?.value : cells.get(key);
+      return cloneReads ? structuredClone(value) : value;
     },
     async put(key: string, value: unknown) {
       calls.push({ op: "put", key: normalize(key), value: normalize(value) });
@@ -373,7 +374,11 @@ function storageFixture(initial: Script["cells"]) {
       return new Map(
         [...cells]
           .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-          .filter(([key]) => key.startsWith(options.prefix)),
+          .filter(([key]) => key.startsWith(options.prefix))
+          .map(([key, value]) => [
+            key,
+            cloneReads ? structuredClone(value) : value,
+          ]),
       );
     },
     async transaction<T>(
@@ -445,6 +450,7 @@ function storageFixture(initial: Script["cells"]) {
       async transaction(effect) {
         const rule = take("transaction");
         requested += 1;
+        changed();
         calls.push({ op: "transactionRequested" });
         if (rule?.stage === "before") await boundary(rule);
         const { value, commit } = await base.transaction(
@@ -468,6 +474,10 @@ function storageFixture(initial: Script["cells"]) {
     state,
     storage: controlled(makeBase()),
     requested: () => requested,
+    async waitTransactions(count: number) {
+      while (requested < count)
+        await new Promise<void>((resolve) => watchers.push(resolve));
+    },
     seed(key: string, value: unknown) {
       cells.set(key, value);
       changed();
@@ -1834,6 +1844,7 @@ export function durableObjectCases(): Case[] {
       events(actions, { every: 1 + (draw() % 5) }),
     );
   }
+  cases.push(...durableRawVersionCases());
   assert.equal(
     new Set(cases.map((item) => item.id)).size,
     cases.length,
@@ -1841,9 +1852,9 @@ export function durableObjectCases(): Case[] {
   );
   return cases;
 }
-export function durableVersionGapCases(): Case[] {
+export function durableRawVersionCases(): Case[] {
   return ["1", true].map((version, index) => ({
-    id: `do.OPEN.raw-version-${index}`,
+    id: `do.snapshot.raw-version-${index}`,
     script: durableObjectScript.parse({
       mode: "snapshot",
       config: {
@@ -2053,11 +2064,6 @@ export async function verifyDurableObject(
       return [{ id: item.id, error: String(error) }];
     }
   });
-  const gapCases = durableVersionGapCases(),
-    gapSource: Awaited<ReturnType<typeof executeDurableObject>>[] = [];
-  for (const item of gapCases)
-    gapSource.push(await executeDurableObject(item.script));
-  const gapNative = native(gapCases, executable);
   const resultAt = (id: string, position: number) => {
     const index = cases.findIndex((item) => item.id === id);
     assert(index >= 0);
@@ -2089,22 +2095,16 @@ export async function verifyDurableObject(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    passed: cases.length - mismatches.length,
+    failures: mismatches,
     comparison:
       "actual snapshot/event-store actions, storage ordering and bytes, failures, callbacks, retained models, lazy event ranges and recovery; raw platform syntax diagnostics retained separately",
     qualification:
       "native fixture explicitly submits borrowed futures at its host seam; controlled LocalSet traces do not establish arbitrary Ready-future/join/select/custom-executor ordering. These paired Store actions are not additional Promise-vs-Effect runtime cases.",
-    openGaps: [
-      {
-        id: "raw-fencing-version",
-        status: "OPEN",
-        consequence:
-          "canonical Fencing/lease currently carries f64, so externally seeded nonnumeric source versions cannot yet pass through; fenced capabilities must not be mapped as full strict 1:1",
-        cases: gapCases.map((item, index) => ({
-          ...item,
-          source: gapSource[index],
-          native: gapNative[index],
-        })),
-      },
+    openGaps: [],
+    qualifications: [
+      "Raw cells use bounded acyclic PlainData payloads and actual shared root array/object identity.",
+      "Controlled host traces do not establish arbitrary Ready/join/select/custom-executor scheduling.",
     ],
     runtime: {
       node: process.version,
@@ -2131,6 +2131,7 @@ export async function verifyDurableObject(
         : [],
     cases: cases.map((item, index) => ({
       ...item,
+      equal: !mismatches.some((m) => m.id === item.id),
       ...results[index],
       equal: !mismatches.some((failure) => failure.id === item.id),
       source: source[index],
@@ -2164,7 +2165,7 @@ if (
       compared: report.compared,
       actions: report.actions,
       mismatches: report.mismatches.length,
-      openGaps: report.openGaps.map((gap) => gap.id),
+      openGaps: report.openGaps,
       controls: report.controls.map((control) => ({
         id: control.id,
         detected: control.detectedIds.length,

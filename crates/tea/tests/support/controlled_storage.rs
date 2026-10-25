@@ -3,6 +3,7 @@ use demlik_tea::{
     PlainData,
     data::JsText,
     durable_object::{DurableObjectStorage, TransactionError},
+    storage::StoredCell,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -127,8 +128,11 @@ pub struct ControlledStorage {
 }
 impl ControlledStorage {
     pub fn new() -> Self {
+        Self::with_inner(MemoryStorage::new())
+    }
+    pub fn with_inner(inner: MemoryStorage) -> Self {
         Self {
-            inner: MemoryStorage::new(),
+            inner,
             rules: Rc::new(RefCell::new(Vec::new())),
             requested: Rc::new(Cell::new(0)),
             requested_changed: Rc::new(tokio::sync::Notify::new()),
@@ -219,16 +223,18 @@ impl ControlledStorage {
 }
 impl DurableObjectStorage for ControlledStorage {
     type Error = StorageFailure;
-    fn get(&self, key: JsText) -> impl Future<Output = Result<PlainData, Self::Error>> {
+    fn get(&self, key: JsText) -> impl Future<Output = Result<StoredCell, Self::Error>> {
         let rule = self.take(Operation::Get, Some(&key));
         async move {
             self.boundary(&rule, Stage::Before).await?;
             let value = self.inner.get(key).await.unwrap();
+            // The paired TS adapter suspends at `await base.get(key)` even for a ready read.
+            tokio::task::yield_now().await;
             self.boundary(&rule, Stage::After).await?;
             Ok(value)
         }
     }
-    fn put(&self, key: JsText, value: PlainData) -> impl Future<Output = Result<(), Self::Error>> {
+    fn put(&self, key: JsText, value: StoredCell) -> impl Future<Output = Result<(), Self::Error>> {
         let rule = self.take(Operation::Put, Some(&key));
         async move {
             self.boundary(&rule, Stage::Before).await?;
@@ -247,7 +253,7 @@ impl DurableObjectStorage for ControlledStorage {
     fn list(
         &self,
         prefix: JsText,
-    ) -> impl Future<Output = Result<Vec<(JsText, PlainData)>, Self::Error>> {
+    ) -> impl Future<Output = Result<Vec<(JsText, StoredCell)>, Self::Error>> {
         let rule = self.take(Operation::List, Some(&prefix));
         async move {
             self.boundary(&rule, Stage::Before).await?;
