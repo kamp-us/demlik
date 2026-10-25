@@ -1,5 +1,10 @@
+use super::analysis::{
+    AnalysisError, AnalysisOptions, AnalysisPrep, CompleteInput, NamedSymbol, analysis_inputs,
+    complete_analysis, prepare_analysis,
+};
+use super::cross_runtime::{CrossRuntimeInput, create_cross_runtime_resolver};
 use super::directories::build_directories;
-use super::edges::{EdgeResult, resolve_edges};
+use super::edges::{EdgeResult, resolve_edges_with_cross_runtime};
 use super::functions::{DiscoveredFunction, discover_functions, is_test_file};
 use super::metrics::{compute_function_metrics, module_comment_lines, module_loc};
 use crate::checker::context::{TypeContextInput, with_type_context};
@@ -33,6 +38,7 @@ pub enum AssemblyError {
     WorkingDirectory(io::Error),
     Threshold(ThresholdError),
     Compiler(TsgoError),
+    Analysis(AnalysisError),
 }
 impl std::fmt::Display for AssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -40,6 +46,7 @@ impl std::fmt::Display for AssemblyError {
             Self::WorkingDirectory(error) => error.fmt(formatter),
             Self::Threshold(error) => error.fmt(formatter),
             Self::Compiler(error) => error.fmt(formatter),
+            Self::Analysis(error) => error.fmt(formatter),
         }
     }
 }
@@ -49,6 +56,15 @@ impl std::error::Error for AssemblyError {
             Self::WorkingDirectory(error) => Some(error),
             Self::Threshold(error) => Some(error),
             Self::Compiler(error) => Some(error),
+            Self::Analysis(error) => Some(error),
+        }
+    }
+}
+impl From<AnalysisError> for AssemblyError {
+    fn from(error: AnalysisError) -> Self {
+        match error {
+            AnalysisError::Compiler(error) => Self::Compiler(error),
+            error => Self::Analysis(error),
         }
     }
 }
@@ -91,6 +107,26 @@ pub fn assemble_graph_with_edges(
     binary: &TsgoBinary,
     fields: NodeFields,
 ) -> Result<Graph, AssemblyError> {
+    assemble_measured(loaded, thresholds, binary, fields, None)
+}
+
+pub fn assemble_graph_with_analysis(
+    loaded: &LoadedEdgeProject,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+    options: &AnalysisOptions<'_>,
+) -> Result<Graph, AssemblyError> {
+    assemble_measured(loaded, thresholds, binary, fields, Some(options))
+}
+
+fn assemble_measured(
+    loaded: &LoadedEdgeProject,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+    options: Option<&AnalysisOptions<'_>>,
+) -> Result<Graph, AssemblyError> {
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let functions = discover_functions(&loaded.project.source_files).functions;
     let ids: Vec<_> = functions
@@ -102,7 +138,7 @@ pub fn assemble_graph_with_edges(
         &loaded.project.source_files,
         &loaded.ts_config_path,
     );
-    let (result, declaration_uses) = with_type_context(
+    let (result, declaration_uses, analysis) = with_type_context(
         binary,
         TypeContextInput {
             project: &loaded.project,
@@ -114,20 +150,54 @@ pub fn assemble_graph_with_edges(
                 &context.unjoined,
                 "function(s) have no node in tsgo's tree, so their calls are not resolved",
             );
-            let result = resolve_edges(context, imports, &ids)?;
-            let uses = resolve_declaration_uses(
-                context,
-                &discover_declarations(&loaded.project.source_files),
-            )?;
-            report_unjoined(
-                &uses.unjoined,
-                "declaration(s) have no node in tsgo's tree, so their uses are unknown",
-            );
-            Ok((result, uses.uses_by_id))
+            Ok((|| -> Result<_, AnalysisError> {
+                let prep = options
+                    .map(prepare_analysis)
+                    .transpose()?
+                    .unwrap_or_else(AnalysisPrep::default);
+                let mut resolver = options
+                    .zip(prep.catalog.as_ref())
+                    .map(|(options, catalog)| {
+                        create_cross_runtime_resolver(
+                            CrossRuntimeInput {
+                                catalog,
+                                root_absolute: &loaded.project.root_absolute,
+                                repo_root: options.repo_root,
+                            },
+                            context,
+                        )
+                    })
+                    .transpose()?;
+                let result =
+                    resolve_edges_with_cross_runtime(context, imports, &ids, resolver.as_mut())?;
+                let uses = resolve_declaration_uses(
+                    context,
+                    &discover_declarations(&loaded.project.source_files),
+                )?;
+                report_unjoined(
+                    &uses.unjoined,
+                    "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+                );
+                let analysis = options
+                    .map(|options| {
+                        complete_analysis(CompleteInput {
+                            options,
+                            prep: &prep,
+                            root_absolute: &loaded.project.root_absolute,
+                            context,
+                            functions: &functions,
+                            inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
+                            resolver: resolver.as_ref(),
+                        })
+                    })
+                    .transpose()?;
+                Ok((result, uses.uses_by_id, analysis))
+            })())
         },
     )
-    .map_err(AssemblyError::Compiler)?;
-    build(
+    .map_err(AssemblyError::Compiler)?
+    .map_err(AssemblyError::from)?;
+    let mut graph = build(
         &loaded.project,
         thresholds,
         fields,
@@ -138,7 +208,11 @@ pub fn assemble_graph_with_edges(
             ts_config: loaded.ts_config_path.to_string_lossy().into_owned(),
         }),
         Some(functions),
-    )
+    )?;
+    if let Some(analysis) = analysis {
+        analysis.apply(&mut graph).map_err(AssemblyError::from)?;
+    }
+    Ok(graph)
 }
 
 fn build(

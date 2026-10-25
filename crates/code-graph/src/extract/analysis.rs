@@ -1,7 +1,315 @@
+use super::cross_runtime::{CrossRuntimeResolver, method_ids_of_classes};
 use super::functions::DiscoveredFunction;
+use super::package_exports::{ExportPatternError, public_export_patterns};
+use super::references::{ReferenceResult, resolve_references};
+use super::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog};
+use crate::checker::context::TypeContext;
+use crate::engine::tsgo::TsgoError;
+use crate::kinds::classify::{
+    ClassifyContext, CompiledKindRules, classify_function, compile_kind_rules,
+};
+use crate::kinds::declarations::{
+    merge_rule_maps, public_method_rules_by_base_class, sibling_property_rules, type_scope_rules,
+};
+use crate::kinds::glob::GlobError;
+use crate::kinds::rules::NodeKindRules;
 use crate::project::locale_compare;
+use crate::project::{
+    discover_package_roots, join_path_text, locale_compare_units, relative_path_text,
+};
+use crate::query::{
+    clusters::build_cluster_report, interface_width::find_interface_width,
+    unguarded::find_unguarded, unreachable::find_unreachable,
+};
 use crate::schema::FunctionNode;
+use crate::schema::{
+    BindingCensusRow, BindingKind, CrossRuntimeEdge, CrossRuntimeReport, Graph,
+    InterfaceWidthReport, NodeKind, ReachabilityReport,
+};
+use crate::text::JsString;
 use indexmap::{IndexMap, IndexSet};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
+
+pub struct AnalysisOptions<'a> {
+    pub cross_runtime: bool,
+    pub kinds: bool,
+    pub reach: bool,
+    pub clusters: bool,
+    pub interface_width: bool,
+    pub kind_rules: &'a NodeKindRules,
+    pub repo_root: &'a Path,
+}
+#[derive(Debug)]
+pub enum AnalysisError {
+    Catalog(CatalogError),
+    Compiler(TsgoError),
+    Pattern(regress::Error),
+    Convention(GlobError),
+    WorkingDirectory(io::Error),
+    ExportPatterns(ExportPatternError),
+}
+impl std::fmt::Display for AnalysisError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Catalog(error) => error.fmt(f),
+            Self::Compiler(error) => error.fmt(f),
+            Self::Pattern(error) => error.fmt(f),
+            Self::Convention(error) => error.fmt(f),
+            Self::WorkingDirectory(error) => error.fmt(f),
+            Self::ExportPatterns(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for AnalysisError {}
+impl From<TsgoError> for AnalysisError {
+    fn from(error: TsgoError) -> Self {
+        Self::Compiler(error)
+    }
+}
+#[derive(Default)]
+pub struct AnalysisPrep {
+    pub catalog: Option<BindingCatalog>,
+}
+pub fn prepare_analysis(options: &AnalysisOptions<'_>) -> Result<AnalysisPrep, AnalysisError> {
+    Ok(AnalysisPrep {
+        catalog: options
+            .cross_runtime
+            .then(|| load_binding_catalog(options.repo_root, None))
+            .transpose()
+            .map_err(AnalysisError::Catalog)?,
+    })
+}
+
+fn binding_key(service: &JsString, binding: &JsString) -> JsString {
+    let mut key = service.clone();
+    key.push_str("|");
+    key.extend(binding);
+    key
+}
+fn binding_census(catalog: &BindingCatalog, edges: &[CrossRuntimeEdge]) -> Vec<BindingCensusRow> {
+    let mut counts: IndexMap<JsString, usize> = IndexMap::new();
+    for edge in edges {
+        *counts
+            .entry(binding_key(&edge.owner_service, &edge.binding))
+            .or_default() += 1;
+    }
+    let mut rows = Vec::new();
+    for manifest in &catalog.manifests {
+        for binding in &manifest.bindings {
+            rows.push(BindingCensusRow {
+                binding: binding.binding.clone(),
+                binding_kind: binding.kind,
+                call_sites: counts
+                    .get(&binding_key(&manifest.service, &binding.binding))
+                    .copied()
+                    .unwrap_or(0),
+                owner_service: manifest.service.clone(),
+                target_class: binding.target_class.clone(),
+                target_service: binding.target_service.clone(),
+            });
+        }
+    }
+    rows.sort_by(|left, right| {
+        locale_compare_units(left.owner_service.units(), right.owner_service.units())
+            .then_with(|| locale_compare_units(left.binding.units(), right.binding.units()))
+            .then_with(|| {
+                locale_compare_units(left.target_class.units(), right.target_class.units())
+            })
+    });
+    rows
+}
+pub struct CompleteInput<'a, 'program, 'channel> {
+    pub options: &'a AnalysisOptions<'a>,
+    pub prep: &'a AnalysisPrep,
+    pub root_absolute: &'a Path,
+    pub context: &'a mut TypeContext<'program, 'channel>,
+    pub functions: &'a [DiscoveredFunction],
+    pub inputs: &'a AnalysisInputs,
+    pub resolver: Option<&'a CrossRuntimeResolver<'a>>,
+}
+pub struct AnalysisBundle {
+    cross_runtime: Option<CrossRuntimeReport>,
+    compiled: CompiledKindRules,
+    classify_context: ClassifyContext,
+    references: Option<ReferenceResult>,
+    kinds: bool,
+    reach: bool,
+    clusters: bool,
+    interface_width: bool,
+    root_absolute: PathBuf,
+    repo_root: PathBuf,
+    worker_mains: Vec<JsString>,
+}
+pub fn complete_analysis(
+    input: CompleteInput<'_, '_, '_>,
+) -> Result<AnalysisBundle, AnalysisError> {
+    let CompleteInput {
+        options,
+        prep,
+        root_absolute,
+        context,
+        functions,
+        inputs,
+        resolver,
+    } = input;
+    let cross_runtime = match (resolver, prep.catalog.as_ref()) {
+        (Some(resolver), Some(catalog)) => {
+            let edges = resolver.edges();
+            let mut config_files = catalog
+                .manifests
+                .iter()
+                .map(|manifest| manifest.config_file.clone())
+                .collect::<Vec<_>>();
+            config_files.sort_by(|left, right| locale_compare(left, right));
+            Some(CrossRuntimeReport {
+                census: binding_census(catalog, &edges),
+                config_files,
+                edges,
+                unparsed_configs: catalog.unparsed_configs.clone(),
+            })
+        }
+        _ => None,
+    };
+    let compiled = compile_kind_rules(options.kind_rules).map_err(AnalysisError::Pattern)?;
+    let cross_runtime_targets = cross_runtime
+        .iter()
+        .flat_map(|report| &report.edges)
+        .filter(|edge| edge.binding_kind != BindingKind::Workflow)
+        .filter_map(|edge| edge.callee_id.clone())
+        .collect();
+    let classes = prep
+        .catalog
+        .iter()
+        .flat_map(|catalog| &catalog.manifests)
+        .flat_map(|manifest| &manifest.bindings)
+        .filter(|binding| binding.kind == BindingKind::DurableObject)
+        .map(|binding| binding.target_class.clone())
+        .collect();
+    let classify_context = ClassifyContext {
+        cross_runtime_targets,
+        durable_object_methods: method_ids_of_classes(context, &classes)?,
+        base_class_entries: public_method_rules_by_base_class(
+            context,
+            &compiled.entry_base_classes,
+        )?,
+        declared_guards: merge_rule_maps([
+            &sibling_property_rules(context, &compiled.entry_guard_properties)?,
+            &type_scope_rules(context, &compiled.entry_guard_properties)?,
+        ]),
+        convention_entries: if options.kinds {
+            super::conventions::convention_entries(
+                functions,
+                options.kind_rules,
+                root_absolute,
+                options.repo_root,
+            )
+            .map_err(AnalysisError::Convention)?
+        } else {
+            IndexMap::new()
+        },
+    };
+    let references = if options.reach || options.interface_width {
+        Some(resolve_references(
+            context,
+            &inputs.names,
+            &inputs.exports_by_file,
+        )?)
+    } else {
+        None
+    };
+    let worker_mains = prep
+        .catalog
+        .iter()
+        .flat_map(|catalog| &catalog.manifests)
+        .filter_map(|manifest| manifest.main.clone())
+        .collect();
+    Ok(AnalysisBundle {
+        cross_runtime,
+        compiled,
+        classify_context,
+        references,
+        kinds: options.kinds,
+        reach: options.reach,
+        clusters: options.clusters,
+        interface_width: options.interface_width,
+        root_absolute: root_absolute.into(),
+        repo_root: options.repo_root.into(),
+        worker_mains,
+    })
+}
+impl AnalysisBundle {
+    pub fn apply(self, graph: &mut Graph) -> Result<(), AnalysisError> {
+        for function in &mut graph.functions {
+            function.node_kind = self
+                .kinds
+                .then(|| classify_function(function, &self.compiled, &self.classify_context));
+        }
+        graph.clusters = self
+            .clusters
+            .then(|| build_cluster_report(&graph.functions, &graph.modules));
+        graph.reachability = None;
+        graph.interface_width = None;
+        if let Some(refs) = &self.references {
+            if self.reach {
+                let mut mains = IndexSet::new();
+                for main in &self.worker_mains {
+                    let absolute =
+                        join_path_text(&self.repo_root.to_string_lossy().as_ref().into(), main);
+                    let relative = relative_path_text(&self.root_absolute, &absolute)
+                        .map_err(AnalysisError::WorkingDirectory)?;
+                    if let Ok(relative) = relative.to_utf8() {
+                        mains.insert(relative);
+                    }
+                }
+                let mut mains = mains.into_iter().collect::<Vec<_>>();
+                mains.sort_by(|left, right| locale_compare(left, right));
+                let patterns = public_export_patterns(
+                    &self.repo_root,
+                    &self.root_absolute,
+                    &discover_package_roots(&self.repo_root, None),
+                )
+                .map_err(AnalysisError::ExportPatterns)?;
+                let found = find_unreachable(
+                    &graph.functions,
+                    &graph.modules,
+                    refs,
+                    &mains,
+                    &self.compiled.test_support,
+                    &patterns,
+                );
+                graph.reachability = Some(ReachabilityReport {
+                    entry_count: graph
+                        .functions
+                        .iter()
+                        .filter(|node| matches!(node.node_kind, Some(NodeKind::Entry { .. })))
+                        .count(),
+                    exported_count: found.exported_count,
+                    reachable_count: found.reachable_count,
+                    unguarded: find_unguarded(&graph.functions),
+                    unreachable: found.unreachable,
+                    withheld: found.withheld,
+                });
+            }
+            if self.interface_width {
+                let packages = find_interface_width(
+                    &graph.functions,
+                    refs,
+                    &discover_package_roots(&self.root_absolute, None),
+                );
+                graph.interface_width = Some(InterfaceWidthReport {
+                    total_exports: packages.iter().map(|row| row.export_count).sum(),
+                    total_zero_consumer: packages.iter().map(|row| row.zero_consumer_count).sum(),
+                    packages,
+                });
+            }
+        }
+        graph.cross_runtime = self.cross_runtime;
+        Ok(())
+    }
+}
 
 pub struct NamedSymbol<'a> {
     pub id: &'a str,

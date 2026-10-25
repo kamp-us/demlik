@@ -10,6 +10,7 @@ pub mod directories;
 pub mod edges;
 pub mod functions;
 pub mod metrics;
+pub mod package_exports;
 pub mod references;
 pub mod scc;
 pub mod wrangler_config;

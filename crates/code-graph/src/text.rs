@@ -266,22 +266,31 @@ impl JsValue {
                 }
                 out.push(']');
             }
-            Self::Object(object) => {
-                out.push('{');
-                for (index, key) in object_keys(object).into_iter().enumerate() {
-                    if index > 0 {
-                        out.push(',');
-                    }
-                    out.push_str(
-                        &serde_json::to_string(key).expect("JavaScript keys serialize losslessly"),
-                    );
-                    out.push(':');
-                    object[key].write_json(out);
-                }
-                out.push('}');
-            }
+            Self::Object(object) => write_object(object, out),
         }
     }
+}
+fn write_object(object: &JsObject, out: &mut String) {
+    out.push('{');
+    for (index, key) in object_keys(object).into_iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str(&serde_json::to_string(key).expect("JavaScript keys serialize losslessly"));
+        out.push(':');
+        object[key].write_json(out);
+    }
+    out.push('}');
+}
+pub(crate) fn serialize_object<S: Serializer>(
+    object: &JsObject,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut json = String::new();
+    write_object(object, &mut json);
+    RawValue::from_string(json)
+        .expect("JavaScript JSON objects serialize valid JSON")
+        .serialize(serializer)
 }
 impl<'de> Deserialize<'de> for JsValue {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {

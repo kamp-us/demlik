@@ -1,6 +1,7 @@
 mod document;
 use crate::project::{
-    RepoListing, list_visible_files, locale_compare_units, normalize_lexical, to_relative,
+    RepoListing, list_visible_files, locale_compare_units, normalize_lexical, relative_path_text,
+    resolve_path_text, to_relative,
 };
 use crate::schema::{BindingKind, DataBindingKind};
 use crate::text::JsString;
@@ -240,73 +241,9 @@ fn dev_vars(dir: &Path) -> (Vec<JsString>, Vec<String>) {
     }
     (sorted_unique(keys), files)
 }
-fn normalize(path: &JsString) -> JsString {
-    let mut stack: Vec<&[u16]> = Vec::new();
-    for part in path.units().split(|unit| *unit == u16::from(b'/')) {
-        if part.is_empty() || part == [u16::from(b'.')] {
-            continue;
-        }
-        if part == [u16::from(b'.'), u16::from(b'.')] {
-            stack.pop();
-        } else {
-            stack.push(part);
-        }
-    }
-    let mut units = vec![u16::from(b'/')];
-    for (index, part) in stack.into_iter().enumerate() {
-        if index > 0 {
-            units.push(u16::from(b'/'));
-        }
-        units.extend_from_slice(part);
-    }
-    JsString::from_units(units)
-}
-fn absolute(path: &Path) -> Result<JsString, CatalogError> {
-    let path = if path.is_absolute() {
-        path.into()
-    } else {
-        std::env::current_dir()
-            .map_err(CatalogError::WorkingDirectory)?
-            .join(path)
-    };
-    Ok(normalize(&path.to_string_lossy().as_ref().into()))
-}
 fn main_path(root: &Path, config_dir: &Path, main: &JsString) -> Result<JsString, CatalogError> {
-    let mut target = if main.starts_with("/") {
-        main.clone()
-    } else {
-        let mut target = absolute(config_dir)?;
-        target.push_str("/");
-        target.extend(main);
-        target
-    };
-    target = normalize(&target);
-    let root = absolute(root)?;
-    let from: Vec<_> = root
-        .units()
-        .split(|unit| *unit == u16::from(b'/'))
-        .filter(|part| !part.is_empty())
-        .collect();
-    let to: Vec<_> = target
-        .units()
-        .split(|unit| *unit == u16::from(b'/'))
-        .filter(|part| !part.is_empty())
-        .collect();
-    let common = from
-        .iter()
-        .zip(&to)
-        .take_while(|(left, right)| left == right)
-        .count();
-    let mut parts: Vec<Vec<u16>> = (common..from.len()).map(|_| vec![46, 46]).collect();
-    parts.extend(to[common..].iter().map(|part| part.to_vec()));
-    let mut units = Vec::new();
-    for (index, part) in parts.into_iter().enumerate() {
-        if index > 0 {
-            units.push(u16::from(b'/'));
-        }
-        units.extend(part);
-    }
-    Ok(JsString::from_units(units))
+    let target = resolve_path_text(config_dir, main).map_err(CatalogError::WorkingDirectory)?;
+    relative_path_text(root, &target).map_err(CatalogError::WorkingDirectory)
 }
 pub fn load_binding_catalog(
     root: &Path,
