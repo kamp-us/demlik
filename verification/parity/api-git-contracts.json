@@ -1,0 +1,46 @@
+{
+  "@demlik/code-graph:./api#Changeset": {
+    "signature": "41437944988008824ba5c9769622c40669179ae9a5dc11ae8c62ffdb249b2601",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": [
+        "demlik_code_graph::api::ratchet::changesets::read_changesets_since"
+      ]
+    },
+    "cases": ["api-git.read.default"]
+  },
+  "@demlik/code-graph:./api#ChangesetsOptions": {
+    "signature": "55ed826b3e75d43a73f6672ec2ebfab6f8e31b7be64fc92195f17abb0d55703a",
+    "rust": {
+      "file": "crates/code-graph/src/api/ratchet/changesets.rs",
+      "symbols": [
+        "demlik_code_graph::api::ratchet::changesets::read_changesets_since"
+      ]
+    },
+    "cases": ["api-git.read.override"]
+  },
+  "@demlik/code-graph:./api#ChangesetsSince": {
+    "signature": "bfabde587d661007c281c86a79654593c8ec06a5e7dc4b6c9d5a153aa67a8fd3",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": [
+        "demlik_code_graph::api::ratchet::changesets::read_changesets_since"
+      ]
+    },
+    "cases": ["api-git.read.default"]
+  },
+  "@demlik/code-graph:./api#readChangesetsSince": {
+    "signature": "6054d4324ecc0f62e4669ea59598bb4b8e9b82ff434bbd549751a250e1f57bb8",
+    "rust": {
+      "file": "crates/code-graph/src/api/ratchet/changesets.rs",
+      "symbols": [
+        "demlik_code_graph::api::ratchet::changesets::read_changesets_since"
+      ]
+    },
+    "cases": [
+      "api-git.read.default",
+      "api-git.read.raw-root-missing-name",
+      "api-git.read.bad-unrelated"
+    ]
+  }
+}

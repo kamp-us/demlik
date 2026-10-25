@@ -1,3 +1,4 @@
+pub mod base;
 mod capture;
 pub mod diff;
 pub mod emit;

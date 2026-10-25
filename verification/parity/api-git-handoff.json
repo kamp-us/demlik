@@ -1,0 +1,223 @@
+{
+  "scope": "Frozen api/base.ts and api/ratchet/changesets.ts, native blocking Git/file IO and pure changeset text parsing; no CLI/API-diff/compiler orchestration",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "branch": "can/rust-git-base-changesets",
+  "parent": "806cf0a1d417cfd4f96b5783c9c40308b824a8b6",
+  "prerequisites": {
+    "foundation": "69a2db4",
+    "canonicalRoot": "6be14e115633a18f9b73ee3db8495abe5dd85933",
+    "errorCauses": "2896613f72a2ebbc153b679d5e7d5ade87335b68",
+    "argumentErrors": "dee0a93bcfc9857d6d2b965315dcd02ccf2c219a",
+    "capture": "a9e783a",
+    "pathAndSymlinkErrors": "20819400ea91c5f7f53e82439a38498e151b6d30",
+    "rawRealpath": "11ed4013099258573249875fff0f77bd671867aa",
+    "sigterm": "806cf0a"
+  },
+  "profiles": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "git": "git version 2.39.5 (Apple Git-154)",
+    "tar": "bsdtar 3.5.3 - libarchive 3.7.4 zlib/1.2.12 liblzma/5.4.3 bz2lib/1.0.8",
+    "devDebug": 0,
+    "testDebug": 0,
+    "incremental": false,
+    "buildJobs": 1
+  },
+  "results": {
+    "parser": {
+      "cases": 325,
+      "passed": 325
+    },
+    "git": {
+      "cases": 88,
+      "passed": 88,
+      "strictCases": 73,
+      "qualifiedCases": 15,
+      "protocolRefusals": 7
+    },
+    "compiledFaults": {
+      "detected": 13,
+      "escaped": 0,
+      "baselineArtifactsUnchanged": true,
+      "activeSourceUnchanged": true
+    },
+    "foundation": {
+      "passed": 284,
+      "attempted": 284,
+      "protocolRefusals": 11
+    },
+    "native": {
+      "passed": 278,
+      "compileFailDocs": 12,
+      "includesActualTokioBlockingWorker": true
+    },
+    "static": {
+      "fmt": true,
+      "workspaceClippyAllTargetsDenyWarnings": true,
+      "verificationTsc": true,
+      "verifierBiome": true
+    },
+    "mapping": {
+      "ownedMappings": 4,
+      "signaturesMatchFrozenInventory": true,
+      "compiledCallsValidated": true,
+      "qualifiedRowsUsedAsStrictMappings": false,
+      "ids": [
+        "@demlik/code-graph:./api#Changeset",
+        "@demlik/code-graph:./api#ChangesetsOptions",
+        "@demlik/code-graph:./api#ChangesetsSince",
+        "@demlik/code-graph:./api#readChangesetsSince"
+      ]
+    }
+  },
+  "qualifications": [
+    {
+      "id": "api-git.resolve.nul",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.resolve.cwd-nul",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.resolve.both-nul",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.names.nul-sha",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.names.nul-path",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.names.cwd-nul",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.read.unreadable-file",
+      "kind": "filesystemDiagnostic"
+    },
+    {
+      "id": "api-git.names.output-limit",
+      "kind": "captureDiagnostic"
+    },
+    {
+      "id": "api-git.export.broken-archived-link",
+      "kind": "filesystemDiagnostic"
+    },
+    {
+      "id": "api-git.export.operation-and-cleanup",
+      "kind": "cleanupDiagnostic"
+    },
+    {
+      "id": "api-git.export.invalid",
+      "kind": "archiveDiagnostic"
+    },
+    {
+      "id": "api-git.export.nul",
+      "kind": "archiveArgumentDiagnostic"
+    },
+    {
+      "id": "api-git.remove.nul",
+      "kind": "argumentDiagnostic"
+    },
+    {
+      "id": "api-git.missing-git.names",
+      "kind": "captureDiagnostic"
+    },
+    {
+      "id": "api-git.missing-git.export",
+      "kind": "archiveDiagnostic"
+    }
+  ],
+  "deliberateDifferences": [
+    {
+      "name": "raw option-like archive revision",
+      "source": "git archive consumes --output and creates a zero-byte file in the disposable source checkout before refusal",
+      "native": "option terminator enforces the documented read-only contract; valid commit and tree inputs still work",
+      "strictParity": false,
+      "field": "archiveReadOnlyQualification in api-git report"
+    },
+    {
+      "name": "blocking native IO",
+      "native": "explicit blocking tooling helpers; actual Tokio spawn_blocking owned return/error types compiled and executed",
+      "claim": "No arbitrary Promise caller-scheduling equivalence"
+    },
+    {
+      "name": "backend observations",
+      "details": "Host diagnostics, recursive-removal failure paths, read-chunk overshoot and exit races retain actual native data. Per-case projections do not normalize ordinary source-owned refusals."
+    },
+    {
+      "name": "non-Unix termination",
+      "details": "Unix SIGTERM and trap cleanup match real Source/native probes. Non-Unix Child::kill fallback is not measured here."
+    }
+  ],
+  "ownedPublicMappings": 4,
+  "centralRegistration": "Parent-owned; base/parser internal Source functions do not get fabricated package-public aliases",
+  "sourceFilesUnchanged": true,
+  "licenseHashes": {
+    "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+    "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+    "packages/code-graph/LICENSE": "0481e6230c6ee65f6184e6197daa5b8152d8c27a4ae6b98b734d63045612f8d0",
+    "packages/structure-sweep/LICENSE": "0481e6230c6ee65f6184e6197daa5b8152d8c27a4ae6b98b734d63045612f8d0",
+    "packages/backlog-sweep/LICENSE": "0481e6230c6ee65f6184e6197daa5b8152d8c27a4ae6b98b734d63045612f8d0",
+    "crates/code-graph/src/ratchet/scope_count/V8-TIMSORT-LICENSE": "b9a6d9320b8f2693e8d41e496ce56caadacaddcca9be2a64a61749278f425cf2"
+  },
+  "sourceHashes": {
+    "crates/code-graph/src/api/base.rs": "7783257dea6a2d83de04d71663a48762f0edd48a54b150a7f59478b8e1116b69",
+    "crates/code-graph/src/api/base/archive.rs": "a6d5f496cd6a151981fc838dde73e469674fd2622da4fa7673a3b4745b4a80e3",
+    "crates/code-graph/src/api/ratchet/changesets.rs": "61649cf4d8053114f363da5ccb8cebe9560d8c6dcd307a8ba50d06e2405f89ed",
+    "crates/code-graph/src/text.rs": "9dfc1bb0e1493f35b3a845654b4f0347887b1a709e09b831de8c27ac8ffe9e0d",
+    "crates/code-graph/src/api/mod.rs": "d5c503e4b1886678eeb44d796dd61c8a2e8a139d22e7aa1bad0d87e7a169c5b8",
+    "crates/code-graph/src/api/ratchet/mod.rs": "e5d80311ce2b4e5b9d83b379444dcc990961c87cda7a4f1a6a281b4b5f10927a",
+    "crates/code-graph/examples/api_base_driver.rs": "64091250c752cfd80183e9b059f5686d4a5db1b8e4fb4901e643c95d116da47d",
+    "crates/code-graph/examples/api_git_driver.rs": "8f872ef681e9e31c2351f49bd2c8ffdcf81e6cbbb3c7404362291b401972664c",
+    "crates/code-graph/tests/api_base.rs": "ec671c5a45d999edd91cf5f3e7a15afc89c1ef1286a1d9a835d53714151293ab",
+    "crates/code-graph/tests/api_changesets.rs": "78f7bbb25f812a7383a93514440499de91f955fe151855b5dc08ef800675cbcf",
+    "crates/parity/tests/api_base_worker.rs": "d0447ac0f31986ab68d2be507f211f721374a317bb649f703317d123dbf96882",
+    "verification/parity/api-base-cases.mjs": "7e0bd85756673f7866d821f76bb680d594f7be22ec7cf8ffcb3b48bcc0a42125",
+    "verification/parity/api-base-reference.mts": "142976f0b20b028436d4f8df427360b44e66d075333383e071b48ac6fb041e29",
+    "verification/parity/api-base-run.mjs": "f0d7bb91db10057c45f7ca963e312d7922c9a2baad41bb88363da17135540558",
+    "verification/parity/api-git-cases.mjs": "1b8e05ba5b102915dab11fb9d639d535cc1f1081521f489205c28319753bde90",
+    "verification/parity/api-git-reference.mts": "673fbaf111f2222a1ee79cae56a82c01327158330156dc858e82c60713909bde",
+    "verification/parity/api-git-run.mjs": "0ad26f6896e07dafde61a059b9e4ace4754f2e03baf73036c1ee31f22784802b",
+    "verification/parity/api-git-mutations.mjs": "81d259af82dbddb801a523a4ba501e7f0fefe5782de75d6b4f09b16d93ad342a",
+    "verification/parity/api-git-contracts.json": "4861d0172cd3c1953717babfb2571264618b6f5cdec24263161e07a8100801e4"
+  },
+  "reportHashes": {
+    "target/parity/api-git.json": "c0836425246ae83848f9cb070b91b1732072aedc9391b3b29377f0ed6a686571",
+    "target/parity/api-git-parser-mutation-baseline.json": "381bb544ed419f5c931c76296f2522efe68933c8cffce7d8f8e26afae11da64f",
+    "target/parity/api-git-mutations.json": "6b123768d0c9c71843780c3e5e19d7c56bc326e56e7cf8294fa986fa0b2f5c1f",
+    "target/parity/api-git-foundation.json": "4aa32a5cf332d8f12f878d8b2885db29326f3ef64fd09707092c66e433129a6d",
+    "target/api-git-final-native.log": "2126d3895292513b954760fe81c5c1a529e7f526be6d0974b7a9398c8b16fd01",
+    "target/api-git-final-clippy.log": "f6ed6e045c4b4149ef08c6e4258c7be9f35e10b4e2b7806c612e5252f422a7ce",
+    "target/api-git-final-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/api-git-final-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/api-git-final-biome.log": "d48614607d9d9ba046a521874ad4a19de4d29ef7020df336606d523349ffdad6",
+    "target/api-git-mapping-proof.json": "b4b9937ea38d25200ada4a584c1a378ef47fb1d63768a039f8e6a14251f65cd4",
+    "target/api-capture-source-signals.json": "3cf7c6cc6924bfb856cf0e6629083741422d0d16505c9521f70128baa89d5280",
+    "target/api-capture-native-signals-red.log": "860b70319d2acedf3214b374ad30fd8cb234be7adbe4e370bdd2b8920b323604",
+    "target/api-capture-native-signals-green.log": "733bd954fd094a06c462157968a9b59a387c022de5c364137ff9f865f6ca478f",
+    "target/api-base-archive-safety-source-red.json": "a18c5d897282ab1c6c3fe518729a13796c9a768ddf4199808dd839aaa1fd9474",
+    "target/parity/api-git-errors-red.json": "0338585d03e235a1bccff3b5c7de2e186d01daa49e5fc209b01f41f9a9ee577f",
+    "target/parity/api-git-expanded-red.json": "99c9aee105709e5807996644d6883714ced441c589b047ef17ff6bfba47f2585",
+    "target/parity/api-git-87-green.json": "a38d9434090b6b1bbd33663fc14198722f8b25bced8627043a6244656127a569",
+    "target/api-git-literal-fixture-red.log": "69aa001ca1efffad5b8747a55f308ffb8e51f7ec5d6e0006f763373460aa3fe8",
+    "target/api-git-mutation-witness-red.log": "9b3fa84c71322c92103fded7a022db8f4cd29d759ab2a3b2a2cbed5bc1ac4c46"
+  },
+  "commands": {
+    "io": "pnpm exec node verification/parity/api-git-run.mjs",
+    "parser": "pnpm exec node verification/parity/api-base-run.mjs",
+    "mutations": "pnpm exec node verification/parity/api-git-mutations.mjs",
+    "native": "cargo test --locked --workspace",
+    "clippy": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+    "tsc": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json"
+  },
+  "targets": {
+    "baseline": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "mutants": "/private/tmp/demlik-rust-reconciler-01a16c9d/target/reconciler-mutation-build"
+  }
+}

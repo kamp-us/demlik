@@ -26,6 +26,42 @@ impl JsRegex {
     pub fn test_str(&self, value: &str) -> bool {
         self.test(&value.into())
     }
+    /// Captures from the first UCS-2 match, with slot 0 the first capturing group.
+    /// An untaken alternative is None; a matched empty group is Some(empty).
+    pub(crate) fn capture_groups(&self, value: &JsString) -> Option<Vec<Option<JsString>>> {
+        let matched = self.0.find_from_ucs2(value.units(), 0).next()?;
+        Some(
+            matched
+                .captures
+                .into_iter()
+                .map(|range| range.map(|range| JsString::from_units(value.units()[range].to_vec())))
+                .collect(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod regex_capture_tests {
+    use super::{JsRegex, JsString};
+    #[test]
+    fn optional_empty_and_raw_captures_keep_their_distinct_values() {
+        let pattern = JsRegex::new(&"^(a)?()(.*)$".into()).unwrap();
+        let raw = JsString::from_units(vec![0xd800, 0xdc00, 0xdfff]);
+        assert_eq!(
+            pattern.capture_groups(&raw).unwrap(),
+            [None, Some("".into()), Some(raw)]
+        );
+        assert_eq!(
+            pattern.capture_groups(&"".into()).unwrap(),
+            [None, Some("".into()), Some("".into())]
+        );
+        assert!(
+            JsRegex::new(&"^(a)$".into())
+                .unwrap()
+                .capture_groups(&"b".into())
+                .is_none()
+        );
+    }
 }
 
 impl JsString {
