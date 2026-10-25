@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "scope-count",
+    driver: "scope_count_driver",
+    script: "graph-scope-count.mts",
+  },
+  {
     name: "boundary-render",
     driver: "boundary_render_driver",
     script: "graph-boundary-render.mts",
@@ -145,6 +150,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "scope_count_driver",
   "boundary_render_driver",
   "shape_judgment_driver",
   "boundary_analyze_driver",

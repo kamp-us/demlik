@@ -74,6 +74,7 @@ export async function recorderParity(options = {}) {
     ]),
     native = run(binary, []),
     failures = [],
+    nativeEvidence = {},
     diagnostics = [];
   assert.equal(reference.length, cases.length);
   assert.equal(native.length, cases.length);
@@ -95,6 +96,7 @@ export async function recorderParity(options = {}) {
           native: nativeDiagnostic,
         });
       }
+      nativeEvidence[cases[i].id] = native[i].observedCalls;
     } catch (error) {
       failures.push({
         id: cases[i].id,
@@ -138,9 +140,8 @@ export async function recorderParity(options = {}) {
       ]),
     ),
     corpusSha256: hash(input),
-    nativeEvidence: Object.fromEntries(
-      native.map((row) => [row.id, row.observedCalls]),
-    ),
+    rustBinarySha256: hash(await readFile(binary)),
+    nativeEvidence,
     sourceHashes: Object.fromEntries(
       await Promise.all(
         files.map(async (file) => [
@@ -177,7 +178,7 @@ export async function recorderParity(options = {}) {
       JSON.stringify(
         {
           ...report,
-          nativeEvidence: { cases: native.length },
+          nativeEvidence: { cases: Object.keys(nativeEvidence).length },
           failures: failures.slice(0, 20),
           reportFile,
         },

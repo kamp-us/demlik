@@ -5,7 +5,7 @@
   "scripts": {
     "verify": "node run.mjs",
     "verify:complete": "node run.mjs --complete",
-    "verify:mutations": "node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node reconcile-mutations.mjs && node runtime-contracts.mjs --mutation-check && node paginate-queue-mutations.mjs && node runtime-hooks.mjs --mutation-check && node zoning-mutations.mjs && node boundary-config-mutations.mjs && node runtime-deadline-run.mjs --mutation-check && node boundary-domain-mutations.mjs && node command-families-mutations.mjs && node flow-run.mjs --mutation-check && node monitored-run-run.mjs --mutation-check && node comment-mutations-run.mjs && node resilient-call-mutations.mjs && node workflow-run.mjs --mutation-check && node saga-run.mjs --mutation-check && node layer-target-mutations-run.mjs && node paginated-walk-mutations.mjs && node layers-mutations-run.mjs && node poller-run.mjs --mutation-check && node layer-gate-mutations-run.mjs && node scoped-read-mutations-run.mjs && node shape-judgment-mutations-run.mjs && node journal-run.mjs --mutation-check && node reconciler-mutations.mjs && node journal-remote-run.mjs --mutation-check && node recorder-shared-owner-mutations.mjs && node boundary-render-mutations-run.mjs && node json-text-mutations.mjs",
+    "verify:mutations": "node --test coverage.test.mjs recorder-evidence.test.mjs && node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node reconcile-mutations.mjs && node runtime-contracts.mjs --mutation-check && node paginate-queue-mutations.mjs && node runtime-hooks.mjs --mutation-check && node zoning-mutations.mjs && node boundary-config-mutations.mjs && node runtime-deadline-run.mjs --mutation-check && node boundary-domain-mutations.mjs && node command-families-mutations.mjs && node flow-run.mjs --mutation-check && node monitored-run-run.mjs --mutation-check && node comment-mutations-run.mjs && node resilient-call-mutations.mjs && node workflow-run.mjs --mutation-check && node saga-run.mjs --mutation-check && node layer-target-mutations-run.mjs && node paginated-walk-mutations.mjs && node layers-mutations-run.mjs && node poller-run.mjs --mutation-check && node layer-gate-mutations-run.mjs && node scoped-read-mutations-run.mjs && node shape-judgment-mutations-run.mjs && node journal-run.mjs --mutation-check && node reconciler-mutations.mjs && node journal-remote-run.mjs --mutation-check && node recorder-shared-owner-mutations.mjs && node boundary-render-mutations-run.mjs && node json-text-mutations.mjs && node recorder-mutations.mjs && node scope-count-mutations-run.mjs",
     "verify:storage-process": "node storage-process.mjs",
     "verify:timing": "node timing-run.mjs",
     "verify:timing:coverage": "node timing-coverage.mjs",
@@ -39,7 +39,12 @@
     "verify:retained-owner-mutations": "node recorder-shared-owner-mutations.mjs",
     "verify:boundary-render-mutations": "node boundary-render-mutations-run.mjs",
     "verify:json-text": "node json-text-run.mjs",
-    "verify:json-text-mutations": "node json-text-mutations.mjs"
+    "verify:json-text-mutations": "node json-text-mutations.mjs",
+    "verify:recorder": "node recorder-run.mjs",
+    "verify:recorder-runtime": "node recorder-runtime.mjs",
+    "verify:recorder-mutations": "node recorder-mutations.mjs",
+    "verify:coverage-contracts": "node --test coverage.test.mjs recorder-evidence.test.mjs",
+    "verify:scope-count-mutations": "node scope-count-mutations-run.mjs"
   },
   "dependencies": {
     "zod": "catalog:"

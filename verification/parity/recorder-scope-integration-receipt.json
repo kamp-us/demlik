@@ -1,0 +1,79 @@
+{
+  "scope": "Combined recorder and scope-count registration and guarded inherited-member evidence. Full native port remains incomplete.",
+  "base": "4d70bd41c93a6cc27a858f43581ce12d93205442",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "acceptance": {
+    "pairedCases": 9643,
+    "passed": 9643,
+    "behaviorFailures": 0,
+    "recorderPairs": 397,
+    "actualRecorderRuntimePairs": 8,
+    "scopeCountPairs": 330,
+    "nativeAndDocTests": 368,
+    "evidenceGuardTests": 11,
+    "recorderCompiledFaultsDetected": 12,
+    "scopeCountCompiledFaultsDetected": 19,
+    "coverageTotal": 3445,
+    "mapped": 650,
+    "inheritedMemberReferences": 14,
+    "coverageGapCount": 2810,
+    "completeExitCode": 1
+  },
+  "guardRepairs": [
+    "inheritedFrom is distinct from pre-existing owned canonical annotations; exact source owner, signature and declaration are checked, reference chains are refused.",
+    "Both owner and local knownGaps survive reference resolution without changing the owner mapping.",
+    "Recorder evidence is collected only after the row at the trusted case index passes validation; failed foreign and duplicate IDs cannot add or replace evidence.",
+    "Both pre-existing coverage guard test bodies were preserved unchanged."
+  ],
+  "redEvidence": {
+    "coverage": "Three new guards failed before repair (7 passed, 3 failed); all 10 coverage guards now pass.",
+    "recorder": "An actual compiled response with a foreign ID retained an untrusted call before repair. The real-response adapter now proves foreign and duplicate ID refusal."
+  },
+  "qualification": "Existing runtime and recorder qualifications remain in the combined and component reports; this checkpoint does not close the overall coverage gate.",
+  "artifactIntegrity": {
+    "recorderBinarySha256": "6d0bc48872b7a2c1860c4f136de421c8e5ffef33a256197e49aedc558b378280",
+    "scopeCountBinarySha256": "8ff38f26405a276306bac49fc2d90207691cb6e8e3b802f2383ffe5463f987df",
+    "scopeCountBinaryUnchangedAcrossControls": true,
+    "mutationTargetsSeparateFromBaseline": true,
+    "combinedReportSha256": "19b33646f1532b3dc93be213c15ee4812a7ee38ce4960227abca56669922ab05"
+  },
+  "logs": {
+    "native": {
+      "path": "/private/tmp/demlik-recorder-scope-main-native-01a16c9d-r2.log",
+      "sha256": "86201e7a3a040d4027f3aae6523a18eaaaa27b71a2af52a17d4bb9fd846bd6ed"
+    },
+    "complete": {
+      "path": "/private/tmp/demlik-recorder-scope-guard-complete-01a16c9d.log",
+      "sha256": "76c790f7513ff6b6de6220da27a84937112d9c800db0b9242e9cbfa54bdfe41b"
+    },
+    "guards": {
+      "path": "/private/tmp/demlik-recorder-evidence-final-guards-01a16c9d.log",
+      "sha256": "f5e675f04659d20931bb8985bcc1969b26ffb3ef62edef329cf5e7428bb433b3"
+    },
+    "static": {
+      "path": "/private/tmp/demlik-recorder-evidence-final-static-01a16c9d.log",
+      "sha256": "070330cd7fc8d6a82f148e4899140a17837f9fa58ac3e884678891bba204c9a1"
+    },
+    "recorderControls": {
+      "path": "/private/tmp/demlik-recorder-scope-guard-recorder-controls-01a16c9d.log",
+      "sha256": "6a5ad0652643d6363fbdcdbf75a175414a4bb1c5339acd562dd286023486db65"
+    },
+    "scopeControls": {
+      "path": "/private/tmp/demlik-recorder-scope-guard-scope-controls-01a16c9d.log",
+      "sha256": "2af00cbf293f16fcbdd28ed75f00ce2148e24b2f6169cc4064904d26bc63832c"
+    },
+    "coverageGuardsRed": {
+      "path": "/private/tmp/demlik-coverage-guard-red-01a16c9d.log",
+      "sha256": "b177c116d5740c9201142481704c9ffc94637259db69c722591f3a4055e93cc5"
+    },
+    "recorderGuardRed": {
+      "path": "/private/tmp/demlik-recorder-evidence-guard-red-01a16c9d.log",
+      "sha256": "058ec121d6901c17ac53e094ac06b1386d83de06e0212447494c88896c5f5b16"
+    },
+    "recorderFinal": {
+      "path": "/private/tmp/demlik-recorder-final-binary-hash-01a16c9d.log",
+      "sha256": "a88e3269cd0e8385617587be2d430d48e5e022354daa11048a952e2a4f5e7e6a"
+    }
+  }
+}

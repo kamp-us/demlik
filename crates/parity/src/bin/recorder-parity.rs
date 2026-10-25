@@ -164,14 +164,14 @@ fn recording(input: &Value, calls: &mut Vec<&'static str>) -> Value {
         move || {
             let i = tick.get();
             tick.set(i + 1);
-            if i == 0 {
-                if let Some((msg, state)) = &nested {
-                    target
-                        .borrow()
-                        .upgrade()
-                        .unwrap()
-                        .record_step(msg.clone(), state.clone());
-                }
+            if i == 0
+                && let Some((msg, state)) = &nested
+            {
+                target
+                    .borrow()
+                    .upgrade()
+                    .unwrap()
+                    .record_step(msg.clone(), state.clone());
             }
             rng.get(i).copied().unwrap_or(0.0)
         },

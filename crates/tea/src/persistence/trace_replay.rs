@@ -74,13 +74,13 @@ pub fn replay_trace<S: Tagged + Serialize, M: Tagged, C, U, X>(
     machine: &Machine<'_, S, M, C, U, X>,
     trace: &Trace<S, M>,
 ) -> Result<ReplayResult<S>, ReplayError> {
-    if let Some(seed) = &trace.loaded {
-        if matches!(
+    if let Some(seed) = &trace.loaded
+        && matches!(
             plain_data(seed).map_err(ReplayError::Comparison)?,
             PlainData::Null
-        ) {
-            return Err(ReplayError::MissingAnchor);
-        }
+        )
+    {
+        return Err(ReplayError::MissingAnchor);
     }
     replay_trace_with(machine, trace, |expected, actual| {
         let expected = plain_data(expected)?;
@@ -153,10 +153,10 @@ fn keys(view: &View<'_>) -> Vec<JsText> {
     }
 }
 fn child<'a, 'b: 'a>(view: &'a View<'b>, key: &JsText) -> View<'a> {
-    if let Some(PlainData::Object(fields)) = data(view) {
-        if let Some(value) = fields.get(key) {
-            return RecordValue::Entry(value);
-        }
+    if let Some(PlainData::Object(fields)) = data(view)
+        && let Some(value) = fields.get(key)
+    {
+        return RecordValue::Entry(value);
     }
     if key.as_utf8() == Some("__proto__") {
         return if matches!(view, RecordValue::ObjectPrototype) {

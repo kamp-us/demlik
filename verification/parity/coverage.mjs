@@ -33,6 +33,42 @@ export function evidenceGaps(mapping, evidence) {
   return gaps;
 }
 
+export function resolveContract(capability, mappings, capabilities) {
+  const mapping = mappings[capability.id];
+  if (!mapping || !Object.hasOwn(mapping, "inheritedFrom"))
+    return { mapping, gaps: [] };
+  const origin = capability.id.match(
+    /^(.*?):.*\/member:src\/[^#]+#([^:]+):([0-9a-f]{64})$/,
+  );
+  const target = origin
+    ? `${origin[1]}:.#${origin[2]}/member:published:${origin[3]}`
+    : undefined;
+  if (!target || mapping.inheritedFrom !== target)
+    return {
+      gaps: ["Canonical mapping does not match the source member owner"],
+    };
+  const owner = mappings[target],
+    declaration = capabilities.get(target);
+  if (!owner || Object.hasOwn(owner, "inheritedFrom") || !declaration)
+    return { gaps: ["Canonical source member has no owned mapping"] };
+  if (
+    mapping.signature !== capability.signature ||
+    owner.signature !== declaration.signature ||
+    declaration.signature !== capability.signature ||
+    declaration.declaration !== capability.declaration
+  )
+    return { gaps: ["Canonical source declaration changed"] };
+  return {
+    mapping: mapping.knownGaps?.length
+      ? {
+          ...owner,
+          knownGaps: [...(owner.knownGaps ?? []), ...mapping.knownGaps],
+        }
+      : owner,
+    gaps: [],
+  };
+}
+
 export async function checkCoverage(evidence) {
   const file = path.join(root, "target/parity/inventory.json");
   execFileSync(
@@ -53,8 +89,17 @@ export async function checkCoverage(evidence) {
     await readFile(path.join(here, "contracts.json"), "utf8"),
   );
   const gaps = [];
+  const capabilities = new Map(
+    inventory.capabilities.map((item) => [item.id, item]),
+  );
   for (const capability of inventory.capabilities) {
-    const mapping = mappings[capability.id];
+    const resolved = resolveContract(capability, mappings, capabilities);
+    if (resolved.gaps.length) {
+      for (const reason of resolved.gaps)
+        gaps.push({ id: capability.id, reason });
+      continue;
+    }
+    const mapping = resolved.mapping;
     if (!mapping) {
       gaps.push({
         id: capability.id,
@@ -80,6 +125,9 @@ export async function checkCoverage(evidence) {
   return {
     total: inventory.capabilities.length,
     mapped: Object.keys(mappings).length,
+    inheritedMemberReferences: Object.values(mappings).filter((item) =>
+      Object.hasOwn(item, "inheritedFrom"),
+    ).length,
     gaps,
     warnings: inventory.warnings,
   };

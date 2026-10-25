@@ -19,6 +19,8 @@ import { paginatedWalkParity } from "./paginated-walk-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { pollerParity } from "./poller-run.mjs";
 import { reconcilerParity } from "./reconciler-run.mjs";
+import { recorderParity } from "./recorder-run.mjs";
+import { recorderRuntime as recorderRuntimeParity } from "./recorder-runtime.mjs";
 import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
@@ -41,6 +43,7 @@ const pollerBinaryArgument = args.indexOf("--poller-bin");
 const journalBinaryArgument = args.indexOf("--journal-bin");
 const journalRemoteBinaryArgument = args.indexOf("--journal-remote-bin");
 const jsonTextBinaryArgument = args.indexOf("--json-text-bin");
+const recorderBinaryArgument = args.indexOf("--recorder-bin");
 const reconcilerBinaryArgument = args.indexOf("--reconciler-bin");
 const workflowBinaryArgument = args.indexOf("--workflow-bin");
 const sagaBinaryArgument = args.indexOf("--saga-bin");
@@ -498,6 +501,56 @@ if (!mutationSuite) {
     });
   }
 }
+let recorder = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    recorder = await recorderParity({
+      quiet: true,
+      allowFailures: true,
+      binary:
+        recorderBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[recorderBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-recorder.json`,
+            ),
+    });
+    failures.push(...recorder.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "recorder.verification",
+      operation: "tea.recorder",
+      message: error.message,
+    });
+  }
+}
+let recordedRuntime = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    recordedRuntime = await recorderRuntimeParity({
+      quiet: true,
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-recorder-runtime.json`,
+            ),
+    });
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "recorder-runtime.verification",
+      operation: "tea.recorder.runtime",
+      message: error.message,
+    });
+  }
+}
 let reconciler = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -758,6 +811,8 @@ const report = {
     journal.cases +
     journalRemote.cases +
     jsonText.cases +
+    recorder.cases +
+    recordedRuntime.cases +
     reconciler.cases +
     workflow.cases +
     saga.cases +
@@ -780,6 +835,8 @@ const report = {
     journal.passed +
     journalRemote.passed +
     jsonText.passed +
+    recorder.passed +
+    recordedRuntime.passed +
     reconciler.passed +
     workflow.passed +
     saga.passed +
@@ -803,6 +860,8 @@ const report = {
       ...(journal.passed ? ["tea.journal"] : []),
       ...(journalRemote.passed ? ["tea.journal-remote"] : []),
       ...(jsonText.passed ? ["tea.json-text"] : []),
+      ...(recorder.passed ? ["tea.recorder"] : []),
+      ...(recordedRuntime.passed ? ["tea.recorder.runtime"] : []),
       ...(reconciler.passed ? ["tea.reconciler"] : []),
       ...(workflow.passed ? ["tea.workflow"] : []),
       ...(saga.passed ? ["tea.saga"] : []),
@@ -845,6 +904,8 @@ const report = {
     failures: undefined,
   },
   jsonText: { ...jsonText, nativeEvidence: undefined, failures: undefined },
+  recorder: { ...recorder, nativeEvidence: undefined, failures: undefined },
+  recordedRuntime: { ...recordedRuntime, nativeEvidence: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
   workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
   saga: { ...saga, nativeEvidence: undefined, failures: undefined },
@@ -896,6 +957,8 @@ const report = {
     ...journal.nativeEvidence,
     ...journalRemote.nativeEvidence,
     ...jsonText.nativeEvidence,
+    ...recorder.nativeEvidence,
+    ...recordedRuntime.nativeEvidence,
     ...reconciler.nativeEvidence,
     ...workflow.nativeEvidence,
     ...saga.nativeEvidence,
