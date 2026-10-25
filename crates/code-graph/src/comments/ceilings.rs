@@ -61,35 +61,7 @@ impl std::error::Error for CeilingInputError {
     }
 }
 fn invalid(expected: &str, value: &JsValue, path: Vec<PathSegment>) -> CeilingInputError {
-    let received = match value {
-        JsValue::Null => "null",
-        JsValue::Bool(_) => "boolean",
-        JsValue::Number(number) if number.is_nan() => "NaN",
-        JsValue::Number(_) => "number",
-        JsValue::String(_) => "string",
-        JsValue::Array(_) => "array",
-        JsValue::Object(_) => "object",
-    };
-    let mut details = JsObject::from([
-        ("expected".into(), JsValue::String(expected.into())),
-        ("code".into(), JsValue::String("invalid_type".into())),
-    ]);
-    if expected == "number"
-        && let JsValue::Number(number) = value
-        && !number.is_finite()
-    {
-        details.insert(
-            "received".into(),
-            JsValue::String(if number.is_nan() { "NaN" } else { "Infinity" }.into()),
-        );
-    }
-    CeilingInputError::Issue(
-        InputIssue::new(
-            path,
-            format!("Invalid input: expected {expected}, received {received}"),
-        )
-        .with_details(details),
-    )
+    CeilingInputError::Issue(InputIssue::invalid_type(path, expected, Some(value)))
 }
 fn number(value: &JsValue, path: Vec<PathSegment>) -> Result<f64, CeilingInputError> {
     let JsValue::Number(number) = value else {
@@ -170,33 +142,10 @@ impl CommentCeilings {
             })
             .collect::<Vec<_>>();
         if !unknown.is_empty() {
-            let mut message = JsString::from(if unknown.len() == 1 {
-                "Unrecognized key: "
-            } else {
-                "Unrecognized keys: "
-            });
-            for (index, key) in unknown.iter().enumerate() {
-                if index > 0 {
-                    message.push_str(", ");
-                }
-                message.push_str("\"");
-                message.extend(key);
-                message.push_str("\"");
-            }
-            return Err(CeilingInputError::Issue(
-                InputIssue::new(Vec::new(), message).with_details(JsObject::from([
-                    ("code".into(), JsValue::String("unrecognized_keys".into())),
-                    (
-                        "keys".into(),
-                        JsValue::Array(
-                            unknown
-                                .into_iter()
-                                .map(|key| JsValue::String(key.clone()))
-                                .collect(),
-                        ),
-                    ),
-                ])),
-            ));
+            return Err(CeilingInputError::Issue(InputIssue::unrecognized_keys(
+                Vec::new(),
+                &unknown,
+            )));
         }
         Ok(Self {
             default,

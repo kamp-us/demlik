@@ -37,6 +37,66 @@ impl InputIssue {
         self.details = details;
         self
     }
+    pub(crate) fn invalid_type(
+        path: Vec<PathSegment>,
+        expected: &str,
+        value: Option<&JsValue>,
+    ) -> Self {
+        let received = match value {
+            None => "undefined",
+            Some(JsValue::Null) => "null",
+            Some(JsValue::Bool(_)) => "boolean",
+            Some(JsValue::Number(number)) if number.is_nan() => "NaN",
+            Some(JsValue::Number(_)) => "number",
+            Some(JsValue::String(_)) => "string",
+            Some(JsValue::Array(_)) => "array",
+            Some(JsValue::Object(_)) => "object",
+        };
+        let mut details = JsObject::from([
+            ("expected".into(), JsValue::String(expected.into())),
+            ("code".into(), JsValue::String("invalid_type".into())),
+        ]);
+        if expected == "number"
+            && let Some(JsValue::Number(number)) = value
+            && !number.is_finite()
+        {
+            details.insert(
+                "received".into(),
+                JsValue::String(if number.is_nan() { "NaN" } else { "Infinity" }.into()),
+            );
+        }
+        Self::new(
+            path,
+            format!("Invalid input: expected {expected}, received {received}"),
+        )
+        .with_details(details)
+    }
+    pub(crate) fn unrecognized_keys(path: Vec<PathSegment>, keys: &[&JsString]) -> Self {
+        let mut message = JsString::from(if keys.len() == 1 {
+            "Unrecognized key: "
+        } else {
+            "Unrecognized keys: "
+        });
+        for (index, key) in keys.iter().enumerate() {
+            if index > 0 {
+                message.push_str(", ");
+            }
+            message.push_str("\"");
+            message.extend(key);
+            message.push_str("\"");
+        }
+        Self::new(path, message).with_details(JsObject::from([
+            ("code".into(), JsValue::String("unrecognized_keys".into())),
+            (
+                "keys".into(),
+                JsValue::Array(
+                    keys.iter()
+                        .map(|key| JsValue::String((*key).clone()))
+                        .collect(),
+                ),
+            ),
+        ]))
+    }
 }
 impl Serialize for InputIssue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
