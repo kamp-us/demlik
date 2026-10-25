@@ -41,7 +41,7 @@ pub struct ReadAllowance {
     pub decided_by: Option<Vec<JsString>>,
 }
 pub type NamedFiles = IndexMap<JsString, IndexMap<JsString, Vec<JsString>>>;
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct BoundaryRules {
     pub features: IndexMap<JsString, Vec<JsString>>,
