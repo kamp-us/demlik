@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "shape-judgments",
+    driver: "shape_judgment_driver",
+    script: "graph-shape-judgments.mts",
+  },
+  {
     name: "scoped-reads",
     driver: "scoped_reads_driver",
     script: "graph-scoped-reads.mts",
@@ -130,6 +135,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "shape_judgment_driver",
   "scoped_reads_driver",
   "layer_gate_driver",
   "layer_driver",

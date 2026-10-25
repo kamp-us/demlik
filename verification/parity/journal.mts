@@ -916,8 +916,25 @@ export async function verifyJournal(
     ),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
-  cases.forEach((item, index) => {
-    assert.deepEqual(results[index].comparison, expected[index], item.id);
+  const failures: {
+    id: string;
+    reference: unknown;
+    native: unknown;
+    message: string;
+  }[] = [];
+  const equal = cases.map((item, index) => {
+    try {
+      assert.deepEqual(results[index].comparison, expected[index], item.id);
+      return true;
+    } catch (error) {
+      failures.push({
+        id: item.id,
+        reference: expected[index],
+        native: results[index].comparison,
+        message: String(error),
+      });
+      return false;
+    }
   });
   const row = (id: string, position: number) => {
     const index = cases.findIndex((item) => item.id === id);
@@ -958,6 +975,8 @@ export async function verifyJournal(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    scope:
+      "native ordered memory and file journals; full port remains incomplete",
     comparison:
       "action-boundary values, live listener traces, parser calls, ready-await prefixes, and exact JSONL bytes; raw platform parser/IO diagnostics retained separately",
     runtime: {
@@ -971,11 +990,19 @@ export async function verifyJournal(
     },
     binary: { path: executable, sha256: digest(executable) },
     compared: cases.length,
+    passed: equal.filter(Boolean).length,
+    failures,
+    qualifications: [
+      "Component request/receipt boundaries are paired. Arbitrary join!, select! and custom-executor continuation ordering remain unverified; the native batch collector awaits receipts in submission order.",
+      "Parser and filesystem failure data is retained. Identical platform diagnostic wording is not verified.",
+    ],
     actions: cases.reduce((sum, item) => sum + item.script.actions.length, 0),
-    controls: mutationCheck ? controls(cases, expected) : [],
+    controls:
+      mutationCheck && !failures.length ? controls(cases, expected) : [],
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: equal[index],
       source: source[index],
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
@@ -1012,4 +1039,5 @@ if (
       report: values.report ?? "target/parity/journal.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }

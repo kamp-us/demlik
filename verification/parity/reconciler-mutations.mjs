@@ -205,6 +205,15 @@ const cleanBinary = path.join(reportDirectory, "reconciler-clean-binary");
 const activeBinary = path.join(target, "debug/reconciler-parity");
 const baselineBinary = path.join(baselineTarget, "debug/reconciler-parity");
 try {
+  execFileSync(
+    cargo,
+    ["build", "--locked", "-p", "demlik-parity", "--bin", "reconciler-parity"],
+    {
+      cwd: root,
+      env: { ...env, CARGO_TARGET_DIR: baselineTarget },
+      stdio: "inherit",
+    },
+  );
   await cp(baselineBinary, cleanBinary);
   const baseline = await reconcilerParity(cargo, {
     binary: cleanBinary,

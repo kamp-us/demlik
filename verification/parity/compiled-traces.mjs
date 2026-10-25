@@ -72,6 +72,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
     controls: report.controls,
     scope: report.scope,
     transitions: report.transitions,
+    ...(report.qualifications ? { qualifications: report.qualifications } : {}),
     reportFile,
   };
 }

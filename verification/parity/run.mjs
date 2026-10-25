@@ -10,11 +10,13 @@ import { checkCoverage } from "./coverage.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
+import { journalParity } from "./journal-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { pollerParity } from "./poller-run.mjs";
+import { reconcilerParity } from "./reconciler-run.mjs";
 import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
@@ -34,6 +36,8 @@ const contractBinaryArgument = args.indexOf("--contract-bin");
 const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
 const pollerBinaryArgument = args.indexOf("--poller-bin");
+const journalBinaryArgument = args.indexOf("--journal-bin");
+const reconcilerBinaryArgument = args.indexOf("--reconciler-bin");
 const workflowBinaryArgument = args.indexOf("--workflow-bin");
 const sagaBinaryArgument = args.indexOf("--saga-bin");
 const resilientCallBinaryArgument = args.indexOf("--resilient-call-bin");
@@ -411,6 +415,59 @@ if (!mutationSuite) {
     });
   }
 }
+let journal = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    journal = await journalParity(cargo, {
+      binary:
+        journalBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[journalBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-journal.json`,
+            ),
+    });
+    failures.push(...journal.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "journal.verification",
+      operation: "tea.journal",
+      message: error.message,
+    });
+  }
+}
+let reconciler = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    reconciler = await reconcilerParity(cargo, {
+      quiet: true,
+      binary:
+        reconcilerBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[reconcilerBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-reconciler.json`,
+            ),
+    });
+    failures.push(...reconciler.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "reconciler.verification",
+      operation: "tea.reconciler",
+      message: error.message,
+    });
+  }
+}
 let workflow = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -641,6 +698,8 @@ const report = {
     paginatedWalk.cases +
     flow.cases +
     poller.cases +
+    journal.cases +
+    reconciler.cases +
     workflow.cases +
     saga.cases +
     monitoredRun.cases +
@@ -659,6 +718,8 @@ const report = {
     paginatedWalk.passed +
     flow.passed +
     poller.passed +
+    journal.passed +
+    reconciler.passed +
     workflow.passed +
     saga.passed +
     monitoredRun.passed +
@@ -678,6 +739,8 @@ const report = {
       ...(paginatedWalk.passed ? ["tea.paginate.paginated-walk"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
       ...(poller.passed ? ["tea.poller"] : []),
+      ...(journal.passed ? ["tea.journal"] : []),
+      ...(reconciler.passed ? ["tea.reconciler"] : []),
       ...(workflow.passed ? ["tea.workflow"] : []),
       ...(saga.passed ? ["tea.saga"] : []),
       ...(monitoredRun.passed ? ["tea.monitored-run"] : []),
@@ -712,6 +775,8 @@ const report = {
   },
   flow: { ...flow, nativeEvidence: undefined, failures: undefined },
   poller: { ...poller, nativeEvidence: undefined, failures: undefined },
+  journal: { ...journal, nativeEvidence: undefined, failures: undefined },
+  reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
   workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
   saga: { ...saga, nativeEvidence: undefined, failures: undefined },
   monitoredRun: {
@@ -759,6 +824,8 @@ const report = {
     ...paginatedWalk.nativeEvidence,
     ...flow.nativeEvidence,
     ...poller.nativeEvidence,
+    ...journal.nativeEvidence,
+    ...reconciler.nativeEvidence,
     ...workflow.nativeEvidence,
     ...saga.nativeEvidence,
     ...monitoredRun.nativeEvidence,
