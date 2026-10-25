@@ -64,7 +64,7 @@ pub fn read_shape<'a>(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShapeFacts {
-    pub offending_form: Option<&'static str>,
+    pub offending_form: Option<JsString>,
     pub first_write: Option<BindingSite>,
 }
 pub fn shape_facts_of(
@@ -80,7 +80,10 @@ pub fn shape_facts_of(
             .find(|part| !part.is_empty())
             .is_some_and(|basename| basename.iter().copied().eq("index.ts".encode_utf16()));
     ShapeFacts {
-        offending_form: entry.then(|| first_offending_form(syntax)).flatten(),
+        offending_form: entry
+            .then(|| first_offending_form(syntax))
+            .flatten()
+            .map(JsString::from),
         first_write: first_write(&shape.allowance, scope, file, syntax),
     }
 }

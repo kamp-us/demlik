@@ -206,7 +206,7 @@ fn shape_preparation_refuses_unread_configs_only_for_declared_reads_and_gates_en
         &"src/orders/index.ts/".into(),
         &syntax,
     );
-    assert_eq!(facts.offending_form, Some("declaration"));
+    assert_eq!(facts.offending_form, Some(JsString::from("declaration")));
     assert!(facts.first_write.is_none());
     assert!(
         shape_facts_of(&shape, &".".into(), &"other.ts".into(), &syntax)

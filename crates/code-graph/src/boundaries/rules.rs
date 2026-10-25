@@ -101,7 +101,7 @@ pub enum Layout {
     PerFeature,
     Port,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ZoneName {
     Index,
@@ -118,6 +118,16 @@ pub enum PortZoneName {
     Application,
     Driving,
     Driven,
+}
+impl From<PortZoneName> for ZoneName {
+    fn from(name: PortZoneName) -> Self {
+        match name {
+            PortZoneName::Ports => Self::Ports,
+            PortZoneName::Application => Self::Application,
+            PortZoneName::Driving => Self::Driving,
+            PortZoneName::Driven => Self::Driven,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -324,6 +334,25 @@ pub enum FeatureFile {
         feature: JsString,
         zone: Zone<PortZoneName>,
     },
+}
+impl FeatureFile {
+    pub fn feature(&self) -> &JsString {
+        match self {
+            Self::PerFeature { feature, .. } | Self::Port { feature, .. } => feature,
+        }
+    }
+    pub fn zone_name(&self) -> ZoneName {
+        match self {
+            Self::PerFeature { zone, .. } => zone.name,
+            Self::Port { zone, .. } => zone.name.into(),
+        }
+    }
+    pub fn zone_rule(&self) -> &'static ZoneRule {
+        match self {
+            Self::PerFeature { zone, .. } => zone.rule,
+            Self::Port { zone, .. } => zone.rule,
+        }
+    }
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ScopeZoning {
