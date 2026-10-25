@@ -1,3 +1,4 @@
+mod capture;
 pub mod diff;
 mod input;
 pub mod map;
