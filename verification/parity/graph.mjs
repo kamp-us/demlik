@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "test-reach",
+    driver: "boundary_domain_driver",
+    script: "graph-test-reach.mts",
+  },
+  {
     name: "layer-gate",
     driver: "layer_gate_driver",
     script: "graph-layer-gate.mts",

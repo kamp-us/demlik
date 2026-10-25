@@ -14,6 +14,33 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "test-reach-opens-type-only-imports",
+    file: "zones/test_reach.rs",
+    before: "if file.runtime_specifiers.contains(&edge.specifier) {",
+    after: "if true {",
+    script: "graph-test-reach.mts",
+    driver: "boundary_domain_driver",
+    witness: "syntax-1",
+  },
+  {
+    name: "test-reach-reports-final-root",
+    file: "zones/test_reach.rs",
+    before: "to: in_scope(scope, &target),",
+    after: "to: in_scope(scope, reach.roots.first().unwrap_or(&target)),",
+    script: "graph-test-reach.mts",
+    driver: "boundary_domain_driver",
+    witness: "transitive-first-hop",
+  },
+  {
+    name: "test-reach-judges-a-root-as-a-test",
+    file: "zones/test_reach.rs",
+    before: "if reach.roots.contains(test.file) {",
+    after: "if false && reach.roots.contains(test.file) {",
+    script: "graph-test-reach.mts",
+    driver: "boundary_domain_driver",
+    witness: 'globs-["src/root.ts","src/helper.ts"]',
+  },
+  {
     name: "entry-prefers-last-form",
     file: "shape/entry_file.rs",
     before: '.nodes("body").into_iter().find_map(form_of)',

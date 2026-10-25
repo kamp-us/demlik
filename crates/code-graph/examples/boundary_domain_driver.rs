@@ -47,6 +47,29 @@ struct ImpureUsesInput {
     source: String,
 }
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct OpeningInput {
+    file: JsString,
+    import_edges: Vec<ImportEdge>,
+    runtime_specifiers: IndexSet<JsString>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RootReachInput {
+    scope: JsString,
+    globs: Vec<JsString>,
+    files: Vec<OpeningInput>,
+    tests: Vec<usize>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RootReachOutput<'a> {
+    roots: &'a IndexSet<JsString>,
+    in_reach: &'a IndexSet<JsString>,
+    violations: Vec<Vec<BoundaryViolation>>,
+    same_empty: bool,
+}
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ZoneImpurityInput {
     scope: JsString,
@@ -138,6 +161,47 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
     match request.operation.as_str() {
+        "code_graph.test-reach" => {
+            use demlik_code_graph::boundaries::zones::test_reach::{
+                OpeningFile, root_reach_of, test_reach_violations,
+            };
+            let input: RootReachInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let patterns = input
+                .globs
+                .iter()
+                .map(demlik_code_graph::kinds::glob::glob_to_regexp)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())?;
+            let files: Vec<_> = input
+                .files
+                .iter()
+                .map(|file| OpeningFile {
+                    file: &file.file,
+                    import_edges: &file.import_edges,
+                    runtime_specifiers: &file.runtime_specifiers,
+                })
+                .collect();
+            let reach = observe!(calls, root_reach_of, &patterns, &input.scope, &files);
+            let empty = observe!(calls, root_reach_of, &[], &input.scope, &[]);
+            let mut violations = Vec::new();
+            for index in input.tests {
+                let file = files.get(index).ok_or("test index outside the file list")?;
+                violations.push(observe!(
+                    calls,
+                    test_reach_violations,
+                    &reach,
+                    &input.scope,
+                    file
+                ));
+            }
+            json(&RootReachOutput {
+                roots: &reach.roots,
+                in_reach: &reach.in_reach,
+                violations,
+                same_empty: std::sync::Arc::ptr_eq(&reach, &empty),
+            })
+        }
         "code_graph.entry-form" => {
             let input: ImpureUsesInput =
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
