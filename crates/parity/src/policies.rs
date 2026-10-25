@@ -509,8 +509,8 @@ impl IdempotencyInitial {
                     .collect(),
             ),
             order: self.order.into_iter().map(Into::into).collect(),
-            capacity: self.capacity.map(Number::value),
-            ttl_ms: self.ttl_ms.map(Number::value),
+            capacity: self.capacity.map(|value| value.value().into()),
+            ttl_ms: self.ttl_ms.map(|value| value.value().into()),
         }
     }
 }
@@ -547,10 +547,10 @@ struct IdempotencyInput {
 fn idempotency_value(state: &demlik_tea::idempotency::IdempotencyStore<Value>) -> Value {
     let mut value = json!({"entries":plain_value(&state.entries.to_plain_data().expect("JSON entries serialize")),"order":state.order});
     if let Some(capacity) = state.capacity {
-        value["capacity"] = encode_number(capacity);
+        value["capacity"] = capacity.number().map_or(Value::Null, encode_number);
     }
     if let Some(ttl_ms) = state.ttl_ms {
-        value["ttlMs"] = encode_number(ttl_ms);
+        value["ttlMs"] = ttl_ms.number().map_or(Value::Null, encode_number);
     }
     value
 }

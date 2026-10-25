@@ -1,5 +1,6 @@
 use crate::data::JsText;
-pub use crate::work_queue::QueueTime as IdempotencyTime;
+pub use crate::work_queue::QueueTime as IdempotencyNumber;
+pub type IdempotencyTime = IdempotencyNumber;
 use serde::{Deserialize, Serialize};
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
@@ -35,18 +36,32 @@ impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
 pub struct IdempotencyStore<V> {
     pub entries: JsRecord<IdempotencyEntry<V>>,
     pub order: Vec<JsText>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub capacity: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ttl_ms: Option<f64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_bound",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub capacity: Option<IdempotencyNumber>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_bound",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ttl_ms: Option<IdempotencyNumber>,
+}
+
+fn deserialize_bound<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<IdempotencyNumber>, D::Error> {
+    IdempotencyNumber::deserialize(deserializer).map(Some)
 }
 
 pub fn init_store<V>(options: StoreOptions) -> IdempotencyStore<V> {
     IdempotencyStore {
         entries: JsRecord::default(),
         order: Vec::new(),
-        capacity: options.capacity,
-        ttl_ms: options.ttl_ms,
+        capacity: options.capacity.map(Into::into),
+        ttl_ms: options.ttl_ms.map(Into::into),
     }
 }
 
@@ -60,7 +75,7 @@ fn live<'a, V: Serialize>(
         return Ok(None);
     }
     if let Some(ttl) = store.ttl_ms {
-        if now_ms - entry.timestamp()? >= ttl {
+        if now_ms - entry.timestamp()? >= ttl.number_or_zero() {
             return Ok(None);
         }
     }
@@ -101,7 +116,7 @@ pub fn evict_expired<V: Clone + Serialize>(
     };
     for key in &store.order {
         let entry = store.entries.resolve(key)?;
-        if entry.missing() || now_ms - entry.timestamp()? >= ttl {
+        if entry.missing() || now_ms - entry.timestamp()? >= ttl.number_or_zero() {
             continue;
         }
         if let Some(entry) = entry.into_owned() {
@@ -131,7 +146,7 @@ pub fn remember<V: Clone + Serialize>(
     next.order.retain(|old| old != &key);
     next.order.push(key);
     if let Some(capacity) = store.capacity {
-        while (next.order.len() as f64) > capacity {
+        while (next.order.len() as f64) > capacity.number_or_zero() {
             if next.order.is_empty() {
                 break;
             }

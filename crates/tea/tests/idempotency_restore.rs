@@ -34,3 +34,52 @@ fn a_json_null_timestamp_remains_null_and_uses_zero_for_the_half_open_ttl() {
         encoded
     );
 }
+
+#[test]
+fn present_null_bounds_are_zero_while_missing_bounds_remain_unbounded() {
+    let reload = |state: &IdempotencyStore<bool>| {
+        serde_json::from_str::<IdempotencyStore<bool>>(
+            &stringify_json(&plain_data(state).unwrap()).unwrap(),
+        )
+        .unwrap()
+    };
+    let ttl = idempotency::remember(
+        &idempotency::init_store(StoreOptions {
+            capacity: None,
+            ttl_ms: Some(f64::NAN),
+        }),
+        "k",
+        true,
+        0.0,
+    )
+    .unwrap();
+    let ttl = reload(&ttl);
+    assert!(!idempotency::seen(&ttl, "k", 0.0).unwrap());
+    assert!(
+        stringify_json(&plain_data(&ttl).unwrap())
+            .unwrap()
+            .contains("\"ttlMs\":null")
+    );
+    let capacity = idempotency::remember(
+        &idempotency::init_store(StoreOptions {
+            capacity: Some(f64::INFINITY),
+            ttl_ms: None,
+        }),
+        "k",
+        true,
+        0.0,
+    )
+    .unwrap();
+    let capacity = reload(&capacity);
+    let emptied = idempotency::remember(&capacity, "j", true, 1.0).unwrap();
+    assert!(emptied.order.is_empty());
+    assert!(
+        stringify_json(&plain_data(&emptied).unwrap())
+            .unwrap()
+            .contains("\"capacity\":null")
+    );
+    let unbounded = reload(&idempotency::init_store(Default::default()));
+    let unbounded = idempotency::remember(&unbounded, "k", true, 0.0).unwrap();
+    assert!(idempotency::seen(&unbounded, "k", 1e12).unwrap());
+    assert_eq!(unbounded.order.len(), 1);
+}
