@@ -1,4 +1,5 @@
 use crate::data::JsText;
+pub use crate::work_queue::QueueTime as IdempotencyTime;
 use serde::{Deserialize, Serialize};
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
@@ -16,7 +17,7 @@ pub struct StoreOptions {
 #[serde(rename_all = "camelCase")]
 pub struct IdempotencyEntry<V> {
     pub value: V,
-    pub at_ms: f64,
+    pub at_ms: IdempotencyTime,
 }
 impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
     type Value = V;
@@ -25,7 +26,7 @@ impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
         &self.value
     }
     fn timestamp(&self) -> f64 {
-        self.at_ms
+        self.at_ms.number_or_zero()
     }
 }
 
@@ -124,7 +125,7 @@ pub fn remember<V: Clone + Serialize>(
         key.clone(),
         RecordValue::Entry(IdempotencyEntry {
             value,
-            at_ms: now_ms,
+            at_ms: now_ms.into(),
         }),
     );
     next.order.retain(|old| old != &key);

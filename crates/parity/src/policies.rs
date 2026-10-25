@@ -502,7 +502,7 @@ impl IdempotencyInitial {
                             key,
                             demlik_tea::idempotency::IdempotencyEntry {
                                 value: entry.value,
-                                at_ms: entry.at_ms.value(),
+                                at_ms: entry.at_ms.value().into(),
                             },
                         )
                     })
