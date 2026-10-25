@@ -14,6 +14,33 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "workspace-crossing-keeps-last-type-only",
+    file: "deployables/workspaces.rs",
+    before: "held.1 &= edge.type_only;",
+    after: "held.1 = edge.type_only;",
+    script: "graph-deployable-paths.mts",
+    driver: "deployables_driver",
+    witness: "workspace-path-0-1",
+  },
+  {
+    name: "worker-graph-judges-durable-object-targets",
+    file: "deployables/cycles.rs",
+    before: "if declaration.kind != BindingKind::Service {",
+    after: "if declaration.kind == BindingKind::Workflow {",
+    script: "graph-deployable-paths.mts",
+    driver: "deployables_driver",
+    witness: "worker-graph.catalog-0",
+  },
+  {
+    name: "worker-cycles-judge-single-workers",
+    file: "deployables/cycles.rs",
+    before: ".filter(|members| members.len() > 1)",
+    after: ".filter(|members| !members.is_empty())",
+    script: "graph-deployable-paths.mts",
+    driver: "deployables_driver",
+    witness: "worker-cycles.self-binding-is-not-cycle",
+  },
+  {
     name: "library-allowance-accepts-unreadable-imports",
     file: "libraries/allowance.rs",
     before: "if imported.unreadable {",

@@ -95,3 +95,26 @@ pub(crate) fn relative_path_text(root: &Path, target: &JsString) -> Result<JsStr
     }
     Ok(JsString::from_units(units))
 }
+
+pub(crate) fn dirname_path_text(path: &JsString) -> JsString {
+    let units = path.units();
+    if units.is_empty() {
+        return ".".into();
+    }
+    let rooted = units[0] == SLASH;
+    let mut matched_slash = true;
+    for index in (1..units.len()).rev() {
+        if units[index] == SLASH {
+            if !matched_slash {
+                return if rooted && index == 1 {
+                    "//".into()
+                } else {
+                    JsString::from_units(units[..index].to_vec())
+                };
+            }
+        } else {
+            matched_slash = false;
+        }
+    }
+    if rooted { "/".into() } else { ".".into() }
+}

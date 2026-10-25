@@ -87,7 +87,7 @@ pub fn is_relative_name(name: &str) -> bool {
     let tail = name.strip_prefix("..").or_else(|| name.strip_prefix('.'));
     tail.is_some_and(|tail| tail.is_empty() || tail.starts_with(['/', '\\']))
 }
-fn is_relative_units(name: &JsString) -> bool {
+pub(crate) fn is_relative_units(name: &JsString) -> bool {
     let units = name.units();
     if units.first() != Some(&46) {
         return false;

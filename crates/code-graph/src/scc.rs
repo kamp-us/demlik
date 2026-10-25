@@ -3,10 +3,10 @@ use std::hash::Hash;
 
 use indexmap::IndexMap;
 
-pub fn strongly_connected_components(
-    nodes: &[String],
-    adjacency: &HashMap<String, Vec<String>>,
-) -> IndexMap<String, usize> {
+pub fn strongly_connected_components<N: Clone + Eq + Hash>(
+    nodes: &[N],
+    adjacency: &HashMap<N, Vec<N>>,
+) -> IndexMap<N, usize> {
     let mut graph = Tarjan {
         adjacency,
         index: HashMap::new(),
@@ -25,35 +25,35 @@ pub fn strongly_connected_components(
     graph.components
 }
 
-struct Frame {
-    node: String,
+struct Frame<N> {
+    node: N,
     next: usize,
 }
 
-struct Tarjan<'a> {
-    adjacency: &'a HashMap<String, Vec<String>>,
-    index: HashMap<String, usize>,
-    low: HashMap<String, usize>,
-    active: Vec<String>,
-    on_stack: HashSet<String>,
-    components: IndexMap<String, usize>,
+struct Tarjan<'a, N> {
+    adjacency: &'a HashMap<N, Vec<N>>,
+    index: HashMap<N, usize>,
+    low: HashMap<N, usize>,
+    active: Vec<N>,
+    on_stack: HashSet<N>,
+    components: IndexMap<N, usize>,
     next_index: usize,
     next_component: usize,
 }
 
-impl Tarjan<'_> {
-    fn discover(&mut self, node: &str) {
-        self.index.insert(node.to_owned(), self.next_index);
-        self.low.insert(node.to_owned(), self.next_index);
+impl<N: Clone + Eq + Hash> Tarjan<'_, N> {
+    fn discover(&mut self, node: &N) {
+        self.index.insert(node.clone(), self.next_index);
+        self.low.insert(node.clone(), self.next_index);
         self.next_index += 1;
-        self.active.push(node.to_owned());
-        self.on_stack.insert(node.to_owned());
+        self.active.push(node.clone());
+        self.on_stack.insert(node.clone());
     }
 
-    fn visit(&mut self, start: &str) {
+    fn visit(&mut self, start: &N) {
         self.discover(start);
         let mut work = vec![Frame {
-            node: start.to_owned(),
+            node: start.clone(),
             next: 0,
         }];
         while let Some(frame) = work.last_mut() {
@@ -99,10 +99,10 @@ impl Tarjan<'_> {
     }
 }
 
-pub fn scc_members<K: Clone + Eq + Hash>(
-    nodes: &[String],
-    components: &IndexMap<String, K>,
-) -> IndexMap<K, Vec<String>> {
+pub fn scc_members<N: Clone + Eq + Hash, K: Clone + Eq + Hash>(
+    nodes: &[N],
+    components: &IndexMap<N, K>,
+) -> IndexMap<K, Vec<N>> {
     let mut members = IndexMap::new();
     for node in nodes {
         if let Some(component) = components.get(node) {
