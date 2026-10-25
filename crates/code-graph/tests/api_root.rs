@@ -83,3 +83,79 @@ fn package_root_follows_a_real_symlink_without_changing_its_target() {
     assert!(link.is_symlink());
     assert!(target.is_dir());
 }
+
+#[cfg(unix)]
+#[test]
+fn raw_realpath_components_follow_the_nine_pinned_source_symlink_cases() {
+    let package = Package::new();
+    let root = fs::canonicalize(&package.0).unwrap();
+    let root: JsString = root.to_str().unwrap().into();
+    let join = |tail: &str| {
+        let mut path = root.clone();
+        path.push_str("/");
+        path.push_str(tail);
+        path
+    };
+    let raw = JsString::from_units(
+        root.units()
+            .iter()
+            .copied()
+            .chain("/raw".encode_utf16())
+            .chain([0xd800])
+            .collect(),
+    );
+    fs::create_dir_all(format!("{}/ordinary", raw.to_lossy())).unwrap();
+    fs::create_dir_all(join("target/suffix�").to_lossy()).unwrap();
+    std::os::unix::fs::symlink("ordinary", format!("{}/relative-link", raw.to_lossy())).unwrap();
+    std::os::unix::fs::symlink(
+        join("target").to_lossy(),
+        format!("{}/absolute-link", raw.to_lossy()),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(raw.to_lossy(), join("entry-link").to_lossy()).unwrap();
+    std::os::unix::fs::symlink("entry-link", join("chain").to_lossy()).unwrap();
+    let mut low = root.clone();
+    low.push_str("/raw");
+    low.extend(&JsString::from_units(vec![0xdfff]));
+    let suffix = |path: &JsString, tail: &str| {
+        let mut value = path.clone();
+        value.push_str(tail);
+        value
+    };
+    let raw_suffix = JsString::from_units("/suffix".encode_utf16().chain([0xd800]).collect());
+    let mut after_link = suffix(&raw, "/absolute-link");
+    after_link.extend(&raw_suffix);
+    let mut expected_after_link = join("target");
+    expected_after_link.extend(&raw_suffix);
+    for (given, expected) in [
+        (raw.clone(), raw.clone()),
+        (low.clone(), low),
+        (join("raw�"), join("raw�")),
+        (suffix(&raw, "/ordinary"), suffix(&raw, "/ordinary")),
+        (suffix(&raw, "/relative-link"), suffix(&raw, "/ordinary")),
+        (suffix(&raw, "/absolute-link"), join("target")),
+        (after_link, expected_after_link),
+        (join("entry-link"), join("raw�")),
+        (join("chain/ordinary"), join("raw�/ordinary")),
+    ] {
+        assert_eq!(package_root(&given).unwrap(), expected, "{given:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_and_broken_links_remain_directory_refusals() {
+    let package = Package::new();
+    for (name, target) in [("dangling", "missing"), ("broken-parent", "missing/child")] {
+        let path = package.0.join(name);
+        std::os::unix::fs::symlink(target, &path).unwrap();
+        let raw = JsString::from(path.to_str().unwrap());
+        let error = package_root(&raw).unwrap_err();
+        let ApiError::Input(error) = error else {
+            panic!("expected directory refusal")
+        };
+        let mut expected = raw;
+        expected.push_str(" is not a directory");
+        assert_eq!(error.message(), &expected);
+    }
+}
