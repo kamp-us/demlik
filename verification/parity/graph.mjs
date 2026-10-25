@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "impure-uses",
+    driver: "boundary_domain_driver",
+    script: "graph-impure-uses.mts",
+  },
+  {
     name: "boundary-domain",
     driver: "boundary_domain_driver",
     script: "graph-boundary-domain.mts",
@@ -55,7 +60,10 @@ export async function graphParity(cargo) {
       "--locked",
       "--package",
       "demlik-code-graph",
-      ...suites.flatMap(({ driver }) => ["--example", driver]),
+      ...[...new Set(suites.map(({ driver }) => driver))].flatMap((driver) => [
+        "--example",
+        driver,
+      ]),
     ],
     { cwd: root, stdio: "inherit" },
   );

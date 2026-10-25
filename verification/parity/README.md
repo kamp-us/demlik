@@ -19,7 +19,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    first issue paths/messages and thrown errors; declaration consistency is
    compared against the library, deployable and shape checks and the real config
    loader. Impurity vocabulary helpers cover globals, constructors and runtime
-   module imports; AST impurity detection is a separate pass.
+   module imports. AST impurity checks reuse OXC trees and compare global reads,
+   bound names, destructuring and type positions, including real repository files.
    Wrangler catalog checks load shared JSONC/TOML files,
    manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
