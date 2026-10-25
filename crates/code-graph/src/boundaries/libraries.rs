@@ -15,6 +15,30 @@ use indexmap::{IndexMap, IndexSet};
 use serde::Serialize;
 use std::path::Path;
 
+pub mod allowance;
+pub mod census;
+pub mod violations;
+
+#[derive(Debug, Clone, Copy)]
+pub enum LibraryRuleError {
+    InheritedType,
+    InheritedLicense,
+}
+impl LibraryRuleError {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::InheritedType => "Cannot read properties of undefined (reading 'includes')",
+            Self::InheritedLicense => "licensed.includes is not a function",
+        }
+    }
+}
+impl std::fmt::Display for LibraryRuleError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.message())
+    }
+}
+impl std::error::Error for LibraryRuleError {}
+
 #[derive(Debug, Default)]
 pub struct Libraries<'a> {
     rules: Option<&'a BoundaryRules>,

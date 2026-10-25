@@ -2,7 +2,7 @@ use demlik_code_graph::{
     boundaries::{
         config::BoundaryRuleInputError,
         libraries::{ImportTarget, LibrariesRead},
-        rules::{ImportedFrom, LibraryType},
+        rules::{BoundaryRules, ImportedFrom, LibraryType},
     },
     layers::resolve_target::WorkspacePackage,
     project::RepoListing,
@@ -54,6 +54,62 @@ struct GlobsInput {
     patterns: Vec<JsString>,
     specifiers: Vec<JsString>,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceFile {
+    file: JsString,
+    source: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JudgmentInput {
+    repo_root: String,
+    rules: Box<RawValue>,
+    scope: JsString,
+    file: JsString,
+    source: String,
+    named_files: Vec<SourceFile>,
+    license_dir: JsString,
+    license_specifiers: indexmap::IndexSet<JsString>,
+    measured_scopes: Vec<JsString>,
+    measured_undeclared: Vec<JsString>,
+    unjudged: usize,
+    roots: Vec<JsString>,
+    zone: Option<ImportedFrom>,
+}
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Checked<T> {
+    Value(T),
+    Thrown { thrown: Thrown },
+}
+fn checked<T>(
+    result: Result<T, demlik_code_graph::boundaries::libraries::LibraryRuleError>,
+) -> Checked<T> {
+    match result {
+        Ok(value) => Checked::Value(value),
+        Err(error) => Checked::Thrown {
+            thrown: Thrown {
+                name: "TypeError",
+                message: error.message().into(),
+            },
+        },
+    }
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JudgmentOutput<'a> {
+    names: Vec<(
+        &'a JsString,
+        &'a demlik_code_graph::syntax::imports::ImportedNames,
+    )>,
+    licensed: Checked<bool>,
+    allowance_issue: Option<JsString>,
+    judgment: Checked<demlik_code_graph::boundaries::libraries::violations::LibraryJudgment>,
+    undeclared: Vec<Vec<demlik_code_graph::boundaries::violation::BoundaryViolation>>,
+    census: Option<demlik_code_graph::boundaries::libraries::census::LibraryCensus>,
+    lines: Option<Vec<JsString>>,
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LibrariesOutput<'a> {
@@ -96,6 +152,147 @@ fn glob_error(error: demlik_code_graph::kinds::glob::GlobError) -> Result<Box<Ra
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
     match request.operation.as_str() {
+        "code_graph.library-judgment" => {
+            let input: JudgmentInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let value = JsValue::parse(input.rules.get()).map_err(|error| error.to_string())?;
+            let rules =
+                observe!(calls, BoundaryRules::parse, &value).map_err(|error| error.to_string())?;
+            let libraries = match observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::read_libraries,
+                &rules,
+                Path::new(&input.repo_root),
+                None
+            ) {
+                Ok(LibrariesRead::Read(libraries)) => libraries,
+                Ok(LibrariesRead::Refused { message }) => return Err(message.to_lossy()),
+                Err(error) => return glob_error(error),
+            };
+            let syntax = observe!(
+                calls,
+                demlik_code_graph::engine::oxc::parse_type_script,
+                Path::new(&input.file.to_lossy()),
+                &input.source
+            )
+            .map_err(|error| error.to_string())?;
+            let names = observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::allowance::imported_names_for,
+                &libraries,
+                &input.scope,
+                &syntax
+            );
+            let edges: Vec<_> = demlik_code_graph::syntax::imports::import_literals(&syntax)
+                .into_iter()
+                .map(|edge| demlik_code_graph::syntax::imports::ImportEdge {
+                    specifier: edge.specifier,
+                    kind: edge.kind,
+                    type_only: edge.type_only,
+                    target: None,
+                })
+                .collect();
+            let runtime = demlik_code_graph::syntax::imports::runtime_specifiers(&syntax);
+            let impure = demlik_code_graph::boundaries::impure_uses::detect_impure_uses(&syntax);
+            let licensed = checked(observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::allowance::is_licensed,
+                &libraries,
+                &input.scope,
+                &input.license_dir,
+                &input.license_specifiers,
+                demlik_code_graph::boundaries::libraries::allowance::NamedFile {
+                    file: &input.file,
+                    imported_names: &names
+                }
+            ));
+            let judgment = checked(observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::violations::judge_libraries,
+                &libraries,
+                &input.scope,
+                demlik_code_graph::boundaries::libraries::violations::LibraryFile {
+                    file: &input.file,
+                    imported_names: &names,
+                    facts: demlik_code_graph::boundaries::impure_uses::ImpureFacts {
+                        impure_uses: &impure,
+                        import_edges: &edges,
+                        runtime_specifiers: &runtime
+                    }
+                },
+                input.zone
+            ));
+            let mut held = Vec::new();
+            for file in &input.named_files {
+                let syntax = demlik_code_graph::engine::oxc::parse_type_script(
+                    Path::new(&file.file.to_lossy()),
+                    &file.source,
+                )
+                .map_err(|error| error.to_string())?;
+                let names = observe!(
+                    calls,
+                    demlik_code_graph::boundaries::libraries::allowance::imported_names_for,
+                    &libraries,
+                    &input.scope,
+                    &syntax
+                );
+                held.push((&file.file, names));
+            }
+            let named: Vec<_> = held
+                .iter()
+                .map(|(file, names)| {
+                    demlik_code_graph::boundaries::libraries::allowance::NamedFile {
+                        file,
+                        imported_names: names,
+                    }
+                })
+                .collect();
+            let allowance_issue = observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::allowance::allowance_issue,
+                &libraries,
+                &input.scope,
+                &named
+            );
+            let undeclared = input
+                .roots
+                .iter()
+                .map(|root| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::boundaries::libraries::violations::undeclared_libraries,
+                        &libraries,
+                        root
+                    )
+                })
+                .collect();
+            let census = observe!(
+                calls,
+                demlik_code_graph::boundaries::libraries::census::library_census,
+                &libraries,
+                demlik_code_graph::boundaries::libraries::census::MeasuredLibraries {
+                    scopes: &input.measured_scopes,
+                    undeclared: &input.measured_undeclared,
+                    unjudged: input.unjudged
+                }
+            );
+            let lines = census.as_ref().map(|census| {
+                observe!(
+                    calls,
+                    demlik_code_graph::boundaries::libraries::census::census_lines,
+                    census
+                )
+            });
+            json(&JudgmentOutput {
+                names: names.iter().collect(),
+                licensed,
+                allowance_issue,
+                judgment,
+                undeclared,
+                census,
+                lines,
+            })
+        }
         "code_graph.libraries" => {
             let input: LibrariesInput =
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;

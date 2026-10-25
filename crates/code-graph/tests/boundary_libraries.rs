@@ -71,3 +71,118 @@ fn libraries_share_workspace_owners_and_assign_an_unlisted_package_to_its_neares
     ));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census() {
+    use demlik_code_graph::{
+        boundaries::{
+            impure_uses::{ImpureFacts, detect_impure_uses},
+            libraries::{
+                allowance::{NamedFile, allowance_issue, imported_names_for},
+                census::{MeasuredLibraries, census_lines, library_census},
+                violations::{LibraryFile, judge_libraries},
+            },
+            violation::BoundaryViolation,
+        },
+        engine::oxc::parse_type_script,
+        syntax::imports::{ImportEdge, import_literals, runtime_specifiers},
+        text::JsValue,
+    };
+    let root = std::env::temp_dir().join(format!("demlik-library-verdict-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    for (dir, name) in [
+        ("packages/core", "@shop/core"),
+        ("packages/adapter", "@shop/adapter"),
+        ("packages/free", "@shop/free"),
+    ] {
+        fs::create_dir_all(root.join(dir)).unwrap();
+        fs::write(
+            root.join(dir).join("package.json"),
+            format!(r#"{{"name":"{name}"}}"#),
+        )
+        .unwrap();
+    }
+    let rules = BoundaryRules::parse(&JsValue::parse(r#"{
+        "libraryTypes":{"core":{"imports":[],"pure":true},"adapter":{"imports":[],"pure":false,"importedFrom":["driven"]},"unused":{"imports":[],"pure":false}},
+        "libraries":{"packages/core":"core","packages/adapter":"adapter"},
+        "libraryRoots":["packages"],
+        "worldLibraries":["node:*"],
+        "allowImportNames":{"packages/core":{"packages/adapter":["A","Never"]}}
+    }"#).unwrap()).unwrap();
+    let LibrariesRead::Read(libraries) = read_libraries(&rules, &root, None).unwrap() else {
+        panic!("fixture refused")
+    };
+    let scope = JsString::from("packages/core");
+    let file = JsString::from("packages/core/src/a.ts");
+    let syntax = parse_type_script(std::path::Path::new("a.ts"),"import {A} from '@shop/adapter'; import {B} from '@shop/adapter/sub'; import {F} from '@shop/free'; console.log('x');").unwrap();
+    let names = imported_names_for(&libraries, &scope, &syntax);
+    let edges: Vec<_> = import_literals(&syntax)
+        .into_iter()
+        .map(|edge| ImportEdge {
+            specifier: edge.specifier,
+            kind: edge.kind,
+            type_only: edge.type_only,
+            target: None,
+        })
+        .collect();
+    let impure = detect_impure_uses(&syntax);
+    let runtime = runtime_specifiers(&syntax);
+    let verdict = judge_libraries(
+        &libraries,
+        &scope,
+        LibraryFile {
+            file: &file,
+            imported_names: &names,
+            facts: ImpureFacts {
+                impure_uses: &impure,
+                import_edges: &edges,
+                runtime_specifiers: &runtime,
+            },
+        },
+        None,
+    )
+    .unwrap();
+    assert_eq!(verdict.unjudged, 1);
+    assert_eq!(verdict.violations.len(), 2);
+    assert!(
+        matches!(&verdict.violations[0],BoundaryViolation::LibraryImportsUp {specifier,type_only:false,..} if specifier=="@shop/adapter")
+    );
+    assert!(
+        matches!(&verdict.violations[1],BoundaryViolation::Impure {specifier,..} if specifier=="console")
+    );
+    let rel = JsString::from("src/a.ts");
+    assert_eq!(
+        allowance_issue(
+            &libraries,
+            &scope,
+            &[NamedFile {
+                file: &rel,
+                imported_names: &names
+            }]
+        )
+        .unwrap(),
+        "allowImportNames \"packages/core\" licenses \"Never\" of \"packages/adapter\", which \"packages/core\" never imports from it: remove the name."
+    );
+    let census = library_census(
+        &libraries,
+        MeasuredLibraries {
+            scopes: &[scope],
+            undeclared: &["packages/free".into()],
+            unjudged: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        census.types[&JsString::from("adapter")],
+        Vec::<JsString>::new()
+    );
+    assert_eq!(
+        census.types[&JsString::from("core")],
+        vec![JsString::from("packages/core")]
+    );
+    assert_eq!(
+        census_lines(&census)[0],
+        "libraries: 1 declared (adapter 0, core 1, unused 0), 1 undeclared, 1 import left unjudged"
+    );
+    fs::remove_dir_all(root).unwrap();
+}

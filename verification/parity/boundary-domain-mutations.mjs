@@ -14,6 +14,33 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "library-allowance-accepts-unreadable-imports",
+    file: "libraries/allowance.rs",
+    before: "if imported.unreadable {",
+    after: "if false && imported.unreadable {",
+    script: "graph-library-judgments.mts",
+    driver: "libraries_driver",
+    witness: "library-judgment.allowance-unreadable",
+  },
+  {
+    name: "library-verdict-loses-type-precedence",
+    file: "libraries/violations.rs",
+    before: "if barred {",
+    after: "if false && barred {",
+    script: "graph-library-judgments.mts",
+    driver: "libraries_driver",
+    witness: "library-judgment.precedence-and-impurity",
+  },
+  {
+    name: "library-census-counts-unmeasured-scopes",
+    file: "libraries/census.rs",
+    before: ".filter(|dir| scopes.contains(dir))",
+    after: ".filter(|dir| { let _ = (&scopes, dir); true })",
+    script: "graph-library-judgments.mts",
+    driver: "libraries_driver",
+    witness: "library-judgment.empty-measured-scopes",
+  },
+  {
     name: "library-owner-ignores-nearest-library",
     file: "libraries.rs",
     before:
