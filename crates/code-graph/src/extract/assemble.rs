@@ -1,6 +1,6 @@
 use super::analysis::{
-    AnalysisError, AnalysisOptions, AnalysisPrep, CompleteInput, NamedSymbol, analysis_inputs,
-    complete_analysis, prepare_analysis,
+    AnalysisBundle, AnalysisError, AnalysisOptions, AnalysisPrep, CompleteInput, NamedSymbol,
+    analysis_inputs, complete_analysis, prepare_analysis,
 };
 use super::cross_runtime::{CrossRuntimeInput, create_cross_runtime_resolver};
 use super::directories::build_directories;
@@ -8,9 +8,11 @@ use super::edges::{EdgeResult, resolve_edges_with_cross_runtime};
 use super::functions::{DiscoveredFunction, discover_functions, is_test_file};
 use super::metrics::{compute_function_metrics, module_comment_lines, module_loc};
 use crate::checker::context::{TypeContextInput, with_type_context};
+use crate::data::extract::load_data_report;
 use crate::declarations::discover::{build_declaration_nodes, discover_declarations};
 use crate::declarations::uses::resolve_declaration_uses;
 use crate::engine::tsgo::{TsgoBinary, TsgoError};
+use crate::extract::wrangler_config::CatalogError;
 use crate::project::{
     EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots, locale_compare,
     to_relative,
@@ -26,11 +28,16 @@ use crate::smells::plan::{PlanAxis, rank_plan};
 use crate::syntax::headers::function_header;
 use crate::syntax::imports::{import_declaration_specifiers, resolve_imports};
 use indexmap::IndexMap;
-use std::io;
+use std::{io, path::Path};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NodeFields {
     pub headers: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DataOptions<'a> {
+    pub repo_root: &'a Path,
 }
 
 #[derive(Debug)]
@@ -39,6 +46,7 @@ pub enum AssemblyError {
     Threshold(ThresholdError),
     Compiler(TsgoError),
     Analysis(AnalysisError),
+    Data(CatalogError),
 }
 impl std::fmt::Display for AssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -47,6 +55,7 @@ impl std::fmt::Display for AssemblyError {
             Self::Threshold(error) => error.fmt(formatter),
             Self::Compiler(error) => error.fmt(formatter),
             Self::Analysis(error) => error.fmt(formatter),
+            Self::Data(error) => error.fmt(formatter),
         }
     }
 }
@@ -57,6 +66,7 @@ impl std::error::Error for AssemblyError {
             Self::Threshold(error) => Some(error),
             Self::Compiler(error) => Some(error),
             Self::Analysis(error) => Some(error),
+            Self::Data(error) => Some(error),
         }
     }
 }
@@ -75,7 +85,16 @@ pub fn assemble_graph(
     thresholds: Thresholds,
     fields: NodeFields,
 ) -> Result<Graph, AssemblyError> {
-    build(loaded, thresholds, fields, None, None)
+    build(loaded, thresholds, fields, None, None, None, None)
+}
+
+pub fn assemble_graph_with_data(
+    loaded: &LoadedProject,
+    thresholds: Thresholds,
+    fields: NodeFields,
+    data: DataOptions<'_>,
+) -> Result<Graph, AssemblyError> {
+    build(loaded, thresholds, fields, None, None, None, Some(data))
 }
 
 struct EdgeBundle {
@@ -107,7 +126,7 @@ pub fn assemble_graph_with_edges(
     binary: &TsgoBinary,
     fields: NodeFields,
 ) -> Result<Graph, AssemblyError> {
-    assemble_measured(loaded, thresholds, binary, fields, None)
+    assemble_graph_with_reports(loaded, thresholds, binary, fields, None, None)
 }
 
 pub fn assemble_graph_with_analysis(
@@ -117,15 +136,16 @@ pub fn assemble_graph_with_analysis(
     fields: NodeFields,
     options: &AnalysisOptions<'_>,
 ) -> Result<Graph, AssemblyError> {
-    assemble_measured(loaded, thresholds, binary, fields, Some(options))
+    assemble_graph_with_reports(loaded, thresholds, binary, fields, Some(options), None)
 }
 
-fn assemble_measured(
+pub fn assemble_graph_with_reports(
     loaded: &LoadedEdgeProject,
     thresholds: Thresholds,
     binary: &TsgoBinary,
     fields: NodeFields,
     options: Option<&AnalysisOptions<'_>>,
+    data: Option<DataOptions<'_>>,
 ) -> Result<Graph, AssemblyError> {
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let functions = discover_functions(&loaded.project.source_files).functions;
@@ -197,7 +217,7 @@ fn assemble_measured(
     )
     .map_err(AssemblyError::Compiler)?
     .map_err(AssemblyError::from)?;
-    let mut graph = build(
+    build(
         &loaded.project,
         thresholds,
         fields,
@@ -208,11 +228,9 @@ fn assemble_measured(
             ts_config: loaded.ts_config_path.to_string_lossy().into_owned(),
         }),
         Some(functions),
-    )?;
-    if let Some(analysis) = analysis {
-        analysis.apply(&mut graph).map_err(AssemblyError::from)?;
-    }
-    Ok(graph)
+        analysis,
+        data,
+    )
 }
 
 fn build(
@@ -221,17 +239,20 @@ fn build(
     fields: NodeFields,
     mut edges: Option<EdgeBundle>,
     discovered: Option<Vec<DiscoveredFunction>>,
+    analysis: Option<AnalysisBundle>,
+    data: Option<DataOptions<'_>>,
 ) -> Result<Graph, AssemblyError> {
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let root = to_relative(
         &std::env::current_dir().map_err(AssemblyError::WorkingDirectory)?,
         &loaded.root_absolute,
     );
+    let discovered =
+        discovered.unwrap_or_else(|| discover_functions(&loaded.source_files).functions);
     let functions: Vec<_> = discovered
-        .unwrap_or_else(|| discover_functions(&loaded.source_files).functions)
-        .into_iter()
+        .iter()
         .map(|discovered| {
-            let metrics = compute_function_metrics(&discovered);
+            let metrics = compute_function_metrics(discovered);
             let header = fields.headers.then(|| function_header(discovered.node()));
             let measured = edges.as_mut().map(|bundle| Edges {
                 calls: bundle
@@ -251,10 +272,10 @@ fn build(
                     .unwrap_or(0),
             });
             let mut function = FunctionNode {
-                id: discovered.id,
-                name: discovered.name,
+                id: discovered.id.clone(),
+                name: discovered.name.clone(),
                 kind: discovered.kind,
-                file: discovered.file,
+                file: discovered.file.clone(),
                 start_line: discovered.start_line,
                 end_line: discovered.end_line,
                 loc: metrics.loc,
@@ -401,7 +422,7 @@ fn build(
         smell_count,
         parse_failures: loaded.parse_failures.clone(),
     };
-    Ok(Graph {
+    let mut graph = Graph {
         root: if root.is_empty() { ".".into() } else { root },
         provenance: edges
             .as_ref()
@@ -425,5 +446,13 @@ fn build(
         directories,
         smells,
         stats,
-    })
+    };
+    if let Some(analysis) = analysis {
+        analysis.apply(&mut graph).map_err(AssemblyError::from)?;
+    }
+    graph.data = data
+        .map(|options| load_data_report(&loaded.source_files, &discovered, options.repo_root))
+        .transpose()
+        .map_err(AssemblyError::Data)?;
+    Ok(graph)
 }

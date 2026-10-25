@@ -347,3 +347,160 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     ));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_failed_reports() {
+    use demlik_code_graph::{
+        engine::tsgo::TsgoBinary,
+        extract::{
+            analysis::AnalysisOptions,
+            assemble::{
+                AssemblyError, DataOptions, NodeFields, assemble_graph, assemble_graph_with_data,
+                assemble_graph_with_reports,
+            },
+            wrangler_config::CatalogError,
+        },
+        kinds::rules::NodeKindRules,
+        project::{EdgeScope, load_cheap_project, load_edge_project},
+        schema::Thresholds,
+    };
+    use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let root = std::env::temp_dir().join(format!(
+        "demlik-data-assembly-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("tsconfig.json"),
+        r#"{"compilerOptions":{"strict":true,"types":[]}}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("wrangler.json"),
+        r#"{"name":"worker","main":"src/entry.ts","d1_databases":[{"binding":"DB"}]}"#,
+    )
+    .unwrap();
+    fs::write(root.join("src/entry.ts"), "declare const env: any;\nenv.DB.exec('SELECT boot');\nexport function read(env: any) { return env.DB.prepare('SELECT 1'); }\nexport function fetch(env: any) { return read(env); }\n").unwrap();
+    let root = fs::canonicalize(root).unwrap();
+    let loaded = load_cheap_project(&root, None).unwrap();
+    let fields = NodeFields { headers: true };
+    assert!(
+        assemble_graph(&loaded, Thresholds::default(), fields)
+            .unwrap()
+            .data
+            .is_none()
+    );
+    let data = DataOptions { repo_root: &root };
+    let cheap = assemble_graph_with_data(&loaded, Thresholds::default(), fields, data).unwrap();
+    let report = cheap.data.as_ref().unwrap();
+    assert_eq!((report.edges.len(), report.unattributed.len()), (1, 1));
+    assert_eq!(report.edges[0].function_id, "src/entry.ts:read");
+    assert_eq!(report.edges[0].site.line, 3);
+    assert_eq!(report.edges[0].site.access, DataAccess::Read);
+    assert_eq!(report.unattributed[0].site.line, 2);
+    let expected_data = serde_json::to_value(report).unwrap();
+    let binary = TsgoBinary::from_native_preview_manifest(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json"),
+    )
+    .unwrap();
+    let measured = load_edge_project(&root, EdgeScope::Package, &root, None).unwrap();
+    let rules = NodeKindRules::default();
+    let analysis = AnalysisOptions {
+        cross_runtime: true,
+        kinds: true,
+        reach: true,
+        clusters: true,
+        interface_width: true,
+        kind_rules: &rules,
+        repo_root: &root,
+    };
+    for options in [None, Some(&analysis)] {
+        let graph = assemble_graph_with_reports(
+            &measured,
+            Thresholds::default(),
+            &binary,
+            fields,
+            options,
+            Some(data),
+        )
+        .unwrap();
+        assert_eq!(serde_json::to_value(&graph.data).unwrap(), expected_data);
+        let fetch = graph
+            .functions
+            .iter()
+            .find(|function| function.name == "fetch")
+            .unwrap();
+        assert!(
+            fetch
+                .edges
+                .as_ref()
+                .unwrap()
+                .calls
+                .iter()
+                .any(|call| call.callee_id == "src/entry.ts:read")
+        );
+        assert_eq!(graph.cross_runtime.is_some(), options.is_some());
+        assert_eq!(graph.reachability.is_some(), options.is_some());
+        assert_eq!(graph.clusters.is_some(), options.is_some());
+        assert_eq!(graph.interface_width.is_some(), options.is_some());
+    }
+    let empty = root.join("empty");
+    fs::create_dir_all(&empty).unwrap();
+    let empty_graph = assemble_graph_with_data(
+        &loaded,
+        Thresholds::default(),
+        fields,
+        DataOptions { repo_root: &empty },
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(empty_graph.data).unwrap(),
+        json!({"configFiles":[],"unparsedConfigs":[],"edges":[],"unattributed":[]})
+    );
+    fs::write(
+        root.join("wrangler.json"),
+        r#"{"vars":{"constructor":null}}"#,
+    )
+    .unwrap();
+    assert!(
+        assemble_graph(&loaded, Thresholds::default(), fields)
+            .unwrap()
+            .data
+            .is_none()
+    );
+    assert!(
+        assemble_graph_with_reports(
+            &measured,
+            Thresholds::default(),
+            &binary,
+            fields,
+            None,
+            None
+        )
+        .unwrap()
+        .data
+        .is_none()
+    );
+    assert!(matches!(
+        assemble_graph_with_data(&loaded, Thresholds::default(), fields, data),
+        Err(AssemblyError::Data(CatalogError::Record(_)))
+    ));
+    assert!(matches!(
+        assemble_graph_with_reports(
+            &measured,
+            Thresholds::default(),
+            &binary,
+            fields,
+            None,
+            Some(data)
+        ),
+        Err(AssemblyError::Data(CatalogError::Record(_)))
+    ));
+    fs::remove_dir_all(root).unwrap();
+}

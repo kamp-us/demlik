@@ -1,7 +1,13 @@
 use demlik_code_graph::{
     data::extract::{DataScan, DataScanInput, Site},
-    extract::wrangler_config::CatalogError,
-    schema::{DataAccess, DataBindingKind, DataReport},
+    extract::{
+        analysis::{AnalysisError, AnalysisOptions},
+        assemble::{AssemblyError, DataOptions, NodeFields},
+        wrangler_config::CatalogError,
+    },
+    kinds::rules::NodeKindRules,
+    project::EdgeScope,
+    schema::{DataAccess, DataBindingKind, DataReport, Thresholds},
     text::JsString,
 };
 use indexmap::IndexMap;
@@ -50,6 +56,33 @@ struct ReportInput {
     foreign_functions: bool,
     #[serde(default)]
     duplicate_units: bool,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum GraphPass {
+    Cheap,
+    Edges,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum GraphScope {
+    Package,
+    Deep,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct GraphInput {
+    root: PathBuf,
+    repo_root: Option<PathBuf>,
+    pass: GraphPass,
+    scope: Option<GraphScope>,
+    data: bool,
+    #[serde(default)]
+    analysis: bool,
+    #[serde(default)]
+    headers: bool,
+    #[serde(default)]
+    thresholds: Thresholds,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +140,16 @@ impl From<CatalogError> for DriverError {
         }
     }
 }
+impl From<AssemblyError> for DriverError {
+    fn from(error: AssemblyError) -> Self {
+        match error {
+            AssemblyError::Data(error) | AssemblyError::Analysis(AnalysisError::Catalog(error)) => {
+                error.into()
+            }
+            error => Self::backend(error),
+        }
+    }
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Response {
@@ -121,8 +164,102 @@ struct Response {
 fn parse<T: for<'a> Deserialize<'a>>(raw: &RawValue) -> Result<T, DriverError> {
     serde_json::from_str(raw.get()).map_err(DriverError::transport)
 }
-fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, DriverError> {
+fn execute(
+    case: Case,
+    manifest: Option<&Path>,
+    calls: &mut Vec<&'static str>,
+) -> Result<Box<RawValue>, DriverError> {
     match case.operation.as_str() {
+        "code_graph.data_graph" => {
+            let input: GraphInput = parse(&case.input)?;
+            if matches!(input.pass, GraphPass::Cheap) && input.analysis {
+                return Err(DriverError::transport(
+                    "cheap pass cannot request semantic analysis",
+                ));
+            }
+            if matches!(input.pass, GraphPass::Cheap) && input.scope.is_some() {
+                return Err(DriverError::transport(
+                    "cheap pass cannot request an edge scope",
+                ));
+            }
+            let repo = input.repo_root.as_deref().unwrap_or(&input.root);
+            let fields = NodeFields {
+                headers: input.headers,
+            };
+            let data = input.data.then_some(DataOptions { repo_root: repo });
+            let graph = match input.pass {
+                GraphPass::Cheap => {
+                    let loaded = observe!(
+                        calls,
+                        demlik_code_graph::project::load_cheap_project,
+                        &input.root,
+                        None
+                    )
+                    .map_err(DriverError::backend)?;
+                    match data {
+                        Some(data) => observe!(
+                            calls,
+                            demlik_code_graph::extract::assemble::assemble_graph_with_data,
+                            &loaded,
+                            input.thresholds,
+                            fields,
+                            data
+                        ),
+                        None => observe!(
+                            calls,
+                            demlik_code_graph::extract::assemble::assemble_graph,
+                            &loaded,
+                            input.thresholds,
+                            fields
+                        ),
+                    }
+                }
+                GraphPass::Edges => {
+                    let binary = observe!(
+                        calls,
+                        demlik_code_graph::engine::tsgo::TsgoBinary::from_native_preview_manifest,
+                        manifest.ok_or_else(|| DriverError::transport(
+                            "data_graph edges requires the native-preview manifest argument"
+                        ))?
+                    )
+                    .map_err(DriverError::backend)?;
+                    let scope = match input.scope {
+                        Some(GraphScope::Deep) => EdgeScope::Deep,
+                        _ => EdgeScope::Package,
+                    };
+                    let loaded = observe!(
+                        calls,
+                        demlik_code_graph::project::load_edge_project,
+                        &input.root,
+                        scope,
+                        repo,
+                        None
+                    )
+                    .map_err(DriverError::backend)?;
+                    let rules = NodeKindRules::default();
+                    let analysis = input.analysis.then_some(AnalysisOptions {
+                        cross_runtime: true,
+                        kinds: true,
+                        reach: true,
+                        clusters: true,
+                        interface_width: true,
+                        kind_rules: &rules,
+                        repo_root: repo,
+                    });
+                    observe!(
+                        calls,
+                        demlik_code_graph::extract::assemble::assemble_graph_with_reports,
+                        &loaded,
+                        input.thresholds,
+                        &binary,
+                        fields,
+                        analysis.as_ref(),
+                        data
+                    )
+                }
+            }?;
+            to_raw_value(&graph).map_err(DriverError::transport)
+        }
         "code_graph.data_report" => {
             let input: ReportInput = parse(&case.input)?;
             let loaded = observe!(
@@ -242,13 +379,14 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let manifest = std::env::args_os().nth(1).map(PathBuf::from);
     for line in io::stdin().lock().lines() {
         let parsed = serde_json::from_str::<Case>(&line?);
         let id = parsed.as_ref().map(|case| case.id.clone()).ok();
         let mut observed_calls = Vec::new();
         let result = parsed
             .map_err(DriverError::transport)
-            .and_then(|case| execute(case, &mut observed_calls));
+            .and_then(|case| execute(case, manifest.as_deref(), &mut observed_calls));
         let response = match result {
             Ok(output) => Response {
                 id,
