@@ -4,6 +4,7 @@ pub type IdempotencyTime = IdempotencyNumber;
 use serde::{Deserialize, Serialize};
 mod adapter;
 pub use adapter::*;
+pub mod intake;
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
 

@@ -130,6 +130,9 @@ impl<I> QueueItem<I> {
     pub fn extra(&self) -> &indexmap::IndexMap<JsText, Rc<PlainData>> {
         &self.extra
     }
+    pub fn has_own(&self, field: impl Into<JsText>) -> bool {
+        self.field_order.contains(&field.into())
+    }
     pub fn with_status(&self, status: QueueItemStatus) -> Self {
         let mut item = self.clone();
         item.fields.status = status;
