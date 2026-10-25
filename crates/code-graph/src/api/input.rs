@@ -7,7 +7,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ApiInputError {
     message: JsString,
-    cause: Option<Box<dyn std::error::Error>>,
+    cause: Option<Box<dyn std::error::Error + Send>>,
 }
 impl ApiInputError {
     pub fn new(message: JsString) -> Self {
@@ -16,7 +16,7 @@ impl ApiInputError {
             cause: None,
         }
     }
-    pub fn with_cause(mut self, cause: impl std::error::Error + 'static) -> Self {
+    pub fn with_cause(mut self, cause: impl std::error::Error + Send + 'static) -> Self {
         self.cause = Some(Box::new(cause));
         self
     }
@@ -34,7 +34,88 @@ impl std::fmt::Display for ApiInputError {
 }
 impl std::error::Error for ApiInputError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.cause.as_deref()
+        self.cause.as_ref().map(|cause| cause.as_ref() as _)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApiArgumentLocation {
+    Argument(usize),
+    WorkingDirectory,
+}
+impl ApiArgumentLocation {
+    pub fn label(self) -> String {
+        match self {
+            Self::Argument(index) => format!("args[{index}]"),
+            Self::WorkingDirectory => "options.cwd".into(),
+        }
+    }
+}
+#[derive(Debug)]
+pub struct ApiArgumentError {
+    argument: JsString,
+    location: ApiArgumentLocation,
+    cause: std::io::Error,
+    message: JsString,
+}
+impl ApiArgumentError {
+    /// Classify a native spawn refusal using the pinned Node validation order:
+    /// first argument containing NUL, then cwd. No process is launched here.
+    pub fn from_null_byte(
+        cwd: &JsString,
+        arguments: &[JsString],
+        cause: std::io::Error,
+    ) -> Result<Self, std::io::Error> {
+        let selected = arguments
+            .iter()
+            .enumerate()
+            .find(|(_, value)| value.units().contains(&0))
+            .map(|(index, value)| (ApiArgumentLocation::Argument(index), value))
+            .or_else(|| {
+                cwd.units()
+                    .contains(&0)
+                    .then_some((ApiArgumentLocation::WorkingDirectory, cwd))
+            });
+        let Some((location, argument)) = selected else {
+            return Err(cause);
+        };
+        // Keep the actual native diagnostic instead of recreating Node's util.inspect.
+        let message = format!(
+            "{} contains a null byte (native argument diagnostic: {cause})",
+            location.label()
+        )
+        .into();
+        Ok(Self {
+            argument: argument.clone(),
+            location,
+            cause,
+            message,
+        })
+    }
+    pub fn argument(&self) -> &JsString {
+        &self.argument
+    }
+    pub fn location(&self) -> ApiArgumentLocation {
+        self.location
+    }
+    pub fn code(&self) -> &'static str {
+        "ERR_INVALID_ARG_VALUE"
+    }
+    pub fn name(&self) -> &'static str {
+        "TypeError"
+    }
+    pub fn message(&self) -> &JsString {
+        &self.message
+    }
+}
+impl std::fmt::Display for ApiArgumentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message.to_lossy())
+    }
+}
+impl std::error::Error for ApiArgumentError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
     }
 }
 
@@ -56,6 +137,7 @@ impl std::error::Error for ApiSchemaError {}
 #[derive(Debug)]
 pub enum ApiError {
     Input(ApiInputError),
+    Argument(ApiArgumentError),
     TypeError(RecordTypeError),
     Io {
         path: JsString,
@@ -71,6 +153,7 @@ impl ApiError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Input(error) => error.name(),
+            Self::Argument(error) => error.name(),
             Self::TypeError(error) => error.name(),
             Self::OperationAndCleanup { cleanup, .. } => cleanup.name(),
             Self::Io { .. } | Self::Compiler(_) => "Error",
@@ -79,6 +162,7 @@ impl ApiError {
     pub fn message(&self) -> JsString {
         match self {
             Self::Input(error) => error.message().clone(),
+            Self::Argument(error) => error.message().clone(),
             Self::TypeError(error) => error.message().clone(),
             Self::Io { source, .. } => source.to_string().into(),
             Self::Compiler(error) => error.to_string().into(),
@@ -90,6 +174,7 @@ impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Input(error) => error.fmt(f),
+            Self::Argument(error) => error.fmt(f),
             Self::TypeError(error) => error.fmt(f),
             Self::Io { path, source } => write!(f, "{}: {source}", path.to_lossy()),
             Self::Compiler(error) => error.fmt(f),
@@ -103,6 +188,7 @@ impl std::error::Error for ApiError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
             Self::Input(error) => error,
+            Self::Argument(error) => error,
             Self::TypeError(error) => error,
             Self::Io { source, .. } => source,
             Self::Compiler(error) => error,

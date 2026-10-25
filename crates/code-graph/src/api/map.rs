@@ -1,4 +1,6 @@
-pub use super::input::{ApiError, ApiInputError, ApiSchemaError, issue_text};
+pub use super::input::{
+    ApiArgumentError, ApiArgumentLocation, ApiError, ApiInputError, ApiSchemaError, issue_text,
+};
 use super::input::{nonempty_string, record_key, refusal, unknown_keys};
 use crate::{
     project::{relative_path_text_from, resolve_path_text_from},

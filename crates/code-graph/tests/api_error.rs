@@ -58,3 +58,58 @@ fn cleanup_owns_the_visible_refusal_and_both_failures_remain_inspectable() {
     );
     assert!(error.source().unwrap().downcast_ref::<ApiError>().is_some());
 }
+
+#[test]
+fn null_argument_error_can_return_from_a_real_worker_without_sync_or_context_bounds() {
+    use demlik_code_graph::api::map::{ApiArgumentError, ApiArgumentLocation};
+    let returned = std::thread::spawn(|| {
+        let value = JsString::from_units("rev".encode_utf16().chain([0, 0xd800]).collect());
+        let cwd = JsString::from_units("cwd".encode_utf16().chain([0]).collect());
+        let arguments = vec!["ordinary".into(), value.clone(), "later\0arg".into()];
+        let cause = std::process::Command::new("git")
+            .args(arguments.iter().map(JsString::to_lossy))
+            .current_dir(cwd.to_lossy())
+            .spawn()
+            .unwrap_err();
+        ApiError::Argument(ApiArgumentError::from_null_byte(&cwd, &arguments, cause).unwrap())
+    })
+    .join()
+    .unwrap();
+    assert_eq!(returned.name(), "TypeError");
+    let ApiError::Argument(error) = returned else {
+        panic!("lost argument refusal")
+    };
+    assert_eq!(error.code(), "ERR_INVALID_ARG_VALUE");
+    assert_eq!(error.location(), ApiArgumentLocation::Argument(1));
+    assert_eq!(error.argument().units(), &[114, 101, 118, 0, 0xd800]);
+    assert_eq!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+}
+#[test]
+fn null_cwd_follows_all_arguments_and_non_null_failures_keep_their_original_kind() {
+    use demlik_code_graph::api::map::{ApiArgumentError, ApiArgumentLocation};
+    let cwd = JsString::from("bad\0cwd");
+    let arguments = vec![JsString::from("ordinary")];
+    let cause = std::process::Command::new("git")
+        .args(arguments.iter().map(JsString::to_lossy))
+        .current_dir(cwd.to_lossy())
+        .spawn()
+        .unwrap_err();
+    let error = ApiArgumentError::from_null_byte(&cwd, &arguments, cause).unwrap();
+    assert_eq!(error.location(), ApiArgumentLocation::WorkingDirectory);
+    assert_eq!(error.argument(), &cwd);
+    let ordinary = ApiArgumentError::from_null_byte(
+        &"cwd".into(),
+        &arguments,
+        io::Error::from(io::ErrorKind::NotFound),
+    )
+    .unwrap_err();
+    assert_eq!(ordinary.kind(), io::ErrorKind::NotFound);
+}
