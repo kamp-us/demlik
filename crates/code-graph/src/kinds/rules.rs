@@ -3,7 +3,7 @@ use super::presets::EntryExportPresetName;
 use crate::project::locale_compare_units;
 use crate::text::JsString;
 use crate::text::{JsObject, JsValue, object_keys};
-use crate::validation::{InputIssue, PathSegment};
+use crate::validation::{InputIssue, PathSegment, record_object};
 use indexmap::IndexMap;
 use serde::Serialize;
 
@@ -128,18 +128,11 @@ fn object<'a>(
             value,
         ));
     };
-    if record && let Some(constructor) = object.get(&JsString::from("constructor")) {
-        if matches!(constructor, JsValue::Null) {
-            return Err(RuleInputError::TypeError(
-                "Cannot read properties of null (reading 'prototype')".into(),
-            ));
-        }
-        let plain = constructor
-            .get("prototype")
-            .and_then(JsValue::as_object)
-            .is_some_and(|prototype| prototype.contains_key(&JsString::from("isPrototypeOf")));
-        if !plain {
-            return Err(invalid(path, "record", value));
+    if record {
+        match record_object(value.expect("object input was checked above")) {
+            Ok(Some(_)) => {}
+            Ok(None) => return Err(invalid(path, "record", value)),
+            Err(error) => return Err(RuleInputError::TypeError(error.message().clone())),
         }
     }
     Ok(object)

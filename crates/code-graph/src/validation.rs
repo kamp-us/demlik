@@ -77,3 +77,49 @@ impl std::fmt::Display for InputIssue {
     }
 }
 impl std::error::Error for InputIssue {}
+
+#[derive(Debug, Serialize)]
+pub struct RecordTypeError {
+    name: &'static str,
+    message: JsString,
+}
+impl RecordTypeError {
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+    pub fn message(&self) -> &JsString {
+        &self.message
+    }
+}
+impl std::fmt::Display for RecordTypeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message.to_lossy())
+    }
+}
+impl std::error::Error for RecordTypeError {}
+
+/// Zod's plain-record constructor predicate under the pinned pristine-builtins profile.
+pub fn record_constructor_value(constructor: Option<&JsValue>) -> Result<bool, RecordTypeError> {
+    match constructor {
+        None => Ok(true),
+        Some(JsValue::Null) => Err(RecordTypeError {
+            name: "TypeError",
+            message: "Cannot read properties of null (reading 'prototype')".into(),
+        }),
+        Some(value) => Ok(value
+            .get("prototype")
+            .and_then(JsValue::as_object)
+            .is_some_and(|prototype| prototype.contains_key(&JsString::from("isPrototypeOf")))),
+    }
+}
+pub fn record_object(value: &JsValue) -> Result<Option<&JsObject>, RecordTypeError> {
+    let Some(object) = value.as_object() else {
+        return Ok(None);
+    };
+    // An unmodified ordinary object's Object constructor has the required prototype.
+    let plain = match object.get(&JsString::from("constructor")) {
+        Some(value) => record_constructor_value(Some(value))?,
+        None => true,
+    };
+    Ok(plain.then_some(object))
+}

@@ -20,3 +20,31 @@ fn retains_flat_validation_details_and_authoritative_utf16_path_and_message() {
         r#"{"code":"too_small","origin":"string","minimum":1,"inclusive":true,"path":["\ud800",2],"message":"\udfff"}"#
     );
 }
+
+#[test]
+fn distinguishes_plain_record_refusals_from_thrown_constructor_errors() {
+    use demlik_code_graph::validation::{record_constructor_value, record_object};
+    for (text, plain) in [
+        ("{}", true),
+        ("[]", false),
+        ("null", false),
+        (r#"{"constructor":1}"#, false),
+        (
+            r#"{"constructor":{"prototype":{"isPrototypeOf":null}}}"#,
+            true,
+        ),
+        (r#"{"constructor":{"prototype":{}}}"#, false),
+        (r#"{"constructor":{"prototype":[]}}"#, false),
+    ] {
+        let value = JsValue::parse(text).unwrap();
+        assert_eq!(record_object(&value).unwrap().is_some(), plain, "{text}");
+    }
+    let value = JsValue::parse(r#"{"constructor":null}"#).unwrap();
+    let error = record_object(&value).unwrap_err();
+    assert_eq!(error.name(), "TypeError");
+    assert_eq!(
+        error.message(),
+        "Cannot read properties of null (reading 'prototype')"
+    );
+    assert!(record_constructor_value(None).unwrap());
+}
