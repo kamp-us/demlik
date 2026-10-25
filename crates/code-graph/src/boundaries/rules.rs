@@ -226,7 +226,7 @@ pub static DRIVEN_HOMES: LazyLock<String> = LazyLock::new(|| {
 fn is_port_folder(folder: &JsString) -> bool {
     port_folders().iter().any(|name| folder == *name)
 }
-fn join(values: &[&JsString], separator: &str) -> JsString {
+pub(super) fn join(values: &[&JsString], separator: &str) -> JsString {
     let mut units = Vec::new();
     for (index, value) in values.iter().enumerate() {
         if index > 0 {
@@ -236,7 +236,7 @@ fn join(values: &[&JsString], separator: &str) -> JsString {
     }
     JsString::from_units(units)
 }
-fn interpolate(parts: &[JsString]) -> JsString {
+pub(super) fn interpolate(parts: &[JsString]) -> JsString {
     join(&parts.iter().collect::<Vec<_>>(), "")
 }
 pub fn layout_issue(scope: &JsString, folders: &[JsString]) -> Option<JsString> {

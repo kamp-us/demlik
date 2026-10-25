@@ -1,0 +1,235 @@
+use demlik_code_graph::{
+    boundaries::{
+        config::BoundaryRuleInputError,
+        declaration::DeclarationError,
+        impure::{GLOBAL_OBJECT, IMPURE_GLOBALS, ImpureShape},
+    },
+    syntax::imports::ImportEdge,
+    text::{JsString, JsValue},
+    validation::{InputIssue, RecordTypeError},
+};
+use indexmap::{IndexMap, IndexSet};
+use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
+use std::io::{self, BufRead};
+
+macro_rules! observe {
+    ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{
+        let result = $function($($argument),*);
+        $calls.push(stringify!($function));
+        result
+    }};
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Request {
+    id: String,
+    operation: String,
+    input: Box<RawValue>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImpureInput {
+    paths: Vec<Vec<JsString>>,
+    ctors: Vec<JsString>,
+    edges: Vec<ImportEdge>,
+    runtime: IndexSet<JsString>,
+}
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Check {
+    Issue { issue: Option<JsString> },
+    Thrown { thrown: Thrown },
+}
+#[derive(Serialize)]
+struct Thrown {
+    name: &'static str,
+    message: JsString,
+}
+fn checked(result: Result<Option<JsString>, DeclarationError>) -> Check {
+    match result {
+        Ok(issue) => Check::Issue { issue },
+        Err(error) => Check::Thrown {
+            thrown: Thrown {
+                name: error.name(),
+                message: error.message(),
+            },
+        },
+    }
+}
+#[derive(Serialize)]
+struct Declarations {
+    library: Check,
+    deployable: Check,
+    shape: Check,
+    combined: Check,
+}
+#[derive(Serialize)]
+#[serde(untagged, rename_all = "camelCase")]
+enum InputRefusal {
+    Issue {
+        #[serde(rename = "inputIssue")]
+        input_issue: InputIssue,
+    },
+    Thrown {
+        thrown: RecordTypeError,
+    },
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImpureOutput {
+    paths: Vec<Option<JsString>>,
+    ctors: Vec<Option<JsString>>,
+    modules: Vec<Option<JsString>>,
+    opened: Vec<JsString>,
+    rows: Vec<&'static str>,
+    globals: IndexMap<&'static str, ImpureShape>,
+    global_object: &'static str,
+}
+fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
+    RawValue::from_string(serde_json::to_string(value).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())
+}
+fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    match request.operation.as_str() {
+        "code_graph.boundary-declarations" => {
+            let value = JsValue::parse(request.input.get()).map_err(|error| error.to_string())?;
+            let parsed = observe!(
+                calls,
+                demlik_code_graph::boundaries::rules::BoundaryRules::parse,
+                &value
+            );
+            let rules = match parsed {
+                Ok(rules) => rules,
+                Err(BoundaryRuleInputError::Issue(input_issue)) => {
+                    return json(&InputRefusal::Issue { input_issue });
+                }
+                Err(BoundaryRuleInputError::TypeError(thrown)) => {
+                    return json(&InputRefusal::Thrown { thrown });
+                }
+            };
+            let output = Declarations {
+                library: checked(observe!(
+                    calls,
+                    demlik_code_graph::boundaries::declaration::library_declaration_issue,
+                    &rules
+                )),
+                deployable: checked(observe!(
+                    calls,
+                    demlik_code_graph::boundaries::declaration::deployable_declaration_issue,
+                    &rules
+                )),
+                shape: checked(observe!(
+                    calls,
+                    demlik_code_graph::boundaries::declaration::shape_declaration_issue,
+                    &rules
+                )),
+                combined: checked(observe!(
+                    calls,
+                    demlik_code_graph::boundaries::declaration::declaration_issue,
+                    &rules
+                )),
+            };
+            json(&output)
+        }
+        "code_graph.impure" => {
+            let input: ImpureInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let paths: Vec<_> = input
+                .paths
+                .iter()
+                .map(|path| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::boundaries::impure::impure_path_of,
+                        path
+                    )
+                })
+                .collect();
+            let ctors: Vec<_> = input
+                .ctors
+                .iter()
+                .map(|ctor| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::boundaries::impure::impure_bare_new_of,
+                        ctor
+                    )
+                })
+                .collect();
+            let modules: Vec<_> = input
+                .edges
+                .iter()
+                .map(|edge| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::boundaries::impure::impure_module_of,
+                        edge
+                    )
+                })
+                .collect();
+            let opened = observe!(
+                calls,
+                demlik_code_graph::boundaries::impure::impure_modules_opened,
+                &input.edges,
+                &input.runtime
+            );
+            let rows: Vec<_> =
+                observe!(calls, demlik_code_graph::boundaries::impure::impure_rows).collect();
+            let globals: IndexMap<_, _> = IMPURE_GLOBALS
+                .iter()
+                .map(|row| (row.name, row.shape))
+                .collect();
+            calls.push("demlik_code_graph::boundaries::impure::IMPURE_GLOBALS");
+            calls.push("demlik_code_graph::boundaries::impure::GLOBAL_OBJECT");
+            json(&ImpureOutput {
+                paths,
+                ctors,
+                modules,
+                opened,
+                rows,
+                globals,
+                global_object: GLOBAL_OBJECT,
+            })
+        }
+        _ => Err("unsupported operation".into()),
+    }
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Response {
+    id: Option<String>,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output: Option<Box<RawValue>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diagnostic: Option<String>,
+    observed_calls: Vec<&'static str>,
+}
+fn main() {
+    for line in io::stdin().lock().lines() {
+        let Ok(line) = line else {
+            break;
+        };
+        let request = serde_json::from_str::<Request>(&line);
+        let mut observed_calls = Vec::new();
+        let result = request
+            .as_ref()
+            .map_err(|error| error.to_string())
+            .and_then(|request| execute(request, &mut observed_calls));
+        let response = Response {
+            id: request.as_ref().ok().map(|request| request.id.clone()),
+            ok: result.is_ok(),
+            error: result.as_ref().err().map(|_| "driver_error"),
+            diagnostic: result.as_ref().err().cloned(),
+            output: result.ok(),
+            observed_calls,
+        };
+        println!(
+            "{}",
+            serde_json::to_string(&response).expect("response is JSON data")
+        );
+    }
+}
