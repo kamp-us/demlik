@@ -1,0 +1,58 @@
+{
+  "scope": "Integrate reviewed ef64/60b model checkpoint on committed newer shared owners; no new AgentState production.",
+  "base": "c3e2a9b8d463e8784a5e8bedf7485333fdd745d3",
+  "picks": {
+    "ef64f14133dafd50077dd3687ec5dfac844f482e": "f35515e6",
+    "60b26bfd49e0f7a2ae0d83554adac2287a541982": "32ffd439"
+  },
+  "worktree": "/private/tmp/demlik-rust-agent-state-01a16c9d",
+  "branch": "can/rust-agent-state-helpers",
+  "change": "Only two runtime fixture projections use canonical NumberOrNull.number(): Number(value) when present, JSON null when absent. No coercion, shared-owner or model module edits.",
+  "verification": {
+    "publicTests": 6,
+    "typedRefusals": 3,
+    "modelStrictTotal": 90,
+    "runtimeIncluded": 36,
+    "qualifiedOpenInputsExcluded": 2,
+    "llmCurrentStrict": 91,
+    "llmActions": 500,
+    "llmOpenGaps": 0,
+    "runtimeTimestampsSeparate": 36,
+    "timestampFailures": 0,
+    "selectedModelClippyDWarnings": true,
+    "sourceTsUnchanged": true
+  },
+  "red": "target/agent-state-model-integration-native.log",
+  "green": "target/agent-state-model-integration-native-green.log",
+  "modelGap": "Existing supported Missing/Undefined native input \u2192MissingInput vs Source rejection remains OPEN; unchanged by integration. Older e638 nonfinite stamp observations are fixed by this c3 shared numeric owner, current91+36 verified.",
+  "leanEnv": {
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-agent-state-01a16c9d/target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1",
+    "CARGO_NET_OFFLINE": "true"
+  },
+  "reportsSha256": {
+    "target/parity/agent-state-model-integration-llm.json": "65df91ee0d458538471840e1bbb7a0e594ca4a61b8e00cbf58560fc54180d730",
+    "target/parity/agent-state-model-integration-timestamps.json": "c3dc20721f7ebdae23f40aca84bf7764af5b4177899ba5e135de07b67b2772c4",
+    "target/parity/agent-state-model-integration-types.json": "7d5a1a5157b5a798b27d67554645ab6df404b9e9bf40244a9a5ae157d04962f8",
+    "target/parity/agent-state-model-integration.json": "afa6fe2af2edb243ea21f31d086ea2c65d0680a5b47c192e10001d68f3c97b9a"
+  },
+  "logsSha256": {
+    "target/agent-state-model-integration-build.log": "e9e6c7fc13c88bccf1b5b6d3807b783c7c469172a852dd7cda9719386b86b8b6",
+    "target/agent-state-model-integration-clippy.log": "9f788eef6e69d5288058071d164902041cbd6c1c244b776412e5769b9c53c42d",
+    "target/agent-state-model-integration-llm-build.log": "0cbea22c7bf2f4fa2c1eafbff8f180790cc3894b595e54be46cf3be8f2d1ef6e",
+    "target/agent-state-model-integration-llm.log": "c49fdcd666c47e27e5e9a180bce4267786df52ce4e8bd5a93aeb910d8c73d79c",
+    "target/agent-state-model-integration-native-green.log": "2937c431c74ae32316c14057a9a06055646f3afe8cf1e48baa56dd5cda07d3b4",
+    "target/agent-state-model-integration-native.log": "28f389badd64205b0e10b4e2b426217375682951f1d7db68d9ab2943a84b6446",
+    "target/agent-state-model-integration-pairs.log": "01d6d72a48175aaa53e285a6b8ff0ee2479745c38eced1f285c3b1848143e3e3",
+    "target/agent-state-model-integration-timestamp-build.log": "6b71de35fc020026899492306195734c470fd2d7060b70a9ddc6121755954af2",
+    "target/agent-state-model-integration-timestamps.log": "e0e3238ab2e471fd464c1a3581ab2d0ef3e03bbbafa84cc068a9b5d0329a5853",
+    "target/agent-state-model-integration-types.log": "5cced603de5e5885af0e114a362d5f68e1d682723ccaf83bff876e0d5fc9f981"
+  },
+  "fixtureSha256": "52e620282a12ef50a460071d60b29ed5558866ddb2a5edee7b3aeb854c991561",
+  "preservedModelReceiptSha256": "34481729e873a7c75d4cf7bad268fde38812b45d6884b7a5b47834b795a20784",
+  "probe": "/private/tmp/demlik-agent-state-source-probe-01a16c9d.json",
+  "probeSha256": "800c0fd872a69307ffdd275311e55b49f8640151a1285257479b321fe6fcbc73"
+}

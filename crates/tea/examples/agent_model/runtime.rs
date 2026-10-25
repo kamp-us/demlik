@@ -160,7 +160,7 @@ fn machine(
                                     "sameToken",
                                     PlainData::Bool(Rc::ptr_eq(&ok.output.token, &ctx.token)),
                                 ),
-                                ("at", PlainData::Number(at)),
+                                ("at", at.number().map_or(PlainData::Null, PlainData::Number)),
                             ]),
                         )
                     }
@@ -183,7 +183,7 @@ fn machine(
                                 ("purpose", app::string(error.purpose)),
                                 ("reason", app::string(error.reason)),
                                 ("sameCause", PlainData::Bool(same)),
-                                ("at", PlainData::Number(at)),
+                                ("at", at.number().map_or(PlainData::Null, PlainData::Number)),
                             ]),
                         )
                     }
