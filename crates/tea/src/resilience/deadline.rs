@@ -95,11 +95,7 @@ pub fn deadlines_sub<S>(
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TimerDeps<M> {
-    pub ms: f64,
-    pub msg: M,
-}
+pub use crate::TimerDeps;
 pub fn next_timer(list: &[Deadline], now_ms: f64) -> Option<TimerDeps<DeadlineExceeded>> {
     let mut soonest: Option<&Deadline> = None;
     for deadline in list {

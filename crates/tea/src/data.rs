@@ -160,7 +160,7 @@ impl<L: Subscription, R: Subscription> Subscription for EitherSub<L, R> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, serde::Deserialize)]
 pub struct TimerDeps<M> {
     pub ms: f64,
     pub msg: M,
