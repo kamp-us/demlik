@@ -5,6 +5,8 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { apiBaseParserParity } from "./api-base-run.mjs";
+import { apiGitParity } from "./api-git-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
@@ -35,6 +37,8 @@ import { workflowParity } from "./workflow-run.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const args = process.argv.slice(2);
+const apiBaseParserBinaryArgument = args.indexOf("--api-base-parser-bin");
+const apiGitBinaryArgument = args.indexOf("--api-git-bin");
 const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
@@ -478,6 +482,62 @@ if (!mutationSuite) {
     });
   }
 }
+let apiBaseParser = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    apiBaseParser = await apiBaseParserParity({
+      quiet: true,
+      allowFailures: true,
+      binary:
+        apiBaseParserBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[apiBaseParserBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-api-base-parser.json`,
+            ),
+    });
+    failures.push(...apiBaseParser.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "api-base-parser.verification",
+      operation: "code_graph.api-base-parser",
+      message: error.message,
+    });
+  }
+}
+let apiGit = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    apiGit = await apiGitParity({
+      quiet: true,
+      allowFailures: true,
+      binary:
+        apiGitBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[apiGitBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-api-git.json`,
+            ),
+    });
+    failures.push(...apiGit.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "api-git.verification",
+      operation: "code_graph.api-git",
+      message: error.message,
+    });
+  }
+}
 let durableObject = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -867,6 +927,8 @@ const report = {
     journal.cases +
     journalRemote.cases +
     durableObject.cases +
+    apiBaseParser.cases +
+    apiGit.cases +
     storedCell.cases +
     jsonText.cases +
     recorder.cases +
@@ -893,6 +955,8 @@ const report = {
     journal.passed +
     journalRemote.passed +
     durableObject.passed +
+    apiBaseParser.passed +
+    apiGit.passed +
     storedCell.passed +
     jsonText.passed +
     recorder.passed +
@@ -920,6 +984,8 @@ const report = {
       ...(journal.passed ? ["tea.journal"] : []),
       ...(journalRemote.passed ? ["tea.journal-remote"] : []),
       ...(durableObject.passed ? ["tea.durable-object"] : []),
+      ...(apiBaseParser.passed ? ["code_graph.api-base-parser"] : []),
+      ...(apiGit.passed ? ["code_graph.api-git"] : []),
       ...(storedCell.passed ? ["tea.stored-cell"] : []),
       ...(jsonText.passed ? ["tea.json-text"] : []),
       ...(recorder.passed ? ["tea.recorder"] : []),
@@ -972,6 +1038,21 @@ const report = {
     failures: undefined,
   },
   storedCell: { ...storedCell, nativeEvidence: undefined, failures: undefined },
+  apiBaseParser: {
+    ...apiBaseParser,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  apiGit: {
+    ...apiGit,
+    nativeEvidence: undefined,
+    qualifiedNativeEvidence: undefined,
+    nativeErrors: undefined,
+    failures: undefined,
+    qualifiedEvidenceCases: Object.keys(apiGit.qualifiedNativeEvidence ?? {})
+      .length,
+    nativeErrorCases: Object.keys(apiGit.nativeErrors ?? {}).length,
+  },
   recorder: { ...recorder, nativeEvidence: undefined, failures: undefined },
   recordedRuntime: { ...recordedRuntime, nativeEvidence: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
@@ -1025,6 +1106,8 @@ const report = {
     ...journal.nativeEvidence,
     ...journalRemote.nativeEvidence,
     ...durableObject.nativeEvidence,
+    ...apiBaseParser.nativeEvidence,
+    ...apiGit.nativeEvidence,
     ...storedCell.nativeEvidence,
     ...jsonText.nativeEvidence,
     ...recorder.nativeEvidence,

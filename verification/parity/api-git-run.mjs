@@ -271,6 +271,7 @@ export async function apiGitParity(options = {}) {
       .filter((name) => name.startsWith("code-graph-api-base-"));
     const failures = [],
       nativeEvidence = {},
+      qualifiedNativeEvidence = {},
       nativeErrors = {};
     assert.equal(source.length, cases.length);
     assert.equal(native.length, cases.length);
@@ -286,7 +287,10 @@ export async function apiGitParity(options = {}) {
           projection(source[i], test, tempParent),
         );
         assert.ok(native[i].observedCalls.includes(markers[test.operation]));
-        nativeEvidence[test.id] = native[i].observedCalls;
+        const evidence = test.qualification
+          ? qualifiedNativeEvidence
+          : nativeEvidence;
+        evidence[test.id] = native[i].observedCalls;
         if (native[i].nativeDetails)
           nativeErrors[test.id] = native[i].nativeDetails;
       } catch (error) {
@@ -421,6 +425,8 @@ export async function apiGitParity(options = {}) {
       protocolRejected: invalid.length,
       failures,
       nativeEvidence,
+      qualifiedNativeEvidence,
+      rustBinarySha256: sha(fs.readFileSync(binary)),
       nativeErrors,
       qualifications,
       sideEffects: {

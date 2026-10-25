@@ -637,7 +637,7 @@ try {
         process.execPath,
         [
           "--import",
-          "tsx",
+          createRequire(import.meta.url).resolve("tsx"),
           fileURLToPath(new URL("./api-view-reference.mts", import.meta.url)),
           "--single",
           JSON.stringify(item.input),

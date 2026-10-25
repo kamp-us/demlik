@@ -11,6 +11,16 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "api-view",
+    driver: "api_view_driver",
+    script: "graph-api-view.mts",
+    args: [
+      require.resolve("@typescript/native-preview/package.json", {
+        paths: [path.join(root, "packages/code-graph")],
+      }),
+    ],
+  },
+  {
     name: "api-foundation",
     driver: "api_foundation_driver",
     script: "graph-api-foundation.mts",
@@ -160,6 +170,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "api_view_driver",
   "api_foundation_driver",
   "boundary_gate_driver",
   "scope_count_driver",
@@ -204,7 +215,7 @@ export async function graphParity(cargo) {
   for (const suite of suites) {
     const binary = path.join(root, "target/debug/examples", suite.driver);
     if (checkedUtf8.has(suite.driver) && !transportProbes[suite.driver]) {
-      const invalid = spawnSync(binary, [], {
+      const invalid = spawnSync(binary, suite.args ?? [], {
         cwd: root,
         input: Buffer.from([0xff, 0x0a]),
         encoding: "utf8",
@@ -262,6 +273,12 @@ export async function graphParity(cargo) {
       steps: report.steps,
       queries: report.queries,
       functions: report.functions,
+      ...(report.declarationCleanupQualification
+        ? {
+            declarationCleanupQualification:
+              report.declarationCleanupQualification,
+          }
+        : {}),
       rustBinarySha256: createHash("sha256")
         .update(await readFile(binary))
         .digest("hex"),

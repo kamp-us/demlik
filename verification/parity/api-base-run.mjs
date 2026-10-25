@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -110,6 +110,7 @@ export async function apiBaseParserParity(options = {}) {
     failures,
     nativeEvidence,
     corpusSha256: hash(input),
+    rustBinarySha256: hash(await readFile(binary)),
   };
   const reportFile =
     options.reportFile ?? path.join(root, "target/parity/api-base-parser.json");
