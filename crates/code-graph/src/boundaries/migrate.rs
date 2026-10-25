@@ -67,21 +67,7 @@ pub fn migrated_ledger(
                 .get(&report.scope)
                 .copied()
                 .unwrap_or_else(|| {
-                    const INHERITED: &[&str] = &[
-                        "constructor",
-                        "__defineGetter__",
-                        "__defineSetter__",
-                        "hasOwnProperty",
-                        "__lookupGetter__",
-                        "__lookupSetter__",
-                        "isPrototypeOf",
-                        "propertyIsEnumerable",
-                        "toString",
-                        "valueOf",
-                        "__proto__",
-                        "toLocaleString",
-                    ];
-                    if INHERITED.iter().any(|name| report.scope == *name) {
+                    if crate::text::has_object_prototype_property(&report.scope) {
                         f64::NAN
                     } else {
                         ceilings.default

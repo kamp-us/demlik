@@ -12,7 +12,11 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/graph-*.json`. Deliberate invalid driver inputs are counted
    separately from library behavior cases.
    Boundary ledger parsing, identity, moves and file operations compare against the
-   same source API, including invalid input and UTF-16 strings.
+   same source API, including invalid input and UTF-16 strings. Reconciliation
+   compares scope pruning, write diagnostics, acceptance and ceiling migration.
+   Query traces compare reachability, unguarded paths, package interface width
+   and clusters. Shared JSON traces compare exact source parse/stringify behavior
+   at the data boundary, using serde and ECMAScript number formatting.
    Timing checks compare debounce/throttle reentry, input transitions, restored
    data and deadline cleanup; their report is `target/parity/timing.json`.
    Runtime traces run through TypeScript Promise, TypeScript Effect, and both
@@ -26,7 +30,7 @@ The implementations live beside each other in `packages/` and `crates/`.
    process restart, dead PID-lock recovery and deletion in both languages.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
-   `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json` and `runtime-contract-mutation.json`.
+   `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json` and `runtime-contract-mutation.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then

@@ -215,29 +215,19 @@ fn object(raw: &RawValue, path: &str) -> Result<Fields, JsString> {
     decode(raw.get()).map_err(|_| issue(path, "not valid JSON"))
 }
 fn unknown_keys(fields: &Fields, names: &[&str], path: &str) -> Result<(), JsString> {
-    let mut keys = fields
-        .keys()
-        .enumerate()
-        .filter(|(_, key)| !names.iter().any(|name| *key == *name))
+    let keys = crate::text::object_keys(fields)
+        .into_iter()
+        .filter(|key| !names.iter().any(|name| *key == *name))
         .collect::<Vec<_>>();
     if keys.is_empty() {
         return Ok(());
     }
-    keys.sort_by_key(|(position, key)| {
-        let index = key.to_utf8().ok().and_then(|value| {
-            value
-                .parse::<u32>()
-                .ok()
-                .filter(|index| *index != u32::MAX && index.to_string() == value)
-        });
-        index.map_or((1, *position as u64), |index| (0, u64::from(index)))
-    });
     let mut detail = if keys.len() == 1 {
         "Unrecognized key: ".encode_utf16().collect::<Vec<_>>()
     } else {
         "Unrecognized keys: ".encode_utf16().collect::<Vec<_>>()
     };
-    for (index, (_, key)) in keys.iter().enumerate() {
+    for (index, key) in keys.iter().enumerate() {
         if index > 0 {
             detail.extend(", ".encode_utf16());
         }

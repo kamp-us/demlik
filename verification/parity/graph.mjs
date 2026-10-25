@@ -10,6 +10,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
+  { name: "json", driver: "json_driver", script: "graph-json.mts" },
+  { name: "query", driver: "query_driver", script: "graph-query.mts" },
+  {
+    name: "reconcile",
+    driver: "reconcile_driver",
+    script: "graph-reconcile.mts",
+  },
   { name: "edges", driver: "edges_driver", script: "graph-edges.mts" },
   { name: "ledger", driver: "ledger_driver", script: "graph-ledger.mts" },
   { name: "project", driver: "project_driver", script: "graph-project.mts" },
