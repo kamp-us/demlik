@@ -1,6 +1,7 @@
 pub mod command;
 pub mod core;
 pub mod data;
+pub mod durable_effects;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod file_store;
 pub mod flow;
@@ -13,6 +14,7 @@ pub mod ports;
 pub mod resilience;
 pub mod retry_backoff;
 pub mod runtime;
+mod schema;
 pub mod storage;
 pub mod timing;
 pub mod work_queue;

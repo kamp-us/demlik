@@ -67,14 +67,7 @@ impl<V> CommandSpec for SnapshotWriteSpec<V> {
         )]))
     }
     fn parse_output(value: PlainData) -> Result<PlainData, SchemaError> {
-        if matches!(value, PlainData::Undefined) {
-            Ok(value)
-        } else {
-            Err(SchemaError::Issues(vec![Issue::new(
-                "",
-                "expected no value",
-            )]))
-        }
+        crate::schema::undefined_only(value)
     }
 }
 pub struct SnapshotLoadSpec<V>(PhantomData<fn() -> V>);
