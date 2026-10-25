@@ -105,7 +105,17 @@ fn reader(
     }
 }
 fn terminate(child: &mut std::process::Child, failures: &mut Vec<CaptureFailure>) {
-    if let Err(error) = child.kill() {
+    // Node spawnSync defaults to SIGTERM. Child::kill uses SIGKILL on Unix,
+    // which skips a tool's signal cleanup handler.
+    #[cfg(unix)]
+    let result = rustix::process::kill_process(
+        rustix::process::Pid::from_child(child),
+        rustix::process::Signal::TERM,
+    )
+    .map_err(io::Error::from);
+    #[cfg(not(unix))]
+    let result = child.kill();
+    if let Err(error) = result {
         failures.push(CaptureFailure::Kill(error));
     }
 }

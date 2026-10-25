@@ -365,6 +365,7 @@ dependencies = [
  "oxc_resolver 11.24.2",
  "oxc_span",
  "regress",
+ "rustix",
  "ryu-js",
  "serde",
  "serde_json",
