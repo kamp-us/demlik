@@ -93,32 +93,12 @@ fn build_edges(
     edges
 }
 fn round_modularity(value: f64) -> f64 {
-    // JS toFixed rounds an exact binary value's decimal halfway case upward.
-    if !value.is_finite() || value.abs() >= 1e21 {
-        return value;
-    }
-    let bits = value.abs().to_bits();
-    let exponent = ((bits >> 52) & 0x7ff) as i32;
-    let mantissa = (bits & ((1 << 52) - 1)) | if exponent == 0 { 0 } else { 1 << 52 };
-    let exponent = if exponent == 0 {
-        -1074
-    } else {
-        exponent - 1075
-    };
-    let scaled = u128::from(mantissa) * 1_000_000;
-    let rounded = if exponent >= 0 {
-        scaled << exponent
-    } else {
-        let shift = exponent.unsigned_abs();
-        if shift >= 128 {
-            0
-        } else {
-            let whole = scaled >> shift;
-            whole + u128::from(shift > 0 && scaled & ((1u128 << shift) - 1) >= 1u128 << (shift - 1))
-        }
-    };
-    (rounded as f64 / 1_000_000.0).copysign(value)
+    ryu_js::Buffer::new()
+        .format_to_fixed(value, 6)
+        .parse()
+        .expect("ECMAScript toFixed produces numeric text")
 }
+
 pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) -> ClusterReport {
     let production: Vec<_> = modules.iter().filter(|node| !node.is_test).collect();
     let node_set: IndexSet<_> = production.iter().map(|node| node.file.as_str()).collect();
