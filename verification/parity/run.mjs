@@ -12,6 +12,7 @@ import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
+import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
 import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { timingParity } from "./timing-run.mjs";
 
@@ -23,6 +24,7 @@ const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
+const deadlineBinaryArgument = args.indexOf("--deadline-bin");
 const paginateQueueBinaryArgument = args.indexOf("--paginate-queue-bin");
 const reportArgument = args.indexOf("--report");
 const mutationArgument = args.indexOf("--mutation-suite");
@@ -289,6 +291,32 @@ if (!mutationSuite) {
     });
   }
 }
+let runtimeDeadline = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    runtimeDeadline = await runtimeDeadlineParity(cargo, {
+      binary:
+        deadlineBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[deadlineBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-runtime-deadline.json`,
+            ),
+    });
+    failures.push(...runtimeDeadline.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "runtime-deadline.verification",
+      operation: "tea.runtime.deadline",
+      message: error.message,
+    });
+  }
+}
 let timing = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -385,6 +413,7 @@ const report = {
     timing.cases +
     runtimeContracts.cases +
     runtimeHooks.cases +
+    runtimeDeadline.cases +
     paginateQueue.cases +
     suiteFailures,
   passed:
@@ -394,6 +423,7 @@ const report = {
     timing.passed +
     runtimeContracts.passed +
     runtimeHooks.passed +
+    runtimeDeadline.passed +
     paginateQueue.passed -
     differentialFailures,
   failures,
@@ -404,6 +434,7 @@ const report = {
       ...(timing.passed ? ["tea.timing"] : []),
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
+      ...(runtimeDeadline.passed ? ["tea.runtime.deadline"] : []),
       ...(paginateQueue.passed ? ["tea.paginate-and-queue"] : []),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
@@ -423,6 +454,11 @@ const report = {
   },
   runtimeHooks: {
     ...runtimeHooks,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  runtimeDeadline: {
+    ...runtimeDeadline,
     nativeEvidence: undefined,
     failures: undefined,
   },
@@ -447,6 +483,7 @@ const report = {
     ...timing.nativeEvidence,
     ...runtimeContracts.nativeEvidence,
     ...runtimeHooks.nativeEvidence,
+    ...runtimeDeadline.nativeEvidence,
     ...paginateQueue.nativeEvidence,
   },
   infrastructureDiagnostics: Object.fromEntries(

@@ -339,10 +339,25 @@ export async function verifyRuntimeDeadline(
   );
   assert.equal(results.length, corpus.length);
   const expected = [];
+  const failures: {
+    id: string;
+    reference: unknown;
+    native: unknown;
+    message: string;
+  }[] = [];
   for (let index = 0; index < corpus.length; index++) {
     const reference = await executeRuntimeDeadline(corpus[index].script);
     expected.push(reference);
-    assert.deepEqual(results[index].comparison, reference, corpus[index].id);
+    try {
+      assert.deepEqual(results[index].comparison, reference, corpus[index].id);
+    } catch (error) {
+      failures.push({
+        id: corpus[index].id,
+        reference,
+        native: results[index].comparison,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
   const cargo = process.env.CARGO ?? "cargo",
     rustc =
@@ -356,10 +371,14 @@ export async function verifyRuntimeDeadline(
     },
     binary: { path: executable, sha256: digest(executable) },
     compared: corpus.length,
-    controls: mutationCheck ? [control(corpus, expected)] : [],
+    passed: corpus.length - failures.length,
+    failures,
+    controls:
+      mutationCheck && !failures.length ? [control(corpus, expected)] : [],
     cases: corpus.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !failures.some((failure) => failure.id === item.id),
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
   };
@@ -387,6 +406,8 @@ if (
   console.log(
     JSON.stringify({
       compared: report.compared,
+      passed: report.passed,
+      failures: report.failures,
       controls: report.controls.map((item) => ({
         id: item.id,
         detected: item.detectedIds.length,
@@ -394,4 +415,5 @@ if (
       report: parsed.values.report ?? "target/parity/runtime-deadline.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }

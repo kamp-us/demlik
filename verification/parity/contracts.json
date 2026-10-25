@@ -3656,5 +3656,130 @@
       "runtime-hooks.promise.drive-stall",
       "runtime-hooks.promise.drive-cancel"
     ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#DRIVEN_HOMES": {
+    "signature": "4785ba5a4a290050f2c1f59b8e3967cc7d330dfaeb90d00bb7b3fd4233955085",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::DRIVEN_HOMES"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#declaresDeployables": {
+    "signature": "4a081c0da1ecfddfbdfe5ae35bbe610236696a101931659e703472353f04e6bf",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::declares_deployables"]
+    },
+    "cases": [
+      "graph.zoning.empty-declaration",
+      "graph.zoning.declares-5",
+      "graph.zoning.declares-6"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#declaresLibraries": {
+    "signature": "f1f6379e02bd3cc98abf06aacc643edf3532fbf96a8338718e97a270bbf85968",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::declares_libraries"]
+    },
+    "cases": [
+      "graph.zoning.empty-declaration",
+      "graph.zoning.declares-0",
+      "graph.zoning.declares-1",
+      "graph.zoning.declares-2",
+      "graph.zoning.declares-3",
+      "graph.zoning.declares-4"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#declaresReadAllowance": {
+    "signature": "c175dfb83e68deb1c3c14c8cabd15385c43a003c79f0a1fab953d90cb46132ec",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::rules::declares_read_allowance"
+      ]
+    },
+    "cases": ["graph.zoning.empty-declaration", "graph.zoning.declares-8"]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#featureFileOf": {
+    "signature": "8007337d0432eaeed8fc4120ca3ea6a3dc146fe8884586f8157e25b3a745e213",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::feature_file_of"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#inScope": {
+    "signature": "b87d41974165bc8082e8ccd1bd07f8128fc79f61275c5284103f50b93c1be706",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::in_scope"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#layoutIssue": {
+    "signature": "ef3b0bc0b509ec57e2d872e881c903fe1582f7e417b57d7f32c7d255e62b85c4",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::layout_issue"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths",
+      "graph.zoning.mixed-layout-helpers"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#placeOf": {
+    "signature": "670898559cd656ed0b8d5f8ed6d6dc75efaac6954fe307a644a39d95c616c749",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::place_of"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#scopeZoning": {
+    "signature": "c05a5e09399034b86029b3f341449e2e0a1c49994218c7570f017def1ef5d95d",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": ["demlik_code_graph::boundaries::rules::scope_zoning"]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths",
+      "graph.zoning.missing-inherited-record-value"
+    ]
+  },
+  "@demlik/code-graph:./dist/chunk-VPOYDNGM.js#unlistedPortFolderIssue": {
+    "signature": "23e825622e2e0751273209fcc1ba1a1b8b631d6570179758aa048a5c1fbd888c",
+    "rust": {
+      "file": "crates/code-graph/src/boundaries/rules.rs",
+      "symbols": [
+        "demlik_code_graph::boundaries::rules::unlisted_port_folder_issue"
+      ]
+    },
+    "cases": [
+      "graph.zoning.per-feature",
+      "graph.zoning.port-complete",
+      "graph.zoning.raw-utf16-paths"
+    ]
   }
 }

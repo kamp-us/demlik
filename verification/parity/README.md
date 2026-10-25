@@ -15,7 +15,10 @@ The implementations live beside each other in `packages/` and `crates/`.
    same source API, including invalid input and UTF-16 strings. Reconciliation
    compares scope pruning, write diagnostics, acceptance and ceiling migration.
    Prepared-rule zoning traces compare both layouts, rule ownership and layout
-   diagnostics; full boundary-rule input validation is a separate contract.
+   diagnostics. Boundary-rule input validation separately compares defaults,
+   first issue paths/messages and thrown errors; declaration consistency is
+   a separate pass. Wrangler catalog checks load shared JSONC/TOML files,
+   manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
    and clusters. Shared JSON traces compare exact source parse/stringify behavior
    at the data boundary, using serde and ECMAScript number formatting.
@@ -31,6 +34,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    both profiles, with complete mismatch evidence and compiled call receipts.
    `target/parity/runtime-hooks.json` compares identity filtering, per-run ports,
    callback identity, events, telemetry, timer fallback and awaited host cleanup.
+   `target/parity/runtime-deadline.json` connects the deadline helper directly to
+   each default timer runner and verifies remaining delay, stop and overrides.
    Promise drive cases use the public source helper; the native Effect convenience
    is not treated as a TypeScript export.
    Independent-process storage checks also run by default, with bounded child
@@ -39,7 +44,9 @@ The implementations live beside each other in `packages/` and `crates/`.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
    `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
-   `runtime-hooks-mutation.json`, `paginate-queue-mutations.json` and `zoning-mutations.json`.
+   `runtime-hooks-mutation.json`, `runtime-deadline-mutation.json`,
+   `paginate-queue-mutations.json`, `zoning-mutations.json` and
+   `boundary-config-mutations.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
@@ -68,7 +75,8 @@ configure the usual `CARGO_HOME`, `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` variables
 The runner also accepts `--rust-bin <path>` and `--report <path>` for testing a
 separately built binary. Use `--runtime-bin <path>` to exercise a separately built
 native runtime example, `--contract-bin <path>` for typed command contracts,
-`--hooks-bin <path>` for runtime hooks, `--paginate-queue-bin <path>` for the
+`--hooks-bin <path>` for runtime hooks, `--deadline-bin <path>` for the deadline
+integration, `--paginate-queue-bin <path>` for the
 pagination/queue driver, or `--timing-bin <path>` for timing. Generated cases use the recorded seed `0x5eed1234`.
 
 Add shared JSON cases under `cases/`, with a unique `id`, an `operation`, `input`,
