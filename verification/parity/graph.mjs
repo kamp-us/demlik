@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
+  { name: "data", driver: "data_driver", script: "graph-data.mts" },
   {
     name: "data-sites",
     driver: "data_driver",
