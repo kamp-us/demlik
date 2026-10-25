@@ -1,5 +1,6 @@
 //! Optional report shapes, shared by extraction and graph consumers.
 use super::EntryReach;
+use crate::text::JsString;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -138,7 +139,7 @@ pub struct ClusterReport {
     pub split_directories: Vec<SplitDirectory>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CrossRuntimeReason {
     TargetServiceUnknown,
@@ -152,29 +153,29 @@ pub enum BindingKind {
     DurableObject,
     Workflow,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CrossRuntimeEdge {
-    pub binding: String,
+    pub binding: JsString,
     pub binding_kind: BindingKind,
     pub caller_id: String,
     pub callee_id: Option<String>,
     pub line: usize,
     pub method: String,
-    pub owner_service: String,
+    pub owner_service: JsString,
     pub reason: Option<CrossRuntimeReason>,
-    pub target_class: String,
-    pub target_service: String,
+    pub target_class: JsString,
+    pub target_service: JsString,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BindingCensusRow {
-    pub binding: String,
+    pub binding: JsString,
     pub binding_kind: BindingKind,
     pub call_sites: usize,
-    pub owner_service: String,
-    pub target_class: String,
-    pub target_service: String,
+    pub owner_service: JsString,
+    pub target_class: JsString,
+    pub target_service: JsString,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

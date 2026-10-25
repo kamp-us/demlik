@@ -220,6 +220,15 @@ pub fn resolve_edges(
     imports: ImportGraph,
     ids: &[String],
 ) -> Result<EdgeResult, TsgoError> {
+    resolve_edges_with_cross_runtime(context, imports, ids, None)
+}
+
+pub fn resolve_edges_with_cross_runtime(
+    context: &mut TypeContext<'_, '_>,
+    imports: ImportGraph,
+    ids: &[String],
+    mut cross_runtime: Option<&mut super::cross_runtime::CrossRuntimeResolver<'_>>,
+) -> Result<EdgeResult, TsgoError> {
     let mut calls_by_id: IndexMap<String, Vec<CallSite>> =
         ids.iter().map(|id| (id.clone(), Vec::new())).collect();
     let sources: Vec<_> = context
@@ -247,6 +256,7 @@ pub fn resolve_edges(
         .collect();
     for (node, id) in nodes {
         let source = node.source_file();
+        let file = context.relative_path(&source);
         let key = source.file_name().to_path_buf();
         if !constants_by_source.contains_key(&key) {
             constants_by_source.insert(
@@ -257,7 +267,16 @@ pub fn resolve_edges(
         let constants = &constants_by_source[&key];
         let mut sites = Vec::new();
         for call in &calls_by_node[&node] {
-            for callee in resolve_callees(context, call, &mut factories)? {
+            let cross = cross_runtime
+                .as_deref_mut()
+                .map(|resolver| resolver.resolve(context, call, &id, &file))
+                .transpose()?
+                .flatten();
+            let callees = match cross {
+                Some(callee) => vec![callee],
+                None => resolve_callees(context, call, &mut factories)?,
+            };
+            for callee in callees {
                 sites.push(CallSite {
                     callee_id: callee.callee_id,
                     declaration: callee.declaration,
