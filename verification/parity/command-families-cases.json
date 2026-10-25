@@ -1,0 +1,2709 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "families.distinct.ok",
+      "input": {
+        "left": "alpha",
+        "right": "beta",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "alpha",
+        "commands": [
+          {
+            "type": "alpha",
+            "key": "a"
+          },
+          {
+            "type": "beta",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "alpha_ok",
+          "cmd": {
+            "type": "alpha",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "beta_ok",
+            "cmd": {
+              "type": "beta",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.distinct.malformed",
+      "input": {
+        "left": "alpha",
+        "right": "beta",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "alpha",
+        "commands": [
+          {
+            "type": "alpha",
+            "key": "a"
+          },
+          {
+            "type": "beta",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "alpha_ok",
+          "cmd": {
+            "type": "alpha",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "alpha_err",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "beta_err",
+            "cmd": {
+              "type": "beta",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.distinct.declared",
+      "input": {
+        "left": "alpha",
+        "right": "beta",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "alpha",
+        "commands": [
+          {
+            "type": "alpha",
+            "key": "a"
+          },
+          {
+            "type": "beta",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "alpha_ok",
+          "cmd": {
+            "type": "alpha",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "alpha_err",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "beta_err",
+            "cmd": {
+              "type": "beta",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.distinct.undeclared",
+      "input": {
+        "left": "alpha",
+        "right": "beta",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "alpha",
+        "commands": [
+          {
+            "type": "alpha",
+            "key": "a"
+          },
+          {
+            "type": "beta",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "alpha_ok",
+          "cmd": {
+            "type": "alpha",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.distinct.none",
+      "input": {
+        "left": "alpha",
+        "right": "beta",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "alpha",
+        "commands": [
+          {
+            "type": "alpha",
+            "key": "a"
+          },
+          {
+            "type": "beta",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "alpha_ok",
+          "cmd": {
+            "type": "alpha",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "alpha_ok",
+            "cmd": {
+              "type": "alpha",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.composed.ok",
+      "input": {
+        "left": "fetch_run",
+        "right": "search_run",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "fetch_run",
+        "commands": [
+          {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          {
+            "type": "search_run",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "fetch_run_ok",
+          "cmd": {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "search_run_ok",
+            "cmd": {
+              "type": "search_run",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.composed.malformed",
+      "input": {
+        "left": "fetch_run",
+        "right": "search_run",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "fetch_run",
+        "commands": [
+          {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          {
+            "type": "search_run",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "fetch_run_ok",
+          "cmd": {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "fetch_run_err",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "search_run_err",
+            "cmd": {
+              "type": "search_run",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.composed.declared",
+      "input": {
+        "left": "fetch_run",
+        "right": "search_run",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "fetch_run",
+        "commands": [
+          {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          {
+            "type": "search_run",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "fetch_run_ok",
+          "cmd": {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "fetch_run_err",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "search_run_err",
+            "cmd": {
+              "type": "search_run",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.composed.undeclared",
+      "input": {
+        "left": "fetch_run",
+        "right": "search_run",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "fetch_run",
+        "commands": [
+          {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          {
+            "type": "search_run",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "fetch_run_ok",
+          "cmd": {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.composed.none",
+      "input": {
+        "left": "fetch_run",
+        "right": "search_run",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "fetch_run",
+        "commands": [
+          {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          {
+            "type": "search_run",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "fetch_run_ok",
+          "cmd": {
+            "type": "fetch_run",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "fetch_run_ok",
+            "cmd": {
+              "type": "fetch_run",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.utf8.ok",
+      "input": {
+        "left": "çağrı",
+        "right": "iş",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "çağrı",
+        "commands": [
+          {
+            "type": "çağrı",
+            "key": "a"
+          },
+          {
+            "type": "iş",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "çağrı_ok",
+          "cmd": {
+            "type": "çağrı",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "iş_ok",
+            "cmd": {
+              "type": "iş",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.utf8.malformed",
+      "input": {
+        "left": "çağrı",
+        "right": "iş",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "çağrı",
+        "commands": [
+          {
+            "type": "çağrı",
+            "key": "a"
+          },
+          {
+            "type": "iş",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "çağrı_ok",
+          "cmd": {
+            "type": "çağrı",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "çağrı_err",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "iş_err",
+            "cmd": {
+              "type": "iş",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.utf8.declared",
+      "input": {
+        "left": "çağrı",
+        "right": "iş",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "çağrı",
+        "commands": [
+          {
+            "type": "çağrı",
+            "key": "a"
+          },
+          {
+            "type": "iş",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "çağrı_ok",
+          "cmd": {
+            "type": "çağrı",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "çağrı_err",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "iş_err",
+            "cmd": {
+              "type": "iş",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.utf8.undeclared",
+      "input": {
+        "left": "çağrı",
+        "right": "iş",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "çağrı",
+        "commands": [
+          {
+            "type": "çağrı",
+            "key": "a"
+          },
+          {
+            "type": "iş",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "çağrı_ok",
+          "cmd": {
+            "type": "çağrı",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.utf8.none",
+      "input": {
+        "left": "çağrı",
+        "right": "iş",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "çağrı",
+        "commands": [
+          {
+            "type": "çağrı",
+            "key": "a"
+          },
+          {
+            "type": "iş",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "çağrı_ok",
+          "cmd": {
+            "type": "çağrı",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "çağrı_ok",
+            "cmd": {
+              "type": "çağrı",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.same.ok",
+      "input": {
+        "left": "same",
+        "right": "same",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "same",
+        "commands": [
+          {
+            "type": "same",
+            "key": "a"
+          },
+          {
+            "type": "same",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "same_ok",
+          "cmd": {
+            "type": "same",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.same.malformed",
+      "input": {
+        "left": "same",
+        "right": "same",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "same",
+        "commands": [
+          {
+            "type": "same",
+            "key": "a"
+          },
+          {
+            "type": "same",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "same_ok",
+          "cmd": {
+            "type": "same",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "same_err",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "same_err",
+            "cmd": {
+              "type": "same",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.same.declared",
+      "input": {
+        "left": "same",
+        "right": "same",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "same",
+        "commands": [
+          {
+            "type": "same",
+            "key": "a"
+          },
+          {
+            "type": "same",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "same_ok",
+          "cmd": {
+            "type": "same",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "same_err",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "same_err",
+            "cmd": {
+              "type": "same",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.same.undeclared",
+      "input": {
+        "left": "same",
+        "right": "same",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "same",
+        "commands": [
+          {
+            "type": "same",
+            "key": "a"
+          },
+          {
+            "type": "same",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "same_ok",
+          "cmd": {
+            "type": "same",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.same.none",
+      "input": {
+        "left": "same",
+        "right": "same",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "same",
+        "commands": [
+          {
+            "type": "same",
+            "key": "a"
+          },
+          {
+            "type": "same",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "same_ok",
+          "cmd": {
+            "type": "same",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "same_ok",
+            "cmd": {
+              "type": "same",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.empty.ok",
+      "input": {
+        "left": "",
+        "right": "_",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "",
+        "commands": [
+          {
+            "type": "",
+            "key": "a"
+          },
+          {
+            "type": "_",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "_ok",
+          "cmd": {
+            "type": "",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "__ok",
+            "cmd": {
+              "type": "_",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.empty.malformed",
+      "input": {
+        "left": "",
+        "right": "_",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "",
+        "commands": [
+          {
+            "type": "",
+            "key": "a"
+          },
+          {
+            "type": "_",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "_ok",
+          "cmd": {
+            "type": "",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "_err",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "__err",
+            "cmd": {
+              "type": "_",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.empty.declared",
+      "input": {
+        "left": "",
+        "right": "_",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "",
+        "commands": [
+          {
+            "type": "",
+            "key": "a"
+          },
+          {
+            "type": "_",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "_ok",
+          "cmd": {
+            "type": "",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "_err",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "__err",
+            "cmd": {
+              "type": "_",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.empty.undeclared",
+      "input": {
+        "left": "",
+        "right": "_",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "",
+        "commands": [
+          {
+            "type": "",
+            "key": "a"
+          },
+          {
+            "type": "_",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "_ok",
+          "cmd": {
+            "type": "",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.empty.none",
+      "input": {
+        "left": "",
+        "right": "_",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "",
+        "commands": [
+          {
+            "type": "",
+            "key": "a"
+          },
+          {
+            "type": "_",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "_ok",
+          "cmd": {
+            "type": "",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "_ok",
+            "cmd": {
+              "type": "",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.suffix.ok",
+      "input": {
+        "left": "task",
+        "right": "task_ok",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "task",
+        "commands": [
+          {
+            "type": "task",
+            "key": "a"
+          },
+          {
+            "type": "task_ok",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "task_ok",
+          "cmd": {
+            "type": "task",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok_ok",
+            "cmd": {
+              "type": "task_ok",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.suffix.malformed",
+      "input": {
+        "left": "task",
+        "right": "task_ok",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "task",
+        "commands": [
+          {
+            "type": "task",
+            "key": "a"
+          },
+          {
+            "type": "task_ok",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "task_ok",
+          "cmd": {
+            "type": "task",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "task_err",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "task_ok_err",
+            "cmd": {
+              "type": "task_ok",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.suffix.declared",
+      "input": {
+        "left": "task",
+        "right": "task_ok",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "task",
+        "commands": [
+          {
+            "type": "task",
+            "key": "a"
+          },
+          {
+            "type": "task_ok",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "task_ok",
+          "cmd": {
+            "type": "task",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "task_err",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "task_ok_err",
+            "cmd": {
+              "type": "task_ok",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.suffix.undeclared",
+      "input": {
+        "left": "task",
+        "right": "task_ok",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "task",
+        "commands": [
+          {
+            "type": "task",
+            "key": "a"
+          },
+          {
+            "type": "task_ok",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "task_ok",
+          "cmd": {
+            "type": "task",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.suffix.none",
+      "input": {
+        "left": "task",
+        "right": "task_ok",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "task",
+        "commands": [
+          {
+            "type": "task",
+            "key": "a"
+          },
+          {
+            "type": "task_ok",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "task_ok",
+          "cmd": {
+            "type": "task",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "task_ok",
+            "cmd": {
+              "type": "task",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.escaped.ok",
+      "input": {
+        "left": "emoji🚀",
+        "right": "quote\"\\name",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "emoji🚀",
+        "commands": [
+          {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          {
+            "type": "quote\"\\name",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "emoji🚀_ok",
+          "cmd": {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "quote\"\\name_ok",
+            "cmd": {
+              "type": "quote\"\\name",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.escaped.malformed",
+      "input": {
+        "left": "emoji🚀",
+        "right": "quote\"\\name",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "emoji🚀",
+        "commands": [
+          {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          {
+            "type": "quote\"\\name",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "emoji🚀_ok",
+          "cmd": {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "emoji🚀_err",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "quote\"\\name_err",
+            "cmd": {
+              "type": "quote\"\\name",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.escaped.declared",
+      "input": {
+        "left": "emoji🚀",
+        "right": "quote\"\\name",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "emoji🚀",
+        "commands": [
+          {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          {
+            "type": "quote\"\\name",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "emoji🚀_ok",
+          "cmd": {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "emoji🚀_err",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "quote\"\\name_err",
+            "cmd": {
+              "type": "quote\"\\name",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.escaped.undeclared",
+      "input": {
+        "left": "emoji🚀",
+        "right": "quote\"\\name",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "emoji🚀",
+        "commands": [
+          {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          {
+            "type": "quote\"\\name",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "emoji🚀_ok",
+          "cmd": {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.escaped.none",
+      "input": {
+        "left": "emoji🚀",
+        "right": "quote\"\\name",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "emoji🚀",
+        "commands": [
+          {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          {
+            "type": "quote\"\\name",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "emoji🚀_ok",
+          "cmd": {
+            "type": "emoji🚀",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "emoji🚀_ok",
+            "cmd": {
+              "type": "emoji🚀",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    },
+    {
+      "id": "families.object-names.ok",
+      "input": {
+        "left": "constructor",
+        "right": "__proto__",
+        "at": 17.25,
+        "mode": "ok"
+      },
+      "expect": {
+        "ownedName": "constructor",
+        "commands": [
+          {
+            "type": "constructor",
+            "key": "a"
+          },
+          {
+            "type": "__proto__",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "constructor_ok",
+          "cmd": {
+            "type": "constructor",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          },
+          {
+            "type": "__proto___ok",
+            "cmd": {
+              "type": "__proto__",
+              "key": "b"
+            },
+            "value": "VALUE",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.object-names.malformed",
+      "input": {
+        "left": "constructor",
+        "right": "__proto__",
+        "at": 17.25,
+        "mode": "malformed"
+      },
+      "expect": {
+        "ownedName": "constructor",
+        "commands": [
+          {
+            "type": "constructor",
+            "key": "a"
+          },
+          {
+            "type": "__proto__",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "constructor_ok",
+          "cmd": {
+            "type": "constructor",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "constructor_err",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "__proto___err",
+            "cmd": {
+              "type": "__proto__",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "",
+                  "message": "expected a useful result"
+                }
+              ]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.object-names.declared",
+      "input": {
+        "left": "constructor",
+        "right": "__proto__",
+        "at": 17.25,
+        "mode": "declared"
+      },
+      "expect": {
+        "ownedName": "constructor",
+        "commands": [
+          {
+            "type": "constructor",
+            "key": "a"
+          },
+          {
+            "type": "__proto__",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "constructor_ok",
+          "cmd": {
+            "type": "constructor",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [
+          {
+            "type": "constructor_err",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          },
+          {
+            "type": "__proto___err",
+            "cmd": {
+              "type": "__proto__",
+              "key": "b"
+            },
+            "error": {
+              "_tag": "declared",
+              "detail": [0, 255]
+            },
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.object-names.undeclared",
+      "input": {
+        "left": "constructor",
+        "right": "__proto__",
+        "at": 17.25,
+        "mode": "undeclared"
+      },
+      "expect": {
+        "ownedName": "constructor",
+        "commands": [
+          {
+            "type": "constructor",
+            "key": "a"
+          },
+          {
+            "type": "__proto__",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "constructor_ok",
+          "cmd": {
+            "type": "constructor",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ]
+      }
+    },
+    {
+      "id": "families.object-names.none",
+      "input": {
+        "left": "constructor",
+        "right": "__proto__",
+        "at": 17.25,
+        "mode": "none"
+      },
+      "expect": {
+        "ownedName": "constructor",
+        "commands": [
+          {
+            "type": "constructor",
+            "key": "a"
+          },
+          {
+            "type": "__proto__",
+            "key": "b"
+          }
+        ],
+        "selectedByCommand": {
+          "type": "constructor_ok",
+          "cmd": {
+            "type": "constructor",
+            "key": "a"
+          },
+          "value": "VALUE",
+          "at": 17.25
+        },
+        "duplicate": [
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "second:value",
+            "at": 17.25
+          },
+          {
+            "type": "constructor_ok",
+            "cmd": {
+              "type": "constructor",
+              "key": "a"
+            },
+            "value": "first:value",
+            "at": 17.25
+          }
+        ],
+        "typed": [null, null]
+      }
+    }
+  ]
+}

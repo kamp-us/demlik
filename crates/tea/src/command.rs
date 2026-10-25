@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     cell::RefCell,
     fmt,
     marker::PhantomData,
@@ -80,6 +81,7 @@ pub trait CommandRecord {}
 
 pub struct Cmd<D: CommandSpec> {
     input: D::Input,
+    name: Cow<'static, str>,
     declaration: PhantomData<fn() -> D>,
 }
 impl<D: CommandSpec> Cmd<D> {
@@ -89,10 +91,16 @@ impl<D: CommandSpec> Cmd<D> {
     pub fn into_input(self) -> D::Input {
         self.input
     }
+    pub fn definition(&self) -> CmdDef<D> {
+        CmdDef {
+            name: self.name.clone(),
+            declaration: PhantomData,
+        }
+    }
 }
 impl<D: CommandSpec> Tagged for Cmd<D> {
     fn tag(&self) -> &str {
-        D::NAME
+        &self.name
     }
 }
 impl<D: CommandSpec> Serialize for Cmd<D>
@@ -105,7 +113,7 @@ where
         else {
             return Err(serde::ser::Error::custom("command input must be a record"));
         };
-        input.insert("type".into(), PlainData::String(D::NAME.into()));
+        input.insert("type".into(), PlainData::String(self.name.as_ref().into()));
         PlainData::Object(input).serialize(serializer)
     }
 }
@@ -114,21 +122,8 @@ where
     D::Input: serde::de::DeserializeOwned + Serialize,
 {
     fn deserialize<S: serde::Deserializer<'de>>(deserializer: S) -> Result<Self, S::Error> {
-        let value = Value::deserialize(deserializer)?;
-        let mut payload = value
-            .as_object()
-            .cloned()
-            .ok_or_else(|| serde::de::Error::custom("command must be a record"))?;
-        if payload.remove("type").as_ref().and_then(Value::as_str) != Some(D::NAME) {
-            return Err(serde::de::Error::custom(format!(
-                "expected command type {}",
-                D::NAME
-            )));
-        }
-        let input =
-            serde_json::from_value(Value::Object(payload)).map_err(serde::de::Error::custom)?;
         CmdDef::<D>::new()
-            .build(input)
+            .restore_command(Value::deserialize(deserializer)?)
             .map_err(serde::de::Error::custom)
     }
 }
@@ -221,67 +216,87 @@ where
     D::Error: serde::de::DeserializeOwned,
 {
     fn deserialize<S: serde::Deserializer<'de>>(deserializer: S) -> Result<Self, S::Error> {
-        let mut value = Value::deserialize(deserializer)?;
-        let record = value
-            .as_object_mut()
-            .ok_or_else(|| serde::de::Error::custom("settled message must be a record"))?;
-        let kind = record
-            .remove("type")
-            .and_then(|value| value.as_str().map(str::to_owned))
-            .ok_or_else(|| serde::de::Error::custom("settled message needs a type"))?;
-        let cmd = serde_json::from_value(
-            record
-                .remove("cmd")
-                .ok_or_else(|| serde::de::Error::missing_field("cmd"))?,
+        restore_settled_value(
+            &CmdDef::<D>::new(),
+            Value::deserialize(deserializer)?,
+            serde_json::from_value,
         )
-        .map_err(serde::de::Error::custom)?;
-        let at = record
-            .remove("at")
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(serde::de::Error::custom)?;
-        let outcome = if kind == format!("{}_ok", D::NAME) {
-            Settlement::Ok(
-                serde_json::from_value(
-                    record
-                        .remove("value")
-                        .ok_or_else(|| serde::de::Error::missing_field("value"))?,
-                )
-                .map_err(serde::de::Error::custom)?,
-            )
-        } else if kind == format!("{}_err", D::NAME) {
-            let error = record
-                .remove("error")
-                .ok_or_else(|| serde::de::Error::missing_field("error"))?;
-            Settlement::Err(
-                if error.get("_tag").and_then(Value::as_str) == Some("malformed_result")
-                    && !D::ERROR_TAGS.contains(&"malformed_result")
-                {
-                    Failure::Malformed(
-                        serde_json::from_value(error).map_err(serde::de::Error::custom)?,
-                    )
-                } else {
-                    Failure::Declared(
-                        serde_json::from_value(error).map_err(serde::de::Error::custom)?,
-                    )
-                },
-            )
-        } else {
-            return Err(serde::de::Error::custom(format!(
-                "unexpected settled message type {kind}"
-            )));
-        };
-        Ok(Self {
-            kind,
-            cmd,
-            outcome,
-            at,
-            engine_stamp: None,
-        })
+        .map_err(serde::de::Error::custom)
     }
 }
+fn wire_error(message: impl fmt::Display) -> serde_json::Error {
+    serde::de::Error::custom(message)
+}
+fn restore_settled_value<D: CommandSpec>(
+    definition: &CmdDef<D>,
+    mut value: Value,
+    restore_command: impl FnOnce(Value) -> Result<Cmd<D>, serde_json::Error>,
+) -> Result<Settled<D>, serde_json::Error>
+where
+    D::Output: serde::de::DeserializeOwned,
+    D::Error: serde::de::DeserializeOwned,
+{
+    let record = value
+        .as_object_mut()
+        .ok_or_else(|| wire_error("settled message must be a record"))?;
+    let kind = record
+        .remove("type")
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .ok_or_else(|| wire_error("settled message needs a type"))?;
+    let cmd = restore_command(
+        record
+            .remove("cmd")
+            .ok_or_else(|| wire_error("missing field `cmd`"))?,
+    )?;
+    let at = record
+        .remove("at")
+        .map(serde_json::from_value)
+        .transpose()?;
+    let outcome = if kind == definition.ok_type() {
+        Settlement::Ok(serde_json::from_value(
+            record
+                .remove("value")
+                .ok_or_else(|| wire_error("missing field `value`"))?,
+        )?)
+    } else if kind == definition.err_type() {
+        let error = record
+            .remove("error")
+            .ok_or_else(|| wire_error("missing field `error`"))?;
+        Settlement::Err(
+            if error.get("_tag").and_then(Value::as_str) == Some("malformed_result")
+                && !D::ERROR_TAGS.contains(&"malformed_result")
+            {
+                Failure::Malformed(serde_json::from_value(error)?)
+            } else {
+                Failure::Declared(serde_json::from_value(error)?)
+            },
+        )
+    } else {
+        return Err(wire_error(format!(
+            "unexpected settled message type {kind}"
+        )));
+    };
+    Ok(Settled {
+        kind,
+        cmd,
+        outcome,
+        at,
+        engine_stamp: None,
+    })
+}
 
-pub struct CmdDef<D>(PhantomData<fn() -> D>);
+pub struct CmdDef<D> {
+    name: Cow<'static, str>,
+    declaration: PhantomData<fn() -> D>,
+}
+impl<D> Clone for CmdDef<D> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            declaration: PhantomData,
+        }
+    }
+}
 impl<D: CommandSpec> Default for CmdDef<D> {
     fn default() -> Self {
         Self::new()
@@ -289,19 +304,66 @@ impl<D: CommandSpec> Default for CmdDef<D> {
 }
 impl<D: CommandSpec> CmdDef<D> {
     pub const fn new() -> Self {
-        Self(PhantomData)
+        Self {
+            name: Cow::Borrowed(D::NAME),
+            declaration: PhantomData,
+        }
     }
-    pub fn cmd_type(&self) -> &'static str {
-        D::NAME
+    /// Use an owned family name while retaining this declaration's typed
+    /// input, output parser, and declared failure channel.
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: Cow::Owned(name.into()),
+            declaration: PhantomData,
+        }
+    }
+    pub fn cmd_type(&self) -> &str {
+        &self.name
     }
     pub fn ok_type(&self) -> String {
-        format!("{}_ok", D::NAME)
+        format!("{}_ok", self.name)
     }
     pub fn err_type(&self) -> String {
-        format!("{}_err", D::NAME)
+        format!("{}_err", self.name)
     }
     pub fn error_tags(&self) -> &'static [&'static str] {
         D::ERROR_TAGS
+    }
+    /// Decode a serialized command against this definition's name. The default
+    /// `Deserialize` implementation uses `NAME`; named families use this owner.
+    pub fn restore_command(&self, value: Value) -> Result<Cmd<D>, serde_json::Error>
+    where
+        D::Input: serde::de::DeserializeOwned + Serialize,
+    {
+        let mut payload = value
+            .as_object()
+            .cloned()
+            .ok_or_else(|| wire_error("command must be a record"))?;
+        if payload.remove("type").as_ref().and_then(Value::as_str) != Some(self.cmd_type()) {
+            return Err(wire_error(format!(
+                "expected command type {}",
+                self.cmd_type()
+            )));
+        }
+        let input = serde_json::from_value(Value::Object(payload))?;
+        self.build(input).map_err(wire_error)
+    }
+    /// Restore replay data without minting engine provenance. A replay builder
+    /// may refer to another named command; the referenced command keeps its tag.
+    pub fn restore_settled(&self, value: Value) -> Result<Settled<D>, serde_json::Error>
+    where
+        D::Input: serde::de::DeserializeOwned + Serialize,
+        D::Output: serde::de::DeserializeOwned,
+        D::Error: serde::de::DeserializeOwned,
+    {
+        restore_settled_value(self, value, |command| {
+            let name = command
+                .get("type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| wire_error("command needs a type"))?
+                .to_owned();
+            Self::named(name).restore_command(command)
+        })
     }
     /// Build from a trusted typed record without serializing the pure payload.
     /// Wire input uses `parse_input`; checked serializable input uses `build`.
@@ -332,6 +394,7 @@ impl<D: CommandSpec> CmdDef<D> {
     fn wrap_input(&self, input: D::Input) -> Cmd<D> {
         Cmd {
             input,
+            name: self.name.clone(),
             declaration: PhantomData,
         }
     }
@@ -342,7 +405,7 @@ impl<D: CommandSpec> CmdDef<D> {
         let value = plain_data(&input).map_err(CommandContractError::serialization)?;
         if !matches!(&value, PlainData::Object(record) if !record.contains_key("type")) {
             return Err(CommandContractError::Input {
-                cmd_type: D::NAME.into(),
+                cmd_type: self.cmd_type().into(),
                 issues: vec![Issue::new(
                     "",
                     "command input must be a record without a type field",
@@ -358,11 +421,11 @@ impl<D: CommandSpec> CmdDef<D> {
         match D::parse_input(value) {
             Ok(input) => self.build(input),
             Err(SchemaError::Issues(issues)) => Err(CommandContractError::Input {
-                cmd_type: D::NAME.into(),
+                cmd_type: self.cmd_type().into(),
                 issues,
             }),
             Err(SchemaError::Async) => Err(CommandContractError::AsyncSchema {
-                location: format!("the \"{}\" Cmd's input schema", D::NAME),
+                location: format!("the \"{}\" Cmd's input schema", self.cmd_type()),
             }),
         }
     }
@@ -396,6 +459,7 @@ impl<D: CommandSpec> CmdDef<D> {
         let Some(completion) = completion else {
             return Ok(None);
         };
+        let definition = cmd.definition();
         Ok(Some(match completion {
             Outcome::Err { error } => {
                 let failure =
@@ -406,17 +470,17 @@ impl<D: CommandSpec> CmdDef<D> {
                     .is_some_and(|tag| D::ERROR_TAGS.contains(&tag))
                 {
                     return Err(CommandContractError::UndeclaredFailure {
-                        cmd_type: D::NAME.into(),
+                        cmd_type: definition.cmd_type().into(),
                         failure,
                         declared: D::ERROR_TAGS.iter().map(|tag| (*tag).into()).collect(),
                     });
                 }
-                self.err(cmd, error, Some(at))
+                definition.err(cmd, error, Some(at))
             }
             Outcome::Ok { value } => match D::parse_output(value) {
-                Ok(value) => self.ok(cmd, value, Some(at)),
+                Ok(value) => definition.ok(cmd, value, Some(at)),
                 Err(SchemaError::Issues(issues)) => Settled {
-                    kind: self.err_type(),
+                    kind: definition.err_type(),
                     cmd,
                     at: Some(at),
                     outcome: Settlement::Err(Failure::Malformed(malformed_result(issues))),
@@ -424,7 +488,7 @@ impl<D: CommandSpec> CmdDef<D> {
                 },
                 Err(SchemaError::Async) => {
                     return Err(CommandContractError::AsyncSchema {
-                        location: format!("the \"{}\" Cmd's ok schema", D::NAME),
+                        location: format!("the \"{}\" Cmd's ok schema", definition.cmd_type()),
                     });
                 }
             },
@@ -757,7 +821,7 @@ impl<D: CommandSpec> CmdDef<D> {
         D::RawOutput: serde::de::DeserializeOwned,
         D::Output: Serialize,
     {
-        WireDefinition::new(D::NAME, D::ERROR_TAGS, |value| {
+        WireDefinition::new(self.cmd_type(), D::ERROR_TAGS, |value| {
             let raw = serde_json::from_value(value).map_err(SchemaError::from)?;
             let parsed = D::parse_output(raw)?;
             serde_json::to_value(parsed).map_err(SchemaError::from)

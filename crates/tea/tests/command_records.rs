@@ -60,6 +60,24 @@ fn typed_record_builds_and_settles_with_borrowed_nonserde_nonclone_input() {
     assert!(matches!(replies[0].outcome(), Settlement::Ok("answer")));
 }
 
+#[test]
+fn owned_named_family_keeps_borrowed_nonserde_nonclone_input() {
+    let label = String::from("borrowed named model");
+    let visits = Cell::new(0);
+    let command = {
+        let definition = CmdDef::<BorrowedSpec<'_>>::named(format!("call-{}", 7));
+        definition.from_record(BorrowedInput {
+            label: &label,
+            visits: &visits,
+        })
+    };
+    visits.set(3);
+    let replies = CommandFamily::settle(command, Some(Outcome::ok(label.as_str())), 17.25).unwrap();
+    assert_eq!(replies[0].tag(), "call-7_ok");
+    assert_eq!(replies[0].cmd().input().visits.get(), 3);
+    assert!(matches!(replies[0].outcome(),Settlement::Ok(value) if *value==label));
+}
+
 #[derive(Serialize)]
 struct NumberInput {
     value: f64,
