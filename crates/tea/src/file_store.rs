@@ -47,7 +47,7 @@ pub enum FileStoreError {
     ProcessProbeUnsupported,
 }
 impl FileStoreError {
-    fn io(operation: &'static str, path: &Path, cause: io::Error) -> Self {
+    pub(crate) fn io(operation: &'static str, path: &Path, cause: io::Error) -> Self {
         Self::Io {
             operation,
             path: path.into(),
@@ -439,7 +439,7 @@ fn radix_pid(value: &str, radix: u32) -> f64 {
         _ => f64::INFINITY,
     }
 }
-async fn acquire_file_lock(parent: &Path, path: &Path) -> Result<(), FileStoreError> {
+pub(crate) async fn acquire_file_lock(parent: &Path, path: &Path) -> Result<(), FileStoreError> {
     fs::create_dir_all(parent)
         .await
         .map_err(|error| FileStoreError::io("mkdir", parent, error))?;

@@ -24,14 +24,17 @@ pub(crate) struct Listeners<F: ?Sized> {
     next: Cell<u64>,
     items: RefCell<BTreeMap<u64, Rc<F>>>,
 }
-impl<F: ?Sized + 'static> Listeners<F> {
+impl<F: ?Sized> Listeners<F> {
     pub fn new() -> Rc<Self> {
         Rc::new(Self {
             next: Cell::new(0),
             items: RefCell::new(BTreeMap::new()),
         })
     }
-    pub fn add(self: &Rc<Self>, callback: Rc<F>) -> Unsubscribe {
+    pub fn add(self: &Rc<Self>, callback: Rc<F>) -> Unsubscribe
+    where
+        F: 'static,
+    {
         if !self
             .items
             .borrow()
