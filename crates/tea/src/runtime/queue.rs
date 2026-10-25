@@ -143,16 +143,16 @@ impl<M> Clone for Producer<M> {
 }
 impl<M: Tagged> Producer<M> {
     pub fn emit(&self, message: M) -> Result<(), DispatchRefused> {
-        if let Some(guard) = &self.guard {
-            if let Err(error) = guard.check(&message) {
-                let error = Arc::new(error);
-                // The owned guard is Send; the local sink consumes this notice separately.
-                self.mailbox
-                    .notice(Notice::Refused(DispatchRefused::Contract(Arc::clone(
-                        &error,
-                    ))));
-                return Err(DispatchRefused::Contract(error));
-            }
+        if let Some(guard) = &self.guard
+            && let Err(error) = guard.check(&message)
+        {
+            let error = Arc::new(error);
+            // The owned guard is Send; the local sink consumes this notice separately.
+            self.mailbox
+                .notice(Notice::Refused(DispatchRefused::Contract(Arc::clone(
+                    &error,
+                ))));
+            return Err(DispatchRefused::Contract(error));
         }
         match self.mailbox.enqueue(message, Origin::Producer) {
             Ok(_) => Ok(()),

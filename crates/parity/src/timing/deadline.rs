@@ -243,10 +243,10 @@ pub fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
             Action::Cancel => cleanup.as_ref().map_or(Ok(()), |cancel| cancel()),
             Action::Fire { index } => {
                 let parked = parked.borrow();
-                if let Some(parked) = parked.get(index) {
-                    if parked.active.get() {
-                        (parked.dispatch)(parked.msg.clone());
-                    }
+                if let Some(parked) = parked.get(index)
+                    && parked.active.get()
+                {
+                    (parked.dispatch)(parked.msg.clone());
                 }
                 Ok(())
             }

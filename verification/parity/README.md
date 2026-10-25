@@ -3,6 +3,14 @@
 Prerequisites: Node 22.21.1 (V8 12.4.254.21-node.33), the repository's pnpm dependencies, Rust 1.99.1 with
 rustfmt and clippy, and a built `@demlik/code-graph` package for full API discovery.
 The implementations live beside each other in `packages/` and `crates/`.
+The workspace declares Rust 1.99 and pins the tested 1.99.1 toolchain.
+
+Mutation checks use separate Cargo targets for baseline and deliberately altered builds.
+For large local verification runs, use these settings to reduce compiler artifact size:
+
+```sh
+CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 pnpm parity
+```
 
 1. Install dependencies with `pnpm install --frozen-lockfile` and `cargo fetch --locked`.
 2. Run `pnpm parity` to compare the implemented operations. Results are written to

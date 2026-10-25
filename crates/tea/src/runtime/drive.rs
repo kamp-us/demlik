@@ -239,10 +239,10 @@ async fn drive<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tag
     let terminal_observe = Rc::clone(&terminal);
     let failed_observe = Rc::clone(&failed);
     *detach.borrow_mut() = Some(runtime.observe_snapshot(move |_, state| {
-        if terminal_observe(&state) || failed_observe(&state) {
-            if let Some(tx) = tx.borrow_mut().take() {
-                let _ = tx.send(state);
-            }
+        if (terminal_observe(&state) || failed_observe(&state))
+            && let Some(tx) = tx.borrow_mut().take()
+        {
+            let _ = tx.send(state);
         }
     }));
     if let Some(cancellation) = options

@@ -193,10 +193,10 @@ pub fn pending_effects_ledger<E>(restore: LedgerRestore<E>) -> PendingEffectsRec
                 EffectLedgerEvent::Owed(event) => event.id,
                 EffectLedgerEvent::Confirmed(event) => event.id,
             };
-            if let Some(id) = id.number() {
-                if id > counter {
-                    counter = id;
-                }
+            if let Some(id) = id.number()
+                && id > counter
+            {
+                counter = id;
             }
         }
     }

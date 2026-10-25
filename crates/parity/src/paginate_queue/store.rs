@@ -183,10 +183,10 @@ pub async fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Valu
             Action::MutateInput { index, key, value } => {
                 let list = observe_async!(calls, demlik_tea::work_queue::QueueClient::list, &queue);
                 let status = list.map(|list| {
-                    if let Some(item) = list.get(index) {
-                        if let PlainData::Object(fields) = &mut *item.input.borrow_mut() {
-                            fields.insert(text(&key), data(&value));
-                        }
+                    if let Some(item) = list.get(index)
+                        && let PlainData::Object(fields) = &mut *item.input.borrow_mut()
+                    {
+                        fields.insert(text(&key), data(&value));
                     }
                 });
                 ("mutateInput", status)

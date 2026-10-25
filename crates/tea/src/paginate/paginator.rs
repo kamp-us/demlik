@@ -303,16 +303,16 @@ pub fn drain<C>(state: &PaginatorState<C>, n: f64) -> PaginatorState<C> {
     })
 }
 pub fn resume<C>(state: &PaginatorState<C>, policy: &PaginatorPolicy<C>) -> PaginatorState<C> {
-    if let PaginatorPhase::Paused { cursor } = &state.0.phase {
-        if state.seen() < policy.high_water_mark {
-            return PaginatorState::from_snapshot(PaginatorSnapshot {
-                phase: PaginatorPhase::Fetching {
-                    cursor: cursor.resumed(),
-                },
-                seen: state.0.seen,
-                pages: state.0.pages,
-            });
-        }
+    if let PaginatorPhase::Paused { cursor } = &state.0.phase
+        && state.seen() < policy.high_water_mark
+    {
+        return PaginatorState::from_snapshot(PaginatorSnapshot {
+            phase: PaginatorPhase::Fetching {
+                cursor: cursor.resumed(),
+            },
+            seen: state.0.seen,
+            pages: state.0.pages,
+        });
     }
     state.clone()
 }

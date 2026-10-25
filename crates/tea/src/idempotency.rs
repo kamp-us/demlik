@@ -74,10 +74,10 @@ fn live<'a, V: Serialize>(
     if entry.missing() {
         return Ok(None);
     }
-    if let Some(ttl) = store.ttl_ms {
-        if now_ms - entry.timestamp()? >= ttl.number_or_zero() {
-            return Ok(None);
-        }
+    if let Some(ttl) = store.ttl_ms
+        && now_ms - entry.timestamp()? >= ttl.number_or_zero()
+    {
+        return Ok(None);
     }
     Ok(Some(entry))
 }

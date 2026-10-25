@@ -112,13 +112,14 @@ impl Store<Model> for Saved {
     }
     async fn save(&self, model: &Model) -> Result<(), Self::Error> {
         self.trace.borrow_mut().push(format!("save:{}", model.n));
-        if let Some(gate) = &self.gate {
-            if model.done && !gate.held.replace(true) {
-                gate.entered.notify_one();
-                gate.released.notified().await;
-                if gate.fail {
-                    return Err("intentional save failure");
-                }
+        if let Some(gate) = &self.gate
+            && model.done
+            && !gate.held.replace(true)
+        {
+            gate.entered.notify_one();
+            gate.released.notified().await;
+            if gate.fail {
+                return Err("intentional save failure");
             }
         }
         *self.state.borrow_mut() = Some(model.clone());
@@ -316,17 +317,17 @@ async fn execute(input: Input, calls: &Calls) -> Result<Value, String> {
                 _ => return Err("later done() did not retain failed save".into()),
             }
         }
-    } else if !matches!(input.scenario, Scenario::TerminalBoot) {
-        if let Err(error) = observe_async!(
+    } else if !matches!(input.scenario, Scenario::TerminalBoot)
+        && let Err(error) = observe_async!(
             calls,
             demlik_tea::runtime::Runtime::dispatch,
             &runtime,
             Msg::Start
-        ) {
-            match &*error {
-                RuntimeError::Handler("intentional handler failure") => failure = Some("handler"),
-                _ => return Err(format!("unexpected dispatch failure: {error}")),
-            }
+        )
+    {
+        match &*error {
+            RuntimeError::Handler("intentional handler failure") => failure = Some("handler"),
+            _ => return Err(format!("unexpected dispatch failure: {error}")),
         }
     }
     let terminal = observe!(calls, demlik_tea::runtime::Runtime::result, &runtime);

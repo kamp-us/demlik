@@ -270,10 +270,10 @@ pub fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
                 }
             }
             Action::MutateInput { index, key, value } => {
-                if let Some(item) = state.get(index) {
-                    if let PlainData::Object(fields) = &mut *item.input.borrow_mut() {
-                        fields.insert(text(&key), data(&value));
-                    }
+                if let Some(item) = state.get(index)
+                    && let PlainData::Object(fields) = &mut *item.input.borrow_mut()
+                {
+                    fields.insert(text(&key), data(&value));
                 }
                 "mutateInput"
             }

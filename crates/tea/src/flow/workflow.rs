@@ -442,12 +442,12 @@ impl<A, R, F> Workflow<A, R, F> {
         below: usize,
     ) -> Result<Option<Owed<A>>, WorkflowError> {
         for index in (0..below).rev() {
-            if let Some(entry) = completed.get(index) {
-                if matches!(entry.step.compensation, WorkflowValue::Value(_)) {
-                    return self
-                        .owe_compensation(Rc::clone(&entry.step), (index as f64).into())
-                        .map(Some);
-                }
+            if let Some(entry) = completed.get(index)
+                && matches!(entry.step.compensation, WorkflowValue::Value(_))
+            {
+                return self
+                    .owe_compensation(Rc::clone(&entry.step), (index as f64).into())
+                    .map(Some);
             }
         }
         Ok(None)

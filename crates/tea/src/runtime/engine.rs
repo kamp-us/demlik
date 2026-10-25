@@ -167,20 +167,20 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
     }
     fn done_receiver(&self) -> oneshot::Receiver<Result<Arc<S>, Failure<SE, HE>>> {
         let (tx, rx) = oneshot::channel();
-        if let Some(state) = self.state() {
-            if self.holds(&state) {
-                let view = self.view.borrow();
-                match &view.saved {
-                    SaveStatus::Saved => {
-                        let _ = tx.send(Ok(state));
-                        return rx;
-                    }
-                    SaveStatus::Failed(error) => {
-                        let _ = tx.send(Err(Rc::clone(error)));
-                        return rx;
-                    }
-                    SaveStatus::Pending => {}
+        if let Some(state) = self.state()
+            && self.holds(&state)
+        {
+            let view = self.view.borrow();
+            match &view.saved {
+                SaveStatus::Saved => {
+                    let _ = tx.send(Ok(state));
+                    return rx;
                 }
+                SaveStatus::Failed(error) => {
+                    let _ = tx.send(Err(Rc::clone(error)));
+                    return rx;
+                }
+                SaveStatus::Pending => {}
             }
         }
         self.done.borrow_mut().push(tx);
@@ -663,15 +663,15 @@ impl<
                                 Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload))))
                             })
                     };
-                    if matches!(origin, Origin::Producer) {
-                        if let Err(error) = &result {
-                            let phase = if error.discarded() {
-                                ErrorPhase::Discard
-                            } else {
-                                ErrorPhase::FollowUp
-                            };
-                            self.core.report(Rc::clone(error), phase);
-                        }
+                    if matches!(origin, Origin::Producer)
+                        && let Err(error) = &result
+                    {
+                        let phase = if error.discarded() {
+                            ErrorPhase::Discard
+                        } else {
+                            ErrorPhase::FollowUp
+                        };
+                        self.core.report(Rc::clone(error), phase);
                     }
                     self.core.finish_receipt(seq, result);
                 }
@@ -748,24 +748,24 @@ impl<
                 SaveStatus::Saved
             },
         };
-        if let Some(store) = &self.store {
-            if self.producer.mailbox.gate() != Gate::Abandoned {
-                let saved = AssertUnwindSafe(async { store.save(&state).await })
-                    .catch_unwind()
-                    .await;
-                tokio::task::yield_now().await;
-                match saved {
-                    Ok(Ok(())) => self.core.view.borrow_mut().saved = SaveStatus::Saved,
-                    Ok(Err(error)) => {
-                        let error = Rc::new(RuntimeError::Save(error));
-                        self.core.save_failed(Rc::clone(&error));
-                        return Err(error);
-                    }
-                    Err(payload) => {
-                        let error = Rc::new(RuntimeError::Panic(PanicCause::new(payload)));
-                        self.core.save_failed(Rc::clone(&error));
-                        return Err(error);
-                    }
+        if let Some(store) = &self.store
+            && self.producer.mailbox.gate() != Gate::Abandoned
+        {
+            let saved = AssertUnwindSafe(async { store.save(&state).await })
+                .catch_unwind()
+                .await;
+            tokio::task::yield_now().await;
+            match saved {
+                Ok(Ok(())) => self.core.view.borrow_mut().saved = SaveStatus::Saved,
+                Ok(Err(error)) => {
+                    let error = Rc::new(RuntimeError::Save(error));
+                    self.core.save_failed(Rc::clone(&error));
+                    return Err(error);
+                }
+                Err(payload) => {
+                    let error = Rc::new(RuntimeError::Panic(PanicCause::new(payload)));
+                    self.core.save_failed(Rc::clone(&error));
+                    return Err(error);
                 }
             }
         }
@@ -1191,21 +1191,19 @@ impl<
             .borrow()
             .as_ref()
             .is_some_and(Result::is_err);
-        if !boot_failed {
-            if let (Some(store), Some(state)) = (&self.store, self.core.state()) {
-                match AssertUnwindSafe(async { store.save(&state).await })
-                    .catch_unwind()
-                    .await
-                {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => self
-                        .core
-                        .report(Rc::new(RuntimeError::Save(error)), ErrorPhase::StopSave),
-                    Err(payload) => self.core.report(
-                        Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
-                        ErrorPhase::StopSave,
-                    ),
-                }
+        if !boot_failed && let (Some(store), Some(state)) = (&self.store, self.core.state()) {
+            match AssertUnwindSafe(async { store.save(&state).await })
+                .catch_unwind()
+                .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => self
+                    .core
+                    .report(Rc::new(RuntimeError::Save(error)), ErrorPhase::StopSave),
+                Err(payload) => self.core.report(
+                    Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
+                    ErrorPhase::StopSave,
+                ),
             }
         }
         self.core.stop_done.set(true);

@@ -252,10 +252,10 @@ fn call_data(value: &CallPhase<PlainData, PlainData, PlainData>) -> PlainData {
         CallPhase::CircuitOpen => obj([("phase", data(&"circuit_open"))]),
         CallPhase::Running { input, budget } => {
             let mut result = obj([("phase", data(&"running")), ("budget", data(budget))]);
-            if !matches!(input, CallValue::Missing) {
-                if let PlainData::Object(fields) = &mut result {
-                    fields.insert("input".into(), value_data(input));
-                }
+            if !matches!(input, CallValue::Missing)
+                && let PlainData::Object(fields) = &mut result
+            {
+                fields.insert("input".into(), value_data(input));
             }
             result
         }
@@ -269,10 +269,10 @@ fn call_data(value: &CallPhase<PlainData, PlainData, PlainData>) -> PlainData {
                 ("retryAtMs", data(retry_at_ms)),
                 ("budget", data(budget)),
             ]);
-            if !matches!(input, CallValue::Missing) {
-                if let PlainData::Object(fields) = &mut result {
-                    fields.insert("input".into(), value_data(input));
-                }
+            if !matches!(input, CallValue::Missing)
+                && let PlainData::Object(fields) = &mut result
+            {
+                fields.insert("input".into(), value_data(input));
             }
             result
         }
@@ -382,10 +382,10 @@ fn phase_data(phase: Phase) -> PlainData {
 fn state_data(state: &Model) -> PlainData {
     let ledger = record(&state.applied().entries, |entry| {
         let mut fields = obj([("expiresAtMs", data(&entry.expires_at_ms))]);
-        if !matches!(entry.value, CallValue::Missing) {
-            if let PlainData::Object(fields) = &mut fields {
-                fields.insert("value".into(), value_data(&entry.value));
-            }
+        if !matches!(entry.value, CallValue::Missing)
+            && let PlainData::Object(fields) = &mut fields
+        {
+            fields.insert("value".into(), value_data(&entry.value));
         }
         fields
     });

@@ -33,9 +33,9 @@ const mutations = [
     suite: "runtime",
     file: "crates/tea/src/runtime/engine.rs",
     before:
-      "let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;\n        self.core.committed(message.as_deref(), &state);",
+      "let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;\n        self.core.committed(message.as_ref(), &state);",
     after:
-      "self.core.committed(message.as_deref(), &state);\n        let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;",
+      "self.core.committed(message.as_ref(), &state);\n        let result = self.run_commands(commands).await;\n        tokio::task::yield_now().await;",
     witness: "runtime.promise.serial",
   },
   {

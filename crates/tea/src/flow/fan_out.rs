@@ -240,18 +240,19 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
         state: Rc<FanOutState<I, R, E>>,
     ) -> Step<Rc<FanOutState<I, R, E>>, C> {
         let mut launched = self.launch(state);
-        if let Some(join) = &self.join {
-            if !launched.state.joined && is_complete(&launched.state) {
-                let results = launched.state.done
-                    [slice_start(launched.state.wave_done_from, launched.state.done.len())..]
-                    .iter()
-                    .map(|done| Rc::clone(&done.result))
-                    .collect::<Vec<_>>();
-                let mut next = launched.state.as_ref().clone();
-                next.joined = true;
-                launched.state = Rc::new(next);
-                launched.commands.push(join(&results));
-            }
+        if let Some(join) = &self.join
+            && !launched.state.joined
+            && is_complete(&launched.state)
+        {
+            let results = launched.state.done
+                [slice_start(launched.state.wave_done_from, launched.state.done.len())..]
+                .iter()
+                .map(|done| Rc::clone(&done.result))
+                .collect::<Vec<_>>();
+            let mut next = launched.state.as_ref().clone();
+            next.joined = true;
+            launched.state = Rc::new(next);
+            launched.commands.push(join(&results));
         }
         launched
     }

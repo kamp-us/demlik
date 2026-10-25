@@ -243,10 +243,10 @@ fn call_data(value: &CallPhase<PlainData, PlainData, PlainData>) -> PlainData {
         CallPhase::CircuitOpen => obj([("phase", data(&"circuit_open"))]),
         CallPhase::Running { input, budget } => {
             let mut result = obj([("phase", data(&"running")), ("budget", data(budget))]);
-            if !matches!(input, CallValue::Missing) {
-                if let PlainData::Object(fields) = &mut result {
-                    fields.insert("input".into(), value_data(input));
-                }
+            if !matches!(input, CallValue::Missing)
+                && let PlainData::Object(fields) = &mut result
+            {
+                fields.insert("input".into(), value_data(input));
             }
             result
         }
@@ -260,10 +260,10 @@ fn call_data(value: &CallPhase<PlainData, PlainData, PlainData>) -> PlainData {
                 ("retryAtMs", data(retry_at_ms)),
                 ("budget", data(budget)),
             ]);
-            if !matches!(input, CallValue::Missing) {
-                if let PlainData::Object(fields) = &mut result {
-                    fields.insert("input".into(), value_data(input));
-                }
+            if !matches!(input, CallValue::Missing)
+                && let PlainData::Object(fields) = &mut result
+            {
+                fields.insert("input".into(), value_data(input));
             }
             result
         }

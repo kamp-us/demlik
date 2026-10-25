@@ -130,10 +130,10 @@ impl EffectScope {
         Ok(())
     }
     fn start_close(&self, failure: Option<ScopeFailure>) {
-        if let Some(failure) = failure {
-            if self.0.failure.borrow().is_none() {
-                *self.0.failure.borrow_mut() = Some(failure);
-            }
+        if let Some(failure) = failure
+            && self.0.failure.borrow().is_none()
+        {
+            *self.0.failure.borrow_mut() = Some(failure);
         }
         if self.0.closing.replace(true) {
             return;

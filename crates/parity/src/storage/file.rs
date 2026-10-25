@@ -264,10 +264,10 @@ where
                     Ok(value) => json!({ "op": "restore", "raw": value.as_ref().map(normalized) }),
                     Err(failure) => {
                         let mut value = super::restore::restore_error(&failure, |cause| error(cause, root, diagnostics));
-                        if let Some(RestoreCause::Load(cause)) = &failure.cause { if matches!(cause, FileStoreError::Json { .. } | FileStoreError::Io { .. }) {
+                        if let Some(RestoreCause::Load(cause)) = &failure.cause && matches!(cause, FileStoreError::Json { .. } | FileStoreError::Io { .. }) {
                             let reason = "the saved state could not be read (<cause>)";
                             value["reason"] = json!(reason); value["message"] = json!(format!("@demlik/tea: store refused — {reason}. The saved state was not restored and nothing was written."));
-                        } }
+                        }
                         json!({ "op": "restore", "error": value })
                     },
                 };

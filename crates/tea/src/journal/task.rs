@@ -77,14 +77,12 @@ pub(super) fn start<T: 'static, E: 'static, F: 'static>(
             .as_mut()
             .poll(&mut Context::from_waker(noop_waker_ref()))
             .is_ready();
-    if !finished {
-        if let Err(cause) =
+    if !finished
+        && let Err(cause) =
             std::panic::catch_unwind(AssertUnwindSafe(|| tokio::task::spawn_local(work)))
-        {
-            if let Some(sender) = completion.borrow_mut().take() {
-                let _ = sender.send(Err(JournalError::Panic(PanicCause::new(cause))));
-            }
-        }
+        && let Some(sender) = completion.borrow_mut().take()
+    {
+        let _ = sender.send(Err(JournalError::Panic(PanicCause::new(cause))));
     }
     JournalTask {
         receiver,

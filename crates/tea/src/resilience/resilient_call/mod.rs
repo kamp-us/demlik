@@ -256,19 +256,18 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
                 vec![],
             ));
         }
-        if self.config.cache.is_some() {
-            if let Some(value) =
+        if self.config.cache.is_some()
+            && let Some(value) =
                 cache::get_with_projection(&state.0.cache, key.clone(), at, |value| {
                     self.projection.project(value)
                 })?
-            {
-                let value = self.projection.read(value)?;
-                if !value.is_undefined() {
-                    return Ok(Step::new(
-                        self.set_call(state, key, CallPhase::Succeeded { result: value }),
-                        vec![],
-                    ));
-                }
+        {
+            let value = self.projection.read(value)?;
+            if !value.is_undefined() {
+                return Ok(Step::new(
+                    self.set_call(state, key, CallPhase::Succeeded { result: value }),
+                    vec![],
+                ));
             }
         }
         let mut bucket = state.0.bucket;

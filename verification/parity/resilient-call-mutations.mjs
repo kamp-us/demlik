@@ -19,8 +19,8 @@ const mutations = [
   {
     name: "cache-gate-disappears",
     file: module,
-    before: "if self.config.cache.is_some() {",
-    after: "if false && self.config.cache.is_some() {",
+    before: "if self.config.cache.is_some()",
+    after: "if false && self.config.cache.is_some()",
     witness: "resilient.cache",
   },
   {
