@@ -256,7 +256,9 @@ function control(
       join(tmpdir(), "demlik-deadline-type-control-"),
     ),
     file = "crates/tea/src/resilience/deadline.rs",
-    before = digest(file);
+    before = digest(file),
+    companion = "crates/tea/src/flow/monitored_run.rs",
+    companionBefore = digest(companion);
   try {
     for (const root of ["Cargo.toml", "Cargo.lock"])
       cpSync(root, join(temporary, root));
@@ -280,6 +282,16 @@ function control(
         needle,
         "#[derive(Debug, Deserialize, Serialize)]\npub struct TimerDeps<M> { pub ms: f64, pub msg: M }",
       ),
+    );
+    const companionSource = join(temporary, companion),
+      companionText = readFileSync(companionSource, "utf8"),
+      companionNeedle = "PlainData, Step, Tagged, TimerDeps,";
+    assert.equal(digest(companionSource), companionBefore);
+    assert.equal(companionText.split(companionNeedle).length, 2);
+    // Keep the composed helper compilable with the intentionally foreign type.
+    writeFileSync(
+      companionSource,
+      `${companionText.replace(companionNeedle, "PlainData, Step, Tagged,")}\nuse crate::resilience::deadline::TimerDeps;\n`,
     );
     const target = join(temporary, "target");
     build(temporary, target);
@@ -305,18 +317,22 @@ function control(
       "both default-runner operations in both profiles detect the foreign timer data type",
     );
     assert.equal(digest(file), before);
+    assert.equal(digest(companion), companionBefore);
     return {
       id: "separate-deadline-timer-type",
       isolation: "disposable-source-copy",
       activeSourceUnchanged: true,
       sourceBeforeSha256: before,
       mutantSourceSha256: digest(source),
+      companionSourceBeforeSha256: companionBefore,
+      companionMutantSourceSha256: digest(companionSource),
       nativeBinarySha256: digest(executable),
       detectedIds,
     };
   } finally {
     rmSync(temporary, { recursive: true, force: true });
     assert.equal(digest(file), before);
+    assert.equal(digest(companion), companionBefore);
   }
 }
 export async function verifyRuntimeDeadline(
