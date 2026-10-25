@@ -8,13 +8,16 @@ use serde::{
 use serde_json::value::RawValue;
 use std::fmt;
 
-pub(super) enum Document {
+mod recovery;
+pub(crate) use recovery::jsonc_recovered;
+
+pub(crate) enum Document {
     Scalar(JsValue),
     Array(Vec<Document>),
     Object(DocumentObject),
     Date,
 }
-pub(super) struct DocumentObject {
+pub(crate) struct DocumentObject {
     own: IndexMap<JsString, Document>,
     prototype: Prototype,
 }
@@ -60,7 +63,7 @@ impl DocumentObject {
             self.own.insert(key, value);
         }
     }
-    pub(super) fn entries(&self) -> impl Iterator<Item = (&JsString, &Document)> {
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&JsString, &Document)> {
         object_keys(&self.own)
             .into_iter()
             .map(|key| (key, &self.own[key]))
@@ -77,21 +80,21 @@ impl DocumentObject {
     }
 }
 impl Document {
-    pub(super) fn object(&self) -> Option<&DocumentObject> {
+    pub(crate) fn object(&self) -> Option<&DocumentObject> {
         if let Self::Object(value) = self {
             Some(value)
         } else {
             None
         }
     }
-    pub(super) fn array(&self) -> Option<&[Self]> {
+    pub(crate) fn array(&self) -> Option<&[Self]> {
         if let Self::Array(value) = self {
             Some(value)
         } else {
             None
         }
     }
-    pub(super) fn string(&self) -> Option<&JsString> {
+    pub(crate) fn string(&self) -> Option<&JsString> {
         if let Self::Scalar(JsValue::String(value)) = self {
             Some(value)
         } else {
@@ -105,13 +108,13 @@ impl Document {
             _ => None,
         }
     }
-    pub(super) fn get(&self, name: &str) -> Option<&Document> {
+    pub(crate) fn get(&self, name: &str) -> Option<&Document> {
         match self.property(name)? {
             Property::Value(value) => Some(value),
             _ => None,
         }
     }
-    pub(super) fn record(&self) -> Result<Option<&DocumentObject>, RecordTypeError> {
+    pub(crate) fn record(&self) -> Result<Option<&DocumentObject>, RecordTypeError> {
         let Some(object) = self.object() else {
             return Ok(None);
         };

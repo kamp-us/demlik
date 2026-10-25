@@ -1,4 +1,4 @@
-mod document;
+pub(crate) mod document;
 use crate::project::{
     RepoListing, list_visible_files, locale_compare_units, normalize_lexical, relative_path_text,
     resolve_path_text, to_relative,

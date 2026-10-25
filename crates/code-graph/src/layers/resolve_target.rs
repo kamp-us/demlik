@@ -1,14 +1,24 @@
-//! Workspace package names; filesystem and tsconfig target resolution are separate.
+//! Resolve import targets for the layer census, retaining real missing local imports.
 
 use crate::{
+    engine::oxc::{FileResolution, NearestTsconfigResolver, create_nearest_tsconfig_resolver},
     extract::package_exports::{package_name, package_source_entry, read_manifest},
+    extract::wrangler_config::document::jsonc_recovered,
+    project::{
+        dirname_path_text, discover_package_roots, find_nearest_tsconfig, join_path_text,
+        relative_path_text,
+    },
     text::JsString,
 };
 use indexmap::IndexMap;
 use serde::Serialize;
-use std::path::Path;
+use std::{
+    collections::{HashMap, HashSet},
+    fs, io,
+    path::{Path, PathBuf},
+};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct WorkspacePackage {
     pub name: JsString,
     pub dir: String,
@@ -59,4 +69,198 @@ pub fn match_package<'a>(
         head.extend_from_slice(second);
     }
     packages.get(&JsString::from_units(head))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ResolvedTarget {
+    File { file: JsString },
+    Package { pkg: WorkspacePackage },
+    External,
+    Unresolved { specifier: JsString },
+}
+
+/// A resolver snapshots workspace packages at creation and caches tsconfig alias keys on use.
+pub struct TargetResolver {
+    repo_root: PathBuf,
+    root_text: JsString,
+    real_root: PathBuf,
+    packages: WorkspacePackages,
+    nearest: NearestTsconfigResolver,
+    keys_by_config: HashMap<PathBuf, Option<Vec<JsString>>>,
+}
+
+pub fn create_target_resolver(repo_root: &Path) -> io::Result<TargetResolver> {
+    let packages = workspace_packages(repo_root, &discover_package_roots(repo_root, None));
+    Ok(TargetResolver {
+        repo_root: repo_root.to_path_buf(),
+        root_text: repo_root.to_string_lossy().as_ref().into(),
+        real_root: fs::canonicalize(repo_root)?,
+        packages,
+        nearest: create_nearest_tsconfig_resolver(),
+        keys_by_config: HashMap::new(),
+    })
+}
+
+impl TargetResolver {
+    pub fn resolve(
+        &mut self,
+        from_file: &JsString,
+        specifier: &JsString,
+    ) -> io::Result<ResolvedTarget> {
+        if specifier.starts_with(".") {
+            return self.resolve_relative(from_file, specifier);
+        }
+        if let Some(pkg) = match_package(specifier, &self.packages) {
+            return Ok(ResolvedTarget::Package { pkg: pkg.clone() });
+        }
+        let absolute = join_path_text(&self.root_text, from_file);
+        match self
+            .nearest
+            .resolve(Path::new(&absolute.to_lossy()), &specifier.to_lossy())
+        {
+            FileResolution::Path(path) => {
+                let relative =
+                    relative_path_text(&self.real_root, &path.to_string_lossy().as_ref().into())?;
+                let node_modules = JsString::from("node_modules");
+                if relative
+                    .units()
+                    .split(|unit| *unit == 47)
+                    .any(|part| part == node_modules.units())
+                    || relative == ".."
+                    || relative.starts_with("../")
+                    || relative.starts_with("/")
+                {
+                    Ok(ResolvedTarget::External)
+                } else {
+                    Ok(ResolvedTarget::File { file: relative })
+                }
+            }
+            FileResolution::Builtin => Ok(ResolvedTarget::External),
+            FileResolution::Missing => {
+                let directory = dirname_path_text(&absolute).to_lossy();
+                let keys = find_nearest_tsconfig(Path::new(&directory))
+                    .and_then(|config| self.alias_keys(&config, &mut HashSet::new()))
+                    .unwrap_or_default();
+                if keys.iter().any(|key| matches_paths_key(key, specifier)) {
+                    Ok(ResolvedTarget::Unresolved {
+                        specifier: specifier.clone(),
+                    })
+                } else {
+                    Ok(ResolvedTarget::External)
+                }
+            }
+        }
+    }
+
+    fn resolve_relative(
+        &self,
+        from_file: &JsString,
+        specifier: &JsString,
+    ) -> io::Result<ResolvedTarget> {
+        let absolute = join_path_text(&self.root_text, from_file);
+        let mut base = join_path_text(&dirname_path_text(&absolute), specifier);
+        for suffix in [".js", ".jsx", ".mjs", ".cjs"] {
+            let suffix: Vec<_> = suffix.encode_utf16().collect();
+            if base.units().ends_with(&suffix) {
+                base = JsString::from_units(
+                    base.units()[..base.units().len() - suffix.len()].to_vec(),
+                );
+                break;
+            }
+        }
+        for probe in [".ts", ".tsx", ".d.ts", "/index.ts", "/index.tsx", ""] {
+            let mut candidate = base.clone();
+            candidate.push_str(probe);
+            let native = candidate.to_lossy();
+            let path = Path::new(&native);
+            if path.exists() && fs::metadata(path)?.is_file() {
+                return Ok(ResolvedTarget::File {
+                    file: relative_path_text(&self.repo_root, &candidate)?,
+                });
+            }
+        }
+        Ok(ResolvedTarget::Unresolved {
+            specifier: specifier.clone(),
+        })
+    }
+
+    fn alias_keys(
+        &mut self,
+        file: &Path,
+        visiting: &mut HashSet<PathBuf>,
+    ) -> Option<Vec<JsString>> {
+        if let Some(cached) = self.keys_by_config.get(file) {
+            return cached.clone();
+        }
+        if !visiting.insert(file.to_path_buf()) {
+            return None;
+        }
+        let keys = read_tsconfig(file).and_then(|config| {
+            if let Some(keys) = config.paths {
+                return Some(keys);
+            }
+            for parent in config.extends.into_iter().rev() {
+                let located = self
+                    .nearest
+                    .locate(file.parent().unwrap_or(file), &parent.to_lossy());
+                if let Some(keys) = located.and_then(|located| self.alias_keys(&located, visiting))
+                {
+                    return Some(keys);
+                }
+            }
+            None
+        });
+        visiting.remove(file);
+        self.keys_by_config.insert(file.to_path_buf(), keys.clone());
+        keys
+    }
+}
+
+struct Tsconfig {
+    extends: Vec<JsString>,
+    paths: Option<Vec<JsString>>,
+}
+
+fn read_tsconfig(file: &Path) -> Option<Tsconfig> {
+    let bytes = fs::read(file).ok()?;
+    let document = jsonc_recovered(&String::from_utf8_lossy(&bytes))?;
+    document.object()?;
+    let extends = match document.get("extends") {
+        None => Vec::new(),
+        Some(value) if value.string().is_some() => vec![value.string()?.clone()],
+        Some(value) => value
+            .array()?
+            .iter()
+            .map(|value| value.string().cloned())
+            .collect::<Option<_>>()?,
+    };
+    let options = document.get("compilerOptions");
+    if let Some(options) = options {
+        options.object()?;
+    }
+    let paths = match options.and_then(|options| options.get("paths")) {
+        None => None,
+        Some(paths) => Some(
+            paths
+                .record()
+                .ok()??
+                .entries()
+                .filter(|(key, _)| *key != "__proto__")
+                .map(|(key, _)| key.clone())
+                .collect(),
+        ),
+    };
+    Some(Tsconfig { extends, paths })
+}
+
+fn matches_paths_key(key: &JsString, specifier: &JsString) -> bool {
+    let Some(star) = key.units().iter().position(|unit| *unit == b'*' as u16) else {
+        return key == specifier;
+    };
+    let prefix = &key.units()[..star];
+    let suffix = &key.units()[star + 1..];
+    specifier.units().len() >= prefix.len() + suffix.len()
+        && specifier.units().starts_with(prefix)
+        && specifier.units().ends_with(suffix)
 }
