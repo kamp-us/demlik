@@ -122,15 +122,26 @@ pub(crate) fn absolute_lexical(path: &Path) -> PathBuf {
             .expect("current directory is unavailable")
             .join(path)
     };
+    normalize_lexical(&absolute)
+}
+
+pub(crate) fn normalize_lexical(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
-    for component in absolute.components() {
+    for component in path.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                normalized.pop();
+                if normalized.file_name().is_some_and(|name| name != "..") {
+                    normalized.pop();
+                } else if !normalized.has_root() {
+                    normalized.push("..");
+                }
             }
             component => normalized.push(component.as_os_str()),
         }
+    }
+    if normalized.as_os_str().is_empty() {
+        normalized.push(".");
     }
     normalized
 }
@@ -180,7 +191,7 @@ pub fn list_visible_files(
             }
         }
     };
-    files.retain(|file| keep(file) && root.join(file).is_file());
+    files.retain(|file| keep(file) && normalize_lexical(&root.join(file)).is_file());
     files.sort_by(|left, right| FILE_COLLATOR.compare(left, right));
     files
 }
@@ -215,7 +226,7 @@ pub fn discover_package_roots(root: &Path, listing: Option<&RepoListing>) -> Vec
 pub fn list_source_files(root: &Path) -> Vec<PathBuf> {
     list_visible_files(root, source_file, None)
         .into_iter()
-        .map(|file| root.join(file))
+        .map(|file| normalize_lexical(&root.join(file)))
         .collect()
 }
 
@@ -307,7 +318,7 @@ pub fn load_cheap_project(
     let mut source_files = Vec::new();
     let mut parse_failures = Vec::new();
     for file in list_visible_files(root, source_file, listing) {
-        let absolute_path = root.join(&file);
+        let absolute_path = normalize_lexical(&root.join(&file));
         let Ok(bytes) = fs::read(&absolute_path) else {
             parse_failures.push(file);
             continue;

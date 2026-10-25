@@ -11,3 +11,4 @@ pub mod functions;
 pub mod metrics;
 pub mod references;
 pub mod scc;
+pub mod wrangler_config;

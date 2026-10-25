@@ -145,7 +145,7 @@ pub enum CrossRuntimeReason {
     TargetNotLoaded,
     AmbiguousTarget,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BindingKind {
     Service,
@@ -185,7 +185,7 @@ pub struct CrossRuntimeReport {
     pub edges: Vec<CrossRuntimeEdge>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DataBindingKind {
     D1,
@@ -193,6 +193,17 @@ pub enum DataBindingKind {
     Kv,
     Queue,
     R2,
+}
+impl DataBindingKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::D1 => "d1",
+            Self::DurableObject => "durable-object",
+            Self::Kv => "kv",
+            Self::Queue => "queue",
+            Self::R2 => "r2",
+        }
+    }
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase")]

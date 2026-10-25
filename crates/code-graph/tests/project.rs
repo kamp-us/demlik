@@ -151,6 +151,28 @@ fn orders_visible_names_like_the_reference_locale_compare() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn lists_the_supplied_directory_but_normalizes_joined_file_paths_before_stat() {
+    let project = Project::new();
+    project.write("holder/shared.ts", "export const lexical = true;");
+    project.write("holder/lexical-only.ts", "export {};");
+    project.write("outside/shared.ts", "export const physical = true;");
+    project.write("outside/physical-only.ts", "export {};");
+    fs::create_dir_all(project.0.join("outside/nested")).unwrap();
+    std::os::unix::fs::symlink(
+        project.0.join("outside/nested"),
+        project.0.join("holder/link"),
+    )
+    .unwrap();
+    let supplied = project.0.join("holder/link/..");
+    assert_eq!(list_visible_files(&supplied, |_| true, None), ["shared.ts"]);
+    assert_eq!(
+        list_source_files(&supplied),
+        [project.0.join("holder/shared.ts")]
+    );
+}
+
 #[test]
 fn selects_the_package_or_workspace_tsconfig_and_reports_missing_configuration() {
     let project = Project::new();
