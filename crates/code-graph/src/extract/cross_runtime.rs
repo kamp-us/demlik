@@ -12,6 +12,13 @@ pub fn owner_of<'a>(
     manifests: &'a [ServiceManifest],
     repo_relative_file: &str,
 ) -> Option<&'a ServiceManifest> {
+    owner_of_text(manifests, &repo_relative_file.into())
+}
+
+pub fn owner_of_text<'a>(
+    manifests: &'a [ServiceManifest],
+    repo_relative_file: &JsString,
+) -> Option<&'a ServiceManifest> {
     let mut best: Option<&ServiceManifest> = None;
     for manifest in manifests {
         let prefix = if manifest.dir.is_empty() {

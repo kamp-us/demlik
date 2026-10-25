@@ -20,7 +20,7 @@ pub struct LibraryType {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub imported_from: Option<Vec<ImportedFrom>>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DeployableKind {
     BindingOutsideDrivenAdapter,

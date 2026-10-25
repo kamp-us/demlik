@@ -14,6 +14,34 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "binding-main-is-not-clean",
+    file: "deployables/bindings.rs",
+    before: "let clean = if file.is_main {",
+    after: "let clean = if false && file.is_main {",
+    script: "graph-deployable-judgments.mts",
+    driver: "deployables_driver",
+    witness: "deployables.all-kinds-main-and-nested",
+  },
+  {
+    name: "binding-owners-exempt-application",
+    file: "deployables/bindings.rs",
+    before: "} else if !file.driven {",
+    after: "} else if !file.driven && file.owners.is_empty() {",
+    script: "graph-deployable-judgments.mts",
+    driver: "deployables_driver",
+    witness: "deployables.owner-owner-does-not-exempt-application",
+  },
+  {
+    name: "deployable-reader-ignores-unparsed-workers",
+    file: "deployables/model.rs",
+    before: "if !reading.is_empty() && !catalog.unparsed_configs.is_empty() {",
+    after:
+      "if false && !reading.is_empty() && !catalog.unparsed_configs.is_empty() {",
+    script: "graph-deployable-judgments.mts",
+    driver: "deployables_driver",
+    witness: 'deployables.broken-config-["binding-outside-driven-adapter"]',
+  },
+  {
     name: "library-allowance-forgets-inherited-function-name",
     file: "libraries/allowance.rs",
     before: 'Ok(if dir == "name" {',
