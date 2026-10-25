@@ -27,7 +27,7 @@ pub enum DeployableKind {
     WorkerCallCycle,
     RelativeImportCrossesWorkspace,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ShapeKind {
     IndexNotExportsOnly,

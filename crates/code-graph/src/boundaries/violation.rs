@@ -24,6 +24,7 @@ impl<'de> Deserialize<'de> for False {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WriteSite {
     pub file: JsString,
+    #[serde(serialize_with = "crate::text::serialize_number")]
     pub line: f64,
     pub binding: JsString,
 }
