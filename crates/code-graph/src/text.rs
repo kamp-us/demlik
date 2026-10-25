@@ -311,6 +311,12 @@ pub(crate) fn serialize_object<S: Serializer>(
         .expect("JavaScript JSON objects serialize valid JSON")
         .serialize(serializer)
 }
+pub(crate) fn serialize_number<S: Serializer>(
+    value: &f64,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    JsValue::Number(*value).serialize(serializer)
+}
 impl<'de> Deserialize<'de> for JsValue {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = Box::<RawValue>::deserialize(deserializer)?;
