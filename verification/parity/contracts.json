@@ -4953,5 +4953,359 @@
       "command.helpers-null"
     ],
     "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./do#applyEffectEvent": {
+    "signature": "cb854ce5eb4ab8380f3a047b21391894fd2cb888166b8453888a7133afd2d541",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::apply_effect_event"]
+    },
+    "cases": ["ledger.map-same-value-zero-and-order"]
+  },
+  "@demlik/tea:./do#emptyLedger": {
+    "signature": "0ebbb752f037c5dc677e72e50cb85c592fb4f0f7f73d64d20f2605d6031b4f32",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::empty_ledger"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#foldLedger": {
+    "signature": "cb8bfafd3e596518255876b69867f4ff5298927fe2b25ff20384809942e673c0",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::fold_ledger"]
+    },
+    "cases": ["ledger.map-same-value-zero-and-order"]
+  },
+  "@demlik/tea:./do#isOwed": {
+    "signature": "8193e5281213f340c5bd4840eafb4fbdbd89a7674a4d20d401d1da307d33301c",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::is_owed"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#PendingEffectsRecorder/member:published:92f8925d794d077fa1c56c0701fbe8144bd8943bb3e304bcc8744f27c0463b19": {
+    "signature": "92f8925d794d077fa1c56c0701fbe8144bd8943bb3e304bcc8744f27c0463b19",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::PendingEffectsRecorder::owe"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#PendingEffectsRecorder/member:published:4a03c812696f2715bccbdb903d094c8d909271058192c0cfa7a6dfb8668f6764": {
+    "signature": "4a03c812696f2715bccbdb903d094c8d909271058192c0cfa7a6dfb8668f6764",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::PendingEffectsRecorder::confirm"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#PendingEffectsRecorder/member:published:7d382d528afecbc32eabe5ebd36029df1b7be64d17f370b2e64f0d47eb1f8b38": {
+    "signature": "7d382d528afecbc32eabe5ebd36029df1b7be64d17f370b2e64f0d47eb1f8b38",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::PendingEffectsRecorder::surviving"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#PendingEffectsRecorder/member:published:3bce9faada05ae289b9a747cb9cb67004ab4ea37ef3d864986c5596298cc1dde": {
+    "signature": "3bce9faada05ae289b9a747cb9cb67004ab4ea37ef3d864986c5596298cc1dde",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::PendingEffectsRecorder::ledger"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#PendingEffectsRecorder/member:published:90af80e061a6066c86a624839ca8876b934d916a36877fec75d4bc995abd99f8": {
+    "signature": "90af80e061a6066c86a624839ca8876b934d916a36877fec75d4bc995abd99f8",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::PendingEffectsRecorder::last_id"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#pendingEffectsLedger": {
+    "signature": "ff06b36320e237097ab872f22c54dbffb1a2cceb96ed587cfde1918d846cb725",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::pending_effects_ledger"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./do#survivingEffects": {
+    "signature": "c80bcd2bc3ed87ead500f1628130da9b9e1ac662ea11f2f2b1ecf3755829d357",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::surviving_effects"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./flow#isCommitted": {
+    "signature": "6ea22a51c75b93caae35ff9c65045a2042f8973df39b38d5f36c18e85fdc3ab4",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::is_committed"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset",
+      "saga.reverse-ok",
+      "saga.reverse-err"
+    ]
+  },
+  "@demlik/tea:./flow#isAborted": {
+    "signature": "3b0d184340078397e74c4fc30d3338b7547f5f07583e639c23379011313b13af",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::is_aborted"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset",
+      "saga.reverse-ok",
+      "saga.reverse-err"
+    ]
+  },
+  "@demlik/tea:./flow#isCompensationFailed": {
+    "signature": "30cab69a2f43c606b88d6a29a4d2a8775292ecab0ac8b4d71b1525e4e3d6a85f",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::is_compensation_failed"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset",
+      "saga.reverse-ok",
+      "saga.reverse-err"
+    ]
+  },
+  "@demlik/tea:./flow#isSettled": {
+    "signature": "acd411ffd7119d4bbb8d6a0b297301f0024267b65ec200097416bbaa2da2f8b7",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::is_settled"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset",
+      "saga.reverse-ok",
+      "saga.reverse-err"
+    ]
+  },
+  "@demlik/tea:./flow#initSaga": {
+    "signature": "9a710502980a73bf37b8a3436ade4a42a3b44f79d2d5dd1dd0a29af7f27b626e",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::init_saga"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset"
+    ]
+  },
+  "@demlik/tea:./flow#createSaga": {
+    "signature": "2bfc6c8c4fdb4d888db7b683d3e949d01e837997ab57ab14d5cfe123fe0cb07d",
+    "rust": {
+      "file": "crates/tea/src/flow/saga.rs",
+      "symbols": ["saga::create_saga"]
+    },
+    "cases": [
+      "saga.commands-retain-prototype-data-and-lossless-tags",
+      "saga.forward-commit-stale-and-reset",
+      "saga.reverse-ok",
+      "saga.reverse-err"
+    ]
+  },
+  "@demlik/tea:./flow#workflowActivityDef": {
+    "signature": "643d6c3c4a1e7038d1073600b3a39dc458938bc8bd5d890f0d413e7e3d016f4e",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["workflow::workflow_activity_def"]
+    },
+    "cases": [
+      "workflow.transport.promise.activity.success",
+      "workflow.transport.promise.activity.malformed",
+      "workflow.transport.promise.activity.undefined",
+      "workflow.transport.effect.activity.success"
+    ]
+  },
+  "@demlik/tea:./flow#workflowCompensationDef": {
+    "signature": "55df9567f527f20d1345f0ce32f6d872eb218674dca9f302dc0f41bf02cd682a",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["workflow::workflow_compensation_def"]
+    },
+    "cases": [
+      "workflow.transport.promise.compensation.success",
+      "workflow.transport.promise.compensation.malformed",
+      "workflow.transport.promise.compensation.undefined",
+      "workflow.transport.effect.compensation.success"
+    ]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:d6a8dfcf9bcdf727cd59b3808add9feaecc58db154209568ee33eae5b2e74105": {
+    "signature": "d6a8dfcf9bcdf727cd59b3808add9feaecc58db154209568ee33eae5b2e74105",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::init"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored",
+      "workflow.no-inverse-fails"
+    ]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:9b86d47d19fc167545c2e47df4bf77e8e72b2493e48801684e3843899744f6d5": {
+    "signature": "9b86d47d19fc167545c2e47df4bf77e8e72b2493e48801684e3843899744f6d5",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::on_activity_ok"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.generated-2",
+      "workflow.generated-3",
+      "workflow.generated-4"
+    ]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:6b3413a2c3231adb5c6431937513e6fd180328618743117c29ed333cb20d6f78": {
+    "signature": "6b3413a2c3231adb5c6431937513e6fd180328618743117c29ed333cb20d6f78",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::on_activity_err"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored",
+      "workflow.no-inverse-fails"
+    ]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:40c86c6c952e1a3f194c4ab1063c10ee3d106b557cef3570c5f22bc3766d38de": {
+    "signature": "40c86c6c952e1a3f194c4ab1063c10ee3d106b557cef3570c5f22bc3766d38de",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::on_compensation_ok"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored"
+    ]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:d2e2cd06ea7a4e12054bf4f8c02a41d3ed0f2e5b9388cf4df00feb2325084a45": {
+    "signature": "d2e2cd06ea7a4e12054bf4f8c02a41d3ed0f2e5b9388cf4df00feb2325084a45",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::on_compensation_err"]
+    },
+    "cases": ["workflow.rollback-err-restored"]
+  },
+  "@demlik/tea:./flow#Workflow/member:published:05936fce491fbeb82b55a539d85658503c908757dc07a5ccffa81b82ee03e53a": {
+    "signature": "05936fce491fbeb82b55a539d85658503c908757dc07a5ccffa81b82ee03e53a",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["Workflow::surviving_activities"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored",
+      "workflow.no-inverse-fails"
+    ]
+  },
+  "@demlik/tea:./flow#createWorkflow": {
+    "signature": "139c68336a73f5638ba130434704bc59e8d7d5bf53f640732d8c56371754d60b",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["workflow::create_workflow"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored",
+      "workflow.no-inverse-fails"
+    ]
+  },
+  "@demlik/tea:./flow#foldWorkflow": {
+    "signature": "fa7691c240385323cf47948f1647f53d9b631990c68b80e83ca476cce245ed23",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["workflow::fold_workflow"]
+    },
+    "cases": ["workflow.forward-duplicate-and-replay"]
+  },
+  "@demlik/tea:./flow#emptyLedger": {
+    "signature": "f5445be46db0d441cf8dd6de6b5dde8f3ec1c5e80e8d773b108bc724f491686d",
+    "rust": {
+      "file": "crates/tea/src/durable_effects.rs",
+      "symbols": ["ledger::empty_ledger"]
+    },
+    "cases": [
+      "ledger.counter-undefined",
+      "ledger.counter-{\"$undefined\":true}",
+      "ledger.counter-null",
+      "ledger.counter-0"
+    ]
+  },
+  "@demlik/tea:./flow#routeWorkflowMsg": {
+    "signature": "fab6d9825d51ad80bf57fab23a13d2c41d583eeb39b97866c0f2ffdf8b87461e",
+    "rust": {
+      "file": "crates/tea/src/flow/workflow.rs",
+      "symbols": ["workflow::route_workflow_msg"]
+    },
+    "cases": [
+      "workflow.forward-duplicate-and-replay",
+      "workflow.rollback-ok-restored",
+      "workflow.rollback-err-restored",
+      "workflow.no-inverse-fails"
+    ]
   }
 }

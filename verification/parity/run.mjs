@@ -18,7 +18,9 @@ import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
 import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
 import { runtimeHooksParity } from "./runtime-hooks.mjs";
+import { sagaParity } from "./saga-run.mjs";
 import { timingParity } from "./timing-run.mjs";
+import { workflowParity } from "./workflow-run.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -29,6 +31,8 @@ const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
 const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
+const workflowBinaryArgument = args.indexOf("--workflow-bin");
+const sagaBinaryArgument = args.indexOf("--saga-bin");
 const resilientCallBinaryArgument = args.indexOf("--resilient-call-bin");
 const monitoredRunBinaryArgument = args.indexOf("--monitored-run-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
@@ -351,6 +355,58 @@ if (!mutationSuite) {
     });
   }
 }
+let workflow = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    workflow = await workflowParity(cargo, {
+      binary:
+        workflowBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[workflowBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-workflow.json`,
+            ),
+    });
+    failures.push(...workflow.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "workflow.verification",
+      operation: "tea.workflow",
+      message: error.message,
+    });
+  }
+}
+let saga = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    saga = await sagaParity(cargo, {
+      binary:
+        sagaBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[sagaBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-saga.json`,
+            ),
+    });
+    failures.push(...saga.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "saga.verification",
+      operation: "tea.saga",
+      message: error.message,
+    });
+  }
+}
 let monitoredRun = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -527,6 +583,8 @@ const report = {
     commandFamilies.cases +
     resilientCall.cases +
     flow.cases +
+    workflow.cases +
+    saga.cases +
     monitoredRun.cases +
     runtimeHooks.cases +
     runtimeDeadline.cases +
@@ -541,6 +599,8 @@ const report = {
     commandFamilies.passed +
     resilientCall.passed +
     flow.passed +
+    workflow.passed +
+    saga.passed +
     monitoredRun.passed +
     runtimeHooks.passed +
     runtimeDeadline.passed +
@@ -556,6 +616,8 @@ const report = {
       ...(commandFamilies.passed ? ["tea.command.families"] : []),
       ...(resilientCall.passed ? ["tea.resilience.resilient-call"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
+      ...(workflow.passed ? ["tea.workflow"] : []),
+      ...(saga.passed ? ["tea.saga"] : []),
       ...(monitoredRun.passed ? ["tea.monitored-run"] : []),
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
       ...(runtimeDeadline.passed ? ["tea.runtime.deadline"] : []),
@@ -582,6 +644,8 @@ const report = {
     failures: undefined,
   },
   flow: { ...flow, nativeEvidence: undefined, failures: undefined },
+  workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
+  saga: { ...saga, nativeEvidence: undefined, failures: undefined },
   monitoredRun: {
     ...monitoredRun,
     nativeEvidence: undefined,
@@ -625,6 +689,8 @@ const report = {
     ...commandFamilies.nativeEvidence,
     ...resilientCall.nativeEvidence,
     ...flow.nativeEvidence,
+    ...workflow.nativeEvidence,
+    ...saga.nativeEvidence,
     ...monitoredRun.nativeEvidence,
     ...runtimeHooks.nativeEvidence,
     ...runtimeDeadline.nativeEvidence,

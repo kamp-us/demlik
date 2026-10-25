@@ -31,6 +31,9 @@ The implementations live beside each other in `packages/` and `crates/`.
    Library scope checks read real manifests, package names, subpaths, nested owners,
    world packages and declaration refusals. Library verdicts also compare import
    precedence, allowed names, stale declarations, impurity and measured census lines.
+   Deployable judgments compare real worker ownership, binding use, owner declarations
+   and census output. Layer target checks resolve real shared files, workspace packages
+   and tsconfig aliases, including measured malformed-config recovery cases.
    Comment checks classify real syntax
    and count lines by file, package and bucket, including source repository files.
    Comment policy checks compare ceiling validation, defaults, points, recorded

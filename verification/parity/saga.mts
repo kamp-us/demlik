@@ -588,8 +588,24 @@ export function verifySaga(
     expected = cases.map((item) => executeSaga(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
+  assert.equal(new Set(cases.map((item) => item.id)).size, cases.length);
+  const failures: {
+    id: string;
+    message: string;
+    reference: unknown;
+    native: unknown;
+  }[] = [];
   cases.forEach((item, index) => {
-    assert.deepEqual(results[index].comparison, expected[index], item.id);
+    try {
+      assert.deepEqual(results[index].comparison, expected[index], item.id);
+    } catch (error) {
+      failures.push({
+        id: item.id,
+        message: error instanceof Error ? error.message : String(error),
+        reference: expected[index],
+        native: results[index].comparison,
+      });
+    }
   });
   const selected = (id: string, position: number) => {
     const index = cases.findIndex((item) => item.id === id);
@@ -623,6 +639,10 @@ export function verifySaga(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    scope:
+      "native reversible saga queue composition; full port remains incomplete",
+    passed: cases.length - failures.length,
+    failures,
     runtime: {
       node: process.version,
       v8: process.versions.v8,
@@ -634,10 +654,12 @@ export function verifySaga(
       (sum, item) => sum + item.script.actions.length,
       0,
     ),
-    controls: mutationCheck ? controls(cases, expected) : [],
+    controls:
+      mutationCheck && !failures.length ? controls(cases, expected) : [],
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !failures.some((failure) => failure.id === item.id),
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
   };
@@ -665,6 +687,8 @@ if (
   console.log(
     JSON.stringify({
       compared: report.compared,
+      passed: report.passed,
+      failures: report.failures,
       transitions: report.transitions,
       controls: report.controls.map((item) => ({
         id: item.id,
@@ -673,4 +697,5 @@ if (
       report: values.report ?? "target/parity/saga.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }
