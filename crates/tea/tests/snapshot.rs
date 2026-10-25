@@ -25,8 +25,8 @@ fn progress_hits_the_snapshot_cadence_and_emits_the_owned_payload_without_clone_
     assert_eq!(saved.commands.len(), 1);
     let data = saved.commands[0].input();
     assert_eq!(data.key.as_utf8(), Some("checkpoint"));
-    assert_eq!(data.seq, 1.0);
-    assert_eq!(data.at, 200.0);
+    assert_eq!(data.seq.number(), Some(1.0));
+    assert_eq!(data.at.number(), Some(200.0));
     assert!(Rc::ptr_eq(&data.payload, &payload));
     assert_eq!(data.payload.position, 7);
     assert_eq!(data.payload.local.get(), 3);
@@ -104,7 +104,7 @@ fn nonfinite_counters_restore_as_null_then_follow_the_source_numeric_coercion() 
     assert_eq!(first.state.seq.number(), None);
     let second = snapshot.record(&first.state, Rc::new(PlainData::Null), 20.0);
     assert_eq!(second.commands.len(), 1);
-    assert_eq!(second.commands[0].input().seq, 1.0);
+    assert_eq!(second.commands[0].input().seq.number(), Some(1.0));
     assert_eq!(second.state.seq.number(), Some(1.0));
     let ack = snapshot.write.ok(
         second.commands.into_iter().next().unwrap(),

@@ -53,8 +53,8 @@ fn pipeline_advances_the_shared_queue_and_forces_the_terminal_checkpoint() {
     assert_eq!(done.commands.len(), 1);
     assert!(Rc::ptr_eq(&done.commands[0].input().payload, &payload));
     assert_eq!(done.commands[0].input().payload.0, 2);
-    assert_eq!(done.commands[0].input().seq, 1.0);
-    assert_eq!(done.commands[0].input().at, 120.0);
+    assert_eq!(done.commands[0].input().seq.number(), Some(1.0));
+    assert_eq!(done.commands[0].input().at.number(), Some(120.0));
     let stale = run.advance(&done.state, Rc::new(Payload(3)), StageResult::Ok, 130.0);
     assert!(Rc::ptr_eq(&stale.state, &done.state));
     assert!(stale.commands.is_empty());

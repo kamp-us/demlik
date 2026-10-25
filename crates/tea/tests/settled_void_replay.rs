@@ -45,8 +45,8 @@ fn persisted_workflow_and_checkpoint_acknowledgements_restore_after_json_omits_u
     );
     persisted_ack(snapshot_write_def().from_record(SnapshotWriteInput {
         key: "bot".into(),
-        seq: 1.0,
-        at: 17.0,
+        seq: 1.0.into(),
+        at: 17.0.into(),
         payload: Rc::new(PlainData::String("saved".into())),
     }));
 }

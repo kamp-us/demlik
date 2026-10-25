@@ -28,9 +28,19 @@ pub struct SnapshotConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotWriteInput<V> {
     pub key: JsText,
-    pub seq: f64,
-    pub at: f64,
+    pub seq: SnapshotNumber,
+    pub at: SnapshotNumber,
     pub payload: Rc<V>,
+}
+impl<V> SnapshotWriteInput<V> {
+    pub fn new(key: impl Into<JsText>, seq: f64, at: f64, payload: Rc<V>) -> Self {
+        Self {
+            key: key.into(),
+            seq: seq.into(),
+            at: at.into(),
+            payload,
+        }
+    }
 }
 impl<V> CommandRecord for SnapshotWriteInput<V> {}
 #[derive(Debug, Serialize, Deserialize)]
@@ -143,8 +153,8 @@ impl<V> Snapshot<V> {
             Rc::new(next),
             vec![self.write.from_record(SnapshotWriteInput {
                 key: self.key.clone(),
-                seq,
-                at,
+                seq: seq.into(),
+                at: at.into(),
                 payload,
             })],
         )
@@ -181,13 +191,16 @@ impl<V> Snapshot<V> {
         msg: &SnapshotSavedMsg<V>,
     ) -> Step<Rc<SnapshotState>, SnapshotWriteCmd<V>> {
         let input = msg.cmd().input();
-        if state.last_saved_seq.is_some_and(|last| input.seq <= last) {
+        if state
+            .last_saved_seq
+            .is_some_and(|last| input.seq.number_or_zero() <= last)
+        {
             return Step::new(Rc::clone(state), vec![]);
         }
         Step::new(
             Rc::new(SnapshotState {
-                last_saved_seq: Some(input.seq),
-                last_saved_at: Some(input.at),
+                last_saved_seq: input.seq.number(),
+                last_saved_at: input.at.number(),
                 ..**state
             }),
             vec![],

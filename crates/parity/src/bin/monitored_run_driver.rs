@@ -208,8 +208,8 @@ fn snapshot_msg(
         definition,
         SnapshotWriteInput {
             key: "foreign/ack".into(),
-            seq,
-            at,
+            seq: seq.into(),
+            at: at.into(),
             payload: Rc::new(PlainData::Null)
         }
     );
@@ -326,8 +326,8 @@ fn run_snapshot(
                     &def,
                     SnapshotWriteInput {
                         key: "definition".into(),
-                        seq: seq.value(),
-                        at: at.value(),
+                        seq: seq.value().into(),
+                        at: at.value().into(),
                         payload: Rc::new(data(&payload))
                     }
                 );
@@ -354,8 +354,8 @@ fn run_snapshot(
                     &def,
                     SnapshotWriteInput {
                         key: "definition".into(),
-                        seq: seq.value(),
-                        at: at.value(),
+                        seq: seq.value().into(),
+                        at: at.value().into(),
                         payload: Rc::new(PlainData::Null)
                     }
                 );
