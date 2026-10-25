@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
+  { name: "analysis", driver: "analysis_driver", script: "graph-analysis.mts" },
   {
     name: "impure-uses",
     driver: "boundary_domain_driver",
@@ -51,6 +52,12 @@ const suites = [
     script: "graph-structure.mts",
   },
 ];
+const checkedUtf8 = new Set([
+  "boundary_config_driver",
+  "boundary_domain_driver",
+  "zoning_driver",
+  "reconcile_driver",
+]);
 
 export async function graphParity(cargo) {
   execFileSync(
@@ -71,8 +78,28 @@ export async function graphParity(cargo) {
   await mkdir(directory, { recursive: true });
   const results = [];
   const nativeEvidence = {};
+  const transportProbes = {};
   for (const suite of suites) {
     const binary = path.join(root, "target/debug/examples", suite.driver);
+    if (checkedUtf8.has(suite.driver) && !transportProbes[suite.driver]) {
+      const invalid = spawnSync(binary, [], {
+        cwd: root,
+        input: Buffer.from([0xff, 0x0a]),
+        encoding: "utf8",
+        timeout: 5_000,
+      });
+      if (invalid.error) throw invalid.error;
+      assert.ok(
+        invalid.status !== null && invalid.status !== 0,
+        `${suite.driver}: invalid UTF-8 must fail`,
+      );
+      assert.match(invalid.stderr, /UTF-8/);
+      transportProbes[suite.driver] = {
+        invalidUtf8Rejected: true,
+        exitCode: invalid.status,
+        diagnostic: invalid.stderr.trim(),
+      };
+    }
     const reportFile = path.join(directory, `graph-${suite.name}.json`);
     execFileSync(
       process.execPath,
@@ -126,6 +153,7 @@ export async function graphParity(cargo) {
       0,
     ),
     suites: results,
+    transportProbes,
     nativeEvidence,
   };
 }

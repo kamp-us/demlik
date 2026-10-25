@@ -271,11 +271,9 @@ struct Response {
     diagnostic: Option<String>,
     observed_calls: Vec<&'static str>,
 }
-fn main() {
+fn main() -> io::Result<()> {
     for line in io::stdin().lock().lines() {
-        let Ok(line) = line else {
-            break;
-        };
+        let line = line?;
         let request = serde_json::from_str::<Request>(&line);
         let mut observed_calls = Vec::new();
         let result = request
@@ -295,4 +293,5 @@ fn main() {
             serde_json::to_string(&response).expect("response is JSON data")
         );
     }
+    Ok(())
 }

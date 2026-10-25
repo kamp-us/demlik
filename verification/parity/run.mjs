@@ -5,6 +5,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { commandFamiliesParity } from "./command-families-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
@@ -23,6 +24,7 @@ const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
+const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
 const deadlineBinaryArgument = args.indexOf("--deadline-bin");
 const paginateQueueBinaryArgument = args.indexOf("--paginate-queue-bin");
@@ -265,6 +267,32 @@ if (!mutationSuite) {
     });
   }
 }
+let commandFamilies = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    commandFamilies = await commandFamiliesParity(cargo, {
+      binary:
+        familiesBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[familiesBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-command-families.json`,
+            ),
+    });
+    failures.push(...commandFamilies.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "command-families.verification",
+      operation: "tea.command.families",
+      message: error.message,
+    });
+  }
+}
 let runtimeHooks = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -412,6 +440,7 @@ const report = {
     runtime.cases +
     timing.cases +
     runtimeContracts.cases +
+    commandFamilies.cases +
     runtimeHooks.cases +
     runtimeDeadline.cases +
     paginateQueue.cases +
@@ -422,6 +451,7 @@ const report = {
     runtime.passed +
     timing.passed +
     runtimeContracts.passed +
+    commandFamilies.passed +
     runtimeHooks.passed +
     runtimeDeadline.passed +
     paginateQueue.passed -
@@ -433,6 +463,7 @@ const report = {
       ...(runtime.passed ? ["tea.runtime"] : []),
       ...(timing.passed ? ["tea.timing"] : []),
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
+      ...(commandFamilies.passed ? ["tea.command.families"] : []),
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
       ...(runtimeDeadline.passed ? ["tea.runtime.deadline"] : []),
       ...(paginateQueue.passed ? ["tea.paginate-and-queue"] : []),
@@ -444,6 +475,11 @@ const report = {
   timing: { ...timing, nativeEvidence: undefined, failures: undefined },
   runtimeContracts: {
     ...runtimeContracts,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  commandFamilies: {
+    ...commandFamilies,
     nativeEvidence: undefined,
     failures: undefined,
   },
@@ -482,6 +518,7 @@ const report = {
     ...runtime.nativeEvidence,
     ...timing.nativeEvidence,
     ...runtimeContracts.nativeEvidence,
+    ...commandFamilies.nativeEvidence,
     ...runtimeHooks.nativeEvidence,
     ...runtimeDeadline.nativeEvidence,
     ...paginateQueue.nativeEvidence,
