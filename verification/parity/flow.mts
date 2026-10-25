@@ -735,8 +735,23 @@ export function verifyFlow(
     expected = cases.map((item) => executeFlow(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
+  const failures: {
+    id: string;
+    message: string;
+    reference: unknown;
+    native: unknown;
+  }[] = [];
   cases.forEach((item, index) => {
-    assert.deepEqual(results[index].comparison, expected[index], item.id);
+    try {
+      assert.deepEqual(results[index].comparison, expected[index], item.id);
+    } catch (error) {
+      failures.push({
+        id: item.id,
+        message: error instanceof Error ? error.message : String(error),
+        reference: expected[index],
+        native: results[index].comparison,
+      });
+    }
   });
   // Independent source-law witnesses keep a changed reference from silently redefining these contracts.
   const wave =
@@ -769,10 +784,14 @@ export function verifyFlow(
       (sum, item) => sum + item.script.actions.length,
       0,
     ),
-    controls: mutationCheck ? controls(cases, expected) : [],
+    passed: cases.length - failures.length,
+    failures,
+    controls:
+      mutationCheck && !failures.length ? controls(cases, expected) : [],
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !failures.some((failure) => failure.id === item.id),
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
   };
@@ -801,6 +820,8 @@ if (
     JSON.stringify({
       compared: report.compared,
       transitions: report.transitions,
+      passed: report.passed,
+      failures: report.failures,
       controls: report.controls.map((item) => ({
         id: item.id,
         detected: item.detectedIds.length,
@@ -808,4 +829,5 @@ if (
       report: values.report ?? "target/parity/flow.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }

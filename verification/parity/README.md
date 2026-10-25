@@ -42,6 +42,9 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/command-families.json` compares owned command names, replay,
    definition precedence and edge provenance. Raw UTF-16 tags remain a shared
    owner gap in the current native `Tagged` interface.
+   `target/parity/flow.json` compares fan-out waves, duplicate IDs, joins,
+   completion ports and size/time batch windows. Snapshot and monitored-run
+   composition are separate scopes.
    `target/parity/runtime-hooks.json` compares identity filtering, per-run ports,
    callback identity, events, telemetry, timer fallback and awaited host cleanup.
    `target/parity/runtime-deadline.json` connects the deadline helper directly to
@@ -57,7 +60,7 @@ The implementations live beside each other in `packages/` and `crates/`.
    `runtime-hooks-mutation.json`, `runtime-deadline-mutation.json`,
    `paginate-queue-mutations.json`, `zoning-mutations.json` and
    `boundary-config-mutations.json`, `boundary-domain-mutations.json` and
-   `command-families-mutations.json`.
+   `command-families-mutations.json` and `flow-mutation.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
@@ -89,7 +92,8 @@ native runtime example, `--contract-bin <path>` for typed command contracts,
 `--hooks-bin <path>` for runtime hooks, `--deadline-bin <path>` for the deadline
 integration, `--paginate-queue-bin <path>` for the
 pagination/queue driver, `--command-families-bin <path>` for owned command names,
-or `--timing-bin <path>` for timing. Generated cases use the recorded seed `0x5eed1234`.
+`--flow-bin <path>` for flow helpers, or `--timing-bin <path>` for timing.
+Generated cases use the recorded seed `0x5eed1234`.
 
 Add shared JSON cases under `cases/`, with a unique `id`, an `operation`, `input`,
 and an optional independent `expected` value. The two drivers must invoke their
