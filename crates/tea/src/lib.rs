@@ -14,6 +14,7 @@ mod js_math;
 pub mod js_record;
 pub mod llm_call;
 pub mod paginate;
+pub mod pbt;
 pub mod persistence;
 pub mod ports;
 pub mod resilience;
