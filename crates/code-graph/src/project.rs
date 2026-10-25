@@ -12,7 +12,9 @@ use crate::syntax::SyntaxFile;
 use icu_collator::{Collator, CollatorBorrowed};
 
 mod text_paths;
-pub(crate) use text_paths::{join_path_text, relative_path_text, resolve_path_text};
+pub(crate) use text_paths::{
+    join_path_text, normalize_path_text, relative_path_text, resolve_path_text,
+};
 
 static FILE_COLLATOR: LazyLock<CollatorBorrowed<'static>> = LazyLock::new(|| {
     Collator::try_new(Default::default(), Default::default())

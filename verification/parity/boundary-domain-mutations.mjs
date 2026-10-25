@@ -14,6 +14,25 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "library-owner-ignores-nearest-library",
+    file: "libraries.rs",
+    before:
+      "dirs.sort_by_key(|dir| std::cmp::Reverse(dir.encode_utf16().count()));",
+    after: "dirs.sort_by_key(|dir| dir.encode_utf16().count());",
+    script: "graph-libraries.mts",
+    driver: "libraries_driver",
+    witness: "libraries.real-packages-and-nearest-owner",
+  },
+  {
+    name: "workspace-duplicate-takes-last-owner",
+    file: "../layers/resolve_target.rs",
+    before: "if by_name.contains_key(name) {",
+    after: "if false && by_name.contains_key(name) {",
+    script: "graph-libraries.mts",
+    driver: "libraries_driver",
+    witness: "packages.order-0",
+  },
+  {
     name: "impurity-ignores-runtime-imports",
     file: "impure.rs",
     before: ".filter(|edge| runtime.contains(&edge.specifier))",
@@ -77,7 +96,7 @@ try {
         "--package",
         "demlik-code-graph",
         "--example",
-        "boundary_domain_driver",
+        fault.driver ?? "boundary_domain_driver",
       ],
       {
         cwd: directory,
@@ -92,7 +111,11 @@ try {
         "--import",
         require.resolve("tsx"),
         path.join(here, fault.script ?? "graph-boundary-domain.mts"),
-        path.join(target, "debug/examples/boundary_domain_driver"),
+        path.join(
+          target,
+          "debug/examples",
+          fault.driver ?? "boundary_domain_driver",
+        ),
         reportFile,
       ],
       { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },

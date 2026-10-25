@@ -3,6 +3,7 @@ pub mod declaration;
 pub mod impure;
 pub mod impure_uses;
 pub mod ledger;
+pub mod libraries;
 pub mod migrate;
 pub mod reconcile;
 pub mod rules;

@@ -8,6 +8,7 @@ pub mod declarations;
 pub mod engine;
 pub mod extract;
 pub mod kinds;
+pub mod layers;
 pub mod project;
 pub mod query;
 pub mod resolve;

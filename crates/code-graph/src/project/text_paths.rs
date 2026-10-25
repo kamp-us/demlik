@@ -6,7 +6,7 @@ const DOT: u16 = b'.' as u16;
 const PARENT: &[u16] = &[DOT, DOT];
 
 // JSON configuration paths must retain code units until the actual native filesystem call.
-fn normalize(path: &JsString) -> JsString {
+pub(crate) fn normalize_path_text(path: &JsString) -> JsString {
     let absolute = path.starts_with("/");
     let mut stack: Vec<&[u16]> = Vec::new();
     for part in path.units().split(|unit| *unit == SLASH) {
@@ -40,26 +40,26 @@ fn normalize(path: &JsString) -> JsString {
 }
 pub(crate) fn join_path_text(base: &JsString, child: &JsString) -> JsString {
     if base.is_empty() {
-        return normalize(child);
+        return normalize_path_text(child);
     }
     if child.is_empty() {
-        return normalize(base);
+        return normalize_path_text(base);
     }
     let mut joined = base.clone();
     joined.push_str("/");
     joined.extend(child);
-    normalize(&joined)
+    normalize_path_text(&joined)
 }
 fn absolute(path: &JsString) -> Result<JsString, io::Error> {
     if path.starts_with("/") {
-        return Ok(normalize(path));
+        return Ok(normalize_path_text(path));
     }
     let cwd = std::env::current_dir()?;
     Ok(join_path_text(&cwd.to_string_lossy().as_ref().into(), path))
 }
 pub(crate) fn resolve_path_text(base: &Path, child: &JsString) -> Result<JsString, io::Error> {
     if child.starts_with("/") {
-        return Ok(normalize(child));
+        return Ok(normalize_path_text(child));
     }
     absolute(&join_path_text(
         &base.to_string_lossy().as_ref().into(),
