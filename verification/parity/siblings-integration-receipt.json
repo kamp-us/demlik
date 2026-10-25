@@ -1,0 +1,460 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-25T23:22:45.851977+00:00",
+  "scope": "Local combined native intake, snapshot numbers, caller-owned input decoding, CLI configs/IO/API preparation and agent content/guards. Full monorepo goal remains incomplete.",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "mainHeadBeforeReceipt": "c3e2a9b8d463e8784a5e8bedf7485333fdd745d3",
+  "crossLanguage": {
+    "report": "target/parity/report-siblings-before-controls.json",
+    "sha256": "dce81b6d16b9ec9f27cf39f04cb33aadffa80c698964fe12f0baea657cc5458a",
+    "cases": 12948,
+    "passed": 12948,
+    "failures": 0,
+    "sourceChanges": 0,
+    "strictEvidence": 12894,
+    "qualifiedCases": 54,
+    "qualifications": {
+      "cliFrontdoor": 35,
+      "git": 15,
+      "apiMode": 4,
+      "rawBackendOffsetThisRun": 0
+    },
+    "rawBackendNote": "All14actual raw Go outputs including thrown error data are exact on this run. The backend-offset qualification remains documented; the prior run had5 qualified rows. No comparison rule changed.",
+    "completeExitCode": 1,
+    "completeExitReason": "2744 explicit uncovered-capability/known-gap rows; no behavioral failure."
+  },
+  "native": {
+    "allTargetsAndDocs": 509,
+    "unitAndIntegration": 483,
+    "doctests": 26,
+    "compileFailDocs": 24,
+    "runnableDocs": 2,
+    "clippyAllTargetsDenyWarnings": true,
+    "fmtAll": true
+  },
+  "static": {
+    "parityTypecheck": true,
+    "parityLint": true,
+    "evidenceGuardsPassed": 11,
+    "gitDiffCheck": true
+  },
+  "affectedFaultChecks": {
+    "groups": 18,
+    "allExitedZero": true,
+    "compiledFaults": 180,
+    "newCompiledFaults": 89,
+    "escaped": 0,
+    "actualResponseGuards": 4,
+    "semanticDetectionOnly": true,
+    "groupsPlan": "/private/tmp/demlik-siblings-main-controls-plan-01a16c9d.json",
+    "groupsPlanSha256": "e4ef71727adf3f962732eb7af836c577d573bc876877e8fceb95ec63cda9b87d",
+    "compiledReports": [
+      {
+        "name": "intake",
+        "report": "target/parity/intake-mutations.json",
+        "sha256": "4f127979ceb2671def3d92b26dfd67504565e0f3abdc82fcc1ef1f3dd8553203",
+        "compiledFaults": 9
+      },
+      {
+        "name": "snapshot",
+        "report": "target/parity/snapshot-input-control.json",
+        "sha256": "e8a1283e7b7f2ad31f0f7ab01fadfe0de0100f26f96d740e623de895aa83c024",
+        "compiledFaults": 1
+      },
+      {
+        "name": "decoder",
+        "report": "target/parity/command-input-controls.json",
+        "sha256": "9d5a501eeb7f94203a2b78a8f53184f4517234ff7a508169b7b76dd2884c14ec",
+        "compiledFaults": 3
+      },
+      {
+        "name": "config",
+        "report": "target/parity/cli-config-mutations.json",
+        "sha256": "130c6ba1de0ad8c02b266d17e4e7bab3d47061f5f13d750e50eaf81841c8b068",
+        "compiledFaults": 14
+      },
+      {
+        "name": "frontdoor",
+        "report": "target/parity/cli-frontdoor-mutations.json",
+        "sha256": "2008bd90f52bd4d3c9cfebd4212090e92a1e16154d5138f3ca33e90db9907162",
+        "compiledFaults": 26
+      },
+      {
+        "name": "content",
+        "report": "target/parity/agent-content-mutations.json",
+        "sha256": "2025ca02136deb901f6e1900cc18e5944dd2ecefe07bd45d135daa933066a667",
+        "compiledFaults": 16
+      },
+      {
+        "name": "guards",
+        "report": "target/parity/agent-guards-mutations.json",
+        "sha256": "454f352bb8b709d700419a17c31d98766b8743eae26f725808a53ed4d81cbe55",
+        "compiledFaults": 20
+      },
+      {
+        "name": "core",
+        "report": "target/parity/mutations.json",
+        "sha256": "0d4c0c9afb8287c16927b22ae618f2893e57a62343ac21aea182199ce41434f6",
+        "compiledFaults": 18
+      },
+      {
+        "name": "queue",
+        "report": "target/parity/paginate-queue-mutations.json",
+        "sha256": "3e7f9e5b6ddb40253a647fa2894ee1bd223984a6e4aba14c6b1aeefa536597e3",
+        "compiledFaults": 10
+      },
+      {
+        "name": "families",
+        "report": "target/parity/command-families-mutations.json",
+        "sha256": "0ece145e208f9269d183a37b52cf3181357b667f44343f72df5bef94df6aa847",
+        "compiledFaults": 3
+      },
+      {
+        "name": "flow",
+        "report": "target/parity/flow-mutation.json",
+        "sha256": "caa3e99a497b673e9529c545e056dad2cd2e8e6c75fc09414455285cfe6d1ac1",
+        "compiledFaults": 2
+      },
+      {
+        "name": "poller",
+        "report": "target/parity/poller-mutation.json",
+        "sha256": "00c6891985be17fae2923ae8cba55281cacd352ce126fc100cb9980250dfc3c1",
+        "compiledFaults": 3
+      },
+      {
+        "name": "runtime-contract",
+        "report": "target/parity/runtime-contract-mutation.json",
+        "sha256": "e55a7a0629075cddf2ab5352d14d87b7b4c11f43ce70ff5306e33dd5efad4de2",
+        "compiledFaults": 1
+      },
+      {
+        "name": "llm",
+        "report": "target/parity/llm-call-controls/summary.json",
+        "sha256": "6d99fbe94aa27d0d2d81aaccfaa648746f7a0dc3bbb63698913c5cb1f3af1494",
+        "compiledFaults": 4
+      },
+      {
+        "name": "timestamps",
+        "report": "target/parity/timestamp-null-control/receipt.json",
+        "sha256": "f4bd8fdeadab4d718f6153d73d59d9c19fe96d477b4a98e9f11958a18c08c976",
+        "compiledFaults": 1
+      },
+      {
+        "name": "api-mode",
+        "report": "target/parity/api-diff-mode-mutations.json",
+        "sha256": "0ecd7f760b6ced572408efdd3f4ea63bd4be645deca9274b7166d3c7f2e1ad50",
+        "compiledFaults": 22
+      },
+      {
+        "name": "api-view",
+        "report": "target/parity/api-view-mutations.json",
+        "sha256": "928f3979c60d33a58381ca841e4246add38c833663367455dbcd91a9d3b47c72",
+        "compiledFaults": 23
+      },
+      {
+        "name": "api-raw",
+        "report": "target/parity/api-raw-file-mutations.json",
+        "sha256": "9fda71d56a4d4db70d524ef4082fd4e7e84086de990abae602e4d9538cb5cf53",
+        "compiledFaults": 4
+      }
+    ],
+    "completedCommands": [
+      {
+        "name": "verify:intake-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:intake-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 159.52
+      },
+      {
+        "name": "verify:snapshot-input-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:snapshot-input-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 22.47
+      },
+      {
+        "name": "verify:command-input-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:command-input-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 56.67
+      },
+      {
+        "name": "verify:cli-config-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:cli-config-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 105.34
+      },
+      {
+        "name": "verify:cli-frontdoor-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:cli-frontdoor-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 204.03
+      },
+      {
+        "name": "verify:agent-content-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:agent-content-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 89.38
+      },
+      {
+        "name": "verify:agent-guards-mutations",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "verify:agent-guards-mutations"
+        ],
+        "exitCode": 0,
+        "seconds": 88.53
+      },
+      {
+        "name": "shared-core",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "mutations.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 704.39
+      },
+      {
+        "name": "shared-queue",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "paginate-queue-mutations.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 94.1
+      },
+      {
+        "name": "shared-families",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "command-families-mutations.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 30.44
+      },
+      {
+        "name": "shared-flow",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "flow-run.mjs",
+          "--mutation-check"
+        ],
+        "exitCode": 0,
+        "seconds": 42.02
+      },
+      {
+        "name": "shared-poller",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "poller-run.mjs",
+          "--mutation-check"
+        ],
+        "exitCode": 0,
+        "seconds": 270.15
+      },
+      {
+        "name": "shared-runtime-contract",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "runtime-contracts.mjs",
+          "--mutation-check"
+        ],
+        "exitCode": 0,
+        "seconds": 31.83
+      },
+      {
+        "name": "shared-llm",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "--import",
+          "tsx",
+          "llm-call-mutations.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 522.78
+      },
+      {
+        "name": "shared-timestamps",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "--import",
+          "tsx",
+          "timestamp-mutations.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 157.39
+      },
+      {
+        "name": "shared-api-mode",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "api-diff-mode-checks-run.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 511.52
+      },
+      {
+        "name": "shared-api-view",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "api-view-mutations-run.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 216.36
+      },
+      {
+        "name": "shared-api-raw",
+        "command": [
+          "pnpm",
+          "--filter",
+          "@demlik/parity",
+          "exec",
+          "node",
+          "api-raw-file-mutations-run.mjs"
+        ],
+        "exitCode": 0,
+        "seconds": 65.85
+      }
+    ]
+  },
+  "unchangedAudit": {
+    "sourceFiles": 789,
+    "baselineExecutables": 1071,
+    "allHashesUnchanged": true,
+    "beforeManifestSha256": "0d79bffd532ee3ae2d039ec663ace7571eaff5047cfc82694d0c24103634c4bc",
+    "all18GroupsExitedZero": true,
+    "manifest": "target/parity/siblings-before-checks.json",
+    "manifestSha256": "0d79bffd532ee3ae2d039ec663ace7571eaff5047cfc82694d0c24103634c4bc",
+    "afterAudit": "target/parity/siblings-after-controls-audit.json",
+    "afterAuditSha256": "5c356a70b197bc70b083fce5a1088b303b958ae9a3a854a80900a1d75df3959a"
+  },
+  "coverage": {
+    "total": 3445,
+    "mapped": 768,
+    "gapRows": 2744,
+    "inheritedMemberReferences": 14,
+    "priorMappings": 724,
+    "addedMappings": 44,
+    "changedPriorMapping": ["@demlik/tea:./persistence#snapshotWriteDef"],
+    "repair": "Snapshot generic wire input now has an actual caller-owned decoder route. Unchanged static parser refusal is explicit in nativeProfile.",
+    "all53CliKnownGapsRetained": true
+  },
+  "archive": {
+    "manifest": "target/parity/history/c3e2a9b8-siblings-integration/manifest.json",
+    "manifestSha256": "ccdeef2a999fa33fcad8c1b41453170a2ab94f926f4f12a2fc6a25287f883d29",
+    "files": 157,
+    "bytes": 266339172,
+    "priorFullChainManifest": "target/parity/history/ff2a6cc5-full-fault-chain/manifest.json",
+    "priorFullChainManifestSha256": "2725997526a06a4fb548c1596945b5f79a2a041559cb6130aa007492ba0eba1a"
+  },
+  "logs": {
+    "/private/tmp/demlik-siblings-main-format-01a16c9d.log": "57888fd4c6f51d24ea15557de1ee3a91568b7177fadbd79433de479e43cca3f5",
+    "/private/tmp/demlik-siblings-main-static-01a16c9d.log": "61af5ceaff6c80d3054538dc49a62a8f9233982fe77518a98dc483cb42c9292f",
+    "/private/tmp/demlik-siblings-main-native-01a16c9d.log": "0d7c7deea8afbdf0889e94b1d46d958ca0a80769a947f4010a0faf845aadc2a7",
+    "/private/tmp/demlik-siblings-main-clippy-01a16c9d.log": "b978e1845b685d1d75b8cb5a59d4fcb9926b24603118534a4b407fbebe7d8e26",
+    "/private/tmp/demlik-siblings-main-guards-01a16c9d.log": "5b00fd664baa05c1076793bbf76564205768dfead5ba28c01c5583b07eba73e1",
+    "/private/tmp/demlik-siblings-main-complete-01a16c9d.log": "ca6d0b73f791e3b2ac10b5723cf5b5fe1a1f129383e3d6bec724e8ca14747ad9",
+    "/private/tmp/demlik-siblings-main-controls-01a16c9d.log": "fddeb6e6c1826e912e17acad7b8792c844b606b530c3a1a4b5b4cbe864b138de"
+  },
+  "sourceHashes": {
+    "verification/parity/agent-checks-run.mjs": "b0600df0c11ccf7ba0cc7a70ccd7caf1d342546fc316b0e1743c77bc88309946",
+    "verification/parity/cli-config-mutations-run.mjs": "f296bc4c28f609921de2f0ec8feb8e145285de9204c5281c9c2428ffe657cade",
+    "verification/parity/cli-frontdoor-mutations-run.mjs": "74e1a07b8a78831d104f6550599e167c8afe6a63a0a54a9457af81862a7d41c8",
+    "verification/parity/command-input-checks-run.mjs": "0e04a0814735be669f396a957ed780d7e74faebc29bd703f90d3bd307090fe4b",
+    "verification/parity/command-input-run.mjs": "e24e1a31d0e401fa345a9b7261c515d37fbda96efbabe38fc33aec28c96b6140",
+    "verification/parity/compiled-traces.mjs": "218bb63e7a4faf6e5b82187fe2a0e0447e8cdf1cb225dbedafb5f1143cb5646b",
+    "verification/parity/contracts.json": "8698081452ab9b9df78d505553e6c24ff775a1467a8a2160bef8567da93f2a6e",
+    "verification/parity/graph.mjs": "b3a1da03cdc0072acf6949684b281d5d794f5da03c5bae0b4c1aeadedbade4e7",
+    "verification/parity/intake-run.mjs": "698a9c2aa650e6ec9d0a0033de33d326b4141d0f0580dd3b1696f0ed88e26380",
+    "verification/parity/intake-runtime-run.mjs": "59f0c96e6c00ff8f0f6bac6284f333d894990320c41d587ffc695f503773d609",
+    "verification/parity/package.json": "1eb937dcb14d6ad76fd1edaf44aed01b0de405dd7daa99716b27918851163499",
+    "verification/parity/run.mjs": "d5694596fef923a97f7886aeae086c9475b52198fd49312de6f443d18f2bfb89",
+    "verification/parity/snapshot-input-checks-run.mjs": "cc9290d3251f8a6c788340d57dad88f9bbbffb17162c8458135e55a3cd8a84b9",
+    "verification/parity/snapshot-input-run.mjs": "01c12ee8aa36c1e01fd3460ec0f8d6bf442db511a32dab23e903cf10d227349d"
+  },
+  "resourceAudit": {
+    "manifest": "target/parity/history/inactive-compiler-cache-2026-10-25T2244Z/manifest.json",
+    "sha256": "2cfa5c205b022c2d679db66922971ac3f964bd6e97fc61832de4bd86361d2658",
+    "retainedArtifacts": 9,
+    "originalAndBackupHashesVerified": true,
+    "reclaimedBytes": 2716352512,
+    "activeTargetsAndSourceReportsUntouched": true
+  },
+  "notes": [
+    "Initial outer summary assertion assumed5raw-Go-offset-qualified rows would recur; actualall14deepEqual was audited and count asserted from recorded classifications.",
+    "An argument-slice typo in the external control-plan registration preflight stopped before controls; corrected before the successful18group run. No compile/driver failure is counted as detection.",
+    "Optional Proptest fetch was rejected by automatic approval review under its interpretation of local-only authorization. No download or workaround; dependency-free work continues and property generators/shrinkers remain unfinished.",
+    "Entirely local, no push/PR/publish/deploy/Docker action."
+  ]
+}

@@ -31,6 +31,13 @@ const reportFormats = {
     calls: "observedCalls",
     binaryHash: (report) => report.binaryHash,
   },
+  input: {
+    binaryArgument: "--native-bin",
+    rows: "cases",
+    total: "compared",
+    calls: "observedRustCalls",
+    binaryHash: (report) => report.binary.sha256,
+  },
 };
 
 export async function compiledTraceParity(cargo, name, options = {}) {

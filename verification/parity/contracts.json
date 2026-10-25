@@ -4146,12 +4146,41 @@
     "signature": "aef17a90a2e74a82dbc211a025b9726fe1177c7501bbb3c6e840bb75a4b4e412",
     "rust": {
       "file": "crates/tea/src/persistence/snapshot.rs",
-      "symbols": ["snapshot::snapshot_write_def"]
+      "symbols": [
+        "snapshot::snapshot_write_def",
+        "snapshot_write_def::<HostValue>",
+        "CmdDef::decode_input",
+        "InputFields::try_from",
+        "InputFields::take",
+        "CommandFamily::settle_in"
+      ]
     },
-    "cases": ["snapshot.definitions"],
-    "knownGaps": [
-      "Generic serialized checkpoint input requires a caller-owned payload decoder; static SnapshotWriteSpec parsing currently refuses it."
-    ]
+    "cases": [
+      "snapshot.definitions",
+      "command-input.snapshot.object.live",
+      "command-input.snapshot.object.json",
+      "command-input.snapshot.null.live",
+      "command-input.snapshot.null.json",
+      "command-input.snapshot.undefined.live",
+      "command-input.snapshot.undefined.json",
+      "command-input.snapshot.missing.live",
+      "command-input.snapshot.missing.json",
+      "command-input.snapshot.array.live",
+      "command-input.snapshot.array.json",
+      "command-input.snapshot.unknown-own-proto.live",
+      "command-input.snapshot.unknown-own-proto.json",
+      "command-input.snapshot.mutable-reference.live",
+      "command-input.snapshot.mutable-reference.json",
+      "command-input.snapshot.text.live",
+      "command-input.snapshot.text.json",
+      "command-input.snapshot.nonfinite.live",
+      "command-input.snapshot.nonfinite.json",
+      "command-input.snapshot.restored-null.live",
+      "command-input.snapshot.restored-null.json",
+      "command-input.snapshot.negative-zero.live",
+      "command-input.snapshot.negative-zero.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
   },
   "@demlik/tea:./persistence#snapshotLoadDef": {
     "signature": "8348e3afed0cb1d2659295d66ca4563c0467d295f2626514b125ed18eb4298af",
@@ -8472,5 +8501,633 @@
     "knownGaps": [
       "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
     ]
+  },
+  "@demlik/tea:./agent#MediaSource": {
+    "signature": "fb8241f24178d26bd49577696455649a0896e752ec2f15b8c63bbecba859d767",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TextPart": {
+    "signature": "37118e4ea8fde44da27006ea1278bc38e278951787bb8a0888f5d3e0d39e4c6a",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.text-4"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#ImagePart": {
+    "signature": "7f4f17d341142d92ec5a1e05933a91c48bfa1cefe205815df2217f83cde2d546",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#FilePart": {
+    "signature": "c47d8e22fc024da03d29cdca1272383ad6603c623acc559c15bbed13254ab9cb",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.parts-3"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#ContentPart": {
+    "signature": "63ee660b40b2d2d7f9fd9e6e37f67cf3c6404f9b14f713a8d73de9e00de5641b",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#MessageContent": {
+    "signature": "84b22c2facbd565c42a099904140c9f50696336efbfd1e9a6ec1871324f986a1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.parts-0"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#contentParts": {
+    "signature": "37502af0bc24e2413f13bcf5fc15349bc071e981e8ae4b9ec0951ea485afb6b1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": [
+      "agent-content.alias-and-media",
+      "agent-content.text-0",
+      "agent-content.text-4"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#IMAGE_OMITTED": {
+    "signature": "8c63fc876e5c0a60efe3cc8d3ba38c444cdefe5cab6512400dadf8e5cfcfb8db",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#FILE_OMITTED": {
+    "signature": "b5eaf2ea61ec59e4b2b7ba401ee6b5fdb7c1a7e83ce5b172c64bc8fdd2f10873",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#omitMedia": {
+    "signature": "405f74aa5542ff4443c7f47bf8f3fef31f90f853a2118cbecdb49997f9276cf1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": [
+      "agent-content.alias-and-media",
+      "agent-content.parts-0",
+      "agent-content.parts-4"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptToolResult": {
+    "signature": "7e9015ee888c39a1d08637996c32319ee2cf2cb0aafd792b8122186fff810d5f",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::from_seed",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptOutcome": {
+    "signature": "e964f3f75fdd1fc9ac7334cfc91855734f052ff1a22da9e8e793761ad2f9227a",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": [
+      "agent-transcript.empty",
+      "agent-transcript.ending-0",
+      "agent-transcript.ending-2",
+      "agent-transcript.ending-3"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptSnapshot": {
+    "signature": "472d9ca29c5fb741991db3c97d8a853f09d657bf40f1fdd560f8a9a8e0c714bc",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::read"]
+    },
+    "cases": [
+      "agent-transcript.live-seeded",
+      "agent-transcript.snapshot-array-isolation"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptSeed": {
+    "signature": "475db69fea0a3295c96df9e62943966eacb0f82f91f3555f350dff621c638acc",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::from_seed"]
+    },
+    "cases": [
+      "agent-transcript.seed-only",
+      "agent-transcript.seed-errors-only",
+      "agent-transcript.seed-order-not-numeric-keys"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript": {
+    "signature": "55f62c30ce2d648066440d9d30038a02bff586d15b3962d40fe72de3f132ef99",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::new",
+        "demlik_tea::agent::transcript::Transcript::from_seed",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript/member:published:764e91cfdca89781203edc88e9d0ee0575dbddbe6a18339847a4296702fe6d14": {
+    "signature": "764e91cfdca89781203edc88e9d0ee0575dbddbe6a18339847a4296702fe6d14",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": [
+      "agent-transcript.live-seeded",
+      "agent-transcript.ignored-started-failed",
+      "agent-transcript.late-events"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript/member:published:fb84f285c7df5d20675799970682a8e804fafba417a9351496d1f3625342a844": {
+    "signature": "fb84f285c7df5d20675799970682a8e804fafba417a9351496d1f3625342a844",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::read"]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#transcript": {
+    "signature": "fd0d78734297d6937dd6caae4a7499df314099187fa785b3ae94b3eebae4a4be",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::new",
+        "demlik_tea::agent::transcript::Transcript::from_seed"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentTurn": {
+    "signature": "adfe54c3a345936e6cd8f46258bfe5f96c93ace36a13f954c0a590dd03a33e34",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentTurn::new"]
+    },
+    "cases": [
+      "agent-canonical.absent-optionals",
+      "agent-canonical.provider-opaque",
+      "agent-canonical.usage"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Conversation": {
+    "signature": "b204a51def0d912440918441142c71f2fcdca06542c24b2c1f01f0bc5a115425",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::from_seed"]
+    },
+    "cases": [
+      "agent-transcript.seed-only",
+      "agent-transcript.seed-order-not-numeric-keys"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEndedStatus": {
+    "signature": "f56ac43e4e2c196c4da9447ef14499c80f2029bc6e5018e7860ac8dbf7445a87",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": [
+      "agent-transcript.ending-0",
+      "agent-transcript.ending-1",
+      "agent-transcript.ending-2",
+      "agent-transcript.ending-3"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEvent": {
+    "signature": "99047880208d12e4104538f1b62d2aa9a69f9918b65a02033786c3de4ef07858",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEventHead": {
+    "signature": "a465d1b6e4f3dd547f84b665437809a77027a988b872f8da6467963451b61dd7",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": ["agent-canonical.absent-optionals"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AGENT_EVENT_TYPES": {
+    "signature": "5e07b87e7f4adf91ef5c3935eb1fdee3f29ec27cd59262262f9f4d208466fcf1",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::Tagged::tag"]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TurnUsage": {
+    "signature": "39e031afe6f6e5dd35f9e831328f860dc94943b03a0c9effce78ca51ff7241ab",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::conversation::add_usage"]
+    },
+    "cases": [
+      "agent-guards.sum-all-counts",
+      "agent-guards.sum-negative-zero",
+      "agent-guards.sum-infinite-overflow"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isTurnUsage": {
+    "signature": "d55094811c1f400117fe7e6717c7ebc3c3a59ab1387a157f9de9c6e96b903c04",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::is_turn_usage"]
+    },
+    "cases": [
+      "agent-guards.usage-cached-exceeds-input",
+      "agent-guards.count-inputTokens-max-safe",
+      "agent-guards.count-inputTokens-unsafe",
+      "agent-guards.count-inputTokens-fraction",
+      "agent-guards.count-reasoningTokens-undefined"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isAgentTurn": {
+    "signature": "7a5a6cd9b57d52f3315fb326d9f79908b17d373ddc60f8fe6d8ed0b626668ec0",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::is_agent_turn"]
+    },
+    "cases": [
+      "agent-guards.turn-tool-array-args",
+      "agent-guards.turn-late-tool-invalid",
+      "agent-guards.turn-provider-null",
+      "agent-guards.turn-usage-null"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#agentTurnSchema": {
+    "signature": "fbbc203487b8a7b198ca661bf7e2618bfb9b9223e57e3286b7d921bbc5b63408",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::types::AGENT_TURN_SCHEMA",
+        "demlik_tea::llm_call::Schema::parse"
+      ]
+    },
+    "cases": [
+      "agent-guards.turn-extra-retained",
+      "agent-guards.turn-tool-object-args",
+      "agent-guards.turn-usage-invalid"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#CompactionPurpose": {
+    "signature": "ce60a01bddc015c531a969c777b65b4571466898aa7f2e3838b466fd79cafd1f",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::llm_call::Purpose::key"]
+    },
+    "cases": ["agent-guards.vocabulary-normal"],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#COMPACTION_PURPOSE": {
+    "signature": "ed141a0fb9e139fd2a21a64eb45400cdb43e3b21da826c08f3b9c2b5d70e4e28",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::agent::compaction::COMPACTION_PURPOSE"]
+    },
+    "cases": ["agent-guards.vocabulary-empty", "agent-guards.vocabulary-lone"],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isCompactionSummary": {
+    "signature": "c9247a88dd5e77c7ad63762bb6744249273a65b86f83c5b4e84cb7951fa744fd",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::agent::compaction::is_compaction_summary"]
+    },
+    "cases": [
+      "agent-guards.summary-empty",
+      "agent-guards.summary-number",
+      "agent-guards.summary-lone"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#compactionSummarySchema": {
+    "signature": "85c45a15e8a899523b081d4febc2602c76c90eb15308b8e6c5fc43b727983274",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": [
+        "demlik_tea::agent::compaction::COMPACTION_SUMMARY_SCHEMA",
+        "demlik_tea::llm_call::Schema::parse"
+      ]
+    },
+    "cases": [
+      "agent-guards.summary-lone",
+      "agent-guards.summary-number",
+      "agent-guards.summary-object"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#CompactionSummary": {
+    "signature": "771efeda774375ec95fcbd5e76950ee80b127e7a99c9b93fe23b29affd8a95da",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::data::plain_data"]
+    },
+    "cases": [
+      "agent-guards.vocabulary-normal",
+      "agent-guards.vocabulary-lone",
+      "agent-guards.vocabulary-astral"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./idempotency#createIntake": {
+    "signature": "bfe0611a24aaa199b95ee15461e708f5d9f32816959243b772a6f2d37d95510b",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::new"]
+    },
+    "cases": [
+      "intake.pending-never-expires",
+      "intake.ttl-starts-at-complete",
+      "intake.complete-is-cache-only-and-unknown-key"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#createIntake/member:published:2faf9d8b8eb87b85c065ce4f31442ca8fac65d3da8cfa58e87fe857092c9eccf": {
+    "signature": "2faf9d8b8eb87b85c065ce4f31442ca8fac65d3da8cfa58e87fe857092c9eccf",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::init"]
+    },
+    "cases": [
+      "intake.pending-never-expires",
+      "intake.ttl-starts-at-complete",
+      "intake.complete-is-cache-only-and-unknown-key"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#createIntake/member:published:64f08a4d85d99bee2b8afc975a0e6b57b537c8922ad99a856b8f9f61404249f1": {
+    "signature": "64f08a4d85d99bee2b8afc975a0e6b57b537c8922ad99a856b8f9f61404249f1",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::receive"]
+    },
+    "cases": [
+      "intake.pending-never-expires",
+      "intake.ttl-starts-at-complete",
+      "intake.complete-is-cache-only-and-unknown-key"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#createIntake/member:published:ab74a90688e060d482c9ffcd6be6eebe2af019bd2abdecbb4bd6e45d03727b2d": {
+    "signature": "ab74a90688e060d482c9ffcd6be6eebe2af019bd2abdecbb4bd6e45d03727b2d",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::complete"]
+    },
+    "cases": [
+      "intake.ttl-starts-at-complete",
+      "intake.complete-is-cache-only-and-unknown-key",
+      "intake.done-pending-claim"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#createIntake/member:published:5db49e99cfdbdcd4f5e68680b18795127be2dc8e496e5363fb0c2e152a4e7254": {
+    "signature": "5db49e99cfdbdcd4f5e68680b18795127be2dc8e496e5363fb0c2e152a4e7254",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::boot"]
+    },
+    "cases": [
+      "intake.pending-crash-resume",
+      "intake.done-before-crash",
+      "intake.boot-noop"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#createIntake/member:published:409a2438832a875ab3bab5ca0763d5cfa3f98738fda5cc685cc8973a5069e891": {
+    "signature": "409a2438832a875ab3bab5ca0763d5cfa3f98738fda5cc685cc8973a5069e891",
+    "rust": {
+      "file": "crates/tea/src/idempotency/intake.rs",
+      "symbols": ["Intake::claim_next"]
+    },
+    "cases": [
+      "intake.complete-is-cache-only-and-unknown-key",
+      "intake.done-pending-claim",
+      "intake.pending-crash-resume"
+    ],
+    "nativeProfile": "Opaque payload/result/key-error handles retain identity without Clone/serde/Send. Ordinary own-data records use the bounded pristine prototype compatibility profile and caller-owned projection codecs. Optional policy own-undefined versus restored absence and arbitrary JS heap/getter behavior remain qualified; no arbitrary executor-ordering claim."
+  },
+  "@demlik/tea:./idempotency#intakeProcessDef": {
+    "signature": "a19eb6f113793546a6bf28d0a11efcd4628e73e8158d6fee9bef0e01f293d466",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["intake_process_def::<HostValue>", "CmdDef::decode_input"]
+    },
+    "cases": [
+      "command-input.process.object.live",
+      "command-input.process.object.json",
+      "command-input.process.null.live",
+      "command-input.process.null.json",
+      "command-input.process.undefined.live",
+      "command-input.process.undefined.json",
+      "command-input.process.missing.live",
+      "command-input.process.missing.json",
+      "command-input.process.array.live",
+      "command-input.process.array.json",
+      "command-input.process.unknown-own-proto.live",
+      "command-input.process.unknown-own-proto.json",
+      "command-input.process.mutable-reference.live",
+      "command-input.process.mutable-reference.json",
+      "command-input.process.named.live",
+      "command-input.process.named.json",
+      "command-input.process.caller-error.live",
+      "command-input.process.caller-error.json",
+      "command-input.process.text.live",
+      "command-input.process.text.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
+  },
+  "@demlik/tea:./idempotency#intakeProcessDef/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["intake_process_def::<HostValue>", "CmdDef::decode_input"]
+    },
+    "cases": [
+      "command-input.process.object.live",
+      "command-input.process.object.json",
+      "command-input.process.null.live",
+      "command-input.process.null.json",
+      "command-input.process.undefined.live",
+      "command-input.process.undefined.json",
+      "command-input.process.missing.live",
+      "command-input.process.missing.json",
+      "command-input.process.array.live",
+      "command-input.process.array.json",
+      "command-input.process.unknown-own-proto.live",
+      "command-input.process.unknown-own-proto.json",
+      "command-input.process.mutable-reference.live",
+      "command-input.process.mutable-reference.json",
+      "command-input.process.text.live",
+      "command-input.process.text.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
+  },
+  "@demlik/tea:./idempotency#intakeReplayDef": {
+    "signature": "18b0dcb28dd9af75381fbb04e94e41797a670f37a22e0ff02f415ec04a24eb01",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["intake_replay_def::<HostValue>", "CmdDef::decode_input"]
+    },
+    "cases": [
+      "command-input.replay.object.live",
+      "command-input.replay.object.json",
+      "command-input.replay.null.live",
+      "command-input.replay.null.json",
+      "command-input.replay.undefined.live",
+      "command-input.replay.undefined.json",
+      "command-input.replay.missing.live",
+      "command-input.replay.missing.json",
+      "command-input.replay.array.live",
+      "command-input.replay.array.json",
+      "command-input.replay.unknown-own-proto.live",
+      "command-input.replay.unknown-own-proto.json",
+      "command-input.replay.mutable-reference.live",
+      "command-input.replay.mutable-reference.json",
+      "command-input.replay.named.live",
+      "command-input.replay.named.json",
+      "command-input.replay.caller-error.live",
+      "command-input.replay.caller-error.json",
+      "command-input.replay.text.live",
+      "command-input.replay.text.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
+  },
+  "@demlik/tea:./idempotency#intakeReplayDef/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["intake_replay_def::<HostValue>", "CmdDef::decode_input"]
+    },
+    "cases": [
+      "command-input.replay.object.live",
+      "command-input.replay.object.json",
+      "command-input.replay.null.live",
+      "command-input.replay.null.json",
+      "command-input.replay.undefined.live",
+      "command-input.replay.undefined.json",
+      "command-input.replay.missing.live",
+      "command-input.replay.missing.json",
+      "command-input.replay.array.live",
+      "command-input.replay.array.json",
+      "command-input.replay.unknown-own-proto.live",
+      "command-input.replay.unknown-own-proto.json",
+      "command-input.replay.mutable-reference.live",
+      "command-input.replay.mutable-reference.json",
+      "command-input.replay.text.live",
+      "command-input.replay.text.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
+  },
+  "@demlik/tea:./persistence#snapshotWriteDef/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "snapshot_write_def::<HostValue>",
+        "CmdDef::decode_input",
+        "InputFields::try_from",
+        "InputFields::take",
+        "CommandFamily::settle_in"
+      ]
+    },
+    "cases": [
+      "command-input.snapshot.object.live",
+      "command-input.snapshot.object.json",
+      "command-input.snapshot.null.live",
+      "command-input.snapshot.null.json",
+      "command-input.snapshot.undefined.live",
+      "command-input.snapshot.undefined.json",
+      "command-input.snapshot.missing.live",
+      "command-input.snapshot.missing.json",
+      "command-input.snapshot.array.live",
+      "command-input.snapshot.array.json",
+      "command-input.snapshot.unknown-own-proto.live",
+      "command-input.snapshot.unknown-own-proto.json",
+      "command-input.snapshot.mutable-reference.live",
+      "command-input.snapshot.mutable-reference.json",
+      "command-input.snapshot.text.live",
+      "command-input.snapshot.text.json",
+      "command-input.snapshot.nonfinite.live",
+      "command-input.snapshot.nonfinite.json",
+      "command-input.snapshot.restored-null.live",
+      "command-input.snapshot.restored-null.json",
+      "command-input.snapshot.negative-zero.live",
+      "command-input.snapshot.negative-zero.json"
+    ],
+    "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
   }
 }

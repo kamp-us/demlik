@@ -15,6 +15,17 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "cli-config",
+    driver: "cli_config_driver",
+    script: "graph-cli-config.mts",
+  },
+  {
+    name: "cli-frontdoor",
+    driver: "cli_frontdoor_driver",
+    script: "graph-cli-frontdoor.mts",
+    format: "frontdoor",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",
@@ -181,6 +192,8 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "cli_config_driver",
+  "cli_frontdoor_driver",
   "cli_parser_driver",
   "api_view_driver",
   "api_foundation_driver",
@@ -259,7 +272,12 @@ export async function graphParity(cargo) {
       { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
     );
     const report = JSON.parse(await readFile(reportFile, "utf8"));
-    const passing = report.cases.slice(0, report.passed);
+    const passing =
+      suite.format === "frontdoor"
+        ? report.cases.filter(
+            (row) => row.valid !== false && row.passed === true,
+          )
+        : report.cases.slice(0, report.passed);
     assert.equal(
       passing.length,
       report.passed,
@@ -269,9 +287,29 @@ export async function graphParity(cargo) {
       report.cases.length,
       report.passed + report.rejectedInvalidInputs,
     );
+    if (suite.format === "frontdoor") {
+      assert.deepEqual(report.failures, []);
+      assert.equal(report.attempted, report.passed);
+      assert.equal(
+        report.unqualifiedPairs + report.qualifiedPairs,
+        report.passed,
+      );
+      assert.equal(
+        Object.keys(report.nativeEvidence).length,
+        report.unqualifiedPairs,
+      );
+      assert.equal(
+        Object.keys(report.qualifiedNativeEvidence).length,
+        report.qualifiedPairs,
+      );
+    }
     for (const answer of passing) {
+      const calls =
+        suite.format === "frontdoor"
+          ? answer.native.trace.observedCalls
+          : answer.observedCalls;
       assert.ok(
-        answer.observedCalls.length > 0,
+        calls.length > 0,
         `${suite.name}: no native behavior was exercised`,
       );
       const id = `graph.${suite.name}.${answer.id}`;
@@ -280,10 +318,18 @@ export async function graphParity(cargo) {
           !Object.hasOwn(qualifiedNativeEvidence, id),
         `duplicate case ${id}`,
       );
-      const evidence = answer.backendOffsetQualified
-        ? qualifiedNativeEvidence
-        : nativeEvidence;
-      evidence[id] = answer.observedCalls;
+      const qualified =
+        suite.format === "frontdoor"
+          ? answer.qualifications.length > 0
+          : answer.backendOffsetQualified;
+      if (suite.format === "frontdoor") {
+        const declared = qualified
+          ? report.qualifiedNativeEvidence
+          : report.nativeEvidence;
+        assert.deepEqual(declared[answer.id], calls);
+      }
+      const evidence = qualified ? qualifiedNativeEvidence : nativeEvidence;
+      evidence[id] = calls;
     }
     results.push({
       name: suite.name,
@@ -293,6 +339,16 @@ export async function graphParity(cargo) {
       steps: report.steps,
       queries: report.queries,
       functions: report.functions,
+      ...(suite.format === "frontdoor"
+        ? {
+            unqualifiedPairs: report.unqualifiedPairs,
+            qualifiedPairs: report.qualifiedPairs,
+            profiles: report.profiles,
+            qualifiedCases: passing.filter(
+              (row) => row.qualifications.length > 0,
+            ),
+          }
+        : {}),
       ...(report.declarationCleanupQualification
         ? {
             declarationCleanupQualification:

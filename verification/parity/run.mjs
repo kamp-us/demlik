@@ -5,15 +5,20 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { agentContentParity } from "./agent-content-run.mjs";
+import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
+import { commandInputParity } from "./command-input-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
+import { intakeParity } from "./intake-run.mjs";
+import { intakeRuntimeParity } from "./intake-runtime-run.mjs";
 import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
 import { jsonTextParity } from "./json-text-run.mjs";
@@ -32,6 +37,7 @@ import { runtimeContractParity } from "./runtime-contracts.mjs";
 import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
 import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { sagaParity } from "./saga-run.mjs";
+import { snapshotInputParity } from "./snapshot-input-run.mjs";
 import { storedCellParity } from "./stored-cell-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
@@ -962,6 +968,82 @@ if (!mutationSuite) {
     });
   }
 }
+const nativeSiblings = [];
+if (!mutationSuite) {
+  const suites = [
+    {
+      name: "idempotentIntake",
+      operation: "tea.idempotent-intake",
+      binaryArgument: "--intake-bin",
+      run: (options) => intakeParity(cargo, options),
+    },
+    {
+      name: "intakeRuntime",
+      operation: "tea.intake-runtime",
+      binaryArgument: "--intake-runtime-bin",
+      run: (options) => intakeRuntimeParity(cargo, options),
+    },
+    {
+      name: "snapshotInput",
+      operation: "tea.snapshot-input",
+      binaryArgument: "--snapshot-input-bin",
+      run: (options) => snapshotInputParity(cargo, options),
+    },
+    {
+      name: "commandInput",
+      operation: "tea.command-input",
+      binaryArgument: "--command-input-bin",
+      run: (options) => commandInputParity(cargo, options),
+    },
+    {
+      name: "agentContent",
+      operation: "tea.agent-content",
+      binaryArgument: "--agent-content-bin",
+      run: agentContentParity,
+    },
+    {
+      name: "agentGuards",
+      operation: "tea.agent-guards",
+      binaryArgument: "--agent-guards-bin",
+      run: agentGuardsParity,
+    },
+  ];
+  for (const suite of suites) {
+    try {
+      const argument = args.indexOf(suite.binaryArgument);
+      const result = await suite.run({
+        binary: argument === -1 ? undefined : path.resolve(args[argument + 1]),
+        reportFile: path.join(
+          path.dirname(reportFile),
+          `${path.basename(reportFile, ".json")}-${suite.name}.json`,
+        ),
+      });
+      failures.push(...result.failures);
+      nativeSiblings.push({
+        name: suite.name,
+        operation: suite.operation,
+        ...result,
+      });
+    } catch (error) {
+      suiteFailures++;
+      failures.push({
+        id: `${suite.name}.verification`,
+        operation: suite.operation,
+        message: error.message,
+      });
+    }
+  }
+}
+const siblingEvidence = {};
+for (const suite of nativeSiblings)
+  for (const [id, calls] of Object.entries(suite.nativeEvidence)) {
+    assert.ok(
+      !Object.hasOwn(siblingEvidence, id),
+      `duplicate sibling case ${id}`,
+    );
+    siblingEvidence[id] = calls;
+  }
+
 let graph = {
   passed: 0,
   rejectedInvalidInputs: 0,
@@ -1001,6 +1083,7 @@ const report = {
     .digest("hex"),
   cases:
     cases.length +
+    nativeSiblings.reduce((sum, suite) => sum + suite.cases, 0) +
     graph.passed +
     runtime.cases +
     timing.cases +
@@ -1032,6 +1115,7 @@ const report = {
     suiteFailures,
   passed:
     cases.length +
+    nativeSiblings.reduce((sum, suite) => sum + suite.passed, 0) +
     graph.passed +
     runtime.passed +
     timing.passed +
@@ -1092,6 +1176,9 @@ const report = {
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
       ...(runtimeDeadline.passed ? ["tea.runtime.deadline"] : []),
       ...(paginateQueue.passed ? ["tea.paginate-and-queue"] : []),
+      ...nativeSiblings
+        .filter((suite) => suite.passed)
+        .map((suite) => suite.operation),
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
@@ -1102,6 +1189,12 @@ const report = {
     qualifiedEvidenceCases: Object.keys(graph.qualifiedNativeEvidence ?? {})
       .length,
   },
+  nativeSiblings: nativeSiblings.map((suite) => ({
+    ...suite,
+    nativeEvidence: undefined,
+    nativeErrors: undefined,
+    failures: undefined,
+  })),
   runtime: { ...runtime, nativeEvidence: undefined },
   timing: { ...timing, nativeEvidence: undefined, failures: undefined },
   runtimeContracts: {
@@ -1236,6 +1329,7 @@ const report = {
     ...runtimeHooks.nativeEvidence,
     ...runtimeDeadline.nativeEvidence,
     ...paginateQueue.nativeEvidence,
+    ...siblingEvidence,
   },
   infrastructureDiagnostics: Object.fromEntries(
     cases.flatMap((test, index) => {
