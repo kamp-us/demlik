@@ -9,7 +9,7 @@ use crate::runtime::listeners::Listeners;
 use crate::{PlainData, data::JsText};
 use std::{cell::RefCell, convert::Infallible, future::Future, rc::Rc};
 pub mod remote;
-mod task;
+pub(crate) mod task;
 pub use task::{JournalError, JournalTask};
 #[cfg(not(target_arch = "wasm32"))]
 mod file;

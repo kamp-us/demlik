@@ -2,6 +2,7 @@ pub mod command;
 pub mod core;
 pub mod data;
 pub mod durable_effects;
+pub mod durable_object;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod file_store;
 pub mod flow;

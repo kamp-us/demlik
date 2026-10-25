@@ -18,6 +18,11 @@ use crate::data::Subscription;
 pub trait Tagged {
     fn tag(&self) -> &str;
 }
+impl<T: Tagged + ?Sized> Tagged for Arc<T> {
+    fn tag(&self) -> &str {
+        (**self).tag()
+    }
+}
 
 pub trait Message: Tagged {
     const TYPES: &'static [&'static str];

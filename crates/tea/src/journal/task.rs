@@ -55,7 +55,7 @@ impl<T, E, F> Future for JournalTask<T, E, F> {
         }
     }
 }
-pub(super) fn start<T: 'static, E: 'static, F: 'static>(
+pub(crate) fn start<T: 'static, E: 'static, F: 'static>(
     effect: impl Future<Output = Result<T, JournalError<E, F>>> + 'static,
     prefix: bool,
 ) -> JournalTask<T, E, F> {
