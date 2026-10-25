@@ -149,6 +149,51 @@ pub fn decode_json(input: &str) -> Result<PlainData, serde_json::Error> {
     }
     .value())
 }
+/// Adapt literal UTF-16 string data to the existing UTF-8 JSON parser.
+/// Only literal unpaired units inside strings are escaped; parsing stays delegated.
+pub fn decode_json_text(input: &JsText) -> Result<PlainData, serde_json::Error> {
+    if let Some(input) = input.as_utf8() {
+        return decode_json(input);
+    }
+    let units = input.as_units();
+    let mut output = String::with_capacity(units.len());
+    let (mut quoted, mut escaped, mut index) = (false, false, 0);
+    while let Some(&unit) = units.get(index) {
+        let paired = (0xd800..=0xdbff).contains(&unit)
+            && units
+                .get(index + 1)
+                .is_some_and(|next| (0xdc00..=0xdfff).contains(next));
+        if (0xd800..=0xdfff).contains(&unit) && !paired {
+            if !quoted || escaped {
+                return Err(<serde_json::Error as serde::de::Error>::custom(format!(
+                    "unpaired UTF-16 code unit U+{unit:04X} is not literal string data at code unit {index}"
+                )));
+            }
+            output.push_str(&format!("\\u{unit:04x}"));
+            index += 1;
+            continue;
+        }
+        let character = if paired {
+            let low = units[index + 1];
+            index += 1;
+            char::from_u32(0x10000 + ((u32::from(unit) - 0xd800) << 10) + u32::from(low) - 0xdc00)
+                .expect("a paired surrogate is a Unicode scalar")
+        } else {
+            char::from_u32(u32::from(unit)).expect("a non-surrogate unit is a Unicode scalar")
+        };
+        output.push(character);
+        if escaped {
+            escaped = false;
+        } else if quoted && unit == u16::from(b'\\') {
+            escaped = true;
+        } else if unit == u16::from(b'"') {
+            quoted = !quoted;
+        }
+        index += 1;
+    }
+    decode_json(&output)
+}
+
 struct Parser<'a> {
     input: &'a str,
     offset: usize,

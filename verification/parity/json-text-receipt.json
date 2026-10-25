@@ -1,0 +1,106 @@
+{
+  "scope": "Canonical JSON decoding from JsText for DO and recorder boundaries; no leaf parser",
+  "base": "327523f5a39472c1c9a460c7fee571e40dfd1cb9",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "api": "demlik_tea::data::decode_json_text(&JsText) -> Result<PlainData, serde_json::Error>",
+  "acceptance": {
+    "strictCases": 218,
+    "passed": 218,
+    "refusalsCompared": 126,
+    "originalPinnedProbeCases": 6,
+    "originalProbeSha256": "4383a83fdbd6c2ee26a9bd1909e0722898024a26a1cb9be0a8b7868953b34697",
+    "nativeTests": 12,
+    "newNativeOwnerTests": 2,
+    "compiledBehavioralControls": 2,
+    "controlWitnesses": [
+      {
+        "id": "escape-invalid-context",
+        "witness": "invalid-escaped-surrogate",
+        "buildSucceeded": true,
+        "sourceUnchanged": true
+      },
+      {
+        "id": "replace-valid-unit-lossily",
+        "witness": "literal-value",
+        "buildSucceeded": true,
+        "sourceUnchanged": true
+      }
+    ]
+  },
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "baselineTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "mutationTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target/reconciler-mutation-build",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "checks": {
+    "native": {
+      "command": "cargo test --locked -p demlik-tea --test json_text --test js_data --test storage_file",
+      "exitCode": 0,
+      "log": "target/json-text-native.log",
+      "logSha256": "8c415d5b53a5373e410a95ada31b5c3800e220742634bc6c085b53317cbb291e"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked -p demlik-tea --lib --example json_text_driver --test json_text -- -D warnings",
+      "exitCode": 0,
+      "log": "target/json-text-clippy.log",
+      "logSha256": "1d7dc0bb4d7bdb46b52d2f4867713149fa11abefd56a3fd3e31688fe5957f797"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/json-text-fmt.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "reference": {
+      "command": "pnpm exec node verification/parity/json-text-run.mjs",
+      "exitCode": 0,
+      "log": "target/json-text-parity.log",
+      "logSha256": "40d2984ca8b4184672d4581f552d70e8ab1426da40d5b946095105c203e7457b"
+    },
+    "controls": {
+      "command": "pnpm exec node verification/parity/json-text-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/json-text-mutations.log",
+      "logSha256": "b793590af849460c105b1bc02bc28a9166def05bee32d2128abf842ca0965ff0"
+    },
+    "privateTypes": {
+      "command": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json",
+      "exitCode": 0,
+      "log": "target/json-text-types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "biome": {
+      "command": "pnpm exec biome check verification/parity/json-text-reference.mts verification/parity/json-text-run.mjs verification/parity/json-text-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/json-text-biome-final.log",
+      "logSha256": "94cf74da15f5f347365d8f075e8b8810699bf75fbd5792ea2824107d092a192d"
+    }
+  },
+  "reports": {
+    "target/parity/json-text.json": "fbfb2dbbb24d46ce862916d4cc3d64a007e9db06197c0410e657d16d28b77f02",
+    "target/parity/json-text-mutations.json": "52a8fbcdc087d0cb333743e01c667ec33ef6aaca33e7317438312c8d69f676c6"
+  },
+  "sourceHashes": {
+    "crates/tea/src/data.rs": "464129299066884f51bbb7bc62be0516904ea2a275c3eba0cab7cf6f37051dbb",
+    "crates/tea/src/data/json.rs": "c5609b2ccfa44f627c411e3b7eb1c107f33ead8bf049590dff9b2bcb82ce22d9",
+    "crates/tea/tests/json_text.rs": "6aa9758f2aca6703abc2ac44d29674b5fedc37337ca511821487afe134fea1b3",
+    "crates/tea/examples/json_text_driver.rs": "207c022d61dac1c8d9ec000ab1a866822560738579e90016131958bd08ffea24",
+    "verification/parity/json-text-source-probe.json": "4383a83fdbd6c2ee26a9bd1909e0722898024a26a1cb9be0a8b7868953b34697",
+    "verification/parity/json-text-reference.mts": "62ee2f8851c431bd9c747046280b5a4e66456a3a849d0e27d201808ba18c1080",
+    "verification/parity/json-text-run.mjs": "7d89b3f6b3cd4506446c04d564d956a560627bf08dfcecc5ec7eb80ce191602b",
+    "verification/parity/json-text-mutations.mjs": "05a2dd4631750477a18c5413d5d41b40c91c12d392600db5e4dba2574aaf2fc1"
+  },
+  "qualifications": [
+    "JSON parsing stays delegated to the existing serde RawValue validation and lossless extractor. UTF8 input uses the original decoder unchanged.",
+    "Native syntax diagnostics, including explicit invalid-UTF16-placement errors, retain their actual backend wording/category. They are qualified separately; accepted values and refusal decisions have no tolerance.",
+    "The UTF16 adapter tracks quote/escape context only to transcode valid literal unpaired units. It does not parse JSON structure, values or schemas.",
+    "Invalid placement is reported with its original code-unit value/position in the existing serde error carrier. No lossy replacement is performed.",
+    "Recorder/replay composition is not included in this checkpoint; its uncommitted files are independent and unstaged."
+  ]
+}

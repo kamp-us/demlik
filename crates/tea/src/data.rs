@@ -8,7 +8,7 @@ mod encoder;
 mod json;
 mod missing;
 pub(crate) use json::UNDEFINED_TOKEN;
-pub use json::{JsText, JsonData, decode_json, stringify_json};
+pub use json::{JsText, JsonData, decode_json, decode_json_text, stringify_json};
 pub use missing::decode_missing;
 
 #[derive(Clone, Debug)]
