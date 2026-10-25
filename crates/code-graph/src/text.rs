@@ -177,6 +177,16 @@ pub fn has_object_prototype_property(key: &JsString) -> bool {
     .any(|name| key == name)
 }
 
+pub(crate) fn object_prototype_function_name(key: &JsString) -> Option<JsString> {
+    (key != "__proto__" && has_object_prototype_property(key)).then(|| {
+        if key == "constructor" {
+            "Object".into()
+        } else {
+            key.clone()
+        }
+    })
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsValue {
     Null,

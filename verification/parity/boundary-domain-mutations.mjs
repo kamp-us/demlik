@@ -14,6 +14,15 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "library-allowance-forgets-inherited-function-name",
+    file: "libraries/allowance.rs",
+    before: 'Ok(if dir == "name" {',
+    after: 'Ok(if false && dir == "name" {',
+    script: "graph-library-judgments.mts",
+    driver: "libraries_driver",
+    witness: 'library-judgment.inherited-toString-name-"toString"-false',
+  },
+  {
     name: "workspace-crossing-keeps-last-type-only",
     file: "deployables/workspaces.rs",
     before: "held.1 &= edge.type_only;",

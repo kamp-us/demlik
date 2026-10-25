@@ -186,3 +186,71 @@ fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census(
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn inherited_allowances_keep_function_names_and_eager_getter_errors() {
+    use demlik_code_graph::{
+        boundaries::libraries::{
+            LibraryRuleError,
+            allowance::{NamedFile, imported_names_for, is_licensed},
+        },
+        engine::oxc::parse_type_script,
+        text::JsValue,
+    };
+    let root = std::env::temp_dir().join(format!(
+        "demlik-inherited-license-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    for (dir, name) in [("toString", "@probe/toString"), ("name", "@probe/name")] {
+        fs::create_dir_all(root.join(dir)).unwrap();
+        fs::write(
+            root.join(dir).join("package.json"),
+            format!(r#"{{"name":"{name}"}}"#),
+        )
+        .unwrap();
+    }
+    let rules=BoundaryRules::parse(&JsValue::parse(r#"{"libraryTypes":{"low":{"imports":[],"pure":false},"high":{"imports":[],"pure":false}},"libraries":{"toString":"low","name":"high"}}"#).unwrap()).unwrap();
+    let LibrariesRead::Read(libraries) = read_libraries(&rules, &root, None).unwrap() else {
+        panic!("fixture refused")
+    };
+    let scope = JsString::from("toString");
+    let file = JsString::from("toString/a.ts");
+    let syntax = parse_type_script(
+        std::path::Path::new("a.ts"),
+        "import {toString} from '@probe/name';",
+    )
+    .unwrap();
+    let names = imported_names_for(&libraries, &scope, &syntax);
+    let specifiers = [JsString::from("@probe/name")].into_iter().collect();
+    assert!(
+        is_licensed(
+            &libraries,
+            &scope,
+            &"name".into(),
+            &specifiers,
+            NamedFile {
+                file: &file,
+                imported_names: &names
+            }
+        )
+        .unwrap()
+    );
+    assert!(matches!(
+        is_licensed(
+            &libraries,
+            &scope,
+            &"caller".into(),
+            &Default::default(),
+            NamedFile {
+                file: &file,
+                imported_names: &names
+            }
+        ),
+        Err(LibraryRuleError::RestrictedFunctionProperty)
+    ));
+    fs::remove_dir_all(root).unwrap();
+}

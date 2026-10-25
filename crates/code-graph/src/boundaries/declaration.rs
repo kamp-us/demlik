@@ -1,7 +1,7 @@
 use super::{impure::impure_rows, rules::*};
 use crate::{
     kinds::glob::{GlobError, glob_to_regexp},
-    text::{JsString, has_object_prototype_property, object_keys},
+    text::{JsString, has_object_prototype_property, object_keys, object_prototype_function_name},
 };
 use indexmap::IndexSet;
 
@@ -136,11 +136,7 @@ fn inherited_value_key(name: &JsString) -> JsString {
     if name == "__proto__" {
         return "[object Object]".into();
     }
-    let function = if name == "constructor" {
-        "Object".into()
-    } else {
-        name.clone()
-    };
+    let function = object_prototype_function_name(name).expect("a known prototype method");
     interpolate(&["function ".into(), function, "() { [native code] }".into()])
 }
 fn allowance_issues(rules: &BoundaryRules) -> Result<Vec<JsString>> {

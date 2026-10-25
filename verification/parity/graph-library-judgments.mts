@@ -322,6 +322,104 @@ try {
       rules: seed % 2 ? { ...rules, allowImportNames: allowance } : rules,
     });
   }
+  const inheritedScopes = Object.getOwnPropertyNames(Object.prototype);
+  const fields = [
+    "name",
+    "length",
+    "caller",
+    "arguments",
+    "prototype",
+    "callee",
+    "apply",
+    "bind",
+    "call",
+    "__proto__",
+    "constructor",
+    "missing",
+  ];
+  for (const dir of new Set([...inheritedScopes, ...fields])) {
+    const manifest = path.join(repo, dir, "package.json");
+    if (!fs.existsSync(manifest)) {
+      fs.mkdirSync(path.dirname(manifest), { recursive: true });
+      fs.writeFileSync(manifest, JSON.stringify({ name: `@meta/${dir}` }));
+    }
+  }
+  const packageName = (dir: string) =>
+    z
+      .object({ name: z.string() })
+      .parse(
+        JSON.parse(
+          fs.readFileSync(path.join(repo, dir, "package.json"), "utf8"),
+        ),
+      ).name;
+  const inheritedCase = (
+    scope: string,
+    dir: string,
+    taken: string,
+    empty = false,
+  ) => {
+    const libraries = Object.fromEntries(
+      [
+        [scope, "low"],
+        [dir, "high"],
+      ].filter(([key]) => key !== "constructor"),
+    );
+    const specifier = packageName(dir);
+    add(
+      `library-judgment.inherited-${scope}-${dir}-${JSON.stringify(taken)}-${empty}`,
+      {
+        rules: {
+          libraryTypes: {
+            low: { imports: [], pure: false },
+            high: { imports: [], pure: false },
+          },
+          libraries,
+        },
+        scope,
+        file: `${scope}/a.ts`,
+        source: `import { ${JSON.stringify(taken)} as value } from ${JSON.stringify(specifier)};`,
+        namedFiles: [],
+        licenseDir: dir,
+        licenseSpecifiers: empty ? [] : [specifier],
+        measuredScopes: [scope, dir],
+        measuredUndeclared: [],
+        unjudged: 0,
+        roots: [],
+      },
+    );
+  };
+  for (const scope of [
+    "toString",
+    "hasOwnProperty",
+    "constructor",
+    "__proto__",
+  ]) {
+    for (const dir of fields) inheritedCase(scope, dir, scope);
+    inheritedCase(scope, "caller", scope, true);
+  }
+  for (const scope of inheritedScopes)
+    inheritedCase(scope, "name", scope === "constructor" ? "Object" : scope);
+  for (const name of ["String", "to", "", "absent"])
+    inheritedCase("toString", "name", name);
+  add("library-judgment.own-allowance-shadows-inherited-name", {
+    rules: {
+      libraryTypes: {
+        low: { imports: [], pure: false },
+        high: { imports: [], pure: false },
+      },
+      libraries: { toString: "low", name: "high" },
+      allowImportNames: { toString: { name: ["toString"] } },
+    },
+    scope: "toString",
+    file: "toString/a.ts",
+    source: 'import { "String" as value } from "@meta/name";',
+    namedFiles: [],
+    licenseDir: "name",
+    licenseSpecifiers: ["@meta/name"],
+    measuredScopes: [],
+    measuredUndeclared: [],
+    roots: [],
+  });
   const checked = (run: () => unknown) => {
     try {
       return run();
@@ -466,6 +564,13 @@ try {
     "library-imports-up",
   );
   assert.equal(baseline.output.judgment.unjudged, 1);
+  const inherited = expected.find(
+    (item) =>
+      item.id === 'library-judgment.inherited-toString-name-"toString"-false',
+  );
+  assert.ok(inherited);
+  assert.equal(inherited.output.licensed, true);
+  assert.deepEqual(inherited.output.judgment.violations, []);
   const report = {
     reference: { node: process.version, v8: process.versions.v8 },
     passed: cases.length - failures.length,

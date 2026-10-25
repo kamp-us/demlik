@@ -5,7 +5,7 @@ use crate::{
         file::SyntaxFile,
         imports::{ImportedNames, imported_names_of},
     },
-    text::{JsString, has_object_prototype_property, object_keys},
+    text::{JsString, has_object_prototype_property, object_keys, object_prototype_function_name},
 };
 use indexmap::{IndexMap, IndexSet};
 
@@ -35,14 +35,8 @@ pub fn is_licensed(
     specifiers: &IndexSet<JsString>,
     file: NamedFile<'_>,
 ) -> Result<bool, LibraryRuleError> {
-    let allowance = libraries
-        .rules()
-        .and_then(|rules| rules.allow_import_names.get(importer));
-    let licensed = allowance.and_then(|allowance| allowance.get(dir));
-    let inherited = licensed.is_none()
-        && has_object_prototype_property(dir)
-        && (allowance.is_some() || has_object_prototype_property(importer));
-    if licensed.is_none() && !inherited {
+    let licensed = licensed_names(libraries, importer, dir)?;
+    if matches!(licensed, LicensedNames::Absent) {
         return Ok(false);
     }
     for specifier in specifiers {
@@ -53,15 +47,83 @@ pub fn is_licensed(
             return Ok(false);
         }
         for name in &imported.names {
-            let Some(licensed) = licensed else {
-                return Err(LibraryRuleError::InheritedLicense);
+            let includes = match &licensed {
+                LicensedNames::Names(names) => names.contains(name),
+                LicensedNames::FunctionName(text) => {
+                    name.is_empty()
+                        || text
+                            .units()
+                            .windows(name.units().len())
+                            .any(|part| part == name.units())
+                }
+                LicensedNames::Null => return Err(LibraryRuleError::NullLicense),
+                LicensedNames::Other => return Err(LibraryRuleError::InheritedLicense),
+                LicensedNames::Absent => {
+                    unreachable!("an absent license returned before the names were read")
+                }
             };
-            if !licensed.contains(name) {
+            if !includes {
                 return Ok(false);
             }
         }
     }
     Ok(true)
+}
+
+enum LicensedNames<'a> {
+    Names(&'a [JsString]),
+    FunctionName(JsString),
+    Other,
+    Null,
+    Absent,
+}
+fn licensed_names<'a>(
+    libraries: &'a Libraries<'_>,
+    importer: &JsString,
+    dir: &JsString,
+) -> Result<LicensedNames<'a>, LibraryRuleError> {
+    if let Some(allowance) = libraries
+        .rules()
+        .and_then(|rules| rules.allow_import_names.get(importer))
+    {
+        return Ok(allowance.get(dir).map_or_else(
+            || {
+                if has_object_prototype_property(dir) {
+                    LicensedNames::Other
+                } else {
+                    LicensedNames::Absent
+                }
+            },
+            |names| LicensedNames::Names(names),
+        ));
+    }
+    if importer == "__proto__" {
+        return Ok(if dir == "__proto__" {
+            LicensedNames::Null
+        } else if has_object_prototype_property(dir) {
+            LicensedNames::Other
+        } else {
+            LicensedNames::Absent
+        });
+    }
+    let Some(name) = object_prototype_function_name(importer) else {
+        return Ok(LicensedNames::Absent);
+    };
+    Ok(if dir == "name" {
+        LicensedNames::FunctionName(name)
+    } else if dir == "caller" || dir == "arguments" {
+        return Err(LibraryRuleError::RestrictedFunctionProperty);
+    } else if dir == "length"
+        || (dir == "prototype" && importer == "constructor")
+        || dir == "apply"
+        || dir == "bind"
+        || dir == "call"
+        || has_object_prototype_property(dir)
+    {
+        LicensedNames::Other
+    } else {
+        LicensedNames::Absent
+    })
 }
 pub fn allowance_issue(
     libraries: &Libraries<'_>,
