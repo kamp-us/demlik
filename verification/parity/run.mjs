@@ -14,6 +14,7 @@ import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
+import { pollerParity } from "./poller-run.mjs";
 import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
@@ -32,6 +33,7 @@ const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
 const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
+const pollerBinaryArgument = args.indexOf("--poller-bin");
 const workflowBinaryArgument = args.indexOf("--workflow-bin");
 const sagaBinaryArgument = args.indexOf("--saga-bin");
 const resilientCallBinaryArgument = args.indexOf("--resilient-call-bin");
@@ -383,6 +385,32 @@ if (!mutationSuite) {
     });
   }
 }
+let poller = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    poller = await pollerParity(cargo, {
+      binary:
+        pollerBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[pollerBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-poller.json`,
+            ),
+    });
+    failures.push(...poller.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "poller.verification",
+      operation: "tea.poller",
+      message: error.message,
+    });
+  }
+}
 let workflow = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -612,6 +640,7 @@ const report = {
     resilientCall.cases +
     paginatedWalk.cases +
     flow.cases +
+    poller.cases +
     workflow.cases +
     saga.cases +
     monitoredRun.cases +
@@ -629,6 +658,7 @@ const report = {
     resilientCall.passed +
     paginatedWalk.passed +
     flow.passed +
+    poller.passed +
     workflow.passed +
     saga.passed +
     monitoredRun.passed +
@@ -647,6 +677,7 @@ const report = {
       ...(resilientCall.passed ? ["tea.resilience.resilient-call"] : []),
       ...(paginatedWalk.passed ? ["tea.paginate.paginated-walk"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
+      ...(poller.passed ? ["tea.poller"] : []),
       ...(workflow.passed ? ["tea.workflow"] : []),
       ...(saga.passed ? ["tea.saga"] : []),
       ...(monitoredRun.passed ? ["tea.monitored-run"] : []),
@@ -680,6 +711,7 @@ const report = {
     failures: undefined,
   },
   flow: { ...flow, nativeEvidence: undefined, failures: undefined },
+  poller: { ...poller, nativeEvidence: undefined, failures: undefined },
   workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
   saga: { ...saga, nativeEvidence: undefined, failures: undefined },
   monitoredRun: {
@@ -726,6 +758,7 @@ const report = {
     ...resilientCall.nativeEvidence,
     ...paginatedWalk.nativeEvidence,
     ...flow.nativeEvidence,
+    ...poller.nativeEvidence,
     ...workflow.nativeEvidence,
     ...saga.nativeEvidence,
     ...monitoredRun.nativeEvidence,

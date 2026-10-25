@@ -73,6 +73,9 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/workflow.json` compares owed/confirmed effects, business results,
    compensation and replay. `target/parity/saga.json` compares forward progress,
    reverse compensation, failures and restored queue state.
+   `target/parity/poller.json` compares polling cadence, retries, duplicate
+   detection and terminal restarts, including saved timestamp and limit values
+   that become JSON null.
    `target/parity/runtime-hooks.json` compares identity filtering, per-run ports,
    callback identity, events, telemetry, timer fallback and awaited host cleanup.
    `target/parity/runtime-deadline.json` connects the deadline helper directly to

@@ -6148,5 +6148,96 @@
       "command.replay-builders-explicit-zero-stamp"
     ],
     "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./flow#Poller/member:published:d0b4a8ce532527610a4104a952334f79c5b6b5ad54be271558252fed209f4b30": {
+    "signature": "d0b4a8ce532527610a4104a952334f79c5b6b5ad54be271558252fed209f4b30",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::init"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.dedupe-touches-and-half-open-expiry",
+      "poller.nan-entry-json-null-cold-ttl",
+      "poller.nan-ttl-json-null-cold-expiry"
+    ]
+  },
+  "@demlik/tea:./flow#Poller/member:published:529847c6b5fa6b32e9027cf6b15aaa26576691a3dd82692152422de45fdc73a3": {
+    "signature": "529847c6b5fa6b32e9027cf6b15aaa26576691a3dd82692152422de45fdc73a3",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::start"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.budget-{\"kind\":\"count\",\"maxAttempts\":3}",
+      "poller.budget-{\"kind\":\"duration\",\"maxElapsedMs\":50}",
+      "poller.budget-{\"kind\":\"duration\",\"maxElapsedMs\":50,\"maxAttempts\":2}"
+    ]
+  },
+  "@demlik/tea:./flow#Poller/member:published:9a983367e282a4bdf3963238b2b0b88aaba3acb37df9b680c36e20e6ec159538": {
+    "signature": "9a983367e282a4bdf3963238b2b0b88aaba3acb37df9b680c36e20e6ec159538",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::tick"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.numeric-{\"$number\":\"NaN\"}",
+      "poller.numeric-{\"$number\":\"Infinity\"}",
+      "poller.numeric-{\"$number\":\"-Infinity\"}"
+    ]
+  },
+  "@demlik/tea:./flow#Poller/member:published:66c736666fc88500a9d24bdee172eed11e807ee68a75a63d922fb329c857edcc": {
+    "signature": "66c736666fc88500a9d24bdee172eed11e807ee68a75a63d922fb329c857edcc",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::tick_result"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.dedupe-touches-and-half-open-expiry",
+      "poller.nan-entry-json-null-cold-ttl",
+      "poller.nan-ttl-json-null-cold-expiry"
+    ]
+  },
+  "@demlik/tea:./flow#Poller/member:published:1f3640598cfc90823c22d77e9744dca7d2b646a06c887cf86da95b985eb4f673": {
+    "signature": "1f3640598cfc90823c22d77e9744dca7d2b646a06c887cf86da95b985eb4f673",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::tick_err"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.budget-{\"kind\":\"count\",\"maxAttempts\":3}",
+      "poller.budget-{\"kind\":\"duration\",\"maxElapsedMs\":50}",
+      "poller.budget-{\"kind\":\"duration\",\"maxElapsedMs\":50,\"maxAttempts\":2}"
+    ]
+  },
+  "@demlik/tea:./flow#Poller/member:published:37971a19c403cc01d12aacdea8dedfb8c69ae6cfa134c28a45968fed7050da09": {
+    "signature": "37971a19c403cc01d12aacdea8dedfb8c69ae6cfa134c28a45968fed7050da09",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["Poller::subs"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.dedupe-touches-and-half-open-expiry",
+      "poller.nan-entry-json-null-cold-ttl",
+      "poller.nan-ttl-json-null-cold-expiry"
+    ]
+  },
+  "@demlik/tea:./flow#createPoller": {
+    "signature": "19248bdff4fa6fc4c31695230b2a056924ec4fcc41fd66679084d6f478b13d48",
+    "rust": {
+      "file": "crates/tea/src/flow/poller.rs",
+      "symbols": ["poller::create_poller"]
+    },
+    "cases": [
+      "poller.cadence-until-override-and-terminal-restarts",
+      "poller.dedupe-touches-and-half-open-expiry",
+      "poller.nan-entry-json-null-cold-ttl",
+      "poller.nan-ttl-json-null-cold-expiry"
+    ]
   }
 }

@@ -738,8 +738,24 @@ export function verifyPoller(
     expected = cases.map((item) => executePoller(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
+  assert.equal(new Set(cases.map((item) => item.id)).size, cases.length);
+  const failures: {
+    id: string;
+    message: string;
+    reference: unknown;
+    native: unknown;
+  }[] = [];
   cases.forEach((item, index) => {
-    assert.deepEqual(results[index].comparison, expected[index], item.id);
+    try {
+      assert.deepEqual(results[index].comparison, expected[index], item.id);
+    } catch (error) {
+      failures.push({
+        id: item.id,
+        message: error instanceof Error ? error.message : String(error),
+        reference: expected[index],
+        native: results[index].comparison,
+      });
+    }
   });
   const row = (id: string, position: number) => {
     const index = cases.findIndex((item) => item.id === id);
@@ -804,6 +820,10 @@ export function verifyPoller(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    scope:
+      "native poller and idempotency cold restore; full port remains incomplete",
+    passed: cases.length - failures.length,
+    failures,
     comparison:
       "canonical JSON wire plus lossless field values, presence and transitions",
     runtime: {
@@ -817,10 +837,12 @@ export function verifyPoller(
       (sum, item) => sum + item.script.actions.length,
       0,
     ),
-    controls: mutationCheck ? controls(cases, expected) : [],
+    controls:
+      mutationCheck && !failures.length ? controls(cases, expected) : [],
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !failures.some((failure) => failure.id === item.id),
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
   };
@@ -848,6 +870,8 @@ if (
   console.log(
     JSON.stringify({
       compared: report.compared,
+      passed: report.passed,
+      failures: report.failures,
       transitions: report.transitions,
       controls: report.controls.map((item) => ({
         id: item.id,
@@ -856,4 +880,5 @@ if (
       report: values.report ?? "target/parity/poller.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }
