@@ -2,6 +2,7 @@
 
 pub mod boundaries;
 pub mod checker;
+pub mod comments;
 pub mod data;
 pub mod declarations;
 pub mod engine;

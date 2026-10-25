@@ -1,4 +1,4 @@
-//! Lossless JavaScript string values at the JSON and filesystem boundaries.
+//! JavaScript strings, patterns, and JSON values at native boundaries.
 
 use std::fmt::Write;
 
@@ -8,6 +8,25 @@ use serde_json::value::RawValue;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JsString(Vec<u16>);
+
+/// An unflagged ECMAScript pattern, matching JavaScript's UTF-16 code units.
+#[derive(Debug)]
+pub struct JsRegex(regress::Regex);
+impl JsRegex {
+    pub fn new(source: &JsString) -> Result<Self, regress::Error> {
+        regress::Regex::from_unicode(
+            source.units().iter().copied().map(u32::from),
+            regress::Flags::default(),
+        )
+        .map(Self)
+    }
+    pub fn test(&self, value: &JsString) -> bool {
+        self.0.find_from_ucs2(value.units(), 0).next().is_some()
+    }
+    pub fn test_str(&self, value: &str) -> bool {
+        self.test(&value.into())
+    }
+}
 
 impl JsString {
     pub fn from_units(units: Vec<u16>) -> Self {

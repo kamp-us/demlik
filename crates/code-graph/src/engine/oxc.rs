@@ -10,6 +10,14 @@ use oxc_resolver::{
     ResolveOptions, Resolver, TsconfigDiscovery, TsconfigOptions, TsconfigReferences,
 };
 
+pub fn parse_snippet(text: &str) -> Result<Option<crate::syntax::file::SyntaxFile>, ParseFailure> {
+    match parse_type_script(Path::new("snippet.tsx"), text) {
+        Ok(syntax) => Ok(Some(syntax)),
+        Err(ParseFailure::Syntax(_)) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 fn module_resolution() -> ResolveOptions {
     ResolveOptions {
         extensions: [
