@@ -1,0 +1,4034 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "walk.basic",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "second",
+              "items": [1, 2]
+            }
+          },
+          {
+            "op": "ok",
+            "at": 12,
+            "value": {
+              "next": null,
+              "items": [3]
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.cmds": [
+          {
+            "type": "resilient_run",
+            "key": "page",
+            "input": null
+          }
+        ],
+        "history.1.cmds.0.type": "process_page",
+        "history.1.cmds.1.input": "second",
+        "history.2.state.walk": {
+          "phase": "done",
+          "seen": 2,
+          "pages": 2
+        },
+        "history.2.complete": true,
+        "history.2.stuck": false
+      }
+    },
+    {
+      "id": "walk.command-order",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "pageSize": "field",
+          "emits": 2
+        },
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "second",
+              "items": [1, 2]
+            }
+          },
+          {
+            "op": "ok",
+            "at": 12,
+            "value": {
+              "next": null,
+              "items": [3]
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.callbacks": ["size", "next", "onPage"],
+        "history.1.cmds.0.type": "process_page",
+        "history.1.cmds.1.type": "process_page",
+        "history.1.cmds.2.type": "resilient_run"
+      }
+    },
+    {
+      "id": "walk.no-page-commands",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": ""
+        },
+        "callbacks": {
+          "onPage": "none"
+        },
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "second",
+              "items": [1, 2]
+            }
+          },
+          {
+            "op": "ok",
+            "at": 12,
+            "value": {
+              "next": null,
+              "items": [3]
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.construct-and-lift",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first"
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "fetchCtor",
+            "key": "caller-key",
+            "input": {
+              "token": "opaque"
+            }
+          },
+          {
+            "op": "lift"
+          },
+          {
+            "op": "start",
+            "at": 17.25
+          },
+          {
+            "op": "lift"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.repeat-arm",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "resume",
+            "at": 100
+          },
+          {
+            "op": "start",
+            "at": 1
+          },
+          {
+            "op": "start",
+            "at": 2000
+          },
+          {
+            "op": "resume",
+            "at": 3000
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "start",
+            "at": 4000
+          },
+          {
+            "op": "resume",
+            "at": 5000
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.same": true,
+        "history.2.same": true,
+        "history.2.cmds": [],
+        "history.3.same": true,
+        "history.5.same": true,
+        "history.6.same": true
+      }
+    },
+    {
+      "id": "walk.backpressure",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "second",
+              "size": 2
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 17.25
+          },
+          {
+            "op": "ok",
+            "at": 18,
+            "value": {
+              "next": null,
+              "size": 4
+            }
+          },
+          {
+            "op": "drain",
+            "n": 100
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.walk": {
+          "phase": "paused",
+          "cursor": "second",
+          "seen": 2,
+          "pages": 1
+        },
+        "history.2.same": true,
+        "history.3.cmds": [],
+        "history.4.cmds": [
+          {
+            "type": "resilient_run",
+            "key": "page",
+            "input": "second"
+          }
+        ],
+        "history.5.complete": true
+      }
+    },
+    {
+      "id": "walk.mark-0",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": -1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-1",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-2",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-3",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-4",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 0.5
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-5",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": {
+            "$number": "NaN"
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-6",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": {
+            "$number": "Infinity"
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.mark-7",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": {
+            "$number": "-Infinity"
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 3
+          },
+          {
+            "op": "ok",
+            "at": 4,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-0",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": -5
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-1",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": {
+            "$number": "-0"
+          }
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-2",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": 0
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-3",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": 0.5
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-4",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": 1
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-5",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": {
+            "$number": "NaN"
+          }
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-6",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": {
+            "$number": "Infinity"
+          }
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.size-7",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {
+          "pageSize": "literal",
+          "size": {
+            "$number": "-Infinity"
+          }
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n"
+            }
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-0",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": -2
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-1",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": {
+              "$number": "-0"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-2",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": 0
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-3",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": 0.5
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-4",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": 2
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-5",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": 20
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-6",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-7",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-8",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "n",
+              "size": 2
+            }
+          },
+          {
+            "op": "drain",
+            "n": {
+              "$number": "-Infinity"
+            }
+          },
+          {
+            "op": "resume",
+            "at": 2
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-undefined",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": {
+            "$undefined": true
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-null",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-false",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": false,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-zero",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-record",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": {
+            "token": "A",
+            "extra": {
+              "$undefined": true
+            }
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.first-utf16",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": {
+            "$utf16": [55296, 65]
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "start",
+            "at": 10000
+          },
+          {
+            "op": "resume",
+            "at": 10001
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.undefined-next",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "payload": 4
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.walk.phase": "done"
+      }
+    },
+    {
+      "id": "walk.null-next",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.walk.phase": "done"
+      }
+    },
+    {
+      "id": "walk.ignored-page-end-undefined",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "end"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.ignored-page-end-null",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "end"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.ignored-page-end-text",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "end"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": "page"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.ignored-page-undefined-undefined",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "undefined"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.ignored-page-undefined-null",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "undefined"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.ignored-page-undefined-text",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "undefined"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": "page"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.failure-retry",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": {
+            "token": "same"
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "err",
+            "at": 11,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "alien:retry:page",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 40,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.resilience.calls.page.phase": "waiting_retry",
+        "history.3.cmds.0.input": {
+          "token": "same"
+        },
+        "history.6.stuck": true,
+        "history.8.same": true
+      }
+    },
+    {
+      "id": "walk.undefined-error-stuck",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.stuck": true,
+        "history.1.failure": {
+          "$undefined": true
+        },
+        "history.2.stuck": true
+      }
+    },
+    {
+      "id": "walk.null-error",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": null
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-0",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": -1
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-1",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 0
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-2",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 1
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-3",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 2
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-4",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": {
+              "$number": "NaN"
+            }
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.retry-count-5",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": {
+              "$number": "Infinity"
+            }
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.jitter-full",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "full",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "rng": [0, 0.5, 0.999]
+      }
+    },
+    {
+      "id": "walk.jitter-equal",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "equal",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "rng": [0, 0.5, 0.999]
+      }
+    },
+    {
+      "id": "walk.deadline",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 59
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "ok",
+            "at": 100,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.stuck": true,
+        "history.2.failure._tag": "deadline_exceeded"
+      }
+    },
+    {
+      "id": "walk.per-page-deadline",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 25,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.timer.msg.atMs": 75
+      }
+    },
+    {
+      "id": "walk.budget-retry",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 40
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 5,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 30,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.rate-gate",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 1
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 0,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 1000,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.rate-terminal",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 0
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 0,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.stuck": true,
+        "history.1.failure": "rate_limited"
+      }
+    },
+    {
+      "id": "walk.circuit-gate",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "ok",
+            "at": 20,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.circuit-recovery",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 200,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 50,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.late-idle",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1,
+          "deadline": {
+            "ms": 50
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "err",
+            "at": 1000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 1000
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "size": 10
+            }
+          },
+          {
+            "op": "err",
+            "at": 3000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"idle\",\"seen\":1,\"pages\":1},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{\"page\":{\"phase\":\"running\",\"input\":\"current\",\"budget\":{\"remainingMs\":50,\"chargingSinceMs\":0}}},\"clockMs\":0}}"
+      },
+      "expectPaths": {
+        "history.0.same": true,
+        "history.1.same": true,
+        "history.2.callbacks": ["size", "next", "onPage"],
+        "history.2.walkSame": true
+      }
+    },
+    {
+      "id": "walk.late-paused",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1,
+          "deadline": {
+            "ms": 50
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "err",
+            "at": 1000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 1000
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "size": 10
+            }
+          },
+          {
+            "op": "err",
+            "at": 3000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"paused\",\"seen\":1,\"pages\":1,\"cursor\":\"parked\"},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{\"page\":{\"phase\":\"running\",\"input\":\"current\",\"budget\":{\"remainingMs\":50,\"chargingSinceMs\":0}}},\"clockMs\":0}}"
+      },
+      "expectPaths": {
+        "history.0.same": true,
+        "history.1.same": true,
+        "history.2.callbacks": ["size", "next", "onPage"],
+        "history.2.walkSame": true
+      }
+    },
+    {
+      "id": "walk.late-done",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1,
+          "deadline": {
+            "ms": 50
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "err",
+            "at": 1000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 1000
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "size": 10
+            }
+          },
+          {
+            "op": "err",
+            "at": 3000,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"done\",\"seen\":1,\"pages\":1},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{\"page\":{\"phase\":\"running\",\"input\":\"current\",\"budget\":{\"remainingMs\":50,\"chargingSinceMs\":0}}},\"clockMs\":0}}"
+      },
+      "expectPaths": {
+        "history.0.same": true,
+        "history.1.same": true,
+        "history.2.callbacks": ["size", "next", "onPage"],
+        "history.2.walkSame": true
+      }
+    },
+    {
+      "id": "walk.callback-size",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "deadline": {
+            "ms": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field",
+          "throw": "size",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [56320, 120]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "next",
+              "size": 2
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.kind": "callback_failed",
+        "history.1.error.phase": "size"
+      }
+    },
+    {
+      "id": "walk.callback-next",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "deadline": {
+            "ms": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field",
+          "throw": "next",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [56320, 120]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "next",
+              "size": 2
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.kind": "callback_failed",
+        "history.1.error.phase": "next"
+      }
+    },
+    {
+      "id": "walk.callback-onPage",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "deadline": {
+            "ms": 100
+          }
+        },
+        "callbacks": {
+          "pageSize": "field",
+          "throw": "onPage",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [56320, 120]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "next",
+              "size": 2
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.kind": "callback_failed",
+        "history.1.error.phase": "onPage"
+      }
+    },
+    {
+      "id": "walk.invalid-page-next",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.invalid-page-size",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "pageSize": "field"
+        },
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null,
+              "size": "not-numeric"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.foreign-ok-key",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "key": "other",
+            "at": 1,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "err",
+            "key": "other",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.foreign-error-key",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "err",
+            "key": "other",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.utf16-data",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": {
+            "$utf16": [56320]
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": {
+                "$utf16": [55296]
+              },
+              "row": {
+                "$object": [
+                  [
+                    {
+                      "$utf16": [56320]
+                    },
+                    {
+                      "$utf16": [55296, 120]
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "$utf16": [56320]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.deadline-zero",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 0
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.deadline-negative",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": -1
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.deadline-nan",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": {
+              "$number": "NaN"
+            }
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.deadline-infinity",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": {
+              "$number": "Infinity"
+            }
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 3,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.clock-nan",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 100000
+          },
+          {
+            "op": "err",
+            "at": {
+              "$number": "NaN"
+            },
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.clock-infinity",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 100000
+          },
+          {
+            "op": "err",
+            "at": {
+              "$number": "Infinity"
+            },
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.clock-negative-zero",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start",
+            "at": {
+              "$number": "-0"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 100000
+          },
+          {
+            "op": "err",
+            "at": {
+              "$number": "-0"
+            },
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "E_UPSTREAM",
+                "details": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.drain-nan-reload",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "start"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "drain",
+            "n": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          },
+          {
+            "op": "resume",
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.reload-idle",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"idle\",\"seen\":0,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}}"
+      }
+    },
+    {
+      "id": "walk.reload-fetching",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"fetching\",\"seen\":0,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}}"
+      }
+    },
+    {
+      "id": "walk.reload-paused",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"paused\",\"seen\":0,\"pages\":0,\"cursor\":null},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}}"
+      }
+    },
+    {
+      "id": "walk.reload-done",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": "first",
+          "highWaterMark": 1
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "start",
+            "at": 10
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"done\",\"seen\":0,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}}"
+      }
+    },
+    {
+      "id": "walk.raw-overflow",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "highWaterMark": 2
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "next"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "drain",
+            "n": 1
+          }
+        ],
+        "seedRaw": "{\"walk\":{\"phase\":\"fetching\",\"cursor\":\"raw\",\"seen\":1e9999,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}}"
+      }
+    },
+    {
+      "id": "walk.raw-lone-units",
+      "operation": "paginated-walk",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "seedRaw": "{\"walk\":{\"phase\":\"fetching\",\"cursor\":{\"\\udc00\":\"\\ud800\"},\"seen\":0,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{\"page\":{\"phase\":\"failed\",\"error\":{\"_tag\":\"port_rejected\",\"cause\":{\"\\ud800\":\"\\udc00\"}}}},\"clockMs\":0}}",
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "walk.done-failed-slot",
+      "operation": "paginated-walk",
+      "input": {
+        "seedRaw": "{\"walk\":{\"phase\":\"done\",\"seen\":2,\"pages\":2},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{\"page\":{\"phase\":\"failed\",\"error\":{\"_tag\":\"port_rejected\",\"cause\":{\"code\":\"old\"}}}},\"clockMs\":0}}",
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 10000
+          },
+          {
+            "op": "err",
+            "at": 10001,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": "late"
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.complete": true,
+        "history.0.stuck": false,
+        "history.0.failure.cause.code": "old",
+        "history.1.same": true,
+        "history.2.same": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,421 @@
+{
+  "scope": "Native L2 paginated-walk only; full-package acceptance remains the parent gate",
+  "base": "8f5084f2a574469ab82b18e4dcd47239777e0a7e",
+  "branch": "can/rust-paginated-walk",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-resilient-integration-01a16c9d/target"
+  },
+  "acceptance": {
+    "walkScripts": 89,
+    "walkActions": 470,
+    "protocolRefusals": 11,
+    "walkControlsDetected": 11,
+    "defaultRuntimeScenarios": 6,
+    "sourceReentrantCalls": 2,
+    "baseDifferentialPassed": 5172,
+    "resilienceRegressionPassed": 59,
+    "nativeWorkspaceTestsAndDocs": 256,
+    "compileFailDocs": 14,
+    "newPureTypedTests": 7,
+    "newRuntimeTypedTest": 1,
+    "strictMappings": 68,
+    "ownedMappings": 22,
+    "canonicalAliases": 46,
+    "strictCoverageGaps": [],
+    "foreignTimerControlDetectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ]
+  },
+  "checks": {
+    "workspace": {
+      "command": "cargo test --locked --workspace",
+      "exitCode": 0,
+      "log": "target/paginated-walk-workspace.log",
+      "logSha256": "9a8a8483bdd84fc23a50b4c98efc078c1deabca7a670a9d0d678b892f4b08891"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/paginated-walk-clippy.log",
+      "logSha256": "aca70fd7314509bea70a3ebf2de337d4879c008568f8f34acf12aaf9522ba825"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/paginated-walk-fmt.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "base": {
+      "command": "pnpm parity",
+      "exitCode": 0,
+      "log": "target/paginated-walk-base-parity.log",
+      "logSha256": "cd135a0c7725f02e14cb8c1a9adbd91e8b991ec10793c0d5da533bc6dafbc339"
+    },
+    "walk": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-run.mjs",
+      "exitCode": 0,
+      "log": "target/paginated-walk-parity-green.log",
+      "logSha256": "7edc7b79b864183cf6fae10829ecf59e70550a26c6f073df7584e1873f73df00"
+    },
+    "walkControls": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/paginated-walk-mutations.log",
+      "logSha256": "bc45cb9d47a0c84bdc9760c8678e107d889d0e5b9d5f720dde7232bd57d90f98"
+    },
+    "walkRuntime": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-runtime.mjs",
+      "exitCode": 0,
+      "log": "target/paginated-walk-runtime-verifier.log",
+      "logSha256": "f46542f7a29e4c843f4d67887053cf1301bff77f4277c456dd34f57c682f67ad"
+    },
+    "walkCoverage": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-coverage.mjs",
+      "exitCode": 0,
+      "log": "target/paginated-walk-coverage.log",
+      "logSha256": "bfe1c9e920abd0b7704606a6efcf33f95851b158cd6f9c87402eee8ea548cb1e"
+    },
+    "resilience": {
+      "command": "pnpm --filter @demlik/parity exec node resilient-call-run.mjs",
+      "exitCode": 0,
+      "log": "target/paginated-walk-resilient-regression.log",
+      "logSha256": "d8360e6bdf6c76bfce18e5dc4c3dd1d445161b15cd565b3f51c0096d529601e1"
+    },
+    "foreignTimer": {
+      "command": "pnpm --filter @demlik/parity exec node runtime-deadline-run.mjs --mutation-check",
+      "exitCode": 0,
+      "log": "target/paginated-walk-foreign-timer-green.log",
+      "logSha256": "217f100b270e32b0ded263dcad36425921a21c53898bc1c4364d5b2721ce20cd"
+    },
+    "privateTypeChecks": {
+      "command": "pnpm --filter @demlik/parity exec tsc --noEmit -p tsconfig.json",
+      "exitCode": 0,
+      "log": "target/paginated-walk-ts-types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "biome": {
+      "command": "pnpm --filter @demlik/parity exec biome check paginated-walk-reference.mts paginated-walk-types.mts paginated-walk-run.mjs paginated-walk-runtime.mjs paginated-walk-mutations.mjs paginated-walk-contracts.json paginated-walk-coverage.mjs paginated-walk-cases.json",
+      "exitCode": 0,
+      "log": "target/paginated-walk-biome.log",
+      "logSha256": "4c4f6a3901832aff0684f4dcc1c04d556a52f40f8313a2060d146b308adbe12e"
+    },
+    "controlBiome": {
+      "command": "pnpm --filter @demlik/parity exec biome check runtime-deadline.mts",
+      "exitCode": 0,
+      "log": "target/paginated-walk-control-biome.log",
+      "logSha256": "c576134cfd3293d78e76f6875af0ac7b1fb95699a1cb855d171e6b5dddae6636"
+    }
+  },
+  "reports": {
+    "target/parity/report.json": "d1f3f5b0f4d09ffd1d89c94b1cc7766fcc7ca1166e60d80aa1e572bc2480f54b",
+    "target/parity/paginated-walk.json": "09e5ddfb30bdbcbcb544adc685e607826cb22d32683ed7823644329865665739",
+    "target/parity/paginated-walk-coverage.json": "bfe1c9e920abd0b7704606a6efcf33f95851b158cd6f9c87402eee8ea548cb1e",
+    "target/parity/paginated-walk-mutations.json": "2ca0615c57c291370fba20166026ad2798dac81a0ee84663278e9a2c16818203",
+    "target/parity/paginated-walk-runtime.json": "e70267272fd5bcfeff8124ed855bc3bdd1cca5b62f8fc63027a09c787f7eb24a",
+    "target/parity/resilient-call.json": "b481a4d1d76af76ce54ab820c8d7ba9e83cdd806167e3154ff4725319376be03",
+    "target/parity/runtime-deadline-mutation.json": "1ecdbf65c4eb1cd0bf537e1be7c89023ad208446cdfc0fe0f1179f75ee259307"
+  },
+  "sourceHashes": {
+    "crates/tea/src/paginate/mod.rs": "026462b1e64d15981d943e71e1fed2ad66052d16978cc39b5c3ef2505fc2cab6",
+    "crates/tea/src/paginate/paginated_walk.rs": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+    "crates/tea/tests/paginated_walk.rs": "529a20f74c7d2130c43d640871ec1ca63b2614aefcc843bee1a48f4cf25b05f5",
+    "crates/tea/tests/paginated_walk_runtime.rs": "5e664e288a8f6b912c21b2e95548403a66e1039bbd3c938894fca497eaa836a2",
+    "crates/parity/src/bin/paginated-walk-parity.rs": "c80a905318da8fdd8768b172696a89fe3d055bee1247f14ee9ce2b5341164445",
+    "verification/parity/paginated-walk-reference.mts": "8ecc6f5006709e645e820555bf6c4907a692c1be3ddbd1106c4e71013e8a978b",
+    "verification/parity/paginated-walk-types.mts": "1b4d2684f2083e1dccfd32244bae53c3d973ab88d11d5a072ed27ef9d08ca684",
+    "verification/parity/paginated-walk-cases.json": "272942d6941b0c601ddf1845a9d8b18ecf68568ba44e918b234029b4f2253a94",
+    "verification/parity/paginated-walk-contracts.json": "e11ac9384b2317b9158ef57644dcd1c5bdb3d3c1bd94b69e884fb661694dfced",
+    "verification/parity/paginated-walk-run.mjs": "361f4b32aaf574d4f873ffb3d6e138d6ba0612cdaebbd76771af6af51397b562",
+    "verification/parity/paginated-walk-coverage.mjs": "4ed6b490b03c7e15561cd31a977bc8e64fabff8e5765959edc4660b23c8e9ada",
+    "verification/parity/paginated-walk-mutations.mjs": "eda4fb47e2cfd1c97007287c0bff87f9552d050faba8cb0042994fd44267be37",
+    "verification/parity/paginated-walk-runtime.mjs": "84631a18d6728169b0d8ca01d0e0e10992a7361319cb9dd0bc9d1f2260bcdcc9",
+    "verification/parity/runtime-deadline.mts": "f8a5bdac178880db3621e17437a1b55302d202e04fc2ed87fdb4e43f64173194"
+  },
+  "controls": [
+    {
+      "name": "repeat-start-fetches-again",
+      "witness": "walk.repeat-arm",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "59b7929bab2e7fa9f6b894c32f692186329427f38d5cd8b268714a0bcb96a6f2",
+      "binarySha256": "a2f060e14f6c17ef9fc85e7e92ead33bb1df04f7c148b7f3066faafcdb9ccfff",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 29
+    },
+    {
+      "name": "fetch-precedes-page-work",
+      "witness": "walk.command-order",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "76914353cfea59653c28504c5d6e8165de4b600a72e51cbd116ff8b7bbdc0854",
+      "binarySha256": "15af06a9f0288be6cc15c4311f2fba8d5c57d34ad659fcb32e9beba712c1579c",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 18
+    },
+    {
+      "name": "late-error-corrupts-resilience",
+      "witness": "walk.late-done",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "69f2fc8443a4ff30d54b4bd83abcc54b30feb00620fba16de6be045697f54bcd",
+      "binarySha256": "f8576a1c7516f3e0259d9e53fe0a0c1a78f202295277d2f3e8940627ccef74d0",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 5
+    },
+    {
+      "name": "late-timer-corrupts-resilience",
+      "witness": "walk.late-paused",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "97de05ed38d8dd2f1036bdeff6a628b5c4b8f0d5ae6fa1482b3dbd56e58457c8",
+      "binarySha256": "510bf92e44178f3a9d1fa73895a94c3f32a32fc60b94ecdf2813eba65aa7016d",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 3
+    },
+    {
+      "name": "late-success-loses-page-work",
+      "witness": "walk.late-done",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "365c92e21fdb65e5307bdc23d5c77a5fc98c5031f96f636be8bc5521134ee3a1",
+      "binarySha256": "4243d360d56aedef37fd6efed2e6dadba9bdb0cb25dc219be4c2d2edf942c01a",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 5
+    },
+    {
+      "name": "resume-reanchors-live-resilience",
+      "witness": "walk.budget-retry",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "32a925fab62ab6ed193fe6b702c1fc650fdfd9a4237294b6ff5eae08a9045aee",
+      "binarySha256": "3396461071f4d4a24668c541b282893596308536ceb62be90558800636d59b86",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 39
+    },
+    {
+      "name": "drain-never-reopens-valve",
+      "witness": "walk.backpressure",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "973b8ccb5c5754c11d4d811cfb1e3ae4eacb5b93605394463d7412a5f6652a5f",
+      "binarySha256": "19d6711f0e34a62daf54e526da8dd2f87a9d18db1412d1c6feb38cc55cad96db",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 22
+    },
+    {
+      "name": "failed-done-is-stuck",
+      "witness": "walk.done-failed-slot",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "85176b91190f32927c9d2bade81ae31fac7c2603b95201dd233ae855774452b5",
+      "binarySha256": "91bb61b87171a627eba75a7d6aaa424fbe294c1633b54fd2fe5c52ecdcd1f75b",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 1
+    },
+    {
+      "name": "undefined-failure-is-healthy",
+      "witness": "walk.undefined-error-stuck",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "893a05c09fb903c724edd52fce2a7c87ddfa168c0d5a2e177e8a9bad726ae953",
+      "binarySha256": "866770bc48b004465bb55d4564f8dd087ccb6d36fa6de8c4ad03535f81458044",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 1
+    },
+    {
+      "name": "callback-error-is-silenced",
+      "witness": "walk.callback-onPage",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "d75a3ef02f58127ba5c3b9b4a6be8eaa26324ca135344c1aba2c5e358617039b",
+      "binarySha256": "37e0b09e9114eae2dbcd8e5b7f93a5fd1a3c66744041ec200927c8053e4016b9",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 1
+    },
+    {
+      "name": "fetch-key-is-not-page",
+      "witness": "walk.basic",
+      "originalSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "mutantSha256": "164ba6456941527dbc50187a76ea314a45e2d87cec6a0f09c26111a18f84df5e",
+      "binarySha256": "88258f1a8c3505cb1593235d36f3b872ad8abfa8e9eabc57882f1940d22c98be",
+      "buildSucceeded": true,
+      "bothWitnessesExecuted": true,
+      "sourceUnchanged": true,
+      "detectedCaseCount": 89
+    }
+  ],
+  "foreignTimerControl": {
+    "id": "separate-deadline-timer-type",
+    "isolation": "disposable-source-copy",
+    "activeSourceUnchanged": true,
+    "sourceBeforeSha256": "cb491380e6e26e7023a0047ef2abeb23872f03ba0ac76a9fdd8c08828f665293",
+    "mutantSourceSha256": "0aee0ffbc8618d20c5116ddfab1496ffe95f22c1d074f34a76d19cea1e4a9237",
+    "companionSourceBeforeSha256": "3bb3599c6cfa6efa1285c66702c46e0ac2a7bebfef0e0a98274717323d16c1fc",
+    "companionMutantSourceSha256": "b39aead10ecd354d7895b33b2afe90ab407fc3f3e1302ede1f5ac7e4ee65ec9e",
+    "walkSourceBeforeSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+    "walkMutantSourceSha256": "0ee3707c850440f77fc4e54c2482011cda6d5680b52174ef357b0ceb85d386d3",
+    "nativeBinarySha256": "98ecfa31ec0e10286079eac0e3409e6b2036373af90bee3bf45e857083c47b20",
+    "detectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ]
+  },
+  "realRuntime": {
+    "scope": "Actual default native Runtime, both profiles; no timer/subscription override",
+    "cases": 6,
+    "passed": 6,
+    "rows": [
+      {
+        "profile": "Promise",
+        "failures": 0,
+        "trace": [
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 0,
+        "reports": 0
+      },
+      {
+        "profile": "Promise",
+        "failures": 1,
+        "trace": [
+          "fetch:first",
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 1,
+        "reports": 0
+      },
+      {
+        "profile": "Promise",
+        "failures": 3,
+        "trace": ["fetch:first", "fetch:first", "fetch:first"],
+        "complete": false,
+        "stuck": true,
+        "sharedFailures": 3,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 0,
+        "trace": [
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 0,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 1,
+        "trace": [
+          "fetch:first",
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 1,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 3,
+        "trace": ["fetch:first", "fetch:first", "fetch:first"],
+        "complete": false,
+        "stuck": true,
+        "sharedFailures": 3,
+        "reports": 0
+      }
+    ],
+    "sourceHashes": {
+      "crates/tea/tests/paginated_walk_runtime.rs": "5e664e288a8f6b912c21b2e95548403a66e1039bbd3c938894fca497eaa836a2",
+      "crates/tea/src/paginate/paginated_walk.rs": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "crates/tea/src/paginate/paginator.rs": "41c2437cee03139193a3cdd5a968b85b2ad41de14ca410b1ae9b3feb6c879428",
+      "crates/tea/src/resilience/resilient_call/mod.rs": "e8c1ddb19bd39fe8dfecb96b9063fec0a43bc786886d59888f1a681437ffd96f",
+      "crates/tea/src/resilience/deadline.rs": "cb491380e6e26e7023a0047ef2abeb23872f03ba0ac76a9fdd8c08828f665293",
+      "crates/tea/src/runtime/engine.rs": "a407f09ebb266367a2652caf4d3548c296f1f4329d8237ff119db76b7aa8e7de",
+      "crates/tea/src/runtime/timer.rs": "95b59464db6937572844607fd30a957effad9524c859568e756d0db4cc0edb6a",
+      "crates/tea/src/command.rs": "814e65eaf1d3253efcb6f8bda75d1c1830d9b9df453a58c41a9ecd639c643c05",
+      "crates/tea/src/data.rs": "7dc78845eeea81cd13fe3f37e36351a3c43c056701c1d9605c78a472d98357ce"
+    },
+    "qualifications": [
+      "The consumer carries opaque non-Clone/non-serde cursor/page payloads and asserts shared failure identity and mutation visibility before emitting each receipt.",
+      "Typed native futures and the existing Runtime are used; this does not claim arbitrary JavaScript microtask scheduling equivalence."
+    ]
+  },
+  "redGreenWitnesses": [
+    {
+      "log": "target/paginated-walk-lift-red.log",
+      "reason": "unresolved public lift_walk API, followed by the passing borrowed-host witness"
+    },
+    {
+      "log": "target/paginated-walk-opaque-command-red.log",
+      "reason": "unused Tagged bound refused pure borrowed commands, followed by the passing witness after removing that bound"
+    },
+    {
+      "log": "target/paginated-walk-parity-red.log",
+      "reason": "pure Deadline.name=None observation was incorrectly omitted; the observer now preserves the source undefined value"
+    },
+    {
+      "log": "target/paginated-walk-foreign-timer-red.log",
+      "reason": "new canonical timer return type prevented the foreign-type control from compiling; only the disposable companion is adapted and the actual four runtime failures are detected"
+    }
+  ],
+  "integration": {
+    "centralRegistrationAndContracts": "unchanged; parent owns their union",
+    "existingVerificationChange": "runtime-deadline.mts adds a hashed disposable companion rewrite for the new walk timer return type; production stays canonical",
+    "productionSharedOwnerChanges": "none; only paginate/mod.rs registration and the new walk module",
+    "sourceTypeScript": "unchanged at the frozen reference"
+  },
+  "qualifications": [
+    "Pure emitted commands need no Tagged/Clone/serde/Send bound; an exhaustive caller From<RunCommand> chooses its fetch variant. Runtime uses the existing tagged command boundary.",
+    "Callback failures are typed Result data with the callback phase; caller Rc<Fn> identity and actual synchronous reentry are retained.",
+    "Resume follows the actual source: only a drained paused walk reopens. Restored fetching start/resume remain identity-preserving no-ops and do not call resilient-call.resume.",
+    "Runtime command tags retain the existing shared UTF-8 interface; cursor/page/failure data use the canonical UTF-16-capable owner at wire seams.",
+    "Native futures retain the existing executor contract; no Promise, JavaScript, schema or scheduler runtime was added.",
+    "The two pre-existing code-graph tsgo inventory diagnostics remain recorded as warnings; walk declaration signatures and every compiled-call mapping pass strictly.",
+    "This branch deliberately remains on the accepted isolated 8f5084f base; unrelated newer main checkpoints require the parent integration gate."
+  ]
+}

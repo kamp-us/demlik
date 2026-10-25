@@ -258,7 +258,9 @@ function control(
     file = "crates/tea/src/resilience/deadline.rs",
     before = digest(file),
     companion = "crates/tea/src/flow/monitored_run.rs",
-    companionBefore = digest(companion);
+    companionBefore = digest(companion),
+    walkCompanion = "crates/tea/src/paginate/paginated_walk.rs",
+    walkCompanionBefore = digest(walkCompanion);
   try {
     for (const root of ["Cargo.toml", "Cargo.lock"])
       cpSync(root, join(temporary, root));
@@ -293,6 +295,18 @@ function control(
       companionSource,
       `${companionText.replace(companionNeedle, "PlainData, Step, Tagged,")}\nuse crate::resilience::deadline::TimerDeps;\n`,
     );
+    const walkSource = join(temporary, walkCompanion),
+      walkText = readFileSync(walkSource, "utf8"),
+      walkNeedle = "Option<crate::TimerDeps<DeadlineExceeded>>";
+    assert.equal(digest(walkSource), walkCompanionBefore);
+    assert.equal(walkText.split(walkNeedle).length, 2);
+    writeFileSync(
+      walkSource,
+      walkText.replace(
+        walkNeedle,
+        "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
+      ),
+    );
     const target = join(temporary, "target");
     build(temporary, target);
     const executable = binary(temporary, target),
@@ -318,6 +332,7 @@ function control(
     );
     assert.equal(digest(file), before);
     assert.equal(digest(companion), companionBefore);
+    assert.equal(digest(walkCompanion), walkCompanionBefore);
     return {
       id: "separate-deadline-timer-type",
       isolation: "disposable-source-copy",
@@ -326,6 +341,8 @@ function control(
       mutantSourceSha256: digest(source),
       companionSourceBeforeSha256: companionBefore,
       companionMutantSourceSha256: digest(companionSource),
+      walkSourceBeforeSha256: walkCompanionBefore,
+      walkMutantSourceSha256: digest(walkSource),
       nativeBinarySha256: digest(executable),
       detectedIds,
     };
@@ -333,6 +350,7 @@ function control(
     rmSync(temporary, { recursive: true, force: true });
     assert.equal(digest(file), before);
     assert.equal(digest(companion), companionBefore);
+    assert.equal(digest(walkCompanion), walkCompanionBefore);
   }
 }
 export async function verifyRuntimeDeadline(
