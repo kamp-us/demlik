@@ -28,6 +28,11 @@ The implementations live beside each other in `packages/` and `crates/`.
    including retained references. Data-site checks compare lexical binding
    aliases, method calls and SQL access heuristics. Full data reports and graph
    assembly compare binding ownership, requested empty reports and option combinations.
+   Library scope checks read real manifests, package names, subpaths, nested owners,
+   world packages and declaration refusals. Library verdicts also compare import
+   precedence, allowed names, stale declarations, impurity and measured census lines.
+   Comment checks classify real syntax
+   and count lines by file, package and bucket, including source repository files.
    Wrangler catalog checks load shared JSONC/TOML files,
    manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
@@ -67,7 +72,7 @@ The implementations live beside each other in `packages/` and `crates/`.
    `paginate-queue-mutations.json`, `zoning-mutations.json` and
    `boundary-config-mutations.json`, `boundary-domain-mutations.json` and
    `command-families-mutations.json`, `flow-mutation.json` and
-   `monitored-run-mutation.json`.
+   `monitored-run-mutation.json` and `comment-mutations.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then

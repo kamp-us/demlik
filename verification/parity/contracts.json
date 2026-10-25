@@ -3781,5 +3781,443 @@
       "graph.zoning.port-complete",
       "graph.zoning.raw-utf16-paths"
     ]
+  },
+  "@demlik/tea:./flow#initFanOut": {
+    "signature": "99b2c8e5603a7a4c277f5fb36815167ee64982fe0dcbca48212d16931158c3cc",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::init_fan_out"]
+    },
+    "cases": ["flow.fan-out.mid-wave-and-failures", "flow.fan-out.budget-zero"]
+  },
+  "@demlik/tea:./flow#isComplete": {
+    "signature": "bbf18edea64991689efb193005761cbead9e9cb19c09187242fc40e7d40470d4",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::is_complete"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut": {
+    "signature": "f6907a39cd07b3d3e1f5c6b8377d234f4acaa13e9c49363db2b2173edcec2cfd",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::create_fan_out"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:ed29fc29fe16600bec5cb49ddb7dc7e8a7d1b02a3f96022fc13c267f419ab20d": {
+    "signature": "ed29fc29fe16600bec5cb49ddb7dc7e8a7d1b02a3f96022fc13c267f419ab20d",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOut::init"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:e19ec2ebef9533c331680b072b328deaf84f9b1a227395353ff73a0d44345977": {
+    "signature": "e19ec2ebef9533c331680b072b328deaf84f9b1a227395353ff73a0d44345977",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOut::scatter"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:d23fad1c9f605b6a8ffbddae07a1f6fd00eb060154237900ab77bd26bec8cdd8": {
+    "signature": "d23fad1c9f605b6a8ffbddae07a1f6fd00eb060154237900ab77bd26bec8cdd8",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOut::item_ok"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:ed9f1c0ba4b6c04c96f9584cd70924961660ac72e5367073161884ef50d52577": {
+    "signature": "ed9f1c0ba4b6c04c96f9584cd70924961660ac72e5367073161884ef50d52577",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOut::item_err"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:baf95061a33f39e9e433d94347b582c9e2793eebf685455653b9633ee373f9c9": {
+    "signature": "baf95061a33f39e9e433d94347b582c9e2793eebf685455653b9633ee373f9c9",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOut::completion"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createFanOut/member:published:3956a7e9b8c60c07d409298e2cf3d3dd6e513afd97de289dfe74f14f104a2f76": {
+    "signature": "3956a7e9b8c60c07d409298e2cf3d3dd6e513afd97de289dfe74f14f104a2f76",
+    "rust": {
+      "file": "crates/tea/src/flow/fan_out.rs",
+      "symbols": ["fan::FanOutCompletion::emit_on_complete"]
+    },
+    "cases": [
+      "flow.fan-out.duplicate-waves",
+      "flow.fan-out.mid-wave-and-failures"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun": {
+    "signature": "0b866171b2a0326560741d5c5e564feead500da4ac39c30b0e892d9e0119c88c",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["monitor::create_monitored_run"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:c34990c281f6f3b9fa4470ef265d61540d9a5e0a25eeb02631722cc5ed69998f": {
+    "signature": "c34990c281f6f3b9fa4470ef265d61540d9a5e0a25eeb02631722cc5ed69998f",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::init"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:e30998e14b541bad74a5abbe1eb3bc80b805a84f98553b57312158104d6784f0": {
+    "signature": "e30998e14b541bad74a5abbe1eb3bc80b805a84f98553b57312158104d6784f0",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::start"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:3ee70b8f1e025348d5337f150315b67d059c8c0c14105e924ca0b5f8c5f16d46": {
+    "signature": "3ee70b8f1e025348d5337f150315b67d059c8c0c14105e924ca0b5f8c5f16d46",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::progress"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:8eddeb34891211fa5af0c38f5eba0d1c193a3b220ceac7fbab22f545e97c1cdd": {
+    "signature": "8eddeb34891211fa5af0c38f5eba0d1c193a3b220ceac7fbab22f545e97c1cdd",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::mark_stale"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:f74d2e02654570c24633857efddfb66d0105c039b4337df6833079c846aaa991": {
+    "signature": "f74d2e02654570c24633857efddfb66d0105c039b4337df6833079c846aaa991",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::cancel", "MonitoredRun::boot"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:0012144c7f1289a8a8ef6670fe60053c1764033948e90043b77869734d31f401": {
+    "signature": "0012144c7f1289a8a8ef6670fe60053c1764033948e90043b77869734d31f401",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::advance"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:142e7176ebd2a90da3f1d9d5822e7a56bfe8a8d1c28fd728ca8256f73054253f": {
+    "signature": "142e7176ebd2a90da3f1d9d5822e7a56bfe8a8d1c28fd728ca8256f73054253f",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::on_deadline"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:6114cb53b722ffd330ea04ad98de3d9c5c180dca9254579cd161aaeac6a27ac3": {
+    "signature": "6114cb53b722ffd330ea04ad98de3d9c5c180dca9254579cd161aaeac6a27ac3",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::confirm_snapshot"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.disabled-checkpoint-confirm"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:db58736ceb84552a3a27c72fa4754060ac00572239b9fb53660f3aed7291e415": {
+    "signature": "db58736ceb84552a3a27c72fa4754060ac00572239b9fb53660f3aed7291e415",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::deadlines"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#createMonitoredRun/member:published:3d00cd95264a5a30a238ffb247fb719ccb1f3cb1ccc3e4374662af0dac6be6a1": {
+    "signature": "3d00cd95264a5a30a238ffb247fb719ccb1f3cb1ccc3e4374662af0dac6be6a1",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["MonitoredRun::timer"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#liftRun": {
+    "signature": "b9d75f80b1795d957bbc3ac25cbcf86e3150e5966f2b4ae68f656031da7c1bab",
+    "rust": {
+      "file": "crates/tea/src/flow/monitored_run.rs",
+      "symbols": ["monitor::lift_run"]
+    },
+    "cases": [
+      "monitored-run.pipeline-boot-and-terminal",
+      "monitored-run.idle-cancel-noops"
+    ]
+  },
+  "@demlik/tea:./flow#initBatchWindow": {
+    "signature": "c6baf106bc42c92ac5ed37384b90f4f6845835c7c0359ad216da72fa9b4b9a67",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::init_batch_window"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./flow#batchWindowExpired": {
+    "signature": "a4918212dbeb4a12c1b8aaa40b931fbad132d0db8d51a609416d589a7829f9df",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::batch_window_expired"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.size-stale-true"
+    ]
+  },
+  "@demlik/tea:./flow#BatchWindowKnob/member:published:1d6ae34f4ab308fd37ff698175dd0706bff9c741b1356322575e75674415a11b": {
+    "signature": "1d6ae34f4ab308fd37ff698175dd0706bff9c741b1356322575e75674415a11b",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::BatchWindowKnob::init"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-true",
+      "flow.batch-window.early-window-true"
+    ]
+  },
+  "@demlik/tea:./flow#BatchWindowKnob/member:published:d972c05f8d6eab4a79be5058e585a5cfb69321ef26ccac8b9610201a716cec27": {
+    "signature": "d972c05f8d6eab4a79be5058e585a5cfb69321ef26ccac8b9610201a716cec27",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::BatchWindowKnob::add"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-true",
+      "flow.batch-window.early-window-true"
+    ]
+  },
+  "@demlik/tea:./flow#BatchWindowKnob/member:published:33b029aeaf1585cfc4aaeaa4a82c88dbee5e517bdd2e00f2da30a190c36be508": {
+    "signature": "33b029aeaf1585cfc4aaeaa4a82c88dbee5e517bdd2e00f2da30a190c36be508",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::BatchWindowKnob::on_window"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-true",
+      "flow.batch-window.early-window-true"
+    ]
+  },
+  "@demlik/tea:./flow#BatchWindowKnob/member:published:4bccad9c36d7cecb83bd08cdac004b80dcb588d0be5c625aaa9611b08886fa6a": {
+    "signature": "4bccad9c36d7cecb83bd08cdac004b80dcb588d0be5c625aaa9611b08886fa6a",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::BatchWindowKnob::timer"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-true",
+      "flow.batch-window.early-window-true"
+    ]
+  },
+  "@demlik/tea:./flow#BatchWindowKnob/member:published:93d03da568707930778c00775e85038ab9a76196cc94490fc8a1ffcbf7570222": {
+    "signature": "93d03da568707930778c00775e85038ab9a76196cc94490fc8a1ffcbf7570222",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::BatchWindowKnob::subs"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-true",
+      "flow.batch-window.early-window-true"
+    ]
+  },
+  "@demlik/tea:./flow#addItem": {
+    "signature": "086bce0c0b05807d9d5140df685e71c69f10c38bda2f0874d999ab11e47f7d5c",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::add_item"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./flow#onWindow": {
+    "signature": "b15394723fd5419a052ba605a674ffcd356f1cb4b060e7f5371ce8b04c625362",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::on_window"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./flow#subsFor": {
+    "signature": "5f8b2a088a68a411c0918780ea06c58e3f673c7303ebfd1695c4a59a2ccaa7f9",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::subs_for"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./flow#timerFor": {
+    "signature": "b2b87f0401ffe18613fd2fcf53c0188df7abc2d87fa3f56a4e1cc994bfdddc55",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::timer_for"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./flow#createBatchWindow": {
+    "signature": "75c3f343aaaa63371c21a0cc25691226ff57d84ad4597e3d6e168230541ea533",
+    "rust": {
+      "file": "crates/tea/src/flow/batch_window.rs",
+      "symbols": ["batch::create_batch_window"]
+    },
+    "cases": [
+      "flow.batch-window.size-stale-false",
+      "flow.batch-window.early-window-false"
+    ]
+  },
+  "@demlik/tea:./persistence#snapshotWriteDef": {
+    "signature": "aef17a90a2e74a82dbc211a025b9726fe1177c7501bbb3c6e840bb75a4b4e412",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["snapshot::snapshot_write_def"]
+    },
+    "cases": ["snapshot.definitions"],
+    "knownGaps": [
+      "Generic serialized checkpoint input requires a caller-owned payload decoder; static SnapshotWriteSpec parsing currently refuses it."
+    ]
+  },
+  "@demlik/tea:./persistence#snapshotLoadDef": {
+    "signature": "8348e3afed0cb1d2659295d66ca4563c0467d295f2626514b125ed18eb4298af",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["snapshot::snapshot_load_def::<PlainData>"]
+    },
+    "cases": ["snapshot.definitions"]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:41cdf55ad9b980ef7157c71667b220d31f65a8c413d6f149d4f61b1c3a8f15de": {
+    "signature": "41cdf55ad9b980ef7157c71667b220d31f65a8c413d6f149d4f61b1c3a8f15de",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::init"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.definitions"]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:1e1b5206f11791148b79d89a84a4843b378d03ae344c7d6a9c4b5187da81a336": {
+    "signature": "1e1b5206f11791148b79d89a84a4843b378d03ae344c7d6a9c4b5187da81a336",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::record"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.cadence-zero"]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:748e8a4335250ab19e0fcc2a9e79ec038b8f7402745bdd11c3724f9713b1a234": {
+    "signature": "748e8a4335250ab19e0fcc2a9e79ec038b8f7402745bdd11c3724f9713b1a234",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::force"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.cadence-zero"]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:71eeeee20df45a77991a60e777565f308673e382c6b0ebec6945b3cb39c83b3a": {
+    "signature": "71eeeee20df45a77991a60e777565f308673e382c6b0ebec6945b3cb39c83b3a",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::confirm"]
+    },
+    "cases": [
+      "snapshot.cadence-force-watermark",
+      "snapshot.nonfinite-watermark"
+    ]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:52d15d6ccee692048eb327c916dbff1e36b447523353e17850e77e555ec2632c": {
+    "signature": "52d15d6ccee692048eb327c916dbff1e36b447523353e17850e77e555ec2632c",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::boot"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.cadence-zero"]
+  },
+  "@demlik/tea:./persistence#SnapshotKnob/member:published:94f2de13de8024154bce06260642840477060bd4060f76ac7b99e133a66d7f0b": {
+    "signature": "94f2de13de8024154bce06260642840477060bd4060f76ac7b99e133a66d7f0b",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["Snapshot::request_load"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.definitions"]
+  },
+  "@demlik/tea:./persistence#createSnapshot": {
+    "signature": "c77b7f2789b2f06aef10d389bca952d9ba4f6eca1e9dbef87c125004b4e45791",
+    "rust": {
+      "file": "crates/tea/src/persistence/snapshot.rs",
+      "symbols": ["snapshot::create_snapshot"]
+    },
+    "cases": ["snapshot.cadence-force-watermark", "snapshot.definitions"]
   }
 }

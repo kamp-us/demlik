@@ -11,6 +11,17 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "library-judgments",
+    driver: "libraries_driver",
+    script: "graph-library-judgments.mts",
+  },
+  {
+    name: "libraries",
+    driver: "libraries_driver",
+    script: "graph-libraries.mts",
+  },
+  { name: "comments", driver: "comment_driver", script: "graph-comments.mts" },
+  {
     name: "data-assembly",
     driver: "data_driver",
     script: "graph-data-assembly.mts",
@@ -69,6 +80,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "libraries_driver",
   "boundary_config_driver",
   "boundary_domain_driver",
   "zoning_driver",
