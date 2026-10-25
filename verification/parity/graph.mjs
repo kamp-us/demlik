@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "boundary-domain",
+    driver: "boundary_domain_driver",
+    script: "graph-boundary-domain.mts",
+  },
+  {
     name: "cross-runtime",
     driver: "cross_runtime_driver",
     script: "graph-cross-runtime.mts",

@@ -17,7 +17,10 @@ The implementations live beside each other in `packages/` and `crates/`.
    Prepared-rule zoning traces compare both layouts, rule ownership and layout
    diagnostics. Boundary-rule input validation separately compares defaults,
    first issue paths/messages and thrown errors; declaration consistency is
-   a separate pass. Wrangler catalog checks load shared JSONC/TOML files,
+   compared against the library, deployable and shape checks and the real config
+   loader. Impurity vocabulary helpers cover globals, constructors and runtime
+   module imports; AST impurity detection is a separate pass.
+   Wrangler catalog checks load shared JSONC/TOML files,
    manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
    and clusters. Shared JSON traces compare exact source parse/stringify behavior
@@ -46,7 +49,7 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
    `runtime-hooks-mutation.json`, `runtime-deadline-mutation.json`,
    `paginate-queue-mutations.json`, `zoning-mutations.json` and
-   `boundary-config-mutations.json`.
+   `boundary-config-mutations.json` and `boundary-domain-mutations.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
