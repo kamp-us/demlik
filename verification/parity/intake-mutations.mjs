@@ -62,6 +62,16 @@ export async function intakeMutations(options = {}) {
       runtimeWitness: "intake-runtime.promise.done.bytes",
     },
     {
+      name: "done-cache-reconciliation-disappears",
+      file: module,
+      before: "self.is_already_done(state, &item)?",
+      after: "false",
+      sites: 2,
+      witness: "intake.done-before-crash",
+      runtimeWitness: "intake-runtime.promise.done.bytes",
+      runtimeWorkers: { reference: [1, 1], rust: [1, 2] },
+    },
+    {
       name: "claim-takes-completed-work",
       file: module,
       before:
@@ -108,7 +118,8 @@ export async function intakeMutations(options = {}) {
       nativeWitness:
         "every_key_callback_failure_retains_the_original_opaque_cause",
     },
-  ];
+  ].filter((control) => !options.only || control.name === options.only);
+  assert(controls.length > 0, "select a named control");
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const activeFiles = [...new Set(controls.map((c) => c.file))],
     sourceHashes = Object.fromEntries(
@@ -235,16 +246,22 @@ export async function intakeMutations(options = {}) {
               binary: join(target, "debug/examples/intake_runtime_driver"),
               reportFile: runtimeFile,
             });
-          assert(
-            comparedRuntime.failures.some(
-              (f) => f.id === control.runtimeWitness,
-            ),
+          const witness = comparedRuntime.failures.find(
+            (f) => f.id === control.runtimeWitness,
           );
+          assert(witness);
+          const workerCounts = {
+            reference: witness.reference.snapshots.map((s) => s.workers),
+            rust: witness.rust.snapshots.map((s) => s.workers),
+          };
+          if (control.runtimeWorkers)
+            assert.deepEqual(workerCounts, control.runtimeWorkers);
           Object.assign(receipt, {
             runtimeWitness: control.runtimeWitness,
             runtimeDetectedIds: comparedRuntime.failures.map((f) => f.id),
             runtimeBinaryHash: comparedRuntime.binaryHash,
             runtimeReport: runtimeFile,
+            runtimeWorkers: workerCounts,
           });
         }
       }
@@ -292,12 +309,14 @@ if (
     options: {
       binary: { type: "string" },
       "runtime-binary": { type: "string" },
+      only: { type: "string" },
       report: { type: "string" },
     },
   });
   const report = await intakeMutations({
     binary: values.binary,
     runtimeBinary: values["runtime-binary"],
+    only: values.only,
     reportFile: values.report,
   });
   console.log(
