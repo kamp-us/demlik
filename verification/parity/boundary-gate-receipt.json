@@ -1,0 +1,194 @@
+{
+  "scope": "ROOT native boundary gate and transferred central registration, including canonical raw MissingTsConfig repair; full-port coverage remains incomplete.",
+  "base": "1fe47116ce205c6b6e2813d939b27e9fb1728b64",
+  "branch": "can/rust-boundary-config",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-boundaries-01a16c9d/target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "acceptance": {
+    "gatePairedCases": 129,
+    "retainedParentPairedCases": 125,
+    "addedCases": [
+      "inherited.feature-folders.non-port.toString",
+      "inherited.feature-folders.non-port.constructor",
+      "inherited.feature-folders.non-port.__proto__",
+      "refusal.raw-scope-root"
+    ],
+    "protocolRefusals": 5,
+    "gateActions": 194,
+    "gateCompiledFaultsDetected": 14,
+    "oldScopeCountFaultsDetected": 19,
+    "oldBoundaryDomainFaultsDetected": 29,
+    "publicProjectNativeTests": 10,
+    "workspaceNativeTestsAndDocs": 300,
+    "completeCompositionCases": 8752,
+    "completeCompositionFailures": 0,
+    "completeCompositionExitCode": 1,
+    "completeCoverageGaps": 2986,
+    "completeCoverageDiscovered": 3445,
+    "completeCoverageMapped": 474
+  },
+  "repair": [
+    "MissingTsConfig owns the source refusal as JsString once; message() preserves its UTF16 independently of Display and retains native start PathBuf/scope data.",
+    "load_edge_project_text accepts declared raw root text and converts it only for FS lookup. Existing Path-based load_edge_project and resolve_edge_ts_config keep their native OsStr inputs and share the same loader.",
+    "ProjectLoadError exposes canonical raw message and typed source cause. Gate uses the raw joined scope root and error.message(), with no gate-local refusal reconstruction or global path normalization change.",
+    "Public consumer retains raw error text after the input is dropped. Its actual compiled regression control replaces the raw display and fails the intended native assertion as well as the strict TS pair.",
+    "The canonical FeatureFolders owner is reused. Three existing port cases prove early includes refusal; three new nonport cases prove later some refusal. An unconditional precheck compiles and fails those three cases."
+  ],
+  "preservedBehavior": [
+    "flag/config/read/refusal precedence",
+    "per-scope source/imports/shape/catalog loading and borrowed facts",
+    "root-only worker graph and measured census scope",
+    "scoped ledger prune/accept/repeat exact bytes and modes",
+    "all-scope migration and refusal before writes",
+    "five strict protocol refusals and unchanged old125 IDs"
+  ],
+  "baselineIntegrity": {
+    "gateBinaryUnchangedAcrossControlsAndComposition": true,
+    "gateBinarySha256": "3d688f0326d3d95d8d3d862bcf3f2cc9de63d13476d07642e15024017be26af6",
+    "scopeBinaryUnchangedAcrossControls": true,
+    "baselineTarget": "/private/tmp/demlik-rust-boundaries-01a16c9d/target",
+    "gateAndScopeMutationTarget": "/private/tmp/demlik-rust-boundaries-01a16c9d/target/parity/shape-judgment-mutation-build",
+    "domainMutationTarget": "/private/tmp/demlik-rust-boundaries-01a16c9d/target/parity/reconcile-mutation-build",
+    "policy": "Disposable controls reuse the existing isolated lean targets sequentially; no mutation build writes baseline Cargo artifacts.",
+    "parentTrackedWipBackupSha256": "f4163adb416f2c8b933f464f576fe07bdc80a9ab5f0d1b1e1f1cd2813658aa8d",
+    "parentUntrackedManifestSha256": "de61f97ea9943ff34fa21f46c67a3d7aec55a9db15c55a463401847c68848752"
+  },
+  "redEvidence": [
+    {
+      "file": "target/parity/graph-boundary-gate-feature-owners-red.json",
+      "attempted": 125,
+      "passed": 122,
+      "failed": 3,
+      "sha256": "c8de41636cc2fb87633a5991809b1510efcce12c5c3eed8f8598415929edb7b8"
+    },
+    {
+      "file": "target/parity/graph-boundary-gate-raw-root-red.json",
+      "attempted": 126,
+      "passed": 125,
+      "failed": 1,
+      "sha256": "a3000cb1f35bbc88c562b8d32cd2631ab491b61b4c89a1a7eb74ee2f132b9f74"
+    }
+  ],
+  "checks": [
+    {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-clippy.log",
+      "sha256": "e696e68c549f95b2606c74ec64e00d7d8007530bb7835b66bea1d3efca0bf679"
+    },
+    {
+      "command": "cargo test --locked --workspace",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-native.log",
+      "sha256": "c5585d8ecad22f837bc88b6994516b8dd570963def42c2e49979c78e3c80a02d"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "pnpm --filter @demlik/parity typecheck",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-types.log",
+      "sha256": "0aab294673c9a1f1bd28385b3fda7fe5fe3e97158191a2b963c32ae468d334ae"
+    },
+    {
+      "command": "pnpm exec biome check verification/parity",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-biome.log",
+      "sha256": "bcee3649b128032d45c020d31fe0e19afd878628e52bbfd1896a1157b89cdac9"
+    },
+    {
+      "command": "pnpm exec node verification/parity/boundary-gate-mutations-run.mjs",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-mutations.log",
+      "sha256": "8b16a31c3cd1874e6a06ec23c9d7096db26a8b6ca72389f4c0d80b132ed7a3fd"
+    },
+    {
+      "command": "pnpm exec node verification/parity/scope-count-mutations-run.mjs",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-scope-mutations.log",
+      "sha256": "307f2b40180ad9f369e571777a84271d3131578d64cc1559b23eecdf8474a239"
+    },
+    {
+      "command": "pnpm exec node --import <tsx-loader> verification/parity/boundary-domain-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/boundary-gate-final-domain-mutations.log",
+      "sha256": "5a23b74ee48b651e89b8b3b85f61166a9516155eb08853a69521dd9800e99de9"
+    },
+    {
+      "command": "pnpm parity:complete",
+      "exitCode": 1,
+      "log": "target/boundary-gate-final-complete.log",
+      "sha256": "83d214351d7502f7a7ab099319822cbd29d140163acac064e6a578c07001ec80"
+    }
+  ],
+  "reports": {
+    "graph-boundary-gate": {
+      "file": "target/parity/graph-boundary-gate.json",
+      "sha256": "e40c6670774b790f74f95239ed59be1f5af0cd13e1aa6851051af3b2c69bc368"
+    },
+    "boundary-gate-mutations": {
+      "file": "target/parity/boundary-gate-mutations.json",
+      "sha256": "98d9736134b4e3a673a16c1d97f99813535598a3d4e4bc18b26766187a012164"
+    },
+    "scope-count-mutations": {
+      "file": "target/parity/scope-count-mutations.json",
+      "sha256": "1f63f6e661f3d4a7c0e69d02b9eb0b11dae4e2ded19084db49c4e2b710bc433c"
+    },
+    "boundary-domain-mutations": {
+      "file": "target/parity/boundary-domain-mutations.json",
+      "sha256": "5a23b74ee48b651e89b8b3b85f61166a9516155eb08853a69521dd9800e99de9"
+    },
+    "report": {
+      "file": "target/parity/report.json",
+      "sha256": "87433ffb44c5321712113b8145b3429daef8728ed5d44d6dde51a48dc78167ec"
+    }
+  },
+  "sourceSha256": {
+    "crates/code-graph/src/boundaries/gate.rs": "5432eed2240942dd20f134a53ac26804375f67a61ac95f10dc361a2330daea7e",
+    "crates/code-graph/src/boundaries/config.rs": "63be17981ebcd250822e3701218153e4ff348f4028619b376479e110871372b6",
+    "crates/code-graph/src/boundaries/rules.rs": "9a6b55a08e0278e33d3f80c61ec6c514aeeebed672656f343d8a6f200041f204",
+    "crates/code-graph/src/project.rs": "a514a387dbe61749ad4e1f4a112fbe3ab355d02386784fb147ddaffd5b7b1e12",
+    "crates/code-graph/tests/boundary_gate.rs": "79c8f2c69f63adf6771afb55eb0968da6723e03f44eb4521ddf06eb2a868017f",
+    "crates/code-graph/tests/boundary_config.rs": "80f81f7a1206ba9f81f0bdb58748f6e511f71e43e1bef884540bc1348c3bc2da",
+    "crates/code-graph/tests/project.rs": "ad56b1dea21615c57f7fbef3990f799324e122815e7286fac75f75967dd1a0ee",
+    "crates/code-graph/examples/boundary_gate_driver.rs": "c6c28f5d9bd462b7cdb9adb5494c621df30ed9e53f169a9a5d45e512a154d421",
+    "verification/parity/graph-boundary-gate.mts": "13d330055a3a2f3d6e0746d39fbfebb8af620f5bfbec9f59585985015d32f28c",
+    "verification/parity/boundary-gate-mutations.mjs": "f847dfabae4670c40366dae9053c054bc26713f692a38d14983e7df51c69cf8d",
+    "verification/parity/graph.mjs": "27fbfadd37e2935dddfdaff68389c9e48ccfcc24fcee2885406b4444938c3dc9",
+    "verification/parity/package.json": "ebae21a135aee904044cc7b598801704ab48c980e2d4f61a4289da36c0588e49"
+  },
+  "preservedLicenseAndLockSha256": {
+    "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+    "packages/code-graph/LICENSE": "0481e6230c6ee65f6184e6197daa5b8152d8c27a4ae6b98b734d63045612f8d0",
+    "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+    "Cargo.lock": "fdf23c8a1440b1d01bcf5cdc2adc404d152bc0335d9ea552579443fe258eeba6",
+    "Cargo.toml": "0294e0883c482d3abc8ef476e63fb156ccde49784d208e1c7c6d4fd8036afe38",
+    "crates/code-graph/Cargo.toml": "1718d04bcd1ba6d86fb159bb93ceac964a3d1aeff251df4ce295b150c32c66a6",
+    "crates/code-graph/src/ratchet/scope_count/V8-TIMSORT-LICENSE": "b9a6d9320b8f2693e8d41e496ce56caadacaddcca9be2a64a61749278f425cf2"
+  },
+  "qualifications": [
+    "The complete command still exits1 for existing full-port coverage gaps. All8752 behavioral cases pass with0 TS changes; no comparison, coverage guard or refusal was relaxed.",
+    "Native OS diagnostic wording is retained separately by the paired gate driver; exact IO category, domain diagnostics, stdout, exit codes, file bytes and permission bits are compared.",
+    "APFS rejects creating a 0xFF filename with EPERM. The public native-Path witness instead uses a real U+FFFD shadow directory/config plus an ancestor config: the original OsStr selects the ancestor, while lossy conversion would select the shadow. The original error PathBuf bytes are retained; no claim of an existing nonUTF8 filename is made.",
+    "This isolated ROOT receipt does not claim MAIN latest composition or its separately integrated TEA recorder. Parent owns MAIN canonical mappings/integration. Default owns unrelated resolve_path_text changes in a separate checkout."
+  ],
+  "noNetworkDockerOrRemoteWrites": true
+}

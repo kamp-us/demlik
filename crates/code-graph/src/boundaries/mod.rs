@@ -2,6 +2,7 @@ pub mod analyze;
 pub mod config;
 pub mod declaration;
 pub mod deployables;
+pub mod gate;
 pub mod impure;
 pub mod impure_uses;
 pub mod ledger;

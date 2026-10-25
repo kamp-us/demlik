@@ -8,6 +8,62 @@ use crate::{
 use indexmap::IndexMap;
 
 #[derive(Debug)]
+pub enum BoundaryConfigResolution {
+    Resolved(Box<BoundaryRules>),
+    Refused { message: JsString },
+}
+#[derive(Debug)]
+pub enum BoundaryConfigError {
+    RecordType(RecordTypeError),
+    Declaration(super::declaration::DeclarationError),
+}
+impl std::fmt::Display for BoundaryConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RecordType(error) => error.fmt(f),
+            Self::Declaration(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for BoundaryConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::RecordType(error) => error,
+            Self::Declaration(error) => error,
+        })
+    }
+}
+pub fn resolve_boundary_rules(
+    file: Option<&JsString>,
+) -> std::result::Result<BoundaryConfigResolution, BoundaryConfigError> {
+    use crate::config::{ConfigFile, invalid_config, read_config};
+    let rules = match file {
+        None => BoundaryRules::default(),
+        Some(file) => {
+            let value = match read_config(ConfigFile::Text(file)) {
+                Ok(value) => value,
+                Err(message) => return Ok(BoundaryConfigResolution::Refused { message }),
+            };
+            match BoundaryRules::parse(&value) {
+                Ok(rules) => rules,
+                Err(BoundaryRuleInputError::Issue(issue)) => {
+                    return Ok(BoundaryConfigResolution::Refused {
+                        message: invalid_config(file, &issue),
+                    });
+                }
+                Err(BoundaryRuleInputError::TypeError(error)) => {
+                    return Err(BoundaryConfigError::RecordType(error));
+                }
+            }
+        }
+    };
+    match super::declaration::declaration_issue(&rules).map_err(BoundaryConfigError::Declaration)? {
+        Some(message) => Ok(BoundaryConfigResolution::Refused { message }),
+        None => Ok(BoundaryConfigResolution::Resolved(Box::new(rules))),
+    }
+}
+
+#[derive(Debug)]
 pub enum BoundaryRuleInputError {
     Issue(InputIssue),
     TypeError(RecordTypeError),

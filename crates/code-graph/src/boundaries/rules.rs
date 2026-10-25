@@ -362,19 +362,61 @@ pub struct ScopeZoning {
     pub lib: IndexSet<JsString>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ZoningError;
+pub enum ZoningError {
+    LayoutFolders,
+    ListedFolders,
+}
 impl std::fmt::Display for ZoningError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("folders.some is not a function")
+        f.write_str(match self {
+            Self::LayoutFolders => "folders.some is not a function",
+            Self::ListedFolders => "folders.includes is not a function",
+        })
     }
 }
 impl std::error::Error for ZoningError {}
-pub fn scope_zoning(rules: &BoundaryRules, scope: &JsString) -> Result<ScopeZoning, ZoningError> {
-    let folders = rules.features.get(scope);
-    if folders.is_none() && crate::text::has_object_prototype_property(scope) {
-        return Err(ZoningError);
+
+#[derive(Clone, Copy)]
+pub(super) enum FeatureFolders<'a> {
+    Absent,
+    Listed(&'a [JsString]),
+    Inherited,
+}
+pub(super) fn feature_folders_of<'a>(
+    rules: &'a BoundaryRules,
+    scope: &JsString,
+) -> FeatureFolders<'a> {
+    match rules.features.get(scope) {
+        Some(folders) => FeatureFolders::Listed(folders),
+        None if crate::text::has_object_prototype_property(scope) => FeatureFolders::Inherited,
+        None => FeatureFolders::Absent,
     }
-    let folders = folders.map_or(&[][..], Vec::as_slice);
+}
+impl<'a> FeatureFolders<'a> {
+    pub(super) fn is_defined(self) -> bool {
+        !matches!(self, Self::Absent)
+    }
+    fn as_list(self) -> Result<&'a [JsString], ZoningError> {
+        match self {
+            Self::Absent => Ok(&[]),
+            Self::Listed(folders) => Ok(folders),
+            Self::Inherited => Err(ZoningError::LayoutFolders),
+        }
+    }
+    pub(super) fn unlisted_port_folder_issue(
+        self,
+        scope: &JsString,
+        held: &[JsString],
+    ) -> Result<Option<JsString>, ZoningError> {
+        match self {
+            Self::Listed(folders) => Ok(unlisted_port_folder_issue(scope, folders, held)),
+            Self::Inherited if held.iter().any(is_port_folder) => Err(ZoningError::ListedFolders),
+            Self::Absent | Self::Inherited => Ok(None),
+        }
+    }
+}
+pub fn scope_zoning(rules: &BoundaryRules, scope: &JsString) -> Result<ScopeZoning, ZoningError> {
+    let folders = feature_folders_of(rules, scope).as_list()?;
     Ok(ScopeZoning {
         layout: if folders.iter().any(is_port_folder) {
             Layout::Port

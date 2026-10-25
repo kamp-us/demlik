@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 
 use crate::engine::oxc::{ParseFailure, parse_type_script};
 use crate::syntax::SyntaxFile;
+use crate::text::JsString;
 use icu_collator::{Collator, CollatorBorrowed};
 
 mod text_paths;
@@ -247,23 +248,36 @@ pub enum EdgeScope {
 pub struct MissingTsConfig {
     pub start: PathBuf,
     pub scope: EdgeScope,
+    message: JsString,
 }
-
+impl MissingTsConfig {
+    fn new(start: &Path, scope: EdgeScope, root_text: Option<&JsString>) -> Self {
+        let display = root_text
+            .cloned()
+            .unwrap_or_else(|| start.to_string_lossy().as_ref().into());
+        let mut message = JsString::from("code-graph: no tsconfig.json found ");
+        match scope {
+            EdgeScope::Package => message.push_str("at or above "),
+            EdgeScope::Deep => message.push_str("at or above the repo root ("),
+        }
+        message.extend(&display);
+        if scope == EdgeScope::Deep {
+            message.push_str(")");
+        }
+        message.push_str("; the edge pass needs one to resolve modules (SPEC §3).");
+        Self {
+            start: start.to_path_buf(),
+            scope,
+            message,
+        }
+    }
+    pub fn message(&self) -> &JsString {
+        &self.message
+    }
+}
 impl fmt::Display for MissingTsConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "code-graph: no tsconfig.json found ")?;
-        match self.scope {
-            EdgeScope::Package => write!(formatter, "at or above {}", self.start.display())?,
-            EdgeScope::Deep => write!(
-                formatter,
-                "at or above the repo root ({})",
-                self.start.display()
-            )?,
-        }
-        write!(
-            formatter,
-            "; the edge pass needs one to resolve modules (SPEC §3)."
-        )
+        formatter.write_str(&self.message.to_lossy())
     }
 }
 
@@ -284,14 +298,23 @@ pub fn resolve_edge_ts_config(
     scope: EdgeScope,
     repo_root: &Path,
 ) -> Result<PathBuf, MissingTsConfig> {
+    resolve_edge_ts_config_in(root, scope, repo_root, None)
+}
+fn resolve_edge_ts_config_in(
+    root: &Path,
+    scope: EdgeScope,
+    repo_root: &Path,
+    root_text: Option<&JsString>,
+) -> Result<PathBuf, MissingTsConfig> {
     let start = match scope {
         EdgeScope::Package => root,
         EdgeScope::Deep => repo_root,
     };
-    find_nearest_tsconfig(start).ok_or_else(|| MissingTsConfig {
-        start: start.to_path_buf(),
-        scope,
-    })
+    let display = match scope {
+        EdgeScope::Package => root_text,
+        EdgeScope::Deep => None,
+    };
+    find_nearest_tsconfig(start).ok_or_else(|| MissingTsConfig::new(start, scope, display))
 }
 
 /// The nearest pnpm workspace root; a standalone scope retains its own root.
@@ -361,6 +384,14 @@ pub enum ProjectLoadError {
     MissingTsConfig(MissingTsConfig),
     Parse(ParseFailure),
 }
+impl ProjectLoadError {
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::MissingTsConfig(error) => error.message().clone(),
+            Self::Parse(error) => error.to_string().into(),
+        }
+    }
+}
 
 impl fmt::Display for ProjectLoadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -370,7 +401,14 @@ impl fmt::Display for ProjectLoadError {
         }
     }
 }
-impl std::error::Error for ProjectLoadError {}
+impl std::error::Error for ProjectLoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::MissingTsConfig(error) => error,
+            Self::Parse(error) => error,
+        })
+    }
+}
 
 pub fn load_edge_project(
     root: &Path,
@@ -378,7 +416,29 @@ pub fn load_edge_project(
     repo_root: &Path,
     listing: Option<&RepoListing>,
 ) -> Result<LoadedEdgeProject, ProjectLoadError> {
-    let ts_config_path = resolve_edge_ts_config(root, scope, repo_root)
+    load_edge_project_in(root, scope, repo_root, listing, None)
+}
+
+/// Load a declared JavaScript root, retaining its text in source-owned refusals.
+/// UTF-16 replacement is limited to the filesystem path, as in Node's string path boundary.
+pub fn load_edge_project_text(
+    root: &JsString,
+    scope: EdgeScope,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+) -> Result<LoadedEdgeProject, ProjectLoadError> {
+    let native = PathBuf::from(root.to_lossy());
+    load_edge_project_in(&native, scope, repo_root, listing, Some(root))
+}
+
+fn load_edge_project_in(
+    root: &Path,
+    scope: EdgeScope,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+    root_text: Option<&JsString>,
+) -> Result<LoadedEdgeProject, ProjectLoadError> {
+    let ts_config_path = resolve_edge_ts_config_in(root, scope, repo_root, root_text)
         .map_err(ProjectLoadError::MissingTsConfig)?;
     let project = load_cheap_project(root, listing).map_err(ProjectLoadError::Parse)?;
     Ok(LoadedEdgeProject {

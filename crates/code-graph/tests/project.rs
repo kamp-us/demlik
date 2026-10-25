@@ -210,6 +210,63 @@ fn selects_the_package_or_workspace_tsconfig_and_reports_missing_configuration()
 }
 
 #[test]
+fn missing_configuration_retains_the_declared_root_after_the_input_is_dropped() {
+    use demlik_code_graph::{
+        project::{ProjectLoadError, load_edge_project_text},
+        text::JsString,
+    };
+    let project = Project::new();
+    let error = {
+        let mut root = JsString::from(format!("{}/services/", project.0.display()));
+        root.extend(&JsString::from_units(vec![0xd800]));
+        load_edge_project_text(&root, EdgeScope::Package, &project.0, None).unwrap_err()
+    };
+    assert!(std::error::Error::source(&error).is_some());
+    assert!(error.message().units().contains(&0xd800));
+    let ProjectLoadError::MissingTsConfig(error) = error else {
+        panic!("the loader preserves the typed refusal");
+    };
+    let mut expected = JsString::from(format!(
+        "code-graph: no tsconfig.json found at or above {}/services/",
+        project.0.display()
+    ));
+    expected.extend(&JsString::from_units(vec![0xd800]));
+    expected.push_str("; the edge pass needs one to resolve modules (SPEC §3).");
+    assert_eq!(error.message(), &expected);
+    assert_eq!(error.start, project.0.join("services/\u{fffd}"));
+    assert!(error.message().units().contains(&0xd800));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_project_paths_keep_their_original_os_bytes_for_lookup_and_refusal() {
+    use demlik_code_graph::project::{ProjectLoadError, load_edge_project};
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+    let project = Project::new();
+    let root = project.0.join(OsString::from_vec(b"native-\xff".to_vec()));
+    let shadow = project.0.join("native-\u{fffd}");
+    fs::create_dir_all(shadow.join("src")).unwrap();
+    fs::write(project.0.join("tsconfig.json"), "{}").unwrap();
+    fs::write(shadow.join("tsconfig.json"), "{}").unwrap();
+    fs::write(shadow.join("src/main.ts"), "export const shadow = true;").unwrap();
+    // A lossy Path conversion would incorrectly load this real replacement-name scope.
+    let loaded = load_edge_project(&root, EdgeScope::Package, &project.0, None).unwrap();
+    assert_eq!(loaded.project.root_absolute, root);
+    assert_eq!(loaded.ts_config_path, project.0.join("tsconfig.json"));
+    assert!(loaded.project.source_files.is_empty());
+    let visible = load_edge_project(&shadow, EdgeScope::Package, &project.0, None).unwrap();
+    assert_eq!(visible.ts_config_path, shadow.join("tsconfig.json"));
+    assert_eq!(visible.project.source_files.len(), 1);
+    fs::remove_file(project.0.join("tsconfig.json")).unwrap();
+    let ProjectLoadError::MissingTsConfig(error) =
+        load_edge_project(&root, EdgeScope::Package, &project.0, None).unwrap_err()
+    else {
+        panic!("the native refusal keeps its typed path");
+    };
+    assert_eq!(error.start, root);
+}
+
+#[test]
 fn resolves_tsconfig_aliases_extension_aliases_and_conditional_package_exports() {
     let project = Project::new();
     project.write(
