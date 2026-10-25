@@ -1,0 +1,284 @@
+{
+  "@demlik/tea:./agent#MediaSource": {
+    "signature": "fb8241f24178d26bd49577696455649a0896e752ec2f15b8c63bbecba859d767",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TextPart": {
+    "signature": "37118e4ea8fde44da27006ea1278bc38e278951787bb8a0888f5d3e0d39e4c6a",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.text-4"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#ImagePart": {
+    "signature": "7f4f17d341142d92ec5a1e05933a91c48bfa1cefe205815df2217f83cde2d546",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#FilePart": {
+    "signature": "c47d8e22fc024da03d29cdca1272383ad6603c623acc559c15bbed13254ab9cb",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.parts-3"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#ContentPart": {
+    "signature": "63ee660b40b2d2d7f9fd9e6e37f67cf3c6404f9b14f713a8d73de9e00de5641b",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": [
+        "demlik_tea::agent::content::content_parts",
+        "demlik_tea::agent::content::omit_media"
+      ]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#MessageContent": {
+    "signature": "84b22c2facbd565c42a099904140c9f50696336efbfd1e9a6ec1871324f986a1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": ["agent-content.alias-and-media", "agent-content.parts-0"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#contentParts": {
+    "signature": "37502af0bc24e2413f13bcf5fc15349bc071e981e8ae4b9ec0951ea485afb6b1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::content_parts"]
+    },
+    "cases": [
+      "agent-content.alias-and-media",
+      "agent-content.text-0",
+      "agent-content.text-4"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#IMAGE_OMITTED": {
+    "signature": "8c63fc876e5c0a60efe3cc8d3ba38c444cdefe5cab6512400dadf8e5cfcfb8db",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#FILE_OMITTED": {
+    "signature": "b5eaf2ea61ec59e4b2b7ba401ee6b5fdb7c1a7e83ce5b172c64bc8fdd2f10873",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": ["agent-content.alias-and-media"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#omitMedia": {
+    "signature": "405f74aa5542ff4443c7f47bf8f3fef31f90f853a2118cbecdb49997f9276cf1",
+    "rust": {
+      "file": "crates/tea/src/agent/content.rs",
+      "symbols": ["demlik_tea::agent::content::omit_media"]
+    },
+    "cases": [
+      "agent-content.alias-and-media",
+      "agent-content.parts-0",
+      "agent-content.parts-4"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptToolResult": {
+    "signature": "7e9015ee888c39a1d08637996c32319ee2cf2cb0aafd792b8122186fff810d5f",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::from_seed",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptOutcome": {
+    "signature": "e964f3f75fdd1fc9ac7334cfc91855734f052ff1a22da9e8e793761ad2f9227a",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": [
+      "agent-transcript.empty",
+      "agent-transcript.ending-0",
+      "agent-transcript.ending-2",
+      "agent-transcript.ending-3"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptSnapshot": {
+    "signature": "472d9ca29c5fb741991db3c97d8a853f09d657bf40f1fdd560f8a9a8e0c714bc",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::read"]
+    },
+    "cases": [
+      "agent-transcript.live-seeded",
+      "agent-transcript.snapshot-array-isolation"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#TranscriptSeed": {
+    "signature": "475db69fea0a3295c96df9e62943966eacb0f82f91f3555f350dff621c638acc",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::from_seed"]
+    },
+    "cases": [
+      "agent-transcript.seed-only",
+      "agent-transcript.seed-errors-only",
+      "agent-transcript.seed-order-not-numeric-keys"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript": {
+    "signature": "55f62c30ce2d648066440d9d30038a02bff586d15b3962d40fe72de3f132ef99",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::new",
+        "demlik_tea::agent::transcript::Transcript::from_seed",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript/member:published:764e91cfdca89781203edc88e9d0ee0575dbddbe6a18339847a4296702fe6d14": {
+    "signature": "764e91cfdca89781203edc88e9d0ee0575dbddbe6a18339847a4296702fe6d14",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": [
+      "agent-transcript.live-seeded",
+      "agent-transcript.ignored-started-failed",
+      "agent-transcript.late-events"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Transcript/member:published:fb84f285c7df5d20675799970682a8e804fafba417a9351496d1f3625342a844": {
+    "signature": "fb84f285c7df5d20675799970682a8e804fafba417a9351496d1f3625342a844",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::read"]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#transcript": {
+    "signature": "fd0d78734297d6937dd6caae4a7499df314099187fa785b3ae94b3eebae4a4be",
+    "rust": {
+      "file": "crates/tea/src/agent/transcript.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::new",
+        "demlik_tea::agent::transcript::Transcript::from_seed"
+      ]
+    },
+    "cases": ["agent-transcript.live-seeded", "agent-transcript.empty"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentTurn": {
+    "signature": "adfe54c3a345936e6cd8f46258bfe5f96c93ace36a13f954c0a590dd03a33e34",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentTurn::new"]
+    },
+    "cases": [
+      "agent-canonical.absent-optionals",
+      "agent-canonical.provider-opaque",
+      "agent-canonical.usage"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#Conversation": {
+    "signature": "b204a51def0d912440918441142c71f2fcdca06542c24b2c1f01f0bc5a115425",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::from_seed"]
+    },
+    "cases": [
+      "agent-transcript.seed-only",
+      "agent-transcript.seed-order-not-numeric-keys"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEndedStatus": {
+    "signature": "f56ac43e4e2c196c4da9447ef14499c80f2029bc6e5018e7860ac8dbf7445a87",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::read"
+      ]
+    },
+    "cases": [
+      "agent-transcript.ending-0",
+      "agent-transcript.ending-1",
+      "agent-transcript.ending-2",
+      "agent-transcript.ending-3"
+    ],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEvent": {
+    "signature": "99047880208d12e4104538f1b62d2aa9a69f9918b65a02033786c3de4ef07858",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AgentEventHead": {
+    "signature": "a465d1b6e4f3dd547f84b665437809a77027a988b872f8da6467963451b61dd7",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::transcript::Transcript::on_event"]
+    },
+    "cases": ["agent-canonical.absent-optionals"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  },
+  "@demlik/tea:./agent#AGENT_EVENT_TYPES": {
+    "signature": "5e07b87e7f4adf91ef5c3935eb1fdee3f29ec27cd59262262f9f4d208466fcf1",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::Tagged::tag"]
+    },
+    "cases": ["agent-transcript.live-seeded"],
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+  }
+}

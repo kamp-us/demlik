@@ -1,0 +1,81 @@
+{
+  "node": "v22.21.1",
+  "v8": "12.4.254.21-node.33",
+  "rows": [
+    {
+      "id": "turns-string",
+      "value": {
+        "turns": [
+          "a",
+          "😀",
+          "\ud800"
+        ],
+        "tools": [],
+        "outcome": {
+          "kind": "running"
+        }
+      }
+    },
+    {
+      "id": "call-id-missing",
+      "value": {
+        "turns": [],
+        "tools": [
+          {
+            "result": 1
+          }
+        ],
+        "outcome": {
+          "kind": "running"
+        }
+      }
+    },
+    {
+      "id": "call-id-number",
+      "value": {
+        "turns": [],
+        "tools": [
+          {
+            "callId": 42,
+            "result": 1
+          }
+        ],
+        "outcome": {
+          "kind": "running"
+        }
+      }
+    },
+    {
+      "id": "call-id-null",
+      "value": {
+        "turns": [],
+        "tools": [
+          {
+            "callId": null,
+            "result": 1
+          }
+        ],
+        "outcome": {
+          "kind": "running"
+        }
+      }
+    },
+    {
+      "id": "call-id-object",
+      "value": {
+        "turns": [],
+        "tools": [
+          {
+            "callId": {
+              "raw": "id"
+            },
+            "result": 1
+          }
+        ],
+        "outcome": {
+          "kind": "running"
+        }
+      }
+    }
+  ]
+}

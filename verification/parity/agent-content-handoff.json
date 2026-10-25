@@ -1,0 +1,314 @@
+{
+  "scope": "Frozen agent/content.ts and transcript.ts, with only their canonical shared carrier facts. No agent factory, provider, SDK, children, schema guards, status function or lifecycle projector port.",
+  "base": "071bc58",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "branch": "can/rust-agent-content-transcript",
+  "worktree": "/private/tmp/demlik-rust-agent-content-01a16c9d",
+  "design": {
+    "parts": "ContentPart exhaustively holds Rc<TextPart/ImagePart/FilePart>; Parts is Rc<RefCell<Vec<ContentPart>>>. content_parts returns the original array or fresh one-text-part array; omit_media retains text and mints media placeholders. JsText remains the canonical UTF16 owner.",
+    "media": "MediaBytes is an Rc view over fixed Rc<[Cell<u8>]> storage. Checked native range views share backing storage and mutations; copied allocates independent storage. Conditional serialization uses actual string index keys as Source Uint8Array JSON does. Native helpers do not reimplement JavaScript typed-array index coercion.",
+    "collector": "Transcript<R,T=AgentTurn,F=PlainData> keeps Rc turn/result/status identities and fresh snapshot arrays. Typed dense seed copies the outer arrays and filters only OK tool results in settle order; duplicates and late events remain. Running is distinct from Ended(existing Rc<AgentEndedStatus>), and Done(None) is valid. Ended serializes flat, with no accidental wrapper. listener owns the same local collector, and snapshots do not require Clone/serde/Send/static on underlying data.",
+    "canonicalFacts": "One types.rs owns ToolCall/AgentTurn/Usage/Conversation/Awaiting/ToolRecord/ToolOutcome and AgentEvent/Head/EndedStatus carriers. The terminal failure remains typed opaque F until the factory binds it; no placeholder AgentFailure union was introduced. Existing QueueField optional-property and PlainData/JsonData owners are reused. Only wire serialization adds Serialize bounds.",
+    "rawBoundary": "from_plain_seed specialises the existing canonical PlainData boundary. It preserves measured nullish defaults, Source property access errors, exact two array-operation refusals, and UTF16 code-point string iteration. It intentionally requires a string callId, so malformed raw IDs are reported as known boundary differences, never Source-exact."
+  },
+  "profile": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "rust": "rustc1.99.1 (58cf8f9c3 2026-10-13)",
+    "debug": 0,
+    "incremental": false,
+    "jobs": 1
+  },
+  "verification": {
+    "strictShared": {
+      "passed": 79,
+      "cases": 79,
+      "nativeEvidenceCases": 79,
+      "protocolRefusals": 7,
+      "failures": [],
+      "report": "target/parity/agent-content.json"
+    },
+    "knownRawDifferences": {
+      "count": 4,
+      "parityPassed": false,
+      "usedAsNativeEvidence": false,
+      "rows": [
+        {
+          "id": "agent-seed.raw-call-id-missing",
+          "qualification": "typed-call-id-boundary",
+          "strictParity": false,
+          "source": {
+            "value": {
+              "turns": [],
+              "tools": [
+                {
+                  "result": 1
+                }
+              ],
+              "outcome": {
+                "kind": "running"
+              }
+            }
+          },
+          "native": {
+            "error": {
+              "name": "TypeError",
+              "message": "transcript tool callId must be a string"
+            }
+          },
+          "nativeError": {
+            "name": "TypeError",
+            "message": "transcript tool callId must be a string",
+            "valueKind": "undefined"
+          },
+          "observedCalls": [
+            "demlik_tea::agent::transcript::Transcript::from_plain_seed"
+          ]
+        },
+        {
+          "id": "agent-seed.raw-call-id-number",
+          "qualification": "typed-call-id-boundary",
+          "strictParity": false,
+          "source": {
+            "value": {
+              "turns": [],
+              "tools": [
+                {
+                  "callId": 42,
+                  "result": 1
+                }
+              ],
+              "outcome": {
+                "kind": "running"
+              }
+            }
+          },
+          "native": {
+            "error": {
+              "name": "TypeError",
+              "message": "transcript tool callId must be a string"
+            }
+          },
+          "nativeError": {
+            "name": "TypeError",
+            "message": "transcript tool callId must be a string",
+            "value": 42,
+            "valueKind": "number"
+          },
+          "observedCalls": [
+            "demlik_tea::agent::transcript::Transcript::from_plain_seed"
+          ]
+        },
+        {
+          "id": "agent-seed.raw-call-id-null",
+          "qualification": "typed-call-id-boundary",
+          "strictParity": false,
+          "source": {
+            "value": {
+              "turns": [],
+              "tools": [
+                {
+                  "callId": null,
+                  "result": 1
+                }
+              ],
+              "outcome": {
+                "kind": "running"
+              }
+            }
+          },
+          "native": {
+            "error": {
+              "name": "TypeError",
+              "message": "transcript tool callId must be a string"
+            }
+          },
+          "nativeError": {
+            "name": "TypeError",
+            "message": "transcript tool callId must be a string",
+            "value": null,
+            "valueKind": "null"
+          },
+          "observedCalls": [
+            "demlik_tea::agent::transcript::Transcript::from_plain_seed"
+          ]
+        },
+        {
+          "id": "agent-seed.raw-call-id-object",
+          "qualification": "typed-call-id-boundary",
+          "strictParity": false,
+          "source": {
+            "value": {
+              "turns": [],
+              "tools": [
+                {
+                  "callId": {
+                    "raw": "id"
+                  },
+                  "result": 1
+                }
+              ],
+              "outcome": {
+                "kind": "running"
+              }
+            }
+          },
+          "native": {
+            "error": {
+              "name": "TypeError",
+              "message": "transcript tool callId must be a string"
+            }
+          },
+          "nativeError": {
+            "name": "TypeError",
+            "message": "transcript tool callId must be a string",
+            "value": {
+              "raw": "id"
+            },
+            "valueKind": "object"
+          },
+          "observedCalls": [
+            "demlik_tea::agent::transcript::Transcript::from_plain_seed"
+          ]
+        }
+      ]
+    },
+    "manualProfile": {
+      "sourceOnly": true,
+      "nativeQualification": "Native interface uses dense ordered sequences, without sparse/prototype/custom-iterator JS array behavior.",
+      "sourceReport": "target/agent-content-manual-profile.json",
+      "probeFixtures": [
+        "verification/parity/agent-content-source-probe.json.fixture",
+        "verification/parity/agent-content-raw-profile-source.json.fixture"
+      ],
+      "customTurnOrder": ["live", "seed"]
+    },
+    "compiledControls": {
+      "detected": 16,
+      "escaped": 0,
+      "allRequiredDeclaredWitnesses": true,
+      "report": "target/parity/agent-content-mutations.json",
+      "baseline": {
+        "cases": 79,
+        "passed": 79,
+        "profileObservations": 4
+      },
+      "sourceAndArtifactUnchanged": true,
+      "build": {
+        "baselineTarget": "/private/tmp/demlik-rust-agent-content-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-agent-content-01a16c9d/target/agent-content-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1
+      }
+    },
+    "native": {
+      "teaTestsIncludingDocs": 314,
+      "compileFailDocs": 22,
+      "newCompileFailDocs": 2,
+      "newPublicPositiveConsumers": 14,
+      "includes": "borrowed opaque model/result/cause and canonical tool args/provider; bound listener after handle drop; native cause Drop re-entry; actual retained tool-result media view and nested wire; null Done and status identity; seed filtering/order; raw refusal input retention"
+    },
+    "sourceTests": {
+      "files": ["agent/content.test.ts", "agent/transcript.test.ts"],
+      "passed": 14
+    },
+    "static": {
+      "teaAllTargetsClippy": "passed -D warnings",
+      "allParityTsc": "passed",
+      "verifierBiome": "passed all7 owned verifier/metadata files",
+      "rustFmt": "passed",
+      "exactInventoryMappings": 24,
+      "mappingGaps": [],
+      "knownDifferenceCasesMapped": 0,
+      "gitDiffCheck": "passed"
+    }
+  },
+  "redGreen": {
+    "content": "Public missing-module red then3green; transcript public missing-module red then11green.",
+    "nestedMedia": "First actual shared trace was61/73strict: nested MediaBytes numeric native map keys failed canonical plain_data; fixed to actual string index properties. The original red report is retained and a public nested-media wire regression was added.",
+    "rawErrorEvidence": "The first observer attempted standalone JSON of Undefined offending values; the boundary now retains valueKind=undefined while omitting the unrepresentable JSON field. Original native error data remains boxed in TranscriptSeedError.",
+    "controlScope": "Every mutant compiles as a disposable copy and mismatches its declared Source/native case. No compile failure or unrelated-only error counted as a detection."
+  },
+  "centralIntegration": {
+    "run": "import { agentContentParity } from \"./agent-content-run.mjs\"; add79 strict rows/nativeEvidence and7protocol rejects. Keep4 profile observations separately, not as parity-passed or coverage evidence.",
+    "contracts": "verification/parity/agent-content-contracts.json contains24 exact Source inventory entries, including the two exact Transcript callable-member signatures. Native-profile qualifications are explicit.",
+    "noCentralFilesEdited": true,
+    "parentOwnsFullPortClaim": true
+  },
+  "commands": {
+    "shared": "pnpm exec node verification/parity/agent-content-run.mjs",
+    "controls": "pnpm exec node verification/parity/agent-content-mutations.mjs",
+    "manual": "pnpm exec node --import ./verification/parity/node_modules/tsx/dist/loader.mjs verification/parity/agent-content-manual-profile.mjs",
+    "native": "cargo test --locked -p demlik-tea",
+    "clippy": "cargo clippy --locked -p demlik-tea --all-targets -- -D warnings",
+    "source": "pnpm --filter @demlik/tea exec vitest run src/agent/content.test.ts src/agent/transcript.test.ts --maxWorkers=1",
+    "typecheck": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json"
+  },
+  "integrity": {
+    "sourcePackagesUnchangedFromReference": true,
+    "sourceHashes": {
+      "content.ts": "e44f3636e5025ef333f86bc6a910a75078d46c1047ba2cb82adf54e13fb5a8c6",
+      "transcript.ts": "c9294ff5a370f03f4662db4667b56fbaddce877341987b030391a83ae88b80da",
+      "types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042"
+    },
+    "baselineBinarySha256": "89cb561c29d9623fe796ee88e7be95024872df59462ed6f361d14683a84739e4",
+    "baselineAndMutantTargetsSeparate": true,
+    "old9fCheckpointAndReceiptsFrozen": true,
+    "noNetworkDockerRemoteOrMainWrites": true,
+    "licenseHashes": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    }
+  },
+  "ownedFilesSha256": {
+    "crates/tea/src/lib.rs": "cc28a696ac99b45dd2f022a60e0932da73956fd3bf36d66cd8c4aefb5aba6d5a",
+    "crates/tea/src/agent/mod.rs": "b93c224e3f7c98ab1c5093528ddc5d8af38621f71cce03e640ad42027c529df3",
+    "crates/tea/src/agent/content.rs": "5b1f2cee2f9997dac341da2f19e352a584d9bd6650e5b897de889b9a9272ee18",
+    "crates/tea/src/agent/types.rs": "97271ffa6e6d7369bdd430857f5f60c9bc0a8be08684314967fdded3734d1853",
+    "crates/tea/src/agent/transcript.rs": "90219ea0996429822985ebf8c0499ee92d6c935c0a8b34ca3acbc5467e64d108",
+    "crates/tea/tests/agent_content.rs": "a4fe8c130ec408429786e4ad45b7f83774357ae447ce06e73569ee573278a2c4",
+    "crates/tea/tests/agent_transcript.rs": "f07d1ab8fdb488258d5640e3777f6e6133f7b484df553f3ab292afdc91e37acc",
+    "crates/tea/examples/agent_content_driver.rs": "80e9f93bd216f51ea8bb9076a87cbc65ad1469c1a3a24fdca0625dbb963a0a4f",
+    "verification/parity/agent-content-reference.mts": "c79dd75d5a8847365f4b53d337fe96a3e3a0ae4988c1cc21368fa26c9b672f89",
+    "verification/parity/agent-content-cases.mjs": "81af761622ce5fbfe1ae3fb1def33e372b0832f24a3994f974807608acf85924",
+    "verification/parity/agent-content-run.mjs": "40eaea677ee77cc542b301dcaaf58c239657d1ce24732ce615eaa9722372de94",
+    "verification/parity/agent-content-mutations.mjs": "9b9f834d324999cd616725fcf13afc1b094e465a86b04f05b732c4cbb4cff495",
+    "verification/parity/agent-content-manual-profile.mjs": "03305e3cf6562836d58760593ef82753ec531c21041f483d881119e055bb18a7",
+    "verification/parity/agent-content-contracts.json": "199862c868b7385db2762b0a058c6265715d26addea0f64f6cd571968c5b22b1",
+    "verification/parity/agent-content-source-probe.json.fixture": "c39e6aa0ed9d92b9144686f8b24b4442b415fb8766fc480a2f33b06e329ae0f7",
+    "verification/parity/agent-content-raw-profile-source.json.fixture": "7747c6eb2552ea91fd4cfae892082f95894403c4a624c57583a1373711d0282e"
+  },
+  "reportsSha256": {
+    "target/parity/agent-content.json": "0cf2264fa5dab3dbdb57bdabfbd243a3de88ff66407500ff068a10b876740b2f",
+    "target/parity/agent-content-first-red.json": "2b8cbdb87f86be06bb5a865d44429bcd9159277b6ffddaa8b6101531b442f8da",
+    "target/parity/agent-content-mutations.json": "3410a972210227153cf03940a0dd729647965c08eac636ab9a34e17463a6fc78",
+    "target/parity/agent-content-mutation-baseline.json": "0cf2264fa5dab3dbdb57bdabfbd243a3de88ff66407500ff068a10b876740b2f",
+    "target/agent-content-manual-profile.json": "a6fdc2669256ac957ecfeb12738586577c1646b04480afa4c065c02743bdb721"
+  },
+  "logsSha256": {
+    "target/agent-content-red.log": "6571d48919c19045a0b0e21dace0b4ba59e9e0ff2a30017e5cfe077a9d01057a",
+    "target/agent-content-green.log": "4e7d5c71c129f55e8112afdf1814a4cea7fcc761be835cc7e9f176bcebccd6f2",
+    "target/agent-transcript-red.log": "ad3e8472488a22fb93f24d190a02e5f74abed6be326087f1734f560621e8e66f",
+    "target/agent-transcript-green.log": "843a414948138b4b7c782a839d0f1e45cb4b801fa1468901d8e59d8a9f160714",
+    "target/agent-content-transcript-green.log": "4f6058bcec5974e3a1eb9e1a9a1f99e6a97da793fd2ffc9fdb11aaf08cabfd45",
+    "target/agent-content-first-pairs.log": "a58e12be4c53934ae3d6b3570ab2a4a7da48f4df2ba099ad39389b8ea59ab95b",
+    "target/agent-content-final-pairs.log": "f202dcd656db3326cb0886cabf3f8ce3705792e4efef30a659ee962ee8a35568",
+    "target/agent-content-native.log": "8ad34a54fe466037c3ba31a624ba5b184ef43e1cd5c77601c09b141e59e186a0",
+    "target/agent-content-source-tests.log": "f9b69b00f9212db909400d65c3b09901dcdfac929e332cc784c06b8695811c37",
+    "target/agent-content-clippy.log": "b7fc396dadae8ba5c32c9f37612cd30db15db049c730c1dec8d100e6ca4a8187",
+    "target/agent-content-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-content-mutations.log": "83bd1e1ac35e503d59d3b46d5797f62fe5dae138f4a9dd793e0410587f9d8007",
+    "target/agent-content-contracts-check.log": "4e3e306fb48a4edd3f60a0ce60a8e6d3a3a091db7670b2e7d168afadcd9a8ed3",
+    "target/agent-content-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-content-lint.log": "aacc4fafe16f6c91e944f305c0cc2b5469d493725d796baa8c38c81cd96f462a"
+  },
+  "blindSpots": [
+    "Four malformed raw callId forms are retained by Source but refused by the native string-ID raw boundary; these are known differences, not strict parity.",
+    "Sparse/inherited/custom-iterator JS array behavior is measured manually and outside dense native sequence interfaces.",
+    "No agent factory/provider/SDK/children/schema/status/projector completion claim; those modules were inspected only as needed for canonical facts.",
+    "Pure constructors/updates need no serde/Clone/Send/static; caller-owned codecs are still needed at actual IO boundaries for opaque Rust data."
+  ]
+}

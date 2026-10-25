@@ -1,0 +1,112 @@
+{
+  "node": "v22.21.1",
+  "v8": "12.4.254.21-node.33",
+  "content": {
+    "sameArray": true,
+    "sameRepeatedArray": true,
+    "plainFreshArray": true,
+    "plainFreshPart": true,
+    "omittedFreshArrays": true,
+    "textRetained": true,
+    "placeholderFresh": true,
+    "omitted": [
+      {
+        "type": "text",
+        "text": "keep\ud800"
+      },
+      {
+        "type": "text",
+        "text": "[image omitted]"
+      },
+      {
+        "type": "text",
+        "text": "[file omitted]"
+      }
+    ],
+    "passLengthAfterPush": 4,
+    "media": {
+      "sameView": true,
+      "differentView": true,
+      "sameBuffer": true,
+      "offset": 1,
+      "length": 2,
+      "backing": [
+        10,
+        21,
+        32,
+        40
+      ],
+      "view": [
+        21,
+        32
+      ],
+      "copy": [
+        99,
+        30
+      ]
+    }
+  },
+  "transcript": {
+    "freshSnapshots": true,
+    "freshTurns": true,
+    "freshTools": true,
+    "turnRetained": true,
+    "resultRetained": true,
+    "toolWrapperRetained": true,
+    "runningOutcomeRetained": true,
+    "seedOwnKeys": [
+      "0",
+      "1",
+      "2",
+      "01"
+    ],
+    "seedTools": [
+      "2"
+    ],
+    "seedOuterMutationIgnored": true,
+    "opaqueMutationVisible": true,
+    "statusRetained": true,
+    "repeatStatusRetained": true,
+    "doneNull": true,
+    "firstStaysRunning": true,
+    "lateEventKept": true,
+    "snapshotMutationIsolated": true,
+    "liveTurnRetained": true,
+    "tools": [
+      "2",
+      "again"
+    ]
+  },
+  "seedEnumeration": {
+    "sparseTools": [
+      "2",
+      "2"
+    ],
+    "spreadHoleBecomesOwnUndefined": true,
+    "malformed": {
+      "objectTurns": {
+        "name": "TypeError",
+        "message": "((intermediate value) ?? []) is not iterable"
+      },
+      "objectTools": {
+        "name": "TypeError",
+        "message": "((intermediate value) ?? []).flatMap is not a function"
+      },
+      "nullConversation": {
+        "turns": 0,
+        "tools": 0,
+        "outcome": "running"
+      },
+      "missingConversation": {
+        "turns": 0,
+        "tools": 0,
+        "outcome": "running"
+      },
+      "nullFields": {
+        "turns": 0,
+        "tools": 0,
+        "outcome": "running"
+      }
+    }
+  }
+}
