@@ -28,6 +28,7 @@ import { runtimeContractParity } from "./runtime-contracts.mjs";
 import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
 import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { sagaParity } from "./saga-run.mjs";
+import { storedCellParity } from "./stored-cell-run.mjs";
 import { timingParity } from "./timing-run.mjs";
 import { workflowParity } from "./workflow-run.mjs";
 
@@ -44,6 +45,7 @@ const pollerBinaryArgument = args.indexOf("--poller-bin");
 const journalBinaryArgument = args.indexOf("--journal-bin");
 const journalRemoteBinaryArgument = args.indexOf("--journal-remote-bin");
 const durableObjectBinaryArgument = args.indexOf("--durable-object-bin");
+const storedCellBinaryArgument = args.indexOf("--stored-cell-bin");
 const jsonTextBinaryArgument = args.indexOf("--json-text-bin");
 const recorderBinaryArgument = args.indexOf("--recorder-bin");
 const reconcilerBinaryArgument = args.indexOf("--reconciler-bin");
@@ -502,6 +504,32 @@ if (!mutationSuite) {
     });
   }
 }
+let storedCell = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    storedCell = await storedCellParity(cargo, {
+      binary:
+        storedCellBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[storedCellBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-stored-cell.json`,
+            ),
+    });
+    failures.push(...storedCell.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "stored-cell.verification",
+      operation: "tea.stored-cell",
+      message: error.message,
+    });
+  }
+}
 let jsonText = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -839,6 +867,7 @@ const report = {
     journal.cases +
     journalRemote.cases +
     durableObject.cases +
+    storedCell.cases +
     jsonText.cases +
     recorder.cases +
     recordedRuntime.cases +
@@ -864,6 +893,7 @@ const report = {
     journal.passed +
     journalRemote.passed +
     durableObject.passed +
+    storedCell.passed +
     jsonText.passed +
     recorder.passed +
     recordedRuntime.passed +
@@ -890,6 +920,7 @@ const report = {
       ...(journal.passed ? ["tea.journal"] : []),
       ...(journalRemote.passed ? ["tea.journal-remote"] : []),
       ...(durableObject.passed ? ["tea.durable-object"] : []),
+      ...(storedCell.passed ? ["tea.stored-cell"] : []),
       ...(jsonText.passed ? ["tea.json-text"] : []),
       ...(recorder.passed ? ["tea.recorder"] : []),
       ...(recordedRuntime.passed ? ["tea.recorder.runtime"] : []),
@@ -940,6 +971,7 @@ const report = {
     nativeEvidence: undefined,
     failures: undefined,
   },
+  storedCell: { ...storedCell, nativeEvidence: undefined, failures: undefined },
   recorder: { ...recorder, nativeEvidence: undefined, failures: undefined },
   recordedRuntime: { ...recordedRuntime, nativeEvidence: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
@@ -993,6 +1025,7 @@ const report = {
     ...journal.nativeEvidence,
     ...journalRemote.nativeEvidence,
     ...durableObject.nativeEvidence,
+    ...storedCell.nativeEvidence,
     ...jsonText.nativeEvidence,
     ...recorder.nativeEvidence,
     ...recordedRuntime.nativeEvidence,

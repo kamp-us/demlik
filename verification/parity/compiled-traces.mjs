@@ -78,6 +78,10 @@ export async function compiledTraceParity(cargo, name, options = {}) {
         ? { qualifications: [report.qualification] }
         : {}),
     ...(report.openGaps ? { openGaps: report.openGaps } : {}),
+    ...(report.adapterAwait ? { adapterAwait: report.adapterAwait } : {}),
+    ...(report.runtimeCases === undefined
+      ? {}
+      : { runtimeCases: report.runtimeCases }),
     ...(report.actions === undefined ? {} : { actions: report.actions }),
     reportFile,
   };

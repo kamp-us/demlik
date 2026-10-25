@@ -1,0 +1,109 @@
+{
+  "scope": "Canonical stored-cell fencing integrated with the current native workspace. Full Rust port remains incomplete.",
+  "base": "ea8780ecb37330faf8c20cdd9f1d0b904cd2ea9e",
+  "sourceLeaf": "5ffc796a274e7bb912494918eb526c0d4188a77c",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "acceptance": {
+    "pairedCases": 10322,
+    "passed": 10322,
+    "behaviorFailures": 0,
+    "nativeAndDocTests": 406,
+    "compileFailDocTests": 18,
+    "evidenceGuardTests": 11,
+    "durableObjectPairs": 169,
+    "storedCellPairs": 97,
+    "actualRuntimePairsIncluded": 8,
+    "allRegisteredFaultSuiteExitCode": 0,
+    "storedCellProductionFaults": 4,
+    "storedCellFixtureFaults": 1,
+    "doRawVersionGapClosed": true,
+    "coverageMapped": 650,
+    "inheritedMemberReferences": 14,
+    "coverageGapCount": 2810,
+    "completeExitCode": 1
+  },
+  "qualifications": [
+    "Only acyclic PlainData payloads with shared root array/object identity are represented.",
+    "Controlled LocalSet/port scripts do not establish arbitrary Ready/join/select/custom-executor scheduling."
+  ],
+  "closedGap": {
+    "id": "raw-fencing-version",
+    "profile": "Acyclic plain-data payloads with actual shared root identity; this does not implement a cyclic JS heap or arbitrary executor scheduling."
+  },
+  "integrationRepairs": [
+    "Automatic merge duplicate DO report fields were removed once; equal is assigned after native spread, from validated trusted case IDs.",
+    "The old stale-file-writer control now targets StoredCell::Number(actual_version) comparison; its semantic fault and witness are unchanged."
+  ],
+  "controls": [
+    {
+      "id": "cells-accept-nan-as-equal",
+      "scope": "production",
+      "detectedCases": 2
+    },
+    {
+      "id": "cells-compare-arrays-structurally",
+      "scope": "production",
+      "detectedCases": 10
+    },
+    {
+      "id": "conflict-copies-retained-fields",
+      "scope": "production",
+      "detectedCases": 8
+    },
+    {
+      "id": "lease-resets-version-before-save",
+      "scope": "production",
+      "detectedCases": 8
+    },
+    {
+      "id": "test-get-omits-source-suspension",
+      "scope": "fixture-await-boundary",
+      "detectedCases": 3
+    }
+  ],
+  "baselineIntegrity": {
+    "baselineAndMutationTargetsSeparate": true,
+    "allCheckedBinariesUnchangedAcrossControls": true,
+    "recorderSha256": "f4a9da0eda772544cb12d823fcf7ec19569ab925a036abce0fa1906e04fd9695",
+    "doSha256": "45939dcf4c2aece8176c6205eee8f4ca98917ee5400cf5c1130314e9f7331752",
+    "storedCellSha256": "7627f3b6c6a5d8748b22d34895a1514e904add053744ece8f97e16c3a9541eb2",
+    "combinedReportSha256": "a1d5870c88912a108e8da03e26428115d295e187d0d4209e088dd36385457a88"
+  },
+  "retainedRedReports": [
+    {
+      "path": "target/parity/stored-cell-first-audit.json",
+      "sha256": "b6e4dce6699e77bf31d2bfc1896c4040805165fe1cc99ce7c515fca974f1811d"
+    },
+    {
+      "path": "target/parity/stored-cell-get-yield-audit.json",
+      "sha256": "4834f326afaa905a491579638e01e30ec0048f789471018ff0a013f37bae873e"
+    }
+  ],
+  "ownerExactReceipt": {
+    "path": "/private/tmp/demlik-rust-policies-01a16c9d/target/parity/stored-cell-receipt.json",
+    "sha256": "95c9e15f60549c7a1ba98067edc4c3a65e813ab6f93b1eb6ee47b0c1f1c431d9"
+  },
+  "logs": {
+    "native": {
+      "path": "/private/tmp/demlik-stored-cell-main-native-01a16c9d.log",
+      "sha256": "1ed35510765789f4da543f7187d9f7f42f9c4c2a963f7b21a7ce1897d1e8f902"
+    },
+    "static": {
+      "path": "/private/tmp/demlik-stored-cell-main-static-01a16c9d-r2.log",
+      "sha256": "ca93d3c327cae80de856996f949402cb7e6511de1bc148d79ae9833b8d535548"
+    },
+    "guards": {
+      "path": "/private/tmp/demlik-stored-cell-main-guards-01a16c9d-r2.log",
+      "sha256": "99f3a8b95ca1bc02a4ac6d14361366f26b43654d9dd013d464479f70463b1493"
+    },
+    "complete": {
+      "path": "/private/tmp/demlik-stored-cell-main-complete-01a16c9d-r2.log",
+      "sha256": "b59b1853a06f173b67d6e718821d7705af4b470f7718a364da1f72b9fc122aea"
+    },
+    "allRegisteredControls": {
+      "path": "/private/tmp/demlik-stored-cell-main-all-controls-01a16c9d.log",
+      "sha256": "681e4148e590e8305a6935efb642d4a016cde7b927f9b41a8adeaf57ae819c86"
+    }
+  }
+}

@@ -2095,8 +2095,6 @@ export async function verifyDurableObject(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
-    passed: cases.length - mismatches.length,
-    failures: mismatches,
     comparison:
       "actual snapshot/event-store actions, storage ordering and bytes, failures, callbacks, retained models, lazy event ranges and recovery; raw platform syntax diagnostics retained separately",
     qualification:
@@ -2131,7 +2129,6 @@ export async function verifyDurableObject(
         : [],
     cases: cases.map((item, index) => ({
       ...item,
-      equal: !mismatches.some((m) => m.id === item.id),
       ...results[index],
       equal: !mismatches.some((failure) => failure.id === item.id),
       source: source[index],

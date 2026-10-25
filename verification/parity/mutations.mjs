@@ -57,7 +57,7 @@ const mutations = [
   {
     name: "file-cas-accepts-stale-writer",
     file: "crates/tea/src/file_store.rs",
-    before: "if actual_version != expected_version {",
+    before: "if StoredCell::Number(actual_version) != expected_version {",
     after: "if false {",
     witness: "storage.file-fenced-cas-no-overwrite",
   },
