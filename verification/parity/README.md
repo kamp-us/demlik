@@ -24,6 +24,10 @@ The implementations live beside each other in `packages/` and `crates/`.
    loader. Impurity vocabulary helpers cover globals, constructors and runtime
    module imports. AST impurity checks reuse OXC trees and compare global reads,
    bound names, destructuring and type positions, including real repository files.
+   Zone checks compare impurity verdicts and the test role's per-kind policy,
+   including retained references. Data-site checks compare lexical binding
+   aliases, method calls and SQL access heuristics; the full data report remains
+   a separate scope.
    Wrangler catalog checks load shared JSONC/TOML files,
    manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
