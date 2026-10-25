@@ -10,6 +10,7 @@ import { checkCoverage } from "./coverage.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
+import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { runtimeParity } from "./runtime.mjs";
@@ -27,6 +28,7 @@ const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
 const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
+const monitoredRunBinaryArgument = args.indexOf("--monitored-run-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
 const deadlineBinaryArgument = args.indexOf("--deadline-bin");
 const paginateQueueBinaryArgument = args.indexOf("--paginate-queue-bin");
@@ -321,6 +323,32 @@ if (!mutationSuite) {
     });
   }
 }
+let monitoredRun = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    monitoredRun = await monitoredRunParity(cargo, {
+      binary:
+        monitoredRunBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[monitoredRunBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-monitored-run.json`,
+            ),
+    });
+    failures.push(...monitoredRun.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "monitored-run.verification",
+      operation: "tea.monitored-run",
+      message: error.message,
+    });
+  }
+}
 let runtimeHooks = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -470,6 +498,7 @@ const report = {
     runtimeContracts.cases +
     commandFamilies.cases +
     flow.cases +
+    monitoredRun.cases +
     runtimeHooks.cases +
     runtimeDeadline.cases +
     paginateQueue.cases +
@@ -482,6 +511,7 @@ const report = {
     runtimeContracts.passed +
     commandFamilies.passed +
     flow.passed +
+    monitoredRun.passed +
     runtimeHooks.passed +
     runtimeDeadline.passed +
     paginateQueue.passed -
@@ -495,6 +525,7 @@ const report = {
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
       ...(commandFamilies.passed ? ["tea.command.families"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
+      ...(monitoredRun.passed ? ["tea.monitored-run"] : []),
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
       ...(runtimeDeadline.passed ? ["tea.runtime.deadline"] : []),
       ...(paginateQueue.passed ? ["tea.paginate-and-queue"] : []),
@@ -515,6 +546,11 @@ const report = {
     failures: undefined,
   },
   flow: { ...flow, nativeEvidence: undefined, failures: undefined },
+  monitoredRun: {
+    ...monitoredRun,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
   paginateQueue: {
     ...paginateQueue,
     nativeEvidence: undefined,
@@ -552,6 +588,7 @@ const report = {
     ...runtimeContracts.nativeEvidence,
     ...commandFamilies.nativeEvidence,
     ...flow.nativeEvidence,
+    ...monitoredRun.nativeEvidence,
     ...runtimeHooks.nativeEvidence,
     ...runtimeDeadline.nativeEvidence,
     ...paginateQueue.nativeEvidence,
