@@ -1,0 +1,883 @@
+{
+  "defaultEmptyFresh": true,
+  "node": "v22.21.1",
+  "v8": "12.4.254.21-node.33",
+  "scenarios": [
+    {
+      "name": "factory-loader-held",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 1,
+      "schemaReads": 2,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": true,
+      "lastParsedSame": true,
+      "firstParsedSame": true,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 0,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "factory-default-messages",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "trace": [
+        "factory",
+        "schema:1",
+        "bind",
+        "invoke",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 1,
+      "schemaReads": 2,
+      "boundSame": true,
+      "messagesSame": false,
+      "defaultEmpty": true,
+      "inputSame": false,
+      "rawSame": true,
+      "lastParsedSame": true,
+      "firstParsedSame": true,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 0,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "factory-schema-transform",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 1,
+      "schemaReads": 2,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": false,
+      "lastParsedSame": true,
+      "firstParsedSame": true,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 1,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "factory-validates-transform-twice",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke",
+        "parse:first",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 2,
+      "schemaReads": 2,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": false,
+      "lastParsedSame": true,
+      "firstParsedSame": false,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 2,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "plain-transform-twice",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "loader"
+      ],
+      "trace": [
+        "loader",
+        "schema:1",
+        "plain",
+        "parse:first",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 2,
+      "schemaReads": 2,
+      "boundSame": null,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": false,
+      "lastParsedSame": true,
+      "firstParsedSame": false,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 2,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "wrapped-transform-twice",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "loader"
+      ],
+      "trace": [
+        "loader",
+        "schema:1",
+        "plain-sync-prefix",
+        "parse:first",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 2,
+      "schemaReads": 2,
+      "boundSame": null,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": false,
+      "lastParsedSame": true,
+      "firstParsedSame": false,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 2,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "distinct-schemas",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "loader"
+      ],
+      "trace": [
+        "loader",
+        "schema:1",
+        "plain",
+        "parse:first",
+        "schema:2",
+        "parse:second"
+      ],
+      "parses": 2,
+      "schemaReads": 2,
+      "boundSame": null,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": false,
+      "lastParsedSame": true,
+      "firstParsedSame": false,
+      "causeSame": null,
+      "errOfCauseSame": null,
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 2,
+          "opaque": {
+            "n": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "factory-factory-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory"
+      ],
+      "trace": [
+        "factory"
+      ],
+      "parses": 0,
+      "schemaReads": 0,
+      "boundSame": false,
+      "messagesSame": false,
+      "defaultEmpty": null,
+      "inputSame": false,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "factory-loader-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader"
+      ],
+      "parses": 0,
+      "schemaReads": 0,
+      "boundSame": false,
+      "messagesSame": false,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "factory-schema-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": false,
+      "messagesSame": false,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "factory-bind-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": false,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "factory-invoke-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "factory-parse1-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 1,
+      "schemaReads": 2,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "plain-first-parse-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "loader"
+      ],
+      "trace": [
+        "loader",
+        "schema:1",
+        "plain",
+        "parse:first"
+      ],
+      "parses": 1,
+      "schemaReads": 1,
+      "boundSame": null,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "plain-second-parse-error",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "loader"
+      ],
+      "trace": [
+        "loader",
+        "schema:1",
+        "plain",
+        "parse:first",
+        "schema:2",
+        "parse:first"
+      ],
+      "parses": 2,
+      "schemaReads": 2,
+      "boundSame": null,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "original\ud800"
+          }
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "original-raw-cause-0",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "$value": "undefined"
+        },
+        "ownCause": true
+      }
+    },
+    {
+      "name": "original-raw-cause-1",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": null,
+        "ownCause": true
+      }
+    },
+    {
+      "name": "original-raw-cause-2",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": "raw cause",
+        "ownCause": true
+      }
+    },
+    {
+      "name": "original-raw-cause-3",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": 17,
+        "ownCause": true
+      }
+    },
+    {
+      "name": "original-raw-cause-4",
+      "beforeHandle": [],
+      "synchronousPrefix": [
+        "factory",
+        "loader"
+      ],
+      "trace": [
+        "factory",
+        "loader",
+        "schema:1",
+        "bind",
+        "invoke"
+      ],
+      "parses": 0,
+      "schemaReads": 1,
+      "boundSame": true,
+      "messagesSame": true,
+      "defaultEmpty": null,
+      "inputSame": true,
+      "rawSame": null,
+      "lastParsedSame": null,
+      "firstParsedSame": null,
+      "causeSame": true,
+      "errOfCauseSame": true,
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "reason": "payload",
+          "raw": "\ud800"
+        },
+        "ownCause": true
+      }
+    }
+  ],
+  "manualSourceOnly": [
+    {
+      "name": "missing",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "TypeError",
+            "message": "model is not a function"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": false
+    },
+    {
+      "name": "null",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "TypeError",
+            "message": "model is not a function"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": false
+    },
+    {
+      "name": "number",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "TypeError",
+            "message": "model is not a function"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": false
+    },
+    {
+      "name": "bare-sync-promise",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "model: a sync function returned a Promise where an Llm was expected — a promise-returning model that is not declared `async` must be wrapped in plainModel(fn) (see the agent's model ports)"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": true
+    },
+    {
+      "name": "bare-sync-rejection",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "model: a sync function returned a Promise where an Llm was expected — a promise-returning model that is not declared `async` must be wrapped in plainModel(fn) (see the agent's model ports)"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": true
+    },
+    {
+      "name": "object-thenable",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "model: a sync function returned a Promise where an Llm was expected — a promise-returning model that is not declared `async` must be wrapped in plainModel(fn) (see the agent's model ports)"
+          }
+        },
+        "ownCause": true
+      },
+      "misroute": true
+    },
+    {
+      "name": "function-with-then",
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 1
+        }
+      },
+      "misroute": false
+    },
+    {
+      "name": "object-non-callable-then",
+      "outcome": {
+        "kind": "ok",
+        "key": "k",
+        "purpose": "turn",
+        "output": {
+          "value": 2
+        }
+      },
+      "misroute": false
+    },
+    {
+      "name": "then-getter-throw",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "then getter original"
+          }
+        },
+        "ownCause": true
+      },
+      "causeSame": true
+    },
+    {
+      "name": "then-call-throw",
+      "outcome": {
+        "kind": "error",
+        "tag": "port_rejected",
+        "cause": {
+          "error": {
+            "name": "Error",
+            "message": "then getter original"
+          }
+        },
+        "ownCause": true
+      },
+      "causeSame": true
+    }
+  ],
+  "introspectionSourceOnly": {
+    "async": true,
+    "asyncTwoArguments": true,
+    "boundAsync": true,
+    "syncPromise": false,
+    "wrapped": false,
+    "spoofed": true,
+    "asyncGenerator": false,
+    "constructionCauseSame": true
+  },
+  "misrouteReason": "model: a sync function returned a Promise where an Llm was expected — a promise-returning model that is not declared `async` must be wrapped in plainModel(fn) (see the agent's model ports)"
+}
