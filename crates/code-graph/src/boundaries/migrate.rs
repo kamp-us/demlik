@@ -4,17 +4,12 @@ use super::{
     violation::ScopeBoundaryReport,
 };
 use crate::text::JsString;
-use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 
 pub const LEGACY_CEILINGS_FILENAME: &str = "boundary-ceilings.json";
 pub const MIGRATED_REASON: &str = "grandfathered from boundary-ceilings.json";
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct ScopeCountCeilings {
-    pub default: f64,
-    pub scopes: IndexMap<JsString, f64>,
-}
+pub use crate::ratchet::scope_count::ScopeCountCeilings;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CeilingBreach {
     pub scope: JsString,
@@ -64,17 +59,7 @@ pub fn migrated_ledger(
                 .count();
             // The source's numeric record still inherits Object.prototype. An
             // inherited function/object compares as NaN; an own number wins.
-            let ceiling = ceilings
-                .scopes
-                .get(&report.scope)
-                .copied()
-                .unwrap_or_else(|| {
-                    if crate::text::has_object_prototype_property(&report.scope) {
-                        f64::NAN
-                    } else {
-                        ceilings.default
-                    }
-                });
+            let ceiling = ceilings.ceiling_of(&report.scope).number_for_comparison();
             ((measured as f64) > ceiling).then(|| CeilingBreach {
                 scope: report.scope.clone(),
                 measured: measured as f64,

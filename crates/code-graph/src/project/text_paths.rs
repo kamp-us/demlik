@@ -67,7 +67,13 @@ pub(crate) fn resolve_path_text(base: &Path, child: &JsString) -> Result<JsStrin
     ))
 }
 pub(crate) fn relative_path_text(root: &Path, target: &JsString) -> Result<JsString, io::Error> {
-    let root = absolute(&root.to_string_lossy().as_ref().into())?;
+    relative_path_text_from(&root.to_string_lossy().as_ref().into(), target)
+}
+pub(crate) fn relative_path_text_from(
+    root: &JsString,
+    target: &JsString,
+) -> Result<JsString, io::Error> {
+    let root = absolute(root)?;
     let target = absolute(target)?;
     let from: Vec<_> = root
         .units()
