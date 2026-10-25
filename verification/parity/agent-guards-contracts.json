@@ -1,0 +1,120 @@
+{
+  "@demlik/tea:./agent#TurnUsage": {
+    "signature": "39e031afe6f6e5dd35f9e831328f860dc94943b03a0c9effce78ca51ff7241ab",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::conversation::add_usage"]
+    },
+    "cases": [
+      "agent-guards.sum-all-counts",
+      "agent-guards.sum-negative-zero",
+      "agent-guards.sum-infinite-overflow"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isTurnUsage": {
+    "signature": "d55094811c1f400117fe7e6717c7ebc3c3a59ab1387a157f9de9c6e96b903c04",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::is_turn_usage"]
+    },
+    "cases": [
+      "agent-guards.usage-cached-exceeds-input",
+      "agent-guards.count-inputTokens-max-safe",
+      "agent-guards.count-inputTokens-unsafe",
+      "agent-guards.count-inputTokens-fraction",
+      "agent-guards.count-reasoningTokens-undefined"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isAgentTurn": {
+    "signature": "7a5a6cd9b57d52f3315fb326d9f79908b17d373ddc60f8fe6d8ed0b626668ec0",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::is_agent_turn"]
+    },
+    "cases": [
+      "agent-guards.turn-tool-array-args",
+      "agent-guards.turn-late-tool-invalid",
+      "agent-guards.turn-provider-null",
+      "agent-guards.turn-usage-null"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#agentTurnSchema": {
+    "signature": "fbbc203487b8a7b198ca661bf7e2618bfb9b9223e57e3286b7d921bbc5b63408",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::types::AGENT_TURN_SCHEMA",
+        "demlik_tea::llm_call::Schema::parse"
+      ]
+    },
+    "cases": [
+      "agent-guards.turn-extra-retained",
+      "agent-guards.turn-tool-object-args",
+      "agent-guards.turn-usage-invalid"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#CompactionPurpose": {
+    "signature": "ce60a01bddc015c531a969c777b65b4571466898aa7f2e3838b466fd79cafd1f",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::llm_call::Purpose::key"]
+    },
+    "cases": ["agent-guards.vocabulary-normal"],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#COMPACTION_PURPOSE": {
+    "signature": "ed141a0fb9e139fd2a21a64eb45400cdb43e3b21da826c08f3b9c2b5d70e4e28",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::agent::compaction::COMPACTION_PURPOSE"]
+    },
+    "cases": ["agent-guards.vocabulary-empty", "agent-guards.vocabulary-lone"],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#isCompactionSummary": {
+    "signature": "c9247a88dd5e77c7ad63762bb6744249273a65b86f83c5b4e84cb7951fa744fd",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::agent::compaction::is_compaction_summary"]
+    },
+    "cases": [
+      "agent-guards.summary-empty",
+      "agent-guards.summary-number",
+      "agent-guards.summary-lone"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#compactionSummarySchema": {
+    "signature": "85c45a15e8a899523b081d4febc2602c76c90eb15308b8e6c5fc43b727983274",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": [
+        "demlik_tea::agent::compaction::COMPACTION_SUMMARY_SCHEMA",
+        "demlik_tea::llm_call::Schema::parse"
+      ]
+    },
+    "cases": [
+      "agent-guards.summary-lone",
+      "agent-guards.summary-number",
+      "agent-guards.summary-object"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  },
+  "@demlik/tea:./agent#CompactionSummary": {
+    "signature": "771efeda774375ec95fcbd5e76950ee80b127e7a99c9b93fe23b29affd8a95da",
+    "rust": {
+      "file": "crates/tea/src/agent/compaction.rs",
+      "symbols": ["demlik_tea::data::plain_data"]
+    },
+    "cases": [
+      "agent-guards.vocabulary-normal",
+      "agent-guards.vocabulary-lone",
+      "agent-guards.vocabulary-astral"
+    ],
+    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+  }
+}

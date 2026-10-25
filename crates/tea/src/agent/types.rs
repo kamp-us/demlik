@@ -1,5 +1,5 @@
-//! Shared data carried by agent events and conversation seeds. The factory,
-//! schema guards, providers and lifecycle projection are separate consumers.
+//! Shared agent data and its load-bearing guards. The factory, providers and
+//! lifecycle projection are separate consumers.
 
 pub use crate::work_queue::QueueField as AgentField;
 use crate::{
@@ -8,6 +8,57 @@ use crate::{
 };
 use serde::Serialize;
 use std::rc::Rc;
+
+fn is_token_count(value: Option<&PlainData>) -> bool {
+    matches!(value, Some(PlainData::Number(number))
+        if number.is_finite() && number.fract() == 0.0 && *number >= 0.0
+            && *number <= 9_007_199_254_740_991.0)
+}
+
+/// Validates an ordinary dense data object without rebuilding it. JavaScript
+/// prototype properties and named array properties are outside PlainData.
+pub fn is_turn_usage(value: &PlainData) -> bool {
+    let PlainData::Object(fields) = value else {
+        return false;
+    };
+    is_token_count(fields.get("inputTokens"))
+        && is_token_count(fields.get("outputTokens"))
+        && ["reasoningTokens", "cachedInputTokens"]
+            .into_iter()
+            .all(|key| match fields.get(key) {
+                None | Some(PlainData::Undefined) => true,
+                value => is_token_count(value),
+            })
+}
+fn is_tool_call(value: &PlainData) -> bool {
+    let PlainData::Object(fields) = value else {
+        return false;
+    };
+    matches!(fields.get("callId"), Some(PlainData::String(_)))
+        && matches!(fields.get("name"), Some(PlainData::String(_)))
+        && matches!(
+            fields.get("args"),
+            Some(PlainData::Object(_) | PlainData::Array(_))
+        )
+}
+
+/// Checks load-bearing fields. Provider and unknown fields remain opaque.
+pub fn is_agent_turn(value: &PlainData) -> bool {
+    let PlainData::Object(fields) = value else {
+        return false;
+    };
+    matches!(fields.get("content"), Some(PlainData::String(_)))
+        && matches!(fields.get("toolCalls"), Some(PlainData::Array(calls)) if calls.iter().all(is_tool_call))
+        && match fields.get("usage") {
+            None | Some(PlainData::Undefined) => true,
+            Some(usage) => is_turn_usage(usage),
+        }
+}
+
+/// Parsing retains the exact raw handle and unknown fields. It validates,
+/// rather than deserializing into the separate trusted native AgentTurn DTO.
+pub const AGENT_TURN_SCHEMA: super::GuardedSchema =
+    super::schema::schema_from_guard(is_agent_turn, "an AgentTurn");
 
 pub struct ToolCall<A = PlainData> {
     pub call_id: JsText,
@@ -53,7 +104,7 @@ pub enum ToolOutcome<R, E = PlainData> {
 }
 pub struct ToolRecord<R, E = PlainData, A = PlainData> {
     pub call: Rc<ToolCall<A>>,
-    pub outcome: ToolOutcome<R, E>,
+    pub outcome: Rc<ToolOutcome<R, E>>,
     pub turn: f64,
 }
 pub enum Awaiting {
@@ -207,6 +258,63 @@ impl Serialize for TurnUsage {
         }
         if let AgentField::Value(value) = self.cached_input_tokens {
             fields.push(("cachedInputTokens", PlainData::Number(value)));
+        }
+        JsonData(&object(fields)).serialize(serializer)
+    }
+}
+impl<R: Serialize, E: Serialize> Serialize for ToolOutcome<R, E> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Ok(result) => JsonData(&object([
+                ("kind", PlainData::String("ok".into())),
+                ("result", field::<S, _>(result)?),
+            ]))
+            .serialize(serializer),
+            Self::Error(error) => error.serialize(serializer),
+        }
+    }
+}
+impl<R: Serialize, E: Serialize, A: Serialize> Serialize for ToolRecord<R, E, A> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        JsonData(&object([
+            ("call", field::<S, _>(&self.call)?),
+            ("outcome", field::<S, _>(&self.outcome)?),
+            ("turn", PlainData::Number(self.turn)),
+        ]))
+        .serialize(serializer)
+    }
+}
+impl Serialize for Awaiting {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let fields = match self {
+            Self::Llm => object([("kind", PlainData::String("llm".into()))]),
+            Self::Tools { batch_turn } => object([
+                ("kind", PlainData::String("tools".into())),
+                ("batchTurn", PlainData::Number(*batch_turn)),
+            ]),
+            Self::Compacting { folding } => object([
+                ("kind", PlainData::String("compacting".into())),
+                ("folding", PlainData::Number(*folding)),
+            ]),
+        };
+        JsonData(&fields).serialize(serializer)
+    }
+}
+impl<R: Serialize, T: Serialize, E: Serialize, A: Serialize> Serialize
+    for Conversation<R, T, E, A>
+{
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut fields = vec![
+            ("turns", field::<S, _>(&self.turns)?),
+            ("toolRecords", field::<S, _>(&self.tool_records)?),
+            ("turnCount", PlainData::Number(self.turn_count)),
+            ("awaiting", field::<S, _>(&self.awaiting)?),
+        ];
+        if let AgentField::Value(value) = self.context_tokens {
+            fields.push((
+                "contextTokens",
+                value.map_or(PlainData::Null, PlainData::Number),
+            ));
         }
         JsonData(&object(fields)).serialize(serializer)
     }

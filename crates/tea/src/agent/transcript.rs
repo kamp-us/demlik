@@ -105,9 +105,9 @@ impl<R, T, F> Transcript<R, T, F> {
         if let Some(conversation) = seed.conversation {
             let tools = seed_tools(
                 conversation.tool_records.iter(),
-                |record| Ok::<_, Infallible>(matches!(record.outcome, ToolOutcome::Ok(_))),
+                |record| Ok::<_, Infallible>(matches!(record.outcome.as_ref(), ToolOutcome::Ok(_))),
                 |record| {
-                    let ToolOutcome::Ok(result) = &record.outcome else {
+                    let ToolOutcome::Ok(result) = record.outcome.as_ref() else {
                         unreachable!("only an OK record is read")
                     };
                     Ok((record.call.call_id.clone(), Rc::clone(result)))

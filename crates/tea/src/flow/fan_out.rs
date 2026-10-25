@@ -96,10 +96,10 @@ struct SettledItem<I, R, E> {
     state: FanOutState<I, R, E>,
     input: Rc<I>,
 }
-fn slice_start(index: f64, len: usize) -> usize {
+pub(crate) fn slice_start(index: f64, len: usize) -> usize {
     if index.is_nan() {
         0
-    } else if index < 0.0 {
+    } else if index.trunc() < 0.0 {
         (len as f64 + index.trunc()).max(0.0) as usize
     } else {
         index.min(len as f64) as usize

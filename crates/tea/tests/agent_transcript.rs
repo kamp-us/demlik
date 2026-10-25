@@ -75,12 +75,12 @@ fn dense_seed_copies_outer_arrays_keeps_only_ok_results_and_does_not_deduplicate
     });
     let ok = Rc::new(ToolRecord {
         call: Rc::clone(&call),
-        outcome: ToolOutcome::Ok(Rc::clone(&result)),
+        outcome: Rc::new(ToolOutcome::Ok(Rc::clone(&result))),
         turn: 1.0,
     });
     let failed = Rc::new(ToolRecord {
         call: Rc::clone(&call),
-        outcome: ToolOutcome::Error(Rc::new(PlainData::Null)),
+        outcome: Rc::new(ToolOutcome::Error(Rc::new(PlainData::Null))),
         turn: 1.0,
     });
     let mut conversation = Conversation {

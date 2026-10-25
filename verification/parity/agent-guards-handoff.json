@@ -1,0 +1,304 @@
+{
+  "scope": "Agent types guards and built-in guard schemas; compaction summary/purpose vocabulary only; conversation-only pure helpers. No AgentState/factory/provider/SDK/children work.",
+  "base": "9cfb02e6df8f537edc2e2f423bc2ea40090fef41",
+  "branch": "can/rust-agent-guards-conversation",
+  "worktree": "/private/tmp/demlik-rust-agent-content-01a16c9d",
+  "reference": {
+    "commit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "sourceHashes": {
+      "types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "schema.ts": "8b7b7f0706e053063f87a2e99a75662dc01b5e0e2ca1941a76af720262cfc864",
+      "compaction.ts": "0875e95beac85e5eabe16ca8a7a80786b09031a0cbcfe23fa644a387faad6aad",
+      "internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d"
+    },
+    "sourcePackagesUnchanged": true
+  },
+  "interface": {
+    "guards": "is_turn_usage/is_agent_turn/is_compaction_summary inspect canonical PlainData. AGENT_TURN_SCHEMA/COMPACTION_SUMMARY_SCHEMA implement existing llm_call::Schema with Raw=Output=Rc<PlainData>; success returns exactly the original handle/extras. No typed DTO rebuild.",
+    "schemaOwner": "One private schema_from_guard constructor, two built-in instances; custom host parsers continue to implement llm_call::Schema. StructuredOutputError exposes Source Error name/message plus original rejected handle.",
+    "canonicalFacts": "Existing AgentTurn/TurnUsage/Conversation/ToolCall/ToolOutcome remain single-owned in agent/types.rs. CompactionSummary and one exhaustive CompactionPurpose enum own the reserved $compact output vocabulary.",
+    "helpers": [
+      "agent::conversation::NO_USAGE",
+      "fresh_conversation",
+      "Conversation::fresh",
+      "add_usage",
+      "dedupe_by_call_id",
+      "fold_summary"
+    ],
+    "bounds": "No Clone/Serialize/Send/static bounds on opaque pure R/T/E/A. Conditional Serialize implementations exist only for wire encoding.",
+    "affectedPublicField": "ToolRecord<R,E,A>::outcome now Rc<ToolOutcome<R,E>>, so shallow compaction copies retain the exact original whole outcome. Only existing real transcript/driver/test consumers adapted.",
+    "sharedPrimitive": "Reused existing flow::fan_out::slice_start through crate-private visibility. Its sign test now uses index.trunc()<0 to match Source Array.slice for negative fractions near zero."
+  },
+  "verification": {
+    "strictShared": {
+      "cases": 158,
+      "passed": 158,
+      "protocolRefusals": 8,
+      "failures": [],
+      "nativeEvidenceCases": 158,
+      "report": "target/parity/agent-guards.json"
+    },
+    "compiledControls": {
+      "detected": 20,
+      "escaped": 0,
+      "allCompiled": true,
+      "allDeclaredWitnessesDetected": true,
+      "mandatoryFullBaseline": {
+        "cases": 158,
+        "passed": 158
+      },
+      "report": "target/parity/agent-guards-mutations.json",
+      "separateTargets": {
+        "baselineTarget": "/private/tmp/demlik-rust-agent-content-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-agent-content-01a16c9d/target/agent-content-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1
+      }
+    },
+    "native": {
+      "teaTestsIncludingDocs": 320,
+      "compileFailDocs": 22,
+      "newPublicPositiveConsumers": 6,
+      "postFixLog": "target/agent-guards-native-post-slice.log",
+      "opaqueWitness": "Borrowed non-Clone/non-serde/non-Send turn/result/cause/args; exact summary/call/outcome retention; actual LlmCall::decode uses the built-in guard schema without rebuilding raw output."
+    },
+    "sourceTests": {
+      "passed": 47,
+      "files": [
+        "packages/tea/src/agent/usage.test.ts",
+        "packages/tea/src/agent/compaction.test.ts"
+      ],
+      "sourceUnchangedAfterRun": true
+    },
+    "affectedFlow": {
+      "cases": 48,
+      "passed": 48,
+      "actions": 847,
+      "driverUnmodified": true,
+      "report": "target/parity/agent-guards-flow.json",
+      "exactCompilerAndHashReceipt": "target/parity/agent-guards-flow-consumer-build.json",
+      "build": {
+        "command": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+          "--edition",
+          "2024",
+          "-C",
+          "debuginfo=0",
+          "--crate-name",
+          "agent_guards_flow_consumer",
+          "-L",
+          "dependency=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps",
+          "--extern",
+          "demlik_tea=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib",
+          "--extern",
+          "serde=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib",
+          "--extern",
+          "serde_json=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib",
+          "/private/tmp/demlik-rust-agent-content-01a16c9d/crates/parity/src/bin/flow_driver.rs",
+          "-o",
+          "/private/tmp/demlik-rust-agent-content-01a16c9d/target/agent-guards-flow-driver"
+        ],
+        "shellCommand": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc --edition 2024 -C debuginfo=0 --crate-name agent_guards_flow_consumer -L dependency=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps --extern demlik_tea=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib --extern serde=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib --extern serde_json=/private/tmp/demlik-rust-agent-content-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib /private/tmp/demlik-rust-agent-content-01a16c9d/crates/parity/src/bin/flow_driver.rs -o /private/tmp/demlik-rust-agent-content-01a16c9d/target/agent-guards-flow-driver",
+        "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+        "filesSha256": {
+          "crates/parity/src/bin/flow_driver.rs": "278c7ec3402c1d2d9b1cb1238f823eb026b750f31ae09b34508a6f87c6aa8901",
+          "crates/parity/src/paginate_queue/wire.rs": "a1df3006cbf2f9a9360104db7ea906d4dd79b50cfdab870b6bb532285e85bece",
+          "target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": "8d5247a42b16d5fe3772fdbe06b5656aa1cc18acf73766899b13be6c49bc14e5",
+          "target/debug/deps/libserde-1e121e747c37db81.rlib": "3a4274c53118e3e722a76a8370c6d5d8cab0555270fce461de4f237b9ab2b427",
+          "target/debug/deps/libserde_json-bae62904d1b7570d.rlib": "c9b4ac4eb75937f1ad53e90991aa4a8f251133fbe868b3a7058688963e01a455",
+          "target/agent-guards-flow-driver": "272d020a76afd1ef04ac7aac8214331b8606cb95f2121933b3f3401fd02abd36"
+        },
+        "driverUnmodified": true
+      }
+    },
+    "focusedSliceProbes": {
+      "passed": 12,
+      "separateFrom158InventoryCorpus": true,
+      "notInventoryEvidence": true,
+      "report": "target/parity/agent-guards-slice-boundaries.json"
+    },
+    "previousContentTranscript": {
+      "passed": 79,
+      "cases": 79,
+      "protocolRefusals": 7,
+      "knownRawCallIdDifferences": 4,
+      "knownDifferencesExcludedFromStrictNativeEvidence": true,
+      "report": "target/parity/agent-guards-old-content-post-slice.json"
+    },
+    "static": {
+      "teaAllTargetsClippy": "passed -D warnings after shared slice fix",
+      "rustFmt": "passed",
+      "allVerifierTsc": "passed",
+      "ownedVerifierBiome": "passed7 files",
+      "gitDiffCheck": "passed",
+      "exactInventoryMappings": 9,
+      "mappingGaps": []
+    },
+    "manualSourceProfile": {
+      "sourceOnly": true,
+      "nativeParityClaim": false,
+      "report": "target/agent-guards-manual-profile.json",
+      "originalProbe": "verification/parity/agent-guards-source-probe.json.fixture"
+    }
+  },
+  "redGreen": {
+    "publicSeams": "Missing public schema/summary/helper APIs and missing conditional wire implementations were observed red before each implementation (separate logs retained).",
+    "sliceSemanticRed": {
+      "nativeExpected": 4,
+      "nativeActual": 1,
+      "strictCase": "agent-guards.fold-negative-near-zero",
+      "strictBefore": {
+        "passed": 0,
+        "cases": 1
+      },
+      "sourceTurns": ["S", "0", "1", "2"],
+      "oldNativeTurnIndices": [-1],
+      "reports": [
+        "target/parity/agent-guards-negative-near-zero-red.json",
+        "target/parity/agent-guards-negative-slice-red.json"
+      ],
+      "nativeLog": "target/agent-guards-negative-slice-red.log",
+      "fix": "Canonical slice helper tests the truncated sign before applying a negative offset; exact original branch is restored by the20th compiled control."
+    },
+    "initialSharedVerifierRed": {
+      "passed": 156,
+      "cases": 157,
+      "report": "target/parity/agent-guards-first-pairs.json",
+      "classification": "Verifier fixture expected a null prototype absent from the JSON wire; Source/native outputs agreed. Rejected-data expectations now use trusted serialized input, and the fixture exercises an actual own __proto__ data property. No comparison tolerance or refusal removal."
+    },
+    "preFixNativeStatic": "The first320 native/docs and initial Clippy pass were before the newly measured negative-near-zero case. Both were rerun successfully after the shared helper fix; pre-fix logs retained."
+  },
+  "centralIntegration": {
+    "function": "agentGuardsParity",
+    "module": "verification/parity/agent-guards-run.mjs",
+    "defaultCorpusCases": 158,
+    "contracts": "verification/parity/agent-guards-contracts.json",
+    "ownedMappings": 9,
+    "nativeEvidence": "Collected only after exact trusted index/ID/call-sequence/value/byte/error comparisons. Refusals remain real passing behavior where Source refuses.",
+    "internalSourceHelpersNotInventedAsPublicAliases": [
+      "schemaFromGuard",
+      "NO_USAGE",
+      "freshConversation",
+      "addUsage",
+      "dedupeByCallId",
+      "foldSummary"
+    ],
+    "centralFilesUnchanged": true
+  },
+  "commands": {
+    "leanEnvironment": "CARGO=/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo RUSTUP_HOME=/private/tmp/demlik-rust-toolchain-01a16c9d/rustup CARGO_HOME=/private/tmp/demlik-rust-toolchain-01a16c9d/cargo RUSTUP_TOOLCHAIN=stable CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/private/tmp/demlik-rust-agent-content-01a16c9d/target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1",
+    "native": [
+      "cargo clippy --locked -p demlik-tea --all-targets -- -D warnings",
+      "cargo test --locked -p demlik-tea",
+      "cargo build --locked -p demlik-tea --example agent_guards_driver --example agent_content_driver"
+    ],
+    "strict": "pnpm exec node --input-type=module -e 'import {agentGuardsParity} from \"./verification/parity/agent-guards-run.mjs\"; await agentGuardsParity({binary:\"./target/debug/examples/agent_guards_driver\",reportFile:\"./target/parity/agent-guards.json\"});'",
+    "controls": "pnpm exec node verification/parity/agent-guards-mutations.mjs",
+    "sliceProbes": "pnpm exec node verification/parity/agent-guards-slice-boundaries.mjs",
+    "manual": "pnpm exec node --import ./verification/parity/node_modules/tsx/dist/loader.mjs verification/parity/agent-guards-manual-profile.mjs",
+    "sourceTests": "pnpm exec vitest run packages/tea/src/agent/usage.test.ts packages/tea/src/agent/compaction.test.ts",
+    "typecheck": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json",
+    "flow": "flowParity(process.env.CARGO,{binary:\"/private/tmp/demlik-rust-agent-content-01a16c9d/target/agent-guards-flow-driver\",reportFile:\"/private/tmp/demlik-rust-agent-content-01a16c9d/target/parity/agent-guards-flow.json\"}); exact unchanged-driver rustc argv/hash receipt is embedded above."
+  },
+  "integrity": {
+    "sourcePackagesUnchangedFrom75de37": true,
+    "newDependencies": false,
+    "baselineAndMutantTargetsSeparate": true,
+    "baselineLibraryDriverArtifactsUnchangedAfterMutants": true,
+    "guardsBinarySha256": "036f00cf6675f010b755c83f2b346c3274d9e4a57cb181c37b38b56123dabc08",
+    "contentBinarySha256": "5a23f426e55102ef0eaa10155fc8cb2a362b4a93eb4754eb066a00864cc1b4cc",
+    "flowBinarySha256": "272d020a76afd1ef04ac7aac8214331b8606cb95f2121933b3f3401fd02abd36",
+    "old9cfEvidencePreserved": {
+      "receiptSha256": "7c1c8e164a0c4f5f1e41fd5a703e8c4c7b10d75001b026d54efac3b631260b99",
+      "reports": 5,
+      "logs": 15,
+      "allHashIdentical": true,
+      "parentPreservedOriginalBinary": "/private/tmp/demlik-agent-content-baseline-9cfb02e6-01a16c9d",
+      "parentOriginalBinarySha256": "89cb561c29d9623fe796ee88e7be95024872df59462ed6f361d14683a84739e4"
+    },
+    "licenseHashes": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    },
+    "noNetworkDockerRemoteOrMainSourceEdits": true
+  },
+  "ownedFilesSha256": {
+    "crates/tea/examples/agent_content_driver.rs": "ad880860ccb1382ba9641c6a1aa9b0b46536db955b2e995d173a25479e7c154c",
+    "crates/tea/examples/agent_guards_driver.rs": "037d678a0b68c41733a58c70c6824eaef489d1e6db4566f9c30810f2a4b18c11",
+    "crates/tea/src/agent/compaction.rs": "305367963f0176e9046e0a92e5b2149d5e5af39ad6604d934cee01fead2882f5",
+    "crates/tea/src/agent/conversation.rs": "808b055e7b0829c8294c5edb72b7ea7beacf04ae064553bf6f8c075e26e9e530",
+    "crates/tea/src/agent/mod.rs": "013476d36298d36ff0546dc58cdcc09a14fa96e7e498b2ca36a45be839d15f32",
+    "crates/tea/src/agent/schema.rs": "29e0a3263d3689a22da65c60e52f7d730c098df9818626ae77b91129c452446a",
+    "crates/tea/src/agent/transcript.rs": "5a39798956f802a418d6bb8c014c69f1f20979e33ece23514e8477a9624b2fbf",
+    "crates/tea/src/agent/types.rs": "69177a796dc5e56b2d7249d61bb6595a37081df91b360a839993f531bf77d82f",
+    "crates/tea/src/flow/fan_out.rs": "0a5c66f5ef649880dd1a3ddb31f669661b4d478849386710f25f22de3ef3a96f",
+    "crates/tea/tests/agent_conversation.rs": "2ba0bdaa27f14afa1638ede7329359c5ab9a01306927281a2a65b73b0a2a54a1",
+    "crates/tea/tests/agent_guards.rs": "2fe1697ac6548f65e0df55a9945a0c1bfecc6b9f671233790bbff39d2b8705f1",
+    "crates/tea/tests/agent_transcript.rs": "012b289ca6375881ebabdf4eee61b40b615ae846bf9e301d8623e97eafaec2e2",
+    "verification/parity/agent-guards-cases.mjs": "61f2814cad79cfa3bf5e2a6d809a7954c95d5da0b0344ec929c2cadb7b8a8937",
+    "verification/parity/agent-guards-contracts.json": "69b543214f21d6d1c0e209edccf931093f19e101324a5df076d0afc45ccc803a",
+    "verification/parity/agent-guards-manual-profile.mjs": "9c1abdc852cacd2049535d607c4f2278f510ba535cec10b4aa7f9e9339cbb80a",
+    "verification/parity/agent-guards-mutations.mjs": "701de24da96dc583ce36c081e6c833fcfd540ff68de37b155af2aed3e7d2d4af",
+    "verification/parity/agent-guards-reference.mts": "863f85302c5f9585ef2703df5a5d2af3f7db24f20ecd8ccd7acf6f237362a72d",
+    "verification/parity/agent-guards-run.mjs": "246fc1db10145f3916abaa36eca33dafb629f296d9b2e1cb090328cb3138908a",
+    "verification/parity/agent-guards-slice-boundaries.mjs": "2a871a626d4c5391ca5150a8106ab44dc6972a1e5b69932134a0d2008ad98449",
+    "verification/parity/agent-guards-source-probe.json.fixture": "f0c07c15ca71a5218fbfeac1a252a0324674e6ffe012ff35e124cde5970b7114"
+  },
+  "reportsSha256": {
+    "target/parity/agent-guards.json": "7812f4c33aa2edcbdd8635d2a4250ecfb723b1601a2ead162091a5458c073aa5",
+    "target/parity/agent-guards-first-pairs.json": "3bde48401b21aad899caa902251cdc36e0ab7f21dbd68f673f9a1ed135238919",
+    "target/parity/agent-guards-mutations.json": "4481cc8785097ea962d8575fedc9d959813fe156b166fb4acffa4bdb567aaac6",
+    "target/parity/agent-guards-mutation-baseline.json": "7812f4c33aa2edcbdd8635d2a4250ecfb723b1601a2ead162091a5458c073aa5",
+    "target/parity/agent-guards-negative-near-zero-red.json": "cd09de57657650eb8fd4cf035bcc334833e91de7aa673085bc20149d3c0fecd4",
+    "target/parity/agent-guards-negative-slice-red.json": "79639e1b1c006d9b5b12f11472642100bbc2a73a47fee37e4e37b00f9b2392ba",
+    "target/parity/agent-guards-slice-boundaries.json": "b7725db31c65ee9536bf0da4624788528a77e8accb7b7fc45b6d8e10e4720f1e",
+    "target/parity/agent-guards-flow.json": "15f38b2a55f4bb5356c50366f8c6098849812b726d5750abba429d217664c7ba",
+    "target/parity/agent-guards-flow-consumer-build.json": "d1ce5009879be978dd8c0dacab56738904b397d1cd440d3a56e0b293db3e0c7d",
+    "target/parity/agent-guards-old-content.json": "d13dbc48a2f6a0fde03819558b552387146cf5bf2bbf268106c1e952be253064",
+    "target/parity/agent-guards-old-content-post-slice.json": "b297d19d6eba8496c695fefd166d61403477be5238195c3839555b9062c3c176",
+    "target/agent-guards-manual-profile.json": "ebff740dab19511269fe787fe24c4c3857ab543a7623b77dd6fa7e19c736035a"
+  },
+  "logsSha256": {
+    "target/agent-guards-schema-red.log": "6ec4f091c592fd2e9eacf797e82aa63e351701fb15fb6dcac214d9f6160869e2",
+    "target/agent-guards-schema-green.log": "ee1e78d2321b196174926e90768c5d5abc8ecb471c85fbe47102abfc0c8edbe4",
+    "target/agent-guards-summary-red.log": "05482fe014d53c1695f6d1a91fa148f33adef142301051d16f665a7678b1aa39",
+    "target/agent-guards-summary-green.log": "1cc672536c9af7d59529c9bedad92705bda01809a23a34354be1dfd137440465",
+    "target/agent-guards-conversation-red.log": "cba6f57f58778d3e8e9b700782f72c9ea245de1e2db18afc87844568e56008ed",
+    "target/agent-guards-conversation-green.log": "66d7e85e54024ef5f10d0cc6d3fbc336fd8b249a3d75d23ae59f3d7536384760",
+    "target/agent-guards-wire-red.log": "6d70b85bae5f1a52face1be25f50222afa010536c8493438ce6e0b04b9dd04b9",
+    "target/agent-guards-native-focused-green.log": "58a9caefb17fb646fb0003150629aa95eed5d774476e3dff2bc13cb87f559c97",
+    "target/agent-guards-first-pairs.log": "4877c75c1ea6aae651fde88fe84f37eb573af5d57a35c28392930c767e23d4f5",
+    "target/agent-guards-pairs-green.log": "6648d983bc5fe4bf3759b02f5393a3132aa9e4d2fd6cb5f1cb7bf4b9a1a8e431",
+    "target/agent-guards-negative-slice-red.log": "4bbcbe4e4b8c73e9ab5102a68be9dea0cf23e7e81b8994097c9f6e5c99cac8b5",
+    "target/agent-guards-negative-slice-pairs-red.log": "446880e3fbeb9d2d74a76931427e0ea2fda04953f8b822e166e601dbca1f4b65",
+    "target/agent-guards-native.log": "4953cd98f8f32da22674ba4bb7dc7243a67341b59c7b007292fa21c1f0223a87",
+    "target/agent-guards-native-post-slice.log": "b15afa8ce69baf146ed751ab2ccc25b29357a5b7641a793c794c6b955d24eaac",
+    "target/agent-guards-clippy-initial.log": "4fdee2eedec2b854938159ea69110e74070b8e5f699292e80eefe5238b5a58cc",
+    "target/agent-guards-clippy-post-slice.log": "ac3429860bdb0ea143d8dd5730c00af27f242fbc4ec019cd080c040d709a830e",
+    "target/agent-guards-drivers-post-slice-build.log": "3fe980a0f9709b0a2d093ea2a65202e1e589d4893ac71be4272c165923b9e527",
+    "target/agent-guards-source-tests.log": "1648b8905ceebf6a4ed2e2e6df80a1f39a7ca6501c880864f4b96cc12a28946c",
+    "target/agent-guards-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-guards-mutations.log": "a45381a5c8560ab64176eeec2662c654bb052fcdd0be1b57d0c814204e82b34f",
+    "target/agent-guards-final-pairs.log": "dcfa529ea54712f565da513d7cb49ee55bd537a2fb9e1d3a4d822cc29426e88e",
+    "target/agent-guards-flow-compile.log": "d1ce5009879be978dd8c0dacab56738904b397d1cd440d3a56e0b293db3e0c7d",
+    "target/agent-guards-flow.log": "c4de9aa611f23498ddd5b735f1aed1468130c4c0b1244e60db1eb4722f4e5a73",
+    "target/agent-guards-slice-boundaries.log": "ae85815a7ce84cb7e8ddf78f6e5ca37f81bf6ed34e6c9d9b56439c454cd7ccd8",
+    "target/agent-guards-old-content-post-slice.log": "d458d0c6afeb746a61475464a768c37cc4f0afe502575a80502237c54fcdf6aa",
+    "target/agent-guards-contracts-check.log": "7b321dd7401ac0a80c81caaaaaa7c1933f9bc0f71093c75b667333b53a824515",
+    "target/agent-guards-lint.log": "a96a065ebb563448c8c20f5e80f3c88c7ae42c01b1423aa0b6621f52a201054f",
+    "target/agent-guards-fmt-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-guards-diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "blindSpots": [
+    "Named/sparse/inherited JavaScript arrays, prototype fields, getter/proxy behavior and arbitrary throwing custom guards are Source-only measured profiles; no JS object/array/schema runtime is recreated.",
+    "Undeclared legacy/extra Conversation and ToolRecord spread fields are measured in Source, unverified here and deferred to a later state/migration seam. No new extension bag is introduced.",
+    "Raw optional-null usage arithmetic is measured in Source but outside the native TurnUsage count fields; schemas correctly refuse those null optional counts.",
+    "Guard schemas retain raw Rc<PlainData> identities/extras; they intentionally do not deserialize into the separate trusted typed AgentTurn DTO. Caller codecs remain explicit at IO for opaque Rust values.",
+    "No AgentState/withUsageDefaults/currentStage/isSettled/requireAwaiting/factory/provider/SDK/children or full-agent completion claim. Old four malformed raw callId differences remain separate and unchanged."
+  ]
+}

@@ -505,7 +505,7 @@ fn transcript(
                         name: "tool".into(),
                         args: Rc::new(PlainData::Object(Default::default())),
                     }),
-                    outcome: ToolOutcome::Ok(at(&values, result)?),
+                    outcome: Rc::new(ToolOutcome::Ok(at(&values, result)?)),
                     turn: 1.0,
                 }),
                 SeedTool::Error { call_id } => Rc::new(ToolRecord {
@@ -514,7 +514,7 @@ fn transcript(
                         name: "tool".into(),
                         args: Rc::new(PlainData::Object(Default::default())),
                     }),
-                    outcome: ToolOutcome::Error(Rc::new(PlainData::Null)),
+                    outcome: Rc::new(ToolOutcome::Error(Rc::new(PlainData::Null))),
                     turn: 1.0,
                 }),
             };

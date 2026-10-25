@@ -1,0 +1,1172 @@
+{
+  "node": "v22.21.1",
+  "v8": "12.4.254.21-node.33",
+  "usage": [
+    {
+      "value": {
+        "$value": "undefined"
+      },
+      "required": false,
+      "optional": true
+    },
+    {
+      "value": null,
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": false,
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": 0,
+      "required": true,
+      "optional": true
+    },
+    {
+      "value": "0",
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": {
+        "$value": "NaN"
+      },
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": {
+        "$value": "Infinity"
+      },
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": {
+        "$value": "-Infinity"
+      },
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": {
+        "$value": "-0"
+      },
+      "required": true,
+      "optional": true
+    },
+    {
+      "value": 0,
+      "required": true,
+      "optional": true
+    },
+    {
+      "value": 0.5,
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": -1,
+      "required": false,
+      "optional": false
+    },
+    {
+      "value": 9007199254740991,
+      "required": true,
+      "optional": true
+    },
+    {
+      "value": 9007199254740992,
+      "required": false,
+      "optional": false
+    }
+  ],
+  "turns": [
+    {
+      "input": {
+        "$value": "undefined"
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": null,
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": {},
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": [],
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": []
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "content": "",
+          "toolCalls": []
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [
+          1
+        ]
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [
+          {
+            "callId": "",
+            "name": "",
+            "args": []
+          }
+        ]
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "content": "",
+          "toolCalls": [
+            {
+              "callId": "",
+              "name": "",
+              "args": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [
+          {
+            "callId": "x",
+            "name": "x",
+            "args": null
+          }
+        ]
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [],
+        "provider": null
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "content": "",
+          "toolCalls": [],
+          "provider": null
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [],
+        "usage": {
+          "$value": "undefined"
+        }
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "content": "",
+          "toolCalls": [],
+          "usage": {
+            "$value": "undefined"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "content": "",
+        "toolCalls": [],
+        "usage": null
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not an AgentTurn"
+        }
+      }
+    }
+  ],
+  "summaries": [
+    {
+      "input": {
+        "$value": "undefined"
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not a CompactionSummary"
+        }
+      }
+    },
+    {
+      "input": null,
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not a CompactionSummary"
+        }
+      }
+    },
+    {
+      "input": "x",
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not a CompactionSummary"
+        }
+      }
+    },
+    {
+      "input": {},
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not a CompactionSummary"
+        }
+      }
+    },
+    {
+      "input": {
+        "summary": ""
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "summary": ""
+        }
+      }
+    },
+    {
+      "input": {
+        "summary": 1
+      },
+      "guard": false,
+      "parsed": {
+        "error": {
+          "name": "Error",
+          "message": "structured-output parse failed: not a CompactionSummary"
+        }
+      }
+    },
+    {
+      "input": {
+        "summary": "\ud800",
+        "extra": {
+          "x": 1
+        }
+      },
+      "guard": true,
+      "parsed": {
+        "value": {
+          "summary": "\ud800",
+          "extra": {
+            "x": 1
+          }
+        }
+      }
+    }
+  ],
+  "identity": {
+    "turn": true,
+    "turnExtra": true,
+    "toolArray": true,
+    "usage": true,
+    "summary": true,
+    "summaryExtra": true,
+    "throwUnchanged": true
+  },
+  "adds": [
+    {
+      "label": "absent",
+      "value": {
+        "inputTokens": 4,
+        "outputTokens": 6
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "explicit-undefined",
+      "value": {
+        "inputTokens": 4,
+        "outputTokens": 6
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "zero",
+      "value": {
+        "inputTokens": 4,
+        "outputTokens": 6,
+        "reasoningTokens": 0
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens",
+        "reasoningTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "null",
+      "value": {
+        "inputTokens": 4,
+        "outputTokens": 6,
+        "reasoningTokens": 0
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens",
+        "reasoningTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "both-null",
+      "value": {
+        "inputTokens": 4,
+        "outputTokens": 6,
+        "reasoningTokens": 0
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens",
+        "reasoningTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "nan",
+      "value": {
+        "inputTokens": {
+          "$value": "NaN"
+        },
+        "outputTokens": {
+          "$value": "NaN"
+        },
+        "reasoningTokens": {
+          "$value": "NaN"
+        },
+        "cachedInputTokens": {
+          "$value": "Infinity"
+        }
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens",
+        "reasoningTokens",
+        "cachedInputTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "negative-zero",
+      "value": {
+        "inputTokens": {
+          "$value": "-0"
+        },
+        "outputTokens": 0,
+        "reasoningTokens": {
+          "$value": "-0"
+        }
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens",
+        "reasoningTokens"
+      ],
+      "fresh": true
+    },
+    {
+      "label": "overflow",
+      "value": {
+        "inputTokens": {
+          "$value": "Infinity"
+        },
+        "outputTokens": 9007199254740992
+      },
+      "keys": [
+        "inputTokens",
+        "outputTokens"
+      ],
+      "fresh": true
+    }
+  ],
+  "dedupe": {
+    "value": [
+      {
+        "callId": "x",
+        "name": "t",
+        "args": {
+          "opaque": "x"
+        }
+      },
+      {
+        "callId": "\ud800",
+        "name": "t",
+        "args": {
+          "opaque": "\ud800"
+        }
+      },
+      {
+        "callId": "__proto__",
+        "name": "t",
+        "args": {
+          "opaque": "__proto__"
+        }
+      }
+    ],
+    "fresh": true,
+    "identity": [
+      0,
+      2,
+      3
+    ]
+  },
+  "fresh": {
+    "value": {
+      "turns": [],
+      "toolRecords": [],
+      "turnCount": 0,
+      "awaiting": {
+        "kind": "llm"
+      },
+      "contextTokens": null
+    },
+    "hasUsage": false,
+    "newOuter": true,
+    "newTurns": true,
+    "newRecords": true,
+    "newAwaiting": true,
+    "noUsage": {
+      "inputTokens": 0,
+      "outputTokens": 0
+    },
+    "noOptional": [
+      "inputTokens",
+      "outputTokens"
+    ]
+  },
+  "folds": [
+    {
+      "folding": 0,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "0",
+            "toolCalls": []
+          },
+          {
+            "content": "1",
+            "toolCalls": [],
+            "provider": {
+              "p": 1
+            }
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [
+          {
+            "call": {
+              "callId": "x",
+              "name": "t",
+              "args": {
+                "opaque": "x"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 1,
+            "extra": {
+              "n": 0
+            }
+          },
+          {
+            "call": {
+              "callId": "x",
+              "name": "t",
+              "args": {
+                "opaque": "x"
+              }
+            },
+            "outcome": {
+              "kind": "error",
+              "reason": "bad",
+              "detail": {
+                "n": 3
+              }
+            },
+            "turn": 2,
+            "extra": {
+              "n": 1
+            }
+          },
+          {
+            "call": {
+              "callId": "\ud800",
+              "name": "t",
+              "args": {
+                "opaque": "\ud800"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 3,
+            "extra": {
+              "n": 2
+            }
+          }
+        ],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        0,
+        1,
+        2
+      ],
+      "recordRefs": [
+        -1,
+        -1,
+        -1
+      ],
+      "callRefs": [
+        0,
+        1,
+        2
+      ],
+      "sameOutcome": [
+        true,
+        true,
+        true
+      ],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": 1,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "1",
+            "toolCalls": [],
+            "provider": {
+              "p": 1
+            }
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [
+          {
+            "call": {
+              "callId": "x",
+              "name": "t",
+              "args": {
+                "opaque": "x"
+              }
+            },
+            "outcome": {
+              "kind": "error",
+              "reason": "bad",
+              "detail": {
+                "n": 3
+              }
+            },
+            "turn": 1,
+            "extra": {
+              "n": 1
+            }
+          },
+          {
+            "call": {
+              "callId": "\ud800",
+              "name": "t",
+              "args": {
+                "opaque": "\ud800"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 2,
+            "extra": {
+              "n": 2
+            }
+          }
+        ],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        1,
+        2
+      ],
+      "recordRefs": [
+        -1,
+        -1
+      ],
+      "callRefs": [
+        1,
+        2
+      ],
+      "sameOutcome": [
+        true,
+        true
+      ],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": 2,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [
+          {
+            "call": {
+              "callId": "\ud800",
+              "name": "t",
+              "args": {
+                "opaque": "\ud800"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 1,
+            "extra": {
+              "n": 2
+            }
+          }
+        ],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        2
+      ],
+      "recordRefs": [
+        -1
+      ],
+      "callRefs": [
+        2
+      ],
+      "sameOutcome": [
+        true
+      ],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": 3,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          }
+        ],
+        "toolRecords": [],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1
+      ],
+      "recordRefs": [],
+      "callRefs": [],
+      "sameOutcome": [],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": 4,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          }
+        ],
+        "toolRecords": [],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1
+      ],
+      "recordRefs": [],
+      "callRefs": [],
+      "sameOutcome": [],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": -1,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [
+          {
+            "call": {
+              "callId": "x",
+              "name": "t",
+              "args": {
+                "opaque": "x"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 2,
+            "extra": {
+              "n": 0
+            }
+          },
+          {
+            "call": {
+              "callId": "x",
+              "name": "t",
+              "args": {
+                "opaque": "x"
+              }
+            },
+            "outcome": {
+              "kind": "error",
+              "reason": "bad",
+              "detail": {
+                "n": 3
+              }
+            },
+            "turn": 3,
+            "extra": {
+              "n": 1
+            }
+          },
+          {
+            "call": {
+              "callId": "\ud800",
+              "name": "t",
+              "args": {
+                "opaque": "\ud800"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 4,
+            "extra": {
+              "n": 2
+            }
+          }
+        ],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        2
+      ],
+      "recordRefs": [
+        -1,
+        -1,
+        -1
+      ],
+      "callRefs": [
+        0,
+        1,
+        2
+      ],
+      "sameOutcome": [
+        true,
+        true,
+        true
+      ],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": 1.5,
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "1",
+            "toolCalls": [],
+            "provider": {
+              "p": 1
+            }
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [
+          {
+            "call": {
+              "callId": "\ud800",
+              "name": "t",
+              "args": {
+                "opaque": "\ud800"
+              }
+            },
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "opaque": true
+              }
+            },
+            "turn": 1.5,
+            "extra": {
+              "n": 2
+            }
+          }
+        ],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        1,
+        2
+      ],
+      "recordRefs": [
+        -1
+      ],
+      "callRefs": [
+        2
+      ],
+      "sameOutcome": [
+        true
+      ],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": {
+        "$value": "NaN"
+      },
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          },
+          {
+            "content": "0",
+            "toolCalls": []
+          },
+          {
+            "content": "1",
+            "toolCalls": [],
+            "provider": {
+              "p": 1
+            }
+          },
+          {
+            "content": "2",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 1,
+              "outputTokens": 2
+            }
+          }
+        ],
+        "toolRecords": [],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1,
+        0,
+        1,
+        2
+      ],
+      "recordRefs": [],
+      "callRefs": [],
+      "sameOutcome": [],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    },
+    {
+      "folding": {
+        "$value": "Infinity"
+      },
+      "value": {
+        "turns": [
+          {
+            "content": "S",
+            "toolCalls": []
+          }
+        ],
+        "toolRecords": [],
+        "turnCount": 9,
+        "awaiting": {
+          "kind": "llm"
+        },
+        "contextTokens": null,
+        "usage": {
+          "legacy": 7
+        },
+        "extra": {
+          "opaque": true
+        }
+      },
+      "sameOuter": false,
+      "sameSummary": true,
+      "turnRefs": [
+        -1
+      ],
+      "recordRefs": [],
+      "callRefs": [],
+      "sameOutcome": [],
+      "sameExtra": true,
+      "sameLegacyUsage": true
+    }
+  ],
+  "manual": {
+    "sparseTurn": true,
+    "inheritedUsage": true,
+    "arrayUsage": true,
+    "arrayTurn": true,
+    "arraySummary": true
+  },
+  "purpose": "$compact"
+}
