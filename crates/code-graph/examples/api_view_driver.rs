@@ -437,6 +437,52 @@ fn execute(
             }
             Ok(result)
         }
+        "lookup-text" => {
+            fields(&input, &["action", "config", "roots", "lookups"])?;
+            let config: JsString = decode(field(&input, "config")?)?;
+            let roots: Vec<JsString> = decode(field(&input, "roots")?)?;
+            let lookups: Vec<JsString> = decode(field(&input, "lookups")?)?;
+            let mut session =
+                demlik_code_graph::engine::tsgo::open_type_session_text(compiler, &config)
+                    .map_err(|error| error.to_string())?;
+            session
+                .with_compilation_text(
+                    demlik_code_graph::engine::tsgo::TextProgramInput {
+                        root_files: &roots,
+                        include_config_files: false,
+                    },
+                    |program| {
+                        let mut rows = Vec::new();
+                        for file in lookups {
+                            let result = observe!(
+                                calls,
+                                demlik_code_graph::engine::tsgo::TypeProgram::source_file_text,
+                                program,
+                                &file
+                            );
+                            let mut row = match result {
+                                Ok(Some(source)) => obj([
+                                    ("found", JsValue::Bool(true)),
+                                    (
+                                        "fileName",
+                                        JsValue::String(
+                                            source.file_name().to_string_lossy().as_ref().into(),
+                                        ),
+                                    ),
+                                ]),
+                                Ok(None) => obj([("found", JsValue::Bool(false))]),
+                                Err(error) => obj([("thrown", thrown(&ApiError::Compiler(error)))]),
+                            };
+                            if let JsValue::Object(record) = &mut row {
+                                record.insert("file".into(), JsValue::String(file));
+                            }
+                            rows.push(row);
+                        }
+                        Ok(JsValue::Array(rows))
+                    },
+                )
+                .map_err(|error| error.to_string())
+        }
         "program" | "nodes" => {
             let allowed = if action == "program" {
                 vec!["action", "config", "out", "entries"]

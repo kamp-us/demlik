@@ -1,7 +1,7 @@
 use demlik_code_graph::{
     api::{
         emit::{CaptureFailure, DeclarationEmitFailure, emit_declarations},
-        map::{ApiError, ApiInputError},
+        map::{ApiCallbackError, ApiError},
         model::SubpathNames,
         view::{PublishedApiOptions, read_published_api},
     },
@@ -127,9 +127,10 @@ fn local_warning_callback_preserves_raw_failure_cause_and_removes_its_actual_emi
                 captured_emits.borrow_mut().push(path);
             }
         }
-        Err(ApiError::Input(ApiInputError::new(raw.clone()).with_cause(
-            fs::read(package.0.join("missing-warning-cause")).unwrap_err(),
-        )))
+        Err(ApiError::Callback(
+            ApiCallbackError::new(raw.clone())
+                .with_cause(fs::read(package.0.join("missing-warning-cause")).unwrap_err()),
+        ))
     };
     let error = read_published_api(
         &package.root(),
@@ -147,10 +148,12 @@ fn local_warning_callback_preserves_raw_failure_cause_and_removes_its_actual_emi
         "code-graph: warning: tsgo reported 1 diagnostic(s); the declarations were emitted anyway"
     );
     assert_eq!(error.message(), expected);
+    assert_eq!(error.name(), "Error");
+    assert!(!error.is_input());
     let cause = error
         .source()
         .unwrap()
-        .downcast_ref::<ApiInputError>()
+        .downcast_ref::<ApiCallbackError>()
         .unwrap()
         .source()
         .unwrap()
@@ -220,7 +223,7 @@ fn compiler_limit_failure_retains_the_real_raw_capture_and_native_status() {
     let failure = error
         .source()
         .unwrap()
-        .downcast_ref::<ApiInputError>()
+        .downcast_ref::<demlik_code_graph::api::map::ApiInputError>()
         .unwrap()
         .source()
         .unwrap()
@@ -265,4 +268,127 @@ fn private_import_type_reference_uses_the_semantic_kind_despite_reverse_enum_ali
         references[&JsString::from("src/hidden.d.ts#Hidden")],
         "export interface Hidden {\n    readonly private: string;\n}"
     );
+}
+
+#[test]
+fn raw_emitted_entry_reaches_the_actual_go_source_file_refusal() {
+    let package = Package::new("raw�.ts", "export declare function raw():void;");
+    let map = JsValue::parse(r#"{".":{"entry":"src/raw\ud800.ts"}}"#).unwrap();
+    let error = read_published_api(
+        &package.root(),
+        &map,
+        &compiler(),
+        PublishedApiOptions::default(),
+    )
+    .unwrap_err();
+    let ApiError::Compiler(demlik_code_graph::engine::tsgo::TsgoError::Compiler {
+        method,
+        message,
+    }) = error
+    else {
+        panic!("expected actual Go refusal")
+    };
+    assert_eq!(method, "getSourceFile");
+    assert!(message.contains("invalid surrogate pair"));
+    assert!(message.contains("\\ud800.d.ts"));
+    assert!(message.contains("\"/file\""));
+}
+
+#[test]
+fn text_program_roots_and_cache_keep_raw_lookup_distinct_from_the_replacement_file() {
+    use demlik_code_graph::engine::tsgo::{TextProgramInput, TsgoError, open_type_session_text};
+    let package = Package::new("raw�.d.ts", "export declare const raw:1;");
+    let config: JsString = package.0.join("tsconfig.json").to_str().unwrap().into();
+    let physical: JsString = package.0.join("src/raw�.d.ts").to_str().unwrap().into();
+    let raw = JsString::from_units(
+        physical
+            .units()
+            .iter()
+            .map(|unit| if *unit == 0xfffd { 0xd800 } else { *unit })
+            .collect(),
+    );
+    let mut session = open_type_session_text(&compiler(), &config).unwrap();
+    for (roots, literal_expected) in [
+        (vec![raw.clone()], false),
+        (vec![physical.clone(), raw.clone()], true),
+        (vec![physical.clone()], true),
+    ] {
+        session
+            .with_compilation_text(
+                TextProgramInput {
+                    root_files: &roots,
+                    include_config_files: false,
+                },
+                |program| {
+                    assert_eq!(
+                        program.source_file_text(&physical)?.is_some(),
+                        literal_expected
+                    );
+                    let error = match program.source_file_text(&raw) {
+                        Err(error) => error,
+                        Ok(_) => panic!("raw lookup must reach Go"),
+                    };
+                    let TsgoError::Compiler { method, message } = error else {
+                        panic!("expected actual Go refusal")
+                    };
+                    assert_eq!(method, "getSourceFile");
+                    assert!(message.contains("invalid surrogate pair"));
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+}
+
+#[test]
+fn text_roots_sort_by_utf16_before_go_merges_global_declarations() {
+    use demlik_code_graph::engine::tsgo::{TextProgramInput, open_type_session_text};
+    let package = Package::new("entry.d.ts", "export type Published=Shared;");
+    let bmp = package.0.join("src/\u{e000}.d.ts");
+    let astral = package.0.join("src/\u{10000}.d.ts");
+    fs::write(&bmp, "interface Shared {bmp:1}").unwrap();
+    fs::write(&astral, "interface Shared {astral:1}").unwrap();
+    let entry: JsString = package.0.join("src/entry.d.ts").to_str().unwrap().into();
+    let config: JsString = package.0.join("tsconfig.json").to_str().unwrap().into();
+    let roots = vec![
+        JsString::from(bmp.to_str().unwrap()),
+        JsString::from(astral.to_str().unwrap()),
+        entry.clone(),
+        JsString::from(astral.to_str().unwrap()),
+    ];
+    let mut session = open_type_session_text(&compiler(), &config).unwrap();
+    session
+        .with_compilation_text(
+            TextProgramInput {
+                root_files: &roots,
+                include_config_files: false,
+            },
+            |program| {
+                let source = program.source_file_text(&entry)?.unwrap();
+                let reference = source
+                    .root()
+                    .descendants()?
+                    .into_iter()
+                    .find(|node| node.is_kind("TypeReference"))
+                    .unwrap()
+                    .node("typeName")?
+                    .unwrap();
+                let symbol = program.symbol_at(&reference)?.unwrap();
+                let names = program
+                    .declarations(&symbol)?
+                    .iter()
+                    .map(|node| {
+                        node.file_name()
+                            .file_name()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_owned()
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(names, vec!["\u{10000}.d.ts", "\u{e000}.d.ts"]);
+                Ok(())
+            },
+        )
+        .unwrap();
 }

@@ -280,6 +280,10 @@ pub struct ProgramInput<'a> {
     pub root_files: &'a [PathBuf],
     pub include_config_files: bool,
 }
+pub struct TextProgramInput<'a> {
+    pub root_files: &'a [JsString],
+    pub include_config_files: bool,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -335,9 +339,9 @@ struct ConfigFile<'a> {
     file: &'a JsString,
 }
 #[derive(Serialize)]
-struct VirtualConfig<'a> {
+struct VirtualConfig<'a, F: ?Sized> {
     extends: &'a JsString,
-    files: &'a [PathBuf],
+    files: &'a F,
     include: [(); 0],
 }
 impl TypeSession {
@@ -360,21 +364,7 @@ impl TypeSession {
         input: ProgramInput<'_>,
         read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
     ) -> Result<T, TsgoError> {
-        let source_config = self
-            .config_text
-            .clone()
-            .unwrap_or_else(|| self.config.to_string_lossy().as_ref().into());
-        let mut files = if input.include_config_files {
-            serde_json::from_value::<ConfigFiles>(self.channel.json(
-                "parseConfigFile",
-                ConfigFile {
-                    file: &source_config,
-                },
-            )?)?
-            .file_names
-        } else {
-            Vec::new()
-        };
+        let mut files = self.config_files(input.include_config_files)?;
         files.extend_from_slice(input.root_files);
         files.sort_by(|left, right| {
             left.to_string_lossy()
@@ -382,6 +372,48 @@ impl TypeSession {
                 .cmp(right.to_string_lossy().encode_utf16())
         });
         files.dedup();
+        self.with_files(&files, read)
+    }
+
+    pub fn with_compilation_text<T>(
+        &mut self,
+        input: TextProgramInput<'_>,
+        read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
+    ) -> Result<T, TsgoError> {
+        let mut files = self
+            .config_files(input.include_config_files)?
+            .into_iter()
+            .map(|file| JsString::from(file.to_string_lossy().as_ref()))
+            .collect::<Vec<_>>();
+        files.extend_from_slice(input.root_files);
+        files.sort();
+        files.dedup();
+        self.with_files(&files, read)
+    }
+
+    fn source_config_text(&self) -> JsString {
+        self.config_text
+            .clone()
+            .unwrap_or_else(|| self.config.to_string_lossy().as_ref().into())
+    }
+    fn config_files(&mut self, include: bool) -> Result<Vec<PathBuf>, TsgoError> {
+        if !include {
+            return Ok(Vec::new());
+        }
+        Ok(serde_json::from_value::<ConfigFiles>(self.channel.json(
+            "parseConfigFile",
+            ConfigFile {
+                file: &self.source_config_text(),
+            },
+        )?)?
+        .file_names)
+    }
+    fn with_files<T, F: Serialize + ?Sized>(
+        &mut self,
+        files: &F,
+        read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
+    ) -> Result<T, TsgoError> {
+        let source_config = self.source_config_text();
         let config = self
             .config
             .parent()
@@ -407,7 +439,7 @@ impl TypeSession {
         let config_name = config_text.to_lossy();
         let body = serde_json::to_string(&VirtualConfig {
             extends: &source_config,
-            files: &files,
+            files,
             include: [],
         })?;
         self.channel.virtual_files.insert(config_name.clone(), body);
@@ -491,7 +523,7 @@ pub struct TypeProgram<'a> {
     channel: &'a mut Channel,
     snapshot: u64,
     project: String,
-    sources: HashMap<String, Rc<SourceFile>>,
+    sources: HashMap<JsString, Rc<SourceFile>>,
     owner: Rc<()>,
     symbols: HashMap<u64, Rc<RefCell<Symbol>>>,
     compiler_options: Value,
@@ -506,9 +538,22 @@ pub enum LibraryKind {
     Referenced,
 }
 
+#[derive(Serialize)]
+struct SourceFileRequest<'a, F> {
+    snapshot: u64,
+    project: &'a str,
+    file: F,
+}
+
 impl TypeProgram<'_> {
     pub fn source_file(&mut self, file: &Path) -> Result<Option<NativeFile>, TsgoError> {
         Ok(self.source_data(file)?.map(|source| NativeFile {
+            source,
+            owner: self.owner.clone(),
+        }))
+    }
+    pub fn source_file_text(&mut self, file: &JsString) -> Result<Option<NativeFile>, TsgoError> {
+        Ok(self.source_data_text(file)?.map(|source| NativeFile {
             source,
             owner: self.owner.clone(),
         }))
@@ -740,20 +785,34 @@ impl TypeProgram<'_> {
     }
 
     fn source_data(&mut self, file: &Path) -> Result<Option<Rc<SourceFile>>, TsgoError> {
-        let key = file.to_string_lossy();
-        if let Some(source) = self.sources.get(key.as_ref()) {
+        self.source_data_request(file.to_string_lossy().as_ref().into(), file)
+    }
+    fn source_data_text(&mut self, file: &JsString) -> Result<Option<Rc<SourceFile>>, TsgoError> {
+        self.source_data_request(file.clone(), file)
+    }
+    fn source_data_request(
+        &mut self,
+        key: JsString,
+        file: impl Serialize,
+    ) -> Result<Option<Rc<SourceFile>>, TsgoError> {
+        if let Some(source) = self.sources.get(&key) {
             return Ok(Some(source.clone()));
         }
         let bytes = self.channel.binary(
             "getSourceFile",
-            json!({ "snapshot": self.snapshot, "project": self.project, "file": file }),
+            SourceFileRequest {
+                snapshot: self.snapshot,
+                project: &self.project,
+                file,
+            },
         )?;
         if bytes.is_empty() {
             return Ok(None);
         }
         let source = Rc::new(SourceFile::parse(bytes)?);
-        self.sources.insert(key.into_owned(), source.clone());
-        self.sources.insert(source.path.clone(), source.clone());
+        self.sources.insert(key, source.clone());
+        self.sources
+            .insert(source.path.clone().into(), source.clone());
         Ok(Some(source))
     }
 
@@ -830,10 +889,24 @@ impl TypeProgram<'_> {
     }
 
     pub fn module_symbol_of(&mut self, file: &Path) -> Result<Option<NativeSymbol>, TsgoError> {
-        let Some(source) = self.source_file(file)? else {
+        let file = self.source_file(file)?;
+        self.module_symbol(file)
+    }
+    pub fn module_symbol_of_text(
+        &mut self,
+        file: &JsString,
+    ) -> Result<Option<NativeSymbol>, TsgoError> {
+        let file = self.source_file_text(file)?;
+        self.module_symbol(file)
+    }
+    fn module_symbol(
+        &mut self,
+        file: Option<NativeFile>,
+    ) -> Result<Option<NativeSymbol>, TsgoError> {
+        let Some(file) = file else {
             return Ok(None);
         };
-        self.symbol_at(&source.root())
+        self.symbol_at(&file.root())
     }
 
     pub fn export_origin(

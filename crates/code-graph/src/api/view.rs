@@ -3,9 +3,9 @@ use crate::{
         emit::{EmitGuard, emit_declarations, emitted_entries},
         map::{ApiError, ApiInputError, ApiSubpath, api_subpaths},
         model::{EmittedNames, PublishedApi, PublishedSubpath, SubpathNames},
-        read::read_subpath_names,
+        read::read_subpath_names_text,
     },
-    engine::tsgo::{ProgramInput, TsgoBinary, open_type_session_text},
+    engine::tsgo::{TextProgramInput, TsgoBinary, open_type_session_text},
     project::{EdgeScope, find_repo_root, resolve_edge_ts_config_text},
     text::{JsString, JsValue},
 };
@@ -63,14 +63,11 @@ pub fn read_emitted_names(
             }
         }
         let entries = emitted_entries(emit.get(), root, subpaths)?;
-        let roots = entries
-            .values()
-            .map(|file| std::path::PathBuf::from(file.to_lossy()))
-            .collect::<Vec<_>>();
+        let roots = entries.values().cloned().collect::<Vec<_>>();
         let mut session = open_type_session_text(compiler, &config).map_err(ApiError::Compiler)?;
         let names = session
-            .with_compilation(
-                ProgramInput {
+            .with_compilation_text(
+                TextProgramInput {
                     root_files: &roots,
                     include_config_files: false,
                 },
@@ -80,11 +77,7 @@ pub fn read_emitted_names(
                         .map(|(subpath, file)| {
                             Ok((
                                 subpath,
-                                read_subpath_names(
-                                    program,
-                                    &emit.get().out,
-                                    Path::new(&file.to_lossy()),
-                                )?,
+                                read_subpath_names_text(program, &emit.get().out, &file)?,
                             ))
                         })
                         .collect()

@@ -88,6 +88,12 @@ export const apiViewSchema = z.discriminatedUnion("action", [
     subpaths: z.array(subpath),
   }),
   z.strictObject({
+    action: z.literal("lookup-text"),
+    config: z.string(),
+    roots: z.array(z.string()),
+    lookups: z.array(z.string()),
+  }),
+  z.strictObject({
     action: z.literal("program"),
     config: z.string(),
     out: z.string(),
@@ -243,6 +249,27 @@ export async function apiViewReference(input: ApiViewInput): Promise<unknown> {
         ...value,
         tempClean: JSON.stringify(before) === JSON.stringify(inventory()),
       });
+    }
+    case "lookup-text": {
+      const program = ts.openTypeProgram({
+        tsConfigPath: input.config,
+        rootFiles: input.roots,
+        includeConfigFiles: false,
+      });
+      try {
+        return input.lookups.map((file) => {
+          try {
+            const source = program.sourceFile(file);
+            return source === undefined
+              ? { file, found: false }
+              : { file, found: true, fileName: source.fileName };
+          } catch (error) {
+            return { file, thrown: thrown(error) };
+          }
+        });
+      } finally {
+        program.close();
+      }
     }
     case "program":
     case "nodes": {

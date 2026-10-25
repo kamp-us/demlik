@@ -3,7 +3,7 @@ use super::{
     text::{declaration_text, statement_of},
 };
 use crate::{
-    engine::tsgo::{NativeNode, TsgoError, TypeProgram},
+    engine::tsgo::{NativeNode, NativeSymbol, TsgoError, TypeProgram},
     project::relative_path_text_from,
     text::JsString,
 };
@@ -200,7 +200,23 @@ pub fn read_subpath_names(
     out: &JsString,
     entry_file: &Path,
 ) -> Result<SubpathNames, TsgoError> {
-    let Some(module) = program.module_symbol_of(entry_file)? else {
+    let module = program.module_symbol_of(entry_file)?;
+    read_names(program, out, module)
+}
+pub fn read_subpath_names_text(
+    program: &mut TypeProgram<'_>,
+    out: &JsString,
+    entry_file: &JsString,
+) -> Result<SubpathNames, TsgoError> {
+    let module = program.module_symbol_of_text(entry_file)?;
+    read_names(program, out, module)
+}
+fn read_names(
+    program: &mut TypeProgram<'_>,
+    out: &JsString,
+    module: Option<NativeSymbol>,
+) -> Result<SubpathNames, TsgoError> {
+    let Some(module) = module else {
         return Ok(SubpathNames::default());
     };
     let mut names = Vec::new();
