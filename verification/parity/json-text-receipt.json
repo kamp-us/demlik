@@ -60,8 +60,8 @@
     "reference": {
       "command": "pnpm exec node verification/parity/json-text-run.mjs",
       "exitCode": 0,
-      "log": "target/json-text-parity.log",
-      "logSha256": "40d2984ca8b4184672d4581f552d70e8ab1426da40d5b946095105c203e7457b"
+      "log": "target/json-text-fixture-parity.log",
+      "logSha256": "63d548a994c7eb608e36ec2b99bef84a7dfb95508ba0754be5544ad8f3d419c3"
     },
     "controls": {
       "command": "pnpm exec node verification/parity/json-text-mutations.mjs",
@@ -83,7 +83,7 @@
     }
   },
   "reports": {
-    "target/parity/json-text.json": "fbfb2dbbb24d46ce862916d4cc3d64a007e9db06197c0410e657d16d28b77f02",
+    "target/parity/json-text.json": "f77ae202c53ebf1d5093488350a60f8ecfb1bf5ea8c7daabb08f614b5ad3201d",
     "target/parity/json-text-mutations.json": "52a8fbcdc087d0cb333743e01c667ec33ef6aaca33e7317438312c8d69f676c6"
   },
   "sourceHashes": {
@@ -91,10 +91,10 @@
     "crates/tea/src/data/json.rs": "c5609b2ccfa44f627c411e3b7eb1c107f33ead8bf049590dff9b2bcb82ce22d9",
     "crates/tea/tests/json_text.rs": "6aa9758f2aca6703abc2ac44d29674b5fedc37337ca511821487afe134fea1b3",
     "crates/tea/examples/json_text_driver.rs": "207c022d61dac1c8d9ec000ab1a866822560738579e90016131958bd08ffea24",
-    "verification/parity/json-text-source-probe.json": "4383a83fdbd6c2ee26a9bd1909e0722898024a26a1cb9be0a8b7868953b34697",
     "verification/parity/json-text-reference.mts": "62ee2f8851c431bd9c747046280b5a4e66456a3a849d0e27d201808ba18c1080",
-    "verification/parity/json-text-run.mjs": "7d89b3f6b3cd4506446c04d564d956a560627bf08dfcecc5ec7eb80ce191602b",
-    "verification/parity/json-text-mutations.mjs": "05a2dd4631750477a18c5413d5d41b40c91c12d392600db5e4dba2574aaf2fc1"
+    "verification/parity/json-text-run.mjs": "88bae96bcffaaa9e37618f2af3ab86f59a0a82eb179e153ed9f5f7f46f29a169",
+    "verification/parity/json-text-mutations.mjs": "05a2dd4631750477a18c5413d5d41b40c91c12d392600db5e4dba2574aaf2fc1",
+    "verification/parity/json-text-source-probe.json.fixture": "4383a83fdbd6c2ee26a9bd1909e0722898024a26a1cb9be0a8b7868953b34697"
   },
   "qualifications": [
     "JSON parsing stays delegated to the existing serde RawValue validation and lossless extractor. UTF8 input uses the original decoder unchanged.",

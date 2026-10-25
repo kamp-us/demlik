@@ -16,7 +16,7 @@ export async function jsonTextParity(options = {}) {
   );
   assert.equal(process.version, scope.referenceEngine.node);
   assert.equal(process.versions.v8, scope.referenceEngine.v8);
-  const probeFile = path.join(here, "json-text-source-probe.json"),
+  const probeFile = path.join(here, "json-text-source-probe.json.fixture"),
     probeBytes = await readFile(probeFile);
   assert.equal(
     hash(probeBytes),

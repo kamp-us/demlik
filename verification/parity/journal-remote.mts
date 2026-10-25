@@ -1265,12 +1265,19 @@ export async function verifyJournalRemote(
   const expected = source.map((value) => value.comparison),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
-  const mismatches = cases.flatMap((item, index) => {
+  const failures = cases.flatMap((item, index) => {
     try {
       assert.deepEqual(results[index].comparison, expected[index]);
       return [];
     } catch (error) {
-      return [{ id: item.id, error: String(error) }];
+      return [
+        {
+          id: item.id,
+          reference: expected[index],
+          native: results[index].comparison,
+          message: String(error),
+        },
+      ];
     }
   });
   const row = (id: string, position: number) => {
@@ -1302,10 +1309,13 @@ export async function verifyJournalRemote(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    scope: "native journal sync clients; full port remains incomplete",
     comparison:
       "action-boundary results, exact transport/local/cursor call order and raw failures, typed phases, record/token/entry identity, held writes/reads, restart and racing-sync quirks",
-    qualification:
-      "native LocalSet receipts are collected in submission order while source uses Promise.all for batches/overlap; these controlled action traces do not prove arbitrary join/select/custom-executor continuation order",
+    qualifications: [
+      "Native LocalSet receipts are collected in submission order while source uses Promise.all for batches/overlap; these controlled traces do not prove arbitrary Ready-future, join/select or custom-executor continuation order.",
+      "The held transport adapter models its own source helper await with an explicit yield; Journal and SyncClient have no production scheduling calibration.",
+    ],
     runtime: {
       node: process.version,
       v8: process.versions.v8,
@@ -1317,20 +1327,21 @@ export async function verifyJournalRemote(
     },
     binary: { path: executable, sha256: digest(executable) },
     compared: cases.length,
+    passed: cases.length - failures.length,
     actions: cases.reduce((sum, item) => sum + item.script.actions.length, 0),
-    mismatches,
+    failures,
     controls:
-      mutationCheck && !mismatches.length ? controls(cases, expected) : [],
+      mutationCheck && !failures.length ? controls(cases, expected) : [],
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !failures.some((failure) => failure.id === item.id),
       source: source[index],
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),
   };
   mkdirSync(dirname(reportPath), { recursive: true });
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  assert.equal(mismatches.length, 0, JSON.stringify(mismatches.slice(0, 4)));
   return report;
 }
 if (
@@ -1354,7 +1365,7 @@ if (
     JSON.stringify({
       compared: report.compared,
       actions: report.actions,
-      mismatches: report.mismatches.length,
+      failures: report.failures.length,
       controls: report.controls.map((control) => ({
         id: control.id,
         detected: control.detectedIds.length,
@@ -1362,4 +1373,5 @@ if (
       report: values.report ?? "target/parity/journal-remote.json",
     }),
   );
+  if (report.failures.length) process.exitCode = 1;
 }

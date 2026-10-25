@@ -10,7 +10,9 @@ import { checkCoverage } from "./coverage.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
+import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
+import { jsonTextParity } from "./json-text-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
@@ -37,6 +39,8 @@ const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
 const pollerBinaryArgument = args.indexOf("--poller-bin");
 const journalBinaryArgument = args.indexOf("--journal-bin");
+const journalRemoteBinaryArgument = args.indexOf("--journal-remote-bin");
+const jsonTextBinaryArgument = args.indexOf("--json-text-bin");
 const reconcilerBinaryArgument = args.indexOf("--reconciler-bin");
 const workflowBinaryArgument = args.indexOf("--workflow-bin");
 const sagaBinaryArgument = args.indexOf("--saga-bin");
@@ -441,6 +445,59 @@ if (!mutationSuite) {
     });
   }
 }
+let journalRemote = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    journalRemote = await journalRemoteParity(cargo, {
+      binary:
+        journalRemoteBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[journalRemoteBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-journal-remote.json`,
+            ),
+    });
+    failures.push(...journalRemote.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "journal-remote.verification",
+      operation: "tea.journal-remote",
+      message: error.message,
+    });
+  }
+}
+let jsonText = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    jsonText = await jsonTextParity({
+      quiet: true,
+      binary:
+        jsonTextBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[jsonTextBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-json-text.json`,
+            ),
+    });
+    failures.push(...jsonText.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "json-text.verification",
+      operation: "tea.json-text",
+      message: error.message,
+    });
+  }
+}
 let reconciler = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -699,6 +756,8 @@ const report = {
     flow.cases +
     poller.cases +
     journal.cases +
+    journalRemote.cases +
+    jsonText.cases +
     reconciler.cases +
     workflow.cases +
     saga.cases +
@@ -719,6 +778,8 @@ const report = {
     flow.passed +
     poller.passed +
     journal.passed +
+    journalRemote.passed +
+    jsonText.passed +
     reconciler.passed +
     workflow.passed +
     saga.passed +
@@ -740,6 +801,8 @@ const report = {
       ...(flow.passed ? ["tea.flow"] : []),
       ...(poller.passed ? ["tea.poller"] : []),
       ...(journal.passed ? ["tea.journal"] : []),
+      ...(journalRemote.passed ? ["tea.journal-remote"] : []),
+      ...(jsonText.passed ? ["tea.json-text"] : []),
       ...(reconciler.passed ? ["tea.reconciler"] : []),
       ...(workflow.passed ? ["tea.workflow"] : []),
       ...(saga.passed ? ["tea.saga"] : []),
@@ -776,6 +839,12 @@ const report = {
   flow: { ...flow, nativeEvidence: undefined, failures: undefined },
   poller: { ...poller, nativeEvidence: undefined, failures: undefined },
   journal: { ...journal, nativeEvidence: undefined, failures: undefined },
+  journalRemote: {
+    ...journalRemote,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  jsonText: { ...jsonText, nativeEvidence: undefined, failures: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
   workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
   saga: { ...saga, nativeEvidence: undefined, failures: undefined },
@@ -825,6 +894,8 @@ const report = {
     ...flow.nativeEvidence,
     ...poller.nativeEvidence,
     ...journal.nativeEvidence,
+    ...journalRemote.nativeEvidence,
+    ...jsonText.nativeEvidence,
     ...reconciler.nativeEvidence,
     ...workflow.nativeEvidence,
     ...saga.nativeEvidence,

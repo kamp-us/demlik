@@ -73,6 +73,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
     scope: report.scope,
     transitions: report.transitions,
     ...(report.qualifications ? { qualifications: report.qualifications } : {}),
+    ...(report.actions === undefined ? {} : { actions: report.actions }),
     reportFile,
   };
 }
