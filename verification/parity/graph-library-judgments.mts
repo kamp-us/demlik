@@ -397,7 +397,9 @@ try {
     for (const dir of fields) inheritedCase(scope, dir, scope);
     inheritedCase(scope, "caller", scope, true);
   }
-  for (const scope of inheritedScopes)
+  for (const scope of inheritedScopes.filter(
+    (scope) => !["toString", "hasOwnProperty", "__proto__"].includes(scope),
+  ))
     inheritedCase(scope, "name", scope === "constructor" ? "Object" : scope);
   for (const name of ["String", "to", "", "absent"])
     inheritedCase("toString", "name", name);
@@ -428,6 +430,11 @@ try {
       return { thrown: { name: error.name, message: error.message } };
     }
   };
+  assert.equal(
+    new Set(cases.map((item) => item.id)).size,
+    cases.length,
+    "unique library case IDs",
+  );
   const expected = cases.map(({ id, input }) => {
     const result = readLibraries(
       BoundaryRulesSchema.parse(input.rules),

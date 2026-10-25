@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "deployable-paths",
+    driver: "deployables_driver",
+    script: "graph-deployable-paths.mts",
+  },
+  {
     name: "comment-policy",
     driver: "comment_policy_driver",
     script: "graph-comment-policy.mts",
@@ -85,6 +90,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "deployables_driver",
   "comment_driver",
   "comment_policy_driver",
   "libraries_driver",
