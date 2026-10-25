@@ -1,3 +1,6 @@
+mod input;
+pub use input::{DecodedInput, InputFields};
+
 use std::{
     borrow::Cow,
     cell::RefCell,
@@ -89,12 +92,16 @@ pub trait CommandRecord {}
 
 pub struct Cmd<D: CommandSpec> {
     input: D::Input,
+    fields: Option<Box<InputFields>>,
     name: Cow<'static, str>,
     declaration: PhantomData<fn() -> D>,
 }
 impl<D: CommandSpec> Cmd<D> {
     pub fn input(&self) -> &D::Input {
         &self.input
+    }
+    pub fn fields(&self) -> Option<&InputFields> {
+        self.fields.as_deref()
     }
     pub fn into_input(self) -> D::Input {
         self.input
@@ -121,6 +128,9 @@ where
         else {
             return Err(serde::ser::Error::custom("command input must be a record"));
         };
+        if let Some(fields) = &self.fields {
+            input = fields.project(input).map_err(serde::ser::Error::custom)?;
+        }
         input.insert("type".into(), PlainData::String(self.name.as_ref().into()));
         PlainData::Object(input).serialize(serializer)
     }
@@ -381,7 +391,8 @@ impl<D: CommandSpec> CmdDef<D> {
         })
     }
     /// Build from a trusted typed record without serializing the pure payload.
-    /// Wire input uses `parse_input`; checked serializable input uses `build`.
+    /// Wire input uses `parse_input` or `decode_input`; `build` checks a
+    /// serializable input record.
     ///
     /// ```compile_fail,E0277
     /// use demlik_tea::{Tagged, command::{CmdDef, CommandSpec, SchemaError}};
@@ -406,9 +417,27 @@ impl<D: CommandSpec> CmdDef<D> {
     {
         self.wrap_input(input)
     }
+    /// Decode once with a caller-owned rule, preserving its exact error type.
+    /// Unlike `parse_input`, this does not invoke the declaration's static
+    /// schema or serialize the typed input. Source unchecked schemas validate
+    /// no fields; any field checks here belong to the supplied decoder.
+    pub fn decode_input<R, E>(
+        &self,
+        raw: R,
+        decode: impl FnOnce(R) -> Result<DecodedInput<D::Input>, E>,
+    ) -> Result<Cmd<D>, E>
+    where
+        D::Input: CommandRecord,
+    {
+        let decoded = decode(raw)?;
+        let mut cmd = self.wrap_input(decoded.input);
+        cmd.fields = decoded.fields;
+        Ok(cmd)
+    }
     fn wrap_input(&self, input: D::Input) -> Cmd<D> {
         Cmd {
             input,
+            fields: None,
             name: self.name.clone(),
             declaration: PhantomData,
         }

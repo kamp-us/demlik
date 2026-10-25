@@ -114,3 +114,26 @@ fn command_serialization_keeps_nonfinite_numbers_for_dependency_hashing() {
         r#"{"value":null,"type":"number"}"#
     );
 }
+
+#[test]
+fn caller_decoder_retains_borrowed_input_and_borrowed_error_channels() {
+    let label = String::from("borrowed decoder");
+    let visits = Cell::new(0);
+    let def = CmdDef::<BorrowedSpec<'_>>::new();
+    let failed = def.decode_input((), |()| {
+        Err::<demlik_tea::command::DecodedInput<BorrowedInput<'_>>, _>(&visits)
+    });
+    assert!(matches!(failed, Err(error) if std::ptr::eq(error, &visits)));
+    let cmd = def
+        .decode_input(label.as_str(), |raw| {
+            Ok::<_, &Cell<u32>>(demlik_tea::command::DecodedInput::new(BorrowedInput {
+                label: raw,
+                visits: &visits,
+            }))
+        })
+        .unwrap();
+    visits.set(11);
+    let replies = CommandFamily::settle(cmd, Some(Outcome::ok(label.as_str())), 17.25).unwrap();
+    assert_eq!(replies[0].cmd().input().visits.get(), 11);
+    assert!(matches!(replies[0].outcome(),Settlement::Ok(value) if *value==label));
+}
