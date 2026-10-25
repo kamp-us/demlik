@@ -80,6 +80,28 @@ function contract(value: unknown): unknown {
     }),
   );
 }
+function backendOffsets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(backendOffsets);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, part]) => {
+      if (key !== "thrown") return [key, backendOffsets(part)];
+      const error = z
+        .strictObject({ name: z.string(), message: z.string() })
+        .parse(part);
+      return [
+        key,
+        {
+          ...error,
+          message: error.message.replace(
+            / after offset [0-9]+$/,
+            " after offset <backend>",
+          ),
+        },
+      ];
+    }),
+  );
+}
 try {
   const root = path.join(directory, "ascii-package");
   file(
@@ -215,6 +237,9 @@ try {
     .map((line) => reply.parse(JSON.parse(line)));
   assert.equal(answers.length, requests.length);
   const failures = [];
+  const qualifications: ("exact" | "backend-offset" | null)[] = cases.map(
+    () => null,
+  );
   for (const [index, row] of cases.entries()) {
     try {
       assert.equal(answers[index].id, row.id);
@@ -228,6 +253,15 @@ try {
         contract(answers[index].output),
         contract(expected[index]),
       );
+      if (isDeepStrictEqual(answers[index].output, expected[index])) {
+        qualifications[index] = "exact";
+      } else {
+        assert.deepEqual(
+          backendOffsets(answers[index].output),
+          backendOffsets(expected[index]),
+        );
+        qualifications[index] = "backend-offset";
+      }
     } catch (error) {
       failures.push({
         id: row.id,
@@ -242,27 +276,14 @@ try {
     assert.equal(answer.ok, false);
     assert.deepEqual(answer.observedCalls, []);
   }
-  const qualified = cases.map(
-    (_, index) => !isDeepStrictEqual(answers[index].output, expected[index]),
-  );
-  for (const [index, isQualified] of qualified.entries()) {
-    if (!isQualified) continue;
-    const source = z
-      .object({ thrown: z.object({ message: z.string() }) })
-      .parse(expected[index]).thrown.message;
-    const native = z
-      .object({ thrown: z.object({ message: z.string() }) })
-      .parse(answers[index].output).thrown.message;
-    assert.equal(
-      source.replace(/ after offset [0-9]+$/, " after offset <backend>"),
-      native.replace(/ after offset [0-9]+$/, " after offset <backend>"),
-    );
-  }
   const report = {
     passed: cases.length - failures.length,
     attempted: cases.length,
-    unqualifiedPairs: qualified.filter((value) => !value).length,
-    backendOffsetQualifiedPairs: qualified.filter(Boolean).length,
+    unqualifiedPairs: qualifications.filter((value) => value === "exact")
+      .length,
+    backendOffsetQualifiedPairs: qualifications.filter(
+      (value) => value === "backend-offset",
+    ).length,
     rejectedInvalidInputs: invalid.length,
     comparison:
       "Exact file/root-membership/refusal-operation/raw-surrogate/cleanup contract; backend message offsets explicitly qualified and retained",
@@ -286,7 +307,10 @@ try {
     cases: requests.map((row, index) => ({
       ...row,
       ...answers[index],
-      backendOffsetQualified: index < cases.length ? qualified[index] : false,
+      backendOffsetQualified:
+        index < cases.length
+          ? qualifications[index] === "backend-offset"
+          : false,
       expected: index < cases.length ? expected[index] : { rejected: true },
       expectedContract: index < cases.length ? contract(expected[index]) : null,
       nativeContract:
