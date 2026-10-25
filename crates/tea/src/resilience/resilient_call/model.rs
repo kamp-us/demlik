@@ -304,7 +304,7 @@ impl<I, R, E> CommandSpec for RunSpec<I, R, E> {
     }
 }
 pub type RunCommand<I, R, E> = Cmd<RunSpec<I, R, E>>;
-pub type CallStep<I, R, E> = Step<State<I, R, E>, RunCommand<I, R, E>>;
+pub type CallStep<I, R, E, H = E> = Step<State<I, R, E>, RunCommand<I, R, H>>;
 pub fn run_cmd_def<I, R, E>(name: &str) -> CmdDef<RunSpec<I, R, E>> {
     CmdDef::named(format!("{name}_run"))
 }
@@ -479,17 +479,18 @@ impl<R: Serialize, E: Serialize> Serialize for SettleOutcome<R, E> {
         JsonData(&PlainData::Object(fields)).serialize(serializer)
     }
 }
-pub struct SettleResult<I, R, E> {
+pub struct SettleResult<I, R, E, H = E> {
     pub call: State<I, R, E>,
-    pub commands: Vec<RunCommand<I, R, E>>,
+    pub commands: Vec<RunCommand<I, R, H>>,
     pub outcome: SettleOutcome<R, E>,
 }
-impl<I: Serialize, R: Serialize, E: Serialize> Serialize for SettleResult<I, R, E> {
+impl<I: Serialize, R: Serialize, E: Serialize, H> Serialize for SettleResult<I, R, E, H> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[derive(Serialize)]
-        struct View<'a, I, R, E> {
+        #[serde(bound(serialize = "I: Serialize, R: Serialize, E: Serialize"))]
+        struct View<'a, I, R, E, H> {
             call: &'a State<I, R, E>,
-            cmds: &'a [RunCommand<I, R, E>],
+            cmds: &'a [RunCommand<I, R, H>],
             outcome: &'a SettleOutcome<R, E>,
         }
         JsonData(

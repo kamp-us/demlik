@@ -13,7 +13,7 @@ use crate::{
     js_record::{JsAccessError, JsRecord, ProjectionFailure, RecordCodec, RecordValue, Resolved},
     retry_backoff::{self, Budget, CountBound, TimedRetryState},
 };
-use std::rc::Rc;
+use std::{marker::PhantomData, rc::Rc};
 
 #[derive(Debug)]
 pub enum ResilientError {
@@ -44,18 +44,20 @@ impl From<ProjectionFailure> for ResilientError {
 /// let command = started.commands.pop().unwrap();
 /// command.settle(Some(Outcome::ok(CallValue::value(42_u64))), 1.0);
 /// ```
-pub struct ResilientCall<'a, I, R, E, B = CountBound> {
+pub struct ResilientCall<'a, I, R, E, B = CountBound, H = E> {
     config: Config<B>,
-    pub run: crate::command::CmdDef<RunSpec<I, R, E>>,
+    pub run: crate::command::CmdDef<RunSpec<I, R, H>>,
+    stored_error: PhantomData<fn() -> E>,
     projection: RecordCodec<'a, CallValue<R>>,
     rng: Rc<dyn Fn() -> f64 + 'a>,
 }
-impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
+impl<'a, I, R, E, B: Budget, H> ResilientCall<'a, I, R, E, B, H> {
     pub fn new(config: Config<B>) -> Self {
         let run = run_cmd_def(&config.name);
         Self {
             config,
             run,
+            stored_error: PhantomData,
             projection: RecordCodec::refusing(),
             rng: Rc::new(fastrand::f64),
         }
@@ -178,7 +180,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         error: Rc<CallFailure<E>>,
         at: CallNumber,
         budget: CallBudget,
-    ) -> Result<CallStep<I, R, E>, ResilientError> {
+    ) -> Result<CallStep<I, R, E, H>, ResilientError> {
         let Some(policy) = &self.config.retry else {
             return Ok(Step::new(
                 self.set_call(state, key, CallPhase::Failed { error }),
@@ -245,7 +247,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         input: CallValue<I>,
         at: CallNumber,
         budget: CallBudget,
-    ) -> Result<CallStep<I, R, E>, ResilientError> {
+    ) -> Result<CallStep<I, R, E, H>, ResilientError> {
         if self.config.deadline.is_some() && budget.remaining_ms.number_or_zero() <= 0.0 {
             let error = Rc::new(CallFailure::DeadlineExceeded {
                 id: self.timer_id("deadline", &key),
@@ -330,7 +332,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         key: impl Into<JsText>,
         input: CallValue<I>,
         at: impl Into<CallNumber>,
-    ) -> Result<CallStep<I, R, E>, ResilientError> {
+    ) -> Result<CallStep<I, R, E, H>, ResilientError> {
         let at = at.into();
         let key = key.into();
         let budget = self.budget_for(state, &key, at);
@@ -340,7 +342,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         &self,
         state: &State<I, R, E>,
         msg: SettleInput<R, E>,
-    ) -> Result<SettleResult<I, R, E>, ResilientError> {
+    ) -> Result<SettleResult<I, R, E, H>, ResilientError> {
         match msg {
             SettleInput::Ok { key, value, at } => {
                 let value = value.present();
@@ -428,7 +430,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         key: impl Into<JsText>,
         error: CallFailure<E>,
         at: impl Into<CallNumber>,
-    ) -> CallStep<I, R, E> {
+    ) -> CallStep<I, R, E, H> {
         let at = at.into();
         Step::new(
             self.set_call(
@@ -440,35 +442,6 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
             ),
             vec![],
         )
-    }
-    pub fn settle_message(
-        &self,
-        state: &State<I, R, E>,
-        message: crate::command::Settled<RunSpec<I, R, E>>,
-    ) -> Result<SettleResult<I, R, E>, ResilientError> {
-        use crate::{
-            Tagged,
-            command::{Failure, Settlement},
-        };
-        let (command, outcome, at) = message.into_parts();
-        let at: CallNumber = at
-            .ok_or_else(|| ResilientError::MissingStamp {
-                command: command.tag().into(),
-            })?
-            .into();
-        let key = command.into_input().key;
-        let input = match outcome {
-            Settlement::Ok(value) => SettleInput::Ok { key, value, at },
-            Settlement::Err(error) => SettleInput::Err {
-                key,
-                error: Rc::new(match error {
-                    Failure::Declared(error) => CallFailure::Run(Rc::new(error)),
-                    Failure::Malformed(error) => CallFailure::Malformed(error),
-                }),
-                at,
-            },
-        };
-        self.settle(state, input)
     }
     pub fn resume(&self, state: &State<I, R, E>, at: impl Into<CallNumber>) -> State<I, R, E> {
         let at = at.into();
@@ -511,7 +484,7 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
         &self,
         slice: &State<I, R, E>,
         msg: &DeadlineExceeded,
-    ) -> Result<CallStep<I, R, E>, ResilientError> {
+    ) -> Result<CallStep<I, R, E, H>, ResilientError> {
         let state = self.tick(slice, msg.at_ms);
         for (key, call) in state.0.calls.own_entries() {
             let RecordValue::Entry(call) = call else {
@@ -589,6 +562,38 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
     }
     pub fn timer(&self, state: &State<I, R, E>) -> Option<TimerDeps<DeadlineExceeded>> {
         deadline::next_timer(&self.deadlines(state), state.0.clock_ms)
+    }
+}
+
+impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
+    pub fn settle_message(
+        &self,
+        state: &State<I, R, E>,
+        message: crate::command::Settled<RunSpec<I, R, E>>,
+    ) -> Result<SettleResult<I, R, E>, ResilientError> {
+        use crate::{
+            Tagged,
+            command::{Failure, Settlement},
+        };
+        let (command, outcome, at) = message.into_parts();
+        let at: CallNumber = at
+            .ok_or_else(|| ResilientError::MissingStamp {
+                command: command.tag().into(),
+            })?
+            .into();
+        let key = command.into_input().key;
+        let input = match outcome {
+            Settlement::Ok(value) => SettleInput::Ok { key, value, at },
+            Settlement::Err(error) => SettleInput::Err {
+                key,
+                error: Rc::new(match error {
+                    Failure::Declared(error) => CallFailure::Run(Rc::new(error)),
+                    Failure::Malformed(error) => CallFailure::Malformed(error),
+                }),
+                at,
+            },
+        };
+        self.settle(state, input)
     }
 }
 

@@ -1,6 +1,7 @@
 pub mod command;
 pub mod core;
 pub mod data;
+pub mod describe_error;
 pub mod durable_effects;
 pub mod durable_object;
 #[cfg(not(target_arch = "wasm32"))]
@@ -10,6 +11,7 @@ pub mod idempotency;
 pub mod journal;
 mod js_math;
 pub mod js_record;
+pub mod llm_call;
 pub mod paginate;
 pub mod persistence;
 pub mod ports;
