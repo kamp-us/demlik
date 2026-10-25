@@ -205,6 +205,12 @@ pub struct NodeRef<'a> {
     index: usize,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct NodeIdentity {
+    file: *const SyntaxFile,
+    index: usize,
+}
+
 impl fmt::Debug for NodeRef<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -219,7 +225,7 @@ impl fmt::Debug for NodeRef<'_> {
 
 impl PartialEq for NodeRef<'_> {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.file, other.file) && self.index == other.index
+        self.identity() == other.identity()
     }
 }
 impl Eq for NodeRef<'_> {}
@@ -233,6 +239,12 @@ impl<'a> NodeRef<'a> {
     }
     pub(crate) fn index(self) -> usize {
         self.index
+    }
+    pub(crate) fn identity(self) -> NodeIdentity {
+        NodeIdentity {
+            file: self.file,
+            index: self.index,
+        }
     }
     pub fn kind(self) -> &'a str {
         &self.data().kind

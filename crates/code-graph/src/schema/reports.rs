@@ -213,15 +213,24 @@ pub enum DataAccess {
     Unknown,
     Write,
 }
+impl DataAccess {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Unknown => "unknown",
+            Self::Write => "write",
+        }
+    }
+}
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSite {
     pub line: usize,
     pub column: usize,
-    pub owner_service: String,
-    pub binding: String,
+    pub owner_service: JsString,
+    pub binding: JsString,
     pub binding_kind: DataBindingKind,
-    pub method: Option<String>,
+    pub method: Option<JsString>,
     pub access: DataAccess,
 }
 #[derive(Debug, Serialize)]

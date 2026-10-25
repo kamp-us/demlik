@@ -1,6 +1,7 @@
 use demlik_code_graph::{
-    data::extract::Site,
-    schema::{DataAccess, DataBindingKind},
+    data::extract::{DataScan, DataScanInput, Site},
+    extract::wrangler_config::CatalogError,
+    schema::{DataAccess, DataBindingKind, DataReport},
     text::JsString,
 };
 use indexmap::IndexMap;
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::{RawValue, to_raw_value};
 use std::{
     io::{self, BufRead},
-    path::Path,
+    path::{Path, PathBuf},
 };
 macro_rules! observe { ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{ let returned = $function($($argument),*); $calls.push(stringify!($function)); returned }}; }
 #[derive(Deserialize)]
@@ -37,6 +38,26 @@ struct SitesInput {
     file: String,
     source: String,
     bindings: Vec<(JsString, Decl)>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct ReportInput {
+    root: PathBuf,
+    repo_root: Option<PathBuf>,
+    #[serde(default)]
+    omit_functions: bool,
+    #[serde(default)]
+    foreign_functions: bool,
+    #[serde(default)]
+    duplicate_units: bool,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReportOutput {
+    functions: usize,
+    parse_failures: Vec<String>,
+    scan: DataScan,
+    report: DataReport,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +88,24 @@ impl DriverError {
             message: error.to_string(),
         }
     }
+    fn backend(error: impl std::fmt::Display) -> Self {
+        Self {
+            kind: "backend-error",
+            message: error.to_string(),
+        }
+    }
+}
+impl From<CatalogError> for DriverError {
+    fn from(error: CatalogError) -> Self {
+        Self {
+            kind: if matches!(error, CatalogError::Record(_)) {
+                "type-error"
+            } else {
+                "backend-error"
+            },
+            message: error.to_string(),
+        }
+    }
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,6 +123,72 @@ fn parse<T: for<'a> Deserialize<'a>>(raw: &RawValue) -> Result<T, DriverError> {
 }
 fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, DriverError> {
     match case.operation.as_str() {
+        "code_graph.data_report" => {
+            let input: ReportInput = parse(&case.input)?;
+            let loaded = observe!(
+                calls,
+                demlik_code_graph::project::load_cheap_project,
+                &input.root,
+                None
+            )
+            .map_err(DriverError::backend)?;
+            let foreign = input
+                .foreign_functions
+                .then(|| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::project::load_cheap_project,
+                        &input.root,
+                        None
+                    )
+                })
+                .transpose()
+                .map_err(DriverError::backend)?;
+            let mut functions = observe!(
+                calls,
+                demlik_code_graph::extract::functions::discover_functions,
+                &foreign.as_ref().unwrap_or(&loaded).source_files
+            )
+            .functions;
+            if input.omit_functions {
+                functions.clear();
+            }
+            let mut units = loaded.source_files;
+            if input.duplicate_units {
+                units.extend(units.clone());
+            }
+            let repo = input.repo_root.as_deref().unwrap_or(&input.root);
+            let catalog = observe!(
+                calls,
+                demlik_code_graph::extract::wrangler_config::load_binding_catalog,
+                repo,
+                None
+            )?;
+            let scan = observe!(
+                calls,
+                demlik_code_graph::data::extract::scan_data_sites,
+                DataScanInput {
+                    units: &units,
+                    functions: &functions,
+                    catalog: &catalog,
+                    repo_root: repo
+                }
+            );
+            let report = observe!(
+                calls,
+                demlik_code_graph::data::extract::load_data_report,
+                &units,
+                &functions,
+                repo
+            )?;
+            to_raw_value(&ReportOutput {
+                functions: functions.len(),
+                parse_failures: loaded.parse_failures,
+                scan,
+                report,
+            })
+            .map_err(DriverError::transport)
+        }
         "code_graph.data_access" => {
             let input: AccessInput = parse(&case.input)?;
             let sql_access = observe!(
