@@ -1,0 +1,266 @@
+[
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "kind": "callable-member",
+    "signature": "c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "declaration": "dispatch(msg: M, opts?: {\n        readonly settle?: DispatchSettle;\n    }): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "kind": "callable-member",
+    "signature": "463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "declaration": "dispatchOnce(msg: M): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:bbfe040238f2f3068da60ce6b50fc7a7584f7e2ac06d1f9fc854db9e482acd22",
+    "kind": "callable-member",
+    "signature": "bbfe040238f2f3068da60ce6b50fc7a7584f7e2ac06d1f9fc854db9e482acd22",
+    "declaration": "subscribe(listener: () => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501",
+    "kind": "callable-member",
+    "signature": "bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501",
+    "declaration": "() => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "kind": "callable-member",
+    "signature": "95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "declaration": "observe(observer: (msg: M, state: S) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:c2fb09c497e0155d7c0a12fb4470e1410ff589953399010621762bba1bd8bd6b",
+    "kind": "callable-member",
+    "signature": "c2fb09c497e0155d7c0a12fb4470e1410ff589953399010621762bba1bd8bd6b",
+    "declaration": "(msg: M, state: S) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "kind": "callable-member",
+    "signature": "3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "declaration": "onBoot(handler: (state: S) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:7a77bfc2862132c340a5300ce9c2f60ef3354a8da82a84b72ace1fcd43c37f75",
+    "kind": "callable-member",
+    "signature": "7a77bfc2862132c340a5300ce9c2f60ef3354a8da82a84b72ace1fcd43c37f75",
+    "declaration": "(state: S) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:0c5f337e43f8bfcee0634dc94ebdc35cf655d8469d0e2eda888180320aee6ccd",
+    "kind": "callable-member",
+    "signature": "0c5f337e43f8bfcee0634dc94ebdc35cf655d8469d0e2eda888180320aee6ccd",
+    "declaration": "on<K extends E[\"type\"]>(type: K, handler: (event: Extract<E, {\n        type: K;\n    }>) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:f8a6b0278ba6fae679be0b86bd04a848d485280020d9b0a3e93e4b3eade884eb",
+    "kind": "callable-member",
+    "signature": "f8a6b0278ba6fae679be0b86bd04a848d485280020d9b0a3e93e4b3eade884eb",
+    "declaration": "(event: Extract<E, {\n        type: K;\n    }>) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:baac010dfb7e3dddb45b2180a3b1b8b77b4dcc5cbe446d2d38ddaf91df83c2bd",
+    "kind": "callable-member",
+    "signature": "baac010dfb7e3dddb45b2180a3b1b8b77b4dcc5cbe446d2d38ddaf91df83c2bd",
+    "declaration": "subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:eaf48c93cd62aa26b77b8bdd742a5cc59cfa07a0c7e0f421a463e8a6eb89b9af",
+    "kind": "callable-member",
+    "signature": "eaf48c93cd62aa26b77b8bdd742a5cc59cfa07a0c7e0f421a463e8a6eb89b9af",
+    "declaration": "(value: T) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:f743bc152c33b097bcff376e9543ad71e1a443cddf14b862dde08ee898c2ce86",
+    "kind": "callable-member",
+    "signature": "f743bc152c33b097bcff376e9543ad71e1a443cddf14b862dde08ee898c2ce86",
+    "declaration": "emitPort<T>(port: Port<T>, value: T): void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootingRuntime:346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "kind": "callable-member",
+    "signature": "346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "declaration": "stop(): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RuntimeRef:c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "kind": "callable-member",
+    "signature": "c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "declaration": "dispatch(msg: M, opts?: {\n        readonly settle?: DispatchSettle;\n    }): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RuntimeRef:463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "kind": "callable-member",
+    "signature": "463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "declaration": "dispatchOnce(msg: M): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:365445d27ce6309019ad22544f3b51c2332879b689655556d0e246238b086f31",
+    "kind": "callable-member",
+    "signature": "365445d27ce6309019ad22544f3b51c2332879b689655556d0e246238b086f31",
+    "declaration": "dispatch(msg: M): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:bbfe040238f2f3068da60ce6b50fc7a7584f7e2ac06d1f9fc854db9e482acd22",
+    "kind": "callable-member",
+    "signature": "bbfe040238f2f3068da60ce6b50fc7a7584f7e2ac06d1f9fc854db9e482acd22",
+    "declaration": "subscribe(listener: () => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501",
+    "kind": "callable-member",
+    "signature": "bb294253172c400781d8bd25c82fb55482e36696d3c6bf70d184f7c7c2a6c501",
+    "declaration": "() => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "kind": "callable-member",
+    "signature": "95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "declaration": "observe(observer: (msg: M, state: S) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:c2fb09c497e0155d7c0a12fb4470e1410ff589953399010621762bba1bd8bd6b",
+    "kind": "callable-member",
+    "signature": "c2fb09c497e0155d7c0a12fb4470e1410ff589953399010621762bba1bd8bd6b",
+    "declaration": "(msg: M, state: S) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "kind": "callable-member",
+    "signature": "3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "declaration": "onBoot(handler: (state: S) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:7a77bfc2862132c340a5300ce9c2f60ef3354a8da82a84b72ace1fcd43c37f75",
+    "kind": "callable-member",
+    "signature": "7a77bfc2862132c340a5300ce9c2f60ef3354a8da82a84b72ace1fcd43c37f75",
+    "declaration": "(state: S) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:0c5f337e43f8bfcee0634dc94ebdc35cf655d8469d0e2eda888180320aee6ccd",
+    "kind": "callable-member",
+    "signature": "0c5f337e43f8bfcee0634dc94ebdc35cf655d8469d0e2eda888180320aee6ccd",
+    "declaration": "on<K extends E[\"type\"]>(type: K, handler: (event: Extract<E, {\n        type: K;\n    }>) => void): () => void;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:f8a6b0278ba6fae679be0b86bd04a848d485280020d9b0a3e93e4b3eade884eb",
+    "kind": "callable-member",
+    "signature": "f8a6b0278ba6fae679be0b86bd04a848d485280020d9b0a3e93e4b3eade884eb",
+    "declaration": "(event: Extract<E, {\n        type: K;\n    }>) => void"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#RunHandle:346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "kind": "callable-member",
+    "signature": "346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "declaration": "stop(): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#Runtime:73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "kind": "callable-member",
+    "signature": "73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "declaration": "getState(): S;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#Runtime:439a6e6b5cc9d0e911c44fc58733120ca89264a04265bd91b9d458649347d19a",
+    "kind": "callable-member",
+    "signature": "439a6e6b5cc9d0e911c44fc58733120ca89264a04265bd91b9d458649347d19a",
+    "declaration": "idle(): Promise<void>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#Runtime:60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c",
+    "kind": "callable-member",
+    "signature": "60b9a9f3131d3b5f06c0690520be62c48d358b208a025b8a979d14689609ed8c",
+    "declaration": "result(): S | undefined;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#Runtime:11a7bcd39f81834c86c2b70c059296a0a76cf871a3dd2d94592d30c910430205",
+    "kind": "callable-member",
+    "signature": "11a7bcd39f81834c86c2b70c059296a0a76cf871a3dd2d94592d30c910430205",
+    "declaration": "done(): Promise<S>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#recorder/member:src/runtime-types.d.ts#BootedRunHandle:73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "kind": "callable-member",
+    "signature": "73239e31056c3babe556a33782922557323447f84eebf756bec845ad3c3e67a2",
+    "declaration": "getState(): S;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "kind": "callable-member",
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "declaration": "<const C extends Cmd>(...arrs: readonly (readonly C[])[]) => readonly C[]"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "kind": "callable-member",
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "declaration": "<const C extends Cmd>(cond: boolean, cmd: C) => readonly C[]"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "kind": "callable-member",
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "declaration": "<T, const C extends Cmd>(value: T | undefined, build: (value: T) => C) => readonly C[]"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "kind": "callable-member",
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "declaration": "(value: T) => C"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Machine:e8b0cc26eae38a3989d59133571cfc45e5a8a8647b2969307985654b4fe739b4",
+    "kind": "callable-member",
+    "signature": "e8b0cc26eae38a3989d59133571cfc45e5a8a8647b2969307985654b4fe739b4",
+    "declaration": "(loaded: S | null, ctx: Ctx) => readonly [S, readonly C[]]"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Reducer:f29bcf772f010096f1790b4502a04d481ec526fb38a3f502cf8005d7ff09dd17",
+    "kind": "callable-member",
+    "signature": "f29bcf772f010096f1790b4502a04d481ec526fb38a3f502cf8005d7ff09dd17",
+    "declaration": "(state: S, msg: Extract<M, {\n        type: K;\n    }>) => SyncReturn<S, C>"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#DepKeyedSub:2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80",
+    "kind": "callable-member",
+    "signature": "2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80",
+    "declaration": "(state: S) => D | null | undefined"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Identity:a0f060fdff7e0a0f9135b5f498a02bd5b6ed029be635b74f13f0c4a1d0c4fdbb",
+    "kind": "callable-member",
+    "signature": "a0f060fdff7e0a0f9135b5f498a02bd5b6ed029be635b74f13f0c4a1d0c4fdbb",
+    "declaration": "(state: S) => unknown"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#Identity:f5daa2883eef987ad1a19f2a05fa60a2058b9f3ea42ad8394ea2e69509332ba0",
+    "kind": "callable-member",
+    "signature": "f5daa2883eef987ad1a19f2a05fa60a2058b9f3ea42ad8394ea2e69509332ba0",
+    "declaration": "(msg: M) => unknown"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "kind": "callable-member",
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "declaration": "(input: Input): CmdValue<Name, Input, Ok, E>;"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "kind": "callable-member",
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "declaration": "(cmd: CmdValue<Name, Input, Ok, E>, value: Ok, at?: number) => SettledOk<Name, CmdValue<Name, Input, Ok, E>, Ok>"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "kind": "callable-member",
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "declaration": "(cmd: CmdValue<Name, Input, Ok, E>, error: E, at?: number) => SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>"
+  },
+  {
+    "id": "@demlik/tea:./persistence#replayTrace/member:src/pure/core.d.ts#ExhaustiveTransitions:ea7129da5ae4e15f7e338aa02c8ab006082a121875ee1ae41e6070eb1bae5e2b",
+    "kind": "callable-member",
+    "signature": "ea7129da5ae4e15f7e338aa02c8ab006082a121875ee1ae41e6070eb1bae5e2b",
+    "declaration": "(state: Extract<S, {\n            type: P;\n        }>, msg: Extract<M, {\n            type: K;\n        }>) => SyncReturn<S, C>"
+  }
+]

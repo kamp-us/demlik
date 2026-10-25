@@ -1,0 +1,160 @@
+{
+  "@demlik/tea:./persistence#Trace": {
+    "signature": "eca3f9d375cffc897b84be4ca2dbfeb5cfd43edb98a7ce7dcd06c08cac9b9aa7",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::Recorder::dump"]
+    },
+    "cases": ["recorder.record.default.true"]
+  },
+  "@demlik/tea:./persistence#RecorderOptions": {
+    "signature": "6aa82d581be6a6906e9468777f80d901c71ce19c4f46aeec9b5a97bd1d530550",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": [
+        "demlik_tea::persistence::recorder::Recorder::with_state_kind"
+      ]
+    },
+    "cases": ["recorder.record.half.true"]
+  },
+  "@demlik/tea:./persistence#Recorder": {
+    "signature": "0aea75764ba821f91868eccde283185f8f95b08ed749dcdcc2f948ae20d14686",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::recorder"]
+    },
+    "cases": ["recorder-runtime.promise.capture-true.sampled-false"]
+  },
+  "@demlik/tea:./persistence#Recorder/member:published:4d95e088e4809d10c1d31842e7d0a4bda6ef87168a75cf2d94368b294e579842": {
+    "signature": "4d95e088e4809d10c1d31842e7d0a4bda6ef87168a75cf2d94368b294e579842",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::Recorder::dump"]
+    },
+    "cases": ["recorder.record.default.true"]
+  },
+  "@demlik/tea:./persistence#Recorder/member:published:710d81eb1228e5753e31815c6456e1e97b2a3b30e9914ee9d5f8dbe8d9177d35": {
+    "signature": "710d81eb1228e5753e31815c6456e1e97b2a3b30e9914ee9d5f8dbe8d9177d35",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/wire.rs",
+      "symbols": ["demlik_tea::persistence::recorder::Recorder::to_jsonl"]
+    },
+    "cases": ["recorder.record.default.true"]
+  },
+  "@demlik/tea:./persistence#Recorder/member:published:46e9cd13d65e33037b8605b87a94a41b798be28d83a4565feda5ef76f8cc2b87": {
+    "signature": "46e9cd13d65e33037b8605b87a94a41b798be28d83a4565feda5ef76f8cc2b87",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::Recorder::stop"]
+    },
+    "cases": ["recorder.record.default.true"]
+  },
+  "@demlik/tea:./persistence#recorder": {
+    "signature": "837866b3e154967285a44b40230d386925e93171fa87065590f4d0416d797ca0",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::recorder"]
+    },
+    "cases": ["recorder-runtime.promise.capture-true.sampled-false"]
+  },
+  "@demlik/tea:./persistence#parseJSONL": {
+    "signature": "9d56f18a99866de12263827d723e4577ac830ef9a934dbaba23080f9e1c0c39c",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/wire.rs",
+      "symbols": ["demlik_tea::persistence::recorder::parse_jsonl"]
+    },
+    "cases": [
+      "recorder.parse.boot-only",
+      "recorder.parse.missing-state-tail",
+      "recorder.parse.null-state-tail"
+    ]
+  },
+  "@demlik/tea:./persistence#TraceAttachment": {
+    "signature": "f63f7ebe3ba5404e5743e2277daefb3ca6686947088ac0f07db299f35c3d4d2a",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/wire.rs",
+      "symbols": ["demlik_tea::persistence::recorder::trace_attachment"]
+    },
+    "cases": ["recorder.attachment.full.default"]
+  },
+  "@demlik/tea:./persistence#traceAttachment": {
+    "signature": "cc013ec9e89c866cd78ac86b3332fb1326464c6f58c152fecd2d44a7e9c7a8bc",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/wire.rs",
+      "symbols": ["demlik_tea::persistence::recorder::trace_attachment"]
+    },
+    "cases": ["recorder.attachment.full.default"]
+  },
+  "@demlik/tea:./persistence#TraceBreadcrumb": {
+    "signature": "9858eecd05b1d5578b0702a11656ab828738f1d180f2d6caa7b6cb95380e4ea2",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/projections.rs",
+      "symbols": ["demlik_tea::persistence::recorder::breadcrumbs_from_trace"]
+    },
+    "cases": ["recorder.attachment.full.fraction"]
+  },
+  "@demlik/tea:./persistence#BreadcrumbsOptions": {
+    "signature": "1e6f4b3dd2920df3800c245660931dcae2d952e89e939595e2699a02b7baf424",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/projections.rs",
+      "symbols": [
+        "demlik_tea::persistence::recorder::breadcrumbs_from_trace_with"
+      ]
+    },
+    "cases": ["recorder.attachment.full.fraction"]
+  },
+  "@demlik/tea:./persistence#BreadcrumbsOptions/member:published:ba811adc6b6991b657966bcdbcf01bb71c8fb2c8b9303129c5a989e41ab83237": {
+    "signature": "ba811adc6b6991b657966bcdbcf01bb71c8fb2c8b9303129c5a989e41ab83237",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/projections.rs",
+      "symbols": [
+        "demlik_tea::persistence::recorder::breadcrumbs_from_trace_with"
+      ]
+    },
+    "cases": ["recorder.attachment.full.fraction"]
+  },
+  "@demlik/tea:./persistence#breadcrumbsFromTrace": {
+    "signature": "6d1fc0183dda30bfc37c5b19689a746f8cedc35ab3f8372b2319e3d173861c01",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder/projections.rs",
+      "symbols": ["demlik_tea::persistence::recorder::breadcrumbs_from_trace"]
+    },
+    "cases": [
+      "recorder.attachment.full.fraction",
+      "recorder.attachment.full.zero"
+    ],
+    "note": "Default tag rendering uses the shared UTF-8 Tagged owner. Explicit renderer and JSON boundary codecs preserve arbitrary JsText values; the shared tag-owner migration remains qualified."
+  },
+  "@demlik/tea:./persistence#ReplayResult": {
+    "signature": "5f3a66677b00f267cb28123419f3567779a79659ad91774ed95b8724c44b3045",
+    "rust": {
+      "file": "crates/tea/src/persistence/trace_replay.rs",
+      "symbols": ["demlik_tea::persistence::trace_replay::replay_trace"]
+    },
+    "cases": ["recorder.replay.match", "recorder.replay.mismatch"]
+  },
+  "@demlik/tea:./persistence#replayTrace": {
+    "signature": "49c62c5b7694be695118bdbfe5e454e9f0d1cb098af1e89f19bd9a16eda9140e",
+    "rust": {
+      "file": "crates/tea/src/persistence/trace_replay.rs",
+      "symbols": ["demlik_tea::persistence::trace_replay::replay_trace"]
+    },
+    "cases": [
+      "recorder.replay.match",
+      "recorder.replay.missing",
+      "recorder.replay.unknown-cell"
+    ]
+  },
+  "@demlik/tea:./persistence#deepEqual": {
+    "signature": "5cbe1370a351b369e5116e3a28ce999fa2be69e1e11ad0aa8541dd9544e1121c",
+    "rust": {
+      "file": "crates/tea/src/persistence/trace_replay.rs",
+      "symbols": ["demlik_tea::persistence::trace_replay::deep_equal"]
+    },
+    "cases": [
+      "recorder.compare.preorder",
+      "recorder.compare.grid-4-5",
+      "recorder.compare.grid-7-7"
+    ]
+  }
+}

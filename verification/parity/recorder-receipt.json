@@ -1,0 +1,493 @@
+{
+  "scope": "Native persistence recorder, update-only recorded replay, and shared state-walk helpers. Central integration and full-package acceptance remain the parent gate.",
+  "base": "cf6acbd",
+  "sharedOwnerDependencies": {
+    "retainedObservationAndSharedFold": "327523f",
+    "canonicalJsonTextDecoder": "db54bf2",
+    "fixtureRenameOnly": "cf6acbd (already present in MAIN; do not pick again)"
+  },
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "branch": "can/rust-trace-recorder",
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "acceptance": {
+    "strictSharedCases": 397,
+    "groups": {
+      "record": 36,
+      "parse": 52,
+      "compare": 261,
+      "attachment": 24,
+      "replay": 9,
+      "walk": 15
+    },
+    "actualRuntimeCases": 8,
+    "runtimeProfiles": ["Promise", "Effect"],
+    "controlsCompiledAndDetected": 12,
+    "focusedNativeTests": 17,
+    "nativeWorkspaceTestsAndDocs": 322,
+    "compileFailDocs": 18,
+    "newSerializationBoundaryCompileFail": 1,
+    "privateTypeRefusals": 2,
+    "ownedMappings": 17,
+    "ownedMappingGaps": [],
+    "inheritedCanonicalIntegrationEntries": 44
+  },
+  "ownership": [
+    "Trace copies only outer arrays and retains original Arc state/message identities. Pure recording, breadcrumbs and explicit-comparator replay impose no Clone, Send, serde or static bounds on model values.",
+    "Runtime factories attach through the existing ordered/deduplicated retained observation owner, using Weak callbacks and explicit stop. The native Recorder handle also detaches on Drop as Rust resource cleanup.",
+    "Update-only replay calls the existing core fold_msgs_shared loop. It does not init, interpret commands, touch stores, or select subscriptions.",
+    "JSON serialization/parse codecs are explicit at wire boundaries. Typed callback causes and rejected raw input/physical line survive as data.",
+    "JSONL uses the canonical decode_json_text and one shared JS whitespace predicate extracted unchanged from js_record string-number trimming. Existing number/string/property pub(crate) visibility for the DO owner is preserved.",
+    "No parser, scheduler, Promise, schema, registry or DI engine added. Native runtime composition uses the existing executor and both profiles."
+  ],
+  "preservedSourceDetails": [
+    "Final state advances even for dropped samples; rate one never samples; NaN RNG keeps a sample. Reentrant sampling records inner before outer and preserves the actual latest endpoint.",
+    "Optional captureSteps presence, null/undefined boot and missing-anchor refusal, honest sampled endpoint, stop/idempotence, and fresh dump arrays retain source behavior.",
+    "No trailing JSONL newline. Steps are positional when present, including empty/short arrays; null interior states only when steps are absent. Sparse parsed steps intentionally shift on rewrite, matching the source.",
+    "Blank lines and exact JS trim retain physical line numbering. Missing state is known undefined, null tails retain the last known state, duplicate/missing boot and unusable null anchor are refused.",
+    "Structural comparison uses Object.is including NaN and signed zero, UTF16-sorted own-key union, inherited pristine Object.prototype reads, array-node length mismatch and unchanged dotted/index path grammar."
+  ],
+  "buildIsolation": {
+    "baselineTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "mutationTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target/reconciler-mutation-build",
+    "policy": "All controls build disposable source copies into the separate reused lean mutation target; no baseline Cargo artifacts are used as mutation output. Active owner bytes are hash checked unchanged for every control.",
+    "baselineDriverSha256": "60e49120b6125ce1d91ffa692736abdc2297443c0363af1cdec9a11d340de9d8"
+  },
+  "checks": {
+    "workspace": {
+      "command": "cargo test --locked --workspace -- --nocapture",
+      "exitCode": 0,
+      "log": "target/recorder-workspace-green.log",
+      "sha256": "1644d4d86c15715c29661a5fead5b90862111020bde46f7d54dbbecec5ca8b79"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/recorder-clippy-final.log",
+      "sha256": "840709a1949f5ce0c71d7b70322a7cacea055b839ef4e021c9696e50ab3a2bfa"
+    },
+    "focused": {
+      "command": "cargo test --locked -p demlik-tea --test recorder --test recorder_jsonl --test recorder_breadcrumbs --test recorder_failures --test trace_replay --test recorder_runtime -- --nocapture",
+      "exitCode": 0,
+      "log": "target/recorder-native-final.log",
+      "sha256": "c888ffcae664874aa4f49f745b29be9136f25cdbed2004518fb000eddc215b91"
+    },
+    "paired": {
+      "command": "pnpm exec node verification/parity/recorder-run.mjs",
+      "exitCode": 0,
+      "log": "target/recorder-paired-final.log",
+      "sha256": "92865c886e578f1726f858cf646f42c71f05680d3f966272ec11354753420803"
+    },
+    "runtime": {
+      "command": "pnpm exec node verification/parity/recorder-runtime.mjs --from-log target/recorder-native-final.log",
+      "exitCode": 0,
+      "log": "target/recorder-runtime-final.log",
+      "sha256": "366044f1e3d04012c7f4e4ed4710f54bd7a650eb04e31ffa56266d248ad86f76"
+    },
+    "coverage": {
+      "command": "pnpm exec node verification/parity/recorder-coverage.mjs",
+      "exitCode": 0,
+      "log": "target/recorder-coverage-final.log",
+      "sha256": "4b97d8d2cb7204890683524586eb78ae3b40242a9dccf9fea5cc3db1842d221c"
+    },
+    "mutations": {
+      "command": "pnpm exec node verification/parity/recorder-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/recorder-mutations-final.log",
+      "sha256": "2726c0b0700a3bb1b4b196a0c56d2896ff5c3c03b4f49febf1becc5ea6a8dba5"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/recorder-fmt-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "privateSourceTypes": {
+      "command": "pnpm --filter @demlik/parity typecheck",
+      "exitCode": 0,
+      "log": "target/recorder-types-final.log",
+      "sha256": "05807e9b389ec3a012fde5dcb296fbf4048412808c3b990732de230a9178f0c5"
+    },
+    "fixtureStyle": {
+      "command": "pnpm exec biome check verification/parity/recorder-{cases,run,runtime,mutations,coverage}.mjs verification/parity/recorder-{contracts,inherited}.json verification/parity/recorder-{reference,types,runtime-reference}.mts",
+      "exitCode": 0,
+      "log": "target/recorder-biome-final.log",
+      "sha256": "0b45e21079be3ab03d5b1718a5c5925abb686d297919ae5d170ec97f9d941a3c"
+    }
+  },
+  "reports": {
+    "recorder": {
+      "file": "target/parity/recorder.json",
+      "sha256": "e92cb806ddc732734751b50da555dbb28b8357860ee2b3ce28166744e1730d43"
+    },
+    "recorder-runtime": {
+      "file": "target/parity/recorder-runtime.json",
+      "sha256": "9a2bf1684486610d78d04296aa72d3c8ea3a444788dbd7809895161201751152"
+    },
+    "recorder-coverage": {
+      "file": "target/parity/recorder-coverage.json",
+      "sha256": "4b97d8d2cb7204890683524586eb78ae3b40242a9dccf9fea5cc3db1842d221c"
+    },
+    "recorder-mutations": {
+      "file": "target/parity/recorder-mutations.json",
+      "sha256": "0f86b9b21ae51ba5094765f95efc1e9cc075c44400566b9e4bcef094d07dd695"
+    }
+  },
+  "sourceHashes": {
+    "crates/tea/src/persistence/recorder.rs": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+    "crates/tea/src/persistence/recorder/wire.rs": "44a26333d689ac11619647d5e7c439528519215a37df27c616fa1db8216f1bfe",
+    "crates/tea/src/persistence/recorder/projections.rs": "8c75031a4556392e52fe945849554bdaed1bb0e95e88da8784741042850c700d",
+    "crates/tea/src/persistence/trace_replay.rs": "7e63c97ee9ea5c7a915596aa8bd235db2172d56da5bf9a060bc591f5b178e7fc",
+    "crates/tea/src/persistence/trace_replay/state_walk.rs": "1c0fcbad27bc6fba495ca32d877afedbfb99480ffc9149cce42f42d6c1db331b",
+    "crates/tea/src/js_record.rs": "b65e2467e44040d46a9e9475e77e7310fdfa6d823245571964361d8523b50286",
+    "crates/tea/src/core.rs": "774f83d8cd23499cf04cf3c6e4676de09e3a97c7b43c068b670f127911b4bb0f",
+    "crates/parity/src/bin/recorder-parity.rs": "fab21f47cc598533b89f723376ef6b0e9686e904aab798ab61d1c68c1d266f2d",
+    "verification/parity/recorder-reference.mts": "8649bb8caf118e97efb18d4d3ffa18da0ac71d306353bcdc00d42f4913e7b09a",
+    "verification/parity/recorder-cases.mjs": "c24020629b8d0c67209c837c590e56e6f095654b844a153e41454f47a57f64ea"
+  },
+  "runtimeSourceHashes": {
+    "crates/tea/tests/recorder_runtime.rs": "fc0839b16d46382320d05d4f91944339e78c596752de98bafcba2c3c5814ab55",
+    "crates/tea/src/persistence/recorder.rs": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+    "crates/tea/src/persistence/recorder/wire.rs": "44a26333d689ac11619647d5e7c439528519215a37df27c616fa1db8216f1bfe",
+    "crates/tea/src/persistence/trace_replay.rs": "7e63c97ee9ea5c7a915596aa8bd235db2172d56da5bf9a060bc591f5b178e7fc",
+    "crates/tea/src/core.rs": "774f83d8cd23499cf04cf3c6e4676de09e3a97c7b43c068b670f127911b4bb0f",
+    "crates/tea/src/runtime/engine.rs": "6395faa1f6c6c8b1dca09bc37e2a7d697c85269393b7e58c2944894aff0e33f0",
+    "verification/parity/recorder-runtime-reference.mts": "4cf5752c1d452784b0e73cd594df406b79134cb448a9ddc98cc872e94867183a"
+  },
+  "referenceSourceHashes": {
+    "packages/tea/src/internal/persistence/recorder/index.ts": "b72f28ecd6d84c7ec3e9cf254372eef0dedf1986f07ac4618e4956ba3fc7b0e4",
+    "packages/tea/src/internal/persistence/trace-replay/index.ts": "3ddec995fe85a670d72b7678dac23e98da2fbc76072a32fc17a6136aa7806497",
+    "packages/tea/src/internal/persistence/trace-replay/state-walk.ts": "b110b357253af8c0b6c7a587c862aa168999da885c59f54a6b363ba79f4175c2"
+  },
+  "controls": [
+    {
+      "id": "sampled-final-is-last-kept-state",
+      "witness": "recorder.record.all-dropped.true",
+      "buildSucceeded": true,
+      "detected": 4,
+      "failedIds": [
+        "recorder.record.reentrant.false",
+        "recorder.record.all-dropped.false",
+        "recorder.record.reentrant.true",
+        "recorder.record.all-dropped.true"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+      "mutantSha256": "247d7920d0f715c73df7d666a5537f7bb054c42eb984ac597d6dbafe41ff71a1",
+      "log": "target/parity/recorder-mutant-sampled-final-is-last-kept-state.log",
+      "logSha256": "061ba211760a7f722681509e5cd498c6c0d9d69cdc10e44ef39a2c26a1b6cb6e"
+    },
+    {
+      "id": "nan-rng-is-dropped",
+      "witness": "recorder.record.half.true",
+      "buildSucceeded": true,
+      "detected": 4,
+      "failedIds": [
+        "recorder.record.half.false",
+        "recorder.record.tiny.false",
+        "recorder.record.half.true",
+        "recorder.record.tiny.true"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+      "mutantSha256": "eab64e1806208ef1412204c974b70e878e71a2e1c8f7095112183a904894a7eb",
+      "log": "target/parity/recorder-mutant-nan-rng-is-dropped.log",
+      "logSha256": "3513c26bcab6c9bf4b47aefb5ff0558856af801ba5938a37b09a36054b43947f"
+    },
+    {
+      "id": "rate-one-pays-rng",
+      "witness": "recorder.record.default.false",
+      "buildSucceeded": true,
+      "detected": 36,
+      "failedIds": [
+        "recorder.record.default.false",
+        "recorder.record.zero.false",
+        "recorder.record.negative.false",
+        "recorder.record.nan.false",
+        "recorder.record.infinity.false",
+        "recorder.record.above.false",
+        "recorder.record.half.false",
+        "recorder.record.tiny.false",
+        "recorder.record.null.false",
+        "recorder.record.undefined.false",
+        "recorder.record.undefined-then-value.false",
+        "recorder.record.null-then-value.false",
+        "recorder.record.value-then-undefined.false",
+        "recorder.record.nonfinite.false",
+        "recorder.record.utf16.false",
+        "recorder.record.no-boot.false",
+        "recorder.record.reentrant.false",
+        "recorder.record.all-dropped.false",
+        "recorder.record.default.true",
+        "recorder.record.zero.true",
+        "recorder.record.negative.true",
+        "recorder.record.nan.true",
+        "recorder.record.infinity.true",
+        "recorder.record.above.true",
+        "recorder.record.half.true",
+        "recorder.record.tiny.true",
+        "recorder.record.null.true",
+        "recorder.record.undefined.true",
+        "recorder.record.undefined-then-value.true",
+        "recorder.record.null-then-value.true",
+        "recorder.record.value-then-undefined.true",
+        "recorder.record.nonfinite.true",
+        "recorder.record.utf16.true",
+        "recorder.record.no-boot.true",
+        "recorder.record.reentrant.true",
+        "recorder.record.all-dropped.true"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+      "mutantSha256": "c3bc031dc27d9a0bfe80273959d6e67f35e1db1c36fba0226b927862176d749f",
+      "log": "target/parity/recorder-mutant-rate-one-pays-rng.log",
+      "logSha256": "c22b99009b82f43685c49e6820d21ecfccff01d28ea4545d32a7677a9316ba8a"
+    },
+    {
+      "id": "steps-presence-is-unconditional",
+      "witness": "recorder.record.default.false",
+      "buildSucceeded": true,
+      "detected": 17,
+      "failedIds": [
+        "recorder.record.default.false",
+        "recorder.record.zero.false",
+        "recorder.record.negative.false",
+        "recorder.record.nan.false",
+        "recorder.record.infinity.false",
+        "recorder.record.above.false",
+        "recorder.record.half.false",
+        "recorder.record.tiny.false",
+        "recorder.record.null.false",
+        "recorder.record.undefined-then-value.false",
+        "recorder.record.null-then-value.false",
+        "recorder.record.value-then-undefined.false",
+        "recorder.record.nonfinite.false",
+        "recorder.record.utf16.false",
+        "recorder.record.no-boot.false",
+        "recorder.record.reentrant.false",
+        "recorder.record.all-dropped.false"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+      "mutantSha256": "43ac4286b3efca846956974b9a8d47516ba598deec7f699ae990e6e994670bf2",
+      "log": "target/parity/recorder-mutant-steps-presence-is-unconditional.log",
+      "logSha256": "4bd12b91563d342dcbaea9d9c4c5a78a7271218350faf07a56606c9c68f4bea8"
+    },
+    {
+      "id": "stop-does-not-detach",
+      "witness": "recorder.record.default.true",
+      "buildSucceeded": true,
+      "detected": 18,
+      "failedIds": [
+        "recorder.record.default.false",
+        "recorder.record.zero.false",
+        "recorder.record.negative.false",
+        "recorder.record.nan.false",
+        "recorder.record.infinity.false",
+        "recorder.record.above.false",
+        "recorder.record.half.false",
+        "recorder.record.tiny.false",
+        "recorder.record.no-boot.false",
+        "recorder.record.default.true",
+        "recorder.record.zero.true",
+        "recorder.record.negative.true",
+        "recorder.record.nan.true",
+        "recorder.record.infinity.true",
+        "recorder.record.above.true",
+        "recorder.record.half.true",
+        "recorder.record.tiny.true",
+        "recorder.record.no-boot.true"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "6bd472a849c5746a6bd038732e53807c163446fc9a53b485b4662998d7b84abe",
+      "mutantSha256": "d909360e09bebd073f1a9ba40302ec4ceb278a3cec95245f5459e5ddf8b5b42f",
+      "log": "target/parity/recorder-mutant-stop-does-not-detach.log",
+      "logSha256": "2bea235110f03c95619d3ae8695f071d00c50086f1f774b7767953f2fa1a7f8d"
+    },
+    {
+      "id": "short-steps-fall-back-to-final",
+      "witness": "recorder.attachment.empty.default",
+      "buildSucceeded": true,
+      "detected": 14,
+      "failedIds": [
+        "recorder.parse.null-state-tail",
+        "recorder.parse.sparse",
+        "recorder.attachment.empty.default",
+        "recorder.attachment.empty.zero",
+        "recorder.attachment.empty.negative",
+        "recorder.attachment.empty.fraction",
+        "recorder.attachment.empty.nan",
+        "recorder.attachment.empty.infinity",
+        "recorder.attachment.short.default",
+        "recorder.attachment.short.zero",
+        "recorder.attachment.short.negative",
+        "recorder.attachment.short.fraction",
+        "recorder.attachment.short.nan",
+        "recorder.attachment.short.infinity"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "44a26333d689ac11619647d5e7c439528519215a37df27c616fa1db8216f1bfe",
+      "mutantSha256": "184e09a682683f729c0385517d65383be86252f51802e76e7c44a95ae0ab7946",
+      "log": "target/parity/recorder-mutant-short-steps-fall-back-to-final.log",
+      "logSha256": "fc4e92dbf66c6088f4387a7476b8bce3815dfee7961bdba9452de55eed8b7b62"
+    },
+    {
+      "id": "missing-state-is-not-known",
+      "witness": "recorder.parse.missing-state-tail",
+      "buildSucceeded": true,
+      "detected": 1,
+      "failedIds": ["recorder.parse.missing-state-tail"],
+      "sourceUnchanged": true,
+      "originalSha256": "44a26333d689ac11619647d5e7c439528519215a37df27c616fa1db8216f1bfe",
+      "mutantSha256": "120536fef88feea372a4d6a79eb3e48f4ef47e86dee9494a4950dfc1892d1b7d",
+      "log": "target/parity/recorder-mutant-missing-state-is-not-known.log",
+      "logSha256": "49d942d672f5c52724be7792d74127c1a9261918ff681a5310c9c444267d740a"
+    },
+    {
+      "id": "null-step-overwrites-last-known",
+      "witness": "recorder.parse.null-state-tail",
+      "buildSucceeded": true,
+      "detected": 3,
+      "failedIds": [
+        "recorder.parse.null-state-tail",
+        "recorder.parse.sparse",
+        "recorder.parse.null-boot-null-step"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "44a26333d689ac11619647d5e7c439528519215a37df27c616fa1db8216f1bfe",
+      "mutantSha256": "bf0c1e8f69693c70f29fa4ffe1dd73051f89d78c5cc74178a6eb0817c450c296",
+      "log": "target/parity/recorder-mutant-null-step-overwrites-last-known.log",
+      "logSha256": "39622c4e04cf609f336a10939efe6348d5e0d03ba3cfa98312c349b34a06d8da"
+    },
+    {
+      "id": "signed-zero-is-equal",
+      "witness": "recorder.compare.grid-4-5",
+      "buildSucceeded": true,
+      "detected": 2,
+      "failedIds": ["recorder.compare.grid-4-5", "recorder.compare.grid-5-4"],
+      "sourceUnchanged": true,
+      "originalSha256": "7e63c97ee9ea5c7a915596aa8bd235db2172d56da5bf9a060bc591f5b178e7fc",
+      "mutantSha256": "7ef4d6ca1810ebf3fcdac74a2f94d0d3a577d1c1c3b5b5176856194420d37e33",
+      "log": "target/parity/recorder-mutant-signed-zero-is-equal.log",
+      "logSha256": "a14920de71505c11672ab6e8f60b499b57cbb993e5a507e08eb4a3595256fc2e"
+    },
+    {
+      "id": "object-key-walk-is-reversed",
+      "witness": "recorder.compare.preorder",
+      "buildSucceeded": true,
+      "detected": 17,
+      "failedIds": [
+        "recorder.compare.preorder",
+        "recorder.compare.utf16-order",
+        "recorder.walk.0",
+        "recorder.walk.1",
+        "recorder.walk.2",
+        "recorder.walk.3",
+        "recorder.walk.4",
+        "recorder.walk.5",
+        "recorder.walk.6",
+        "recorder.walk.7",
+        "recorder.walk.8",
+        "recorder.walk.9",
+        "recorder.walk.10",
+        "recorder.walk.11",
+        "recorder.walk.12",
+        "recorder.walk.13",
+        "recorder.walk.14"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "1c0fcbad27bc6fba495ca32d877afedbfb99480ffc9149cce42f42d6c1db331b",
+      "mutantSha256": "f9f537448a4df5ad4d8ddda3803c948f15e294a19532915e5b4569b9931f1e28",
+      "log": "target/parity/recorder-mutant-object-key-walk-is-reversed.log",
+      "logSha256": "d56f737af70370861bc9d6425cb53dce0937374410c9800c8b9bab9002eadf51"
+    },
+    {
+      "id": "missing-builtin-is-undefined",
+      "witness": "recorder.compare.inherited-toString-false",
+      "buildSucceeded": true,
+      "detected": 23,
+      "failedIds": [
+        "recorder.compare.proto-own-nested",
+        "recorder.compare.inherited-toString-false",
+        "recorder.compare.inherited-toString-true",
+        "recorder.compare.inherited-toLocaleString-false",
+        "recorder.compare.inherited-toLocaleString-true",
+        "recorder.compare.inherited-valueOf-false",
+        "recorder.compare.inherited-valueOf-true",
+        "recorder.compare.inherited-constructor-false",
+        "recorder.compare.inherited-constructor-true",
+        "recorder.compare.inherited-hasOwnProperty-false",
+        "recorder.compare.inherited-hasOwnProperty-true",
+        "recorder.compare.inherited-isPrototypeOf-false",
+        "recorder.compare.inherited-isPrototypeOf-true",
+        "recorder.compare.inherited-propertyIsEnumerable-false",
+        "recorder.compare.inherited-propertyIsEnumerable-true",
+        "recorder.compare.inherited-__defineGetter__-false",
+        "recorder.compare.inherited-__defineGetter__-true",
+        "recorder.compare.inherited-__defineSetter__-false",
+        "recorder.compare.inherited-__defineSetter__-true",
+        "recorder.compare.inherited-__lookupGetter__-false",
+        "recorder.compare.inherited-__lookupGetter__-true",
+        "recorder.compare.inherited-__lookupSetter__-false",
+        "recorder.compare.inherited-__lookupSetter__-true"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "7e63c97ee9ea5c7a915596aa8bd235db2172d56da5bf9a060bc591f5b178e7fc",
+      "mutantSha256": "a18b57077dab4622c48af0bd92ee47be4c8f3eeab83d1b947d52b9ee676fdd30",
+      "log": "target/parity/recorder-mutant-missing-builtin-is-undefined.log",
+      "logSha256": "6763b094806d5b6f8b04e3b307d5d5be506205956fd72b82f8024b0e72a0e3e6"
+    },
+    {
+      "id": "cold-replay-skips-messages",
+      "witness": "recorder.replay.match",
+      "buildSucceeded": true,
+      "detected": 6,
+      "failedIds": [
+        "recorder.replay.match",
+        "recorder.replay.mismatch",
+        "recorder.replay.unknown-cell",
+        "recorder.replay.replace-null",
+        "recorder.replay.replace-undefined",
+        "recorder.replay.nonfinite"
+      ],
+      "sourceUnchanged": true,
+      "originalSha256": "7e63c97ee9ea5c7a915596aa8bd235db2172d56da5bf9a060bc591f5b178e7fc",
+      "mutantSha256": "59eb28154927c8e91e50d0508457b35008ee19600ea68a0ca58799e936fcade1",
+      "log": "target/parity/recorder-mutant-cold-replay-skips-messages.log",
+      "logSha256": "d56f737af70370861bc9d6425cb53dce0937374410c9800c8b9bab9002eadf51"
+    }
+  ],
+  "qualifications": [
+    "The inherited entries are enumerated for central canonical-owner integration, not fabricated as recorder mappings or counted as completed here.",
+    "The shared Tagged::tag owner remains UTF-8. Default breadcrumb tag text uses it; explicit renderers and JSON codecs retain arbitrary JsText payloads/keys. Shared tag migration remains an overall-port qualification.",
+    "Backend JSON diagnostics preserve real serde/V8 causes separately; the source-owned refusal prefix/name/line, accept/reject behavior and values are strict.",
+    "Actual serde and V8 syntax causes are retained in the paired report (11 syntax refusals) with exact acceptance/value and source-owned prefix/name/line comparison; backend-specific diagnostic suffixes are not claimed text-identical.",
+    "The source Effect recorder fixture bridges only the common synchronous observation hooks with a type-only adapter; all waiting verbs still run through the actual source Effect runtime.",
+    "Native automatic Drop cleanup is additional Rust handle lifecycle behavior; explicit stop/unsubscribe and both Runtime profiles have real witnesses.",
+    "Inventory emitted the same two code-graph tsgo warning records as the existing base inventory. Recorder/private fixture TypeScript checks pass; these 17 source signatures are verified live.",
+    "The prior 6633-case whole baseline remains captured by the accepted shared-owner checkpoint327523f. This receipt does not claim the newer MAIN composition or its unrelated journal/DO/graph suites were rerun in this isolated branch."
+  ],
+  "centralIntegration": {
+    "ownedMappings": "verification/parity/recorder-contracts.json",
+    "inheritedList": "verification/parity/recorder-inherited.json",
+    "sharedRunner": "recorderParity from verification/parity/recorder-run.mjs",
+    "runtimeRunner": "recorderRuntime from verification/parity/recorder-runtime.mjs",
+    "mutationCommand": "pnpm exec node verification/parity/recorder-mutations.mjs",
+    "registrations": "Parent owns central run.mjs/contracts union; these files were not edited."
+  },
+  "noNetworkOrDocker": true
+}

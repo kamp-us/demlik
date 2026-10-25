@@ -374,7 +374,7 @@ impl<E> JsRecord<E> {
     }
 }
 
-fn builtin(key: &str) -> Option<&'static str> {
+pub(crate) fn builtin(key: &str) -> Option<&'static str> {
     [
         "constructor",
         "__defineGetter__",
@@ -392,7 +392,7 @@ fn builtin(key: &str) -> Option<&'static str> {
     .find(|name| *name == key)
 }
 
-fn property(value: &PlainData, name: &str) -> Result<PlainData, JsAccessError> {
+pub(crate) fn property(value: &PlainData, name: &str) -> Result<PlainData, JsAccessError> {
     match value {
         PlainData::Null | PlainData::Undefined => Err(JsAccessError::type_error(format!(
             "Cannot read properties of {} (reading '{name}')",
@@ -418,7 +418,7 @@ pub(crate) fn plain(value: &impl Serialize) -> Result<PlainData, JsAccessError> 
     })
 }
 
-fn number(value: &PlainData) -> Result<f64, JsAccessError> {
+pub(crate) fn number(value: &PlainData) -> Result<f64, JsAccessError> {
     Ok(match value {
         PlainData::Undefined => f64::NAN,
         PlainData::Null => 0.0,
@@ -445,7 +445,7 @@ fn number(value: &PlainData) -> Result<f64, JsAccessError> {
         }
     })
 }
-fn string(value: &PlainData) -> Result<JsText, JsAccessError> {
+pub(crate) fn string(value: &PlainData) -> Result<JsText, JsAccessError> {
     Ok(match value {
         PlainData::Undefined => "undefined".into(),
         PlainData::Null => "null".into(),
@@ -480,28 +480,45 @@ fn string(value: &PlainData) -> Result<JsText, JsAccessError> {
         }
     })
 }
+fn js_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0009}'
+            | '\u{000a}'
+            | '\u{000b}'
+            | '\u{000c}'
+            | '\u{000d}'
+            | '\u{0020}'
+            | '\u{00a0}'
+            | '\u{1680}'
+            | '\u{2000}'
+            ..='\u{200a}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202f}'
+                | '\u{205f}'
+                | '\u{3000}'
+                | '\u{feff}'
+    )
+}
+pub(crate) fn trim_js(value: &str) -> &str {
+    value.trim_matches(js_whitespace)
+}
+pub(crate) fn trim_js_units(value: &[u16]) -> &[u16] {
+    let space = |unit: &u16| char::from_u32(u32::from(*unit)).is_some_and(js_whitespace);
+    let start = value
+        .iter()
+        .position(|unit| !space(unit))
+        .unwrap_or(value.len());
+    let end = value
+        .iter()
+        .rposition(|unit| !space(unit))
+        .map_or(start, |index| index + 1);
+    &value[start..end]
+}
+
 fn string_number(value: &str) -> f64 {
-    let value = value.trim_matches(|c| {
-        matches!(
-            c,
-            '\u{0009}'
-                | '\u{000a}'
-                | '\u{000b}'
-                | '\u{000c}'
-                | '\u{000d}'
-                | '\u{0020}'
-                | '\u{00a0}'
-                | '\u{1680}'
-                | '\u{2000}'
-                ..='\u{200a}'
-                    | '\u{2028}'
-                    | '\u{2029}'
-                    | '\u{202f}'
-                    | '\u{205f}'
-                    | '\u{3000}'
-                    | '\u{feff}'
-        )
-    });
+    let value = trim_js(value);
     match value {
         "" => return 0.0,
         "Infinity" | "+Infinity" => return f64::INFINITY,
