@@ -1,0 +1,303 @@
+{
+  "scope": "Accepted paginated-walk source integration into immutable newer main; Reconciler is separate work",
+  "base": "6efcc1e9526d621da06fa968ea8e178e1fe5e99a",
+  "acceptedWalk": "a1db3decf34dfb3dd300fb1f70211f255e9cc067",
+  "integratedAs": "189b033df49109fd616a0ee0b80b4c8973667d9f",
+  "sourceAdaptations": [],
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "target": "/private/tmp/demlik-rust-walk-integration-01a16c9d/target",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true"
+  },
+  "acceptance": {
+    "nativeTestsAndDocs": 282,
+    "walkScripts": 89,
+    "walkActions": 470,
+    "protocolRefusals": 11,
+    "defaultWalkRuntimeScenarios": 6,
+    "currentMainDifferential": 6633,
+    "strictWalkMappings": 68,
+    "coverageGaps": [],
+    "foreignTimerDetectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ],
+    "referenceChanges": []
+  },
+  "checks": {
+    "native": {
+      "command": "cargo test --locked --workspace",
+      "exitCode": 0,
+      "log": "target/walk-integration-native.log",
+      "sha256": "5ae6d51acd38ee242e370eb69fbe245eaa85f74ad7144dc2a1765c93f7873689"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/walk-integration-clippy.log",
+      "sha256": "f8eeb5fba3f7e9361d7d48ed990824bdc33805accd1d15bdae05f9678465299c"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/walk-integration-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "currentParity": {
+      "command": "pnpm parity",
+      "exitCode": 0,
+      "log": "target/walk-integration-parity.log",
+      "sha256": "6881c71ec4aea5cd512c2235a220805a2b45b1f959394b131a95893d013255ce"
+    },
+    "walk": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-run.mjs",
+      "exitCode": 0,
+      "log": "target/walk-integration-walk.log",
+      "sha256": "17d59a1c06e39be20e283f830110120b5ae4266f59d79002e225eba1f424fce8"
+    },
+    "walkRuntime": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-runtime.mjs",
+      "exitCode": 0,
+      "log": "target/walk-integration-runtime.log",
+      "sha256": "edb65454e3daf27528ec2c188e15426c10cccdbebf278662f5d7907ea2b41f5f"
+    },
+    "coverage": {
+      "command": "pnpm --filter @demlik/parity exec node paginated-walk-coverage.mjs",
+      "exitCode": 0,
+      "log": "target/walk-integration-coverage.log",
+      "sha256": "bfe1c9e920abd0b7704606a6efcf33f95851b158cd6f9c87402eee8ea548cb1e"
+    },
+    "foreignTimerControl": {
+      "command": "pnpm --filter @demlik/parity exec node runtime-deadline-run.mjs --mutation-check",
+      "exitCode": 0,
+      "log": "target/walk-integration-foreign-timer.log",
+      "sha256": "ff400e6aebf625f6e5006397110dcc5414ff24debdb950160ef918ba10196769"
+    },
+    "privateTypes": {
+      "command": "pnpm --filter @demlik/parity exec tsc --noEmit -p tsconfig.json",
+      "exitCode": 0,
+      "log": "target/walk-integration-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "biome": {
+      "command": "pnpm --filter @demlik/parity exec biome check paginated-walk-reference.mts paginated-walk-types.mts paginated-walk-run.mjs paginated-walk-runtime.mjs paginated-walk-mutations.mjs paginated-walk-contracts.json paginated-walk-coverage.mjs paginated-walk-cases.json paginated-walk-receipt.json runtime-deadline.mts",
+      "exitCode": 0,
+      "log": "target/walk-integration-biome.log",
+      "sha256": "ab62c54ed06588e2feb9feffe171b78674e9e3489c1bc2d1571e42b1a676a350"
+    }
+  },
+  "unchangedAcceptedFiles": {
+    "crates/parity/src/bin/paginated-walk-parity.rs": "c80a905318da8fdd8768b172696a89fe3d055bee1247f14ee9ce2b5341164445",
+    "crates/tea/src/paginate/mod.rs": "026462b1e64d15981d943e71e1fed2ad66052d16978cc39b5c3ef2505fc2cab6",
+    "crates/tea/src/paginate/paginated_walk.rs": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+    "crates/tea/tests/paginated_walk.rs": "529a20f74c7d2130c43d640871ec1ca63b2614aefcc843bee1a48f4cf25b05f5",
+    "crates/tea/tests/paginated_walk_runtime.rs": "5e664e288a8f6b912c21b2e95548403a66e1039bbd3c938894fca497eaa836a2",
+    "verification/parity/paginated-walk-cases.json": "272942d6941b0c601ddf1845a9d8b18ecf68568ba44e918b234029b4f2253a94",
+    "verification/parity/paginated-walk-contracts.json": "e11ac9384b2317b9158ef57644dcd1c5bdb3d3c1bd94b69e884fb661694dfced",
+    "verification/parity/paginated-walk-coverage.mjs": "4ed6b490b03c7e15561cd31a977bc8e64fabff8e5765959edc4660b23c8e9ada",
+    "verification/parity/paginated-walk-mutations.mjs": "eda4fb47e2cfd1c97007287c0bff87f9552d050faba8cb0042994fd44267be37",
+    "verification/parity/paginated-walk-receipt.json": "6a24aff1c74033ed5614f11ced38edadf15aec2adcee02c0f1aa673eedf5322c",
+    "verification/parity/paginated-walk-reference.mts": "8ecc6f5006709e645e820555bf6c4907a692c1be3ddbd1106c4e71013e8a978b",
+    "verification/parity/paginated-walk-run.mjs": "361f4b32aaf574d4f873ffb3d6e138d6ba0612cdaebbd76771af6af51397b562",
+    "verification/parity/paginated-walk-runtime.mjs": "84631a18d6728169b0d8ca01d0e0e10992a7361319cb9dd0bc9d1f2260bcdcc9",
+    "verification/parity/paginated-walk-types.mts": "1b4d2684f2083e1dccfd32244bae53c3d973ab88d11d5a072ed27ef9d08ca684",
+    "verification/parity/paginated-walk.md": "85da96b0dd196a7c6eca951f270dfe7295104528af0d373c47d26c3b567103cc",
+    "verification/parity/runtime-deadline.mts": "f8a5bdac178880db3621e17437a1b55302d202e04fc2ed87fdb4e43f64173194"
+  },
+  "preservedNewerMainNativeFiles": {
+    "crates/code-graph/Cargo.toml": "1718d04bcd1ba6d86fb159bb93ceac964a3d1aeff251df4ce295b150c32c66a6",
+    "crates/code-graph/examples/comment_gate_driver.rs": "f05d045e1b21a22c926781d73438f89f62a847b350dd226de038d85e111491ef",
+    "crates/code-graph/examples/comment_policy_driver.rs": "5e11c78da94e7b39de58f7f746a7aa5cd89ca4eb4cb4001a2edad8023dd36f1e",
+    "crates/code-graph/examples/deployables_driver.rs": "b04017cc40d7a8e391f54559f5394e8885099d28552b2a0022fc6e3e754adff2",
+    "crates/code-graph/examples/layer_target_driver.rs": "e60925ef5252c01c21d5f753864c6208823836d2858b087986a63810433ea8d0",
+    "crates/code-graph/examples/support/number_input.rs": "adf76b60d1920f3738dcdf4d4fc7ded569c73807157171b2d6b137530436cf50",
+    "crates/code-graph/src/boundaries/declaration.rs": "212849b90082134720c6f2dedf23e875729d14cdb602a57649f2d5e72a397ff6",
+    "crates/code-graph/src/boundaries/deployables/bindings.rs": "53383afbe964afb2b9578f2066b4559647c4056ed051e7f30651d817ee09e634",
+    "crates/code-graph/src/boundaries/deployables/census.rs": "d0c886bb70d544d6ddb6b2f7ea6c43311f89ac2a49c553a74f32fd1f026366a6",
+    "crates/code-graph/src/boundaries/deployables/judge.rs": "f52bc804d1625755f1183325f85ee9ab37a912a9127574f5d129522399b116c6",
+    "crates/code-graph/src/boundaries/deployables/mod.rs": "e54c7805d99baeb9745b2dba9fe0872762de16581146134b484cf297fc825c80",
+    "crates/code-graph/src/boundaries/deployables/model.rs": "0de30f7e59c593ffcf213ddb964dcf7dff79b67423aa1aaf10bf8dc3b3c17f83",
+    "crates/code-graph/src/boundaries/libraries.rs": "b7047495aa1ab616ce0e3a4bf94c1732e2a180bbf061e4c079afad4d2ce2ce6c",
+    "crates/code-graph/src/boundaries/libraries/allowance.rs": "4100f1fd2c35165cae5d99e29638e3cf65103faf21c6a0bc7b7e23e83640624e",
+    "crates/code-graph/src/boundaries/rules.rs": "cd0589e0435dc020171fdf3cb5e3f8b299c09e1756d15148fe8b6639b8c7f8fb",
+    "crates/code-graph/src/comments/config.rs": "a089860febaf3476a928eb50469661878e5f6106a5639e5b3ca026b58e733a69",
+    "crates/code-graph/src/comments/gate.rs": "e96a6e97c4ffc6b3d1be6b1ebc75893237c629b6a3e603396dfb849fd1fc8a06",
+    "crates/code-graph/src/comments/mod.rs": "bc9973571ec1efaaee83a72b5d65b793c224d8fd84be8aa8b29c031eaba24004",
+    "crates/code-graph/src/comments/ratchet.rs": "fa52c2101fb392a6c309424b2b3b27db1daa6f39ebcb18b4efcd65807fffbf8a",
+    "crates/code-graph/src/comments/render.rs": "5c6cbc7f929304a68e0f05f039a01954afddf4938a5fe21bc9c7b1ffa30c450c",
+    "crates/code-graph/src/extract/cross_runtime.rs": "9416385028630a717339efcc55044ebd740d83db2f8ebd7feb405aa81e854a31",
+    "crates/code-graph/src/extract/wrangler_config/document.rs": "893b3ac237e7934267865210f4a83dd4d7ae822ffa6ad3e3290737fcf9f404c5",
+    "crates/code-graph/src/extract/wrangler_config/document/recovery.rs": "5224342a04c4723d1ae2b8312b326df5a778e5700d9bb9dd5b7813d47866e98e",
+    "crates/code-graph/src/extract/wrangler_config/mod.rs": "358597eec38c097ff55dd40c1991514513b95753506f4cfa59fd06756011d9cb",
+    "crates/code-graph/src/layers/resolve_target.rs": "ec504768c264c11afed43efda12c5b87879c2ac6f7ada0be83c1751c850e3560",
+    "crates/code-graph/src/lib.rs": "db7576d3efdbf7f6092ff45019db39acd310d65763059d5b4b52073d54da5453",
+    "crates/code-graph/src/render/json.rs": "1c3034d4e29040bca5e0b85ce9dbcfbe7bc3184100d1c793f10348f6f4e3d4db",
+    "crates/code-graph/src/render/mod.rs": "777101c04d45f09f394168647c19531647fe3f009cf6d0fcd12661b7131e2a75",
+    "crates/code-graph/src/render/text.rs": "4b9361271937ada8ee2c45e7b87ec1a09a85f5e736e9792d2501e73da04a99d8",
+    "crates/code-graph/src/text.rs": "d969f4ed3a719707c3055a8ee2eae98d0e82deb42659305ed3c07210341f948e",
+    "crates/code-graph/tests/boundary_libraries.rs": "7fdc358d9f9be242f6113b10263d6a2efd539c06895dc162f0c09bddcb020449",
+    "crates/code-graph/tests/comment_gate.rs": "2c74a0da55c4443b5d34596a32f264d2fe6c6a58643f694aa23893a924f9a5c0",
+    "crates/code-graph/tests/comment_policy.rs": "c6344821e8f7e01f93b773cc69479109c27d1b67b78590f49a0c0925bc189ccc",
+    "crates/code-graph/tests/deployable_paths.rs": "48f97a6a96c55b390780b2d89e76a8c5cd83cf8aadb5e641d1add916664b2c29",
+    "crates/code-graph/tests/layer_targets.rs": "2893a8ba26971aa0bbda11dd52623fa6e38eba0c7ec3237be2864e9526868a1c",
+    "crates/tea/examples/discord_ping.rs": "d4d8742e5371305a80188e7681b8915a58890180550d5be3f1f0f8279dcefd00",
+    "crates/tea/src/durable_effects.rs": "a7fbc540ebd53c36dca2bdb2774e8b05d7a4f89088c70f0640ab988f1cc5f136",
+    "crates/tea/src/durable_effects/wire.rs": "f0dba295ea29740ee3866f52692b7b01cbb15b987c050464028c62273dea9051",
+    "crates/tea/src/flow/mod.rs": "6fcf10e0f309783204e69bfc8e2f32fc34c37fdf01f173f3bf3fe4f266954b80",
+    "crates/tea/src/flow/saga.rs": "615555e27953f0c9c0aca93cb0e6ee3230303ea0113a4682e42df3ae4e2b372d",
+    "crates/tea/src/flow/saga/wire.rs": "7a93b343d8a04ece7934733a8d6d4b225977a4c6e394b6c443875f4e01844673",
+    "crates/tea/src/flow/workflow.rs": "1053eaea08ece2ab590d56e0a7ce164566ed4108372b10da347b428ad8487e95",
+    "crates/tea/src/flow/workflow/wire.rs": "6f17112337d038de023cc1165a7c8b5a04438ab9f4e9b06c59cf5c043eccf402",
+    "crates/tea/src/lib.rs": "cef3419e65e5380c061c43b533122020550ee3efd85165571e45ce2c5a49028c",
+    "crates/tea/src/persistence/snapshot.rs": "bd94b5073974371852af91ac09d11ffc14ccfaeff7dcce62c8781c868fa6128a",
+    "crates/tea/src/schema.rs": "4182593a66dad53db1c3380998cd2e3340cf34c145c773113ac1e4f350bb1cbd",
+    "crates/tea/tests/durable_effects.rs": "772e08613d1e5ece60d9d51af50853bbf3a5274a46f931e8711ea381f84209cf",
+    "crates/tea/tests/flow_saga.rs": "36a401461971f096df1115f3119022d425e09925adfb58a73923fbbe35cad729",
+    "crates/tea/tests/flow_saga_runtime.rs": "5cb59b9f7677a14f83a6ccaa8014d9147c0cd26042a1a51e891f52dcc964a895",
+    "crates/tea/tests/flow_workflow.rs": "26e2dc254009ed257dd4ac6407c0535b6afedc03e587b6d84f8568a58f8271d1",
+    "crates/tea/tests/flow_workflow_runtime.rs": "7dc9aaef4a355bf37b8310ee0bbf2a6158914b495b15d9c4ee5bb53e126d85ae",
+    "crates/tea/tests/settled_void_replay.rs": "555ba2fea393bbcda0b8d68cd809de133083bca37f31df8ad708c8e5cf57c156"
+  },
+  "foreignTimerControl": {
+    "id": "separate-deadline-timer-type",
+    "isolation": "disposable-source-copy",
+    "activeSourceUnchanged": true,
+    "sourceBeforeSha256": "cb491380e6e26e7023a0047ef2abeb23872f03ba0ac76a9fdd8c08828f665293",
+    "mutantSourceSha256": "0aee0ffbc8618d20c5116ddfab1496ffe95f22c1d074f34a76d19cea1e4a9237",
+    "companionSourceBeforeSha256": "3bb3599c6cfa6efa1285c66702c46e0ac2a7bebfef0e0a98274717323d16c1fc",
+    "companionMutantSourceSha256": "b39aead10ecd354d7895b33b2afe90ab407fc3f3e1302ede1f5ac7e4ee65ec9e",
+    "walkSourceBeforeSha256": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+    "walkMutantSourceSha256": "0ee3707c850440f77fc4e54c2482011cda6d5680b52174ef357b0ceb85d386d3",
+    "nativeBinarySha256": "beda83ea0682b69a660b7c43cb412c7f9f9f3056dde028c02b0e4fd67d4e2151",
+    "detectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ]
+  },
+  "actualDefaultRuntime": {
+    "scope": "Actual default native Runtime, both profiles; no timer/subscription override",
+    "cases": 6,
+    "passed": 6,
+    "rows": [
+      {
+        "profile": "Promise",
+        "failures": 0,
+        "trace": [
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 0,
+        "reports": 0
+      },
+      {
+        "profile": "Promise",
+        "failures": 1,
+        "trace": [
+          "fetch:first",
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 1,
+        "reports": 0
+      },
+      {
+        "profile": "Promise",
+        "failures": 3,
+        "trace": ["fetch:first", "fetch:first", "fetch:first"],
+        "complete": false,
+        "stuck": true,
+        "sharedFailures": 3,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 0,
+        "trace": [
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 0,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 1,
+        "trace": [
+          "fetch:first",
+          "fetch:first",
+          "process:first",
+          "fetch:second",
+          "process:second"
+        ],
+        "complete": true,
+        "stuck": false,
+        "sharedFailures": 1,
+        "reports": 0
+      },
+      {
+        "profile": "Effect",
+        "failures": 3,
+        "trace": ["fetch:first", "fetch:first", "fetch:first"],
+        "complete": false,
+        "stuck": true,
+        "sharedFailures": 3,
+        "reports": 0
+      }
+    ],
+    "sourceHashes": {
+      "crates/tea/tests/paginated_walk_runtime.rs": "5e664e288a8f6b912c21b2e95548403a66e1039bbd3c938894fca497eaa836a2",
+      "crates/tea/src/paginate/paginated_walk.rs": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+      "crates/tea/src/paginate/paginator.rs": "41c2437cee03139193a3cdd5a968b85b2ad41de14ca410b1ae9b3feb6c879428",
+      "crates/tea/src/resilience/resilient_call/mod.rs": "e8c1ddb19bd39fe8dfecb96b9063fec0a43bc786886d59888f1a681437ffd96f",
+      "crates/tea/src/resilience/deadline.rs": "cb491380e6e26e7023a0047ef2abeb23872f03ba0ac76a9fdd8c08828f665293",
+      "crates/tea/src/runtime/engine.rs": "a407f09ebb266367a2652caf4d3548c296f1f4329d8237ff119db76b7aa8e7de",
+      "crates/tea/src/runtime/timer.rs": "95b59464db6937572844607fd30a957effad9524c859568e756d0db4cc0edb6a",
+      "crates/tea/src/command.rs": "814e65eaf1d3253efcb6f8bda75d1c1830d9b9df453a58c41a9ecd639c643c05",
+      "crates/tea/src/data.rs": "7dc78845eeea81cd13fe3f37e36351a3c43c056701c1d9605c78a472d98357ce"
+    },
+    "qualifications": [
+      "The consumer carries opaque non-Clone/non-serde cursor/page payloads and asserts shared failure identity and mutation visibility before emitting each receipt.",
+      "Typed native futures and the existing Runtime are used; this does not claim arbitrary JavaScript microtask scheduling equivalence."
+    ]
+  },
+  "reports": {
+    "target/parity/report.json": "3f0010bb50a904cb8b086ba351596ae5968a7be812ed5e90c9c954b87c37a9d7",
+    "target/parity/paginated-walk.json": "c085d4ef15e365fad57ec91622634762a19a72f403b7a261f6a20b9d2043f738",
+    "target/parity/paginated-walk-runtime.json": "e70267272fd5bcfeff8124ed855bc3bdd1cca5b62f8fc63027a09c787f7eb24a",
+    "target/parity/paginated-walk-coverage.json": "bfe1c9e920abd0b7704606a6efcf33f95851b158cd6f9c87402eee8ea548cb1e",
+    "target/parity/runtime-deadline-mutation.json": "07da3e48b2020defe410537bb6295911035654311b95fcbb51e307a089aa3470"
+  },
+  "integration": [
+    "The accepted commit cherry-picked without conflicts or required native consumer changes. Newer workflow, saga, durable effects and graph paths remain byte-identical to main6efcc1e.",
+    "The accepted disposable walk companion already keeps the foreign-timer control compilable on this base. Its mutant builds and detects exactly the four original runtime fire/stop cases; production TimerDeps stays canonical.",
+    "Central run/contracts registration is unchanged; the parent owns the 68-mapping union and the 89-case registration.",
+    "No idempotency.rs or other shared production owner was edited."
+  ],
+  "qualifications": [
+    "The accepted 11 walk mutation controls were not repeated for this receipt because the walk owner, consumers, corpus and scripts remain byte-identical to a1db3de; its committed receipt retains their actual build/detection evidence. The directly affected foreign-timer control was rebuilt and executed here.",
+    "The existing Runtime UTF-8 tag interface and native executor contract remain explicit shared qualifications.",
+    "The two inherited code-graph tsgo inventory warnings remain recorded; strict walk declaration/call evidence has zero gaps."
+  ]
+}
