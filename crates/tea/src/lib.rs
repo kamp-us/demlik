@@ -8,6 +8,7 @@ pub mod idempotency;
 mod js_math;
 pub mod js_record;
 pub mod paginate;
+pub mod persistence;
 pub mod ports;
 pub mod resilience;
 pub mod retry_backoff;
