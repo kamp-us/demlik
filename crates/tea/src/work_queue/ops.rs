@@ -1,4 +1,4 @@
-use super::{Queue, QueueField, QueueItem, QueueItemStatus};
+use super::{Queue, QueueField, QueueItem, QueueItemStatus, QueueTime};
 use crate::data::JsText;
 use std::rc::Rc;
 
@@ -18,7 +18,7 @@ pub struct QueueChange<I> {
 pub fn enqueue_op<I>(
     queue: &Queue<I>,
     input: Rc<I>,
-    now: f64,
+    now: impl Into<QueueTime>,
     id: impl Into<JsText>,
 ) -> Enqueued<I> {
     let item = Rc::new(QueueItem::new(input, now, id));
@@ -29,7 +29,7 @@ pub fn enqueue_op<I>(
         item,
     }
 }
-pub fn claim_next_op<I>(queue: &Queue<I>, now: f64) -> Option<Claimed<I>> {
+pub fn claim_next_op<I>(queue: &Queue<I>, now: impl Into<QueueTime>) -> Option<Claimed<I>> {
     let items = queue.items();
     let index = items
         .iter()

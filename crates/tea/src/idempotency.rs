@@ -2,6 +2,8 @@ use crate::data::JsText;
 pub use crate::work_queue::QueueTime as IdempotencyNumber;
 pub type IdempotencyTime = IdempotencyNumber;
 use serde::{Deserialize, Serialize};
+mod adapter;
+pub use adapter::*;
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
 
@@ -20,7 +22,7 @@ pub struct IdempotencyEntry<V> {
     pub value: V,
     pub at_ms: IdempotencyTime,
 }
-impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
+impl<V> RecordEntry for IdempotencyEntry<V> {
     type Value = V;
     const TIMESTAMP_KEY: &'static str = "atMs";
     fn payload(&self) -> &V {
@@ -28,6 +30,11 @@ impl<V: Serialize> RecordEntry for IdempotencyEntry<V> {
     }
     fn timestamp(&self) -> f64 {
         self.at_ms.number_or_zero()
+    }
+    fn timestamp_data(&self) -> crate::PlainData {
+        self.at_ms
+            .number()
+            .map_or(crate::PlainData::Null, crate::PlainData::Number)
     }
 }
 
@@ -65,17 +72,18 @@ pub fn init_store<V>(options: StoreOptions) -> IdempotencyStore<V> {
     }
 }
 
-fn live<'a, V: Serialize>(
+fn live<'a, V>(
     store: &'a IdempotencyStore<V>,
     key: &JsText,
-    now_ms: f64,
+    now_ms: IdempotencyTime,
+    project: impl FnOnce(&V) -> Result<crate::PlainData, JsAccessError>,
 ) -> Result<Option<Resolved<'a, IdempotencyEntry<V>>>, JsAccessError> {
-    let entry = store.entries.resolve(key)?;
+    let entry = store.entries.resolve_with(key, project)?;
     if entry.missing() {
         return Ok(None);
     }
     if let Some(ttl) = store.ttl_ms
-        && now_ms - entry.timestamp()? >= ttl.number_or_zero()
+        && now_ms.number_or_zero() - entry.timestamp()? >= ttl.number_or_zero()
     {
         return Ok(None);
     }
@@ -85,17 +93,33 @@ fn live<'a, V: Serialize>(
 pub fn seen<V: Serialize>(
     store: &IdempotencyStore<V>,
     key: impl Into<JsText>,
-    now_ms: f64,
+    now_ms: impl Into<IdempotencyTime>,
 ) -> Result<bool, JsAccessError> {
-    Ok(live(store, &key.into(), now_ms)?.is_some())
+    seen_with_projection(store, key, now_ms, crate::js_record::plain)
+}
+pub fn seen_with_projection<V>(
+    store: &IdempotencyStore<V>,
+    key: impl Into<JsText>,
+    now_ms: impl Into<IdempotencyTime>,
+    project: impl FnOnce(&V) -> Result<crate::PlainData, JsAccessError>,
+) -> Result<bool, JsAccessError> {
+    Ok(live(store, &key.into(), now_ms.into(), project)?.is_some())
 }
 
 pub fn recall<'a, V: Serialize>(
     store: &'a IdempotencyStore<V>,
     key: impl Into<JsText>,
-    now_ms: f64,
+    now_ms: impl Into<IdempotencyTime>,
 ) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
-    match live(store, &key.into(), now_ms)? {
+    recall_with_projection(store, key, now_ms, crate::js_record::plain)
+}
+pub fn recall_with_projection<'a, V>(
+    store: &'a IdempotencyStore<V>,
+    key: impl Into<JsText>,
+    now_ms: impl Into<IdempotencyTime>,
+    project: impl FnOnce(&V) -> Result<crate::PlainData, JsAccessError>,
+) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
+    match live(store, &key.into(), now_ms.into(), project)? {
         Some(entry) => entry.payload(),
         None => Ok(None),
     }
@@ -103,11 +127,19 @@ pub fn recall<'a, V: Serialize>(
 
 pub fn evict_expired<V: Clone + Serialize>(
     store: &IdempotencyStore<V>,
-    now_ms: f64,
+    now_ms: impl Into<IdempotencyTime>,
+) -> Result<IdempotencyStore<V>, JsAccessError> {
+    evict_expired_with_projection(store, now_ms, crate::js_record::plain)
+}
+pub fn evict_expired_with_projection<V: Clone>(
+    store: &IdempotencyStore<V>,
+    now_ms: impl Into<IdempotencyTime>,
+    project: impl Fn(&V) -> Result<crate::PlainData, JsAccessError>,
 ) -> Result<IdempotencyStore<V>, JsAccessError> {
     let Some(ttl) = store.ttl_ms else {
         return Ok(store.clone());
     };
+    let now_ms = now_ms.into().number_or_zero();
     let mut next = IdempotencyStore {
         entries: JsRecord::default(),
         order: Vec::new(),
@@ -115,7 +147,7 @@ pub fn evict_expired<V: Clone + Serialize>(
         ttl_ms: store.ttl_ms,
     };
     for key in &store.order {
-        let entry = store.entries.resolve(key)?;
+        let entry = store.entries.resolve_with(key, &project)?;
         if entry.missing() || now_ms - entry.timestamp()? >= ttl.number_or_zero() {
             continue;
         }
@@ -131,16 +163,26 @@ pub fn remember<V: Clone + Serialize>(
     store: &IdempotencyStore<V>,
     key: impl Into<JsText>,
     value: V,
-    now_ms: f64,
+    now_ms: impl Into<IdempotencyTime>,
 ) -> Result<IdempotencyStore<V>, JsAccessError> {
-    let mut next = evict_expired(store, now_ms)?;
+    remember_with_projection(store, key, value, now_ms, crate::js_record::plain)
+}
+pub fn remember_with_projection<V: Clone>(
+    store: &IdempotencyStore<V>,
+    key: impl Into<JsText>,
+    value: V,
+    now_ms: impl Into<IdempotencyTime>,
+    project: impl Fn(&V) -> Result<crate::PlainData, JsAccessError>,
+) -> Result<IdempotencyStore<V>, JsAccessError> {
+    let now_ms = now_ms.into();
+    let mut next = evict_expired_with_projection(store, now_ms, project)?;
     next.entries = next.entries.spread();
     let key = key.into();
     next.entries.assign(
         key.clone(),
         RecordValue::Entry(IdempotencyEntry {
             value,
-            at_ms: now_ms.into(),
+            at_ms: now_ms,
         }),
     );
     next.order.retain(|old| old != &key);

@@ -280,6 +280,10 @@ pub(crate) enum Resolved<'a, E> {
     ObjectPrototype,
     Missing,
 }
+pub(crate) enum RecordLookup<'a, E: RecordEntry> {
+    Value(Resolved<'a, E>),
+    Payload(&'a E::Value),
+}
 impl<'a, E> From<&'a RecordValue<E>> for Resolved<'a, E> {
     fn from(value: &'a RecordValue<E>) -> Self {
         match value {
@@ -324,13 +328,6 @@ impl<'a, E: RecordEntry> Resolved<'a, E> {
     }
 }
 impl<E> JsRecord<E> {
-    pub(crate) fn resolve(&self, key: &JsText) -> Result<Resolved<'_, E>, JsAccessError>
-    where
-        E: RecordEntry,
-        E::Value: Serialize,
-    {
-        self.resolve_with(key, plain)
-    }
     pub(crate) fn resolve_with(
         &self,
         key: &JsText,
@@ -339,13 +336,22 @@ impl<E> JsRecord<E> {
     where
         E: RecordEntry,
     {
+        Ok(match self.lookup(key) {
+            RecordLookup::Value(value) => value,
+            RecordLookup::Payload(value) => Resolved::Data(project(value)?),
+        })
+    }
+    pub(crate) fn lookup(&self, key: &JsText) -> RecordLookup<'_, E>
+    where
+        E: RecordEntry,
+    {
         if let Some(value) = self.own.get(key) {
-            return Ok(value.into());
+            return RecordLookup::Value(value.into());
         }
         if let Prototype::Injected(value) = &self.prototype {
             let inherited = match value.as_ref() {
                 RecordValue::Entry(entry) if key.as_utf8() == Some("value") => {
-                    Some(project(entry.payload())?)
+                    return RecordLookup::Payload(entry.payload());
                 }
                 RecordValue::Entry(entry) if key.as_utf8() == Some(E::TIMESTAMP_KEY) => {
                     Some(entry.timestamp_data())
@@ -354,20 +360,20 @@ impl<E> JsRecord<E> {
                 _ => None,
             };
             if let Some(value) = inherited {
-                return Ok(Resolved::Data(value));
+                return RecordLookup::Value(Resolved::Data(value));
             }
         }
         if matches!(self.prototype, Prototype::Null) {
-            return Ok(Resolved::Missing);
+            return RecordLookup::Value(Resolved::Missing);
         }
         if key.as_utf8() == Some("__proto__") {
-            return Ok(match &self.prototype {
+            return RecordLookup::Value(match &self.prototype {
                 Prototype::Object => Resolved::ObjectPrototype,
                 Prototype::Injected(value) => value.as_ref().into(),
                 Prototype::Null => Resolved::Missing,
             });
         }
-        Ok(match key.as_utf8().and_then(builtin) {
+        RecordLookup::Value(match key.as_utf8().and_then(builtin) {
             Some(name) => Resolved::Builtin(name),
             None => Resolved::Missing,
         })

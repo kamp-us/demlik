@@ -109,7 +109,7 @@ impl<I> QueueItem<I> {
     /// let mut item = QueueItem::new(std::rc::Rc::new("job"), 0.0, "id");
     /// item.status = QueueItemStatus::Failed;
     /// ```
-    pub fn new(input: Rc<I>, at: f64, id: impl Into<JsText>) -> Self {
+    pub fn new(input: Rc<I>, at: impl Into<QueueTime>, id: impl Into<JsText>) -> Self {
         Self {
             fields: QueueItemFields {
                 id: id.into(),
