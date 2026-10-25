@@ -14,6 +14,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    Boundary ledger parsing, identity, moves and file operations compare against the
    same source API, including invalid input and UTF-16 strings. Reconciliation
    compares scope pruning, write diagnostics, acceptance and ceiling migration.
+   Prepared-rule zoning traces compare both layouts, rule ownership and layout
+   diagnostics; full boundary-rule input validation is a separate contract.
    Query traces compare reachability, unguarded paths, package interface width
    and clusters. Shared JSON traces compare exact source parse/stringify behavior
    at the data boundary, using serde and ECMAScript number formatting.
@@ -37,7 +39,7 @@ The implementations live beside each other in `packages/` and `crates/`.
 3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
    fail their intended cases. This builds disposable source copies and writes
    `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
-   `runtime-hooks-mutation.json` and `paginate-queue-mutations.json`.
+   `runtime-hooks-mutation.json`, `paginate-queue-mutations.json` and `zoning-mutations.json`.
 4. Run `pnpm --filter @demlik/parity typecheck` and `pnpm rust:check` to check
    TypeScript type contracts, Rust types, compile-fail examples, formatting and lint.
 5. Build the reference package with `pnpm --filter @demlik/code-graph build`, then
