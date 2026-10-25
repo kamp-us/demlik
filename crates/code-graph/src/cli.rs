@@ -2,7 +2,9 @@
 //!
 //! `parse` accepts user arguments, excluding the executable, and returns output
 //! and exit decisions as data. It performs no graph execution or host IO.
+pub mod frontdoor;
 mod help;
+pub mod io;
 mod options;
 mod suggest;
 use crate::text::JsString;

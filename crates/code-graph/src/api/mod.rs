@@ -11,4 +11,5 @@ pub mod read;
 mod root;
 pub mod text;
 pub mod view;
+pub(crate) use root::real_path;
 pub use root::{package_root, project_relative};

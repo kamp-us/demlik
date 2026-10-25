@@ -29,7 +29,7 @@ pub fn package_root(root: &JsString) -> Result<JsString, ApiError> {
         source,
     })
 }
-fn real_path(absolute: &JsString) -> Result<JsString, std::io::Error> {
+pub(crate) fn real_path(absolute: &JsString) -> Result<JsString, std::io::Error> {
     let canonical = fs::canonicalize(absolute.to_lossy())?;
     if String::from_utf16(absolute.units()).is_ok() {
         return Ok(canonical.to_string_lossy().as_ref().into());

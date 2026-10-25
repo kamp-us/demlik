@@ -11,7 +11,7 @@ use crate::{
             text::render_api_ratchet,
             verdict::{api_changes, ratchet_api_diff},
         },
-        view::{PublishedApiOptions, read_published_api},
+        view::{ApiWarning, PublishedApiOptions, read_published_api},
     },
     engine::tsgo::TsgoBinary,
     extract::functions::js_space,
@@ -151,18 +151,17 @@ struct Outcome {
     payload: JsString,
     exit: ApiExit,
 }
-fn outcome_of(run: &ApiRun<'_>, compiler: &TsgoBinary) -> Result<Outcome, ApiError> {
+fn outcome_of<'warning>(
+    run: &ApiRun<'_>,
+    compiler: &'warning TsgoBinary,
+    options: PublishedApiOptions<'warning>,
+) -> Result<Outcome, ApiError> {
     let map = read_json_file(run.map_file, "API map")?;
     if let (Some(base), Some(policy_file)) = (run.base, run.policy_file) {
         let policy_value = read_json_file(policy_file, "bump policy")?;
         let policy = bump_policy(&policy_value)?;
-        let diff = diff_published_api_blocking(
-            run.host.root_absolute,
-            &map,
-            base,
-            compiler,
-            PublishedApiOptions::default(),
-        )?;
+        let diff =
+            diff_published_api_blocking(run.host.root_absolute, &map, base, compiler, options)?;
         let changesets = read_changesets_since(
             run.host.root_absolute,
             &diff.base,
@@ -191,22 +190,11 @@ fn outcome_of(run: &ApiRun<'_>, compiler: &TsgoBinary) -> Result<Outcome, ApiErr
     }
     let payload = match run.base {
         None => json_payload(
-            &read_published_api(
-                run.host.root_absolute,
-                &map,
-                compiler,
-                PublishedApiOptions::default(),
-            )?,
+            &read_published_api(run.host.root_absolute, &map, compiler, options)?,
             run.host.pretty,
         )?,
         Some(base) => json_payload(
-            &diff_published_api_blocking(
-                run.host.root_absolute,
-                &map,
-                base,
-                compiler,
-                PublishedApiOptions::default(),
-            )?,
+            &diff_published_api_blocking(run.host.root_absolute, &map, base, compiler, options)?,
             run.host.pretty,
         )?,
     };
@@ -232,8 +220,15 @@ fn report_precondition(
 /// Run the already-parsed API mode. Processing and emit failures are reported;
 /// report failures escape exactly where the Source caller invokes that callback.
 pub fn run_api_view_blocking(
-    mut run: ApiRun<'_>,
+    run: ApiRun<'_>,
     compiler: &TsgoBinary,
+) -> Result<ApiRunOutcome, ApiRunError> {
+    run_api_view_with_warning(run, compiler, None)
+}
+fn run_api_view_with_warning<'host, 'warning>(
+    mut run: ApiRun<'host>,
+    compiler: &'warning TsgoBinary,
+    warning: Option<&'warning mut ApiWarning<'warning>>,
 ) -> Result<ApiRunOutcome, ApiRunError> {
     let stray = run
         .host
@@ -256,7 +251,15 @@ pub fn run_api_view_blocking(
     if run.policy_file.is_some() && run.base.is_none() {
         return report_precondition(&mut run.host, &"--api-policy needs --api-base <rev>".into());
     }
-    let result = outcome_of(&run, compiler).and_then(|outcome| {
+    let result = outcome_of(
+        &run,
+        compiler,
+        PublishedApiOptions {
+            repo_root: None,
+            warn: warning,
+        },
+    )
+    .and_then(|outcome| {
         (run.host.emit)(&outcome.payload)?;
         Ok(outcome.exit)
     });
@@ -288,11 +291,19 @@ pub fn run_api_view_blocking(
 /// order come from the future global parser; this function does not infer them.
 pub fn run_api_flags_blocking<'a>(
     flags: ApiFlags<'a>,
-    mut host: ApiHost<'a>,
+    host: ApiHost<'a>,
     compiler: &TsgoBinary,
 ) -> Result<Option<ApiRunOutcome>, ApiRunError> {
+    run_api_flags_with_warning_blocking(flags, host, compiler, None)
+}
+pub(crate) fn run_api_flags_with_warning_blocking<'host, 'warning>(
+    flags: ApiFlags<'host>,
+    mut host: ApiHost<'host>,
+    compiler: &'warning TsgoBinary,
+    warning: Option<&'warning mut ApiWarning<'warning>>,
+) -> Result<Option<ApiRunOutcome>, ApiRunError> {
     if let Some(map_file) = flags.api {
-        return run_api_view_blocking(
+        return run_api_view_with_warning(
             ApiRun {
                 host,
                 map_file,
@@ -300,6 +311,7 @@ pub fn run_api_flags_blocking<'a>(
                 policy_file: flags.api_policy,
             },
             compiler,
+            warning,
         )
         .map(Some);
     }
