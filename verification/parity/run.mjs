@@ -1000,7 +1000,13 @@ const report = {
       ...graph.suites.map((suite) => `code_graph.${suite.name}`),
     ]),
   ],
-  graph: { ...graph, nativeEvidence: undefined },
+  graph: {
+    ...graph,
+    nativeEvidence: undefined,
+    qualifiedNativeEvidence: undefined,
+    qualifiedEvidenceCases: Object.keys(graph.qualifiedNativeEvidence ?? {})
+      .length,
+  },
   runtime: { ...runtime, nativeEvidence: undefined },
   timing: { ...timing, nativeEvidence: undefined, failures: undefined },
   runtimeContracts: {

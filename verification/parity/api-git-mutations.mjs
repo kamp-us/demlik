@@ -156,6 +156,30 @@ export async function apiGitMutations(options = {}) {
     baselineParser =
       options.parserBinary ??
       path.join(baselineTarget, "debug/examples/api_base_driver");
+  if (!options.gitBinary || !options.parserBinary)
+    execFileSync(
+      process.env.CARGO ?? "cargo",
+      [
+        "build",
+        "--locked",
+        "-p",
+        "demlik-code-graph",
+        ...(!options.gitBinary ? ["--example", "api_git_driver"] : []),
+        ...(!options.parserBinary ? ["--example", "api_base_driver"] : []),
+      ],
+      {
+        cwd: root,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          CARGO_TARGET_DIR: baselineTarget,
+          CARGO_PROFILE_DEV_DEBUG: "0",
+          CARGO_PROFILE_TEST_DEBUG: "0",
+          CARGO_INCREMENTAL: "0",
+          CARGO_BUILD_JOBS: "1",
+        },
+      },
+    );
   const baselines = new Map(
     [baselineGit, baselineParser].map((file) => [
       file,

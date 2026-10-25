@@ -1,0 +1,67 @@
+{
+  "@demlik/code-graph:./api#ApiEntryText": {
+    "signature": "0c745b617c6ed5ba038f46447f03b2c9853717683cc45edf1dac7f42cd8f701d",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::view::read_published_api"]
+    },
+    "cases": [
+      "graph.api-view.existing-four-entry-fixture",
+      "graph.api-view.every-declaration-kind-and-reference-shape",
+      "graph.api-view.aliases-keep-declared-text-and-fresh-facts",
+      "graph.api-view.published-reference-is-not-inlined"
+    ]
+  },
+  "@demlik/code-graph:./api#PublishedApi": {
+    "signature": "b2735a6a7a8a7e9f7073f337a33e530f27d8931143fa5042e74262ac9c8ab0a7",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::view::read_published_api"]
+    },
+    "cases": [
+      "graph.api-view.existing-four-entry-fixture",
+      "graph.api-view.existing-four-entry-repeat",
+      "graph.api-view.every-declaration-kind-and-reference-shape"
+    ]
+  },
+  "@demlik/code-graph:./api#PublishedApiOptions": {
+    "signature": "6a1efaaf8bc6577a01ae704661fa7e50951a0b4f37fff1e4e3a31ce5fd0d83dd",
+    "rust": {
+      "file": "crates/code-graph/src/api/view.rs",
+      "symbols": ["demlik_code_graph::api::view::read_published_api"]
+    },
+    "cases": [
+      "graph.api-view.package-scope-repo-option-is-passed-with-source-precedence",
+      "graph.api-view.type-errors-still-publish",
+      "graph.api-view.default-warning-stderr",
+      "graph.api-view.warning-callback-failure-cleans-temp"
+    ]
+  },
+  "@demlik/code-graph:./api#PublishedApiOptions/member:published:a9acd5b9c7b91b389be59c9d39b5b53ff6590dd5ded7e3df0289c51c88a452df": {
+    "signature": "a9acd5b9c7b91b389be59c9d39b5b53ff6590dd5ded7e3df0289c51c88a452df",
+    "rust": {
+      "file": "crates/code-graph/src/api/view.rs",
+      "symbols": ["demlik_code_graph::api::view::read_published_api"]
+    },
+    "cases": [
+      "graph.api-view.type-errors-still-publish",
+      "graph.api-view.warning-callback-failure-cleans-temp"
+    ]
+  },
+  "@demlik/code-graph:./api#readPublishedApi": {
+    "signature": "999b97be7ef02630eb4958b7ef978525f333a104678efdd2c5304f238ffe9169",
+    "rust": {
+      "file": "crates/code-graph/src/api/view.rs",
+      "symbols": ["demlik_code_graph::api::view::read_published_api"]
+    },
+    "cases": [
+      "graph.api-view.existing-four-entry-fixture",
+      "graph.api-view.existing-four-entry-repeat",
+      "graph.api-view.aliases-keep-declared-text-and-fresh-facts",
+      "graph.api-view.private-reference-cycle",
+      "graph.api-view.invalid-map-after-valid-package",
+      "graph.api-view.type-errors-still-publish",
+      "graph.api-view.warning-callback-failure-cleans-temp"
+    ]
+  }
+}

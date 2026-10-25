@@ -9,16 +9,22 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
+const nativeCompilerManifest = require.resolve(
+  "@typescript/native-preview/package.json",
+  { paths: [path.join(root, "packages/code-graph")] },
+);
 const suites = [
   {
     name: "api-view",
     driver: "api_view_driver",
     script: "graph-api-view.mts",
-    args: [
-      require.resolve("@typescript/native-preview/package.json", {
-        paths: [path.join(root, "packages/code-graph")],
-      }),
-    ],
+    args: [nativeCompilerManifest],
+  },
+  {
+    name: "api-raw-file",
+    driver: "api_view_driver",
+    script: "graph-api-raw-file.mts",
+    args: [nativeCompilerManifest],
   },
   {
     name: "api-foundation",
@@ -211,6 +217,7 @@ export async function graphParity(cargo) {
   await mkdir(directory, { recursive: true });
   const results = [];
   const nativeEvidence = {};
+  const qualifiedNativeEvidence = {};
   const transportProbes = {};
   for (const suite of suites) {
     const binary = path.join(root, "target/debug/examples", suite.driver);
@@ -262,8 +269,15 @@ export async function graphParity(cargo) {
         `${suite.name}: no native behavior was exercised`,
       );
       const id = `graph.${suite.name}.${answer.id}`;
-      assert.ok(!Object.hasOwn(nativeEvidence, id), `duplicate case ${id}`);
-      nativeEvidence[id] = answer.observedCalls;
+      assert.ok(
+        !Object.hasOwn(nativeEvidence, id) &&
+          !Object.hasOwn(qualifiedNativeEvidence, id),
+        `duplicate case ${id}`,
+      );
+      const evidence = answer.backendOffsetQualified
+        ? qualifiedNativeEvidence
+        : nativeEvidence;
+      evidence[id] = answer.observedCalls;
     }
     results.push({
       name: suite.name,
@@ -279,6 +293,20 @@ export async function graphParity(cargo) {
               report.declarationCleanupQualification,
           }
         : {}),
+      ...(report.backendOffsetQualifiedPairs === undefined
+        ? {}
+        : {
+            unqualifiedPairs: report.unqualifiedPairs,
+            backendOffsetQualifiedPairs: report.backendOffsetQualifiedPairs,
+            backendOffsetQualification: report.comparison,
+            backendOffsetCases: passing
+              .filter((answer) => answer.backendOffsetQualified)
+              .map((answer) => ({
+                id: `graph.${suite.name}.${answer.id}`,
+                source: answer.expected,
+                native: answer.output,
+              })),
+          }),
       rustBinarySha256: createHash("sha256")
         .update(await readFile(binary))
         .digest("hex"),
@@ -294,5 +322,6 @@ export async function graphParity(cargo) {
     suites: results,
     transportProbes,
     nativeEvidence,
+    qualifiedNativeEvidence,
   };
 }

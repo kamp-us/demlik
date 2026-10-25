@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "scope": "Local API declaration view, raw filename fix, Git base/changesets, and actual compiled verification controls. Full goal remains incomplete.",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "mainHeadBeforeReceipt": "44f6bf9c6087ca914ed14e0490854237d687bd24",
+  "crossLanguage": {
+    "file": "target/parity/report-api-raw-10902-before-controls.json",
+    "sha256": "e787401ec78fdc0b984ea5e973a892db468db885ee810d97fbf6cd274dd892a6",
+    "cases": 10902,
+    "passed": 10902,
+    "failures": 0,
+    "sourceChanges": 0,
+    "unqualifiedNativeEvidence": 10882,
+    "gitQualified": 15,
+    "graphQualified": 5
+  },
+  "repairedRawVerification": {
+    "file": "target/parity/graph-api-raw-file-repaired.json",
+    "sha256": "011027fb38d0a3068c637dd2701b8b39f97e6875cea00a1c690c4541f96f3277",
+    "cases": 14,
+    "passed": 14,
+    "exact": 9,
+    "backendOffsetQualified": 5,
+    "adapter": {
+      "file": "verification/parity/graph-api-raw-file.mts",
+      "sha256": "6c1c5aa4f32f1974c27f0ac937ea0e9d7e3a273b1a81ff7987dd65855eb35023"
+    },
+    "semanticFailuresCannotQualify": true,
+    "oldRawControlReceiptSuperseded": true
+  },
+  "native": {
+    "passed": 441,
+    "compileFail": 20,
+    "log": "/private/tmp/demlik-api-raw-main-native-01a16c9d.log"
+  },
+  "controls": {
+    "view": {
+      "file": "target/parity/api-view-mutations.json",
+      "sha256": "b6132b7bb8fbf5fbe906cdc4df392d16963c8d8a52f20cd111950704b0ec2aee",
+      "detected": 23,
+      "escaped": 0,
+      "binary": {
+        "file": "target/debug/examples/api_view_driver",
+        "sha256": "64fd6e4bdbe9b1fbbc983d383edeacd11aff7dd4519de75c377222e31e0ebc87"
+      }
+    },
+    "rawFile": {
+      "file": "target/parity/api-raw-file-mutations.json",
+      "sha256": "856c3f21050f7fecd4aaacd2e8e9e6b71f2fef1673d78dbd78bf1414bff242bc",
+      "detected": 4,
+      "escaped": 0,
+      "binary": {
+        "file": "target/debug/examples/api_view_driver",
+        "sha256": "64fd6e4bdbe9b1fbbc983d383edeacd11aff7dd4519de75c377222e31e0ebc87"
+      }
+    },
+    "foundation": {
+      "file": "target/parity/api-foundation-mutations.json",
+      "sha256": "46b058ab3442958f1237bda3b2963ce118669991b06e11f2dc26ae190362d67b",
+      "detected": 21,
+      "escaped": 0,
+      "binary": {
+        "file": "target/debug/examples/api_foundation_driver",
+        "sha256": "e6b80d418a9d81b4e75617ef071e11d6b0ca0b8511b2add37e5e68f1ab4849d6"
+      }
+    },
+    "git": {
+      "file": "target/parity/api-git-mutations.json",
+      "sha256": "aa0c260dbc40872beb90e41215945967cb803a3dcd38cd3543cc51d30a8a3795",
+      "detected": 13,
+      "escaped": 0,
+      "baselineHashes": {
+        "/private/tmp/demlik-rust-driver-01a16c9d/target/debug/examples/api_git_driver": "c60b9ac19a012187608a8ce5b87878460623b562c54e021eaa00751d8b1a25a2",
+        "/private/tmp/demlik-rust-driver-01a16c9d/target/debug/examples/api_base_driver": "6225ab6d85b137faec4320d1ef13f700a39b674ef4a9d7e76bf8857469395bf5"
+      }
+    }
+  },
+  "coldGitBaselinePreparation": {
+    "file": "target/parity/api-git-cold-baseline-manifest.json",
+    "sha256": "8a13b4d17d63dab9378f4318126852501ff039b6ba2d4b6a2d046087b4daedb4",
+    "missingExecutablesRebuilt": true,
+    "rebuiltBytesEqualPreservedOriginals": true
+  },
+  "capabilities": {
+    "mapped": 667,
+    "previousMappingsPreserved": 654,
+    "newFoundationMappings": 8,
+    "newViewMappings": 5,
+    "coverageGaps": 2793,
+    "complete": false
+  },
+  "sourceHashes": {
+    "crates/code-graph/src/api/base.rs": "7783257dea6a2d83de04d71663a48762f0edd48a54b150a7f59478b8e1116b69",
+    "crates/code-graph/src/api/base/archive.rs": "a6d5f496cd6a151981fc838dde73e469674fd2622da4fa7673a3b4745b4a80e3",
+    "crates/code-graph/src/api/capture.rs": "0914ac114106874fe58bea6d10218aafc77db79f0f8503f62705988db68c18d5",
+    "crates/code-graph/src/api/diff.rs": "320ba94b9f26da59f8da4be125d39d881ed8f134c749011ec3f4cf7a451895cb",
+    "crates/code-graph/src/api/emit.rs": "a3b6319ac272b46b6bfc0680cc49e7229b7661c541a96021cbb939e05a8538ba",
+    "crates/code-graph/src/api/input.rs": "7532619f1798cb6b7442f0855f6cf5b72fcefdcbfa86a99de6f4568a26c74073",
+    "crates/code-graph/src/api/map.rs": "767476686b4f273006993d5dd75c65b1351d8858917521126d250bbe761632b2",
+    "crates/code-graph/src/api/mod.rs": "39e68aed706881236fcb3215efbe4a8cdc78af920f1dc95a68a5dc3895b0fd91",
+    "crates/code-graph/src/api/model.rs": "7c58d7bcdbaea4062ddd6cdf3c7943af61f06bcfab5d30982be94fb60797d29b",
+    "crates/code-graph/src/api/ratchet/changesets.rs": "61649cf4d8053114f363da5ccb8cebe9560d8c6dcd307a8ba50d06e2405f89ed",
+    "crates/code-graph/src/api/ratchet/mod.rs": "e5d80311ce2b4e5b9d83b379444dcc990961c87cda7a4f1a6a281b4b5f10927a",
+    "crates/code-graph/src/api/ratchet/policy.rs": "88f5cc5f3acf23a120c7b91b0ad3b27881f2ab74ef6b162bb25fba3713610151",
+    "crates/code-graph/src/api/ratchet/text.rs": "509705b5b2136fd199d27c455aa0e0a9f4622deed262f6130daff6854deef384",
+    "crates/code-graph/src/api/ratchet/verdict.rs": "16a77b8f2c9efebd53846ee36bb2bee7e0c82bdc42b1403fce06df33d5cbe1fc",
+    "crates/code-graph/src/api/read.rs": "50f8f4944794f162fa862faf1e0404c64b003f4b64812b01efe86653e3f8657b",
+    "crates/code-graph/src/api/root.rs": "8e84584714bdbff4a3127c2e4c9b1476bf13f5bc519e0f78473ea2c22cc9ee95",
+    "crates/code-graph/src/api/text.rs": "d32e0956659d3fceb697f47c4412cddd5eade94b375177abd3bf7d9c25b8ef09",
+    "crates/code-graph/src/api/text/SCANNER-LICENSE": "527adf9d4c760f7367c2aeffed6a89afba8ba40ea1b0efbc8f56496ad30ea9cf",
+    "crates/code-graph/src/api/view.rs": "2d399943dde08c45963f7d112df1bc7f0234893ad8bdee46284afdca4e28f510",
+    "crates/code-graph/src/engine/tsgo/ast.rs": "a5b69c75d8cbaf2025c2a0d19c14f19e1031d68cb5eab808ca1fe2dfa36e4ebf",
+    "crates/code-graph/src/engine/tsgo/ast_7_0_20260707_2.json": "5cd1eff4a6cb8d11a2ed88bfb2e55a9b0f139c8356fe1e9f25cb8e3e08a544cf",
+    "crates/code-graph/src/engine/tsgo/channel.rs": "e7b72b0a1ec21c73fb4d022c2d58456e49779e97ed6408b9271d0063008cb414",
+    "crates/code-graph/src/engine/tsgo/mod.rs": "528251b80c069cf976f8eee95e69efad9c550fd55a97055f365302dfb10e5b12",
+    "crates/code-graph/src/engine/tsgo/tree.rs": "86afded2a22a8b16209d8f291e4535473c3e7dacac3ba7c585a3a1566d559bb6",
+    "verification/parity/api-foundation-contracts.json": "61226371892d864806a1b21f561d4d2708dbc6a1daa4135d3453b93d42200af5",
+    "verification/parity/api-git-mutations.mjs": "243ed390bb61e6dd04bc3da200a712aac44267bef64ff155fb4a0eda61469d84",
+    "verification/parity/api-raw-file-mutations.mjs": "5a63d60eba03713b1305cf19889f7308a4ac0039f32a67fdf08ce2076f70fbf7",
+    "verification/parity/api-view-mutations.mjs": "b2f4b30721dd62d4b539f2a3289ad64dcf186c6f8a3ce823e23254915a0d810e",
+    "verification/parity/graph-api-raw-file.mts": "6c1c5aa4f32f1974c27f0ac937ea0e9d7e3a273b1a81ff7987dd65855eb35023",
+    "verification/parity/graph-api-view.mts": "40cea2742de4be1593f59d583b8d142197b29673e5e6d05fc91bc0827a554f8c",
+    "verification/parity/graph.mjs": "d6259343064f67fb9a2add0c5ae336a5bfcc11148861a235704da9348d30aa3d",
+    "verification/parity/run.mjs": "5ff5fe1bdf0278855942c1b9e01b999013f2f747560e4c063d0abda4d1f489f9",
+    "verification/parity/api-view-contracts.json": "fd80b829913e89feea21dc34064ac3ade4ae554b371e95bc358d644dca275872"
+  },
+  "qualificationLocations": {
+    "directEmitCleanup": "graph.suites[api-view].declarationCleanupQualification",
+    "rawGoOffsets": "graph.suites[api-raw-file].backendOffsetCases",
+    "git": "apiGit.qualifications and apiGit.archiveReadOnlyQualification"
+  },
+  "notes": [
+    "The full10902 run preceded the adapter-only raw-report repair; the repaired exact adapter then reran14 paired cases,4 compiled raw controls,lint/TSC and11 evidence guards. Production code did not change.",
+    "The foundation21 controls were refreshed after the intentional raw compiler integration changed its binary. All four control groups now match actual current baseline artifacts.",
+    "LLM finite checkpoint is integrated but not centrally registered until its reachable timestamp restoration gap is repaired; its separate receipt preserves82cases and3open probes.",
+    "No TypeScript production changes, Docker use, remote writes or publication."
+  ]
+}
