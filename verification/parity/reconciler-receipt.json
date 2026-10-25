@@ -1,0 +1,287 @@
+{
+  "scope": "Native L2 Reconciler only; full-package acceptance and central integration remain the parent gate",
+  "base": "c2a1036e603c0a435033dec52f15ba5d08eef603",
+  "dependencyCacheCommit": "a843161e16b6b0f74c7fc9589d1771c2e1aa3155",
+  "branch": "can/rust-reconciler",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "acceptance": {
+    "sharedScripts": 74,
+    "sharedActions": 300,
+    "protocolRefusals": 11,
+    "controlsDetected": 13,
+    "sharedTraceControls": 12,
+    "typedStoredUndefinedControl": 1,
+    "defaultRuntimeScenarios": 6,
+    "sourceReentrantCalls": 2,
+    "sourceStoredUndefinedAckAppliesNext": true,
+    "baseDifferentialPassed": 6633,
+    "nativeWorkspaceTestsAndDocs": 296,
+    "compileFailDocs": 17,
+    "positiveDocs": 2,
+    "newPureTypedTests": 10,
+    "separateCacheOwnerTests": 2,
+    "newRuntimeTypedTest": 1,
+    "privateTypeRefusals": 4,
+    "strictMappings": 70,
+    "ownedMappings": 21,
+    "canonicalAliases": 49,
+    "strictCoverageGaps": [],
+    "foreignTimerControlDetectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ]
+  },
+  "buildIsolation": {
+    "reason": "Earlier shared-target controls are superseded: a parent experiment found mutant library artifacts could survive restoration of an example binary.",
+    "baselineInvalidation": {
+      "command": "cargo clean --package demlik-tea --package demlik-parity",
+      "log": "target/reconciler-baseline-invalidation.log",
+      "sha256": "3155615409f293569f29af25a250ae246e51beaf963b656d95cc5d550e2a2789"
+    },
+    "freshBaselineChecks": ["workspace", "clippy", "base"],
+    "mutationTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target/reconciler-mutation-build",
+    "controlsSequential": true,
+    "targetPolicy": "Baseline and mutants use separate Cargo targets; all disposable controls share one lean mutation target.",
+    "baselineBinaryUnchangedByControls": true,
+    "baselineArtifacts": {
+      "target/debug/deps/libdemlik_tea-4bb07dfa8887887e.rmeta": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target/debug/deps/libdemlik_tea-57564d36aa5122de.rmeta": "7c78cba3f35d19fc9f88908e6e98b4537303a984c7e73210e60851f69c4a048f",
+      "target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": "e16fd97f18c04078fa0716f7b40e3a69ebb34a287de7f8025fedd44b8d9b7f1d",
+      "target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rmeta": "b639305115ce9dd080e44cf24b6cfedffab04aadccba24dc6b6f0bdefb6607d7",
+      "target/debug/deps/libdemlik_tea-fd5cf03657b7919f.rlib": "edbf33ac67d0a1457d7e6caaa8a826804677f9920254a9073ef898760677d3e0",
+      "target/debug/deps/libdemlik_tea-fd5cf03657b7919f.rmeta": "f61aac91845b8decf0ab42024c7cbdd9416d3900d4e8bf93450a5e0882a906c6",
+      "target/debug/deps/reconciler-64fcd06b63bfb6c7": "68e7b29078baec480c980e454b0a935e6131b3353343c23004fb53626204130e",
+      "target/debug/deps/reconciler_cache_key-a0b5adbe376a642b": "55c915cb8641e01d8805e61d1a8bc9327e7f17d905feddec33f6d905cd335401",
+      "target/debug/deps/reconciler_runtime-7b74738119f618f1": "ff918086fc69365b68e2986977e56f892ec85f034bb6ce8b78abefd55581e641",
+      "target/debug/reconciler-parity": "8704950d2c1c811a55aa9d82e31189a4b0cf139e79a202392932c835c813f1bc"
+    }
+  },
+  "checks": {
+    "workspace": {
+      "command": "cargo test --locked --workspace -- --nocapture",
+      "exitCode": 0,
+      "log": "target/reconciler-workspace-final.log",
+      "logSha256": "ac0e16f684605a7a7a1c46860fa18e8bd3cdbdf65471aaf23e96214d42786186"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/reconciler-clippy-final.log",
+      "logSha256": "b0dfa67ce5f4bcaba29c6ab9a5271f86704c75580dcbc0ff5eeaf6828493b9d1"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/reconciler-fmt-final.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "base": {
+      "command": "pnpm parity",
+      "exitCode": 0,
+      "log": "target/reconciler-base-final.log",
+      "logSha256": "18b6411cdf6d6754659b0806cdcbd3b033b3269909a7ceb774e7ac6f0e249d93"
+    },
+    "sharedAndControls": {
+      "command": "pnpm exec node verification/parity/reconciler-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/reconciler-mutations-isolated.log",
+      "logSha256": "e5bf0fb507ae4709e323efe182e37e2f433bb8f9f2350760d088f17b37a6bc05"
+    },
+    "runtime": {
+      "command": "pnpm exec node verification/parity/reconciler-runtime.mjs --from-log target/reconciler-workspace-final.log",
+      "exitCode": 0,
+      "log": "target/reconciler-runtime-final.log",
+      "logSha256": "8045e7ea2ec3959b4dc337dfdf4b7673deaaaac146b9d5e510eb15c760124c9c"
+    },
+    "cacheOwner": {
+      "command": "pnpm exec node verification/parity/reconciler-cache-owner.mjs --from-log target/reconciler-workspace-final.log",
+      "exitCode": 0,
+      "log": "target/reconciler-cache-owner-final.log",
+      "logSha256": "07f7648698d900e3699adc00e474715a8229a106c2879386548cbf6ce6a3e311"
+    },
+    "coverage": {
+      "command": "pnpm exec node verification/parity/reconciler-coverage.mjs",
+      "exitCode": 0,
+      "log": "target/reconciler-coverage-final.log",
+      "logSha256": "17d81ba4bf116fb781399fc05c7915b4c785caea5100ea82a08b168eec0bd149"
+    },
+    "foreignTimer": {
+      "command": "pnpm --filter @demlik/parity exec node runtime-deadline-run.mjs --mutation-check",
+      "exitCode": 0,
+      "log": "target/reconciler-foreign-timer-final.log",
+      "logSha256": "789efaad20e5d7bf0890bcb65881aaefdee027fcfb93f80117109daff826c68d"
+    },
+    "privateTypes": {
+      "command": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json",
+      "exitCode": 0,
+      "log": "target/reconciler-types-final.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "biome": {
+      "command": "pnpm exec biome check verification/parity/reconciler-reference.mts verification/parity/reconciler-types.mts verification/parity/reconciler-run.mjs verification/parity/reconciler-runtime.mjs verification/parity/reconciler-mutations.mjs verification/parity/reconciler-contracts.json verification/parity/reconciler-coverage.mjs verification/parity/reconciler-cache-owner.mjs verification/parity/reconciler-cases.json verification/parity/runtime-deadline.mts",
+      "exitCode": 0,
+      "log": "target/reconciler-biome-final.log",
+      "logSha256": "c50ef6746bdec510ff442f1a8fc8baeaa7ecaa722d961a7870d2a225805d7fb9"
+    }
+  },
+  "reports": {
+    "target/parity/report.json": "afb68c4c9074b8a21ca700786992d365c9b2195848d7fb4d1b3b23fac9e8f203",
+    "target/parity/reconciler.json": "414e057cce02e9142a9f028b6b4bc02e43c3d7e2e6af03fcacb99c25ab570ff0",
+    "target/parity/reconciler-runtime.json": "8045e7ea2ec3959b4dc337dfdf4b7673deaaaac146b9d5e510eb15c760124c9c",
+    "target/parity/reconciler-cache-owner.json": "07f7648698d900e3699adc00e474715a8229a106c2879386548cbf6ce6a3e311",
+    "target/parity/reconciler-mutations.json": "b064907c83802494488e94625190329babd6b06cbb6cb31fe05dee5a0e3d747b",
+    "target/parity/reconciler-coverage.json": "17d81ba4bf116fb781399fc05c7915b4c785caea5100ea82a08b168eec0bd149",
+    "target/parity/runtime-deadline-mutation.json": "856f21c36de5d573fd8c08dfcb45f6a533877e6811a10378d99a15c5d16c0351"
+  },
+  "sourceHashes": {
+    "crates/tea/src/flow/mod.rs": "d33ab52ec6e39d9efd6f245da68a6ad244ee46eab66a5154e1995c7ae4d09831",
+    "crates/tea/src/flow/reconciler.rs": "1978e329e059001aa0b45af4b86afdbe154c4a9a77c08de1b5afb44b16886d80",
+    "crates/tea/src/flow/reconciler/wire.rs": "d5b62c0bea485509e2024e381900e1c3f7c059ce19a2e29b377505fa9548a954",
+    "crates/tea/tests/reconciler.rs": "61d1fb8c1a846a3170993be1625934fa250c3b5b2c71e9320203d75f0d9b70cd",
+    "crates/tea/tests/reconciler_runtime.rs": "4eb495099f7ad61b42305ec30727bb271cc24ceb3f5d39ceef18feef894e99a9",
+    "crates/parity/src/bin/reconciler-parity.rs": "4f8b894e470142e9f859dd7fa520f62de21a5094c1bcec5f3830aedd468bc221",
+    "verification/parity/reconciler-reference.mts": "e3b4ea27552e455057c70fe3039beec38f292e675f2fee11213359d11b0b632f",
+    "verification/parity/reconciler-types.mts": "d0a30be66c1178e11648c6f0ecd310033b8d8d04b61523faa6fb62389ab1371d",
+    "verification/parity/reconciler-cases.json": "41f5283bdb02b7d34fbcdacb0e43f16fd71b89b1ed1a58a1414a73fe84264762",
+    "verification/parity/reconciler-contracts.json": "ff9f0fde8f7f1283b67f3b3508b79847d612189cf365074cfff058d68bd45337",
+    "verification/parity/reconciler-run.mjs": "f93aec431aaaf9bafb167617612ec79eb8be1ba4bdca87707711d624858bef5a",
+    "verification/parity/reconciler-runtime.mjs": "2b788209a978ba103b569b30445cbe6cdbf9b5c974b8d6123be782b83fa75ae3",
+    "verification/parity/reconciler-mutations.mjs": "738a2a5df70d9444f0c1351e818ee630a5483a74d338bc977b5da35b25887461",
+    "verification/parity/reconciler-coverage.mjs": "277def30225228c24202ea8f7de4c148b9ca1464ec4354738265bf7c06ccf4aa",
+    "verification/parity/reconciler.md": "a742273aa7964d6efa887127bb2bc4cff2ce76d7fcc71ed039bffdeafa4049d4",
+    "verification/parity/runtime-deadline.mts": "fa654c4cff46a2ac6751373fdb963d834a792cece788f37a6609518000b64bee"
+  },
+  "ownerHashes": {
+    "crates/tea/src/paginate/paginated_walk.rs": "940572aa1ea89d11d4d97e966cfd4b54bd74267b094814b588ee9ec34614346e",
+    "crates/tea/src/resilience/cache.rs": "8da4aca4845bdb63db2fbc728af1692b8973202693dab11bb99ad8ffc3fda50c",
+    "crates/tea/src/resilience/deadline.rs": "cb491380e6e26e7023a0047ef2abeb23872f03ba0ac76a9fdd8c08828f665293",
+    "crates/tea/src/runtime/engine.rs": "a407f09ebb266367a2652caf4d3548c296f1f4329d8237ff119db76b7aa8e7de",
+    "crates/tea/src/runtime/timer.rs": "95b59464db6937572844607fd30a957effad9524c859568e756d0db4cc0edb6a",
+    "crates/tea/src/command.rs": "814e65eaf1d3253efcb6f8bda75d1c1830d9b9df453a58c41a9ecd639c643c05",
+    "crates/tea/src/data.rs": "7dc78845eeea81cd13fe3f37e36351a3c43c056701c1d9605c78a472d98357ce",
+    "crates/tea/src/work_queue/mod.rs": "ac0e06d3369db97f8e60afeab4140f5b243774f1a0462f3b5c6be1c84f889cbc"
+  },
+  "controls": [
+    {
+      "name": "emission-advances-before-ack",
+      "witness": "reconciler.wait-for-ack",
+      "detectedCases": 44,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "ledger-identity-is-position",
+      "witness": "reconciler.replan-content-not-position",
+      "detectedCases": 36,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "json-identity-sorts-object-keys",
+      "witness": "reconciler.json-property-order",
+      "detectedCases": 5,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "restored-null-cursor-indexes-zero",
+      "witness": "reconciler.cursor-null-restored",
+      "detectedCases": 1,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "undefined-failure-does-not-escalate",
+      "witness": "reconciler.undefined-terminal-error",
+      "detectedCases": 6,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "late-success-replans-completed-state",
+      "witness": "reconciler.late-done",
+      "detectedCases": 5,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "timer-requires-scanning-phase",
+      "witness": "reconciler.timer-outside-scanning",
+      "detectedCases": 2,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "acknowledgment-uses-planned-change",
+      "witness": "reconciler.wrong-ack-is-not-validated",
+      "detectedCases": 2,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "applied-ledger-expires-early",
+      "witness": "reconciler.ttl-half-open",
+      "detectedCases": 31,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "items-callback-error-is-silenced",
+      "witness": "reconciler.callback-items",
+      "detectedCases": 2,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "undefined-key-becomes-empty-string",
+      "witness": "reconciler.json-undefined-ack",
+      "detectedCases": 1,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "undefined-plan-slot-finishes-plan",
+      "witness": "reconciler.undefined-plan-slots",
+      "detectedCases": 5,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    },
+    {
+      "name": "undefined-stored-value-counts-as-applied",
+      "witness": "native:a_stored_undefined_acknowledgment_does_not_mark_a_defined_change_as_applied",
+      "detectedCases": 1,
+      "buildSucceeded": true,
+      "activeSourceUnchanged": true
+    }
+  ],
+  "qualifications": [
+    "Verified on the accepted walk integration baseline c2a1036; newer parent-main integration and central runner/contracts union remain separate.",
+    "Config::with_id and typed stored ledger values support borrowed non-Clone/non-serde data. Config::new selects JSON identity and requires Change:Serialize only at that constructor.",
+    "Opaque values read through an injected/prototype ledger entry require an explicit caller projection at the existing cache boundary. Missing or failing projections remain visible errors; no reflection runtime was added.",
+    "Generic opaque persistence requires a caller-owned decoder at the Serde boundary. Shared data observations preserve undefined, nonfinite and UTF-16 values before explicit JSON reload.",
+    "Existing native future scheduling and UTF-8 runtime tag qualifications remain. No parser, executor, Promise/schema runtime, cache implementation or registry was added.",
+    "Capability discovery retained the two inherited tsgo diagnostic warnings; declarations were emitted and all70 scoped signatures and actual public-call mappings were checked.",
+    "Source TypeScript stayed frozen. No Docker, remote, GitHub, deployment or publication commands were used."
+  ]
+}

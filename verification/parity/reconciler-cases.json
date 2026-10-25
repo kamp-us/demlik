@@ -1,0 +1,3429 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "reconciler.basic",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": null,
+          "desired": {
+            "target": 2
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            },
+            {
+              "id": "b",
+              "to": 2
+            }
+          ],
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": "second",
+              "items": [
+                {
+                  "id": "a",
+                  "v": 1
+                }
+              ]
+            }
+          },
+          {
+            "op": "ok",
+            "at": 12,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "b",
+                  "v": 0
+                }
+              ]
+            }
+          },
+          {
+            "op": "applied",
+            "at": 13,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 14,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.cmds": [
+          {
+            "type": "resilient_run",
+            "key": "page",
+            "input": null
+          }
+        ],
+        "history.1.state.phase": "scanning",
+        "history.2.state.phase": "applying",
+        "history.2.state.appliedCursor": 0,
+        "history.2.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ],
+        "history.2.callbacks": ["next", "items", "diff", "id", "apply"],
+        "history.3.state.appliedCursor": 1,
+        "history.4.complete": true,
+        "history.4.state.appliedCursor": 2
+      }
+    },
+    {
+      "id": "reconciler.wait-for-ack",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "applyNext",
+            "at": 2
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "applyNext",
+            "at": 4
+          },
+          {
+            "op": "applied",
+            "at": 5,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.state.appliedCursor": 0,
+        "history.1.state.appliedCursor": 0,
+        "history.2.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ],
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ],
+        "history.4.state.appliedCursor": 1
+      }
+    },
+    {
+      "id": "reconciler.replan-content-not-position",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "c",
+                "to": 2
+              },
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": {
+              "id": "c",
+              "to": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 4,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          },
+          {
+            "op": "planned",
+            "at": 5,
+            "changes": [
+              {
+                "id": "b",
+                "to": 2
+              },
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "c",
+                "to": 2
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "c",
+              "to": 2
+            }
+          }
+        ],
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ],
+        "history.5.complete": true,
+        "history.5.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.plan-identity",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            },
+            {
+              "id": "b",
+              "to": 2
+            }
+          ]
+        },
+        "actions": [
+          {
+            "op": "planned"
+          },
+          {
+            "op": "planned",
+            "at": 1
+          },
+          {
+            "op": "applyNext",
+            "at": 2
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.planSame": false,
+        "history.1.planSame": true
+      }
+    },
+    {
+      "id": "reconciler.explicit-empty-plan",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "throw": "diff"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": []
+          },
+          {
+            "op": "applyNext"
+          },
+          {
+            "op": "applied",
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "scan"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.complete": true,
+        "history.0.callbacks": [],
+        "history.1.same": true,
+        "history.2.same": true,
+        "history.3.same": true
+      }
+    },
+    {
+      "id": "reconciler.nullish-plan-diffs",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ]
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": null
+          },
+          {
+            "op": "planned",
+            "changes": {
+              "$undefined": true
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.callbacks": ["diff", "apply"],
+        "history.1.planSame": true
+      }
+    },
+    {
+      "id": "reconciler.replay-builders-lift",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": "first"
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "fetchCtor",
+            "key": "other",
+            "input": {
+              "token": "same"
+            }
+          },
+          {
+            "op": "lift"
+          },
+          {
+            "op": "scan",
+            "at": 17.25
+          },
+          {
+            "op": "lift"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.repeat-scan",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "applyNext"
+          },
+          {
+            "op": "applied",
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "scan"
+          },
+          {
+            "op": "scan",
+            "at": 999
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          },
+          {
+            "op": "scan",
+            "at": 10000
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.same": true,
+        "history.1.same": true,
+        "history.3.same": true,
+        "history.5.same": true
+      }
+    },
+    {
+      "id": "reconciler.json-property-order",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "a": 1,
+                "b": 2
+              },
+              {
+                "b": 2,
+                "a": 1
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "a": 1,
+              "b": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": {
+              "b": 2,
+              "a": 1
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "b": 2,
+              "a": 1
+            }
+          }
+        ],
+        "history.2.complete": true
+      }
+    },
+    {
+      "id": "reconciler.json-integer-key-order",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "2": "b",
+                "1": "a"
+              },
+              {
+                "1": "a",
+                "2": "b"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "2": "b",
+              "1": "a"
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true,
+        "history.1.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.json-nan",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$number": "NaN"
+              },
+              null
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [null]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true,
+        "history.1.cmds": [],
+        "history.3.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.json-infinity",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$number": "Infinity"
+              },
+              null
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [null]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true,
+        "history.1.cmds": [],
+        "history.3.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.json-negative-infinity",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$number": "-Infinity"
+              },
+              null
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$number": "-Infinity"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [null]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true,
+        "history.1.cmds": [],
+        "history.3.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.json-undefined-ack",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.applied.entries.undefined.value": {
+          "$undefined": true
+        },
+        "history.1.state.applied.entries.undefined.expiresAtMs": 9007199254740992
+      }
+    },
+    {
+      "id": "reconciler.json-undefined-fields",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "optional": {
+                  "$undefined": true
+                }
+              },
+              {
+                "id": "a"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "a",
+              "optional": {
+                "$undefined": true
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true
+      }
+    },
+    {
+      "id": "reconciler.json-array-undefined",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              [
+                {
+                  "$undefined": true
+                }
+              ],
+              [null]
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": [
+              {
+                "$undefined": true
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true
+      }
+    },
+    {
+      "id": "reconciler.json-negative-zero",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$number": "-0"
+              },
+              0
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$number": "-0"
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true
+      }
+    },
+    {
+      "id": "reconciler.defined-falsy-values",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [false, 0, "", null]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": false
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": 0
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": ""
+          },
+          {
+            "op": "applied",
+            "at": 4,
+            "change": null
+          },
+          {
+            "op": "planned",
+            "at": 5,
+            "changes": [false, 0, "", null]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.5.complete": true,
+        "history.5.cmds": []
+      }
+    },
+    {
+      "id": "reconciler.undefined-plan-slots",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$undefined": true
+              },
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "$undefined": true
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "$undefined": true
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.state.appliedCursor": 1,
+        "history.1.state.appliedCursor": 3,
+        "history.4.complete": true
+      }
+    },
+    {
+      "id": "reconciler.wrong-ack-is-not-validated",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "c",
+              "to": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": {
+              "id": "c",
+              "to": 2
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.appliedCursor": 1,
+        "history.1.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ],
+        "history.2.complete": true
+      }
+    },
+    {
+      "id": "reconciler.actual-plan",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "diff": "actual",
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "next",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "b",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "applied",
+            "at": 4,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.whole-page-undefined",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "next": "end",
+          "items": "one",
+          "diff": "actual"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.whole-page-null",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "next": "end",
+          "items": "one",
+          "diff": "actual"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": null
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.whole-page-text",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "next": "end",
+          "items": "one",
+          "diff": "actual"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": "page"
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": "page"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.empty-items",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": null
+        },
+        "callbacks": {
+          "next": "end",
+          "items": "empty"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true
+      }
+    },
+    {
+      "id": "reconciler.retry",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": {
+            "token": "same"
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "err",
+            "at": 11,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 40,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 100,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.phase": "scanning",
+        "history.2.cmds.0.input": {
+          "token": "same"
+        },
+        "history.5.state.phase": "failed",
+        "history.5.scanFailure": {
+          "_tag": "port_rejected",
+          "cause": {
+            "code": "UPSTREAM",
+            "data": [0, false, null]
+          }
+        }
+      }
+    },
+    {
+      "id": "reconciler.undefined-terminal-error",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.phase": "failed",
+        "history.1.scanFailure": {
+          "$undefined": true
+        },
+        "history.2.state.phase": "failed"
+      }
+    },
+    {
+      "id": "reconciler.deadline",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.phase": "failed",
+        "history.1.scanFailure._tag": "deadline_exceeded"
+      }
+    },
+    {
+      "id": "reconciler.per-page-deadline",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ]
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 20,
+            "value": {
+              "next": "second",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.timer.msg.atMs": 70,
+        "history.3.state.phase": "applying"
+      }
+    },
+    {
+      "id": "reconciler.budget-retry",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 40
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 5,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "scan",
+            "at": 10000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 30,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.rate",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 1
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 0,
+            "value": {
+              "next": "n",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 1000,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "b",
+                  "to": 2
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.rate-terminal",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 0
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 0,
+            "value": {
+              "next": "n",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.phase": "scanning",
+        "history.1.scanFailure": "rate_limited"
+      }
+    },
+    {
+      "id": "reconciler.circuit",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 100
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 20,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.jitter-full",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "full",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "rng": [0, 0.5, 0.999]
+      }
+    },
+    {
+      "id": "reconciler.jitter-equal",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "equal",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "at": 50,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          }
+        ],
+        "rng": [0, 0.5, 0.999]
+      }
+    },
+    {
+      "id": "reconciler.callback-next",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "identity": "field",
+          "throw": "next",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [55296]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.phase": "next",
+        "history.1.state.walk.resilience.clockMs": 10
+      }
+    },
+    {
+      "id": "reconciler.callback-items",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "identity": "field",
+          "throw": "items",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [55296]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.phase": "items",
+        "history.1.state.walk.resilience.clockMs": 10
+      }
+    },
+    {
+      "id": "reconciler.callback-diff",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "identity": "field",
+          "throw": "diff",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [55296]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.phase": "diff",
+        "history.1.state.walk.resilience.clockMs": 10
+      }
+    },
+    {
+      "id": "reconciler.callback-id",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "identity": "field",
+          "throw": "id",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [55296]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.phase": "id",
+        "history.1.state.walk.resilience.clockMs": 10
+      }
+    },
+    {
+      "id": "reconciler.callback-apply",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ],
+          "identity": "field",
+          "throw": "apply",
+          "cause": {
+            "code": "CALLBACK",
+            "raw": {
+              "$utf16": [55296]
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "scan",
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "at": 11,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.same": true,
+        "history.1.error.phase": "apply",
+        "history.1.state.walk.resilience.clockMs": 10
+      }
+    },
+    {
+      "id": "reconciler.invalid-items",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null,
+              "items": "wrong"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.invalid-next",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.invalid-id",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [null]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.late-idle",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": "late",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "err",
+            "at": 2,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 3
+          },
+          {
+            "op": "scan",
+            "at": 4
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.0.state.phase": "idle",
+        "history.0.callbacks": ["next"],
+        "history.0.cmds": [],
+        "history.1.same": false,
+        "history.2.same": true
+      }
+    },
+    {
+      "id": "reconciler.late-done",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "at": 1,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "err",
+            "at": 3,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 4
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.state.phase": "done",
+        "history.2.actualSame": true,
+        "history.2.callbacks": ["next"],
+        "history.3.same": false,
+        "history.4.same": true
+      }
+    },
+    {
+      "id": "reconciler.late-failed",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:page",
+            "at": 3
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.state.phase": "failed",
+        "history.2.cmds": [],
+        "history.2.actualSame": true,
+        "history.2.scanFailure": {
+          "$undefined": true
+        }
+      }
+    },
+    {
+      "id": "reconciler.late-applying-drops-fetch",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "planned",
+            "at": 1,
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": "late",
+              "items": [
+                {
+                  "id": "b",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.state.phase": "applying",
+        "history.2.cmds": [],
+        "history.2.callbacks": ["next"],
+        "history.2.actualSame": true
+      }
+    },
+    {
+      "id": "reconciler.timer-outside-scanning",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": []
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.complete": true,
+        "history.3.cmds.0.type": "resilient_run",
+        "history.3.state.phase": "done"
+      }
+    },
+    {
+      "id": "reconciler.restore-first-undefined",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": {
+            "$undefined": true
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "scan",
+            "at": 10000
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.restore-first-null",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": null,
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "scan",
+            "at": 10000
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.restore-first-utf16",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": {
+            "$utf16": [56320]
+          },
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "scan",
+            "at": 10000
+          },
+          {
+            "op": "err",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "ok",
+            "at": 30,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.restore-ledger",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "applyNext",
+            "at": 2
+          },
+          {
+            "op": "applied",
+            "at": 3,
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          },
+          {
+            "op": "planned",
+            "at": 4,
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "b",
+              "to": 2
+            }
+          }
+        ],
+        "history.5.complete": true
+      }
+    },
+    {
+      "id": "reconciler.ttl-half-open",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1]
+          },
+          {
+            "op": "applied",
+            "at": 0,
+            "change": 1
+          },
+          {
+            "op": "planned",
+            "at": 9007199254740990,
+            "changes": [1]
+          },
+          {
+            "op": "planned",
+            "at": 9007199254740991,
+            "changes": [1]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.2.cmds": [],
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ttl-infinity-reload",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": {
+              "$number": "Infinity"
+            },
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 0,
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-0",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": -1
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-1",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": -0.0
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-2",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": 0.5
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-3",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": 1
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-4",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": 2
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-5",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": 10
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-6",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-7",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [1, 2]
+          },
+          {
+            "op": "setCursor",
+            "cursor": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "applyNext",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.cursor-null-restored",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "applyNext"
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": 2
+          }
+        ],
+        "seedRaw": "{\"phase\":\"applying\",\"walk\":{\"walk\":{\"phase\":\"idle\",\"seen\":0,\"pages\":0},\"resilience\":{\"circuit\":{\"phase\":\"closed\",\"failures\":0},\"bucket\":{\"tokens\":1,\"capacity\":1,\"refillPerSec\":1,\"lastRefillMs\":0},\"retry\":{},\"cache\":{\"entries\":{}},\"calls\":{},\"clockMs\":0}},\"actual\":[],\"plan\":[1,2],\"appliedCursor\":null,\"applied\":{\"entries\":{}}}"
+      },
+      "expectPaths": {
+        "history.0.state.appliedCursor": 1,
+        "history.0.cmds": [
+          {
+            "type": "apply_change",
+            "change": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.prototype-projection",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "__proto__",
+                "value": "mark",
+                "expiresAtMs": 1000
+              },
+              {
+                "id": "value",
+                "value": false,
+                "expiresAtMs": 0
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 0,
+            "change": {
+              "id": "__proto__",
+              "value": "mark",
+              "expiresAtMs": 1000
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 1,
+            "changes": [
+              {
+                "id": "value",
+                "value": false,
+                "expiresAtMs": 0
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true,
+        "history.1.cmds": [],
+        "history.3.cmds": [
+          {
+            "type": "apply_change",
+            "change": {
+              "id": "value",
+              "value": false,
+              "expiresAtMs": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ledger-key-constructor",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "constructor",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "constructor",
+              "body": "opaque"
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "constructor",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "id": "constructor",
+                "body": "opaque"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ledger-key-toString",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "toString",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "toString",
+              "body": "opaque"
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "toString",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "id": "toString",
+                "body": "opaque"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ledger-key-hasOwnProperty",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "hasOwnProperty",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "hasOwnProperty",
+              "body": "opaque"
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "hasOwnProperty",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "id": "hasOwnProperty",
+                "body": "opaque"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ledger-key-__proto__",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "__proto__",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "__proto__",
+              "body": "opaque"
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "__proto__",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "id": "__proto__",
+                "body": "opaque"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.ledger-key-value",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "value",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "value",
+              "body": "opaque"
+            }
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": "value",
+                "body": "opaque"
+              }
+            ]
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 3,
+            "changes": [
+              {
+                "id": "value",
+                "body": "opaque"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.utf16-json-identity",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "$object": [
+                  [
+                    {
+                      "$utf16": [56320]
+                    },
+                    {
+                      "$utf16": [55296]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "$object": [
+                [
+                  {
+                    "$utf16": [56320]
+                  },
+                  {
+                    "$utf16": [55296]
+                  }
+                ]
+              ]
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "$object": [
+                  [
+                    {
+                      "$utf16": [56320]
+                    },
+                    {
+                      "$utf16": [55296]
+                    }
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.3.complete": true
+      }
+    },
+    {
+      "id": "reconciler.utf16-custom-id",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "field"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": {
+                  "$utf16": [55296]
+                },
+                "data": {
+                  "$object": [
+                    [
+                      {
+                        "$utf16": [56320]
+                      },
+                      {
+                        "$utf16": [55296]
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": {
+                "$utf16": [55296]
+              },
+              "data": {
+                "$object": [
+                  [
+                    {
+                      "$utf16": [56320]
+                    },
+                    {
+                      "$utf16": [55296]
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "planned",
+            "at": 2,
+            "changes": [
+              {
+                "id": {
+                  "$utf16": [55296]
+                },
+                "data": {
+                  "$object": [
+                    [
+                      {
+                        "$utf16": [56320]
+                      },
+                      {
+                        "$utf16": [55296]
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.3.complete": true
+      }
+    },
+    {
+      "id": "reconciler.constant-id",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {},
+        "callbacks": {
+          "identity": "constant",
+          "constantId": "same"
+        },
+        "actions": [
+          {
+            "op": "planned",
+            "changes": [
+              {
+                "id": "a",
+                "to": 2
+              },
+              {
+                "id": "b",
+                "to": 2
+              }
+            ]
+          },
+          {
+            "op": "applied",
+            "at": 1,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.complete": true
+      }
+    },
+    {
+      "id": "reconciler.foreign-ok-key",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {
+          "plan": [
+            {
+              "id": "a",
+              "to": 2
+            }
+          ]
+        },
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "ok",
+            "key": "other",
+            "at": 1,
+            "value": {
+              "next": null,
+              "items": [
+                {
+                  "id": "a",
+                  "to": 2
+                }
+              ]
+            }
+          },
+          {
+            "op": "applied",
+            "at": 2,
+            "change": {
+              "id": "a",
+              "to": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "reconciler.foreign-error-key",
+      "operation": "tea.flow.reconciler",
+      "input": {
+        "config": {
+          "firstPage": 0
+        },
+        "callbacks": {},
+        "actions": [
+          {
+            "op": "scan"
+          },
+          {
+            "op": "err",
+            "key": "other",
+            "at": 1,
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "code": "UPSTREAM",
+                "data": [0, false, null]
+              }
+            }
+          },
+          {
+            "op": "ok",
+            "at": 2,
+            "value": {
+              "next": null,
+              "items": []
+            }
+          }
+        ]
+      },
+      "expectPaths": {
+        "history.1.state.phase": "scanning"
+      }
+    }
+  ]
+}

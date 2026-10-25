@@ -231,6 +231,10 @@ function build(cwd = process.cwd(), target?: string) {
     {
       ...process.env,
       CARGO_NET_OFFLINE: "true",
+      CARGO_PROFILE_DEV_DEBUG: "0",
+      CARGO_PROFILE_TEST_DEBUG: "0",
+      CARGO_INCREMENTAL: "0",
+      CARGO_BUILD_JOBS: "1",
       ...(target ? { CARGO_TARGET_DIR: target } : {}),
     },
   );
@@ -260,7 +264,9 @@ function control(
     companion = "crates/tea/src/flow/monitored_run.rs",
     companionBefore = digest(companion),
     walkCompanion = "crates/tea/src/paginate/paginated_walk.rs",
-    walkCompanionBefore = digest(walkCompanion);
+    walkCompanionBefore = digest(walkCompanion),
+    reconcilerCompanion = "crates/tea/src/flow/reconciler.rs",
+    reconcilerCompanionBefore = digest(reconcilerCompanion);
   try {
     for (const root of ["Cargo.toml", "Cargo.lock"])
       cpSync(root, join(temporary, root));
@@ -307,7 +313,26 @@ function control(
         "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
       ),
     );
-    const target = join(temporary, "target");
+    const reconcilerSource = join(temporary, reconcilerCompanion),
+      reconcilerText = readFileSync(reconcilerSource, "utf8");
+    assert.equal(digest(reconcilerSource), reconcilerCompanionBefore);
+    assert.equal(reconcilerText.split(walkNeedle).length, 2);
+    writeFileSync(
+      reconcilerSource,
+      reconcilerText.replace(
+        walkNeedle,
+        "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
+      ),
+    );
+    const target = resolve(
+      process.env.DEMLIK_MUTATION_TARGET_DIR ??
+        join(process.cwd(), "target/reconciler-mutation-build"),
+    );
+    assert.notEqual(
+      target,
+      resolve(process.env.CARGO_TARGET_DIR ?? "target"),
+      "baseline and mutant artifacts must be isolated",
+    );
     build(temporary, target);
     const executable = binary(temporary, target),
       mutated = native(
@@ -325,14 +350,20 @@ function control(
         }
       })
       .map((item) => item.id);
-    assert.equal(
-      detectedIds.length,
-      4,
+    assert.deepEqual(
+      detectedIds,
+      [
+        "runtime-deadline.promise.fire",
+        "runtime-deadline.promise.stop",
+        "runtime-deadline.effect.fire",
+        "runtime-deadline.effect.stop",
+      ],
       "both default-runner operations in both profiles detect the foreign timer data type",
     );
     assert.equal(digest(file), before);
     assert.equal(digest(companion), companionBefore);
     assert.equal(digest(walkCompanion), walkCompanionBefore);
+    assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
     return {
       id: "separate-deadline-timer-type",
       isolation: "disposable-source-copy",
@@ -343,6 +374,8 @@ function control(
       companionMutantSourceSha256: digest(companionSource),
       walkSourceBeforeSha256: walkCompanionBefore,
       walkMutantSourceSha256: digest(walkSource),
+      reconcilerSourceBeforeSha256: reconcilerCompanionBefore,
+      reconcilerMutantSourceSha256: digest(reconcilerSource),
       nativeBinarySha256: digest(executable),
       detectedIds,
     };
@@ -351,6 +384,7 @@ function control(
     assert.equal(digest(file), before);
     assert.equal(digest(companion), companionBefore);
     assert.equal(digest(walkCompanion), walkCompanionBefore);
+    assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
   }
 }
 export async function verifyRuntimeDeadline(
