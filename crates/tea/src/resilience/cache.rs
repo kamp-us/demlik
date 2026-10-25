@@ -4,6 +4,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::js_record::{JsAccessError, JsRead, JsRecord, RecordEntry, RecordValue, Resolved};
 
+/// JSON identity can be undefined. Record-key coercion belongs to the cache,
+/// while existing text-key callers keep their conversion unchanged.
+pub trait IntoCacheKey {
+    fn into_cache_key(self) -> JsText;
+}
+impl<T: Into<JsText>> IntoCacheKey for T {
+    fn into_cache_key(self) -> JsText {
+        self.into()
+    }
+}
+impl IntoCacheKey for Option<JsText> {
+    fn into_cache_key(self) -> JsText {
+        self.unwrap_or_else(|| "undefined".into())
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheEntry<V> {
@@ -95,10 +111,10 @@ fn live_with_projection<'a, V>(
 
 pub fn get<'a, V: Serialize>(
     cache: &'a TtlCache<V>,
-    key: impl Into<JsText>,
+    key: impl IntoCacheKey,
     now_ms: impl Into<CacheNumber>,
 ) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
-    match live(cache, &key.into(), now_ms.into())? {
+    match live(cache, &key.into_cache_key(), now_ms.into())? {
         Some(entry) => entry.payload(),
         None => Ok(None),
     }
@@ -108,11 +124,11 @@ pub fn get<'a, V: Serialize>(
 /// record's `value` property calls the supplied projection boundary.
 pub fn get_with_projection<'a, V>(
     cache: &'a TtlCache<V>,
-    key: impl Into<JsText>,
+    key: impl IntoCacheKey,
     now_ms: impl Into<CacheNumber>,
     project: impl FnOnce(&V) -> Result<crate::PlainData, JsAccessError>,
 ) -> Result<Option<JsRead<'a, V>>, JsAccessError> {
-    match live_with_projection(cache, &key.into(), now_ms.into(), project)? {
+    match live_with_projection(cache, &key.into_cache_key(), now_ms.into(), project)? {
         Some(entry) => entry.payload(),
         None => Ok(None),
     }
@@ -120,22 +136,22 @@ pub fn get_with_projection<'a, V>(
 
 pub fn has<V: Serialize>(
     cache: &TtlCache<V>,
-    key: impl Into<JsText>,
+    key: impl IntoCacheKey,
     now_ms: impl Into<CacheNumber>,
 ) -> Result<bool, JsAccessError> {
-    Ok(live(cache, &key.into(), now_ms.into())?.is_some())
+    Ok(live(cache, &key.into_cache_key(), now_ms.into())?.is_some())
 }
 
 pub fn set<V: Clone>(
     cache: &TtlCache<V>,
-    key: impl Into<JsText>,
+    key: impl IntoCacheKey,
     value: V,
     now_ms: impl Into<CacheNumber>,
     ttl_ms: f64,
 ) -> TtlCache<V> {
     let mut entries = cache.entries.spread();
     entries.assign(
-        key.into(),
+        key.into_cache_key(),
         RecordValue::Entry(CacheEntry {
             value,
             expires_at_ms: (now_ms.into().number_or_zero() + ttl_ms).into(),
@@ -144,9 +160,9 @@ pub fn set<V: Clone>(
     TtlCache { entries }
 }
 
-pub fn remove<V: Clone>(cache: &TtlCache<V>, key: impl Into<JsText>) -> TtlCache<V> {
+pub fn remove<V: Clone>(cache: &TtlCache<V>, key: impl IntoCacheKey) -> TtlCache<V> {
     let mut entries = cache.entries.spread();
-    entries.delete(&key.into());
+    entries.delete(&key.into_cache_key());
     TtlCache { entries }
 }
 

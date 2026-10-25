@@ -1,0 +1,68 @@
+{
+  "scope": "Narrow cache-owned conversion of an absent JSON identity into the existing undefined record key",
+  "base": "c2a1036e603c0a435033dec52f15ba5d08eef603",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "acceptance": {
+    "publicNativeTests": 2,
+    "passed": 2,
+    "sourceOfKeyCoercion": "resilience::cache::IntoCacheKey",
+    "preserved": "Existing generic Into<JsText> callers compile; Some text, lookup, has, removal and half-open TTL remain observable."
+  },
+  "check": {
+    "command": "cargo test --locked --workspace -- --nocapture; node verification/parity/reconciler-cache-owner.mjs --from-log target/reconciler-workspace-final.log",
+    "log": "target/reconciler-workspace-final.log",
+    "logSha256": "ac0e16f684605a7a7a1c46860fa18e8bd3cdbdf65471aaf23e96214d42786186",
+    "report": "target/parity/reconciler-cache-owner.json",
+    "reportSha256": "07f7648698d900e3699adc00e474715a8229a106c2879386548cbf6ce6a3e311",
+    "proof": {
+      "scope": "Narrow cache-owned optional text key conversion",
+      "tests": 2,
+      "passed": 2,
+      "testsExecuted": [
+        "absent_json_identity_is_coerced_by_the_cache_owner",
+        "existing_generic_text_callers_keep_their_bound"
+      ],
+      "sourceHashes": {
+        "crates/tea/src/resilience/cache.rs": "8da4aca4845bdb63db2fbc728af1692b8973202693dab11bb99ad8ffc3fda50c",
+        "crates/tea/tests/reconciler_cache_key.rs": "afbc81e90831ba308c191670ab30d93638b5ecf22f4882fe97d4dd0c400aa860"
+      },
+      "proof": {
+        "kind": "existing-test-log",
+        "log": "target/reconciler-workspace-final.log",
+        "sha256": "ac0e16f684605a7a7a1c46860fa18e8bd3cdbdf65471aaf23e96214d42786186"
+      },
+      "assertions": [
+        "None and the existing literal undefined key address the same stored true value; exact JSON key and half-open expiry are asserted independently.",
+        "Existing generic Into<JsText> callers retain their bound; Some text, has and removal use the same owner."
+      ],
+      "unchangedAlgorithms": [
+        "cache TTL",
+        "lookup and prototype projection",
+        "typed stored values"
+      ]
+    }
+  },
+  "buildIsolation": {
+    "baselineTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "profileDevDebug": "0",
+    "profileTestDebug": "0",
+    "incremental": "0",
+    "jobs": "1",
+    "priorSharedMutationArtifactsInvalidated": {
+      "command": "cargo clean --package demlik-tea --package demlik-parity",
+      "log": "target/reconciler-baseline-invalidation.log",
+      "sha256": "3155615409f293569f29af25a250ae246e51beaf963b656d95cc5d550e2a2789"
+    },
+    "subsequentMutantsUseSeparateTarget": true
+  },
+  "sourceHashes": {
+    "crates/tea/src/resilience/cache.rs": "8da4aca4845bdb63db2fbc728af1692b8973202693dab11bb99ad8ffc3fda50c",
+    "crates/tea/tests/reconciler_cache_key.rs": "afbc81e90831ba308c191670ab30d93638b5ecf22f4882fe97d4dd0c400aa860",
+    "verification/parity/reconciler-cache-owner.mjs": "a912fc128d3173d484115ce33526eefe61d33010b08e5792dc139d91a20394f9"
+  },
+  "qualifications": [
+    "This changes key conversion and its trait bound only; TTL, record projection and stored-value ownership remain in their existing implementations.",
+    "The cache tests call public cache APIs directly and do not depend on the Reconciler module."
+  ]
+}
