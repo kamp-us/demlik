@@ -10,6 +10,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
+  {
+    name: "cross-runtime",
+    driver: "cross_runtime_driver",
+    script: "graph-cross-runtime.mts",
+  },
   { name: "catalog", driver: "catalog_driver", script: "graph-catalog.mts" },
   {
     name: "boundary-config",
