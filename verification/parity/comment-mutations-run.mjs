@@ -17,6 +17,8 @@ execFileSync(
     "comment_driver",
     "--example",
     "comment_policy_driver",
+    "--example",
+    "comment_gate_driver",
   ],
   { cwd: root, stdio: "inherit" },
 );
@@ -30,6 +32,8 @@ execFileSync(
     path.join(root, "target/parity/comment-mutations.json"),
     "--policy-driver",
     path.join(root, "target/debug/examples/comment_policy_driver"),
+    "--gate-driver",
+    path.join(root, "target/debug/examples/comment_gate_driver"),
   ],
   { cwd: root, stdio: "inherit" },
 );

@@ -34,7 +34,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    Comment checks classify real syntax
    and count lines by file, package and bucket, including source repository files.
    Comment policy checks compare ceiling validation, defaults, points, recorded
-   scopes, excess and slack; file gate and rendering remain separate scopes.
+   scopes, excess and slack. The file gate compares config refusal, text/JSON
+   rendering, write precedence, exit decisions and actual file bytes/modes.
    Wrangler catalog checks load shared JSONC/TOML files,
    manifests, binding names, environment keys and invalid configurations.
    Query traces compare reachability, unguarded paths, package interface width
