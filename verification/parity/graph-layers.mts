@@ -26,50 +26,9 @@ import {
 const binary = z.string().min(1).parse(process.argv[2]);
 assert.equal(process.version, "v22.21.1");
 assert.equal(process.versions.v8, "12.4.254.21-node.33");
-const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const layer = z
-  .object({ name: z.string(), paths: z.array(z.string()) })
-  .strict();
-const allowed = z
-  .object({
-    from: z.string(),
-    to: z.string(),
-    sites: count,
-    reason: z.string(),
-  })
-  .strict();
-const rank = z.object({ name: z.string(), rank: count }).strict();
-const edge = z
-  .object({
-    from: z.string(),
-    fromLine: count,
-    fromLayer: z.string(),
-    to: z.string(),
-    toLine: count,
-    toLayer: z.string(),
-    specifier: z.string(),
-    typeOnly: z.boolean(),
-  })
-  .strict();
-const census = z
-  .object({
-    down: count,
-    sideways: count,
-    up: count,
-    unlayered: count,
-    external: count,
-    unresolved: count,
-  })
-  .strict();
-const report = z
-  .object({
-    layers: z.array(z.string()),
-    filesScanned: count,
-    census,
-    violations: z.array(edge),
-    unresolved: z.array(z.string()),
-  })
-  .strict();
+
+import { allowed, type edge, layer, rank, report } from "./layer-shapes.mjs";
+
 const scalar = z.union([
   z.number(),
   z.enum(["NaN", "Infinity", "-Infinity", "-0"]),

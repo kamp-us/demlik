@@ -1,9 +1,10 @@
 use super::ceilings::{CeilingInputError, CommentCeilings};
 use crate::{
-    text::{JsString, JsValue},
-    validation::{PathSegment, RecordTypeError},
+    config::{ConfigFile, invalid_config, read_config},
+    text::JsString,
+    validation::RecordTypeError,
 };
-use std::{fs, path::Path};
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum CommentConfigResolution {
@@ -16,45 +17,16 @@ pub fn resolve_comment_ceilings(
     let Some(file) = file else {
         return Ok(CommentConfigResolution::Resolved(CommentCeilings::default()));
     };
-    let bytes = match fs::read(file) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return Ok(CommentConfigResolution::Refused {
-                message: format!("cannot read config file \"{}\".", file.display()).into(),
-            });
-        }
-    };
-    let value = match JsValue::parse(&String::from_utf8_lossy(&bytes)) {
+    let value = match read_config(ConfigFile::Native(file)) {
         Ok(value) => value,
-        Err(_) => {
-            return Ok(CommentConfigResolution::Refused {
-                message: format!("config file \"{}\" is not valid JSON.", file.display()).into(),
-            });
-        }
+        Err(message) => return Ok(CommentConfigResolution::Refused { message }),
     };
+    let file = JsString::from(file.to_string_lossy().as_ref());
     match CommentCeilings::parse(&value) {
         Ok(ceilings) => Ok(CommentConfigResolution::Resolved(ceilings)),
         Err(CeilingInputError::TypeError(error)) => Err(error),
-        Err(CeilingInputError::Issue(issue)) => {
-            let mut location = JsString::default();
-            for (index, part) in issue.path().iter().enumerate() {
-                if index > 0 {
-                    location.push_str(".");
-                }
-                match part {
-                    PathSegment::Field(field) => location.extend(field),
-                    PathSegment::Index(index) => location.push_str(&index.to_string()),
-                }
-            }
-            if location.is_empty() {
-                location.push_str("(root)");
-            }
-            let mut message = JsString::from(format!("invalid config in \"{}\": ", file.display()));
-            message.extend(&location);
-            message.push_str(": ");
-            message.extend(issue.message());
-            message.push_str(".");
-            Ok(CommentConfigResolution::Refused { message })
-        }
+        Err(CeilingInputError::Issue(issue)) => Ok(CommentConfigResolution::Refused {
+            message: invalid_config(&file, &issue),
+        }),
     }
 }
