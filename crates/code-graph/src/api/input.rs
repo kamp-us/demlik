@@ -7,10 +7,18 @@ use crate::{
 #[derive(Debug)]
 pub struct ApiInputError {
     message: JsString,
+    cause: Option<Box<dyn std::error::Error>>,
 }
 impl ApiInputError {
     pub fn new(message: JsString) -> Self {
-        Self { message }
+        Self {
+            message,
+            cause: None,
+        }
+    }
+    pub fn with_cause(mut self, cause: impl std::error::Error + 'static) -> Self {
+        self.cause = Some(Box::new(cause));
+        self
     }
     pub fn name(&self) -> &'static str {
         "ApiInputError"
@@ -24,7 +32,11 @@ impl std::fmt::Display for ApiInputError {
         f.write_str(&self.message.to_lossy())
     }
 }
-impl std::error::Error for ApiInputError {}
+impl std::error::Error for ApiInputError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.as_deref()
+    }
+}
 
 #[derive(Debug)]
 pub enum ApiSchemaError {
@@ -49,6 +61,30 @@ pub enum ApiError {
         path: JsString,
         source: std::io::Error,
     },
+    Compiler(crate::engine::tsgo::TsgoError),
+    OperationAndCleanup {
+        operation: Box<Self>,
+        cleanup: Box<Self>,
+    },
+}
+impl ApiError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Input(error) => error.name(),
+            Self::TypeError(error) => error.name(),
+            Self::OperationAndCleanup { cleanup, .. } => cleanup.name(),
+            Self::Io { .. } | Self::Compiler(_) => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Input(error) => error.message().clone(),
+            Self::TypeError(error) => error.message().clone(),
+            Self::Io { source, .. } => source.to_string().into(),
+            Self::Compiler(error) => error.to_string().into(),
+            Self::OperationAndCleanup { cleanup, .. } => cleanup.message(),
+        }
+    }
 }
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,6 +92,10 @@ impl std::fmt::Display for ApiError {
             Self::Input(error) => error.fmt(f),
             Self::TypeError(error) => error.fmt(f),
             Self::Io { path, source } => write!(f, "{}: {source}", path.to_lossy()),
+            Self::Compiler(error) => error.fmt(f),
+            Self::OperationAndCleanup { operation, cleanup } => {
+                write!(f, "{operation}; temporary cleanup also failed: {cleanup}")
+            }
         }
     }
 }
@@ -65,6 +105,8 @@ impl std::error::Error for ApiError {
             Self::Input(error) => error,
             Self::TypeError(error) => error,
             Self::Io { source, .. } => source,
+            Self::Compiler(error) => error,
+            Self::OperationAndCleanup { operation, .. } => operation.as_ref(),
         })
     }
 }

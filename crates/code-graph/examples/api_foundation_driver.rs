@@ -356,6 +356,10 @@ fn refused(error: ApiError) -> Result<JsValue, String> {
             ("path", JsValue::String(path)),
             ("message", JsValue::String(source.to_string().into())),
         ]),
+        error => obj([
+            ("name", JsValue::String(error.name().into())),
+            ("message", JsValue::String(error.message())),
+        ]),
     };
     Ok(obj([("thrown", thrown)]))
 }
