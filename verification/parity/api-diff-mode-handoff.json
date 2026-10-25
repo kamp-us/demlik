@@ -1,0 +1,265 @@
+{
+  "scope": "Frozen api/diff.ts readBaseSide/diffPublishedApi and api/cli.ts API-mode caller. No global CLI parser/execution or central registration.",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "branch": "can/rust-api-diff-mode",
+  "base": "4786e73677d0a22115cc34f4e003d663d543e1e8",
+  "prerequisites": {
+    "publishedView455d655": "eb8e576",
+    "callbackErrors6cd9172": "7c112ca",
+    "rawFilename325809f": "fd0f222",
+    "rawVerifier0a93f79": "5e48fef"
+  },
+  "profile": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "compiler": {
+      "version": "7.0.0-dev.20260707.2",
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/node_modules/.pnpm/@typescript+native-preview-darwin-arm64@7.0.0-dev.20260707.2/node_modules/@typescript/native-preview-darwin-arm64/lib/tsgo",
+      "sha256": "63d89ecb27497f264b4c3ecb0e4f6d2cf09896803a81fff027ecfb336f8974e2"
+    },
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "debug": 0,
+    "incremental": false,
+    "jobs": 1
+  },
+  "interface": {
+    "default": "api::diff::diff_published_api_blocking",
+    "asyncBaseMap": "prepare_api_diff_with_base_map_blocking -> BaseMapStep::{Complete,Awaiting(BaseMapRequest)}; caller awaits its borrowed local future; finish_blocking validates and emits. abort_blocking exposes fallible cleanup; unfinished Drop attempts cleanup best-effort. Both tooling segments block explicitly.",
+    "mode": "api::cli::{run_api_view_blocking,run_api_flags_blocking}, borrowed non-Send emit/report callbacks and explicit ordered given attributes, ApiExit0/1/2/3, inactive None; ApiRunOutcome retains caught cause and ApiRunError retains report-primary plus processing error."
+  },
+  "verification": {
+    "workflow": {
+      "cases": 77,
+      "strict": 73,
+      "qualified": 4,
+      "protocolRejects": 7,
+      "failures": [],
+      "report": "target/parity/api-diff-mode.json",
+      "strictEvidenceCases": 73,
+      "qualifiedEvidenceCases": 4,
+      "qualifications": [
+        {
+          "id": "api-workflow.diff.callback-read-failure",
+          "qualification": "backendDiffError"
+        },
+        {
+          "id": "api-workflow.diff.callback-cleanup-failure",
+          "qualification": "cleanupError"
+        },
+        {
+          "id": "api-workflow.diff.success-cleanup-failure",
+          "qualification": "cleanupError"
+        },
+        {
+          "id": "api-workflow.mode.out-failure",
+          "qualification": "backendModeReport"
+        }
+      ],
+      "sideEffects": {
+        "sourceCheckoutUnchanged": true,
+        "nativeCheckoutUnchanged": true,
+        "sourceCleanupResidues": 2,
+        "nativeCleanupResidues": 2,
+        "outFileBytesEqual": true
+      }
+    },
+    "compiledFaults": {
+      "detected": 22,
+      "escaped": 0,
+      "mandatoryFullBaseline": [77, 77],
+      "witnesses": "Each compiled production-source mutant must mismatch at least one declared real1-2case witness, not merely an unrelated error; every case retains strict refusal/cleanup/output checks and explicit OS qualification.",
+      "report": "target/parity/api-diff-mode-mutations.json",
+      "build": {
+        "baselineTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-reconciler-01a16c9d/target/reconciler-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1
+      },
+      "baselineArtifactUnchanged": true
+    },
+    "responseGuards": {
+      "red": {
+        "passed": 2,
+        "failed": 2
+      },
+      "green": {
+        "passed": 4,
+        "failed": 0
+      },
+      "report": "target/parity/api-diff-mode-guards.json",
+      "cases": [
+        "foreign ID",
+        "duplicate ID",
+        "extra untrusted call marker",
+        "wrong typed failure on qualified OS row"
+      ],
+      "finalChecks": "Evidence is assigned only after trusted index, exact declared call list, all paired/literal checks and qualified native failure/path checks. Qualified evidence is separate."
+    },
+    "native": {
+      "workspaceTestsIncludingDocs": 301,
+      "compileFailDocs": 12,
+      "newPublicConsumers": {
+        "diff": 2,
+        "borrowedAsyncAndLifecycle": 4,
+        "mode": 5
+      },
+      "workspaceClippyAllTargets": "passed -D warnings",
+      "fmt": "passed"
+    },
+    "sourceCallerTests": {
+      "files": [
+        "api/diff.test.ts",
+        "api/crash.test.ts",
+        "api/ratchet/gate.test.ts"
+      ],
+      "passed": 56
+    },
+    "affected": {
+      "foundation": {
+        "passed": 284,
+        "cases": 284,
+        "protocolRejects": 11
+      },
+      "parser": {
+        "passed": 325,
+        "cases": 325
+      },
+      "git": {
+        "passed": 88,
+        "cases": 88,
+        "strict": 73,
+        "qualified": 15,
+        "protocolRejects": 7
+      },
+      "view": {
+        "passed": 153,
+        "cases": 153,
+        "protocolRejects": 7
+      },
+      "rawFiles": {
+        "passed": 14,
+        "cases": 14,
+        "exact": 9,
+        "offsetQualified": 5,
+        "protocolRejects": 3
+      }
+    },
+    "static": {
+      "tsc": "passed",
+      "newVerifierBiome": "passed",
+      "gitDiffCheck": "passed",
+      "exactPublicMappings": 4,
+      "mappingGaps": [],
+      "qualifiedMappingsUsed": 0,
+      "fabricatedInternalCliAliases": 0
+    }
+  },
+  "commands": {
+    "workflow": "pnpm exec node verification/parity/api-diff-mode-run.mjs",
+    "mutations": "pnpm exec node verification/parity/api-diff-mode-mutations.mjs",
+    "guards": "pnpm exec node verification/parity/api-diff-mode-guards.mjs",
+    "native": "cargo test --locked --workspace",
+    "clippy": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+    "source": "pnpm --filter @demlik/code-graph exec vitest run src/api/diff.test.ts src/api/crash.test.ts src/api/ratchet/gate.test.ts --maxWorkers=1",
+    "typecheck": "pnpm exec tsc --noEmit -p verification/parity/tsconfig.json"
+  },
+  "centralIntegration": {
+    "run": "import { apiDiffModeParity } from \"./api-diff-mode-run.mjs\"; add77 workflow rows but only73strict nativeEvidence entries to unqualified evidence. Preserve4qualifiedNativeEvidence entries and nativeErrors separately.",
+    "mappings": "verification/parity/api-diff-mode-contracts.json (4 exact inventory capabilities; parent owns union/registration)",
+    "noCentralFilesEdited": true
+  },
+  "integrity": {
+    "sourcePackagesUnchangedFromReference": true,
+    "sourceHashes": {
+      "packages/code-graph/src/api/diff.ts": "d3d97bdac22656609f2b2661b4609457154fdd684328fd6b83c5123f40443c11",
+      "packages/code-graph/src/api/cli.ts": "bdb0deab291750f2fd47fb341c49fd95c19f9edc4fbd6246914dc05544dd69e9",
+      "packages/code-graph/src/api/view.ts": "0ff3b9037d1c9983bd773c91c13531b12fc4c57d2127dac951aec1e5bdca56f7",
+      "packages/code-graph/src/api/map.ts": "4ea58d863f031cb29ec67cbd856181c2b21a6f5c533af429f57e5ef5605bbf8d",
+      "packages/code-graph/src/api/base.ts": "9567e1d9b52e1d5a0428e410a36ea15c3a8ead394b8e897d455df066b6f8c590",
+      "packages/code-graph/src/api/ratchet/changesets.ts": "c1a6e4f716f0f354087e23a68766b00a3df292dcd4504f19c40724b867219c16"
+    },
+    "licenseHashes": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/code-graph/LICENSE": "0481e6230c6ee65f6184e6197daa5b8152d8c27a4ae6b98b734d63045612f8d0",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7",
+      "crates/code-graph/src/ratchet/scope_count/V8-TIMSORT-LICENSE": "b9a6d9320b8f2693e8d41e496ce56caadacaddcca9be2a64a61749278f425cf2",
+      "crates/code-graph/src/api/text/SCANNER-LICENSE": "527adf9d4c760f7367c2aeffed6a89afba8ba40ea1b0efbc8f56496ad30ea9cf"
+    },
+    "filterBeforeAfterHashesEqual": true,
+    "filterBeforeHashes": {
+      "crates/code-graph/src/api/diff/published.rs": "f65458bc444db81cdb4625dd10d17b1b94fcc60799105d60e8deb997eb93bd76",
+      "crates/code-graph/src/api/cli.rs": "5419f13ee9a5c3ea5301567fa74cf1499d6b306aca08cb0f83b124a740d68aed",
+      "crates/parity/src/bin/api_mode_driver.rs": "e5c9a4475fc670e6c78b1640a9d31210c35bc233735d6c000e3544d218aa16ac",
+      "packages/code-graph/src/api/diff.ts": "d3d97bdac22656609f2b2661b4609457154fdd684328fd6b83c5123f40443c11",
+      "packages/code-graph/src/api/cli.ts": "bdb0deab291750f2fd47fb341c49fd95c19f9edc4fbd6246914dc05544dd69e9",
+      "target/debug/api_mode_driver": "eb5814fed744d336254e0438b8c027a799728b8b94cb3b98402b4320e76e3656"
+    },
+    "filterAfterHashes": {
+      "crates/code-graph/src/api/diff/published.rs": "f65458bc444db81cdb4625dd10d17b1b94fcc60799105d60e8deb997eb93bd76",
+      "crates/code-graph/src/api/cli.rs": "5419f13ee9a5c3ea5301567fa74cf1499d6b306aca08cb0f83b124a740d68aed",
+      "crates/parity/src/bin/api_mode_driver.rs": "e5c9a4475fc670e6c78b1640a9d31210c35bc233735d6c000e3544d218aa16ac",
+      "packages/code-graph/src/api/diff.ts": "d3d97bdac22656609f2b2661b4609457154fdd684328fd6b83c5123f40443c11",
+      "packages/code-graph/src/api/cli.ts": "bdb0deab291750f2fd47fb341c49fd95c19f9edc4fbd6246914dc05544dd69e9",
+      "target/debug/api_mode_driver": "eb5814fed744d336254e0438b8c027a799728b8b94cb3b98402b4320e76e3656"
+    },
+    "baselineArtifactSha256": "eb5814fed744d336254e0438b8c027a799728b8b94cb3b98402b4320e76e3656",
+    "baselineAndMutantTargetsSeparate": true,
+    "noNetworkDockerOrRemoteWrites": true
+  },
+  "qualifications": [
+    "Native tooling APIs block explicitly. The custom baseMap uses a caller-owned borrowed local Future between two blocking segments. No Promise scheduling equivalence or generic async-host offload claim; non-Send warn callbacks stay local.",
+    "Four workflow rows separately qualify OS/backend diagnostic wording. Real failure kind/path, visible classification, events, exit, payload and cleanup refusal remain checked; original complete Source/native messages and native cause/paths stay in reports. Recursive Source deletion identifies an inner failed path while native Io owns the requested tree root.",
+    "Published raw-file suite retains backend Go JSON request offsets separately (actual exact/qualified counts may depend on handle/path lengths). The first canonical verifier crash is incomplete proof; repaired verifier plus actual14case rerun is authoritative.",
+    "Inherited Git raw-option archive helper deliberately refuses Source option-like archive side effects by using --. Direct emit NUL-argument cleanup is retained on native error paths despite the Source leak. These exceptions are outside unqualified workflow rows; details remain in prior Git/view receipts.",
+    "Existing private capture Unix SIGTERM was already measured; non-Unix capture backend behavior was not measured here.",
+    "Global CLI parsing/execution and central full-port coverage are owned by parent and excluded from this checkpoint."
+  ],
+  "reportsSha256": {
+    "target/parity/api-diff-mode.json": "8747a9bcac1d4c97732f332f99b3da5a6708bd2bd6f60c1f460ca010b227879c",
+    "target/parity/api-diff-mode-mutations.json": "b6d39c7f52630871ceda026c1bd95c120f0dd5f96c269f847b90d506d54b9444",
+    "target/parity/api-diff-mode-guards-red.json": "3d98b74cf672cfee070933bb8d622016e2fcf6246650aa3e5f373098a17e9bce",
+    "target/parity/api-diff-mode-guards.json": "b5bbf4a5e4d2fbf297b902a47c6fdc12802edb5c65e2a39dfb2b5a332e18d887",
+    "target/parity/api-diff-mode-before-filter.json": "9e033700529ef748ef271acf3fd8a41a36cd50b4dacbc42f16ddcf6fe71068f5",
+    "target/parity/api-diff-mode-mutation-baseline.json": "68beef7525add9198e7e20858d16d1d18b0ef3e9f3a360817a2c798ec6fbd720",
+    "target/parity/api-diff-mode-foundation.json": "711b3d3ff44c14107988f5463a4aa20f75637aa88757093fd373ba942205d252",
+    "target/parity/api-diff-mode-git.json": "709af5444156720cd5fbdb6bf0fd9e1fe82f0a946d671f663eacd9c3f9ee5c37",
+    "target/parity/api-diff-mode-base-parser.json": "381bb544ed419f5c931c76296f2522efe68933c8cffce7d8f8e26afae11da64f",
+    "target/parity/api-diff-mode-view.json": "a88aedb008b9fe4b294a99e13c6081d7f33feef664b78613dae9eb0cc10e9780",
+    "target/parity/api-diff-mode-raw-file.json": "56821427589d9e331c063ebb365ab8604a46e3a9ef3fed6238b3eb36d8e78258",
+    "target/parity/api-diff-mode-native-literal-shape-red.json": "65fb5b19377ae6999e23ed5d8cb40dad28e2bc0aef6f09c2336b11b8aff40165",
+    "target/parity/api-diff-mode-empty-map-source-refusal-red.json": "12aa12ca53b7e574b6d13c701f694340b2d6526c22a5cf828cb2505473fb34ec"
+  },
+  "logsSha256": {
+    "target/api-diff-mode-workspace.log": "75d21c92b3d877bc6274a2081e2dbc8e2ee5d9fabe1c651f76f7bc39b8a5418f",
+    "target/api-diff-mode-clippy.log": "9ca5e298b8e73e259312fb1b14181752c5e01fdd865fa741ef46986eac7d75d6",
+    "target/api-diff-mode-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/api-diff-mode-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/api-diff-mode-lint.log": "d198b4ab073f2171a887b047b7acd67e56024aed4869d866a2238735340099e3",
+    "target/api-diff-mode-source-tests.log": "61fc6e7811694a989d64d993d6f2592929ac9a46cbf152d6d8f5f5b7ddf6882d",
+    "target/api-diff-mode-final-pairs.log": "a06845320b776fc162752f08bd7af8a10af324a3ff9365c0ce9102da6b8c2967",
+    "target/api-diff-mode-mutations.log": "4e6005f798ab9b28cdb979f374c90ba771d5de7029b842f909843ea92da561bc",
+    "target/api-diff-mode-mutations-full-corpus-stopped.log": "8da1003ebcd4fb9aa6fa4768c1f1e7b3afa5a4f0f0544ab158962f4e2674d6f9",
+    "target/api-diff-mode-guards-red.log": "5eaf726b25141aa81073d5a3f7a30e0c3c518c136bc730895f6b43e2d84a5f17",
+    "target/api-diff-mode-guards-green.log": "d79b11dced169a4741e200ee1eb1ebbfc1a080a95e58392d85bccfa4a74af4ec",
+    "target/api-diff-mode-contracts-check.log": "c67aea751fdb3425ba0b814a6c1040cf739365fafca95c88cd8daa096787cd5b"
+  },
+  "ownedFilesSha256": {
+    "crates/code-graph/src/api/cli.rs": "5419f13ee9a5c3ea5301567fa74cf1499d6b306aca08cb0f83b124a740d68aed",
+    "crates/code-graph/src/api/diff/published.rs": "f65458bc444db81cdb4625dd10d17b1b94fcc60799105d60e8deb997eb93bd76",
+    "crates/code-graph/src/api/diff.rs": "0b9dcd493ccc329ce5fef4383ac556d1a5a52d2f835c411463d749b169ed13f5",
+    "crates/code-graph/src/api/mod.rs": "66b558fe6c44e553d4d7cd325f165a4b91d41d53d6af000baafe46ee15d9c0fd",
+    "crates/code-graph/tests/api_diff.rs": "c9eaca058179cd4037d718287056e5ebae81a90922f48e1787fbecfab9a27e74",
+    "crates/code-graph/tests/api_mode.rs": "9fa5cfe158a7ad54282d84cdb6aa2cf9066cdfcece7c5167934f25d04cf744e5",
+    "crates/code-graph/tests/support/api_repo.rs": "50a4f93595aa3ab49abddd1558b43b1f4d6dfa0074915ba82697d091ceef86bc",
+    "crates/parity/tests/api_diff_async.rs": "443c9912c8f0439eae5a0180ba8dffb5c426e28857fd20410c39416d894d4fcd",
+    "crates/parity/src/bin/api_mode_driver.rs": "e5c9a4475fc670e6c78b1640a9d31210c35bc233735d6c000e3544d218aa16ac",
+    "verification/parity/api-diff-mode-cases.mjs": "aebd6b1b8166081b335babeef5e445cba5ff813477f32e4243c6193913978015",
+    "verification/parity/api-diff-mode-reference.mts": "2933b0fb2816a9dbe41d47958671af8813cdb37b541998f62f218855db4bcc26",
+    "verification/parity/api-diff-mode-run.mjs": "d6fb9bd70e2c6d74dee3e45d20713b4ccd1c6383f310d7b68fb74b71d05b685c",
+    "verification/parity/api-diff-mode-mutations.mjs": "6b96c6418e487d36abda141d8caa0e63fc69110ab1e628237155cee827f559a6",
+    "verification/parity/api-diff-mode-guards.mjs": "6bad98944a1dc1be644a768d64c921e2eb771c12a81f3951072daa1b74946f4f",
+    "verification/parity/api-diff-mode-contracts.json": "4fa1ff7445e58f80c48faedb8d8b2fa81000b733219d9cf16e1008db4f006b44"
+  }
+}

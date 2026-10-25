@@ -1,0 +1,58 @@
+{
+  "@demlik/code-graph:./api#ApiDiff": {
+    "signature": "845d1cebf7e851667bc3a4d0a39a764cd4ebc41a90dcf46b2a6e82557cc0c0ca",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::diff::diff_published_api_blocking"]
+    },
+    "cases": ["api-workflow.diff.dirty-default"]
+  },
+  "@demlik/code-graph:./api#ApiDiffOptions": {
+    "signature": "e5e7b0c72b2e5eab4113d00033859174245d5dc989b8883f8fdc3178e5d39b7f",
+    "rust": {
+      "file": "crates/code-graph/src/api/diff/published.rs",
+      "symbols": [
+        "demlik_code_graph::api::diff::diff_published_api_blocking",
+        "demlik_code_graph::api::diff::prepare_api_diff_with_base_map_blocking"
+      ]
+    },
+    "cases": [
+      "api-workflow.diff.dirty-default",
+      "api-workflow.diff.both-warning-contexts",
+      "api-workflow.diff.base-map-file-async"
+    ]
+  },
+  "@demlik/code-graph:./api#ApiDiffOptions/member:published:cbf83eb578270410890b881ed22bf6cf7d63c4ee7196e856999f64227f6a9e5e": {
+    "signature": "cbf83eb578270410890b881ed22bf6cf7d63c4ee7196e856999f64227f6a9e5e",
+    "rust": {
+      "file": "crates/code-graph/src/api/diff/published.rs",
+      "symbols": [
+        "demlik_code_graph::api::diff::prepare_api_diff_with_base_map_blocking",
+        "demlik_code_graph::api::diff::BaseMapRequest::finish_blocking"
+      ]
+    },
+    "cases": [
+      "api-workflow.diff.base-map-file-sync",
+      "api-workflow.diff.base-map-file-async",
+      "api-workflow.diff.before-package-skips-callback",
+      "api-workflow.diff.callback-input"
+    ]
+  },
+  "@demlik/code-graph:./api#diffPublishedApi": {
+    "signature": "7d6cfa739f2c70f587495cca01c057f5dd5cbfc4bb9f9fc21cc3eac71efbd7cb",
+    "rust": {
+      "file": "crates/code-graph/src/api/diff/published.rs",
+      "symbols": [
+        "demlik_code_graph::api::diff::diff_published_api_blocking",
+        "demlik_code_graph::api::diff::prepare_api_diff_with_base_map_blocking",
+        "demlik_code_graph::api::diff::BaseMapRequest::finish_blocking"
+      ]
+    },
+    "cases": [
+      "api-workflow.diff.dirty-default",
+      "api-workflow.diff.no-base-rows-skips-emit",
+      "api-workflow.diff.base-map-file-async",
+      "api-workflow.diff.base-map-bad-schema"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 pub mod base;
 mod capture;
+pub mod cli;
 pub mod diff;
 pub mod emit;
 mod input;

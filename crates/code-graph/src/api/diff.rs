@@ -1,5 +1,10 @@
+mod published;
 use super::model::{AddedName, ApiEntryText, ChangedName, RemovedName, SubpathDiff, SubpathNames};
 use crate::text::{JsString, object_keys};
+pub use published::{
+    BaseMapRequest, BaseMapStep, diff_published_api_blocking,
+    prepare_api_diff_with_base_map_blocking,
+};
 use std::sync::Arc;
 fn same_entry(before: &ApiEntryText, after: &ApiEntryText) -> bool {
     before.text == after.text
