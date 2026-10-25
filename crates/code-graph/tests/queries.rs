@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use demlik_code_graph::checker::context::{TypeContextInput, with_type_context};
@@ -12,13 +13,17 @@ use demlik_code_graph::schema::{EntryReach, Graph, NodeKind, Thresholds};
 struct Project(PathBuf);
 impl Project {
     fn new(files: &[(&str, &str)]) -> Self {
+        static NEXT_PROJECT: AtomicU64 = AtomicU64::new(0);
+        let sequence = NEXT_PROJECT.fetch_add(1, Ordering::Relaxed);
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root =
-            std::env::temp_dir().join(format!("demlik-query-{}-{unique}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "demlik-query-{}-{unique}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir(&root).unwrap();
         fs::write(
             root.join("tsconfig.json"),
             r#"{"compilerOptions":{"strict":true,"types":[]}}"#,
@@ -259,7 +264,19 @@ fn clusters_real_call_triangles_and_excludes_isolated_and_test_modules() {
 }
 impl Drop for Project {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).unwrap();
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            if std::thread::panicking() {
+                eprintln!(
+                    "query fixture cleanup failed for {}: {error}",
+                    self.0.display()
+                );
+            } else {
+                panic!(
+                    "query fixture cleanup failed for {}: {error}",
+                    self.0.display()
+                );
+            }
+        }
     }
 }
 
