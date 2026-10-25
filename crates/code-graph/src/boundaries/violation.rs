@@ -7,6 +7,11 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct False;
+impl From<False> for bool {
+    fn from(_: False) -> Self {
+        false
+    }
+}
 impl Serialize for False {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_bool(false)
@@ -55,6 +60,9 @@ macro_rules! violations {
             }
             pub fn specifier(&self) -> &JsString {
                 match self { $(Self::$variant { specifier, .. } => specifier,)* }
+            }
+            pub fn type_only(&self) -> bool {
+                match self { $(Self::$variant { type_only, .. } => (*type_only).into()),* }
             }
         }
         impl<'de> Deserialize<'de> for BoundaryViolation {

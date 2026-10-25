@@ -67,7 +67,7 @@ try {
       licenseSpecifiers: strings,
       measuredScopes: strings,
       measuredUndeclared: strings,
-      unjudged: z.number().int().nonnegative(),
+      unjudged: z.number(),
       roots: strings,
       zone: z.enum(["driven", "configurator", "any"]).nullable(),
     })
@@ -129,6 +129,10 @@ try {
       input: inputSchema.parse({ ...input, ...patch }),
     });
   add("library-judgment.precedence-and-impurity");
+  for (const unjudged of [-1, -0, 0.5, Number(1234567890123456768n), 1e21])
+    add(`library-judgment.measured-number-${JSON.stringify(unjudged)}`, {
+      unjudged,
+    });
   add("library-judgment.feature-counts-no-unjudged", {
     scope: "apps/api",
     file: "apps/api/src/a.ts",
@@ -511,9 +515,9 @@ try {
       input: {},
     }),
     JSON.stringify({
-      id: "negative-count",
+      id: "wrong-type-count",
       operation: "code_graph.library-judgment",
-      input: { ...input, unjudged: -1 },
+      input: { ...input, unjudged: null },
     }),
   ];
   const run = spawnSync(binary, [], {
@@ -586,7 +590,7 @@ try {
     rejectedInvalidInputs: invalid.length,
     cases: answers,
     qualifications: [
-      "Library verdicts consume real OXC imports and impurity facts; scope-wide graph loading and full boundary gate remain separate. Census counts are native nonnegative counts.",
+      "Library verdicts consume real OXC imports and impurity facts; scope-wide graph loading and full boundary gate remain separate. Measured census facts retain source numeric values.",
     ],
   };
   if (process.argv[3])

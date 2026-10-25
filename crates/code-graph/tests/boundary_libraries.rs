@@ -168,7 +168,7 @@ fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census(
         MeasuredLibraries {
             scopes: &[scope],
             undeclared: &["packages/free".into()],
-            unjudged: 1,
+            unjudged: 1.0,
         },
     )
     .unwrap();

@@ -1,6 +1,7 @@
 use super::Libraries;
 use crate::{
     project::locale_compare_units,
+    render::text::number,
     text::{JsString, JsValue, object_keys},
 };
 use indexmap::{IndexMap, IndexSet};
@@ -12,7 +13,8 @@ pub struct LibraryCensus {
     #[serde(serialize_with = "serialize_types")]
     pub types: IndexMap<JsString, Vec<JsString>>,
     pub undeclared: Vec<JsString>,
-    pub unjudged_imports: usize,
+    #[serde(serialize_with = "crate::text::serialize_number")]
+    pub unjudged_imports: f64,
 }
 fn serialize_types<S: Serializer>(
     types: &IndexMap<JsString, Vec<JsString>>,
@@ -34,7 +36,7 @@ fn serialize_types<S: Serializer>(
 pub struct MeasuredLibraries<'a> {
     pub scopes: &'a [JsString],
     pub undeclared: &'a [JsString],
-    pub unjudged: usize,
+    pub unjudged: f64,
 }
 pub fn library_census(
     libraries: &Libraries<'_>,
@@ -82,7 +84,7 @@ pub fn census_lines(census: &LibraryCensus) -> Vec<JsString> {
     let per_type = join(
         names.iter().map(|name| {
             let mut text = (*name).clone();
-            text.push_str(&format!(" {}", census.types[*name].len()));
+            text.push_str(&format!(" {}", number(census.types[*name].len() as f64)));
             text
         }),
         ", ",
@@ -92,13 +94,13 @@ pub fn census_lines(census: &LibraryCensus) -> Vec<JsString> {
     } else {
         per_type
     };
-    let mut first = JsString::from(format!("libraries: {declared} declared ("));
+    let mut first = JsString::from(format!("libraries: {} declared (", number(declared as f64)));
     first.extend(&per_type);
     first.push_str(&format!(
         "), {} undeclared, {} import{} left unjudged",
-        census.undeclared.len(),
-        census.unjudged_imports,
-        if census.unjudged_imports == 1 {
+        number(census.undeclared.len() as f64),
+        number(census.unjudged_imports),
+        if census.unjudged_imports == 1.0 {
             ""
         } else {
             "s"

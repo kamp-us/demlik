@@ -8,6 +8,7 @@ pub mod ledger;
 pub mod libraries;
 pub mod migrate;
 pub mod reconcile;
+pub mod render;
 pub mod rules;
 pub mod shape;
 pub mod violation;

@@ -73,7 +73,7 @@ struct JudgmentInput {
     license_specifiers: indexmap::IndexSet<JsString>,
     measured_scopes: Vec<JsString>,
     measured_undeclared: Vec<JsString>,
-    unjudged: usize,
+    unjudged: f64,
     roots: Vec<JsString>,
     zone: Option<ImportedFrom>,
 }

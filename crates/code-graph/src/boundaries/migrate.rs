@@ -18,7 +18,9 @@ pub struct ScopeCountCeilings {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CeilingBreach {
     pub scope: JsString,
-    pub measured: usize,
+    #[serde(serialize_with = "crate::text::serialize_number")]
+    pub measured: f64,
+    #[serde(serialize_with = "crate::text::serialize_number")]
     pub ceiling: f64,
 }
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -75,7 +77,7 @@ pub fn migrated_ledger(
                 });
             ((measured as f64) > ceiling).then(|| CeilingBreach {
                 scope: report.scope.clone(),
-                measured,
+                measured: measured as f64,
                 ceiling,
             })
         })

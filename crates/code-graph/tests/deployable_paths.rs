@@ -190,7 +190,7 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
     rows.push(rows[0].clone());
     let census = deployable_census(&deployables, &rows).unwrap();
     assert_eq!(census.workers.len(), 1);
-    assert_eq!(census.workers[0].bindings[&JsString::from("DB")], 2);
+    assert_eq!(census.workers[0].bindings[&JsString::from("DB")], 2.0);
     assert_eq!(
         deployable_census_lines(&census)[0],
         "deployables: 1 worker using bindings, 3 sites, 0 service bindings to a worker with no config in the repo"

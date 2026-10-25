@@ -12,7 +12,8 @@ use std::{collections::HashSet, sync::Arc};
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reconciliation {
-    pub scopes_checked: usize,
+    #[serde(serialize_with = "crate::text::serialize_number")]
+    pub scopes_checked: f64,
     pub unrecorded: Vec<Arc<BoundaryLedgerEntry>>,
     pub pruned: Vec<Arc<BoundaryLedgerEntry>>,
     pub kept: BoundaryLedger,
@@ -73,7 +74,7 @@ pub fn reconcile(
         }
     }
     Reconciliation {
-        scopes_checked: reports.len(),
+        scopes_checked: reports.len() as f64,
         unrecorded: measured
             .into_iter()
             .filter(|entry| !recorded_keys.contains(&ledger_key(entry)))
