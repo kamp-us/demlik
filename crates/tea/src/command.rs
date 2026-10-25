@@ -61,7 +61,7 @@ impl<O, E> Outcome<O, E> {
 }
 
 pub trait CommandSpec {
-    type Input: Serialize;
+    type Input;
     type RawOutput;
     type Output;
     type Error: Tagged;
@@ -70,6 +70,13 @@ pub trait CommandSpec {
     fn parse_input(value: Value) -> Result<Self::Input, SchemaError>;
     fn parse_output(value: Self::RawOutput) -> Result<Self::Output, SchemaError>;
 }
+
+/// A typed command-input record whose effect tag is owned by `Cmd`.
+///
+/// Implement this for input structs constructed from already-parsed domain
+/// values. Their fields must form a record without a `type` field. Serialization
+/// and external parsing keep their own checked boundaries.
+pub trait CommandRecord {}
 
 pub struct Cmd<D: CommandSpec> {
     input: D::Input,
@@ -88,7 +95,10 @@ impl<D: CommandSpec> Tagged for Cmd<D> {
         D::NAME
     }
 }
-impl<D: CommandSpec> Serialize for Cmd<D> {
+impl<D: CommandSpec> Serialize for Cmd<D>
+where
+    D::Input: Serialize,
+{
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let PlainData::Object(mut input) =
             plain_data(&self.input).map_err(serde::ser::Error::custom)?
@@ -101,7 +111,7 @@ impl<D: CommandSpec> Serialize for Cmd<D> {
 }
 impl<'de, D: CommandSpec> serde::Deserialize<'de> for Cmd<D>
 where
-    D::Input: serde::de::DeserializeOwned,
+    D::Input: serde::de::DeserializeOwned + Serialize,
 {
     fn deserialize<S: serde::Deserializer<'de>>(deserializer: S) -> Result<Self, S::Error> {
         let value = Value::deserialize(deserializer)?;
@@ -186,6 +196,7 @@ impl<D: CommandSpec> Tagged for Settled<D> {
 }
 impl<D: CommandSpec> Serialize for Settled<D>
 where
+    D::Input: Serialize,
     D::Output: Serialize,
     D::Error: Serialize,
 {
@@ -205,7 +216,7 @@ where
 }
 impl<'de, D: CommandSpec> serde::Deserialize<'de> for Settled<D>
 where
-    D::Input: serde::de::DeserializeOwned,
+    D::Input: serde::de::DeserializeOwned + Serialize,
     D::Output: serde::de::DeserializeOwned,
     D::Error: serde::de::DeserializeOwned,
 {
@@ -292,7 +303,42 @@ impl<D: CommandSpec> CmdDef<D> {
     pub fn error_tags(&self) -> &'static [&'static str] {
         D::ERROR_TAGS
     }
-    pub fn build(&self, input: D::Input) -> Result<Cmd<D>, CommandContractError> {
+    /// Build from a trusted typed record without serializing the pure payload.
+    /// Wire input uses `parse_input`; checked serializable input uses `build`.
+    ///
+    /// ```compile_fail,E0277
+    /// use demlik_tea::{Tagged, command::{CmdDef, CommandSpec, SchemaError}};
+    /// struct Scalar;
+    /// struct Never;
+    /// impl Tagged for Never { fn tag(&self) -> &str { "never" } }
+    /// impl CommandSpec for Scalar {
+    ///     type Input = u32;
+    ///     type RawOutput = ();
+    ///     type Output = ();
+    ///     type Error = Never;
+    ///     const NAME: &'static str = "scalar";
+    ///     const ERROR_TAGS: &'static [&'static str] = &[];
+    ///     fn parse_input(_: serde_json::Value) -> Result<u32, SchemaError> { Ok(0) }
+    ///     fn parse_output(_: ()) -> Result<(), SchemaError> { Ok(()) }
+    /// }
+    /// CmdDef::<Scalar>::new().from_record(7);
+    /// ```
+    pub fn from_record(&self, input: D::Input) -> Cmd<D>
+    where
+        D::Input: CommandRecord,
+    {
+        self.wrap_input(input)
+    }
+    fn wrap_input(&self, input: D::Input) -> Cmd<D> {
+        Cmd {
+            input,
+            declaration: PhantomData,
+        }
+    }
+    pub fn build(&self, input: D::Input) -> Result<Cmd<D>, CommandContractError>
+    where
+        D::Input: Serialize,
+    {
         let value = plain_data(&input).map_err(CommandContractError::serialization)?;
         if !matches!(&value, PlainData::Object(record) if !record.contains_key("type")) {
             return Err(CommandContractError::Input {
@@ -303,12 +349,12 @@ impl<D: CommandSpec> CmdDef<D> {
                 )],
             });
         }
-        Ok(Cmd {
-            input,
-            declaration: PhantomData,
-        })
+        Ok(self.wrap_input(input))
     }
-    pub fn parse_input(&self, value: Value) -> Result<Cmd<D>, CommandContractError> {
+    pub fn parse_input(&self, value: Value) -> Result<Cmd<D>, CommandContractError>
+    where
+        D::Input: Serialize,
+    {
         match D::parse_input(value) {
             Ok(input) => self.build(input),
             Err(SchemaError::Issues(issues)) => Err(CommandContractError::Input {
