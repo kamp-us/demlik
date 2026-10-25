@@ -58,13 +58,25 @@ fn absolute(path: &JsString) -> Result<JsString, io::Error> {
     Ok(join_path_text(&cwd.to_string_lossy().as_ref().into(), path))
 }
 pub(crate) fn resolve_path_text(base: &Path, child: &JsString) -> Result<JsString, io::Error> {
-    if child.starts_with("/") {
-        return Ok(normalize_path_text(child));
-    }
-    absolute(&join_path_text(
-        &base.to_string_lossy().as_ref().into(),
-        child,
-    ))
+    resolve_path_text_from(&base.to_string_lossy().as_ref().into(), child)
+}
+pub(crate) fn resolve_path_text_from(
+    base: &JsString,
+    child: &JsString,
+) -> Result<JsString, io::Error> {
+    let resolved = if child.starts_with("/") {
+        normalize_path_text(child)
+    } else {
+        absolute(&join_path_text(base, child))?
+    };
+    // Node path.resolve strips trailing separators, unlike path.normalize/join.
+    Ok(
+        if resolved.units().len() > 1 && resolved.units().last() == Some(&SLASH) {
+            JsString::from_units(resolved.units()[..resolved.units().len() - 1].to_vec())
+        } else {
+            resolved
+        },
+    )
 }
 pub(crate) fn relative_path_text(root: &Path, target: &JsString) -> Result<JsString, io::Error> {
     relative_path_text_from(&root.to_string_lossy().as_ref().into(), target)
@@ -123,4 +135,29 @@ pub(crate) fn dirname_path_text(path: &JsString) -> JsString {
         }
     }
     if rooted { "/".into() } else { ".".into() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_resolve_removes_only_nonroot_trailing_separator() {
+        assert_eq!(
+            resolve_path_text_from(&"/package".into(), &"src/".into()).unwrap(),
+            JsString::from("/package/src"),
+        );
+        assert_eq!(
+            resolve_path_text_from(&"/package/src/".into(), &"../".into()).unwrap(),
+            JsString::from("/package"),
+        );
+        assert_eq!(
+            resolve_path_text_from(&"/package".into(), &"///".into()).unwrap(),
+            JsString::from("/"),
+        );
+        assert_eq!(
+            normalize_path_text(&"/package/src/".into()),
+            JsString::from("/package/src/"),
+        );
+    }
 }

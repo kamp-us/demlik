@@ -15,7 +15,7 @@ use icu_collator::{Collator, CollatorBorrowed};
 mod text_paths;
 pub(crate) use text_paths::{
     dirname_path_text, join_path_text, normalize_path_text, relative_path_text,
-    relative_path_text_from, resolve_path_text,
+    relative_path_text_from, resolve_path_text, resolve_path_text_from,
 };
 
 static FILE_COLLATOR: LazyLock<CollatorBorrowed<'static>> = LazyLock::new(|| {

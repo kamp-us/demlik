@@ -1,5 +1,6 @@
 //! Source analysis, graph queries and architecture rules.
 
+pub mod api;
 pub mod boundaries;
 pub mod checker;
 pub mod comments;
