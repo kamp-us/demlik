@@ -9,7 +9,34 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 
+const reportFormats = {
+  trace: {
+    binaryArgument: "--native-binary",
+    rows: "cases",
+    total: "compared",
+    calls: "observedRustCalls",
+    binaryHash: (report) => report.binary.sha256,
+  },
+  llm: {
+    binaryArgument: "--binary",
+    rows: "results",
+    total: "total",
+    calls: "publicCalls",
+    binaryHash: (report) => report.binaryHash,
+  },
+  timestamps: {
+    binaryArgument: "--binary",
+    rows: "results",
+    total: "total",
+    calls: "observedCalls",
+    binaryHash: (report) => report.binaryHash,
+  },
+};
+
 export async function compiledTraceParity(cargo, name, options = {}) {
+  const formatName = options.format ?? "trace";
+  assert.ok(Object.hasOwn(reportFormats, formatName), "unknown report format");
+  const format = reportFormats[formatName];
   const reportFile =
     options.reportFile ?? path.join(root, `target/parity/${name}.json`);
   await mkdir(path.dirname(reportFile), { recursive: true });
@@ -22,7 +49,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
       path.join(here, `${name}.mts`),
       "--report",
       reportFile,
-      ...(options.binary ? ["--native-binary", options.binary] : []),
+      ...(options.binary ? [format.binaryArgument, options.binary] : []),
       ...(options.mutation ? ["--mutation-check"] : []),
     ],
     {
@@ -46,31 +73,31 @@ export async function compiledTraceParity(cargo, name, options = {}) {
       { cause: error },
     );
   }
-  assert.equal(report.cases.length, report.compared);
-  assert.equal(
-    new Set(report.cases.map((item) => item.id)).size,
-    report.compared,
-  );
-  assert.equal(report.passed, report.cases.filter((item) => item.equal).length);
+  const rows = report[format.rows];
+  const compared = report[format.total];
+  assert.equal(rows.length, compared);
+  assert.equal(new Set(rows.map((item) => item.id)).size, compared);
+  assert.equal(report.passed, rows.filter((item) => item.equal).length);
   assert.equal(result.status, report.failures.length ? 1 : 0);
   return {
-    cases: report.compared,
+    cases: compared,
     passed: report.passed,
     failures: report.failures,
     nativeEvidence: Object.fromEntries(
-      report.cases
+      rows
         .filter((item) => item.equal)
         .map((item) => {
           assert.ok(
-            item.observedRustCalls.length > 0,
+            item[format.calls].length > 0,
             `${item.id}: no compiled native calls`,
           );
-          return [item.id, item.observedRustCalls];
+          return [item.id, item[format.calls]];
         }),
     ),
-    binarySha256: report.binary.sha256,
+    binarySha256: format.binaryHash(report),
     controls: report.controls,
     scope: report.scope,
+    ...(report.profile ? { profile: report.profile } : {}),
     transitions: report.transitions,
     ...(report.qualifications
       ? { qualifications: report.qualifications }
@@ -87,7 +114,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
   };
 }
 
-export async function compiledTraceMain(moduleUrl, name) {
+export async function compiledTraceMain(moduleUrl, name, options = {}) {
   if (
     !process.argv[1] ||
     moduleUrl !== pathToFileURL(path.resolve(process.argv[1])).href
@@ -95,6 +122,7 @@ export async function compiledTraceMain(moduleUrl, name) {
     return;
   const mutation = process.argv.includes("--mutation-check");
   const report = await compiledTraceParity(process.env.CARGO ?? "cargo", name, {
+    ...options,
     mutation,
     reportFile: mutation
       ? path.join(root, `target/parity/${name}-mutation.json`)

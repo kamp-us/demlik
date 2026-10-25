@@ -1,0 +1,924 @@
+{
+  "@demlik/code-graph:cli:option:--thresholds <file>": {
+    "signature": "0ff54bf2ea365ec4c7a48b15c1004377faa3991740fb65d6a5aa7fd21f4af24c",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.thresholds.space",
+      "graph.cli-parser.option.thresholds.equal",
+      "graph.cli-parser.option.thresholds.empty",
+      "graph.cli-parser.option.thresholds.missing",
+      "graph.cli-parser.option.thresholds.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--accept-smells": {
+    "signature": "b09e1ab6827a3c410649d3d86fe46f054ffeadf352dc73cb5198abc687db54d8",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.acceptSmells.before",
+      "graph.cli-parser.option.acceptSmells.after",
+      "graph.cli-parser.option.acceptSmells.equal-is-unknown",
+      "graph.cli-parser.option.acceptSmells.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--max <n>": {
+    "signature": "7d577c59f1f05ba7c17c459368971f57fa6ffa35744598a8a1e07e3036783946",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.max.space",
+      "graph.cli-parser.option.max.equal",
+      "graph.cli-parser.option.max.empty",
+      "graph.cli-parser.option.max.missing",
+      "graph.cli-parser.option.max.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--fail-on <level>": {
+    "signature": "8b900eeb66b6a4a69e11f63945a4a27e33b140cca246c42e2f18ca03d58b70e3",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.failOn.space",
+      "graph.cli-parser.option.failOn.equal",
+      "graph.cli-parser.option.failOn.empty",
+      "graph.cli-parser.option.failOn.missing",
+      "graph.cli-parser.option.failOn.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--ci": {
+    "signature": "4a926ef4afc08b0c1dd52bcf1d121c7de52b008d4864b17e0377709934978670",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.ci.before",
+      "graph.cli-parser.option.ci.after",
+      "graph.cli-parser.option.ci.equal-is-unknown",
+      "graph.cli-parser.option.ci.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--html": {
+    "signature": "c733e003bd5e690ca8cea7efa6cba4beb3954208154d49bbe40c1ad98d183854",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.html.before",
+      "graph.cli-parser.option.html.after",
+      "graph.cli-parser.option.html.equal-is-unknown",
+      "graph.cli-parser.option.html.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--find <name>": {
+    "signature": "e116015b8eaedb697fa4ebd73e3c3c0f20813b448e712cc603e4694437e57279",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.find.space",
+      "graph.cli-parser.option.find.equal",
+      "graph.cli-parser.option.find.empty",
+      "graph.cli-parser.option.find.missing",
+      "graph.cli-parser.option.find.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--blast <id>": {
+    "signature": "d11092b521f2b4cb82869153c2034a5a6fb7b250c290cc0a7de008b258b1e0aa",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.blast.space",
+      "graph.cli-parser.option.blast.equal",
+      "graph.cli-parser.option.blast.empty",
+      "graph.cli-parser.option.blast.missing",
+      "graph.cli-parser.option.blast.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--deep": {
+    "signature": "6bd0e415a4d31a7cf2eea6ad1fd68a29b610493315344aa954998448e12f07f4",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.deep.before",
+      "graph.cli-parser.option.deep.after",
+      "graph.cli-parser.option.deep.equal-is-unknown",
+      "graph.cli-parser.option.deep.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--headers": {
+    "signature": "1068c89364c54b7bdaf5922fcae7e554de47a1f9f5e21ae86b2d01e2566850c5",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.headers.before",
+      "graph.cli-parser.option.headers.after",
+      "graph.cli-parser.option.headers.equal-is-unknown",
+      "graph.cli-parser.option.headers.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--edges": {
+    "signature": "9893ee81db41148e731be01eb75e02dfd9b3e4a16d7745d2305aab078b7f7e72",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.edges.before",
+      "graph.cli-parser.option.edges.after",
+      "graph.cli-parser.option.edges.equal-is-unknown",
+      "graph.cli-parser.option.edges.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--file <f>": {
+    "signature": "c835db80cd46d387c651ac9327d2f0c555205e42d65b48f9ea92b47f0e6ef8de",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.file.space",
+      "graph.cli-parser.option.file.equal",
+      "graph.cli-parser.option.file.empty",
+      "graph.cli-parser.option.file.missing",
+      "graph.cli-parser.option.file.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--hexagon": {
+    "signature": "134fb59cef3955437b7e3f2e330d7aac16bc33e488653b9f6babf726a7fddf3a",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.hexagon.before",
+      "graph.cli-parser.option.hexagon.after",
+      "graph.cli-parser.option.hexagon.equal-is-unknown",
+      "graph.cli-parser.option.hexagon.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--tree": {
+    "signature": "31d228b06c755b403fe0e1d5163c3be0a6db6bdeaaff3d5b8de81e71c0db6e3e",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.tree.before",
+      "graph.cli-parser.option.tree.after",
+      "graph.cli-parser.option.tree.equal-is-unknown",
+      "graph.cli-parser.option.tree.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--smells": {
+    "signature": "217f135306957dd194a277c3fa99023a280dbce75415a9f566672dc6a91e9d71",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.smells.before",
+      "graph.cli-parser.option.smells.after",
+      "graph.cli-parser.option.smells.equal-is-unknown",
+      "graph.cli-parser.option.smells.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--by <axis>": {
+    "signature": "6d31250e5c61dbb629008c7f574bef290fb784ba902acbc2db0623d8b2fc3b1e",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.by.space",
+      "graph.cli-parser.option.by.equal",
+      "graph.cli-parser.option.by.empty",
+      "graph.cli-parser.option.by.missing",
+      "graph.cli-parser.option.by.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--plan": {
+    "signature": "42a3139c13689bf504a126a5e2c4ef3dff4cace9fde6bc079f9ee74a7c13b8ea",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.plan.before",
+      "graph.cli-parser.option.plan.after",
+      "graph.cli-parser.option.plan.equal-is-unknown",
+      "graph.cli-parser.option.plan.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--graph": {
+    "signature": "7940149dde111ecd457172cc424cdbbd889cc1a602130088c4f2459e120c430a",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.graph.before",
+      "graph.cli-parser.option.graph.after",
+      "graph.cli-parser.option.graph.equal-is-unknown",
+      "graph.cli-parser.option.graph.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--entry-preset <name>": {
+    "signature": "a22bacf29b6c58ee82efcd9563a925e1562272214be7a1a1da44ad63cff38fd1",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.entryPreset.space",
+      "graph.cli-parser.option.entryPreset.equal",
+      "graph.cli-parser.option.entryPreset.empty",
+      "graph.cli-parser.option.entryPreset.missing",
+      "graph.cli-parser.option.entryPreset.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--node-kinds <file>": {
+    "signature": "99d9f8ba4e6bbc9ae4946cedeed92b2f5aea7de344120ec29122a0e855c98068",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.nodeKinds.space",
+      "graph.cli-parser.option.nodeKinds.equal",
+      "graph.cli-parser.option.nodeKinds.empty",
+      "graph.cli-parser.option.nodeKinds.missing",
+      "graph.cli-parser.option.nodeKinds.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--cycles": {
+    "signature": "d5b4219b163a50718ad75fc43087916eb8a8a233e696ebf27c7b25ad83b3ad31",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.cycles.before",
+      "graph.cli-parser.option.cycles.after",
+      "graph.cli-parser.option.cycles.equal-is-unknown",
+      "graph.cli-parser.option.cycles.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--data": {
+    "signature": "60c263226da1c68000048a4a6157a809bc4717dd641dffc2d891f8af62cd1f4c",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.data.before",
+      "graph.cli-parser.option.data.after",
+      "graph.cli-parser.option.data.equal-is-unknown",
+      "graph.cli-parser.option.data.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--interface-width": {
+    "signature": "0910997980e7d17ab98e63c6869a8c971496cd24da9e2cc9d5a17ce9dff38813",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.interfaceWidth.before",
+      "graph.cli-parser.option.interfaceWidth.after",
+      "graph.cli-parser.option.interfaceWidth.equal-is-unknown",
+      "graph.cli-parser.option.interfaceWidth.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--clusters": {
+    "signature": "b2fea936654fdd1c6522b65aaca6d404dcc70fd30893c0e69460c497efc40fb3",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.clusters.before",
+      "graph.cli-parser.option.clusters.after",
+      "graph.cli-parser.option.clusters.equal-is-unknown",
+      "graph.cli-parser.option.clusters.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--unguarded": {
+    "signature": "2ae8e4da7a7b538e68913e2237a1b26b9a27dbba319c5f32ce80a91094b83a0a",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.unguarded.before",
+      "graph.cli-parser.option.unguarded.after",
+      "graph.cli-parser.option.unguarded.equal-is-unknown",
+      "graph.cli-parser.option.unguarded.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--dead-only": {
+    "signature": "e7ff9f418cf26a41d0bb9b1f24d8cac94a8e4dcf72bf757ae7063506464e311b",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.deadOnly.before",
+      "graph.cli-parser.option.deadOnly.after",
+      "graph.cli-parser.option.deadOnly.equal-is-unknown",
+      "graph.cli-parser.option.deadOnly.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--accept-dead": {
+    "signature": "a9137b194154a44f0b355ef1c3f0addbedda94b68ffe60e3a2d3e9c693ebd6ce",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.acceptDead.before",
+      "graph.cli-parser.option.acceptDead.after",
+      "graph.cli-parser.option.acceptDead.equal-is-unknown",
+      "graph.cli-parser.option.acceptDead.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--unreachable": {
+    "signature": "9a72ab28dd8415ebf4bf2e817d5d177513f11acc8a3cdc874478c067b86cf881",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.unreachable.before",
+      "graph.cli-parser.option.unreachable.after",
+      "graph.cli-parser.option.unreachable.equal-is-unknown",
+      "graph.cli-parser.option.unreachable.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--kinds": {
+    "signature": "c7e63fcbae9b1c0ce783ba6c256ffeae067ca89af258639ea98fd904aec7a83a",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.kinds.before",
+      "graph.cli-parser.option.kinds.after",
+      "graph.cli-parser.option.kinds.equal-is-unknown",
+      "graph.cli-parser.option.kinds.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--cross-runtime": {
+    "signature": "8f49e5f1bb5c6f3b93734c9e23f53d2c54f481f6f2a72dcf1c9bef310d1ec221",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.crossRuntime.before",
+      "graph.cli-parser.option.crossRuntime.after",
+      "graph.cli-parser.option.crossRuntime.equal-is-unknown",
+      "graph.cli-parser.option.crossRuntime.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--write-ceilings": {
+    "signature": "6fd95a1056e8559847dbf51aea6bd8e834a7e9a36ad145f51ca1823e7116c889",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.writeCeilings.before",
+      "graph.cli-parser.option.writeCeilings.after",
+      "graph.cli-parser.option.writeCeilings.equal-is-unknown",
+      "graph.cli-parser.option.writeCeilings.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--comments": {
+    "signature": "7f032256cb96be19feb79d31864a7d34ceae67a1d5d350f95f4cc3574f4cd515",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.comments.before",
+      "graph.cli-parser.option.comments.after",
+      "graph.cli-parser.option.comments.equal-is-unknown",
+      "graph.cli-parser.option.comments.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--env-keys": {
+    "signature": "ff22c78d58db5d0793ad216af1dadceb44bda9f6e69a8debe901f9fd0738a26f",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.envKeys.before",
+      "graph.cli-parser.option.envKeys.after",
+      "graph.cli-parser.option.envKeys.equal-is-unknown",
+      "graph.cli-parser.option.envKeys.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--hotspots-limit <n>": {
+    "signature": "24ce3ea77c6208ba9cc39d6466ddf694ac8c2b20dca9b3cddc452f4c9c48f116",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.hotspotsLimit.space",
+      "graph.cli-parser.option.hotspotsLimit.equal",
+      "graph.cli-parser.option.hotspotsLimit.empty",
+      "graph.cli-parser.option.hotspotsLimit.missing",
+      "graph.cli-parser.option.hotspotsLimit.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--hotspots-since <iso>": {
+    "signature": "85b3daafec6997e4dae938c5fade023e7cac7920e685d0fdfb541b464bec93ac",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.hotspotsSince.space",
+      "graph.cli-parser.option.hotspotsSince.equal",
+      "graph.cli-parser.option.hotspotsSince.empty",
+      "graph.cli-parser.option.hotspotsSince.missing",
+      "graph.cli-parser.option.hotspotsSince.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--hotspots-days <n>": {
+    "signature": "ec102ce4bf6cca079e241e9795317be71fab1b96cb92c55959a31d9a01fba2d5",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.hotspotsDays.space",
+      "graph.cli-parser.option.hotspotsDays.equal",
+      "graph.cli-parser.option.hotspotsDays.empty",
+      "graph.cli-parser.option.hotspotsDays.missing",
+      "graph.cli-parser.option.hotspotsDays.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--hotspots": {
+    "signature": "9039099cf65c7d42ebf9cc6839d7f50b9bb3a6f8e73a55f64cf2ecdf6e865128",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.hotspots.before",
+      "graph.cli-parser.option.hotspots.after",
+      "graph.cli-parser.option.hotspots.equal-is-unknown",
+      "graph.cli-parser.option.hotspots.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--collapse-config <file>": {
+    "signature": "cda62d3fac0c7bf1c5427a13ead7ba6eaf9844210b08c9473b642c7a197d676f",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.collapseConfig.space",
+      "graph.cli-parser.option.collapseConfig.equal",
+      "graph.cli-parser.option.collapseConfig.empty",
+      "graph.cli-parser.option.collapseConfig.missing",
+      "graph.cli-parser.option.collapseConfig.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--collapse": {
+    "signature": "4a2ff4f1ab7b107d286271bf54d3faa7508a31ca39a1129ddbc404d768e1b94c",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.collapse.before",
+      "graph.cli-parser.option.collapse.after",
+      "graph.cli-parser.option.collapse.equal-is-unknown",
+      "graph.cli-parser.option.collapse.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--boundary-rules <file>": {
+    "signature": "04407e7e660512542b6a5685737ef751d9b123dc7804b799b756e4c4b9519c1e",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.boundaryRules.space",
+      "graph.cli-parser.option.boundaryRules.equal",
+      "graph.cli-parser.option.boundaryRules.empty",
+      "graph.cli-parser.option.boundaryRules.missing",
+      "graph.cli-parser.option.boundaryRules.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--migrate-ceilings": {
+    "signature": "a861f96ef6f01716788232a7be1e54f6d92fd5475aa9fdae8c88cc785c746a1c",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.migrateCeilings.before",
+      "graph.cli-parser.option.migrateCeilings.after",
+      "graph.cli-parser.option.migrateCeilings.equal-is-unknown",
+      "graph.cli-parser.option.migrateCeilings.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--reason <text>": {
+    "signature": "92c27dc811d2b8c5667fd9b7a5de9ab70b0ddfe98a918a9da86c58848db580b5",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.reason.space",
+      "graph.cli-parser.option.reason.equal",
+      "graph.cli-parser.option.reason.empty",
+      "graph.cli-parser.option.reason.missing",
+      "graph.cli-parser.option.reason.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--accept-crossings": {
+    "signature": "4cd8e9e589fc174ace89898fbb7bbe13782ae7a286835107945a6bd12381209b",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.acceptCrossings.before",
+      "graph.cli-parser.option.acceptCrossings.after",
+      "graph.cli-parser.option.acceptCrossings.equal-is-unknown",
+      "graph.cli-parser.option.acceptCrossings.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--boundaries": {
+    "signature": "702268b74bdcab86d495aca49181e67c86e7ad573fd23b3a50637e896eeccf69",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.boundaries.before",
+      "graph.cli-parser.option.boundaries.after",
+      "graph.cli-parser.option.boundaries.equal-is-unknown",
+      "graph.cli-parser.option.boundaries.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--layer-rules <file>": {
+    "signature": "7d6a8faec0eb20177c8145a78e3c222ae4de0ce2c09bc75f379afb8864e8da8d",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.layerRules.space",
+      "graph.cli-parser.option.layerRules.equal",
+      "graph.cli-parser.option.layerRules.empty",
+      "graph.cli-parser.option.layerRules.missing",
+      "graph.cli-parser.option.layerRules.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--layers": {
+    "signature": "35e7971270e740372e6cb39afc9a18c9ea4c26961ea271c795705e9a1c23eb0d",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.layers.before",
+      "graph.cli-parser.option.layers.after",
+      "graph.cli-parser.option.layers.equal-is-unknown",
+      "graph.cli-parser.option.layers.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--api-base <rev>": {
+    "signature": "6036aa4622d285ab2ca4b3264189204b2eb577061213d7db27673a2bc7f6e118",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.apiBase.space",
+      "graph.cli-parser.option.apiBase.equal",
+      "graph.cli-parser.option.apiBase.empty",
+      "graph.cli-parser.option.apiBase.missing",
+      "graph.cli-parser.option.apiBase.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--api-policy <file>": {
+    "signature": "bb22262cf424a220ac178f564b5528278ed15129182c3fa7d774f7ee7916b15a",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.apiPolicy.space",
+      "graph.cli-parser.option.apiPolicy.equal",
+      "graph.cli-parser.option.apiPolicy.empty",
+      "graph.cli-parser.option.apiPolicy.missing",
+      "graph.cli-parser.option.apiPolicy.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--api <map>": {
+    "signature": "5ac995bd4a50b5b9c40b362359602c9be0e24e8618087bfb0531127e3691b58c",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.api.space",
+      "graph.cli-parser.option.api.equal",
+      "graph.cli-parser.option.api.empty",
+      "graph.cli-parser.option.api.missing",
+      "graph.cli-parser.option.api.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--out <file>": {
+    "signature": "3ce3755ebf6f438eb4c64108031cfe1c5c36531ba3e2440552abc4cab49d1f79",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.out.space",
+      "graph.cli-parser.option.out.equal",
+      "graph.cli-parser.option.out.empty",
+      "graph.cli-parser.option.out.missing",
+      "graph.cli-parser.option.out.raw-0"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--json": {
+    "signature": "bdf56d6571184b1d2dde7d4f51354eeb61f6134da40b7e528b0cb72246ae74d7",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.json.before",
+      "graph.cli-parser.option.json.after",
+      "graph.cli-parser.option.json.equal-is-unknown",
+      "graph.cli-parser.option.json.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:option:--pretty": {
+    "signature": "a97c92bb69ef9ec69eaddbcfb0b2c1844269a6d78880e4b1834eaeefe99de9c0",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.option.pretty.before",
+      "graph.cli-parser.option.pretty.after",
+      "graph.cli-parser.option.pretty.equal-is-unknown",
+      "graph.cli-parser.option.pretty.negated-is-unknown"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  },
+  "@demlik/code-graph:cli:argument:<path>": {
+    "signature": "4258a1e79987c9c3bab87314071d2c5ce6ca079f79a2799253b4c0415db9ea1b",
+    "rust": {
+      "file": "crates/code-graph/src/cli.rs",
+      "symbols": ["demlik_code_graph::cli::parse"]
+    },
+    "cases": [
+      "graph.cli-parser.parse.fixed-0",
+      "graph.cli-parser.parse.fixed-2",
+      "graph.cli-parser.parse.fixed-3",
+      "graph.cli-parser.parse.fixed-8",
+      "graph.cli-parser.target.raw-1"
+    ],
+    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "knownGaps": [
+      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+    ]
+  }
+}

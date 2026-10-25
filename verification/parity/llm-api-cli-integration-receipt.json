@@ -1,0 +1,349 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-25T21:30:05.186586+00:00",
+  "scope": "Local combined LLM numeric restoration, API diff/mode and CLI parsing verification checkpoint. Full Rust port remains incomplete.",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "mainHeadBeforeReceipt": "a3703f2ee0ebef16d33eb1a8832d96e386925d5d",
+  "crossLanguage": {
+    "file": "target/parity/report-llm-api-cli-11705-before-controls.json",
+    "sha256": "912b64fea7cf3df1948bb1f970ffd580d1aa88736fa8e7d36d108ef94c46c357",
+    "cases": 11705,
+    "passed": 11705,
+    "failures": 0,
+    "sourceChanges": 0,
+    "unqualifiedNativeEvidence": 11681,
+    "qualified": {
+      "git": 15,
+      "rawGoOffsets": 5,
+      "apiDiffMode": 4
+    },
+    "newSuites": {
+      "llmCall": 91,
+      "timestampRuntime": 36,
+      "apiDiffMode": 77,
+      "cliParser": 599
+    },
+    "numericLlmOpenGaps": []
+  },
+  "native": {
+    "passed": 460,
+    "compileFailDocs": 20,
+    "rustCheck": true
+  },
+  "static": {
+    "parityLint": true,
+    "parityTypecheck": true,
+    "evidenceGuards": 11
+  },
+  "fullFaultChain": {
+    "command": "pnpm parity:mutations",
+    "registeredCommand": "node --test coverage.test.mjs recorder-evidence.test.mjs && node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node reconcile-mutations.mjs && node runtime-contracts.mjs --mutation-check && node paginate-queue-mutations.mjs && node runtime-hooks.mjs --mutation-check && node zoning-mutations.mjs && node boundary-config-mutations.mjs && node runtime-deadline-run.mjs --mutation-check && node boundary-domain-mutations.mjs && node command-families-mutations.mjs && node flow-run.mjs --mutation-check && node monitored-run-run.mjs --mutation-check && node comment-mutations-run.mjs && node resilient-call-mutations.mjs && node workflow-run.mjs --mutation-check && node saga-run.mjs --mutation-check && node layer-target-mutations-run.mjs && node paginated-walk-mutations.mjs && node layers-mutations-run.mjs && node poller-run.mjs --mutation-check && node layer-gate-mutations-run.mjs && node scoped-read-mutations-run.mjs && node shape-judgment-mutations-run.mjs && node journal-run.mjs --mutation-check && node reconciler-mutations.mjs && node journal-remote-run.mjs --mutation-check && node recorder-shared-owner-mutations.mjs && node boundary-render-mutations-run.mjs && node json-text-mutations.mjs && node recorder-mutations.mjs && node scope-count-mutations-run.mjs && node boundary-gate-mutations-run.mjs && node api-foundation-mutations-run.mjs && node durable-object-run.mjs --mutation-check && node stored-cell-run.mjs --mutation-check && node api-view-mutations-run.mjs && node api-raw-file-mutations-run.mjs && node api-git-mutations.mjs && node --import tsx llm-call-mutations.mjs && node --import tsx timestamp-mutations.mjs && node api-diff-mode-checks-run.mjs && node cli-parser-mutations-run.mjs",
+    "registeredShellSteps": 45,
+    "exitCode": 0,
+    "allRegisteredStepsPassed": true,
+    "semanticDetectionOnly": true,
+    "newSuffix": {
+      "llmCompiledFaults": 4,
+      "timestampCompiledFaults": 1,
+      "apiActualResponseGuards": 4,
+      "apiCompiledFaults": 22,
+      "cliParserCompiledFaults": 22
+    },
+    "reports": {
+      "target/parity/api-diff-mode-guards.json": {
+        "sha256": "0c60a369b1c2f4679fb25f739d871888187994cf9f8e9bb734c68f2a754b5e6b",
+        "passed": 4,
+        "attempted": 4,
+        "controls": 4
+      },
+      "target/parity/api-diff-mode-mutations.json": {
+        "sha256": "8c76c75747355391fca8ef492c80dd264303b9f695164a1b401dbbd5f2503a33",
+        "detected": 22,
+        "escaped": 0,
+        "controls": 22
+      },
+      "target/parity/api-foundation-mutations.json": {
+        "sha256": "7f8475ef802d1f00037480c1f2319185e8469cee64778965eddd126dffbacc53",
+        "detected": 21,
+        "escaped": 0,
+        "controls": 21
+      },
+      "target/parity/api-git-mutations.json": {
+        "sha256": "cc6cb982e31cf1cdf69f3fda4ba6250b7fe064f858abb762a52567dc12f380ea",
+        "detected": 13,
+        "escaped": 0,
+        "controls": 13
+      },
+      "target/parity/api-raw-file-mutations.json": {
+        "sha256": "8c023f48dd11803248b363194d2a43db01247a3bc8b1717f093be2ad48d1f30e",
+        "detected": 4,
+        "escaped": 0,
+        "controls": 4
+      },
+      "target/parity/api-view-mutations.json": {
+        "sha256": "12ed9906060e650369587f4e39140f2b6b8c029feba6313777cc82de26c19280",
+        "detected": 23,
+        "escaped": 0,
+        "controls": 23
+      },
+      "target/parity/boundary-config-mutations.json": {
+        "sha256": "aca0c16b707a35fa457c591e4ddb586414a6d98c3cfd1685636a5a0f1fb57d8e",
+        "rows": 2,
+        "detected": 2
+      },
+      "target/parity/boundary-domain-mutations.json": {
+        "sha256": "6b9239133d80c1cf96a2663de7eec9effdd0db673a0578a277da1596bf9ec7aa",
+        "rows": 29,
+        "detected": 29
+      },
+      "target/parity/boundary-gate-mutations.json": {
+        "sha256": "dab5f6fb2692ab535fd4c03f588e131aa091b3038f733f5dc19e8ca5c923d042",
+        "detected": 14,
+        "escaped": 0,
+        "controls": 14
+      },
+      "target/parity/boundary-render-mutations.json": {
+        "sha256": "cb152938eed0636b8ab3527eedbf98ed25fb341684f365ad32840d56d9667e04",
+        "detected": 17,
+        "escaped": 0,
+        "controls": 17
+      },
+      "target/parity/cli-parser-mutations.json": {
+        "sha256": "0a32707b7b75cc0881809363f562a0f6ea0cd01198788cd2d01a36102e452aca",
+        "detected": 22,
+        "escaped": 0,
+        "controls": 22
+      },
+      "target/parity/command-families-mutations.json": {
+        "sha256": "0ece145e208f9269d183a37b52cf3181357b667f44343f72df5bef94df6aa847",
+        "rows": 3,
+        "detected": 3
+      },
+      "target/parity/comment-mutations.json": {
+        "sha256": "9e9f0d0110bc67f2d58c17674d891884095590f0264e0a27a210771fbd2bbfc8",
+        "passed": 12,
+        "controls": 12
+      },
+      "target/parity/durable-object-mutation.json": {
+        "sha256": "d727882ddfce036b6f5b0b7479069a872f023d69ea8f80fb118640184ac2b4e1",
+        "passed": 169,
+        "controls": 4
+      },
+      "target/parity/flow-mutation.json": {
+        "sha256": "93ddd9f97f68c4288ae0f7b4381bf6bf07589e05e62d269349faf090f5600806",
+        "passed": 48,
+        "controls": 2
+      },
+      "target/parity/journal-mutation.json": {
+        "sha256": "7bc3d0972708233cc73082146277b78139d5afdd906a0773b03adf99326acb19",
+        "passed": 69,
+        "controls": 4
+      },
+      "target/parity/journal-remote-mutation.json": {
+        "sha256": "96cb9fd150d352a22623c1ea7e6ed85509b2cf27e71bbd911d05bda7ae19890b",
+        "passed": 108,
+        "controls": 4
+      },
+      "target/parity/json-text-mutations.json": {
+        "sha256": "ccdc7aac8782d90f87ab0669fb9787d5b43734b05e80ef63147e8f627b63398b",
+        "detected": 2
+      },
+      "target/parity/layer-gate-mutations.json": {
+        "sha256": "de068bcca80f4078e5162d5ca5bf2c1c5a1c0cdb21b3d1a21152b7ee25dd6e42",
+        "passed": 10,
+        "controls": 10
+      },
+      "target/parity/layer-target-mutations.json": {
+        "sha256": "f32db673d2b68652c47fde03695f3f2449c6ab191b46045da081c0a09963f1bd",
+        "passed": 8,
+        "controls": 8
+      },
+      "target/parity/layers-mutations.json": {
+        "sha256": "c9f681342ceddc4afa3f2c415870ed531a97dd26856ebcd3d2d27680fdaaab8c",
+        "passed": 8,
+        "controls": 8
+      },
+      "target/parity/ledger-first-reason-mutation.json": {
+        "sha256": "f41eaaff76b2fb63327381f1ad200c11e78782e08b8cb3dab2040fce89736237",
+        "passed": 100,
+        "attempted": 102
+      },
+      "target/parity/ledger-mutations.json": {
+        "sha256": "cc87cbc6d846f6468f2b62555222afb357d2233c8c9966ff2048d0b6f0063a2b",
+        "rows": 1,
+        "detected": 1
+      },
+      "target/parity/monitored-run-mutation.json": {
+        "sha256": "b39a39f4297b19aef956bc0f4dbe4ac989728150830061b3fe538d8fbf601aef",
+        "passed": 61,
+        "controls": 2
+      },
+      "target/parity/mutations.json": {
+        "sha256": "0d4c0c9afb8287c16927b22ae618f2893e57a62343ac21aea182199ce41434f6",
+        "rows": 18,
+        "detected": 18
+      },
+      "target/parity/paginate-queue-mutations.json": {
+        "sha256": "3e7f9e5b6ddb40253a647fa2894ee1bd223984a6e4aba14c6b1aeefa536597e3",
+        "rows": 10,
+        "detected": 10
+      },
+      "target/parity/paginated-walk-mutations.json": {
+        "sha256": "cdd509b5acb33c1d3da1273509ea1248efefe05cc825d6667d093ec0e5f2d9d4",
+        "detected": 11
+      },
+      "target/parity/poller-mutation.json": {
+        "sha256": "ee625ce71415a16f2ccda869b971de5c0fbf48274a173fde32b128d6205c8f80",
+        "passed": 57,
+        "controls": 3
+      },
+      "target/parity/reconcile-mutations.json": {
+        "sha256": "ff1fe544bcf59bef795a0814691435da2a09ed4472cb6c1cfd1701b3ce9c7975",
+        "rows": 2,
+        "detected": 2
+      },
+      "target/parity/reconciler-mutations.json": {
+        "sha256": "18602651b2fcb2495f4b9dfc79570034285a09b337e4ff0e1966790fcfc426a6",
+        "detected": 13
+      },
+      "target/parity/recorder-mutations.json": {
+        "sha256": "be567b4df863661a29a7a531c21861a007bea524cf2fce899f81a657ea9c5b96",
+        "detected": 12
+      },
+      "target/parity/recorder-shared-owner-mutations.json": {
+        "sha256": "9424aa47d1bae24fd581dc772ff6df36428fdb099f41d60bbfb03cb82eb6842c",
+        "detected": 4
+      },
+      "target/parity/resilient-call-mutations.json": {
+        "sha256": "a6480003e68d330ee81d5eafdff779203dfc2c424daad11d41d09d7d66caae67",
+        "rows": 9,
+        "detected": 9
+      },
+      "target/parity/runtime-contract-mutation.json": {
+        "sha256": "9d63b42f68deb5e2f13789268fd40792a59bc1ef498fa57c3850f6e3e35b0177",
+        "passed": 48,
+        "controls": 1
+      },
+      "target/parity/runtime-deadline-mutation.json": {
+        "sha256": "c59720d36ce39e552d8abd0885fd90bb418422db0af9f4e7b35ca48197fb6ecc",
+        "passed": 6,
+        "controls": 1
+      },
+      "target/parity/runtime-hooks-mutation.json": {
+        "sha256": "5e1bd3e020e5a7dd270c2c1c2e300a3ede1e4a2d786fb48a8dbad1cc10aadc12",
+        "passed": 38,
+        "controls": 2
+      },
+      "target/parity/saga-mutation.json": {
+        "sha256": "ae5674cc035f92869fedd47113360e96f3b0889b628006238df9e761c38de3f3",
+        "passed": 71,
+        "controls": 2
+      },
+      "target/parity/scope-count-mutations.json": {
+        "sha256": "6bb88b7bcbfdf26f4eec6b684a1067772d332765bdb4cbd99da37dd4ce0f22fb",
+        "detected": 19,
+        "escaped": 0,
+        "controls": 19
+      },
+      "target/parity/scoped-read-mutations.json": {
+        "sha256": "5c0686719e670ea799744f00e90546590e225fa13b5262c1e2c0971a61c2e2d4",
+        "detected": 10,
+        "escaped": 0,
+        "controls": 10
+      },
+      "target/parity/shape-judgment-mutations.json": {
+        "sha256": "c62d6744a2962902370b7140f84c96807c9c26d48ef37cc46e5b70a84c6cdc07",
+        "detected": 12,
+        "escaped": 0,
+        "controls": 12
+      },
+      "target/parity/stored-cell-mutation.json": {
+        "sha256": "76790d4347d7999ce62d93ac59ac33a7210a9424c781375d0f1af052f53f8386",
+        "passed": 97,
+        "controls": 5
+      },
+      "target/parity/timing-mutations.json": {
+        "sha256": "1ddb492d22f7744d7618d7a23d97c41f20bdebf29b77edd88fd17aff78da1a74",
+        "rows": 7,
+        "detected": 7
+      },
+      "target/parity/workflow-mutation.json": {
+        "sha256": "6eeb41044486611e00d49c2146d0f348a11f7162dca40def821036c51f755837",
+        "passed": 65,
+        "controls": 3
+      },
+      "target/parity/zoning-mutations.json": {
+        "sha256": "f442dee5eacb82fb64939d9bfdae4f13d3850667e8a6c46b6ca60e93cbd0aab1",
+        "rows": 1,
+        "detected": 1
+      }
+    }
+  },
+  "unchangedAudit": {
+    "file": "target/parity/llm-api-cli-before-controls.json",
+    "sha256": "88967fb8ce47c53ea32c640d935affbcde69a5313c642884660d8294306e229a",
+    "sourceFiles": 470,
+    "baselineExecutables": 260,
+    "changed": 0
+  },
+  "coverage": {
+    "inventory": 3445,
+    "mapped": 724,
+    "gaps": 2789,
+    "priorMappingsPreservedExactly": 667,
+    "newStrictApiMappings": 4,
+    "newCliParsingMappingsWithKnownGaps": 53,
+    "complete": false
+  },
+  "logs": {
+    "native": {
+      "file": "/private/tmp/demlik-llm-api-cli-main-native-01a16c9d.log",
+      "sha256": "4b45fd177652e0df562b9ffec6622738e3cdfe4d738768864b5af1542519b8f3"
+    },
+    "static": {
+      "file": "/private/tmp/demlik-llm-api-cli-main-static-r2-01a16c9d.log",
+      "sha256": "59214f60149d40e72298443294aa2ca297b902f5d38970d8ff31a722321eb963"
+    },
+    "guards": {
+      "file": "/private/tmp/demlik-llm-api-cli-main-guards-r2-01a16c9d.log",
+      "sha256": "7413267b41eda864dbed9cb0536211b0a2a44fd412246424ea02707ddc4cfb03"
+    },
+    "complete": {
+      "file": "/private/tmp/demlik-llm-api-cli-main-complete-r2-01a16c9d.log",
+      "sha256": "2dd82b11dbe34592e3725534913c7c0b87efb1bf7874bd04f58142fb8dfb8954"
+    },
+    "fullFaultChain": {
+      "file": "/private/tmp/demlik-llm-api-cli-main-all-controls-01a16c9d.log",
+      "sha256": "294773b8966bdac3e5a7933e38c294e640c438642f90399d1f1cf9126571b659"
+    }
+  },
+  "sourceHashes": {
+    "crates/code-graph/src/api/cli.rs": "5419f13ee9a5c3ea5301567fa74cf1499d6b306aca08cb0f83b124a740d68aed",
+    "crates/code-graph/src/api/diff.rs": "0b9dcd493ccc329ce5fef4383ac556d1a5a52d2f835c411463d749b169ed13f5",
+    "crates/code-graph/src/cli.rs": "8574502bd3959877b7f1371d00513ccb0dedf20f04fbf4ee72ee2dfa39a096f5",
+    "crates/code-graph/src/cli/options.rs": "19f004b2c6a624b593f57ff08036339073fe9ca2ded014cbc5ab174bc005995d",
+    "crates/tea/src/command.rs": "957b59efa2359450bd41b558fab9163f78b3d82790c5e4e98ade8349b2b9102e",
+    "crates/tea/src/data/number.rs": "7b5281409ee630e34bc2d720530d97bae8b35f0684ccf5be3a3b416c14718ab6",
+    "crates/tea/src/llm_call.rs": "0b234380b020e4a15180f3e984666f4e9cc5e4a223589807707056c84ec9c854",
+    "crates/tea/src/resilience/resilient_call/mod.rs": "e7487c585e028ca0489a11e6e6318b8351ed3693e5963e2c2a6e38dcfaaaf61f",
+    "verification/parity/api-diff-mode-checks-run.mjs": "01013086bb1bf277b9c212e9996d52b5d746ca68710984def4e85b0c439c17ad",
+    "verification/parity/cli-parser-contracts.json": "d498e85f00637feafb44d8351b55bc2a4c95ff7a2f24a84b02f93609ee418a5b",
+    "verification/parity/cli-parser-mutations-run.mjs": "a839107d3f481673544566f2c80bce136e607a6a0046935e5be98b3846dd65c5",
+    "verification/parity/compiled-traces.mjs": "aa62f34a6a2a64d40bbaed9e456d24d361f505b3d03aff225ae47bf0b02b4b02",
+    "verification/parity/contracts.json": "a924327fbbc0053ca2bcfe49d66b7d3e61c1838ab12a1b7f47011316cec5719d",
+    "verification/parity/graph.mjs": "5a4d2ce19ac5f6e303153928034b4bab2b60f0b55c598cd3becf77c323cd4d7b",
+    "verification/parity/llm-call-run.mjs": "1938faf3e054d4f3322b1da2c770662bd94c2e97c1856ba8c191fb6c7d9b23fe",
+    "verification/parity/package.json": "8d7fecbcda425bf1f5dffd1b7a4e5240ba838e869623a912fb49cf663ebfe128",
+    "verification/parity/paginate-queue-mutations.mjs": "cdd0b746a986f43940a2e3f6e8fc008a126f3a8bac86de75efbff786b33f3dfa",
+    "verification/parity/run.mjs": "0c7106e860a458eaa416499349e9fa959b44e8344b59593e0a0e6125aba1bfdd",
+    "verification/parity/timestamps-run.mjs": "3b0ce9b9611b3feabb7a45cc237378797231cd57338c06b2b55a330d9949742a"
+  },
+  "notes": [
+    "The complete gate correctly remains red for uncovered capabilities; all11705 behavioral observations passed.",
+    "All53CLI parsing mappings explicitly retain functional global/mode execution gaps; no fake defineProgram wildcard was admitted.",
+    "The queue overflow control was only relocated to the new canonical data/number.rs owner; exact fault and witness unchanged.",
+    "All existing OS/raw/backend/scheduling/opaque decoder qualifications remain explicit; qualified rows are excluded from unqualified coverage evidence.",
+    "No TypeScript production changes, remote writes, Docker use, publication or whole-goal completion.",
+    "Queued later worker leaves were not integrated during this frozen-source full check."
+  ]
+}

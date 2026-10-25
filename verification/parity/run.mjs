@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { apiBaseParserParity } from "./api-base-run.mjs";
+import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
@@ -16,6 +17,7 @@ import { graphParity } from "./graph.mjs";
 import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
 import { jsonTextParity } from "./json-text-run.mjs";
+import { llmCallParity } from "./llm-call-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
@@ -31,6 +33,7 @@ import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
 import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { sagaParity } from "./saga-run.mjs";
 import { storedCellParity } from "./stored-cell-run.mjs";
+import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
 import { workflowParity } from "./workflow-run.mjs";
 
@@ -39,6 +42,9 @@ const root = path.resolve(here, "../..");
 const args = process.argv.slice(2);
 const apiBaseParserBinaryArgument = args.indexOf("--api-base-parser-bin");
 const apiGitBinaryArgument = args.indexOf("--api-git-bin");
+const apiDiffModeBinaryArgument = args.indexOf("--api-diff-mode-bin");
+const llmCallBinaryArgument = args.indexOf("--llm-call-bin");
+const timestampBinaryArgument = args.indexOf("--timestamps-bin");
 const binaryArgument = args.indexOf("--rust-bin");
 const runtimeBinaryArgument = args.indexOf("--runtime-bin");
 const timingBinaryArgument = args.indexOf("--timing-bin");
@@ -538,6 +544,86 @@ if (!mutationSuite) {
     });
   }
 }
+let apiDiffMode = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    apiDiffMode = await apiDiffModeParity({
+      quiet: true,
+      allowFailures: true,
+      binary:
+        apiDiffModeBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[apiDiffModeBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-api-diff-mode.json`,
+            ),
+    });
+    failures.push(...apiDiffMode.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "api-diff-mode.verification",
+      operation: "code_graph.api-diff-mode",
+      message: error.message,
+    });
+  }
+}
+let llmCall = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    llmCall = await llmCallParity(cargo, {
+      binary:
+        llmCallBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[llmCallBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-llm-call.json`,
+            ),
+    });
+    failures.push(...llmCall.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "llm-call.verification",
+      operation: "tea.llm-call",
+      message: error.message,
+    });
+  }
+}
+let timestamps = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    timestamps = await timestampParity(cargo, {
+      binary:
+        timestampBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[timestampBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-timestamps.json`,
+            ),
+    });
+    failures.push(...timestamps.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "timestamps.verification",
+      operation: "tea.timestamps",
+      message: error.message,
+    });
+  }
+}
 let durableObject = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -929,6 +1015,9 @@ const report = {
     durableObject.cases +
     apiBaseParser.cases +
     apiGit.cases +
+    apiDiffMode.cases +
+    llmCall.cases +
+    timestamps.cases +
     storedCell.cases +
     jsonText.cases +
     recorder.cases +
@@ -957,6 +1046,9 @@ const report = {
     durableObject.passed +
     apiBaseParser.passed +
     apiGit.passed +
+    apiDiffMode.passed +
+    llmCall.passed +
+    timestamps.passed +
     storedCell.passed +
     jsonText.passed +
     recorder.passed +
@@ -986,6 +1078,9 @@ const report = {
       ...(durableObject.passed ? ["tea.durable-object"] : []),
       ...(apiBaseParser.passed ? ["code_graph.api-base-parser"] : []),
       ...(apiGit.passed ? ["code_graph.api-git"] : []),
+      ...(apiDiffMode.passed ? ["code_graph.api-diff-mode"] : []),
+      ...(llmCall.passed ? ["tea.llm-call"] : []),
+      ...(timestamps.passed ? ["tea.timestamps"] : []),
       ...(storedCell.passed ? ["tea.stored-cell"] : []),
       ...(jsonText.passed ? ["tea.json-text"] : []),
       ...(recorder.passed ? ["tea.recorder"] : []),
@@ -1060,6 +1155,19 @@ const report = {
     nativeErrorCases: Object.keys(apiGit.nativeErrors ?? {}).length,
   },
   recorder: { ...recorder, nativeEvidence: undefined, failures: undefined },
+  apiDiffMode: {
+    ...apiDiffMode,
+    nativeEvidence: undefined,
+    qualifiedNativeEvidence: undefined,
+    nativeErrors: undefined,
+    failures: undefined,
+    qualifiedEvidenceCases: Object.keys(
+      apiDiffMode.qualifiedNativeEvidence ?? {},
+    ).length,
+    nativeErrorCases: Object.keys(apiDiffMode.nativeErrors ?? {}).length,
+  },
+  llmCall: { ...llmCall, nativeEvidence: undefined, failures: undefined },
+  timestamps: { ...timestamps, nativeEvidence: undefined, failures: undefined },
   recordedRuntime: { ...recordedRuntime, nativeEvidence: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
   workflow: { ...workflow, nativeEvidence: undefined, failures: undefined },
@@ -1114,6 +1222,9 @@ const report = {
     ...durableObject.nativeEvidence,
     ...apiBaseParser.nativeEvidence,
     ...apiGit.nativeEvidence,
+    ...apiDiffMode.nativeEvidence,
+    ...llmCall.nativeEvidence,
+    ...timestamps.nativeEvidence,
     ...storedCell.nativeEvidence,
     ...jsonText.nativeEvidence,
     ...recorder.nativeEvidence,

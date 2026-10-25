@@ -15,6 +15,11 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "cli-parser",
+    driver: "cli_parser_driver",
+    script: "graph-cli-parser.mts",
+  },
+  {
     name: "api-view",
     driver: "api_view_driver",
     script: "graph-api-view.mts",
@@ -176,6 +181,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "cli_parser_driver",
   "api_view_driver",
   "api_foundation_driver",
   "boundary_gate_driver",

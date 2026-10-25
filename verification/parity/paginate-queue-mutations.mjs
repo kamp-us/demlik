@@ -80,7 +80,7 @@ const mutations = [
   },
   {
     name: "queue-drops-json-number-overflow",
-    file: "crates/tea/src/work_queue/mod.rs",
+    file: "crates/tea/src/data/number.rs",
     before: "PlainData::Number(value) => Ok(Self(Some(value))),",
     after:
       "PlainData::Number(value) => Ok(Self(Some(if value.is_finite() { value } else { 0.0 }))),",
