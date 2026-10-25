@@ -11,6 +11,7 @@ pub mod data;
 pub mod declarations;
 pub mod engine;
 pub mod extract;
+pub mod hexagon;
 pub mod kinds;
 pub mod layers;
 pub mod project;

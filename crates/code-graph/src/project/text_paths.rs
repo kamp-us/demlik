@@ -137,9 +137,43 @@ pub(crate) fn dirname_path_text(path: &JsString) -> JsString {
     if rooted { "/".into() } else { ".".into() }
 }
 
+pub(crate) fn basename_path_text(path: &JsString) -> JsString {
+    let units = path.units();
+    let end = units
+        .iter()
+        .rposition(|unit| *unit != SLASH)
+        .map_or(0, |index| index + 1);
+    let start = units[..end]
+        .iter()
+        .rposition(|unit| *unit == SLASH)
+        .map_or(0, |index| index + 1);
+    JsString::from_units(units[start..end].to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn node_posix_basename_keeps_code_units_and_does_not_normalize_dot_segments() {
+        for (path, expected) in [
+            ("", ""),
+            ("/", ""),
+            ("///", ""),
+            ("a", "a"),
+            ("a///", "a"),
+            ("/a//b///", "b"),
+            ("a/.", "."),
+            ("a/..", ".."),
+            ("a\\b", "a\\b"),
+        ] {
+            assert_eq!(basename_path_text(&path.into()), JsString::from(expected));
+        }
+        assert_eq!(
+            basename_path_text(&JsString::from_units(vec![47, 114, 0xd800, 47, 47])),
+            JsString::from_units(vec![114, 0xd800])
+        );
+    }
 
     #[test]
     fn node_resolve_removes_only_nonroot_trailing_separator() {

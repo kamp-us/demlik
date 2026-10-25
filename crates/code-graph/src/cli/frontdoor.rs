@@ -1,4 +1,4 @@
-//! Preparation through API dispatch; every other mode is an explicit continuation.
+//! Preparation and early API/hexagon dispatch; later modes return a continuation.
 use super::{
     CliExit, CliOptions,
     io::{CliIo, ExitCodeError, clean_exit, exit_with, output_to},
@@ -15,6 +15,7 @@ use crate::{
         resolve_thresholds, with_entry_presets,
     },
     engine::tsgo::TsgoBinary,
+    hexagon::cli::{HexagonOutput, HexagonRunError, HexagonRunOutcome, run_hexagon},
     kinds::rules::{NodeKindRules, RuleInputError},
     project::resolve_path_text_from,
     schema::Thresholds,
@@ -92,11 +93,17 @@ pub enum ApiDispatch {
     Continue(Box<PreparedCli>),
 }
 #[derive(Debug)]
+pub enum HexagonDispatch {
+    Complete(HexagonRunOutcome),
+    Continue(Box<PreparedCli>),
+}
+#[derive(Debug)]
 pub enum FrontdoorError {
     Resolve { target: JsString, source: io::Error },
     Realpath { path: JsString, source: io::Error },
     NodeKinds(NodeKindConfigError),
     Api(ApiRunError),
+    Hexagon(HexagonRunError),
     ExitCode(ExitCodeError),
 }
 impl FrontdoorError {
@@ -106,6 +113,7 @@ impl FrontdoorError {
                 "TypeError"
             }
             Self::Api(error) => error.visible().name(),
+            Self::Hexagon(error) => error.name(),
             Self::ExitCode(error) => error.name(),
             _ => "Error",
         }
@@ -120,6 +128,7 @@ impl FrontdoorError {
             }
             Self::NodeKinds(error) => error.to_string().into(),
             Self::Api(error) => error.message(),
+            Self::Hexagon(error) => error.message(),
             Self::ExitCode(error) => error.message(),
         }
     }
@@ -135,6 +144,7 @@ impl Error for FrontdoorError {
             Self::Resolve { source, .. } | Self::Realpath { source, .. } => source,
             Self::NodeKinds(error) => error,
             Self::Api(error) => error,
+            Self::Hexagon(error) => error,
             Self::ExitCode(error) => error,
         })
     }
@@ -252,6 +262,36 @@ pub fn prepare_cli(
     })))
 }
 impl PreparedCli {
+    /// Run the next early mode after ApiDispatch::Continue, retaining all later modes.
+    pub fn dispatch_hexagon(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<HexagonDispatch, FrontdoorError> {
+        if self.options.hexagon() != Some(true) {
+            return Ok(HexagonDispatch::Continue(self));
+        }
+        let result = {
+            let bridge = RefCell::new(&mut *host);
+            let output = output_to(self.options.out());
+            let mut emit = |payload: &JsString| output.emit(&mut bridge.borrow_mut(), payload);
+            let mut report = |message: &JsString| {
+                clean_exit(&mut bridge.borrow_mut(), message);
+                Ok(())
+            };
+            run_hexagon(
+                &self.root_absolute,
+                HexagonOutput {
+                    json: self.options.json() == Some(true),
+                    pretty: self.options.pretty() == Some(true),
+                    emit: &mut emit,
+                    report: &mut report,
+                },
+            )
+        }
+        .map_err(FrontdoorError::Hexagon)?;
+        Ok(HexagonDispatch::Complete(result))
+    }
+
     /// The native tool calls block; inactive API flags return this owned continuation.
     pub fn dispatch_api_blocking(
         self: Box<Self>,
