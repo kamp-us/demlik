@@ -176,7 +176,7 @@ pub struct WorkflowCompensationInput<A> {
     pub compensation: WorkflowValue<Rc<A>>,
 }
 impl<A> CommandRecord for WorkflowCompensationInput<A> {}
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, serde::Deserialize)]
 pub enum WorkflowTransportFailure {}
 impl Tagged for WorkflowTransportFailure {
     fn tag(&self) -> &str {
@@ -200,6 +200,9 @@ impl<A> CommandSpec for WorkflowActivitySpec<A> {
     fn parse_output(value: PlainData) -> Result<PlainData, SchemaError> {
         crate::schema::undefined_only(value)
     }
+    fn missing_output() -> Option<PlainData> {
+        Some(PlainData::Undefined)
+    }
 }
 pub struct WorkflowCompensationSpec<A>(PhantomData<fn() -> A>);
 impl<A> CommandSpec for WorkflowCompensationSpec<A> {
@@ -217,6 +220,9 @@ impl<A> CommandSpec for WorkflowCompensationSpec<A> {
     }
     fn parse_output(value: PlainData) -> Result<PlainData, SchemaError> {
         crate::schema::undefined_only(value)
+    }
+    fn missing_output() -> Option<PlainData> {
+        Some(PlainData::Undefined)
     }
 }
 pub type ActivityCmd<A> = Cmd<WorkflowActivitySpec<A>>;

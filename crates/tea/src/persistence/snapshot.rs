@@ -69,6 +69,9 @@ impl<V> CommandSpec for SnapshotWriteSpec<V> {
     fn parse_output(value: PlainData) -> Result<PlainData, SchemaError> {
         crate::schema::undefined_only(value)
     }
+    fn missing_output() -> Option<PlainData> {
+        Some(PlainData::Undefined)
+    }
 }
 pub struct SnapshotLoadSpec<V>(PhantomData<fn() -> V>);
 impl<V> CommandSpec for SnapshotLoadSpec<V> {
