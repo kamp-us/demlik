@@ -5307,5 +5307,846 @@
       "workflow.rollback-err-restored",
       "workflow.no-inverse-fails"
     ]
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig": {
+    "signature": "0c903ba296e9e11871d92667ea2ae986bc9a99cba6d63a11969b82a0bdd98870",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::PaginatedWalk::new"]
+    },
+    "cases": ["walk.command-order", "walk.backpressure"]
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:published:6e08e07b22f9b3fbfd9d40fa375d8a40679ed5f9eae7baf98fc6b900e5c1f1d6": {
+    "signature": "6e08e07b22f9b3fbfd9d40fa375d8a40679ed5f9eae7baf98fc6b900e5c1f1d6",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok"
+      ]
+    },
+    "cases": ["walk.command-order"],
+    "note": "The caller-owned typed Rc<Fn> callback is invoked by page_ok; callback phase order, typed failure causes and real reentry have compiled public witnesses."
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:published:933f090d0c84fd539270d73f543d41e08308f328ea0d89065d7e0a19dafecc68": {
+    "signature": "933f090d0c84fd539270d73f543d41e08308f328ea0d89065d7e0a19dafecc68",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok"
+      ]
+    },
+    "cases": ["walk.command-order"],
+    "note": "The caller-owned typed Rc<Fn> callback is invoked by page_ok; callback phase order, typed failure causes and real reentry have compiled public witnesses."
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:published:aa2ef9a7b7cedfa9b297c67bb2f27a4b4b29a4675988ccd3ed4b2e9228d20228": {
+    "signature": "aa2ef9a7b7cedfa9b297c67bb2f27a4b4b29a4675988ccd3ed4b2e9228d20228",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok"
+      ]
+    },
+    "cases": ["walk.command-order"],
+    "note": "The caller-owned typed Rc<Fn> callback is invoked by page_ok; callback phase order, typed failure causes and real reentry have compiled public witnesses."
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkConfig/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkState": {
+    "signature": "e77fe232a854c253cd319043a66aa402bdb2b355e346c59d0576ce0c9dc4b148",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::init",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::start"
+      ]
+    },
+    "cases": ["walk.basic", "walk.raw-lone-units"]
+  },
+  "@demlik/tea:./paginate#FetchPageCmd": {
+    "signature": "7fc79da765852d338b9d2bd93a6de0662f9a9fde20942ad43bdfbb269348ef71",
+    "rust": {
+      "file": "crates/tea/src/resilience/resilient_call/model.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::fetch",
+        "demlik_tea::command::CmdDef::from_record"
+      ]
+    },
+    "cases": ["walk.construct-and-lift"],
+    "canonical": "@demlik/tea:./resilience#RunCmd",
+    "note": "The walk returns the same existing typed fetch command definition; it does not introduce another family authority."
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09": {
+    "signature": "76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::from_record"]
+    },
+    "cases": ["walk.construct-and-lift"],
+    "canonical": "@demlik/tea:./resilience#RunCmd/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "note": "Rust keeps the typed associated input/output through RunCommand; positive opaque consumers and the wrong-page compile-fail doc cover that relationship."
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#FetchPageCmd/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./paginate#PageOkMsg": {
+    "signature": "536c03843b98f32f5a9fa6f4892f00f7c81208999386432f4c933eba3e84444c",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PageOk::new",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok"
+      ]
+    },
+    "cases": ["walk.basic"]
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09": {
+    "signature": "76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::from_record"]
+    },
+    "cases": ["walk.construct-and-lift"],
+    "canonical": "@demlik/tea:./resilience#RunCmd/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "note": "Rust keeps the typed associated input/output through RunCommand; positive opaque consumers and the wrong-page compile-fail doc cover that relationship."
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#PageOkMsg/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./paginate#PageErrMsg": {
+    "signature": "27cbf98c9d1aad9a4073353346de1711f77f42bf93d30d23239aefd6209b2906",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PageErr::new",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_err"
+      ]
+    },
+    "cases": ["walk.failure-retry"]
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09": {
+    "signature": "76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::from_record"]
+    },
+    "cases": ["walk.construct-and-lift"],
+    "canonical": "@demlik/tea:./resilience#RunCmd/member:src/pure/core.d.ts#CmdOf:76f044b75fb072740295de2e3afa544becd68a7114eb45cc73bfd4b997e84f09",
+    "note": "Rust keeps the typed associated input/output through RunCommand; positive opaque consumers and the wrong-page compile-fail doc cover that relationship."
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#PageErrMsg/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./paginate#PaginatedWalkTimerMsg": {
+    "signature": "bcc40ee1fb4ebe588afdcfa21d993e0a833e4702b8bc581d42ba84b74d6d8613",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::on_timer"
+      ]
+    },
+    "cases": ["walk.deadline"]
+  },
+  "@demlik/tea:./paginate#PAGE_KEY": {
+    "signature": "c7e84b55a58ebe3ab70d2cb5ced76c305bf6220670f671e1e6d1b9827d09cd72",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::PaginatedWalk::start"]
+    },
+    "cases": ["walk.basic"],
+    "note": "The independent literal asserts key=page, and a compiled constant mutation is detected."
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk": {
+    "signature": "def14705d329ab7af548ffb6c4371f539323b8c2ec971cd5bc3ea40720408ccf",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::new",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::with_rng",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::fetch",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::init",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::start",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::resume",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_err",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::on_timer",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::drain",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::is_complete",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::is_stuck",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::failure",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::deadlines",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::timer"
+      ]
+    },
+    "cases": [
+      "walk.basic",
+      "walk.backpressure",
+      "walk.failure-retry",
+      "walk.construct-and-lift"
+    ]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:1481ec8cfb9fb3611938163aaa224055085f9de290f22bb28fd497c8225b1167": {
+    "signature": "1481ec8cfb9fb3611938163aaa224055085f9de290f22bb28fd497c8225b1167",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::with_rng"
+      ]
+    },
+    "cases": ["walk.jitter-full"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:e6ebac8edcf82d207896c32f447c867d4aa26de664bbd4c484b2fc8f7833d9e7": {
+    "signature": "e6ebac8edcf82d207896c32f447c867d4aa26de664bbd4c484b2fc8f7833d9e7",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::PaginatedWalk::init"]
+    },
+    "cases": ["walk.basic"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:a50010f8309c2f4a138221b8f0bf633556cf30cd34c5b66c337309831c3b2b1a": {
+    "signature": "a50010f8309c2f4a138221b8f0bf633556cf30cd34c5b66c337309831c3b2b1a",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::start",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::resume"
+      ]
+    },
+    "cases": ["walk.backpressure", "walk.repeat-arm"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:747096dfb312803c90014f7abce8f6e59e739aeeef51571c6f692c05d26e1b00": {
+    "signature": "747096dfb312803c90014f7abce8f6e59e739aeeef51571c6f692c05d26e1b00",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_ok"
+      ]
+    },
+    "cases": ["walk.basic", "walk.callback-onPage"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:08e7bc56f882b6d1c5b75fcfe4e4074f9613e231fe9dd39f0e562dcafdaccb52": {
+    "signature": "08e7bc56f882b6d1c5b75fcfe4e4074f9613e231fe9dd39f0e562dcafdaccb52",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::page_err"
+      ]
+    },
+    "cases": ["walk.failure-retry", "walk.late-done"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:01ee9a33039996e13b50cb57cc494988a09206e2681c34e56c4ef00c2e37f72c": {
+    "signature": "01ee9a33039996e13b50cb57cc494988a09206e2681c34e56c4ef00c2e37f72c",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::on_timer"
+      ]
+    },
+    "cases": ["walk.deadline", "walk.late-paused"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:1ba7aff934c7a00a3c19dae4f54a1b1608ca01df72a9e6ee0b7789e09485ea36": {
+    "signature": "1ba7aff934c7a00a3c19dae4f54a1b1608ca01df72a9e6ee0b7789e09485ea36",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::PaginatedWalk::drain"]
+    },
+    "cases": ["walk.backpressure", "walk.drain-nan-reload"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:8e092b9b306a9c29616c52bad26a1cdd30722f67e2260bdd01238537a843a137": {
+    "signature": "8e092b9b306a9c29616c52bad26a1cdd30722f67e2260bdd01238537a843a137",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::is_complete",
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::is_stuck"
+      ]
+    },
+    "cases": [
+      "walk.basic",
+      "walk.undefined-error-stuck",
+      "walk.done-failed-slot"
+    ]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:33a998852c46d5c3aa75101faa99387db66c9a142225afeb51bca70415794d5d": {
+    "signature": "33a998852c46d5c3aa75101faa99387db66c9a142225afeb51bca70415794d5d",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::failure"
+      ]
+    },
+    "cases": ["walk.failure-retry", "walk.done-failed-slot"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:e4451b3accb38a8821840597947ccb39e8570248ec425584812624964bf8771c": {
+    "signature": "e4451b3accb38a8821840597947ccb39e8570248ec425584812624964bf8771c",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": [
+        "demlik_tea::paginate::paginated_walk::PaginatedWalk::deadlines"
+      ]
+    },
+    "cases": ["walk.budget-retry", "walk.per-page-deadline"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:published:d864b708011afac64e3bee76333052ea36e3b5094ef45c2fc7c37a2268ecdf67": {
+    "signature": "d864b708011afac64e3bee76333052ea36e3b5094ef45c2fc7c37a2268ecdf67",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::PaginatedWalk::timer"]
+    },
+    "cases": ["walk.budget-retry", "walk.per-page-deadline"]
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#createPaginatedWalk/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
+  },
+  "@demlik/tea:./paginate#liftWalk": {
+    "signature": "a0af6b473bd5b91021bdf3e6e987b258e5ca9dcd5db23722de5d3a2176680656",
+    "rust": {
+      "file": "crates/tea/src/paginate/paginated_walk.rs",
+      "symbols": ["demlik_tea::paginate::paginated_walk::lift_walk"]
+    },
+    "cases": ["walk.construct-and-lift"]
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#Cmd:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c": {
+    "signature": "c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::batch"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:c5c509f40877c749e3d0f522264eaef856d1ca0dd814e7797e9b825ccc14aa0c"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#Cmd:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844": {
+    "signature": "b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:b852b0914621a3cf5920259f6f40286356c35e95679e270da687762d6ce9e844"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#Cmd:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4": {
+    "signature": "e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e97a53c7f58b2240dec1643dd5cb8af163ef4854976e7bc18403b6801c47bcc4"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#Cmd:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1": {
+    "signature": "e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::when_defined"]
+    },
+    "cases": [
+      "command.helpers-missing",
+      "command.helpers-zero",
+      "command.helpers-null"
+    ],
+    "canonical": "@demlik/tea:.#Cmd/member:published:e91aa919bfd878ced23b49416521bd49ec843e229566c9155c72ed100a9a9fa1"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#CmdDef:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5": {
+    "signature": "fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": [
+        "demlik_tea::command::CmdDef::<Fetch>::build",
+        "demlik_tea::command::CmdDef::<DataCommand>::build"
+      ]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp",
+      "command.dependency-infinity",
+      "command.dependency-utf16-key"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:fcb717d0beb79caadfd48383b7d2643946d73dac3d2a744443d7437814b570b5"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#CmdDef:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6": {
+    "signature": "4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::ok"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:4fb4ef52719d61c80e16467dbc457741b353c626df14eab5bc393849844f2cb6"
+  },
+  "@demlik/tea:./paginate#liftWalk/member:src/pure/core.d.ts#CmdDef:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4": {
+    "signature": "b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4",
+    "rust": {
+      "file": "crates/tea/src/command.rs",
+      "symbols": ["demlik_tea::command::CmdDef::<Fetch>::err"]
+    },
+    "cases": [
+      "command.replay-builders-without-stamp",
+      "command.replay-builders-explicit-zero-stamp"
+    ],
+    "canonical": "@demlik/tea:.#CmdDef/member:published:b424a6fa095b834c4774c0c4d28b857b458fe5525ba1fc6bbde4de327d34ebc4"
   }
 }

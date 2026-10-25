@@ -5,7 +5,7 @@
   "scripts": {
     "verify": "node run.mjs",
     "verify:complete": "node run.mjs --complete",
-    "verify:mutations": "node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node reconcile-mutations.mjs && node runtime-contracts.mjs --mutation-check && node paginate-queue-mutations.mjs && node runtime-hooks.mjs --mutation-check && node zoning-mutations.mjs && node boundary-config-mutations.mjs && node runtime-deadline-run.mjs --mutation-check && node boundary-domain-mutations.mjs && node command-families-mutations.mjs && node flow-run.mjs --mutation-check && node monitored-run-run.mjs --mutation-check && node comment-mutations-run.mjs && node resilient-call-mutations.mjs && node workflow-run.mjs --mutation-check && node saga-run.mjs --mutation-check && node layer-target-mutations-run.mjs",
+    "verify:mutations": "node mutations.mjs && node timing-mutations.mjs && node ledger-mutations.mjs && node reconcile-mutations.mjs && node runtime-contracts.mjs --mutation-check && node paginate-queue-mutations.mjs && node runtime-hooks.mjs --mutation-check && node zoning-mutations.mjs && node boundary-config-mutations.mjs && node runtime-deadline-run.mjs --mutation-check && node boundary-domain-mutations.mjs && node command-families-mutations.mjs && node flow-run.mjs --mutation-check && node monitored-run-run.mjs --mutation-check && node comment-mutations-run.mjs && node resilient-call-mutations.mjs && node workflow-run.mjs --mutation-check && node saga-run.mjs --mutation-check && node layer-target-mutations-run.mjs && node paginated-walk-mutations.mjs",
     "verify:storage-process": "node storage-process.mjs",
     "verify:timing": "node timing-run.mjs",
     "verify:timing:coverage": "node timing-coverage.mjs",
@@ -25,7 +25,8 @@
     "verify:resilient-call": "node resilient-call-run.mjs",
     "verify:workflow": "node workflow-run.mjs",
     "verify:saga": "node saga-run.mjs",
-    "verify:layer-target-mutations": "node layer-target-mutations-run.mjs"
+    "verify:layer-target-mutations": "node layer-target-mutations-run.mjs",
+    "verify:paginated-walk": "node paginated-walk-run.mjs"
   },
   "dependencies": {
     "zod": "catalog:"

@@ -60,11 +60,17 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/resilient-call.json` compares composed cache, retry, circuit,
    rate and deadline decisions, restored states and the typed outcome bridge.
    Its Runtime consumer uses the actual default timer in both profiles.
+   `target/parity/paginated-walk.json` compares cursor advancement, backpressure,
+   callback order, retry decisions and explicit JSON reloads. The native Runtime
+   consumer also runs success, retry and failure in both profiles.
    `target/parity/flow.json` compares fan-out waves, duplicate IDs, joins,
    completion ports and size/time batch windows. `target/parity/monitored-run.json`
    compares snapshot cadence, command acknowledgments, stage progress, failure,
    watchdogs and restored state. Generic serialized checkpoint payloads require
    a caller-owned decoder; typed opaque payloads run through both native profiles.
+   `target/parity/workflow.json` compares owed/confirmed effects, business results,
+   compensation and replay. `target/parity/saga.json` compares forward progress,
+   reverse compensation, failures and restored queue state.
    `target/parity/runtime-hooks.json` compares identity filtering, per-run ports,
    callback identity, events, telemetry, timer fallback and awaited host cleanup.
    `target/parity/runtime-deadline.json` connects the deadline helper directly to

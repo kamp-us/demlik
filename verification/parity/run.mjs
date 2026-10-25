@@ -12,6 +12,7 @@ import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
+import { paginatedWalkParity } from "./paginated-walk-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
@@ -38,6 +39,7 @@ const monitoredRunBinaryArgument = args.indexOf("--monitored-run-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
 const deadlineBinaryArgument = args.indexOf("--deadline-bin");
 const paginateQueueBinaryArgument = args.indexOf("--paginate-queue-bin");
+const paginatedWalkBinaryArgument = args.indexOf("--paginated-walk-bin");
 const reportArgument = args.indexOf("--report");
 const mutationArgument = args.indexOf("--mutation-suite");
 const mutationSuite =
@@ -329,6 +331,32 @@ if (!mutationSuite) {
     });
   }
 }
+let paginatedWalk = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    paginatedWalk = await paginatedWalkParity(cargo, {
+      binary:
+        paginatedWalkBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[paginatedWalkBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-paginated-walk.json`,
+            ),
+    });
+    failures.push(...paginatedWalk.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "paginated-walk.verification",
+      operation: "tea.paginate.paginated-walk",
+      message: error.message,
+    });
+  }
+}
 let flow = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -582,6 +610,7 @@ const report = {
     runtimeContracts.cases +
     commandFamilies.cases +
     resilientCall.cases +
+    paginatedWalk.cases +
     flow.cases +
     workflow.cases +
     saga.cases +
@@ -598,6 +627,7 @@ const report = {
     runtimeContracts.passed +
     commandFamilies.passed +
     resilientCall.passed +
+    paginatedWalk.passed +
     flow.passed +
     workflow.passed +
     saga.passed +
@@ -615,6 +645,7 @@ const report = {
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
       ...(commandFamilies.passed ? ["tea.command.families"] : []),
       ...(resilientCall.passed ? ["tea.resilience.resilient-call"] : []),
+      ...(paginatedWalk.passed ? ["tea.paginate.paginated-walk"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
       ...(workflow.passed ? ["tea.workflow"] : []),
       ...(saga.passed ? ["tea.saga"] : []),
@@ -640,6 +671,11 @@ const report = {
   },
   resilientCall: {
     ...resilientCall,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  paginatedWalk: {
+    ...paginatedWalk,
     nativeEvidence: undefined,
     failures: undefined,
   },
@@ -688,6 +724,7 @@ const report = {
     ...runtimeContracts.nativeEvidence,
     ...commandFamilies.nativeEvidence,
     ...resilientCall.nativeEvidence,
+    ...paginatedWalk.nativeEvidence,
     ...flow.nativeEvidence,
     ...workflow.nativeEvidence,
     ...saga.nativeEvidence,
