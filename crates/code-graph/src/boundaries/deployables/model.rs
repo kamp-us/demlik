@@ -212,6 +212,73 @@ pub struct BindingSite {
     #[serde(serialize_with = "crate::text::serialize_number")]
     pub line: f64,
 }
+#[derive(Clone, Copy)]
+pub enum BindingOwners<'a> {
+    Record(&'a IndexMap<JsString, Vec<JsString>>),
+    InheritedFunction(&'a JsString),
+    ObjectPrototype,
+}
+static NO_BINDING_OWNERS: LazyLock<IndexMap<JsString, Vec<JsString>>> =
+    LazyLock::new(IndexMap::new);
+pub fn binding_owners_of<'a>(rules: &'a BoundaryRules, scope: &'a JsString) -> BindingOwners<'a> {
+    if let Some(owners) = rules.binding_owners.get(scope) {
+        BindingOwners::Record(owners)
+    } else if scope == "__proto__" {
+        BindingOwners::ObjectPrototype
+    } else if crate::text::object_prototype_function_name(scope).is_some() {
+        BindingOwners::InheritedFunction(scope)
+    } else {
+        BindingOwners::Record(&NO_BINDING_OWNERS)
+    }
+}
+impl BindingOwners<'_> {
+    pub fn permits(
+        self,
+        binding: &JsString,
+        file: &JsString,
+    ) -> Result<bool, DeployableJudgmentError> {
+        use crate::text::{has_object_prototype_property, object_prototype_function_name};
+        match self {
+            Self::Record(owners) => {
+                if let Some(files) = owners.get(binding) {
+                    Ok(files.contains(file))
+                } else if has_object_prototype_property(binding) {
+                    Err(DeployableJudgmentError::InheritedOwners)
+                } else {
+                    Ok(true)
+                }
+            }
+            Self::ObjectPrototype => {
+                if binding == "__proto__" {
+                    Err(DeployableJudgmentError::NullOwners)
+                } else if has_object_prototype_property(binding) {
+                    Err(DeployableJudgmentError::InheritedOwners)
+                } else {
+                    Ok(true)
+                }
+            }
+            Self::InheritedFunction(scope) => {
+                if binding == "name" {
+                    object_prototype_function_name(scope)
+                        .map(|name| name.contains(file))
+                        .ok_or(DeployableJudgmentError::InheritedOwners)
+                } else if binding == "caller" || binding == "arguments" {
+                    Err(DeployableJudgmentError::RestrictedFunctionProperty)
+                } else if binding == "length"
+                    || binding == "apply"
+                    || binding == "bind"
+                    || binding == "call"
+                    || (binding == "prototype" && scope == "constructor")
+                    || has_object_prototype_property(binding)
+                {
+                    Err(DeployableJudgmentError::InheritedOwners)
+                } else {
+                    Ok(true)
+                }
+            }
+        }
+    }
+}
 pub struct DeployableFile<'a> {
     pub scope: &'a JsString,
     pub file: &'a JsString,
@@ -220,16 +287,20 @@ pub struct DeployableFile<'a> {
     pub binding_sites: &'a [BindingSite],
     pub driven: bool,
     pub is_main: bool,
-    pub owners: &'a IndexMap<JsString, Vec<JsString>>,
+    pub owners: BindingOwners<'a>,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum DeployableJudgmentError {
     InheritedOwners,
+    NullOwners,
+    RestrictedFunctionProperty,
 }
 impl DeployableJudgmentError {
     pub fn message(self) -> &'static str {
         match self {
             Self::InheritedOwners => "owners.includes is not a function",
+            Self::NullOwners => "Cannot read properties of null (reading 'includes')",
+            Self::RestrictedFunctionProperty => crate::text::RESTRICTED_FUNCTION_PROPERTY_MESSAGE,
         }
     }
 }

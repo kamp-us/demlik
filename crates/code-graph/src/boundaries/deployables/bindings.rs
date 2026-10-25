@@ -7,7 +7,7 @@ use crate::{
     data::extract::binding_sites,
     project::locale_compare_units,
     syntax::file::SyntaxFile,
-    text::{JsString, has_object_prototype_property, object_keys},
+    text::{JsString, object_keys},
 };
 use indexmap::{IndexMap, IndexSet};
 
@@ -50,12 +50,8 @@ pub fn binding_violations(
             true
         } else if !file.driven {
             false
-        } else if let Some(owners) = file.owners.get(binding) {
-            owners.contains(file.file)
-        } else if has_object_prototype_property(binding) {
-            return Err(DeployableJudgmentError::InheritedOwners);
         } else {
-            true
+            file.owners.permits(binding, file.file)?
         };
         if !clean {
             violations.push(BoundaryViolation::BindingOutsideDrivenAdapter {

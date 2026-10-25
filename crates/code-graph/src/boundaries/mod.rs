@@ -1,3 +1,4 @@
+pub mod analyze;
 pub mod config;
 pub mod declaration;
 pub mod deployables;

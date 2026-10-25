@@ -117,7 +117,11 @@ struct Scoped<'a> {
 fn scoped<'a>(reads: &'a ScopeReads<'_>) -> Scoped<'a> {
     Scoped {
         allowance: reads.allowance,
-        writes: reads.writes.iter().collect(),
+        writes: reads
+            .writes
+            .iter()
+            .map(|(file, write)| (file, write.as_ref()))
+            .collect(),
     }
 }
 #[derive(Serialize)]

@@ -16,6 +16,11 @@ const suites = [
     script: "graph-shape-judgments.mts",
   },
   {
+    name: "boundary-analysis",
+    driver: "boundary_analyze_driver",
+    script: "graph-boundary-analysis.mts",
+  },
+  {
     name: "scoped-reads",
     driver: "scoped_reads_driver",
     script: "graph-scoped-reads.mts",
@@ -136,6 +141,7 @@ const suites = [
 ];
 const checkedUtf8 = new Set([
   "shape_judgment_driver",
+  "boundary_analyze_driver",
   "scoped_reads_driver",
   "layer_gate_driver",
   "layer_driver",

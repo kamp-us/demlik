@@ -215,7 +215,7 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                     binding_sites: &sites,
                     driven: file.driven,
                     is_main: file.is_main.unwrap_or(actual_main),
-                    owners: &owners,
+                    owners: domain::BindingOwners::Record(&owners),
                 };
                 let direct = checked(observe!(
                     calls,

@@ -90,7 +90,7 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
     use demlik_code_graph::{
         boundaries::{
             deployables::{
-                DeployableFile, DeployablesRead,
+                BindingOwners, DeployableFile, DeployablesRead,
                 bindings::{binding_owner_issue, binding_sites_of, binding_violations},
                 census::{SiteRow, deployable_census, deployable_census_lines},
                 is_worker_main, read_deployables, worker_of,
@@ -154,7 +154,7 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
         binding_sites: &sites,
         driven: false,
         is_main: true,
-        owners: &owners,
+        owners: BindingOwners::Record(&owners),
     };
     assert!(binding_violations(&facts).unwrap().is_empty());
     let application = DeployableFile {

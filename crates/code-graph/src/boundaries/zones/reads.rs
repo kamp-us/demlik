@@ -13,7 +13,7 @@ use crate::{
 };
 use indexmap::{IndexMap, IndexSet};
 use serde::{Serialize, Serializer, ser::SerializeStruct};
-use std::cell::OnceCell;
+use std::{cell::OnceCell, sync::Arc};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,7 +97,7 @@ pub fn unknown_driven<'a>(
 #[derive(Debug)]
 pub struct ScopeReads<'a> {
     pub allowance: &'a ScopeAllowance,
-    pub writes: IndexMap<JsString, WriteSite>,
+    pub writes: IndexMap<JsString, Arc<WriteSite>>,
 }
 #[derive(Clone, Copy)]
 pub struct ReadModule<'a> {
@@ -118,11 +118,11 @@ pub fn scope_reads_of<'a>(
                 module.first_write.map(|write| {
                     (
                         module.file.clone(),
-                        WriteSite {
+                        Arc::new(WriteSite {
                             file: in_scope(scope, module.file),
                             binding: write.binding.clone(),
                             line: write.line,
-                        },
+                        }),
                     )
                 })
             })
@@ -134,7 +134,7 @@ pub fn scope_reads_of<'a>(
 pub enum DrivenVerdict<'a> {
     Licensed,
     Unlicensed,
-    Write(&'a WriteSite),
+    Write(&'a Arc<WriteSite>),
 }
 impl Serialize for DrivenVerdict<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

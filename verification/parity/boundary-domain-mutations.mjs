@@ -14,6 +14,85 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "analyzer-keeps-test-exempt-verdicts",
+    file: "analyze.rs",
+    before:
+      "violations.retain(|violation| judges_test_files(violation.kind()));",
+    after: "violations.retain(|_| true);",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "test-role-true",
+  },
+  {
+    name: "analyzer-counts-test-only-unknown-entry",
+    file: "analyze.rs",
+    before: "if !is_test_file(&inputs.shape.tests, scope, module.file)",
+    after: "if true",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "unknown-only-tests",
+  },
+  {
+    name: "analyzer-double-judges-an-import",
+    file: "analyze.rs",
+    before: "judged.push(edge);",
+    after: "let _ = edge;",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "test-role-false",
+  },
+  {
+    name: "analyzer-copies-a-shared-write-fact",
+    file: "analyze.rs",
+    before: "Some(Arc::clone(write))",
+    after: "Some(Arc::new((**write).clone()))",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "one-write-shared-by-two-crossings",
+  },
+  {
+    name: "analyzer-judges-a-nested-library-in-parent",
+    file: "analyze.rs",
+    before:
+      "if owner_of(ctx.inputs.libraries, &from).is_some_and(|owner| ctx.scope != owner) {",
+    after:
+      "if false && owner_of(ctx.inputs.libraries, &from).is_some_and(|owner| ctx.scope != owner) {",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "nested-library-is-judged-in-its-own-scope",
+  },
+  {
+    name: "analyzer-reverses-kind-order",
+    file: "analyze.rs",
+    before: "locale_compare(a.kind().as_str(), b.kind().as_str())",
+    after: "locale_compare(b.kind().as_str(), a.kind().as_str())",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "test-role-false",
+  },
+  {
+    name: "analyzer-skips-test-reach",
+    file: "analyze.rs",
+    before:
+      "if is_test_file(&ctx.inputs.shape.tests, ctx.scope, module.file) {",
+    after:
+      "if false && is_test_file(&ctx.inputs.shape.tests, ctx.scope, module.file) {",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "transitive-runtime-test-root",
+  },
+  {
+    name: "binding-scope-forgets-inherited-function",
+    file: "deployables/model.rs",
+    before:
+      "} else if crate::text::object_prototype_function_name(scope).is_some() {",
+    after:
+      "} else if false && crate::text::object_prototype_function_name(scope).is_some() {",
+    script: "graph-boundary-analysis.mts",
+    driver: "boundary_analyze_driver",
+    witness: "inherited-owner-toString-bind",
+  },
+  {
     name: "test-reach-opens-type-only-imports",
     file: "zones/test_reach.rs",
     before: "if file.runtime_specifiers.contains(&edge.specifier) {",
@@ -72,7 +151,8 @@ const faults = [
     name: "binding-owners-exempt-application",
     file: "deployables/bindings.rs",
     before: "} else if !file.driven {",
-    after: "} else if !file.driven && file.owners.is_empty() {",
+    after:
+      "} else if !file.driven && matches!(file.owners, super::model::BindingOwners::Record(owners) if owners.is_empty()) {",
     script: "graph-deployable-judgments.mts",
     driver: "deployables_driver",
     witness: "deployables.owner-owner-does-not-exempt-application",

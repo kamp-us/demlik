@@ -49,13 +49,7 @@ pub fn is_licensed(
         for name in &imported.names {
             let includes = match &licensed {
                 LicensedNames::Names(names) => names.contains(name),
-                LicensedNames::FunctionName(text) => {
-                    name.is_empty()
-                        || text
-                            .units()
-                            .windows(name.units().len())
-                            .any(|part| part == name.units())
-                }
+                LicensedNames::FunctionName(text) => text.contains(name),
                 LicensedNames::Null => return Err(LibraryRuleError::NullLicense),
                 LicensedNames::Other => return Err(LibraryRuleError::InheritedLicense),
                 LicensedNames::Absent => {

@@ -45,6 +45,13 @@ impl JsString {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+    pub fn contains(&self, part: &Self) -> bool {
+        part.is_empty()
+            || self
+                .0
+                .windows(part.0.len())
+                .any(|units| units == part.units())
+    }
     pub fn starts_with(&self, prefix: &str) -> bool {
         let mut units = self.0.iter();
         prefix
@@ -186,6 +193,8 @@ pub(crate) fn object_prototype_function_name(key: &JsString) -> Option<JsString>
         }
     })
 }
+
+pub(crate) const RESTRICTED_FUNCTION_PROPERTY_MESSAGE: &str = "'caller', 'callee', and 'arguments' properties may not be accessed on strict mode functions or the arguments objects for calls to them";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsValue {

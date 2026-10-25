@@ -32,9 +32,7 @@ impl LibraryRuleError {
             Self::InheritedType => "Cannot read properties of undefined (reading 'includes')",
             Self::InheritedLicense => "licensed.includes is not a function",
             Self::NullLicense => "Cannot read properties of null (reading 'includes')",
-            Self::RestrictedFunctionProperty => {
-                "'caller', 'callee', and 'arguments' properties may not be accessed on strict mode functions or the arguments objects for calls to them"
-            }
+            Self::RestrictedFunctionProperty => crate::text::RESTRICTED_FUNCTION_PROPERTY_MESSAGE,
         }
     }
 }

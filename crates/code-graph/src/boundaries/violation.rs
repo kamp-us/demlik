@@ -49,6 +49,14 @@ macro_rules! violations {
         pub enum BoundaryViolation {
             $(#[serde(rename = $tag)] $variant { $($(#[$attribute])* $field: $type,)* },)*
         }
+        impl BoundaryViolation {
+            pub fn from_file(&self) -> &JsString {
+                match self { $(Self::$variant { from, .. } => from,)* }
+            }
+            pub fn specifier(&self) -> &JsString {
+                match self { $(Self::$variant { specifier, .. } => specifier,)* }
+            }
+        }
         impl<'de> Deserialize<'de> for BoundaryViolation {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
