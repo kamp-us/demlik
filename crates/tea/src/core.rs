@@ -8,6 +8,7 @@ pub use subscriptions::{
 
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde::Serialize;
@@ -202,18 +203,41 @@ pub struct Replay<S, C, U> {
     pub subs: Vec<U>,
 }
 
-pub fn fold_updates<S: Tagged, M: Tagged, C>(
-    update: &Update<'_, S, M, C>,
+fn fold_using<S, M, C>(
     mut state: S,
     messages: impl IntoIterator<Item = M>,
+    mut apply: impl FnMut(&S, M) -> Result<Step<S, C>, NoCellError>,
 ) -> Result<Step<S, C>, NoCellError> {
     let mut commands = Vec::new();
     for message in messages {
-        let next = update.apply(&state, &message)?;
+        let next = apply(&state, message)?;
         state = next.state;
         commands.extend(next.commands);
     }
     Ok(Step { state, commands })
+}
+
+pub fn fold_updates<S: Tagged, M: Tagged, C>(
+    update: &Update<'_, S, M, C>,
+    state: S,
+    messages: impl IntoIterator<Item = M>,
+) -> Result<Step<S, C>, NoCellError> {
+    fold_using(state, messages, |state, message| {
+        update.apply(state, &message)
+    })
+}
+
+/// Fold the original retained values without cloning the model or messages.
+/// An empty input returns the same seed Arc; commands remain uninterpreted.
+pub fn fold_updates_shared<S: Tagged, M: Tagged, C>(
+    update: &Update<'_, S, M, C>,
+    state: Arc<S>,
+    messages: impl IntoIterator<Item = Arc<M>>,
+) -> Result<Step<Arc<S>, C>, NoCellError> {
+    fold_using(state, messages, |state, message| {
+        let next = update.apply(state, &message)?;
+        Ok(Step::new(Arc::new(next.state), next.commands))
+    })
 }
 
 pub fn fold_msgs<S: Tagged, M: Tagged, C, U, X>(
@@ -222,6 +246,15 @@ pub fn fold_msgs<S: Tagged, M: Tagged, C, U, X>(
     messages: impl IntoIterator<Item = M>,
 ) -> Result<S, NoCellError> {
     Ok(fold_updates(&machine.update, state, messages)?.state)
+}
+
+/// Update-only retained replay: init, interpretation and subscriptions are not called.
+pub fn fold_msgs_shared<S: Tagged, M: Tagged, C, U, X>(
+    machine: &Machine<'_, S, M, C, U, X>,
+    state: Arc<S>,
+    messages: impl IntoIterator<Item = Arc<M>>,
+) -> Result<Arc<S>, NoCellError> {
+    Ok(fold_updates_shared(&machine.update, state, messages)?.state)
 }
 
 pub fn replay<S: Tagged, M: Tagged, C, U: Subscription, X>(

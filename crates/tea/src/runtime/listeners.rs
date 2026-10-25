@@ -35,11 +35,21 @@ impl<F: ?Sized> Listeners<F> {
     where
         F: 'static,
     {
+        self.add_equivalent(callback, Rc::ptr_eq)
+    }
+    pub(crate) fn add_equivalent(
+        self: &Rc<Self>,
+        callback: Rc<F>,
+        equivalent: fn(&Rc<F>, &Rc<F>) -> bool,
+    ) -> Unsubscribe
+    where
+        F: 'static,
+    {
         if !self
             .items
             .borrow()
             .values()
-            .any(|item| Rc::ptr_eq(item, &callback))
+            .any(|item| equivalent(item, &callback))
         {
             let id = self.next.get();
             self.next.set(id + 1);
@@ -51,7 +61,7 @@ impl<F: ?Sized> Listeners<F> {
                 .items
                 .borrow()
                 .iter()
-                .find(|(_, item)| Rc::ptr_eq(item, &callback))
+                .find(|(_, item)| equivalent(item, &callback))
                 .map(|(id, _)| *id);
             if let Some(id) = id {
                 listeners.items.borrow_mut().remove(&id);

@@ -1,0 +1,119 @@
+{
+  "scope": "Shared retained observation and update-only fold owners needed by recorder; recorder composition is the next separate checkpoint",
+  "base": "89cf1b5d6234cb1cb515a7257bc0026d15b60e0b",
+  "branch": "can/rust-trace-recorder",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "source": [
+    "packages/tea/src/internal/engine/builtins.ts observation/subscribeTo",
+    "packages/tea/src/pure/core.ts foldUpdates/foldMsgs"
+  ],
+  "environment": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-reconciler-01a16c9d/target",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "api": {
+    "runtime": [
+      "Runtime::observe_retained",
+      "Runtime::observe_retained_shared",
+      "Runtime::on_boot_retained",
+      "Runtime::on_boot_retained_shared"
+    ],
+    "core": ["fold_updates_shared", "fold_msgs_shared"],
+    "preserved": [
+      "Existing borrowed/shared observation signatures",
+      "Original callback Rc identity and live insertion/removal order",
+      "Stale unsubscribe removes a re-registered original callback",
+      "Boot/observer panic phases and continuation",
+      "Empty shared fold seed Arc identity",
+      "No pure S/M Clone, Send, serde or static bound",
+      "No init, handler or subscription selection in shared fold"
+    ]
+  },
+  "acceptance": {
+    "teaNativeTestsAndDocs": 222,
+    "focusedNativeTests": 15,
+    "newOwnedObserverTestsBothProfiles": 3,
+    "newBorrowedOpaqueFoldTests": 3,
+    "existingHookTests": 9,
+    "baseCases": 6633,
+    "compiledNativeControls": 4,
+    "controlFailuresAreAssertions": true
+  },
+  "mainJournalAlignment": {
+    "reference": "32d510a",
+    "listenersModuleVisibility": "pub(crate)",
+    "implBound": "F:?Sized",
+    "staticBoundLocation": ["add", "add_equivalent"],
+    "journalFilesChanged": []
+  },
+  "checks": {
+    "native": {
+      "command": "cargo test --locked -p demlik-tea -- --nocapture",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-native.log",
+      "logSha256": "ba2ab6cf822ef53b90f2f3ba804800cd932e266ffdaa8da34db022506c730fd4"
+    },
+    "clippy": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-clippy.log",
+      "logSha256": "a9ba7342da7cd65087426aa2b5694853852b3ac7188252fa1cf5b9981535fd20"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-fmt.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "focused": {
+      "command": "cargo test --locked -p demlik-tea --test core_retained_fold --test runtime_retained_observers --test runtime_hooks -- --nocapture",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-green.log",
+      "logSha256": "30d83ebbda96ebbe52dba49980e84ff6d7e2a3a8461e9ec2f9872769e67d40e3"
+    },
+    "base": {
+      "command": "pnpm parity",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-base.log",
+      "logSha256": "1b0d4a70f386d2c733ed34af05a2c0c54875bdbc71058cbef96e9f08a99f80a1"
+    },
+    "controls": {
+      "command": "pnpm exec node verification/parity/recorder-shared-owner-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-mutations.log",
+      "logSha256": "e987b2a2f6f860a2e1666e0d2dadb0555e98fe0d4cb52cf67db6b876d923a6fd"
+    },
+    "biome": {
+      "command": "pnpm exec biome check --write verification/parity/recorder-shared-owner-mutations.mjs",
+      "exitCode": 0,
+      "log": "target/recorder-shared-owner-biome.log",
+      "logSha256": "55bdef361f24f28282093369c6e3df4e06011521f56f7de0a735f42ab22b4d8a"
+    }
+  },
+  "reports": {
+    "target/parity/recorder-shared-owner-base.json": "ec23a49e6758c76d432b0e2dbc49337cdfc4c6b7aa0abbfb13ffbf22730e09be",
+    "target/parity/recorder-shared-owner-mutations.json": "3be66a51850788cd85dc66bacce444b38375431c7b84af08ac964ab37dfb0f00"
+  },
+  "sourceHashes": {
+    "crates/tea/src/core.rs": "774f83d8cd23499cf04cf3c6e4676de09e3a97c7b43c068b670f127911b4bb0f",
+    "crates/tea/src/lib.rs": "8b3acf50cb8cf3d0125ae6fd9bc3d2da010e09446bafde449991023f51752c9f",
+    "crates/tea/src/runtime/engine.rs": "6395faa1f6c6c8b1dca09bc37e2a7d697c85269393b7e58c2944894aff0e33f0",
+    "crates/tea/src/runtime/listeners.rs": "d781b2761eebc3039d68149fee4bc3a383067f1aac7c0259b8f8b189ba4fb2b6",
+    "crates/tea/src/runtime/mod.rs": "ad14c15be74cf63cc5e47509a1de79d7eb8ce5dfbbee8b3acf7134fbe6ce397c",
+    "crates/tea/tests/core_retained_fold.rs": "531e5404fe8f557352e2e4ceb2433280fcfef1753eed863ed9ed8725a08b302d",
+    "crates/tea/tests/runtime_retained_observers.rs": "0748beac45a04834f64011cce39576a747523278ef5a9d6898690b2fb6d64d60",
+    "verification/parity/recorder-shared-owner-mutations.mjs": "f90903a39210d7bc4adf14a3ab0c9644034a5d2b67c1576c97d3346418cb3565"
+  },
+  "qualifications": [
+    "Native retained hooks expose the actor existing Arc handles through the same ordered observer/boot listener sets. This is a Rust ownership extension, not a new observer registry.",
+    "This receipt covers only shared owners. Recorder sampling, JSONL, structural comparison, mappings and record-to-cold-replay integration are not claimed here.",
+    "The test-only Arc-with-non-Send lint allowance is explicit and justified by the required local opaque ownership contract.",
+    "Mutation artifacts use a separate target and all controls operate on disposable source copies. Native/source assertions are not accepted from compiler failures."
+  ]
+}

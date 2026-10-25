@@ -20,7 +20,8 @@ pub mod storage;
 pub mod timing;
 pub mod work_queue;
 pub use core::{
-    Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_updates, replay,
+    Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_msgs_shared, fold_updates,
+    fold_updates_shared, replay,
 };
 pub use data::{
     EitherSub, PlainData, Sub, SubId, Subscription, TimerDeps, structural_hash, sub_id_of,

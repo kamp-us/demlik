@@ -34,8 +34,48 @@ struct View<S, SE, HE> {
     state: Option<Arc<S>>,
     saved: SaveStatus<SE, HE>,
 }
-type Observer<S, M> = dyn Fn(&M, &S);
-type Boot<S> = dyn Fn(&S);
+type ObserverFn<S, M> = dyn Fn(&M, &S);
+type RetainedObserverFn<S, M> = dyn Fn(&Arc<M>, &Arc<S>);
+type BootFn<S> = dyn Fn(&S);
+type RetainedBootFn<S> = dyn Fn(&Arc<S>);
+enum Observer<S, M> {
+    Borrowed(Rc<ObserverFn<S, M>>),
+    Retained(Rc<RetainedObserverFn<S, M>>),
+}
+impl<S, M> Observer<S, M> {
+    fn call(&self, message: &Arc<M>, state: &Arc<S>) {
+        match self {
+            Self::Borrowed(callback) => callback(message, state),
+            Self::Retained(callback) => callback(message, state),
+        }
+    }
+    fn same(left: &Rc<Self>, right: &Rc<Self>) -> bool {
+        match (left.as_ref(), right.as_ref()) {
+            (Self::Borrowed(left), Self::Borrowed(right)) => Rc::ptr_eq(left, right),
+            (Self::Retained(left), Self::Retained(right)) => Rc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+}
+enum Boot<S> {
+    Borrowed(Rc<BootFn<S>>),
+    Retained(Rc<RetainedBootFn<S>>),
+}
+impl<S> Boot<S> {
+    fn call(&self, state: &Arc<S>) {
+        match self {
+            Self::Borrowed(callback) => callback(state),
+            Self::Retained(callback) => callback(state),
+        }
+    }
+    fn same(left: &Rc<Self>, right: &Rc<Self>) -> bool {
+        match (left.as_ref(), right.as_ref()) {
+            (Self::Borrowed(left), Self::Borrowed(right)) => Rc::ptr_eq(left, right),
+            (Self::Retained(left), Self::Retained(right)) => Rc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+}
 type ScopeWatcher<SE, HE> = dyn Fn(Failure<SE, HE>);
 struct Core<S, M, SE, HE, E> {
     ports: Rc<super::ports::PortRegistry>,
@@ -157,25 +197,25 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             }
         }
     }
-    fn committed(self: &Rc<Self>, message: Option<&M>, state: &S) {
+    fn committed(self: &Rc<Self>, message: Option<&Arc<M>>, state: &Arc<S>) {
         self.listeners.fanout(
             |listener| listener(),
             |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Listener),
         );
         if let Some(message) = message {
             self.observers.fanout(
-                |observer| observer(message, state),
+                |observer| observer.call(message, state),
                 |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Observer),
             );
         } else {
             self.booted.set(true);
             self.boots.fanout(
-                |handler| handler(state),
+                |handler| handler.call(state),
                 |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Boot),
             );
         }
         self.fanout(self.commits.iter(), ErrorPhase::Observer, |commit| {
-            commit(message, state)
+            commit(message.map(Arc::as_ref), state)
         });
         if let Some(message) = message {
             self.events.committed(message, state, |cause| {
@@ -438,8 +478,26 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
     pub fn observe(&self, observer: impl Fn(&M, &S) + 'static) -> super::Unsubscribe {
         self.observe_shared(Rc::new(observer))
     }
-    pub fn observe_shared(&self, observer: Rc<Observer<S, M>>) -> super::Unsubscribe {
-        self.core.observers.add(observer)
+    pub fn observe_shared(&self, observer: Rc<ObserverFn<S, M>>) -> super::Unsubscribe {
+        self.core
+            .observers
+            .add_equivalent(Rc::new(Observer::Borrowed(observer)), Observer::same)
+    }
+    /// Borrow the runtime's original shared handles. Clone an Arc to retain its
+    /// value without requiring the model or message to implement Clone.
+    pub fn observe_retained(
+        &self,
+        observer: impl Fn(&Arc<M>, &Arc<S>) + 'static,
+    ) -> super::Unsubscribe {
+        self.observe_retained_shared(Rc::new(observer))
+    }
+    pub fn observe_retained_shared(
+        &self,
+        observer: Rc<RetainedObserverFn<S, M>>,
+    ) -> super::Unsubscribe {
+        self.core
+            .observers
+            .add_equivalent(Rc::new(Observer::Retained(observer)), Observer::same)
     }
     pub fn on_boot(&self, handler: impl Fn(&S) + 'static) -> super::Unsubscribe {
         self.on_boot_shared(Rc::new(handler))
@@ -452,7 +510,25 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             }
             return Box::new(|| {});
         }
-        self.core.boots.add(handler)
+        self.core
+            .boots
+            .add_equivalent(Rc::new(Boot::Borrowed(handler)), Boot::same)
+    }
+    /// Retain the same post-init anchor supplied to the borrowed boot hooks.
+    pub fn on_boot_retained(&self, handler: impl Fn(&Arc<S>) + 'static) -> super::Unsubscribe {
+        self.on_boot_retained_shared(Rc::new(handler))
+    }
+    pub fn on_boot_retained_shared(&self, handler: Rc<RetainedBootFn<S>>) -> super::Unsubscribe {
+        if self.core.booted.get() {
+            if let Some(state) = self.core.state() {
+                self.core
+                    .fanout([handler], ErrorPhase::Boot, |handler| handler(&state));
+            }
+            return Box::new(|| {});
+        }
+        self.core
+            .boots
+            .add_equivalent(Rc::new(Boot::Retained(handler)), Boot::same)
     }
 }
 fn refusal<SE, HE>(error: super::DispatchRefused) -> Failure<SE, HE> {
@@ -696,7 +772,7 @@ impl<
         self.reconcile(&state)?;
         let result = self.run_commands(commands).await;
         tokio::task::yield_now().await;
-        self.core.committed(message.as_deref(), &state);
+        self.core.committed(message.as_ref(), &state);
         result
     }
     async fn run_commands(self: &Rc<Self>, commands: Vec<C>) -> Answer<SE, HE> {
