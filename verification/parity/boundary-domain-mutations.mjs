@@ -35,6 +35,15 @@ const faults = [
     script: "graph-impure-uses.mts",
     witness: "bound-parameter",
   },
+  {
+    name: "test-role-keeps-impurity-verdicts",
+    file: "zones/test_role.rs",
+    before: "    match kind {",
+    after:
+      "    if matches!(kind, BoundaryKind::Impure) { return true; }\n    match kind {",
+    script: "graph-boundary-zones.mts",
+    witness: "test-role-all-kinds",
+  },
 ];
 try {
   for (const name of [

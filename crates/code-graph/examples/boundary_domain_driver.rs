@@ -4,6 +4,9 @@ use demlik_code_graph::{
         declaration::DeclarationError,
         impure::{GLOBAL_OBJECT, IMPURE_GLOBALS, ImpureShape},
         impure_uses::{ImpureFacts, ImpureUse},
+        rules::Place,
+        violation::BoundaryViolation,
+        zones::impure_violations::{ImpureContext, ImpureFile},
     },
     syntax::imports::ImportEdge,
     text::{JsString, JsValue},
@@ -42,6 +45,35 @@ struct ImpureInput {
 struct ImpureUsesInput {
     file: String,
     source: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ZoneImpurityInput {
+    scope: JsString,
+    file: JsString,
+    source: String,
+    rules: Box<RawValue>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TestRoleInput {
+    scope: JsString,
+    file: JsString,
+    patterns: Vec<JsString>,
+    violations: Vec<BoundaryViolation>,
+}
+#[derive(Serialize)]
+struct ZoneImpurityOutput {
+    place: Place,
+    violations: Vec<BoundaryViolation>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TestRoleOutput<'a> {
+    matches: bool,
+    is_test: bool,
+    judged: Vec<&'a BoundaryViolation>,
+    same_refs: Vec<usize>,
 }
 #[derive(Serialize)]
 struct ImpureUsesOutput {
@@ -106,6 +138,144 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
     match request.operation.as_str() {
+        "code_graph.zone-impurity" => {
+            let input: ZoneImpurityInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let value = JsValue::parse(input.rules.get()).map_err(|error| error.to_string())?;
+            let rules = match observe!(
+                calls,
+                demlik_code_graph::boundaries::rules::BoundaryRules::parse,
+                &value
+            ) {
+                Ok(rules) => rules,
+                Err(BoundaryRuleInputError::Issue(input_issue)) => {
+                    return json(&InputRefusal::Issue { input_issue });
+                }
+                Err(BoundaryRuleInputError::TypeError(thrown)) => {
+                    return json(&InputRefusal::Thrown { thrown });
+                }
+            };
+            let zoning = match observe!(
+                calls,
+                demlik_code_graph::boundaries::rules::scope_zoning,
+                &rules,
+                &input.scope
+            ) {
+                Ok(zoning) => zoning,
+                Err(error) => {
+                    return json(&Check::Thrown {
+                        thrown: Thrown {
+                            name: "TypeError",
+                            message: error.to_string().into(),
+                        },
+                    });
+                }
+            };
+            let place = observe!(
+                calls,
+                demlik_code_graph::boundaries::rules::place_of,
+                &input.file,
+                &zoning
+            );
+            let syntax = observe!(
+                calls,
+                demlik_code_graph::engine::oxc::parse_type_script,
+                Path::new(&input.file.to_lossy()),
+                &input.source
+            )
+            .map_err(|error| error.to_string())?;
+            let uses = observe!(
+                calls,
+                demlik_code_graph::boundaries::impure_uses::detect_impure_uses,
+                &syntax
+            );
+            let edges: Vec<_> = observe!(
+                calls,
+                demlik_code_graph::syntax::imports::import_literals,
+                &syntax
+            )
+            .into_iter()
+            .map(|literal| ImportEdge {
+                specifier: literal.specifier,
+                kind: literal.kind,
+                type_only: literal.type_only,
+                target: None,
+            })
+            .collect();
+            let runtime = observe!(
+                calls,
+                demlik_code_graph::syntax::imports::runtime_specifiers,
+                &syntax
+            );
+            let violations = observe!(
+                calls,
+                demlik_code_graph::boundaries::zones::impure_violations::impure_violations,
+                ImpureContext {
+                    scope: &input.scope,
+                    module: ImpureFile {
+                        file: &input.file,
+                        facts: ImpureFacts {
+                            impure_uses: &uses,
+                            import_edges: &edges,
+                            runtime_specifiers: &runtime
+                        }
+                    },
+                    place: &place
+                }
+            );
+            json(&ZoneImpurityOutput { place, violations })
+        }
+        "code_graph.test-role" => {
+            let input: TestRoleInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let globs = input
+                .patterns
+                .iter()
+                .map(|pattern| {
+                    observe!(
+                        calls,
+                        demlik_code_graph::kinds::glob::glob_to_regexp,
+                        pattern
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())?;
+            let matches = observe!(
+                calls,
+                demlik_code_graph::boundaries::zones::test_role::matches_globs,
+                &globs,
+                &input.scope,
+                &input.file
+            );
+            let is_test = observe!(
+                calls,
+                demlik_code_graph::boundaries::zones::test_role::is_test_file,
+                &globs,
+                &input.scope,
+                &input.file
+            );
+            let judged = observe!(
+                calls,
+                demlik_code_graph::boundaries::zones::test_role::judged_in_test_file,
+                &input.violations
+            );
+            let same_refs = judged
+                .iter()
+                .map(|item| {
+                    input
+                        .violations
+                        .iter()
+                        .position(|candidate| std::ptr::eq(*item, candidate))
+                        .expect("filtered violations borrow their input")
+                })
+                .collect();
+            json(&TestRoleOutput {
+                matches,
+                is_test,
+                judged,
+                same_refs,
+            })
+        }
         "code_graph.impure-uses" => {
             let input: ImpureUsesInput =
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
