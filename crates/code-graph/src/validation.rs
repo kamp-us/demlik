@@ -2,6 +2,96 @@
 use crate::text::{JsObject, JsString, JsValue};
 use serde::{Serialize, Serializer};
 
+pub(crate) enum NumberCheck {
+    Integer { minimum: f64, maximum: Option<f64> },
+    Number { minimum: f64, maximum: Option<f64> },
+}
+
+// The numeric checks used by the frozen Thresholds and CollapseSettings schemas.
+// Keep safe-int format failures before the schemas' explicit range checks.
+pub(crate) fn checked_number(
+    value: &JsValue,
+    path: Vec<PathSegment>,
+    check: NumberCheck,
+) -> Result<f64, InputIssue> {
+    let JsValue::Number(number) = value else {
+        return Err(InputIssue::invalid_type(path, "number", Some(value)));
+    };
+    if !number.is_finite() {
+        return Err(InputIssue::invalid_type(path, "number", Some(value)));
+    }
+    let (integer, minimum, maximum) = match check {
+        NumberCheck::Integer { minimum, maximum } => (true, minimum, maximum),
+        NumberCheck::Number { minimum, maximum } => (false, minimum, maximum),
+    };
+    if integer {
+        if number.fract() != 0.0 {
+            let mut issue = InputIssue::invalid_type(path, "int", Some(value));
+            issue
+                .details
+                .insert("format".into(), JsValue::String("safeint".into()));
+            return Err(issue);
+        }
+        const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
+        if number.abs() > MAX_SAFE {
+            let too_big = *number > 0.0;
+            let limit = if too_big { MAX_SAFE } else { -MAX_SAFE };
+            return Err(InputIssue::new(
+                path,
+                format!(
+                    "Too {}: expected int to be {}{}",
+                    if too_big { "big" } else { "small" },
+                    if too_big { "<" } else { ">" },
+                    crate::render::text::number(limit)
+                ),
+            )
+            .with_details(JsObject::from([
+                (
+                    "code".into(),
+                    JsValue::String(if too_big { "too_big" } else { "too_small" }.into()),
+                ),
+                (
+                    if too_big { "maximum" } else { "minimum" }.into(),
+                    JsValue::Number(limit),
+                ),
+                (
+                    "note".into(),
+                    JsValue::String("Integers must be within the safe integer range.".into()),
+                ),
+                ("origin".into(), JsValue::String("int".into())),
+            ])));
+        }
+    }
+    let (limit, too_big) = if *number < minimum {
+        (minimum, false)
+    } else if let Some(maximum) = maximum.filter(|maximum| *number > *maximum) {
+        (maximum, true)
+    } else {
+        return Ok(*number);
+    };
+    Err(InputIssue::new(
+        path,
+        format!(
+            "Too {}: expected number to be {}{}",
+            if too_big { "big" } else { "small" },
+            if too_big { "<=" } else { ">=" },
+            crate::render::text::number(limit)
+        ),
+    )
+    .with_details(JsObject::from([
+        ("origin".into(), JsValue::String("number".into())),
+        (
+            "code".into(),
+            JsValue::String(if too_big { "too_big" } else { "too_small" }.into()),
+        ),
+        (
+            if too_big { "maximum" } else { "minimum" }.into(),
+            JsValue::Number(limit),
+        ),
+        ("inclusive".into(), JsValue::Bool(true)),
+    ])))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum PathSegment {

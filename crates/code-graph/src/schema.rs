@@ -63,8 +63,8 @@ impl std::fmt::Display for ThresholdError {
 }
 impl std::error::Error for ThresholdError {}
 impl Thresholds {
-    pub fn validate(&self) -> Result<(), ThresholdError> {
-        for (field, value) in [
+    fn fields(&self) -> [(&'static str, u64); 9] {
+        [
             ("longFunctionLoc", self.long_function_loc),
             ("deepNesting", self.deep_nesting),
             ("highComplexity", self.high_complexity),
@@ -74,12 +74,49 @@ impl Thresholds {
             ("directorySprawl", self.directory_sprawl),
             ("dependencyCycle", self.dependency_cycle),
             ("crossBoundaryImports", self.cross_boundary_imports),
-        ] {
+        ]
+    }
+    pub fn validate(&self) -> Result<(), ThresholdError> {
+        for (field, value) in self.fields() {
             if value > 9_007_199_254_740_991 {
                 return Err(ThresholdError { field, value });
             }
         }
         Ok(())
+    }
+    pub fn parse(value: &crate::text::JsValue) -> Result<Self, crate::validation::InputIssue> {
+        use crate::{
+            text::JsString,
+            validation::{InputIssue, NumberCheck, PathSegment, checked_number},
+        };
+        let object = value
+            .as_object()
+            .ok_or_else(|| InputIssue::invalid_type(Vec::new(), "object", Some(value)))?;
+        let fields = Self::default().fields();
+        for (key, _) in fields {
+            if let Some(value) = object.get(&JsString::from(key)) {
+                checked_number(
+                    value,
+                    vec![PathSegment::Field(key.into())],
+                    NumberCheck::Integer {
+                        minimum: 0.0,
+                        maximum: None,
+                    },
+                )?;
+            }
+        }
+        let unknown = crate::text::object_keys(object)
+            .into_iter()
+            .filter(|key| !fields.iter().any(|(expected, _)| **key == *expected))
+            .collect::<Vec<_>>();
+        if !unknown.is_empty() {
+            return Err(InputIssue::unrecognized_keys(Vec::new(), &unknown));
+        }
+        // Keep transport/default conversion owned by the existing count model.
+        Ok(serde_json::from_str(
+            &serde_json::to_string(value).expect("validated JSON value serializes"),
+        )
+        .expect("validated Thresholds match the canonical count transport"))
     }
 }
 
