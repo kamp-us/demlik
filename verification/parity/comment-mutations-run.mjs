@@ -15,6 +15,8 @@ execFileSync(
     "demlik-code-graph",
     "--example",
     "comment_driver",
+    "--example",
+    "comment_policy_driver",
   ],
   { cwd: root, stdio: "inherit" },
 );
@@ -26,6 +28,8 @@ execFileSync(
     path.join(here, "comment-mutations.mjs"),
     path.join(root, "target/debug/examples/comment_driver"),
     path.join(root, "target/parity/comment-mutations.json"),
+    "--policy-driver",
+    path.join(root, "target/debug/examples/comment_policy_driver"),
   ],
   { cwd: root, stdio: "inherit" },
 );
