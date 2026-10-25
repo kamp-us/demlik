@@ -300,6 +300,21 @@ pub fn resolve_edge_ts_config(
 ) -> Result<PathBuf, MissingTsConfig> {
     resolve_edge_ts_config_in(root, scope, repo_root, None)
 }
+pub fn resolve_edge_ts_config_text(
+    root: &JsString,
+    scope: EdgeScope,
+    repo_root: &Path,
+) -> Result<JsString, MissingTsConfig> {
+    let native_root = root.to_lossy();
+    let selected =
+        resolve_edge_ts_config_in(Path::new(&native_root), scope, repo_root, Some(root))?;
+    let start = match scope {
+        EdgeScope::Package => root.clone(),
+        EdgeScope::Deep => repo_root.to_string_lossy().as_ref().into(),
+    };
+    let relative = to_relative(Path::new(&start.to_lossy()), &selected);
+    Ok(join_path_text(&start, &relative.into()))
+}
 fn resolve_edge_ts_config_in(
     root: &Path,
     scope: EdgeScope,

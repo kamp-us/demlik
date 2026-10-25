@@ -343,13 +343,14 @@ impl SourceFile {
         let start = self.node_start(node)?;
         let end = usize::try_from(node.end)
             .map_err(|_| TsgoError::protocol("native AST node has a synthetic negative end"))?;
-        let units = self
-            .text
-            .get(start..end)
-            .ok_or_else(|| TsgoError::protocol("native AST node has an invalid source span"))?;
-        String::from_utf16(units).map_err(|error| {
+        String::from_utf16(self.text_slice(start..end)?).map_err(|error| {
             TsgoError::protocol(format!("native AST source span is not Unicode: {error}"))
         })
+    }
+    pub fn text_slice(&self, range: std::ops::Range<usize>) -> Result<&[u16], TsgoError> {
+        self.text
+            .get(range)
+            .ok_or_else(|| TsgoError::protocol("native AST node has an invalid source span"))
     }
 
     pub fn imported_module(&self, specifier: &str) -> Result<Option<Node>, TsgoError> {
@@ -450,11 +451,11 @@ fn decode_wtf8(bytes: &[u8]) -> Result<Vec<u16>, TsgoError> {
     Ok(units)
 }
 
-fn line_break(ch: u16) -> bool {
+pub(crate) fn line_break(ch: u16) -> bool {
     matches!(ch, 10 | 13 | 0x2028 | 0x2029)
 }
 
-fn conflict_marker(text: &[u16], position: usize) -> bool {
+pub(crate) fn conflict_marker(text: &[u16], position: usize) -> bool {
     let Some(&ch) = text.get(position) else {
         return false;
     };
@@ -464,6 +465,23 @@ fn conflict_marker(text: &[u16], position: usize) -> bool {
             .get(position..position + 7)
             .is_some_and(|seven| seven.iter().all(|part| *part == ch))
         && (ch == 61 || ch == 124 || text.get(position + 7) == Some(&32))
+}
+
+pub(crate) fn conflict_marker_end(text: &[u16], mut position: usize) -> usize {
+    if matches!(text[position], 60 | 62) {
+        while position < text.len() && !line_break(text[position]) {
+            position += 1;
+        }
+    } else {
+        position += 7;
+        while position < text.len() {
+            if matches!(text[position], 61 | 62) && conflict_marker(text, position) {
+                break;
+            }
+            position += 1;
+        }
+    }
+    position
 }
 
 fn skip_trivia(text: &[u16], mut position: usize, in_jsdoc: bool, stop_comments: bool) -> usize {
@@ -510,19 +528,7 @@ fn skip_trivia(text: &[u16], mut position: usize, in_jsdoc: bool, stop_comments:
                 consume_star = false;
             }
             60 | 62 | 61 | 124 if conflict_marker(text, position) => {
-                if ch == 60 || ch == 62 {
-                    while position < text.len() && !line_break(text[position]) {
-                        position += 1;
-                    }
-                } else {
-                    position += 7;
-                    while position < text.len() {
-                        if matches!(text[position], 61 | 62) && conflict_marker(text, position) {
-                            break;
-                        }
-                        position += 1;
-                    }
-                }
+                position = conflict_marker_end(text, position);
                 consume_star = false;
             }
             35 if position == 0 && text.get(1) == Some(&33) => {

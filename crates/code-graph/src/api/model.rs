@@ -32,7 +32,53 @@ pub struct ApiEntryText {
     #[serde(serialize_with = "serialize_record")]
     pub references: Arc<ApiReferences>,
 }
-pub type SubpathNames = IndexMap<JsString, Arc<ApiEntryText>>;
+#[derive(Debug, Default, Serialize)]
+#[serde(transparent)]
+pub struct SubpathNames {
+    #[serde(serialize_with = "serialize_record")]
+    pub entries: IndexMap<JsString, Arc<ApiEntryText>>,
+    #[serde(skip)]
+    prototype: Option<Arc<ApiEntryText>>,
+}
+impl SubpathNames {
+    pub fn prototype(&self) -> Option<&Arc<ApiEntryText>> {
+        self.prototype.as_ref()
+    }
+    pub(crate) fn assign(&mut self, name: JsString, entry: Arc<ApiEntryText>) {
+        if name == "__proto__" {
+            self.prototype = Some(entry);
+        } else {
+            self.entries.insert(name, entry);
+        }
+    }
+}
+impl FromIterator<(JsString, Arc<ApiEntryText>)> for SubpathNames {
+    fn from_iter<T: IntoIterator<Item = (JsString, Arc<ApiEntryText>)>>(rows: T) -> Self {
+        Self {
+            entries: rows.into_iter().collect(),
+            prototype: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PublishedSubpath {
+    pub entry: JsString,
+    pub tier: Option<JsString>,
+    pub names: SubpathNames,
+}
+#[derive(Debug, Serialize)]
+pub struct PublishedApi {
+    pub root: JsString,
+    pub compiler: JsString,
+    #[serde(serialize_with = "serialize_record")]
+    pub subpaths: IndexMap<JsString, PublishedSubpath>,
+}
+#[derive(Debug)]
+pub struct EmittedNames {
+    pub compiler: JsString,
+    pub names: IndexMap<JsString, SubpathNames>,
+}
 #[derive(Debug, Serialize)]
 pub struct AddedName {
     pub after: Arc<ApiEntryText>,

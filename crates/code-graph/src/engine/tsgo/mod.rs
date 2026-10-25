@@ -3,6 +3,7 @@
 mod ast;
 mod channel;
 mod tree;
+pub(crate) use ast::{conflict_marker, conflict_marker_end, line_break};
 pub use tree::{NativeFile, NativeNode, NativeSymbol};
 
 use std::cell::RefCell;
@@ -13,7 +14,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 
-use serde::Deserialize;
+use crate::{
+    project::{dirname_path_text, join_path_text},
+    text::JsString,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use ast::{Node, SourceFile};
@@ -266,6 +271,7 @@ pub struct Declaration {
 pub struct TypeSession {
     channel: Channel,
     config: PathBuf,
+    config_text: Option<JsString>,
     case_sensitive: bool,
     ordinal: u64,
 }
@@ -285,6 +291,24 @@ pub fn open_type_session(
     binary: &TsgoBinary,
     ts_config_path: &Path,
 ) -> Result<TypeSession, TsgoError> {
+    open_type_session_in(binary, ts_config_path, None)
+}
+
+pub fn open_type_session_text(
+    binary: &TsgoBinary,
+    ts_config_path: &JsString,
+) -> Result<TypeSession, TsgoError> {
+    open_type_session_in(
+        binary,
+        Path::new(&ts_config_path.to_lossy()),
+        Some(ts_config_path.clone()),
+    )
+}
+fn open_type_session_in(
+    binary: &TsgoBinary,
+    ts_config_path: &Path,
+    config_text: Option<JsString>,
+) -> Result<TypeSession, TsgoError> {
     let directory = ts_config_path
         .parent()
         .ok_or_else(|| TsgoError::protocol("tsconfig has no parent directory"))?;
@@ -294,11 +318,28 @@ pub fn open_type_session(
     Ok(TypeSession {
         channel,
         config: ts_config_path.to_path_buf(),
+        config_text,
         case_sensitive: initialization.use_case_sensitive_file_names,
         ordinal: 0,
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ProjectUpdate<'a> {
+    OpenProjects([&'a JsString; 1]),
+    CloseProjects([&'a JsString; 1]),
+}
+#[derive(Serialize)]
+struct ConfigFile<'a> {
+    file: &'a JsString,
+}
+#[derive(Serialize)]
+struct VirtualConfig<'a> {
+    extends: &'a JsString,
+    files: &'a [PathBuf],
+    include: [(); 0],
+}
 impl TypeSession {
     pub fn with_program<T>(
         &mut self,
@@ -319,11 +360,17 @@ impl TypeSession {
         input: ProgramInput<'_>,
         read: impl FnOnce(&mut TypeProgram<'_>) -> Result<T, TsgoError>,
     ) -> Result<T, TsgoError> {
+        let source_config = self
+            .config_text
+            .clone()
+            .unwrap_or_else(|| self.config.to_string_lossy().as_ref().into());
         let mut files = if input.include_config_files {
-            serde_json::from_value::<ConfigFiles>(
-                self.channel
-                    .json("parseConfigFile", json!({ "file": self.config }))?,
-            )?
+            serde_json::from_value::<ConfigFiles>(self.channel.json(
+                "parseConfigFile",
+                ConfigFile {
+                    file: &source_config,
+                },
+            )?)?
             .file_names
         } else {
             Vec::new()
@@ -345,14 +392,29 @@ impl TypeSession {
                 self.ordinal
             ));
         self.ordinal += 1;
-        let config_name = config.to_string_lossy().into_owned();
-        let body = serde_json::to_string(
-            &json!({ "extends": self.config, "files": files, "include": [] }),
-        )?;
+        let config_text = match &self.config_text {
+            None => config.to_string_lossy().as_ref().into(),
+            Some(raw) => join_path_text(
+                &dirname_path_text(raw),
+                &config
+                    .file_name()
+                    .expect("virtual config name")
+                    .to_string_lossy()
+                    .as_ref()
+                    .into(),
+            ),
+        };
+        let config_name = config_text.to_lossy();
+        let body = serde_json::to_string(&VirtualConfig {
+            extends: &source_config,
+            files: &files,
+            include: [],
+        })?;
         self.channel.virtual_files.insert(config_name.clone(), body);
-        let opened = self
-            .channel
-            .json("updateSnapshot", json!({ "openProjects": [config] }));
+        let opened = self.channel.json(
+            "updateSnapshot",
+            ProjectUpdate::OpenProjects([&config_text]),
+        );
         let snapshot: Snapshot = match opened.and_then(|value| Ok(serde_json::from_value(value)?)) {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -380,7 +442,7 @@ impl TypeSession {
                 "tsgo opened no project for {config_name}"
             ))),
         };
-        let cleanup = self.close_program(snapshot.snapshot, &config);
+        let cleanup = self.close_program(snapshot.snapshot, &config_text);
         self.channel.virtual_files.remove(&config_name);
         match (result, cleanup) {
             (Ok(value), Ok(())) => Ok(value),
@@ -392,12 +454,12 @@ impl TypeSession {
         }
     }
 
-    fn close_program(&mut self, snapshot: u64, config: &Path) -> Result<(), TsgoError> {
+    fn close_program(&mut self, snapshot: u64, config: &JsString) -> Result<(), TsgoError> {
         self.channel
             .json("release", json!({ "snapshot": snapshot }))?;
         let closed = self
             .channel
-            .json("updateSnapshot", json!({ "closeProjects": [config] }))?;
+            .json("updateSnapshot", ProjectUpdate::CloseProjects([config]))?;
         let snapshot = closed["snapshot"]
             .as_u64()
             .ok_or_else(|| TsgoError::protocol("closeProjects returned no snapshot"))?;
@@ -706,12 +768,12 @@ impl TypeProgram<'_> {
 
     fn exported_declaration(
         &mut self,
-        module: Symbol,
+        module: u64,
         name: &str,
     ) -> Result<Option<Declaration>, TsgoError> {
         let exports: Vec<Symbol> = serde_json::from_value(self.channel.json(
             "getExportsOfModule",
-            json!({ "snapshot": self.snapshot, "project": self.project, "symbol": module.id }),
+            json!({ "snapshot": self.snapshot, "project": self.project, "symbol": module }),
         )?)?;
         let Some(symbol) = exports
             .into_iter()
@@ -760,13 +822,18 @@ impl TypeProgram<'_> {
         file: &Path,
         name: &str,
     ) -> Result<Option<Declaration>, TsgoError> {
-        let Some(source) = self.source_data(file)? else {
+        let Some(module) = self.module_symbol_of(file)? else {
             return Ok(None);
         };
-        let Some(module) = self.raw_symbol_at(&source, source.node(1)?)? else {
+        let id = module.data.borrow().id;
+        self.exported_declaration(id, name)
+    }
+
+    pub fn module_symbol_of(&mut self, file: &Path) -> Result<Option<NativeSymbol>, TsgoError> {
+        let Some(source) = self.source_file(file)? else {
             return Ok(None);
         };
-        self.exported_declaration(module, name)
+        self.symbol_at(&source.root())
     }
 
     pub fn export_origin(
@@ -784,6 +851,6 @@ impl TypeProgram<'_> {
         let Some(module) = self.raw_symbol_at(&source, literal)? else {
             return Ok(None);
         };
-        self.exported_declaration(module, name)
+        self.exported_declaration(module.id, name)
     }
 }

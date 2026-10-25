@@ -15,9 +15,9 @@ pub fn diff_subpath_names(
     after: &SubpathNames,
 ) -> SubpathDiff {
     let mut diff = SubpathDiff::new(tier.cloned());
-    for name in object_keys(after) {
-        let now = &after[name];
-        match before.get(name) {
+    for name in object_keys(&after.entries) {
+        let now = &after.entries[name];
+        match before.entries.get(name) {
             None => diff.assign_added(
                 name.clone(),
                 AddedName {
@@ -34,12 +34,12 @@ pub fn diff_subpath_names(
             _ => {}
         }
     }
-    for name in object_keys(before) {
-        if !after.contains_key(name) {
+    for name in object_keys(&before.entries) {
+        if !after.entries.contains_key(name) {
             diff.assign_removed(
                 name.clone(),
                 RemovedName {
-                    before: Arc::clone(&before[name]),
+                    before: Arc::clone(&before.entries[name]),
                 },
             );
         }

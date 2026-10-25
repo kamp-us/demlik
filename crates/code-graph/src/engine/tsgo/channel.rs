@@ -3,6 +3,7 @@ use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::{TsgoBinary, TsgoError};
@@ -41,7 +42,7 @@ impl Channel {
         })
     }
 
-    pub fn json(&mut self, method: &str, parameters: Value) -> Result<Value, TsgoError> {
+    pub fn json(&mut self, method: &str, parameters: impl Serialize) -> Result<Value, TsgoError> {
         let bytes = self.binary(method, parameters)?;
         if bytes.is_empty() {
             Ok(Value::Null)
@@ -50,7 +51,11 @@ impl Channel {
         }
     }
 
-    pub fn binary(&mut self, method: &str, parameters: Value) -> Result<Vec<u8>, TsgoError> {
+    pub fn binary(
+        &mut self,
+        method: &str,
+        parameters: impl Serialize,
+    ) -> Result<Vec<u8>, TsgoError> {
         self.write_tuple(1, method.as_bytes(), &serde_json::to_vec(&parameters)?)?;
         loop {
             if self.byte()? != 0x93 {

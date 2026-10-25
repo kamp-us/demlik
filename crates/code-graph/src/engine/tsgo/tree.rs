@@ -25,6 +25,11 @@ impl NativeFile {
     pub fn is_declaration_file(&self) -> bool {
         self.source.is_declaration_file()
     }
+    pub fn text_slice(&self, range: std::ops::Range<usize>) -> Result<JsString, TsgoError> {
+        self.source
+            .text_slice(range)
+            .map(|text| JsString::from_units(text.to_vec()))
+    }
 }
 
 #[derive(Clone)]
@@ -35,6 +40,9 @@ pub struct NativeNode {
 impl NativeNode {
     pub fn kind(&self) -> u32 {
         self.node.kind
+    }
+    pub fn pos(&self) -> i32 {
+        self.node.pos
     }
     pub fn flags(&self) -> u32 {
         self.node.flags

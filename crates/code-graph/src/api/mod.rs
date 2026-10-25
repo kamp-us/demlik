@@ -1,8 +1,12 @@
 mod capture;
 pub mod diff;
+pub mod emit;
 mod input;
 pub mod map;
 pub mod model;
 pub mod ratchet;
+pub mod read;
 mod root;
+pub mod text;
+pub mod view;
 pub use root::{package_root, project_relative};
