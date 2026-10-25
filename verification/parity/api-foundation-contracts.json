@@ -1,0 +1,85 @@
+{
+  "@demlik/code-graph:./api#ApiInputError": {
+    "signature": "965575888981cef698f4704fdb401104d5e12ca6f2fcfc59eff52234facb6c1d",
+    "rust": {
+      "file": "crates/code-graph/src/api/input.rs",
+      "symbols": ["demlik_code_graph::api::map::api_subpaths"]
+    },
+    "cases": [
+      "graph.api-foundation.subpath-ordinal-first-refusal",
+      "graph.api-foundation.working-map-0"
+    ]
+  },
+  "@demlik/code-graph:./api#ApiMap": {
+    "signature": "24050ae2e7f7bc8f2373abbbf9da97d5f4858c79f7f3170a67636c9df748f76b",
+    "rust": {
+      "file": "crates/code-graph/src/api/map.rs",
+      "symbols": ["demlik_code_graph::api::map::parse_api_map"]
+    },
+    "cases": ["graph.api-foundation.map-raw-keys-and-entries"]
+  },
+  "@demlik/code-graph:./api#ApiMapSchema": {
+    "signature": "91fa5d3366ac96ba8594d82cdd6bfd12fcb7f2825b3b29089e6409dcb433ea0d",
+    "rust": {
+      "file": "crates/code-graph/src/api/map.rs",
+      "symbols": ["demlik_code_graph::api::map::parse_api_map"]
+    },
+    "cases": [
+      "graph.api-foundation.map-raw-keys-and-entries",
+      "graph.api-foundation.map-nested-proto-is-strict-unknown"
+    ]
+  },
+  "@demlik/code-graph:./api#Bump": {
+    "signature": "a2382c75904c87dedb2cf1c418950f3472cdb681ae78e86672f1753834c4896d",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::model::BumpPolicy::parse"]
+    },
+    "cases": ["graph.api-foundation.policy-defaults-each-missing-callout"]
+  },
+  "@demlik/code-graph:./api#BumpPolicy": {
+    "signature": "32eed7e5a1039fee7006223b5d6b152476c4192a5a1eebbe4f5f482725d60198",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::model::BumpPolicy::parse"]
+    },
+    "cases": ["graph.api-foundation.policy-defaults-each-missing-callout"]
+  },
+  "@demlik/code-graph:./api#BumpPolicySchema": {
+    "signature": "cac26a30a81c970b94364fd2d4d643fa383a8e0b7959eebc872876e089344572",
+    "rust": {
+      "file": "crates/code-graph/src/api/ratchet/policy.rs",
+      "symbols": ["demlik_code_graph::api::model::BumpPolicy::parse"]
+    },
+    "cases": [
+      "graph.api-foundation.policy-defaults-each-missing-callout",
+      "graph.api-foundation.policy-strict-order-and-unknown-keys"
+    ]
+  },
+  "@demlik/code-graph:./api#ApiRatchetVerdict": {
+    "signature": "78e3d08754da63ad127840af4317627c0c181ca2b8dfd2df2073e6e3fbacdf34",
+    "rust": {
+      "file": "crates/code-graph/src/api/model.rs",
+      "symbols": ["demlik_code_graph::api::ratchet::verdict::ratchet_api_diff"]
+    },
+    "cases": [
+      "graph.api-foundation.ratchet-major-patch-true-true",
+      "graph.api-foundation.ratchet-major-major-true-true",
+      "graph.api-foundation.callout-exact-utf16-0",
+      "graph.api-foundation.rules-shared-per-kind-not-per-equal-shape"
+    ]
+  },
+  "@demlik/code-graph:./api#ratchetApiDiff": {
+    "signature": "7477402cd4b7c408d14f4d3a9d7673f9f3131c1ec3c96daa7bba7b6ff6d67882",
+    "rust": {
+      "file": "crates/code-graph/src/api/ratchet/verdict.rs",
+      "symbols": ["demlik_code_graph::api::ratchet::verdict::ratchet_api_diff"]
+    },
+    "cases": [
+      "graph.api-foundation.ratchet-major-patch-true-true",
+      "graph.api-foundation.ratchet-major-major-true-true",
+      "graph.api-foundation.callout-exact-utf16-0",
+      "graph.api-foundation.rules-shared-per-kind-not-per-equal-shape"
+    ]
+  }
+}

@@ -1,13 +1,11 @@
 use demlik_code_graph::{
     api::{
-        diff::diff_subpath_names,
-        map::{self, ApiError, ApiSchemaError},
+        map::{ApiError, ApiSchemaError},
         model::{
             AddedName, ApiChange, ApiDiff, ApiEntryText, ApiRatchetMiss, ApiRatchetVerdict,
-            ApiReferences, Bump, BumpPolicy, BumpRule, ChangeKind, ChangedName, Changeset,
-            ChangesetBump, ChangesetsSince, RemovedName, SubpathDiff, SubpathNames, VerdictContext,
+            ApiReferences, Bump, BumpRule, ChangeKind, ChangedName, Changeset, ChangesetBump,
+            ChangesetsSince, RemovedName, SubpathDiff, SubpathNames, VerdictContext,
         },
-        ratchet::{policy, text::render_api_ratchet, verdict},
     },
     render::json::stable_stringify,
     text::{JsString, JsValue, object_keys},
@@ -389,15 +387,27 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
     match action.as_str() {
         "parse-map" => {
             fields(&input, &["action", "value"])?;
-            checked(observe!(calls, map::parse_api_map, field(&input, "value")?))
+            checked(observe!(
+                calls,
+                demlik_code_graph::api::map::parse_api_map,
+                field(&input, "value")?
+            ))
         }
         "parse-policy" => {
             fields(&input, &["action", "value"])?;
-            checked(observe!(calls, BumpPolicy::parse, field(&input, "value")?))
+            checked(observe!(
+                calls,
+                demlik_code_graph::api::model::BumpPolicy::parse,
+                field(&input, "value")?
+            ))
         }
         "policy" => {
             fields(&input, &["action", "value"])?;
-            match observe!(calls, policy::bump_policy, field(&input, "value")?) {
+            match observe!(
+                calls,
+                demlik_code_graph::api::ratchet::policy::bump_policy,
+                field(&input, "value")?
+            ) {
                 Ok(policy) => value(&policy),
                 Err(error) => refused(error),
             }
@@ -408,8 +418,14 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
             let map = field(&input, "map")?;
             let base: Option<JsString> = decode(field(&input, "base")?)?;
             let result = match base {
-                Some(base) => observe!(calls, map::base_api_subpaths, &root, map, &base),
-                None => observe!(calls, map::api_subpaths, &root, map),
+                Some(base) => observe!(
+                    calls,
+                    demlik_code_graph::api::map::base_api_subpaths,
+                    &root,
+                    map,
+                    &base
+                ),
+                None => observe!(calls, demlik_code_graph::api::map::api_subpaths, &root, map),
             };
             match result {
                 Ok(rows) => value(&rows),
@@ -422,7 +438,13 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
             let tier: Option<JsString> = decode(field(&input, "tier")?)?;
             let before = pool.names(decode(field(&input, "before")?)?)?;
             let after = pool.names(decode(field(&input, "after")?)?)?;
-            let diff = observe!(calls, diff_subpath_names, tier.as_ref(), &before, &after);
+            let diff = observe!(
+                calls,
+                demlik_code_graph::api::diff::diff_subpath_names,
+                tier.as_ref(),
+                &before,
+                &after
+            );
             let prototypes = value(&prototypes(&pool, &diff))?;
             let keys = value(&[
                 object_keys(&diff.added),
@@ -436,7 +458,11 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
                 compiler: "compiler".into(),
                 subpaths: [(".".into(), diff)].into_iter().collect(),
             };
-            let changes = observe!(calls, verdict::api_changes, &api);
+            let changes = observe!(
+                calls,
+                demlik_code_graph::api::ratchet::verdict::api_changes,
+                &api
+            );
             Ok(obj([
                 ("diff", snapshot),
                 ("keys", keys),
@@ -455,7 +481,11 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
             let pool = decode::<PoolInput>(field(&input, "pool")?)?.build()?;
             let diff = decode::<DiffInput>(field(&input, "diff")?)?.build(&pool)?;
             if action == "changes" {
-                let changes = observe!(calls, verdict::api_changes, &diff);
+                let changes = observe!(
+                    calls,
+                    demlik_code_graph::api::ratchet::verdict::api_changes,
+                    &diff
+                );
                 return Ok(obj([
                     ("changes", value(&changes)?),
                     ("identities", value(&change_identities(&pool, &changes))?),
@@ -467,14 +497,19 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
             let snapshot = serde_json::to_string(&diff).map_err(|error| error.to_string())?;
             match observe!(
                 calls,
-                verdict::ratchet_api_diff,
+                demlik_code_graph::api::ratchet::verdict::ratchet_api_diff,
                 &diff,
                 field(&input, "policy")?,
                 &changesets
             ) {
                 Err(error) => refused(error),
                 Ok(verdict) => {
-                    let text = observe!(calls, render_api_ratchet, &verdict, &context);
+                    let text = observe!(
+                        calls,
+                        demlik_code_graph::api::ratchet::text::render_api_ratchet,
+                        &verdict,
+                        &context
+                    );
                     let rules_shared = verdict
                         .misses
                         .iter()
@@ -514,7 +549,12 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<JsValue, S
             let pool = decode::<PoolInput>(field(&input, "pool")?)?.build()?;
             let verdict = decode::<VerdictInput>(field(&input, "verdict")?)?.build(&pool)?;
             let context: VerdictContext = decode::<ContextInput>(field(&input, "context")?)?.into();
-            let text = observe!(calls, render_api_ratchet, &verdict, &context);
+            let text = observe!(
+                calls,
+                demlik_code_graph::api::ratchet::text::render_api_ratchet,
+                &verdict,
+                &context
+            );
             let compact = observe!(calls, stable_stringify, &verdict, false)
                 .map_err(|error| error.to_string())?;
             let pretty = observe!(calls, stable_stringify, &verdict, true)

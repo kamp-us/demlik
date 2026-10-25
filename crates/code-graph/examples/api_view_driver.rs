@@ -5,7 +5,7 @@ use demlik_code_graph::{
         model::SubpathNames,
         read::read_subpath_names,
         text,
-        view::{self, PublishedApiOptions},
+        view::PublishedApiOptions,
     },
     engine::tsgo::{ProgramInput, TsgoBinary, open_type_session},
     text::{JsString, JsValue},
@@ -200,10 +200,11 @@ fn execute(
         "package" => {
             fields(&input, &["action", "root"])?;
             let root: JsString = decode(field(&input, "root")?)?;
-            match observe!(calls, view::package_root, &root) {
+            match observe!(calls, demlik_code_graph::api::view::package_root, &root) {
                 Ok(root) => {
-                    let relative = observe!(calls, view::project_relative, &root)
-                        .map_err(|e| e.to_string())?;
+                    let relative =
+                        observe!(calls, demlik_code_graph::api::view::project_relative, &root)
+                            .map_err(|e| e.to_string())?;
                     Ok(obj([
                         ("root", JsValue::String(root)),
                         ("relative", JsValue::String(relative)),
@@ -289,7 +290,7 @@ fn execute(
             let result = if let Some(map) = map {
                 observe!(
                     calls,
-                    view::read_published_api,
+                    demlik_code_graph::api::view::read_published_api,
                     &root,
                     map,
                     compiler,
@@ -315,7 +316,7 @@ fn execute(
             } else {
                 observe!(
                     calls,
-                    view::read_emitted_names,
+                    demlik_code_graph::api::view::read_emitted_names,
                     &root,
                     &subpaths,
                     compiler,
