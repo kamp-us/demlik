@@ -3,6 +3,7 @@ use demlik_code_graph::{
         config::BoundaryRuleInputError,
         declaration::DeclarationError,
         impure::{GLOBAL_OBJECT, IMPURE_GLOBALS, ImpureShape},
+        impure_uses::{ImpureFacts, ImpureUse},
     },
     syntax::imports::ImportEdge,
     text::{JsString, JsValue},
@@ -12,6 +13,7 @@ use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use std::io::{self, BufRead};
+use std::path::Path;
 
 macro_rules! observe {
     ($calls:expr, $function:path $(, $argument:expr)* $(,)?) => {{
@@ -34,6 +36,18 @@ struct ImpureInput {
     ctors: Vec<JsString>,
     edges: Vec<ImportEdge>,
     runtime: IndexSet<JsString>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImpureUsesInput {
+    file: String,
+    source: String,
+}
+#[derive(Serialize)]
+struct ImpureUsesOutput {
+    uses: Vec<ImpureUse>,
+    names: Vec<JsString>,
+    runtime: Vec<JsString>,
 }
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -92,6 +106,55 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
     match request.operation.as_str() {
+        "code_graph.impure-uses" => {
+            let input: ImpureUsesInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let syntax = observe!(
+                calls,
+                demlik_code_graph::engine::oxc::parse_type_script,
+                Path::new(&input.file),
+                &input.source
+            )
+            .map_err(|error| error.to_string())?;
+            let literals = observe!(
+                calls,
+                demlik_code_graph::syntax::imports::import_literals,
+                &syntax
+            );
+            let edges: Vec<_> = literals
+                .into_iter()
+                .map(|literal| ImportEdge {
+                    specifier: literal.specifier,
+                    kind: literal.kind,
+                    type_only: literal.type_only,
+                    target: None,
+                })
+                .collect();
+            let runtime = observe!(
+                calls,
+                demlik_code_graph::syntax::imports::runtime_specifiers,
+                &syntax
+            );
+            let uses = observe!(
+                calls,
+                demlik_code_graph::boundaries::impure_uses::detect_impure_uses,
+                &syntax
+            );
+            let names = observe!(
+                calls,
+                demlik_code_graph::boundaries::impure_uses::impure_names_of,
+                ImpureFacts {
+                    impure_uses: &uses,
+                    import_edges: &edges,
+                    runtime_specifiers: &runtime
+                }
+            );
+            json(&ImpureUsesOutput {
+                uses,
+                names,
+                runtime: runtime.into_iter().collect(),
+            })
+        }
         "code_graph.boundary-declarations" => {
             let value = JsValue::parse(request.input.get()).map_err(|error| error.to_string())?;
             let parsed = observe!(

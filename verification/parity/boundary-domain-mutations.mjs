@@ -27,6 +27,14 @@ const faults = [
     after: "if false && seen.contains(feature) {",
     witness: "duplicate-feature",
   },
+  {
+    name: "impurity-forgets-bound-names",
+    file: "impure_uses.rs",
+    before: "bound: bound_names(syntax),",
+    after: "bound: IndexSet::new(),",
+    script: "graph-impure-uses.mts",
+    witness: "bound-parameter",
+  },
 ];
 try {
   for (const name of [
@@ -74,7 +82,7 @@ try {
       [
         "--import",
         require.resolve("tsx"),
-        path.join(here, "graph-boundary-domain.mts"),
+        path.join(here, fault.script ?? "graph-boundary-domain.mts"),
         path.join(target, "debug/examples/boundary_domain_driver"),
         reportFile,
       ],

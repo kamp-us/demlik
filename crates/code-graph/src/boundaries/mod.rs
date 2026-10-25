@@ -1,6 +1,7 @@
 pub mod config;
 pub mod declaration;
 pub mod impure;
+pub mod impure_uses;
 pub mod ledger;
 pub mod migrate;
 pub mod reconcile;
