@@ -42,12 +42,16 @@ impl std::error::Error for ApiInputError {
 pub enum ApiArgumentLocation {
     Argument(usize),
     WorkingDirectory,
+    Path,
+    SymlinkTarget,
 }
 impl ApiArgumentLocation {
     pub fn label(self) -> String {
         match self {
             Self::Argument(index) => format!("args[{index}]"),
             Self::WorkingDirectory => "options.cwd".into(),
+            Self::Path => "path".into(),
+            Self::SymlinkTarget => "target".into(),
         }
     }
 }
@@ -79,18 +83,48 @@ impl ApiArgumentError {
         let Some((location, argument)) = selected else {
             return Err(cause);
         };
+        Ok(Self::null_value(location, argument, cause))
+    }
+    pub fn from_null_path(
+        argument: &JsString,
+        cause: std::io::Error,
+    ) -> Result<Self, std::io::Error> {
+        if !argument.units().contains(&0) {
+            return Err(cause);
+        }
+        Ok(Self::null_value(ApiArgumentLocation::Path, argument, cause))
+    }
+    pub fn from_null_symlink(
+        target: &JsString,
+        destination: &JsString,
+        cause: std::io::Error,
+    ) -> Result<Self, std::io::Error> {
+        if target.units().contains(&0) {
+            return Ok(Self::null_value(
+                ApiArgumentLocation::SymlinkTarget,
+                target,
+                cause,
+            ));
+        }
+        Self::from_null_path(destination, cause)
+    }
+    fn null_value(
+        location: ApiArgumentLocation,
+        argument: &JsString,
+        cause: std::io::Error,
+    ) -> Self {
         // Keep the actual native diagnostic instead of recreating Node's util.inspect.
         let message = format!(
             "{} contains a null byte (native argument diagnostic: {cause})",
             location.label()
         )
         .into();
-        Ok(Self {
+        Self {
             argument: argument.clone(),
             location,
             cause,
             message,
-        })
+        }
     }
     pub fn argument(&self) -> &JsString {
         &self.argument
@@ -143,6 +177,11 @@ pub enum ApiError {
         path: JsString,
         source: std::io::Error,
     },
+    Symlink {
+        path: JsString,
+        destination: JsString,
+        source: std::io::Error,
+    },
     Compiler(crate::engine::tsgo::TsgoError),
     OperationAndCleanup {
         operation: Box<Self>,
@@ -156,7 +195,7 @@ impl ApiError {
             Self::Argument(error) => error.name(),
             Self::TypeError(error) => error.name(),
             Self::OperationAndCleanup { cleanup, .. } => cleanup.name(),
-            Self::Io { .. } | Self::Compiler(_) => "Error",
+            Self::Io { .. } | Self::Symlink { .. } | Self::Compiler(_) => "Error",
         }
     }
     pub fn message(&self) -> JsString {
@@ -164,7 +203,7 @@ impl ApiError {
             Self::Input(error) => error.message().clone(),
             Self::Argument(error) => error.message().clone(),
             Self::TypeError(error) => error.message().clone(),
-            Self::Io { source, .. } => source.to_string().into(),
+            Self::Io { source, .. } | Self::Symlink { source, .. } => source.to_string().into(),
             Self::Compiler(error) => error.to_string().into(),
             Self::OperationAndCleanup { cleanup, .. } => cleanup.message(),
         }
@@ -177,6 +216,16 @@ impl std::fmt::Display for ApiError {
             Self::Argument(error) => error.fmt(f),
             Self::TypeError(error) => error.fmt(f),
             Self::Io { path, source } => write!(f, "{}: {source}", path.to_lossy()),
+            Self::Symlink {
+                path,
+                destination,
+                source,
+            } => write!(
+                f,
+                "symlink {} -> {}: {source}",
+                path.to_lossy(),
+                destination.to_lossy()
+            ),
             Self::Compiler(error) => error.fmt(f),
             Self::OperationAndCleanup { operation, cleanup } => {
                 write!(f, "{operation}; temporary cleanup also failed: {cleanup}")
@@ -190,7 +239,7 @@ impl std::error::Error for ApiError {
             Self::Input(error) => error,
             Self::Argument(error) => error,
             Self::TypeError(error) => error,
-            Self::Io { source, .. } => source,
+            Self::Io { source, .. } | Self::Symlink { source, .. } => source,
             Self::Compiler(error) => error,
             Self::OperationAndCleanup { operation, .. } => operation.as_ref(),
         })

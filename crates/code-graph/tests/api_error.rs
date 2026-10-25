@@ -113,3 +113,72 @@ fn null_cwd_follows_all_arguments_and_non_null_failures_keep_their_original_kind
     .unwrap_err();
     assert_eq!(ordinary.kind(), io::ErrorKind::NotFound);
 }
+
+#[test]
+fn null_filesystem_path_keeps_its_own_location_raw_units_and_real_refusal() {
+    use demlik_code_graph::api::map::{ApiArgumentError, ApiArgumentLocation};
+    let value = JsString::from_units(vec![114, 97, 119, 0, 0xd800]);
+    let native = std::fs::symlink_metadata(value.to_lossy()).unwrap_err();
+    let error = ApiArgumentError::from_null_path(&value, native).unwrap();
+    assert_eq!(error.location(), ApiArgumentLocation::Path);
+    assert_eq!(error.argument(), &value);
+    assert_eq!(error.code(), "ERR_INVALID_ARG_VALUE");
+    assert_eq!(error.name(), "TypeError");
+    assert_eq!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    let ordinary = ApiArgumentError::from_null_path(
+        &"ordinary".into(),
+        io::Error::from(io::ErrorKind::NotFound),
+    )
+    .unwrap_err();
+    assert_eq!(ordinary.kind(), io::ErrorKind::NotFound);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_refusal_keeps_both_raw_paths_and_node_target_before_path_precedence() {
+    use demlik_code_graph::api::map::{ApiArgumentError, ApiArgumentLocation};
+    let target = JsString::from_units(vec![116, 0, 0xd800]);
+    let destination = JsString::from("dest\0bad");
+    let cause = std::os::unix::fs::symlink(target.to_lossy(), destination.to_lossy()).unwrap_err();
+    let error = ApiArgumentError::from_null_symlink(&target, &destination, cause).unwrap();
+    assert_eq!(error.location(), ApiArgumentLocation::SymlinkTarget);
+    assert_eq!(error.argument(), &target);
+    let cause = std::os::unix::fs::symlink("ordinary", destination.to_lossy()).unwrap_err();
+    let error =
+        ApiArgumentError::from_null_symlink(&"ordinary".into(), &destination, cause).unwrap();
+    assert_eq!(error.location(), ApiArgumentLocation::Path);
+    assert_eq!(error.argument(), &destination);
+    let path = JsString::from_units(vec![116, 0xd800]);
+    let destination = JsString::from_units(vec![100, 0xdfff]);
+    let error = ApiError::Symlink {
+        path,
+        destination,
+        source: io::Error::from(io::ErrorKind::AlreadyExists),
+    };
+    assert_eq!(error.name(), "Error");
+    assert_eq!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::AlreadyExists
+    );
+    let ApiError::Symlink {
+        path, destination, ..
+    } = error
+    else {
+        panic!("lost symlink event")
+    };
+    assert_eq!(path.units(), &[116, 0xd800]);
+    assert_eq!(destination.units(), &[100, 0xdfff]);
+}
