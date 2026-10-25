@@ -10,7 +10,10 @@ use std::{
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{PlainData, Tagged, data::plain_data};
+use crate::{
+    PlainData, Tagged,
+    data::{NumberOrNull, plain_data},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct Issue {
@@ -163,13 +166,13 @@ pub enum Settlement<O, E> {
 pub type SettledParts<D> = (
     Cmd<D>,
     Settlement<<D as CommandSpec>::Output, <D as CommandSpec>::Error>,
-    Option<f64>,
+    Option<NumberOrNull>,
 );
 pub struct Settled<D: CommandSpec> {
     kind: String,
     cmd: Cmd<D>,
     outcome: Settlement<D::Output, D::Error>,
-    at: Option<f64>,
+    at: Option<NumberOrNull>,
     engine_stamp: Option<EngineStamp>,
 }
 impl<D: CommandSpec> Settled<D> {
@@ -179,7 +182,7 @@ impl<D: CommandSpec> Settled<D> {
     pub fn outcome(&self) -> &Settlement<D::Output, D::Error> {
         &self.outcome
     }
-    pub fn at(&self) -> Option<f64> {
+    pub fn at(&self) -> Option<NumberOrNull> {
         self.at
     }
     pub fn engine_stamp(&self) -> Option<&EngineStamp> {
@@ -214,7 +217,10 @@ where
         };
         record.insert(key.into(), value.map_err(serde::ser::Error::custom)?);
         if let Some(at) = self.at {
-            record.insert("at".into(), PlainData::Number(at));
+            record.insert(
+                "at".into(),
+                plain_data(&at).map_err(serde::ser::Error::custom)?,
+            );
         }
         PlainData::Object(record).serialize(serializer)
     }
@@ -443,7 +449,7 @@ impl<D: CommandSpec> CmdDef<D> {
             kind: self.ok_type(),
             cmd,
             outcome: Settlement::Ok(value),
-            at,
+            at: at.map(Into::into),
             engine_stamp: None,
         }
     }
@@ -452,7 +458,7 @@ impl<D: CommandSpec> CmdDef<D> {
             kind: self.err_type(),
             cmd,
             outcome: Settlement::Err(Failure::Declared(error)),
-            at,
+            at: at.map(Into::into),
             engine_stamp: None,
         }
     }
@@ -489,7 +495,7 @@ impl<D: CommandSpec> CmdDef<D> {
                 Err(SchemaError::Issues(issues)) => Settled {
                     kind: definition.err_type(),
                     cmd,
-                    at: Some(at),
+                    at: Some(at.into()),
                     outcome: Settlement::Err(Failure::Malformed(malformed_result(issues))),
                     engine_stamp: None,
                 },

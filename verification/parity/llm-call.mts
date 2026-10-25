@@ -555,6 +555,36 @@ export async function execute(script: Script) {
   return script.kind === "pure" ? pure(script) : runtime(script);
 }
 
+function restoredTimestampCases() {
+  return ["Infinity", "NaN", "-Infinity"].map((value) => ({
+    id: `llm.restored-stamp.${value}`,
+    input: llmScript.parse({
+      kind: "pure",
+      rng: [0.5],
+      actions: [
+        {
+          op: "attempt",
+          purpose: "plan",
+          model: null,
+          payload: "prompt",
+          at: 0,
+          slot: "a",
+        },
+        { op: "schema", purpose: "plan", mode: "pass" },
+        {
+          op: "decode",
+          slot: "a",
+          raw: "parsed",
+          at: { $number: value },
+          apply: false,
+        },
+        { op: "roundTripMsg" },
+        { op: "succeed" },
+      ],
+    }),
+  }));
+}
+
 export function corpus() {
   const cases: { id: string; input: Script }[] = [];
   const add = (id: string, input: unknown) =>
@@ -573,7 +603,7 @@ export function corpus() {
     cause: unknown = { kind: "error", message: "provider rejected" },
     apply = true,
     slot = "a",
-    at = 1,
+    at: unknown = 1,
   ) => ({ op: "reject", slot, cause, field, at, apply });
   const plan = { steps: ["inspect", "explain"], extra: "strip" };
   const decodeAction = (raw: unknown = plan, slot = "a", at = 1) => ({
@@ -978,6 +1008,39 @@ export function corpus() {
   for (const profile of ["promise", "effect"])
     for (const mode of ["success", "provider", "schema"])
       add(`llm.runtime.${profile}.${mode}`, { kind: "runtime", profile, mode });
+  cases.push(...restoredTimestampCases());
+  for (const value of ["Infinity", "NaN", "-Infinity"]) {
+    const first = [
+      attempt(),
+      reject("own", { kind: "value", value: "provider error" }, false, "a", {
+        $number: value,
+      }),
+      { op: "roundTripMsg" },
+      { op: "fail" },
+    ];
+    add(`llm.restored-error.${value}`, base([...first, { op: "roundTrip" }]));
+    add(
+      `llm.restored-retry.${value}`,
+      base(
+        [
+          ...first,
+          { op: "fireNext", slot: "b" },
+          { ...decodeAction(plan, "b"), at: { $number: value }, apply: false },
+          { op: "roundTripMsg" },
+          { op: "succeed" },
+        ],
+        {
+          retry: {
+            baseMs: 1,
+            factor: 2,
+            capMs: 4,
+            jitter: "none",
+            maxAttempts: 2,
+          },
+        },
+      ),
+    );
+  }
   return cases;
 }
 
@@ -1021,36 +1084,7 @@ export async function llmCallParity(
     : allCases;
   if (options.caseIds) assert.equal(cases.length, options.caseIds.length);
   assert(cases.length > 0);
-  const timestampCases = options.caseIds
-    ? []
-    : ["Infinity", "NaN", "-Infinity"].map((value) => ({
-        id: `llm.open.restored-stamp.${value}`,
-        input: llmScript.parse({
-          kind: "pure",
-          rng: [0.5],
-          actions: [
-            {
-              op: "attempt",
-              purpose: "plan",
-              model: null,
-              payload: "prompt",
-              at: 0,
-              slot: "a",
-            },
-            { op: "schema", purpose: "plan", mode: "pass" },
-            {
-              op: "decode",
-              slot: "a",
-              raw: "parsed",
-              at: { $number: value },
-              apply: false,
-            },
-            { op: "roundTripMsg" },
-            { op: "succeed" },
-          ],
-        }),
-      }));
-  const comparedCases = [...cases, ...timestampCases];
+  const comparedCases = cases;
   const input = `${comparedCases.map((test) => JSON.stringify(test)).join("\n")}\n`;
   const run = spawnSync(binary, [], {
     cwd: root,
@@ -1099,8 +1133,10 @@ export async function llmCallParity(
       publicCalls: rust.calls,
     });
   }
-  const results = comparedResults.slice(0, cases.length),
-    timestampProbes = comparedResults.slice(cases.length);
+  const results = comparedResults,
+    timestampProbes = comparedResults.filter((result) =>
+      result.id.startsWith("llm.restored-"),
+    );
   const mismatches = results.filter((result) => !result.equal);
   const sourceFiles = [
     "packages/tea/src/internal/llm-call/index.ts",
@@ -1108,6 +1144,10 @@ export async function llmCallParity(
     "crates/tea/src/llm_call.rs",
     "crates/tea/src/llm_call/wire.rs",
     "crates/tea/src/describe_error.rs",
+    "crates/tea/src/command.rs",
+    "crates/tea/src/data.rs",
+    "crates/tea/src/data/number.rs",
+    "crates/tea/src/work_queue/mod.rs",
     "crates/tea/src/resilience/resilient_call/mod.rs",
     "crates/tea/src/resilience/resilient_call/model.rs",
     "crates/tea/examples/llm_structured/consumer.rs",
@@ -1149,7 +1189,7 @@ export async function llmCallParity(
     assert(capabilities.every((capability) => capability.caseIds.length > 0));
   const report = {
     version: 1,
-    profile: "finite-settled-timestamps",
+    profile: "numeric-and-json-null-settled-timestamps",
     passed: results.length - mismatches.length,
     total: results.length,
     actions: results.reduce((n, r) => n + r.actions, 0),
@@ -1162,7 +1202,7 @@ export async function llmCallParity(
         ...result,
         owner: "crates/tea/src/command.rs:restore_settled_value",
         contract:
-          "A nonfinite numeric engine stamp is JSON null after persistence. Source restores and settles it; native canonical Settled currently refuses null as f64. This is outside the strict finite-settled-timestamp profile; no leaf-local workaround.",
+          "A nonfinite numeric engine stamp is JSON null after persistence. Source restores and settles it; native canonical Settled must preserve that null through its data-owned NumberOrNull. These are strict valid-call/persistence cases.",
       })),
     sourceHashes: Object.fromEntries(
       sourceFiles.map((file) => [file, hash(join(root, file))]),
@@ -1174,7 +1214,7 @@ export async function llmCallParity(
       "Opaque native error uses an explicit application-owned Serialize projection at the existing command boundary; its original non-Serialize Rc cause is retained and tested. Unprojected opaque errors remain unsupported by CommandFamily.",
       "Native Schema is a supplied typed parser, with no network/provider or agent framework. Typed missing schema/purpose and host panic behavior are outside these accepted scripts.",
       "Runtime cases use awaited serial operations and fixed clocks; arbitrary host executor ordering is not asserted.",
-      "Strict cases use finite settled timestamps. The separate timestampProbes/openGaps preserve actual nonfinite-stamp JSON-null restoration mismatches pending the canonical owner follow-up.",
+      "Strict cases use numeric Source clock values and their JSON-restored null, including promoted a6 timestamp probes. Manually missing or nonnumeric raw timestamps remain outside the typed number contract and are explicitly not claimed equivalent.",
     ],
   };
   mkdirSync(dirname(reportFile), { recursive: true });

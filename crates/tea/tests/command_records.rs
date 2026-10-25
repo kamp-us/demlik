@@ -56,7 +56,7 @@ fn typed_record_builds_and_settles_with_borrowed_nonserde_nonclone_input() {
     let replies = CommandFamily::settle(command, Some(Outcome::ok("answer")), 17.25).unwrap();
     assert_eq!(replies[0].tag(), "borrowed_ok");
     assert_eq!(replies[0].cmd().input().label, "borrowed model");
-    assert_eq!(replies[0].at(), Some(17.25));
+    assert_eq!(replies[0].at(), Some(17.25.into()));
     assert!(matches!(replies[0].outcome(), Settlement::Ok("answer")));
 }
 

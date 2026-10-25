@@ -576,11 +576,9 @@ impl<'a, I, R, E, B: Budget> ResilientCall<'a, I, R, E, B> {
             command::{Failure, Settlement},
         };
         let (command, outcome, at) = message.into_parts();
-        let at: CallNumber = at
-            .ok_or_else(|| ResilientError::MissingStamp {
-                command: command.tag().into(),
-            })?
-            .into();
+        let at = at.ok_or_else(|| ResilientError::MissingStamp {
+            command: command.tag().into(),
+        })?;
         let key = command.into_input().key;
         let input = match outcome {
             Settlement::Ok(value) => SettleInput::Ok { key, value, at },

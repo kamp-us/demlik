@@ -149,11 +149,11 @@ fn an_owned_send_guard_survives_command_consumption_and_refuses_replay_builders(
         .unwrap()
         .pop()
         .unwrap();
-    assert_eq!(settled.at(), Some(71.0));
+    assert_eq!(settled.at(), Some(71.0.into()));
     assert!(guard.check(&settled).is_ok());
     let restored: Settled<Fetch> =
         serde_json::from_value(serde_json::to_value(&settled).unwrap()).unwrap();
-    assert_eq!(restored.at(), Some(71.0));
+    assert_eq!(restored.at(), Some(71.0.into()));
     assert!(guard.check(&restored).is_err());
     let replay = def.ok(
         def.build(FetchInput { url: "/".into() }).unwrap(),

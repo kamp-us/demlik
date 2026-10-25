@@ -7,9 +7,11 @@ use serde_json::Value;
 mod encoder;
 mod json;
 mod missing;
+mod number;
 pub(crate) use json::UNDEFINED_TOKEN;
 pub use json::{JsText, JsonData, decode_json, decode_json_text, stringify_json};
 pub use missing::decode_missing;
+pub use number::NumberOrNull;
 
 #[derive(Clone, Debug)]
 pub enum PlainData {

@@ -27,40 +27,7 @@ pub enum QueueItemStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
-#[serde(transparent)]
-pub struct QueueTime(pub Option<f64>);
-impl<'de> Deserialize<'de> for QueueTime {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        match PlainData::deserialize(deserializer)? {
-            PlainData::Number(value) => Ok(Self(Some(value))),
-            PlainData::Null => Ok(Self(None)),
-            _ => Err(serde::de::Error::custom(
-                "expected a number or restored JSON null",
-            )),
-        }
-    }
-}
-impl From<f64> for QueueTime {
-    fn from(value: f64) -> Self {
-        Self(Some(value))
-    }
-}
-impl QueueTime {
-    pub fn number(self) -> Option<f64> {
-        self.0
-    }
-    /// Numeric arithmetic treats a stored JSON null as zero. Serialization
-    /// keeps the original null until an operation produces a new number.
-    pub fn number_or_zero(self) -> f64 {
-        self.0.unwrap_or(0.0)
-    }
-}
-impl PartialEq<f64> for QueueTime {
-    fn eq(&self, other: &f64) -> bool {
-        self.0.is_some_and(|value| value == *other)
-    }
-}
+pub use crate::data::NumberOrNull as QueueTime;
 
 /// `retry` and recovery explicitly assign undefined; a newly enqueued item
 /// has no such own property. JSON omits both, while pure observations differ.

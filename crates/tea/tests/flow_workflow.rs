@@ -272,7 +272,7 @@ fn both_transport_definitions_turn_a_nonvoid_success_into_a_malformed_result() {
         assert_eq!(messages.len(), 1);
         let message = messages.pop().unwrap();
         assert_eq!(message.tag(), tag);
-        assert_eq!(message.at(), Some(17.25));
+        assert_eq!(message.at(), Some(17.25.into()));
         let Settlement::Err(Failure::Malformed(error)) = message.outcome() else {
             panic!("malformed transport success")
         };

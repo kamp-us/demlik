@@ -25,7 +25,7 @@ where
         restored.outcome(),
         Settlement::Ok(PlainData::Undefined)
     ));
-    assert_eq!(restored.at(), Some(17.25));
+    assert_eq!(restored.at(), Some(17.25.into()));
     assert_eq!(serde_json::to_value(restored).unwrap(), encoded);
 }
 
