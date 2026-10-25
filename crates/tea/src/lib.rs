@@ -3,6 +3,7 @@ pub mod core;
 pub mod data;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod file_store;
+pub mod flow;
 pub mod idempotency;
 mod js_math;
 pub mod js_record;
