@@ -3,6 +3,7 @@
 pub mod api;
 pub mod boundaries;
 pub mod checker;
+pub mod cli;
 pub mod comments;
 pub(crate) mod config;
 pub mod data;
