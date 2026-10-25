@@ -266,7 +266,9 @@ function control(
     walkCompanion = "crates/tea/src/paginate/paginated_walk.rs",
     walkCompanionBefore = digest(walkCompanion),
     reconcilerCompanion = "crates/tea/src/flow/reconciler.rs",
-    reconcilerCompanionBefore = digest(reconcilerCompanion);
+    reconcilerCompanionBefore = digest(reconcilerCompanion),
+    llmCompanion = "crates/tea/src/llm_call.rs",
+    llmCompanionBefore = digest(llmCompanion);
   try {
     for (const root of ["Cargo.toml", "Cargo.lock"])
       cpSync(root, join(temporary, root));
@@ -324,6 +326,19 @@ function control(
         "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
       ),
     );
+    const llmSource = join(temporary, llmCompanion),
+      llmText = readFileSync(llmSource, "utf8"),
+      llmNeedle =
+        "Option<crate::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>";
+    assert.equal(digest(llmSource), llmCompanionBefore);
+    assert.equal(llmText.split(llmNeedle).length, 2);
+    writeFileSync(
+      llmSource,
+      llmText.replace(
+        llmNeedle,
+        "Option<crate::resilience::deadline::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>",
+      ),
+    );
     const target = resolve(
       process.env.DEMLIK_MUTATION_TARGET_DIR ??
         join(process.cwd(), "target/reconciler-mutation-build"),
@@ -364,6 +379,7 @@ function control(
     assert.equal(digest(companion), companionBefore);
     assert.equal(digest(walkCompanion), walkCompanionBefore);
     assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
+    assert.equal(digest(llmCompanion), llmCompanionBefore);
     return {
       id: "separate-deadline-timer-type",
       isolation: "disposable-source-copy",
@@ -376,6 +392,8 @@ function control(
       walkMutantSourceSha256: digest(walkSource),
       reconcilerSourceBeforeSha256: reconcilerCompanionBefore,
       reconcilerMutantSourceSha256: digest(reconcilerSource),
+      llmSourceBeforeSha256: llmCompanionBefore,
+      llmMutantSourceSha256: digest(llmSource),
       nativeBinarySha256: digest(executable),
       detectedIds,
     };
@@ -385,6 +403,7 @@ function control(
     assert.equal(digest(companion), companionBefore);
     assert.equal(digest(walkCompanion), walkCompanionBefore);
     assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
+    assert.equal(digest(llmCompanion), llmCompanionBefore);
   }
 }
 export async function verifyRuntimeDeadline(
