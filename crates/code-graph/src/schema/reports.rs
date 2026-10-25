@@ -1,7 +1,7 @@
 //! Optional report shapes, shared by extraction and graph consumers.
 use super::EntryReach;
 use crate::text::JsString;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -186,7 +186,7 @@ pub struct CrossRuntimeReport {
     pub edges: Vec<CrossRuntimeEdge>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DataBindingKind {
     D1,
@@ -206,7 +206,7 @@ impl DataBindingKind {
         }
     }
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DataAccess {
     Read,
