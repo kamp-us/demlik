@@ -54,6 +54,9 @@ The implementations live beside each other in `packages/` and `crates/`.
    `target/parity/command-families.json` compares owned command names, replay,
    definition precedence and edge provenance. Raw UTF-16 tags remain a shared
    owner gap in the current native `Tagged` interface.
+   `target/parity/resilient-call.json` compares composed cache, retry, circuit,
+   rate and deadline decisions, restored states and the typed outcome bridge.
+   Its Runtime consumer uses the actual default timer in both profiles.
    `target/parity/flow.json` compares fan-out waves, duplicate IDs, joins,
    completion ports and size/time batch windows. `target/parity/monitored-run.json`
    compares snapshot cadence, command acknowledgments, stage progress, failure,
@@ -107,7 +110,7 @@ native runtime example, `--contract-bin <path>` for typed command contracts,
 `--hooks-bin <path>` for runtime hooks, `--deadline-bin <path>` for the deadline
 integration, `--paginate-queue-bin <path>` for the
 pagination/queue driver, `--command-families-bin <path>` for owned command names,
-`--flow-bin <path>` for flow helpers, `--monitored-run-bin <path>` for snapshot
+`--resilient-call-bin <path>` for resilient calls, `--flow-bin <path>` for flow helpers, `--monitored-run-bin <path>` for snapshot
 and monitored runs, or `--timing-bin <path>` for timing.
 Generated cases use the recorded seed `0x5eed1234`.
 

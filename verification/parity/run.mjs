@@ -13,6 +13,7 @@ import { graphParity } from "./graph.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
+import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
 import { runtimeDeadlineParity } from "./runtime-deadline-run.mjs";
@@ -28,6 +29,7 @@ const timingBinaryArgument = args.indexOf("--timing-bin");
 const contractBinaryArgument = args.indexOf("--contract-bin");
 const familiesBinaryArgument = args.indexOf("--command-families-bin");
 const flowBinaryArgument = args.indexOf("--flow-bin");
+const resilientCallBinaryArgument = args.indexOf("--resilient-call-bin");
 const monitoredRunBinaryArgument = args.indexOf("--monitored-run-bin");
 const hooksBinaryArgument = args.indexOf("--hooks-bin");
 const deadlineBinaryArgument = args.indexOf("--deadline-bin");
@@ -297,6 +299,32 @@ if (!mutationSuite) {
     });
   }
 }
+let resilientCall = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    resilientCall = await resilientCallParity(cargo, {
+      binary:
+        resilientCallBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[resilientCallBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-resilient-call.json`,
+            ),
+    });
+    failures.push(...resilientCall.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "resilient-call.verification",
+      operation: "tea.resilience.resilient-call",
+      message: error.message,
+    });
+  }
+}
 let flow = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -497,6 +525,7 @@ const report = {
     timing.cases +
     runtimeContracts.cases +
     commandFamilies.cases +
+    resilientCall.cases +
     flow.cases +
     monitoredRun.cases +
     runtimeHooks.cases +
@@ -510,6 +539,7 @@ const report = {
     timing.passed +
     runtimeContracts.passed +
     commandFamilies.passed +
+    resilientCall.passed +
     flow.passed +
     monitoredRun.passed +
     runtimeHooks.passed +
@@ -524,6 +554,7 @@ const report = {
       ...(timing.passed ? ["tea.timing"] : []),
       ...(runtimeContracts.passed ? ["tea.runtime.contracts"] : []),
       ...(commandFamilies.passed ? ["tea.command.families"] : []),
+      ...(resilientCall.passed ? ["tea.resilience.resilient-call"] : []),
       ...(flow.passed ? ["tea.flow"] : []),
       ...(monitoredRun.passed ? ["tea.monitored-run"] : []),
       ...(runtimeHooks.passed ? ["tea.runtime.hooks"] : []),
@@ -542,6 +573,11 @@ const report = {
   },
   commandFamilies: {
     ...commandFamilies,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
+  resilientCall: {
+    ...resilientCall,
     nativeEvidence: undefined,
     failures: undefined,
   },
@@ -587,6 +623,7 @@ const report = {
     ...timing.nativeEvidence,
     ...runtimeContracts.nativeEvidence,
     ...commandFamilies.nativeEvidence,
+    ...resilientCall.nativeEvidence,
     ...flow.nativeEvidence,
     ...monitoredRun.nativeEvidence,
     ...runtimeHooks.nativeEvidence,
