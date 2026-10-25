@@ -24,6 +24,9 @@ impl Cancel {
             changed: Notify::new(),
         }
     }
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.set.load(Ordering::SeqCst)
+    }
     pub fn cancel(&self) {
         self.set.store(true, Ordering::SeqCst);
         self.changed.notify_waiters();
@@ -170,6 +173,11 @@ impl<E: 'static> SubscriptionWork<E> {
 }
 pub trait Subscriptions<U, M> {
     type Error;
+    /// Runner-table presence, before transferring owned subscription data.
+    /// Return false for absent entries so the runtime can select a built-in.
+    fn has_runner(&self, _kind: &str) -> bool {
+        true
+    }
     fn start(
         &self,
         sub: U,
@@ -189,6 +197,9 @@ impl<E> Default for NoSubscriptions<E> {
 }
 impl<U, M, E> Subscriptions<U, M> for NoSubscriptions<E> {
     type Error = E;
+    fn has_runner(&self, _: &str) -> bool {
+        false
+    }
     fn start(&self, _: U, _: Producer<M>) -> Result<Option<SubscriptionWork<E>>, E> {
         Ok(None)
     }

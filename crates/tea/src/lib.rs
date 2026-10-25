@@ -17,4 +17,6 @@ pub mod work_queue;
 pub use core::{
     Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_updates, replay,
 };
-pub use data::{PlainData, Sub, SubId, Subscription, structural_hash, sub_id_of};
+pub use data::{
+    EitherSub, PlainData, Sub, SubId, Subscription, TimerDeps, structural_hash, sub_id_of,
+};

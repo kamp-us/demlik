@@ -1,19 +1,27 @@
+mod drive;
 mod engine;
 mod events;
 mod listeners;
 mod persistence;
 mod ports;
 mod queue;
+mod scope;
 mod telemetry;
+mod timer;
 mod types;
 mod work;
 
+pub use drive::{
+    DriveCancellation, DriveError, DriveOptions, DriveSignal, DriveStart, DriveTask, drive_to_done,
+};
 pub use engine::{Runtime, launch, run};
 pub use events::{EventProjector, NoEvent};
 pub use listeners::Unsubscribe;
 pub use persistence::Persistence;
 pub use queue::{DispatchRefused, Producer, RuntimeRef};
+pub use scope::{EffectScope, ScopeExit, ScopeFailure, ScopeProfileError, ScopeTask};
 pub use telemetry::{Telemetry, TelemetryEvent};
+pub use timer::RuntimeTimer;
 pub use types::{
     ErrorPhase, Failure, Gate, IdentityDropNotice, Options, Profile, Report, RuntimeError,
     Supervision,

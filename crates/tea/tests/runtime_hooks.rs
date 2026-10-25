@@ -140,7 +140,7 @@ async fn typed_port_handles_share_reference_identity_but_listener_sets_are_per_r
             );
             first.ready().await.unwrap();
             second.ready().await.unwrap();
-            type Unsub = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+            type Unsub = Rc<RefCell<Option<demlik_tea::runtime::Unsubscribe>>>;
             let log = Rc::new(RefCell::new(vec![]));
             let own: Unsub = Rc::new(RefCell::new(None));
             let removed: Unsub = Rc::new(RefCell::new(None));
@@ -419,7 +419,7 @@ async fn replacing_the_last_port_listener_uses_a_new_bucket_after_the_current_em
                 options,
             );
             runtime.ready().await.unwrap();
-            type Unsub = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+            type Unsub = Rc<RefCell<Option<demlik_tea::runtime::Unsubscribe>>>;
             let own: Unsub = Rc::new(RefCell::new(None));
             let owned = Rc::clone(&own);
             let log = Rc::new(RefCell::new(vec![]));
@@ -520,6 +520,88 @@ async fn a_handler_emits_typed_nonserializable_port_data_before_public_commit() 
             );
             runtime.dispatch(Msg::Ping).await.unwrap();
             assert_eq!(&*log.borrow(), &["port:5", "commit"]);
+            runtime.stop().await;
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn duplicate_subscription_unsubscribe_uses_callback_identity_after_it_is_removed_and_readded()
+{
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let options: Options<Model, Msg, Infallible, Infallible> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(PlainData::Undefined),
+                (),
+                NoInterpreter::new(),
+                NoSubscriptions::new(),
+                options,
+            );
+            runtime.ready().await.unwrap();
+            let hits = Rc::new(Cell::new(0));
+            let observed = Rc::clone(&hits);
+            let callback: Rc<dyn Fn()> = Rc::new(move || observed.set(observed.get() + 1));
+            let first = runtime.subscribe_shared(Rc::clone(&callback));
+            let duplicate = runtime.subscribe_shared(Rc::clone(&callback));
+            first();
+            let _current = runtime.subscribe_shared(callback);
+            duplicate();
+            runtime.dispatch(Msg::Ping).await.unwrap();
+            assert_eq!(
+                hits.get(),
+                0,
+                "the duplicate unsubscribe removes the same callback when it has been readded"
+            );
+            runtime.stop().await;
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn unsubscribe_can_be_repeated_and_old_port_or_event_bucket_handles_leave_replacements_alive()
+{
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let options: Options<Model, Msg, Infallible, Infallible> =
+                Options::new(Profile::Promise);
+            let runtime = launch(
+                machine(PlainData::Undefined),
+                (),
+                NoInterpreter::new(),
+                NoSubscriptions::new(),
+                options.with_events(|_, _| vec![Msg::Ping]),
+            );
+            runtime.ready().await.unwrap();
+            let hits = Rc::new(Cell::new(0));
+            let count = Rc::clone(&hits);
+            let callback: Rc<dyn Fn()> = Rc::new(move || count.set(count.get() + 1));
+            let off = runtime.subscribe_shared(Rc::clone(&callback));
+            off();
+            let _current = runtime.subscribe_shared(callback);
+            off();
+            runtime.dispatch(Msg::Ping).await.unwrap();
+            assert_eq!(hits.get(), 0);
+            let port = demlik_tea::ports::define_port::<u32>("runtime-hooks.stale-bucket").unwrap();
+            let hits = Rc::new(Cell::new(0));
+            let count = Rc::clone(&hits);
+            let callback: Rc<dyn Fn(&u32)> = Rc::new(move |_| count.set(count.get() + 1));
+            let old = runtime.subscribe_port(&port, Rc::clone(&callback));
+            old();
+            let _current = runtime.subscribe_port(&port, callback);
+            old();
+            runtime.emit_port(&port, 1);
+            assert_eq!(hits.get(), 1);
+            let hits = Rc::new(Cell::new(0));
+            let count = Rc::clone(&hits);
+            let callback: Rc<dyn Fn(&Msg)> = Rc::new(move |_| count.set(count.get() + 1));
+            let old = runtime.on("Ping", Rc::clone(&callback));
+            old();
+            let _current = runtime.on("Ping", callback);
+            old();
+            runtime.dispatch(Msg::Ping).await.unwrap();
+            assert_eq!(hits.get(), 1);
             runtime.stop().await;
         })
         .await;

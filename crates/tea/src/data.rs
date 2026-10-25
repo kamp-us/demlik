@@ -119,6 +119,56 @@ mod private {
 pub trait Subscription: private::Sealed {
     fn id(&self) -> &SubId;
     fn kind(&self) -> &str;
+    fn into_timer<M: 'static>(self) -> Result<TimerDeps<M>, Self>
+    where
+        Self: Sized + 'static,
+    {
+        Err(self)
+    }
+}
+
+/// A typed union of validated subscription declarations. Each member retains
+/// its canonical identity and can transfer built-in timer data without cloning.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum EitherSub<L, R> {
+    Left(L),
+    Right(R),
+}
+impl<L: Subscription, R: Subscription> private::Sealed for EitherSub<L, R> {}
+impl<L: Subscription, R: Subscription> Subscription for EitherSub<L, R> {
+    fn id(&self) -> &SubId {
+        match self {
+            Self::Left(sub) => sub.id(),
+            Self::Right(sub) => sub.id(),
+        }
+    }
+    fn kind(&self) -> &str {
+        match self {
+            Self::Left(sub) => sub.kind(),
+            Self::Right(sub) => sub.kind(),
+        }
+    }
+    fn into_timer<M: 'static>(self) -> Result<TimerDeps<M>, Self>
+    where
+        Self: 'static,
+    {
+        match self {
+            Self::Left(sub) => sub.into_timer().map_err(Self::Left),
+            Self::Right(sub) => sub.into_timer().map_err(Self::Right),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct TimerDeps<M> {
+    pub ms: f64,
+    pub msg: M,
+}
+impl<M: Serialize> Sub<TimerDeps<M>> {
+    pub fn timer(ms: f64, msg: M) -> Result<Self, DependencyError> {
+        Self::new("timer", TimerDeps { ms, msg })
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -178,6 +228,21 @@ impl<D> Subscription for Sub<D> {
     }
     fn kind(&self) -> &str {
         &self.kind
+    }
+    fn into_timer<M: 'static>(self) -> Result<TimerDeps<M>, Self>
+    where
+        Self: 'static,
+    {
+        if self.kind != "timer" {
+            return Err(self);
+        }
+        let erased: Box<dyn std::any::Any> = Box::new(self);
+        match erased.downcast::<Sub<TimerDeps<M>>>() {
+            Ok(timer) => Ok(timer.deps),
+            Err(original) => Err(*original
+                .downcast::<Self>()
+                .expect("original subscription type")),
+        }
     }
 }
 

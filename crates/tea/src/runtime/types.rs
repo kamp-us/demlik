@@ -44,6 +44,7 @@ pub enum ErrorPhase {
 #[derive(Debug)]
 pub enum RuntimeError<SE, HE> {
     IdentityDrop(IdentityDropNotice),
+    Timer(crate::timing::TimerError),
     NoCell(NoCellError),
     Restore(StoreRefusedError<SE>),
     Save(SE),
@@ -85,6 +86,7 @@ pub enum RuntimeError<SE, HE> {
 impl<SE, HE> RuntimeError<SE, HE> {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Timer(_) => "TimerError",
             Self::IdentityDrop(_) => "IdentityDropNotice",
             Self::NoCell(_) => "NoCellError",
             Self::Restore(_) => "StoreRefusedError",
@@ -171,6 +173,7 @@ pub struct Options<S, M, SE = std::convert::Infallible, HE = std::convert::Infal
 {
     pub events: Option<EventProjector<S, M, E>>,
     pub telemetry: Option<Telemetry<HE>>,
+    pub timer: Option<super::RuntimeTimer>,
     pub profile: Profile,
     pub store: Option<Persistence<S, SE>>,
     pub terminal: Option<Terminal<S>>,
@@ -186,6 +189,7 @@ impl<S, M, SE, HE> Options<S, M, SE, HE> {
         Self {
             events: None,
             telemetry: None,
+            timer: None,
             profile,
             store: None,
             terminal: None,
@@ -220,6 +224,7 @@ impl<S, M, SE, HE, E> Options<S, M, SE, HE, E> {
             supervision: self.supervision,
             events: Some(Rc::new(project)),
             telemetry: self.telemetry,
+            timer: self.timer,
         }
     }
 }

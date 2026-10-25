@@ -36,6 +36,7 @@ struct View<S, SE, HE> {
 }
 type Observer<S, M> = dyn Fn(&M, &S);
 type Boot<S> = dyn Fn(&S);
+type ScopeWatcher<SE, HE> = dyn Fn(Failure<SE, HE>);
 struct Core<S, M, SE, HE, E> {
     ports: Rc<super::ports::PortRegistry>,
     view: RefCell<View<S, SE, HE>>,
@@ -58,6 +59,8 @@ struct Core<S, M, SE, HE, E> {
     telemetry: Option<Telemetry<HE>>,
     telemetry_seq: Cell<f64>,
     clock: Rc<dyn Fn() -> f64>,
+    scope_failure: RefCell<Option<Failure<SE, HE>>>,
+    scope_watchers: Rc<Listeners<ScopeWatcher<SE, HE>>>,
 }
 impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
     Core<S, M, SE, HE, E>
@@ -81,6 +84,16 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
         } else {
             eprintln!("@demlik/tea: {:?}: {}", phase, error.name());
         }
+    }
+    fn fail_scope(&self, error: Failure<SE, HE>) {
+        if self.scope_failure.borrow().is_some() {
+            return;
+        }
+        *self.scope_failure.borrow_mut() = Some(Rc::clone(&error));
+        self.scope_watchers.fanout(
+            |watcher| watcher(Rc::clone(&error)),
+            |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Sub),
+        );
     }
     fn notices(&self, mailbox: &Mailbox<M>) {
         let notices = mailbox.with(|queue| queue.notices.drain(..).collect::<Vec<_>>());
@@ -234,6 +247,7 @@ pub struct Runtime<S, M, SE, HE, E = NoEvent> {
     core: Rc<Core<S, M, SE, HE, E>>,
     producer: Producer<M>,
     stopper: Rc<dyn Fn()>,
+    live_work: Rc<dyn Fn() -> (usize, usize)>,
     profile: Profile,
     idle_cap: usize,
 }
@@ -243,6 +257,7 @@ impl<S, M, SE, HE, E> Clone for Runtime<S, M, SE, HE, E> {
             core: Rc::clone(&self.core),
             producer: self.producer.clone(),
             stopper: Rc::clone(&self.stopper),
+            live_work: Rc::clone(&self.live_work),
             profile: self.profile,
             idle_cap: self.idle_cap,
         }
@@ -251,6 +266,29 @@ impl<S, M, SE, HE, E> Clone for Runtime<S, M, SE, HE, E> {
 impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
     Runtime<S, M, SE, HE, E>
 {
+    pub(crate) fn live_work(&self) -> (usize, usize) {
+        (self.live_work)()
+    }
+    pub(crate) fn observe_snapshot(
+        &self,
+        observer: impl Fn(&M, Arc<S>) + 'static,
+    ) -> super::Unsubscribe {
+        let core = Rc::downgrade(&self.core);
+        self.observe(move |message, _| {
+            if let Some(state) = core.upgrade().and_then(|core| core.state()) {
+                observer(message, state);
+            }
+        })
+    }
+    pub fn profile(&self) -> Profile {
+        self.profile
+    }
+    pub(crate) fn scope_failure(&self) -> Option<Failure<SE, HE>> {
+        self.core.scope_failure.borrow().clone()
+    }
+    pub(crate) fn watch_scope(&self, watcher: Rc<dyn Fn(Failure<SE, HE>)>) -> super::Unsubscribe {
+        self.core.scope_watchers.add(watcher)
+    }
     pub fn subscribe_port<T: 'static>(
         &self,
         port: &crate::ports::Port<T>,
@@ -464,6 +502,7 @@ struct Env<S, M, C, U, X, SE, HE, I, R, E> {
     input: X,
     interpreter: I,
     subscriptions: R,
+    timer: super::RuntimeTimer,
     store: Option<Rc<dyn Backend<S, SE>>>,
     core: Rc<Core<S, M, SE, HE, E>>,
     producer: Producer<M>,
@@ -858,7 +897,29 @@ impl<
                 }
                 let kind = sub.kind().to_owned();
                 let work = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                    self.subscriptions.start(sub, self.producer.clone())
+                    if self.subscriptions.has_runner(&kind) {
+                        self.subscriptions
+                            .start(sub, self.producer.clone())
+                            .map_err(|error| Rc::new(RuntimeError::Handler(error)))
+                    } else {
+                        match sub.into_timer::<M>() {
+                            Ok(deps) => {
+                                let owner = Rc::clone(self);
+                                self.timer
+                                    .start(
+                                        deps,
+                                        self.profile,
+                                        self.producer.clone(),
+                                        Rc::new(move |error| {
+                                            owner.fail_sub(Rc::new(RuntimeError::Timer(error)))
+                                        }),
+                                    )
+                                    .map(Some)
+                                    .map_err(|error| Rc::new(RuntimeError::Timer(error)))
+                            }
+                            Err(_) => Ok(None),
+                        }
+                    }
                 }));
                 let work = match work {
                     Ok(Ok(Some(work))) => work,
@@ -869,17 +930,14 @@ impl<
                         continue;
                     }
                     Ok(Err(error)) => {
-                        let error = Rc::new(RuntimeError::Handler(error));
-                        self.core.report(Rc::clone(&error), ErrorPhase::Sub);
+                        self.fail_sub(Rc::clone(&error));
                         first.get_or_insert(error);
-                        self.start_stop();
                         continue;
                     }
                     Err(payload) => {
                         let error = Rc::new(RuntimeError::Panic(PanicCause::new(payload)));
-                        self.core.report(Rc::clone(&error), ErrorPhase::Sub);
+                        self.fail_sub(Rc::clone(&error));
                         first.get_or_insert(error);
-                        self.start_stop();
                         continue;
                     }
                 };
@@ -887,6 +945,13 @@ impl<
             }
         }
         first.map_or(Ok(()), Err)
+    }
+    fn fail_sub(self: &Rc<Self>, error: Failure<SE, HE>) {
+        self.core.report(Rc::clone(&error), ErrorPhase::Sub);
+        if self.profile == Profile::Effect && self.producer.mailbox.gate() == Gate::Open {
+            self.core.fail_scope(error);
+        }
+        self.start_stop();
     }
     fn start_sub(self: &Rc<Self>, id: SubId, kind: String, work: SubscriptionWork<HE>) {
         let cancel = Arc::new(Cancel::new());
@@ -913,9 +978,8 @@ impl<
                     Err(payload) => Some(Rc::new(RuntimeError::Panic(PanicCause::new(payload)))),
                 };
                 if let Some(error) = failure {
-                    env.core.report(error, ErrorPhase::Sub);
+                    env.fail_sub(error);
                     env.stop_subs([sub_id]);
-                    env.start_stop();
                 }
                 let _ = tx.send(());
             });
@@ -1108,6 +1172,7 @@ pub fn launch<
         supervision,
         events,
         telemetry,
+        timer,
     } = options;
     let store = store.map(|store| store.open());
     let initial = if store.is_none() {
@@ -1148,18 +1213,29 @@ pub fn launch<
         telemetry,
         telemetry_seq: Cell::new(0.0),
         clock: Rc::clone(&clock),
+        scope_failure: RefCell::new(None),
+        scope_watchers: Listeners::new(),
     });
     let producer = Producer {
         mailbox: Arc::new(Mailbox::new()),
         guard: None,
     };
     let edge = CommandEdge::new(move || clock());
+    let timer = timer.unwrap_or_else(|| {
+        let owner = Rc::clone(&core);
+        let clock = Rc::clone(&core.clock);
+        super::RuntimeTimer::new(Rc::new(crate::timing::TokioTimer::with_clock(
+            move || clock(),
+            move |error| owner.report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Sub),
+        )))
+    });
     let env = Rc::new(Env {
         machine,
         identity,
         input,
         interpreter,
         subscriptions,
+        timer,
         store,
         core: Rc::clone(&core),
         producer: producer.clone(),
@@ -1205,7 +1281,9 @@ pub fn launch<
         };
         worker.worker(boot).await;
     });
+    let live = Rc::clone(&env);
     Runtime {
+        live_work: Rc::new(move || (live.running.borrow().len(), live.in_flight.borrow().len())),
         core,
         producer,
         stopper: Rc::new(move || env.start_stop()),

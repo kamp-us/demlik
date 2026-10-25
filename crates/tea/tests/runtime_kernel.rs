@@ -533,7 +533,7 @@ async fn failed_deps_keep_their_running_type_while_siblings_reconcile_and_cleanu
 async fn callback_failures_are_data_and_live_unsubscription_preserves_fanout_order() {
     tokio::task::LocalSet::new()
         .run_until(async {
-            type Unsubscribe = Rc<RefCell<Option<Box<dyn FnOnce()>>>>;
+            type Unsubscribe = Rc<RefCell<Option<demlik_tea::runtime::Unsubscribe>>>;
             let log = Rc::new(RefCell::new(vec![]));
             let options: Options<Model, Msg, std::convert::Infallible, &'static str> =
                 Options::new(Profile::Promise);

@@ -19,7 +19,7 @@ pub(crate) fn fanout<T>(
     }
 }
 
-pub type Unsubscribe = Box<dyn FnOnce()>;
+pub type Unsubscribe = Box<dyn Fn()>;
 pub(crate) struct Listeners<F: ?Sized> {
     next: Cell<u64>,
     items: RefCell<BTreeMap<u64, Rc<F>>>,
@@ -32,21 +32,27 @@ impl<F: ?Sized + 'static> Listeners<F> {
         })
     }
     pub fn add(self: &Rc<Self>, callback: Rc<F>) -> Unsubscribe {
-        let existing = self
+        if !self
             .items
             .borrow()
-            .iter()
-            .find(|(_, item)| Rc::ptr_eq(item, &callback))
-            .map(|(id, _)| *id);
-        let id = existing.unwrap_or_else(|| {
+            .values()
+            .any(|item| Rc::ptr_eq(item, &callback))
+        {
             let id = self.next.get();
             self.next.set(id + 1);
-            self.items.borrow_mut().insert(id, callback);
-            id
-        });
+            self.items.borrow_mut().insert(id, Rc::clone(&callback));
+        }
         let listeners = Rc::clone(self);
         Box::new(move || {
-            listeners.items.borrow_mut().remove(&id);
+            let id = listeners
+                .items
+                .borrow()
+                .iter()
+                .find(|(_, item)| Rc::ptr_eq(item, &callback))
+                .map(|(id, _)| *id);
+            if let Some(id) = id {
+                listeners.items.borrow_mut().remove(&id);
+            }
         })
     }
     pub fn is_empty(&self) -> bool {
