@@ -6,7 +6,10 @@ use serde_json::Value;
 
 mod encoder;
 mod json;
+mod missing;
+pub(crate) use json::UNDEFINED_TOKEN;
 pub use json::{JsText, JsonData, decode_json, stringify_json};
+pub use missing::decode_missing;
 
 #[derive(Clone, Debug)]
 pub enum PlainData {

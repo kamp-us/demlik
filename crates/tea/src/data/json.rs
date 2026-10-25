@@ -13,7 +13,7 @@ use serde_json::value::RawValue;
 use super::PlainData;
 
 pub(super) const DATA_TOKEN: &str = "$demlik::PlainData";
-pub(super) const UNDEFINED_TOKEN: &str = "$demlik::Undefined";
+pub(crate) const UNDEFINED_TOKEN: &str = "$demlik::Undefined";
 
 #[derive(Clone, Debug)]
 /// JavaScript text, including unpaired UTF-16 units. The UTF-8 view is checked.
@@ -217,9 +217,9 @@ impl Parser<'_> {
                 }
                 self.offset += 1;
                 values.sort_by(|left, _, right, _| {
-                    array_index(left)
+                    left.array_index()
                         .map_or((1, 0), |index| (0, index))
-                        .cmp(&array_index(right).map_or((1, 0), |index| (0, index)))
+                        .cmp(&right.array_index().map_or((1, 0), |index| (0, index)))
                 });
                 PlainData::Object(values)
             }
@@ -317,10 +317,12 @@ fn quote(text: &JsText) -> String {
     output.push('"');
     output
 }
-fn array_index(key: &JsText) -> Option<u32> {
-    let key = key.as_utf8()?;
-    let index: u32 = key.parse().ok()?;
-    (index != u32::MAX && index.to_string() == key).then_some(index)
+impl JsText {
+    pub(crate) fn array_index(&self) -> Option<u32> {
+        let key = self.as_utf8()?;
+        let index: u32 = key.parse().ok()?;
+        (index != u32::MAX && index.to_string() == key).then_some(index)
+    }
 }
 pub fn stringify_json(value: &PlainData) -> Option<String> {
     Some(match value {
@@ -350,7 +352,7 @@ pub fn stringify_json(value: &PlainData) -> Option<String> {
                 .iter()
                 .filter(|(_, value)| !matches!(value, PlainData::Undefined))
                 .collect::<Vec<_>>();
-            entries.sort_by_key(|(key, _)| array_index(key).map_or((1, 0), |index| (0, index)));
+            entries.sort_by_key(|(key, _)| key.array_index().map_or((1, 0), |index| (0, index)));
             format!(
                 "{{{}}}",
                 entries
@@ -380,8 +382,24 @@ impl Serialize for PlainData {
 }
 impl<'de> Deserialize<'de> for PlainData {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        decode_json(raw.get()).map_err(serde::de::Error::custom)
+        struct Data;
+        impl<'de> serde::de::Visitor<'de> for Data {
+            type Value = PlainData;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("JSON data or an omitted undefined field")
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<PlainData, E> {
+                Ok(PlainData::Undefined)
+            }
+            fn visit_newtype_struct<D: serde::Deserializer<'de>>(
+                self,
+                deserializer: D,
+            ) -> Result<PlainData, D::Error> {
+                let raw = Box::<RawValue>::deserialize(deserializer)?;
+                decode_json(raw.get()).map_err(serde::de::Error::custom)
+            }
+        }
+        deserializer.deserialize_newtype_struct(UNDEFINED_TOKEN, Data)
     }
 }
 struct DataBody<'a>(&'a PlainData);

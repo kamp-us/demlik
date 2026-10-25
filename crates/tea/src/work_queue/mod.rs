@@ -287,7 +287,10 @@ impl<'de, I: Deserialize<'de>> Deserialize<'de> for QueueItem<I> {
                     fields: QueueItemFields {
                         id: id.ok_or_else(|| serde::de::Error::missing_field("id"))?,
                         status: status.ok_or_else(|| serde::de::Error::missing_field("status"))?,
-                        input: input.ok_or_else(|| serde::de::Error::missing_field("input"))?,
+                        input: match input {
+                            Some(input) => input,
+                            None => crate::data::decode_missing("input")?,
+                        },
                         enqueued_at: enqueued_at
                             .ok_or_else(|| serde::de::Error::missing_field("enqueuedAt"))?,
                         started_at,
