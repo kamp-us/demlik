@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "layer-gate",
+    driver: "layer_gate_driver",
+    script: "graph-layer-gate.mts",
+  },
+  {
     name: "layers",
     driver: "layer_driver",
     script: "graph-layers.mts",
@@ -115,6 +120,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "layer_gate_driver",
   "layer_driver",
   "layer_target_driver",
   "comment_gate_driver",

@@ -36,6 +36,8 @@ The implementations live beside each other in `packages/` and `crates/`.
    and tsconfig aliases, including measured malformed-config recovery cases.
    Layer reports compare rule input, match specificity, import classification,
    directed counts and allowance reconciliation against shared real projects.
+   The layer file gate also checks config refusals, byte decoding, JSON/pretty
+   rendering and exit decisions; production CLI integration is tracked separately.
    Comment checks classify real syntax
    and count lines by file, package and bucket, including source repository files.
    Comment policy checks compare ceiling validation, defaults, points, recorded
