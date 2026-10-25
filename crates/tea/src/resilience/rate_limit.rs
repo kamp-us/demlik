@@ -1,39 +1,53 @@
 use crate::js_math::{max as js_max, min as js_min};
+pub use crate::work_queue::QueueTime as BucketNumber;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenBucket {
-    pub tokens: f64,
-    pub capacity: f64,
-    pub refill_per_sec: f64,
-    pub last_refill_ms: f64,
+    pub tokens: BucketNumber,
+    pub capacity: BucketNumber,
+    pub refill_per_sec: BucketNumber,
+    pub last_refill_ms: BucketNumber,
 }
 
-pub fn init_bucket(capacity: f64, refill_per_sec: f64, now_ms: f64) -> TokenBucket {
+pub fn init_bucket(
+    capacity: f64,
+    refill_per_sec: f64,
+    now_ms: impl Into<BucketNumber>,
+) -> TokenBucket {
     TokenBucket {
-        tokens: capacity,
-        capacity,
-        refill_per_sec,
-        last_refill_ms: now_ms,
+        tokens: capacity.into(),
+        capacity: capacity.into(),
+        refill_per_sec: refill_per_sec.into(),
+        last_refill_ms: now_ms.into(),
     }
 }
 
-pub fn refill(bucket: &TokenBucket, now_ms: f64) -> TokenBucket {
-    let elapsed_sec = js_max(0.0, now_ms - bucket.last_refill_ms) / 1000.0;
-    let replenished = bucket.tokens + elapsed_sec * bucket.refill_per_sec;
+pub fn refill(bucket: &TokenBucket, now_ms: impl Into<BucketNumber>) -> TokenBucket {
+    let now_ms = now_ms.into();
+    let elapsed_sec = js_max(
+        0.0,
+        now_ms.number_or_zero() - bucket.last_refill_ms.number_or_zero(),
+    ) / 1000.0;
+    let replenished =
+        bucket.tokens.number_or_zero() + elapsed_sec * bucket.refill_per_sec.number_or_zero();
     TokenBucket {
-        tokens: js_min(bucket.capacity, replenished),
+        tokens: js_min(bucket.capacity.number_or_zero(), replenished).into(),
         last_refill_ms: now_ms,
         ..*bucket
     }
 }
 
-pub fn try_consume(bucket: &TokenBucket, now_ms: f64, n: f64) -> (TokenBucket, bool) {
+pub fn try_consume(
+    bucket: &TokenBucket,
+    now_ms: impl Into<BucketNumber>,
+    n: f64,
+) -> (TokenBucket, bool) {
     let mut next = refill(bucket, now_ms);
-    let allowed = next.tokens >= n;
+    let allowed = next.tokens.number_or_zero() >= n;
     if allowed {
-        next.tokens -= n;
+        next.tokens = (next.tokens.number_or_zero() - n).into();
     }
     (next, allowed)
 }

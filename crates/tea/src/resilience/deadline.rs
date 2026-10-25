@@ -1,3 +1,4 @@
+pub use crate::work_queue::QueueTime as DeadlineNumber;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -23,7 +24,7 @@ pub struct Deadline {
     pub id: JsText,
     #[serde(rename = "type")]
     kind: Kind,
-    pub at_ms: f64,
+    pub at_ms: DeadlineNumber,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
@@ -37,11 +38,11 @@ impl Deadline {
         self
     }
 }
-pub fn deadline_sub(id: impl Into<JsText>, at_ms: f64) -> Deadline {
+pub fn deadline_sub(id: impl Into<JsText>, at_ms: impl Into<DeadlineNumber>) -> Deadline {
     Deadline {
         id: id.into(),
         kind: Kind::Deadline,
-        at_ms,
+        at_ms: at_ms.into(),
         name: None,
     }
 }
@@ -52,7 +53,7 @@ pub struct DeadlineExceeded {
     #[serde(rename = "type")]
     pub kind: String,
     pub id: JsText,
-    pub at_ms: f64,
+    pub at_ms: DeadlineNumber,
 }
 impl Tagged for DeadlineExceeded {
     fn tag(&self) -> &str {
@@ -67,13 +68,13 @@ pub fn deadline_msg_type(name: Option<&str>) -> String {
 }
 pub fn deadline_exceeded(
     id: impl Into<JsText>,
-    at_ms: f64,
+    at_ms: impl Into<DeadlineNumber>,
     name: Option<&str>,
 ) -> DeadlineExceeded {
     DeadlineExceeded {
         kind: deadline_msg_type(name),
         id: id.into(),
-        at_ms,
+        at_ms: at_ms.into(),
     }
 }
 pub type DeadlinesSub = Sub<Vec<Deadline>>;
@@ -96,21 +97,25 @@ pub fn deadlines_sub<S>(
 }
 
 pub use crate::TimerDeps;
-pub fn next_timer(list: &[Deadline], now_ms: f64) -> Option<TimerDeps<DeadlineExceeded>> {
+pub fn next_timer(
+    list: &[Deadline],
+    now_ms: impl Into<DeadlineNumber>,
+) -> Option<TimerDeps<DeadlineExceeded>> {
+    let now_ms = now_ms.into().number_or_zero();
     let mut soonest: Option<&Deadline> = None;
     for deadline in list {
-        if soonest.is_none_or(|old| deadline.at_ms < old.at_ms) {
+        if soonest.is_none_or(|old| deadline.at_ms.number_or_zero() < old.at_ms.number_or_zero()) {
             soonest = Some(deadline);
         }
     }
     soonest.map(|deadline| TimerDeps {
-        ms: crate::js_math::max(0.0, deadline.at_ms - now_ms),
+        ms: crate::js_math::max(0.0, deadline.at_ms.number_or_zero() - now_ms),
         msg: deadline_exceeded(&deadline.id, deadline.at_ms, deadline.name.as_deref()),
     })
 }
 
 pub type Dispatch<M> = Rc<dyn Fn(M)>;
-pub type ArmTimer<M, C, E> = dyn Fn(&JsText, f64, M, Dispatch<M>) -> Result<C, E>;
+pub type ArmTimer<M, C, E> = dyn Fn(&JsText, DeadlineNumber, M, Dispatch<M>) -> Result<C, E>;
 pub trait Cancel {
     type Error;
     fn cancel(&self) -> Result<(), Self::Error>;
@@ -137,7 +142,7 @@ impl<C: Cancel> DeadlineSubscription<C> {
 pub fn subscribe_with<C: Cancel>(
     mut arm: impl FnMut(
         &JsText,
-        f64,
+        DeadlineNumber,
         DeadlineExceeded,
         Dispatch<DeadlineExceeded>,
     ) -> Result<C, C::Error>,
@@ -170,13 +175,13 @@ pub fn set_timeout_arm_timer<T: crate::timing::Timer + 'static>(
     timer: Rc<T>,
 ) -> impl Fn(
     &JsText,
-    f64,
+    DeadlineNumber,
     DeadlineExceeded,
     Dispatch<DeadlineExceeded>,
 ) -> Result<TimerCancellation<T>, crate::timing::TimerError> {
     move |_id, at_ms, msg, dispatch| {
         let handle = timer.set_timeout(
-            crate::js_math::max(0.0, at_ms - timer.now_ms()),
+            crate::js_math::max(0.0, at_ms.number_or_zero() - timer.now_ms()),
             Box::new(move || {
                 dispatch(msg);
                 Ok(())

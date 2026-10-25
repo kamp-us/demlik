@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeMap};
@@ -25,6 +26,68 @@ impl fmt::Display for JsAccessError {
     }
 }
 impl std::error::Error for JsAccessError {}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectionFailure {
+    pub value: PlainData,
+    pub cause: JsAccessError,
+}
+impl fmt::Display for ProjectionFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.cause.fmt(formatter)
+    }
+}
+impl std::error::Error for ProjectionFailure {}
+
+type Project<'a, V> = dyn Fn(&V) -> Result<PlainData, JsAccessError> + 'a;
+type Decode<'a, V> = dyn Fn(&PlainData) -> Result<V, JsAccessError> + 'a;
+/// Conversion is required only when a typed record is read through a raw
+/// projected value. Ordinary stored reads keep the original typed reference.
+pub struct RecordCodec<'a, V> {
+    project: Rc<Project<'a, V>>,
+    decode: Rc<Decode<'a, V>>,
+}
+impl<'a, V> RecordCodec<'a, V> {
+    pub fn new(
+        project: impl Fn(&V) -> Result<PlainData, JsAccessError> + 'a,
+        decode: impl Fn(&PlainData) -> Result<V, JsAccessError> + 'a,
+    ) -> Self {
+        Self {
+            project: Rc::new(project),
+            decode: Rc::new(decode),
+        }
+    }
+    pub fn refusing() -> Self {
+        Self::new(
+            |_| {
+                Err(JsAccessError {
+                    name: "ProjectionRefused",
+                    message: "record value needs an explicit projection codec".into(),
+                })
+            },
+            |_| {
+                Err(JsAccessError {
+                    name: "ProjectionRefused",
+                    message: "projected value needs an explicit decode codec".into(),
+                })
+            },
+        )
+    }
+    pub fn project(&self, value: &V) -> Result<PlainData, JsAccessError> {
+        (self.project)(value)
+    }
+    pub fn read(&self, value: JsRead<'_, V>) -> Result<V, ProjectionFailure>
+    where
+        V: Clone,
+    {
+        match value {
+            JsRead::Stored(value) => Ok(value.clone()),
+            JsRead::Projected(value) => {
+                (self.decode)(&value).map_err(|cause| ProjectionFailure { value, cause })
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum JsRead<'a, V> {
@@ -111,7 +174,15 @@ impl<E> JsRecord<E> {
         }
     }
     pub fn own_entries(&self) -> impl Iterator<Item = (&JsText, &RecordValue<E>)> {
-        self.own.iter()
+        let mut entries = self.own.iter().collect::<Vec<_>>();
+        entries.sort_by_key(|(key, _)| key.array_index().map_or((1, 0), |index| (0, index)));
+        entries.into_iter()
+    }
+    pub(crate) fn own_value(&self, key: &JsText) -> Option<&RecordValue<E>> {
+        self.own.get(key)
+    }
+    pub(crate) fn define(&mut self, key: JsText, value: RecordValue<E>) {
+        self.own.insert(key, value);
     }
     pub(crate) fn assign(&mut self, key: JsText, value: RecordValue<E>) {
         let setter_visible = match &self.prototype {
@@ -193,10 +264,13 @@ impl<'de, E: Deserialize<'de>> Deserialize<'de> for JsRecord<E> {
 }
 
 pub(crate) trait RecordEntry {
-    type Value: Serialize;
+    type Value;
     const TIMESTAMP_KEY: &'static str;
     fn payload(&self) -> &Self::Value;
     fn timestamp(&self) -> f64;
+    fn timestamp_data(&self) -> PlainData {
+        PlainData::Number(self.timestamp())
+    }
 }
 
 pub(crate) enum Resolved<'a, E> {
@@ -229,7 +303,7 @@ impl<E: Clone> Resolved<'_, E> {
 }
 impl<'a, E: RecordEntry> Resolved<'a, E> {
     pub(crate) fn missing(&self) -> bool {
-        matches!(self, Self::Missing)
+        matches!(self, Self::Missing | Self::Data(PlainData::Undefined))
     }
     pub(crate) fn timestamp(&self) -> Result<f64, JsAccessError> {
         match self {
@@ -253,6 +327,17 @@ impl<E> JsRecord<E> {
     pub(crate) fn resolve(&self, key: &JsText) -> Result<Resolved<'_, E>, JsAccessError>
     where
         E: RecordEntry,
+        E::Value: Serialize,
+    {
+        self.resolve_with(key, plain)
+    }
+    pub(crate) fn resolve_with(
+        &self,
+        key: &JsText,
+        project: impl FnOnce(&E::Value) -> Result<PlainData, JsAccessError>,
+    ) -> Result<Resolved<'_, E>, JsAccessError>
+    where
+        E: RecordEntry,
     {
         if let Some(value) = self.own.get(key) {
             return Ok(value.into());
@@ -260,10 +345,10 @@ impl<E> JsRecord<E> {
         if let Prototype::Injected(value) = &self.prototype {
             let inherited = match value.as_ref() {
                 RecordValue::Entry(entry) if key.as_utf8() == Some("value") => {
-                    Some(plain(entry.payload())?)
+                    Some(project(entry.payload())?)
                 }
                 RecordValue::Entry(entry) if key.as_utf8() == Some(E::TIMESTAMP_KEY) => {
-                    Some(PlainData::Number(entry.timestamp()))
+                    Some(entry.timestamp_data())
                 }
                 RecordValue::Data(PlainData::Object(values)) => values.get(key).cloned(),
                 _ => None,
@@ -322,7 +407,7 @@ fn property(value: &PlainData, name: &str) -> Result<PlainData, JsAccessError> {
     }
 }
 
-fn plain(value: &impl Serialize) -> Result<PlainData, JsAccessError> {
+pub(crate) fn plain(value: &impl Serialize) -> Result<PlainData, JsAccessError> {
     crate::data::plain_data(value).map_err(|error| match error {
         crate::data::DependencyError::ObjectKey => {
             JsAccessError::type_error("JS data records require string keys")

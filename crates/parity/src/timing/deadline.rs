@@ -192,7 +192,7 @@ pub fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
                       dispatch: Dispatch<DeadlineExceeded>|
                       -> Result<Cleanup, TimerError> {
                     arms_count.set(arms_count.get() + 1);
-                    arms.borrow_mut().push(json!({"id":super::text(id),"atMs":super::number(at_ms),"msg":snapshot(&msg),"at":super::number(clock.now.get())}));
+                    arms.borrow_mut().push(json!({"id":super::text(id),"atMs":snapshot(&at_ms),"msg":snapshot(&msg),"at":super::number(clock.now.get())}));
                     if fail_arm == Some(arms_count.get()) {
                         return Err(TimerError::new(format!("arm failed {}", arms_count.get())));
                     }

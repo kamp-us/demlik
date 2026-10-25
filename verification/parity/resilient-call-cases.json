@@ -1,0 +1,3318 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "resilient.passthrough",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.count",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.duration",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxElapsedMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.both-bounds",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxElapsedMs": 20,
+            "maxAttempts": 3
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.unbounded",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "unbounded": true
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.cache",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.deadline",
+      "input": {
+        "config": {
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.rate",
+      "input": {
+        "config": {
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 1
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.circuit",
+      "input": {
+        "config": {
+          "circuit": {
+            "threshold": 2,
+            "cooldownMs": 10
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.all",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "circuit": {
+            "threshold": 2,
+            "cooldownMs": 10
+          },
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 1
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.named",
+      "input": {
+        "config": {
+          "name": "fetch",
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "fetch:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "fetch:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.unicode-name",
+      "input": {
+        "config": {
+          "name": "\u00e7a\u011fr\u0131",
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "\u00e7a\u011fr\u0131:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "\u00e7a\u011fr\u0131:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.full-jitter",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "full",
+            "maxAttempts": 3
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.equal-jitter",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "equal",
+            "unbounded": true
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": {
+              "request": "first"
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "_tag": "offline",
+              "detail": [0, 255]
+            },
+            "at": 1
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "answer": "done"
+            },
+            "at": 2
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "timer",
+            "id": "resilient:retry:10",
+            "at": 5
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": "again",
+            "at": 6
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "settleFailed",
+            "key": "2",
+            "error": {
+              "reason": "caller rejected"
+            },
+            "at": 1001
+          },
+          {
+            "op": "timer",
+            "id": "resilient:deadline:2",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "final",
+            "at": 1003
+          }
+        ],
+        "rng": [0.25, 0.75]
+      }
+    },
+    {
+      "id": "resilient.key-63-6f-6e-73-74-72-75-63-74-6f-72",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "constructor",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "constructor",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "constructor",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "constructor",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-5f-5f-70-72-6f-74-6f-5f-5f",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "__proto__",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "__proto__",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "__proto__",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "__proto__",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-74-6f-53-74-72-69-6e-67",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "toString",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "toString",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "toString",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "toString",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-32",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "2",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "2",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "2",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-31-30",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "10",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "10",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "10",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-d800",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "\ud800",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "\ud800",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "\ud800",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "\ud800",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.key-61-3a-62",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "a:b",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "key": "a:b",
+            "error": {
+              "reason": "offline"
+            },
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "engineOk",
+            "key": "a:b",
+            "value": {
+              "\udfff": "\ud800"
+            },
+            "at": 1001
+          },
+          {
+            "op": "attempt",
+            "key": "a:b",
+            "input": "cached",
+            "at": 1002
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.engine-port_rejected",
+      "input": {
+        "config": {
+          "name": "tool",
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 10
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "work",
+            "at": 0
+          },
+          {
+            "op": "engineErr",
+            "error": {
+              "_tag": "port_rejected",
+              "cause": {
+                "\ud800": "\udfff"
+              },
+              "code": 5
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "engineOk",
+            "value": "recovered",
+            "at": 20
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.engine-deadline_exceeded",
+      "input": {
+        "config": {
+          "name": "tool",
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 10
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "work",
+            "at": 0
+          },
+          {
+            "op": "engineErr",
+            "error": {
+              "_tag": "deadline_exceeded",
+              "cause": {
+                "\ud800": "\udfff"
+              },
+              "code": 5
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "engineOk",
+            "value": "recovered",
+            "at": 20
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.budget-before-cache",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          },
+          "deadline": {
+            "ms": 0
+          },
+          "rateLimit": {
+            "capacity": 1,
+            "refillPerSec": 1
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "input": "ignored",
+            "at": 1
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.negative-budget",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "unbounded": true
+          },
+          "deadline": {
+            "ms": -1
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "ignored",
+            "at": 0
+          },
+          {
+            "op": "resume",
+            "at": 100
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.zero-rate-before-circuit",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "rateLimit": {
+            "capacity": 0,
+            "refillPerSec": 0
+          },
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 0
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "engineErr",
+            "error": {
+              "_tag": "port_rejected",
+              "cause": "offline"
+            },
+            "at": 40
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-undefined",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": {
+              "$undefined": true
+            }
+          },
+          {
+            "op": "attempt",
+            "input": {
+              "$undefined": true
+            },
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": {
+              "$undefined": true
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": {
+              "$undefined": true
+            },
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-null",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": null
+          },
+          {
+            "op": "attempt",
+            "input": null,
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": null,
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": null,
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-false",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": false
+          },
+          {
+            "op": "attempt",
+            "input": false,
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": false,
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": false,
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-zero",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": 0
+          },
+          {
+            "op": "attempt",
+            "input": 0,
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": 0,
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": 0,
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-empty",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": ""
+          },
+          {
+            "op": "attempt",
+            "input": "",
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": "",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": "",
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-lone",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": "\ud800"
+          },
+          {
+            "op": "attempt",
+            "input": "\ud800",
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": "\ud800",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": "\ud800",
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-nan",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "attempt",
+            "input": {
+              "$number": "NaN"
+            },
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": {
+              "$number": "NaN"
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": {
+              "$number": "NaN"
+            },
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.value-infinity",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "runCtor",
+            "input": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "attempt",
+            "input": {
+              "$number": "Infinity"
+            },
+            "at": 0
+          },
+          {
+            "op": "engineOk",
+            "value": {
+              "$number": "Infinity"
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "input": "next",
+            "at": 2
+          },
+          {
+            "op": "err",
+            "error": {
+              "$number": "Infinity"
+            },
+            "at": 3
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.cache-projection-undefined",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 100
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "key": "__proto__",
+            "value": {
+              "$undefined": true
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "value",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.cache-projection-null",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 100
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "key": "__proto__",
+            "value": null,
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "value",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.cache-projection-object",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": 100
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "key": "__proto__",
+            "value": {
+              "value": "nested",
+              "expiresAtMs": 100
+            },
+            "at": 0
+          },
+          {
+            "op": "attempt",
+            "key": "value",
+            "input": "body",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "attempt",
+            "key": "__proto__",
+            "input": "body",
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.backward-clock",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 10
+          },
+          {
+            "op": "err",
+            "error": "backwards",
+            "at": 5
+          },
+          {
+            "op": "attempt",
+            "input": "again",
+            "at": 3
+          },
+          {
+            "op": "fireNext"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.duration-exhausts",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxElapsedMs": 20
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 100
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": 101
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": 122
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.empty-name",
+      "input": {
+        "config": {
+          "name": "",
+          "retry": {
+            "baseMs": 10,
+            "factor": 2,
+            "capMs": 100,
+            "jitter": "none",
+            "maxAttempts": 3
+          },
+          "deadline": {
+            "ms": 50
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": 1
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "roundtrip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-clock-NaN",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-budget-NaN",
+      "input": {
+        "config": {
+          "deadline": {
+            "ms": {
+              "$number": "NaN"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-cache-NaN",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": {
+              "$number": "NaN"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-clock-Infinity",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": {
+              "$number": "Infinity"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-budget-Infinity",
+      "input": {
+        "config": {
+          "deadline": {
+            "ms": {
+              "$number": "Infinity"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-cache-Infinity",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": {
+              "$number": "Infinity"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-clock--Infinity",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": {
+              "$number": "-Infinity"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-budget--Infinity",
+      "input": {
+        "config": {
+          "deadline": {
+            "ms": {
+              "$number": "-Infinity"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "resume",
+            "at": 1000
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1001
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-cache--Infinity",
+      "input": {
+        "config": {
+          "cache": {
+            "ttlMs": {
+              "$number": "-Infinity"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "ok",
+            "value": "cached",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-bucket-NaN",
+      "input": {
+        "config": {
+          "rateLimit": {
+            "capacity": {
+              "$number": "NaN"
+            },
+            "refillPerSec": {
+              "$number": "NaN"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-bucket-Infinity",
+      "input": {
+        "config": {
+          "rateLimit": {
+            "capacity": {
+              "$number": "Infinity"
+            },
+            "refillPerSec": {
+              "$number": "Infinity"
+            }
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-open-clock",
+      "input": {
+        "config": {
+          "circuit": {
+            "threshold": 1,
+            "cooldownMs": 10
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": {
+              "$number": "NaN"
+            }
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.numeric-retry-at",
+      "input": {
+        "config": {
+          "retry": {
+            "baseMs": {
+              "$number": "Infinity"
+            },
+            "factor": 2,
+            "capMs": {
+              "$number": "Infinity"
+            },
+            "jitter": "none",
+            "maxAttempts": 3
+          }
+        },
+        "actions": [
+          {
+            "op": "attempt",
+            "input": "body",
+            "at": 0
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "fireNext"
+          },
+          {
+            "op": "err",
+            "error": "offline",
+            "at": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.error-extra-deadline",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "err",
+            "error": {
+              "_tag": "deadline_exceeded",
+              "id": "handler",
+              "atMs": 7,
+              "cause": {
+                "\ud800": "\udfff"
+              }
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.error-extra-malformed",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "err",
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "payload",
+                  "message": "invalid"
+                }
+              ],
+              "cause": {
+                "body": [0, 255]
+              }
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.error-extra-issue",
+      "operation": "resilientCall",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "err",
+            "error": {
+              "_tag": "malformed_result",
+              "issues": [
+                {
+                  "path": "payload",
+                  "message": "invalid",
+                  "cause": "retain"
+                }
+              ]
+            },
+            "at": 1
+          },
+          {
+            "op": "roundtrip"
+          },
+          {
+            "op": "inspect"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.literal-basic",
+      "input": {
+        "config": {},
+        "actions": [
+          {
+            "op": "attempt",
+            "key": "job",
+            "input": {
+              "value": 3
+            },
+            "at": 10
+          },
+          {
+            "op": "ok",
+            "key": "job",
+            "value": {
+              "answer": 4
+            },
+            "at": 11
+          }
+        ]
+      },
+      "expected": {
+        "name": "resilient",
+        "run": {
+          "cmdType": "resilient_run",
+          "okType": "resilient_run_ok",
+          "errType": "resilient_run_err",
+          "errorTags": ["port_rejected", "deadline_exceeded"]
+        },
+        "rngCalls": 0,
+        "history": [
+          {
+            "state": {
+              "circuit": {
+                "phase": "closed",
+                "failures": 0
+              },
+              "bucket": {
+                "tokens": 1,
+                "capacity": 1,
+                "refillPerSec": 1,
+                "lastRefillMs": 0
+              },
+              "retry": {},
+              "cache": {
+                "entries": {}
+              },
+              "calls": {
+                "job": {
+                  "phase": "running",
+                  "input": {
+                    "value": 3
+                  },
+                  "budget": {
+                    "remainingMs": 0,
+                    "chargingSinceMs": 10
+                  }
+                }
+              },
+              "clockMs": 10
+            },
+            "cmds": [
+              {
+                "type": "resilient_run",
+                "key": "job",
+                "input": {
+                  "value": 3
+                }
+              }
+            ],
+            "same": false,
+            "deadlines": [],
+            "timer": null
+          },
+          {
+            "state": {
+              "circuit": {
+                "phase": "closed",
+                "failures": 0
+              },
+              "bucket": {
+                "tokens": 1,
+                "capacity": 1,
+                "refillPerSec": 1,
+                "lastRefillMs": 0
+              },
+              "retry": {},
+              "cache": {
+                "entries": {}
+              },
+              "calls": {
+                "job": {
+                  "phase": "succeeded",
+                  "result": {
+                    "answer": 4
+                  }
+                }
+              },
+              "clockMs": 11
+            },
+            "cmds": [],
+            "same": false,
+            "deadlines": [],
+            "timer": null,
+            "outcome": {
+              "kind": "done",
+              "value": {
+                "answer": 4
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "resilient.public-helpers",
+      "input": {
+        "config": {
+          "name": "named"
+        },
+        "actions": [
+          {
+            "op": "runDef",
+            "key": "job",
+            "input": {
+              "payload": "typed"
+            }
+          },
+          {
+            "op": "lift"
+          },
+          {
+            "op": "attempt",
+            "key": "job",
+            "input": 1,
+            "at": 10
+          },
+          {
+            "op": "lift"
+          }
+        ]
+      },
+      "expect": {
+        "name": "named",
+        "rngCalls": 0
+      }
+    },
+    {
+      "id": "resilient.undefined-options",
+      "input": {
+        "config": {
+          "name": {
+            "$undefined": true
+          },
+          "retry": {
+            "$undefined": true
+          },
+          "circuit": {
+            "$undefined": true
+          },
+          "rateLimit": {
+            "$undefined": true
+          },
+          "cache": {
+            "$undefined": true
+          },
+          "deadline": {
+            "$undefined": true
+          }
+        },
+        "actions": [
+          {
+            "op": "inspect"
+          },
+          {
+            "op": "runCtor",
+            "input": {
+              "$undefined": true
+            }
+          }
+        ]
+      },
+      "expect": {
+        "name": "resilient",
+        "rngCalls": 0
+      }
+    }
+  ]
+}

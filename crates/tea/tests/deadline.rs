@@ -85,7 +85,10 @@ fn injected_deadline_arms_keep_absolute_targets_and_cleanup_calls_the_host_in_or
         },
     )
     .unwrap();
-    assert_eq!(*armed.borrow(), [("a".into(), 10.0), ("b".into(), 20.0)]);
+    assert_eq!(
+        *armed.borrow(),
+        [("a".into(), 10.0.into()), ("b".into(), 20.0.into())]
+    );
     assert_eq!(*output.borrow(), ["deadline_exceeded", "search_deadline"]);
     cleanup.cancel().unwrap();
     cleanup.cancel().unwrap();

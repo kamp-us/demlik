@@ -50,6 +50,16 @@ impl QueueTime {
     pub fn number(self) -> Option<f64> {
         self.0
     }
+    /// Numeric arithmetic treats a stored JSON null as zero. Serialization
+    /// keeps the original null until an operation produces a new number.
+    pub fn number_or_zero(self) -> f64 {
+        self.0.unwrap_or(0.0)
+    }
+}
+impl PartialEq<f64> for QueueTime {
+    fn eq(&self, other: &f64) -> bool {
+        self.0.is_some_and(|value| value == *other)
+    }
 }
 
 /// `retry` and recovery explicitly assign undefined; a newly enqueued item

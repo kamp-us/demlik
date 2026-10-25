@@ -80,7 +80,9 @@ async fn main() {
                 .unwrap()
                 .unwrap();
             cleanup.cancel().unwrap();
-            let emitted = search.on_flush(&last.state, settled.at_ms).unwrap();
+            let emitted = search
+                .on_flush(&last.state, settled.at_ms.number_or_zero())
+                .unwrap();
             println!("{}", serde_json::to_string(&emitted.commands).unwrap());
         })
         .await;

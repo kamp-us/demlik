@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use serde::{Serialize, ser::SerializeMap};
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{PlainData, Tagged, data::plain_data};
@@ -70,6 +70,11 @@ pub trait CommandSpec {
     const ERROR_TAGS: &'static [&'static str];
     fn parse_input(value: Value) -> Result<Self::Input, SchemaError>;
     fn parse_output(value: Self::RawOutput) -> Result<Self::Output, SchemaError>;
+    /// A declaration with an undefined output can restore its omitted JSON
+    /// field. Required output types keep the default missing-field refusal.
+    fn missing_output() -> Option<Self::Output> {
+        None
+    }
 }
 
 /// A typed command-input record whose effect tag is owned by `Cmd`.
@@ -196,17 +201,22 @@ where
     D::Error: Serialize,
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut record = serializer.serialize_map(Some(if self.at.is_some() { 4 } else { 3 }))?;
-        record.serialize_entry("type", &self.kind)?;
-        record.serialize_entry("cmd", &self.cmd)?;
-        match &self.outcome {
-            Settlement::Ok(value) => record.serialize_entry("value", value)?,
-            Settlement::Err(error) => record.serialize_entry("error", error)?,
-        }
+        let mut record = indexmap::IndexMap::from([
+            ("type".into(), PlainData::String(self.kind.as_str().into())),
+            (
+                "cmd".into(),
+                plain_data(&self.cmd).map_err(serde::ser::Error::custom)?,
+            ),
+        ]);
+        let (key, value) = match &self.outcome {
+            Settlement::Ok(value) => ("value", plain_data(value)),
+            Settlement::Err(error) => ("error", plain_data(error)),
+        };
+        record.insert(key.into(), value.map_err(serde::ser::Error::custom)?);
         if let Some(at) = self.at {
-            record.serialize_entry("at", &at)?;
+            record.insert("at".into(), PlainData::Number(at));
         }
-        record.end()
+        PlainData::Object(record).serialize(serializer)
     }
 }
 impl<'de, D: CommandSpec> serde::Deserialize<'de> for Settled<D>
@@ -253,11 +263,10 @@ where
         .map(serde_json::from_value)
         .transpose()?;
     let outcome = if kind == definition.ok_type() {
-        Settlement::Ok(serde_json::from_value(
-            record
-                .remove("value")
-                .ok_or_else(|| wire_error("missing field `value`"))?,
-        )?)
+        Settlement::Ok(match record.remove("value") {
+            Some(value) => serde_json::from_value(value)?,
+            None => D::missing_output().ok_or_else(|| wire_error("missing field `value`"))?,
+        })
     } else if kind == definition.err_type() {
         let error = record
             .remove("error")
@@ -462,11 +471,9 @@ impl<D: CommandSpec> CmdDef<D> {
         let definition = cmd.definition();
         Ok(Some(match completion {
             Outcome::Err { error } => {
-                let failure =
-                    serde_json::to_value(&error).map_err(CommandContractError::serialization)?;
-                if !failure
-                    .get("_tag")
-                    .and_then(Value::as_str)
+                let failure = plain_data(&error).map_err(CommandContractError::serialization)?;
+                if !failure_tag(&failure)
+                    .and_then(crate::data::JsText::as_utf8)
                     .is_some_and(|tag| D::ERROR_TAGS.contains(&tag))
                 {
                     return Err(CommandContractError::UndeclaredFailure {
@@ -663,7 +670,7 @@ pub enum CommandContractError {
     },
     UndeclaredFailure {
         cmd_type: String,
-        failure: Value,
+        failure: PlainData,
         declared: Vec<String>,
     },
     Outcome {
@@ -680,6 +687,37 @@ pub enum CommandContractError {
     NullDispatch,
 }
 impl CommandContractError {
+    pub fn message_text(&self) -> crate::data::JsText {
+        let Self::UndeclaredFailure {
+            cmd_type,
+            failure,
+            declared,
+        } = self
+        else {
+            return self.to_string().into();
+        };
+        let mut units = format!("@demlik/tea: the \"{cmd_type}\" handler failed with ")
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        if let Some(tag) = failure_tag(failure) {
+            units.extend("_tag \"".encode_utf16());
+            units.extend_from_slice(tag.as_units());
+            units.push(34);
+        } else {
+            units.extend("a value with no _tag".encode_utf16());
+        }
+        let declared = if declared.is_empty() {
+            "none".into()
+        } else {
+            declared
+                .iter()
+                .map(|tag| format!("\"{tag}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        units.extend(format!(", which its Cmd.define does not declare (declared: {declared}). An undeclared failure goes to the error sink, never to \"{cmd_type}_err\".").encode_utf16());
+        crate::data::JsText::from_units(units)
+    }
     fn serialization(error: impl fmt::Display) -> Self {
         Self::Serialization {
             message: error.to_string(),
@@ -713,29 +751,8 @@ impl fmt::Display for CommandContractError {
                 f,
                 "@demlik/tea: {location} validated asynchronously. tea checks schemas synchronously, so a schema whose `~standard.validate` returns a Promise cannot be used here."
             ),
-            Self::UndeclaredFailure {
-                cmd_type,
-                failure,
-                declared,
-            } => {
-                let description = failure
-                    .get("_tag")
-                    .and_then(Value::as_str)
-                    .map(|tag| format!("_tag \"{tag}\""))
-                    .unwrap_or_else(|| "a value with no _tag".into());
-                let declared = if declared.is_empty() {
-                    "none".into()
-                } else {
-                    declared
-                        .iter()
-                        .map(|tag| format!("\"{tag}\""))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
-                write!(
-                    f,
-                    "@demlik/tea: the \"{cmd_type}\" handler failed with {description}, which its Cmd.define does not declare (declared: {declared}). An undeclared failure goes to the error sink, never to \"{cmd_type}_err\"."
-                )
+            Self::UndeclaredFailure { .. } => {
+                f.write_str(&String::from_utf16_lossy(self.message_text().as_units()))
             }
             Self::Outcome { cmd_type, detail } => write!(
                 f,
@@ -759,41 +776,64 @@ impl fmt::Display for CommandContractError {
 impl std::error::Error for CommandContractError {}
 impl Serialize for CommandContractError {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut value =
-            json!({ "name": self.name(), "_tag": self.name(), "message": self.to_string() });
+        let mut value = indexmap::IndexMap::from([
+            ("name".into(), PlainData::String(self.name().into())),
+            ("_tag".into(), PlainData::String(self.name().into())),
+            ("message".into(), PlainData::String(self.message_text())),
+        ]);
         if matches!(self, Self::NullDispatch) {
-            value
-                .as_object_mut()
-                .expect("error is a record")
-                .remove("_tag");
+            value.shift_remove("_tag");
         }
         match self {
             Self::Input { cmd_type, issues } => {
-                value["cmdType"] = json!(cmd_type);
-                value["issues"] = json!(issues);
+                value.insert("cmdType".into(), PlainData::String(cmd_type.into()));
+                value.insert(
+                    "issues".into(),
+                    plain_data(issues).map_err(serde::ser::Error::custom)?,
+                );
             }
-            Self::AsyncSchema { location } => value["where"] = json!(location),
+            Self::AsyncSchema { location } => {
+                value.insert("where".into(), PlainData::String(location.into()));
+            }
             Self::UndeclaredFailure {
                 cmd_type,
                 failure,
                 declared,
             } => {
-                value["cmdType"] = json!(cmd_type);
-                value["failure"] = failure.clone();
-                value["declared"] = json!(declared);
+                value.insert("cmdType".into(), PlainData::String(cmd_type.into()));
+                value.insert("failure".into(), failure.clone());
+                value.insert(
+                    "declared".into(),
+                    plain_data(declared).map_err(serde::ser::Error::custom)?,
+                );
             }
-            Self::Outcome { cmd_type, .. } => value["cmdType"] = json!(cmd_type),
+            Self::Outcome { cmd_type, .. } => {
+                value.insert("cmdType".into(), PlainData::String(cmd_type.into()));
+            }
             Self::CompletionMismatch {
                 cmd_type,
                 completion_type,
             } => {
-                value["cmdType"] = json!(cmd_type);
-                value["completionType"] = json!(completion_type);
+                value.insert("cmdType".into(), PlainData::String(cmd_type.into()));
+                value.insert(
+                    "completionType".into(),
+                    PlainData::String(completion_type.into()),
+                );
             }
             Self::Serialization { .. } => {}
             Self::NullDispatch => {}
         }
-        value.serialize(serializer)
+        PlainData::Object(value).serialize(serializer)
+    }
+}
+
+fn failure_tag(value: &PlainData) -> Option<&crate::data::JsText> {
+    let PlainData::Object(record) = value else {
+        return None;
+    };
+    match record.get("_tag") {
+        Some(PlainData::String(value)) => Some(value),
+        _ => None,
     }
 }
 
@@ -907,7 +947,7 @@ impl<'a> CmdContract<'a> {
             {
                 return Err(CommandContractError::UndeclaredFailure {
                     cmd_type: definition.name.clone(),
-                    failure: failure.clone(),
+                    failure: PlainData::from(failure),
                     declared: definition.error_tags.clone(),
                 });
             }

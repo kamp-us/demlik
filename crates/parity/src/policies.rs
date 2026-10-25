@@ -32,13 +32,13 @@ impl CircuitInitial {
     fn state(self) -> CircuitState {
         match self {
             Self::Closed { failures } => CircuitState::Closed {
-                failures: failures.value(),
+                failures: failures.value().into(),
             },
             Self::Open { opened_at_ms } => CircuitState::Open {
-                opened_at_ms: opened_at_ms.value(),
+                opened_at_ms: opened_at_ms.value().into(),
             },
             Self::HalfOpen { probes } => CircuitState::HalfOpen {
-                probes: probes.value(),
+                probes: probes.value().into(),
             },
         }
     }
@@ -46,13 +46,13 @@ impl CircuitInitial {
 fn circuit_value(state: &CircuitState) -> Value {
     match state {
         CircuitState::Closed { failures } => {
-            json!({"phase":"closed", "failures":encode_number(*failures)})
+            json!({"phase":"closed", "failures":stored_number(*failures)})
         }
         CircuitState::Open { opened_at_ms } => {
-            json!({"phase":"open", "openedAtMs":encode_number(*opened_at_ms)})
+            json!({"phase":"open", "openedAtMs":stored_number(*opened_at_ms)})
         }
         CircuitState::HalfOpen { probes } => {
-            json!({"phase":"half_open", "probes":encode_number(*probes)})
+            json!({"phase":"half_open", "probes":stored_number(*probes)})
         }
     }
 }
@@ -162,10 +162,10 @@ struct BucketInitial {
 impl BucketInitial {
     fn state(self) -> demlik_tea::resilience::rate_limit::TokenBucket {
         demlik_tea::resilience::rate_limit::TokenBucket {
-            tokens: self.tokens.value(),
-            capacity: self.capacity.value(),
-            refill_per_sec: self.refill_per_sec.value(),
-            last_refill_ms: self.last_refill_ms.value(),
+            tokens: self.tokens.value().into(),
+            capacity: self.capacity.value().into(),
+            refill_per_sec: self.refill_per_sec.value().into(),
+            last_refill_ms: self.last_refill_ms.value().into(),
         }
     }
 }
@@ -189,7 +189,7 @@ struct BucketInput {
     steps: Vec<BucketStep>,
 }
 fn bucket_value(state: &demlik_tea::resilience::rate_limit::TokenBucket) -> Value {
-    json!({"tokens":encode_number(state.tokens), "capacity":encode_number(state.capacity), "refillPerSec":encode_number(state.refill_per_sec), "lastRefillMs":encode_number(state.last_refill_ms)})
+    json!({"tokens":stored_number(state.tokens), "capacity":stored_number(state.capacity), "refillPerSec":stored_number(state.refill_per_sec), "lastRefillMs":stored_number(state.last_refill_ms)})
 }
 fn bucket(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, String> {
     let input: BucketInput = serde_json::from_value(input).map_err(|error| error.to_string())?;
@@ -326,7 +326,7 @@ impl CacheInitial {
                             key,
                             demlik_tea::resilience::cache::CacheEntry {
                                 value: entry.value,
-                                expires_at_ms: entry.expires_at_ms.value(),
+                                expires_at_ms: entry.expires_at_ms.value().into(),
                             },
                         )
                     })
@@ -641,4 +641,8 @@ fn idempotency(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
         trace.push(json!({"state":idempotency_value(&state)}));
     }
     Ok(json!({"trace":trace}))
+}
+
+fn stored_number(value: demlik_tea::work_queue::QueueTime) -> Value {
+    value.number().map_or(Value::Null, encode_number)
 }

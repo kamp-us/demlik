@@ -102,7 +102,7 @@ fn a_declared_command_stays_data_and_its_engine_edge_mints_a_parsed_stamped_mess
         serde_json::to_value(settled).unwrap(),
         json!({
             "type": "fetch_ok", "cmd": { "type": "fetch", "url": "/users" },
-            "value": { "body": "kept" }, "at": 42.0,
+            "value": { "body": "kept" }, "at": 42,
         })
     );
 }
@@ -434,7 +434,7 @@ fn restoring_a_raw_failure_channel_keeps_kernel_malformed_results_distinct() {
             Ok(value)
         }
     }
-    let wire = json!({ "type": "fetch_err", "cmd": { "type": "fetch" }, "error": { "_tag": "malformed_result", "issues": [{ "path": "body", "message": "Expected string" }] }, "at": 3.0 });
+    let wire = json!({ "type": "fetch_err", "cmd": { "type": "fetch" }, "error": { "_tag": "malformed_result", "issues": [{ "path": "body", "message": "Expected string" }] }, "at": 3 });
     let restored: Settled<RawCommand> = serde_json::from_value(wire.clone()).unwrap();
     assert!(matches!(
         restored.outcome(),

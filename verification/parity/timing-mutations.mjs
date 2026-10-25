@@ -52,8 +52,8 @@ const mutations = [
   {
     name: "deadline-restarts-full-delay",
     file: "crates/tea/src/resilience/deadline.rs",
-    before: "crate::js_math::max(0.0, at_ms - timer.now_ms())",
-    after: "crate::js_math::max(0.0, at_ms)",
+    before: "crate::js_math::max(0.0, at_ms.number_or_zero() - timer.now_ms())",
+    after: "crate::js_math::max(0.0, at_ms.number_or_zero())",
     witness: "timing.deadline-default",
   },
   {
