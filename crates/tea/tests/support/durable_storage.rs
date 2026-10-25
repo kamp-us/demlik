@@ -71,10 +71,10 @@ impl MemoryStorage {
         }
     }
     fn value(&self, key: &JsText) -> PlainData {
-        if let Some(staged) = &self.staged {
-            if let Some(value) = staged.borrow().get(key) {
-                return value.clone().unwrap_or(PlainData::Undefined);
-            }
+        if let Some(staged) = &self.staged
+            && let Some(value) = staged.borrow().get(key)
+        {
+            return value.clone().unwrap_or(PlainData::Undefined);
         }
         self.cells
             .borrow()

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
+import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
@@ -42,6 +43,7 @@ const flowBinaryArgument = args.indexOf("--flow-bin");
 const pollerBinaryArgument = args.indexOf("--poller-bin");
 const journalBinaryArgument = args.indexOf("--journal-bin");
 const journalRemoteBinaryArgument = args.indexOf("--journal-remote-bin");
+const durableObjectBinaryArgument = args.indexOf("--durable-object-bin");
 const jsonTextBinaryArgument = args.indexOf("--json-text-bin");
 const recorderBinaryArgument = args.indexOf("--recorder-bin");
 const reconcilerBinaryArgument = args.indexOf("--reconciler-bin");
@@ -474,6 +476,32 @@ if (!mutationSuite) {
     });
   }
 }
+let durableObject = { cases: 0, passed: 0, nativeEvidence: {} };
+if (!mutationSuite) {
+  try {
+    durableObject = await durableObjectParity(cargo, {
+      binary:
+        durableObjectBinaryArgument === -1
+          ? undefined
+          : path.resolve(args[durableObjectBinaryArgument + 1]),
+      reportFile:
+        reportArgument === -1
+          ? undefined
+          : path.join(
+              path.dirname(reportFile),
+              `${path.basename(reportFile, ".json")}-durable-object.json`,
+            ),
+    });
+    failures.push(...durableObject.failures);
+  } catch (error) {
+    suiteFailures++;
+    failures.push({
+      id: "durable-object.verification",
+      operation: "tea.durable-object",
+      message: error.message,
+    });
+  }
+}
 let jsonText = { cases: 0, passed: 0, nativeEvidence: {} };
 if (!mutationSuite) {
   try {
@@ -810,6 +838,7 @@ const report = {
     poller.cases +
     journal.cases +
     journalRemote.cases +
+    durableObject.cases +
     jsonText.cases +
     recorder.cases +
     recordedRuntime.cases +
@@ -834,6 +863,7 @@ const report = {
     poller.passed +
     journal.passed +
     journalRemote.passed +
+    durableObject.passed +
     jsonText.passed +
     recorder.passed +
     recordedRuntime.passed +
@@ -859,6 +889,7 @@ const report = {
       ...(poller.passed ? ["tea.poller"] : []),
       ...(journal.passed ? ["tea.journal"] : []),
       ...(journalRemote.passed ? ["tea.journal-remote"] : []),
+      ...(durableObject.passed ? ["tea.durable-object"] : []),
       ...(jsonText.passed ? ["tea.json-text"] : []),
       ...(recorder.passed ? ["tea.recorder"] : []),
       ...(recordedRuntime.passed ? ["tea.recorder.runtime"] : []),
@@ -904,6 +935,11 @@ const report = {
     failures: undefined,
   },
   jsonText: { ...jsonText, nativeEvidence: undefined, failures: undefined },
+  durableObject: {
+    ...durableObject,
+    nativeEvidence: undefined,
+    failures: undefined,
+  },
   recorder: { ...recorder, nativeEvidence: undefined, failures: undefined },
   recordedRuntime: { ...recordedRuntime, nativeEvidence: undefined },
   reconciler: { ...reconciler, nativeEvidence: undefined, failures: undefined },
@@ -956,6 +992,7 @@ const report = {
     ...poller.nativeEvidence,
     ...journal.nativeEvidence,
     ...journalRemote.nativeEvidence,
+    ...durableObject.nativeEvidence,
     ...jsonText.nativeEvidence,
     ...recorder.nativeEvidence,
     ...recordedRuntime.nativeEvidence,

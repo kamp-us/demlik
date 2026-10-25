@@ -1,0 +1,365 @@
+{
+  "scope": "Combined boundary gate, API foundation and numeric Durable Object store registration. Full Rust port remains incomplete.",
+  "base": "082fe483067b9c000cf6cfaea68abbdfbb4d6e6a",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "referenceChanges": [],
+  "acceptance": {
+    "pairedCases": 10223,
+    "passed": 10223,
+    "behaviorFailures": 0,
+    "nativeAndDocTests": 397,
+    "gatePairs": 129,
+    "gateProtocolRefusals": 5,
+    "apiFoundationPairs": 284,
+    "apiProtocolRefusals": 11,
+    "durableObjectPairs": 167,
+    "durableObjectActions": 1122,
+    "compiledGateFaultsDetected": 14,
+    "compiledApiFaultsDetected": 21,
+    "compiledDoFaultsDetected": 4,
+    "doFaultDetectionCounts": [
+      45,
+      2,
+      47,
+      37
+    ],
+    "coverageMapped": 650,
+    "inheritedMemberReferences": 14,
+    "coverageGapCount": 2810,
+    "completeExitCode": 1
+  },
+  "preservedOpenGaps": [
+    {
+      "id": "raw-fencing-version",
+      "status": "OPEN",
+      "consequence": "canonical Fencing/lease currently carries f64, so externally seeded nonnumeric source versions cannot yet pass through; fenced capabilities must not be mapped as full strict 1:1",
+      "cases": [
+        {
+          "id": "do.OPEN.raw-version-0",
+          "script": {
+            "mode": "snapshot",
+            "config": {
+              "key": null,
+              "fenced": true,
+              "parse": "default",
+              "serialize": "default"
+            },
+            "models": [],
+            "cells": [
+              {
+                "key": "@@state@@version",
+                "value": "1"
+              }
+            ],
+            "actions": [
+              {
+                "op": "loadFenced"
+              },
+              {
+                "op": "cells"
+              }
+            ]
+          },
+          "source": {
+            "comparison": [
+              {
+                "result": {
+                  "ok": true,
+                  "value": {
+                    "raw": null,
+                    "version": "1"
+                  }
+                },
+                "calls": [
+                  {
+                    "op": "get",
+                    "key": "@@state@@version"
+                  },
+                  {
+                    "op": "get",
+                    "key": "@@state"
+                  }
+                ],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    "1"
+                  ]
+                ]
+              },
+              {
+                "result": {
+                  "ok": true,
+                  "value": [
+                    [
+                      "@@state@@version",
+                      "1"
+                    ]
+                  ]
+                },
+                "calls": [],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    "1"
+                  ]
+                ]
+              }
+            ],
+            "diagnostics": [],
+            "observedSourceCalls": [
+              "doStore",
+              "FencedStore.loadFenced"
+            ]
+          },
+          "native": {
+            "comparison": [
+              {
+                "result": {
+                  "ok": false,
+                  "error": {
+                    "kind": "invalidVersion",
+                    "raw": "1"
+                  }
+                },
+                "calls": [
+                  {
+                    "op": "get",
+                    "key": "@@state@@version"
+                  },
+                  {
+                    "op": "get",
+                    "key": "@@state"
+                  }
+                ],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    "1"
+                  ]
+                ]
+              },
+              {
+                "result": {
+                  "ok": true,
+                  "value": [
+                    [
+                      "@@state@@version",
+                      "1"
+                    ]
+                  ]
+                },
+                "calls": [],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    "1"
+                  ]
+                ]
+              }
+            ],
+            "diagnostics": [
+              {
+                "kind": "invalidVersion",
+                "raw": "1"
+              }
+            ],
+            "observedRustCalls": [
+              "durable_object::do_store",
+              "durable_object::DoStore::fenced",
+              "demlik_tea::storage::Fencing::load_fenced"
+            ]
+          }
+        },
+        {
+          "id": "do.OPEN.raw-version-1",
+          "script": {
+            "mode": "snapshot",
+            "config": {
+              "key": null,
+              "fenced": true,
+              "parse": "default",
+              "serialize": "default"
+            },
+            "models": [],
+            "cells": [
+              {
+                "key": "@@state@@version",
+                "value": true
+              }
+            ],
+            "actions": [
+              {
+                "op": "loadFenced"
+              },
+              {
+                "op": "cells"
+              }
+            ]
+          },
+          "source": {
+            "comparison": [
+              {
+                "result": {
+                  "ok": true,
+                  "value": {
+                    "raw": null,
+                    "version": true
+                  }
+                },
+                "calls": [
+                  {
+                    "op": "get",
+                    "key": "@@state@@version"
+                  },
+                  {
+                    "op": "get",
+                    "key": "@@state"
+                  }
+                ],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    true
+                  ]
+                ]
+              },
+              {
+                "result": {
+                  "ok": true,
+                  "value": [
+                    [
+                      "@@state@@version",
+                      true
+                    ]
+                  ]
+                },
+                "calls": [],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    true
+                  ]
+                ]
+              }
+            ],
+            "diagnostics": [],
+            "observedSourceCalls": [
+              "doStore",
+              "FencedStore.loadFenced"
+            ]
+          },
+          "native": {
+            "comparison": [
+              {
+                "result": {
+                  "ok": false,
+                  "error": {
+                    "kind": "invalidVersion",
+                    "raw": true
+                  }
+                },
+                "calls": [
+                  {
+                    "op": "get",
+                    "key": "@@state@@version"
+                  },
+                  {
+                    "op": "get",
+                    "key": "@@state"
+                  }
+                ],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    true
+                  ]
+                ]
+              },
+              {
+                "result": {
+                  "ok": true,
+                  "value": [
+                    [
+                      "@@state@@version",
+                      true
+                    ]
+                  ]
+                },
+                "calls": [],
+                "callbacks": [],
+                "cells": [
+                  [
+                    "@@state@@version",
+                    true
+                  ]
+                ]
+              }
+            ],
+            "diagnostics": [
+              {
+                "kind": "invalidVersion",
+                "raw": true
+              }
+            ],
+            "observedRustCalls": [
+              "durable_object::do_store",
+              "durable_object::DoStore::fenced",
+              "demlik_tea::storage::Fencing::load_fenced"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "qualifications": [
+    "native fixture explicitly submits borrowed futures at its host seam; controlled LocalSet traces do not establish arbitrary Ready-future/join/select/custom-executor ordering. These paired Store actions are not additional Promise-vs-Effect runtime cases."
+  ],
+  "integration": [
+    "Preserved all pre-existing verification commands, added gate/API/DO registration and their controls.",
+    "Shared compiled-trace adapter retains openGaps and source-owned caller-host qualifications.",
+    "Three Rust1.99 Clippy style repairs collapse nested guards without changing evaluation order or suppressing lints.",
+    "Scope-count/recorder integration previously passed its full composition, evidence guards and31 controls in d0e57de."
+  ],
+  "artifactIntegrity": {
+    "baselineBinariesUnchangedAcrossControls": true,
+    "baselineAndMutationTargetsSeparate": true,
+    "gateBinarySha256": "ff42fe26b5655447daec785033bd609906f9d13e8478b24a5684733db5e0c0bb",
+    "apiBinarySha256": "4b8b3b0e17ebefc73f9645dd86bd2c003af8291979dcc2ec6ffac84189ded1c9",
+    "doBinarySha256": "c194f11824332b3bd67e0b00483dad6d1415452867f7f13e19a7462ee6bdc6f6",
+    "combinedReportSha256": "266a01666a1a11eaf5330b2309f58d3427ac88a9a5b4cdcc6673cd5af93bec23"
+  },
+  "logs": {
+    "native": {
+      "path": "/private/tmp/demlik-gate-api-do-main-native-01a16c9d-r3.log",
+      "sha256": "59fd92f79d9e7000a09f31c13e10fc30f5912c745fb11f8f5178dcb0ba5ed304"
+    },
+    "static": {
+      "path": "/private/tmp/demlik-gate-api-do-main-static-01a16c9d-r3.log",
+      "sha256": "e8dc0f75debc4543d2451c2afb6dc440cf14b94625fa5bc1a6f4746701976812"
+    },
+    "complete": {
+      "path": "/private/tmp/demlik-gate-api-do-main-complete-01a16c9d-r3.log",
+      "sha256": "fde2d000b866f1e4b6c8324292d4dd4b0b67fd3425dcb77b5cbe9d15e821b4bc"
+    },
+    "gateControls": {
+      "path": "/private/tmp/demlik-gate-api-do-main-gate-controls-01a16c9d.log",
+      "sha256": "95fa1ca976410c4b05ad958132ad286e9682f4dd81efa0582b246cec78ca46fd"
+    },
+    "apiControls": {
+      "path": "/private/tmp/demlik-gate-api-do-main-api-controls-01a16c9d.log",
+      "sha256": "7b9c79a3c888eff4f4099d4fd09c4f2c8b0d5bb9256792cda5ac26da11a571f1"
+    },
+    "doControls": {
+      "path": "/private/tmp/demlik-gate-api-do-main-do-controls-01a16c9d.log",
+      "sha256": "2c3d95c57ca966ff9e9daf9b38ce332a146d7fa55d1159258dea1bc95b938ccd"
+    }
+  }
+}

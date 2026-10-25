@@ -2117,8 +2117,10 @@ export async function verifyDurableObject(
     },
     binary: { path: executable, sha256: digest(executable) },
     compared: cases.length,
+    passed: cases.length - mismatches.length,
     actions: cases.reduce((sum, item) => sum + item.script.actions.length, 0),
     mismatches,
+    failures: mismatches,
     controls:
       mutationCheck && !mismatches.length
         ? controls(
@@ -2130,6 +2132,7 @@ export async function verifyDurableObject(
     cases: cases.map((item, index) => ({
       ...item,
       ...results[index],
+      equal: !mismatches.some((failure) => failure.id === item.id),
       source: source[index],
       functions: [...new Set(results[index].observedRustCalls)].sort(),
     })),

@@ -257,10 +257,10 @@ impl<'a, S: Tagged, M: Tagged, C, U: Subscription, X, P: DurableObjectStorage + 
             }
         }
         .map_err(DoStoreError::Fold)?;
-        if !self.core.ready_fired.replace(true) {
-            if let Some(ready) = &self.core.options.on_ready {
-                ready(Arc::clone(&state)).map_err(DoStoreError::Ready)?;
-            }
+        if !self.core.ready_fired.replace(true)
+            && let Some(ready) = &self.core.options.on_ready
+        {
+            ready(Arc::clone(&state)).map_err(DoStoreError::Ready)?;
         }
         Ok(SnapshotInput::Recovered(state))
     }
@@ -325,10 +325,10 @@ impl<
             )
             .await?;
             let state = core.latest_state.borrow().clone();
-            if seq - core.snapshot_seq.get() >= core.every {
-                if let Some(state) = state {
-                    core.write_snapshot(seq, state).await?;
-                }
+            if seq - core.snapshot_seq.get() >= core.every
+                && let Some(state) = state
+            {
+                core.write_snapshot(seq, state).await?;
             }
             Ok(())
         })

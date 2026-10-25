@@ -11,6 +11,11 @@ const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
 const suites = [
   {
+    name: "api-foundation",
+    driver: "api_foundation_driver",
+    script: "graph-api-foundation.mts",
+  },
+  {
     name: "boundary-gate",
     driver: "boundary_gate_driver",
     script: "graph-boundary-gate.mts",
@@ -155,6 +160,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "api_foundation_driver",
   "boundary_gate_driver",
   "scope_count_driver",
   "boundary_render_driver",
