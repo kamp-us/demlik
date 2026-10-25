@@ -182,3 +182,82 @@ fn symlink_refusal_keeps_both_raw_paths_and_node_target_before_path_precedence()
     assert_eq!(path.units(), &[116, 0xd800]);
     assert_eq!(destination.units(), &[100, 0xdfff]);
 }
+
+#[test]
+fn finally_cleanup_controls_input_classification_without_discarding_the_operation() {
+    use demlik_code_graph::{api::map::api_subpaths, text::JsValue};
+    let refusal = || api_subpaths(&"/package".into(), &JsValue::parse("{}").unwrap()).unwrap_err();
+    assert!(refusal().is_input());
+    let error = ApiError::OperationAndCleanup {
+        operation: Box::new(ApiError::Io {
+            path: "operation".into(),
+            source: io::Error::from(io::ErrorKind::PermissionDenied),
+        }),
+        cleanup: Box::new(refusal()),
+    };
+    assert!(error.is_input());
+    let ApiError::OperationAndCleanup { operation, cleanup } = &error else {
+        panic!("lost causes")
+    };
+    assert!(std::ptr::eq(error.visible(), cleanup.as_ref()));
+    assert!(
+        matches!(operation.as_ref(),ApiError::Io{source,..} if source.kind()==io::ErrorKind::PermissionDenied)
+    );
+    let nested = ApiError::OperationAndCleanup {
+        operation: Box::new(refusal()),
+        cleanup: Box::new(ApiError::OperationAndCleanup {
+            operation: Box::new(error),
+            cleanup: Box::new(ApiError::Io {
+                path: "cleanup".into(),
+                source: io::Error::from(io::ErrorKind::NotFound),
+            }),
+        }),
+    };
+    assert!(!nested.is_input());
+    assert!(
+        matches!(nested.visible(),ApiError::Io{source,..} if source.kind()==io::ErrorKind::NotFound)
+    );
+}
+
+#[test]
+fn ordinary_callback_error_keeps_raw_message_and_original_cause_across_a_worker() {
+    use demlik_code_graph::api::map::ApiCallbackError;
+    use std::sync::Arc;
+    #[derive(Debug)]
+    struct ToolCause {
+        marker: Arc<()>,
+    }
+    impl std::fmt::Display for ToolCause {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("original tooling failure")
+        }
+    }
+    impl Error for ToolCause {}
+    let marker = Arc::new(());
+    let shared = Arc::clone(&marker);
+    let message = JsString::from_units(
+        "ApiInputError: callback "
+            .encode_utf16()
+            .chain([0xd800, 10, 9, 0x85])
+            .collect(),
+    );
+    let raw = message.clone();
+    let error = std::thread::spawn(move || {
+        ApiError::Callback(ApiCallbackError::new(raw).with_cause(ToolCause { marker: shared }))
+    })
+    .join()
+    .unwrap();
+    assert_eq!(error.name(), "Error");
+    assert_eq!(error.message(), message);
+    assert!(!error.is_input());
+    let cause = error
+        .source()
+        .unwrap()
+        .downcast_ref::<ApiCallbackError>()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<ToolCause>()
+        .unwrap();
+    assert!(Arc::ptr_eq(&marker, &cause.marker));
+}

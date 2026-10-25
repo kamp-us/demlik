@@ -38,6 +38,40 @@ impl std::error::Error for ApiInputError {
     }
 }
 
+#[derive(Debug)]
+pub struct ApiCallbackError {
+    message: JsString,
+    cause: Option<Box<dyn std::error::Error + Send>>,
+}
+impl ApiCallbackError {
+    pub fn new(message: JsString) -> Self {
+        Self {
+            message,
+            cause: None,
+        }
+    }
+    pub fn with_cause(mut self, cause: impl std::error::Error + Send + 'static) -> Self {
+        self.cause = Some(Box::new(cause));
+        self
+    }
+    pub fn name(&self) -> &'static str {
+        "Error"
+    }
+    pub fn message(&self) -> &JsString {
+        &self.message
+    }
+}
+impl std::fmt::Display for ApiCallbackError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message.to_lossy())
+    }
+}
+impl std::error::Error for ApiCallbackError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.as_ref().map(|cause| cause.as_ref() as _)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApiArgumentLocation {
     Argument(usize),
@@ -171,6 +205,7 @@ impl std::error::Error for ApiSchemaError {}
 #[derive(Debug)]
 pub enum ApiError {
     Input(ApiInputError),
+    Callback(ApiCallbackError),
     Argument(ApiArgumentError),
     TypeError(RecordTypeError),
     Io {
@@ -189,9 +224,19 @@ pub enum ApiError {
     },
 }
 impl ApiError {
+    pub fn visible(&self) -> &Self {
+        match self {
+            Self::OperationAndCleanup { cleanup, .. } => cleanup.visible(),
+            error => error,
+        }
+    }
+    pub fn is_input(&self) -> bool {
+        matches!(self.visible(), Self::Input(_))
+    }
     pub fn name(&self) -> &'static str {
         match self {
             Self::Input(error) => error.name(),
+            Self::Callback(error) => error.name(),
             Self::Argument(error) => error.name(),
             Self::TypeError(error) => error.name(),
             Self::OperationAndCleanup { cleanup, .. } => cleanup.name(),
@@ -201,6 +246,7 @@ impl ApiError {
     pub fn message(&self) -> JsString {
         match self {
             Self::Input(error) => error.message().clone(),
+            Self::Callback(error) => error.message().clone(),
             Self::Argument(error) => error.message().clone(),
             Self::TypeError(error) => error.message().clone(),
             Self::Io { source, .. } | Self::Symlink { source, .. } => source.to_string().into(),
@@ -213,6 +259,7 @@ impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Input(error) => error.fmt(f),
+            Self::Callback(error) => error.fmt(f),
             Self::Argument(error) => error.fmt(f),
             Self::TypeError(error) => error.fmt(f),
             Self::Io { path, source } => write!(f, "{}: {source}", path.to_lossy()),
@@ -237,6 +284,7 @@ impl std::error::Error for ApiError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
             Self::Input(error) => error,
+            Self::Callback(error) => error,
             Self::Argument(error) => error,
             Self::TypeError(error) => error,
             Self::Io { source, .. } | Self::Symlink { source, .. } => source,
