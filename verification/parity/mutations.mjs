@@ -87,15 +87,15 @@ const mutations = [
   {
     name: "circuit-excludes-cooldown-edge",
     file: "crates/tea/src/resilience/circuit_breaker.rs",
-    before: "now_ms - opened_at_ms >= policy.cooldown_ms",
-    after: "now_ms - opened_at_ms > policy.cooldown_ms",
+    before: "now_ms - opened_at_ms.number_or_zero() >= policy.cooldown_ms",
+    after: "now_ms - opened_at_ms.number_or_zero() > policy.cooldown_ms",
     witness: "policies.circuit-cooldown-probe-and-late-results",
   },
   {
     name: "bucket-discards-nan",
     file: "crates/tea/src/resilience/rate_limit.rs",
-    before: "js_min(bucket.capacity, replenished)",
-    after: "bucket.capacity.min(replenished)",
+    before: "js_min(bucket.capacity.number_or_zero(), replenished)",
+    after: "bucket.capacity.number_or_zero().min(replenished)",
     witness: "policies.bucket-nan-propagation",
   },
   {
@@ -108,8 +108,9 @@ const mutations = [
   {
     name: "cache-retains-expiry-edge",
     file: "crates/tea/src/resilience/cache.rs",
-    before: "if entry.missing() || now_ms >= entry.timestamp()?",
-    after: "if entry.missing() || now_ms > entry.timestamp()?",
+    before:
+      "if entry.missing() || now_ms.number_or_zero() >= entry.timestamp()?",
+    after: "if entry.missing() || now_ms.number_or_zero() > entry.timestamp()?",
     witness: "policies.cache-half-open-ttl-null-failure-and-removal",
   },
   {

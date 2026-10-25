@@ -1,0 +1,200 @@
+{
+  "scope": "Bounded resilient-call integration on the current native runtime; this is not a full-port completion claim.",
+  "base": "1841cdc6af34c1304e2432aad22fee76442da187",
+  "integratedCheckpoint": "f3290a5",
+  "originalCheckpoint": "0a60bb785ec464f5ed308b2ed4a5ffe298c696b5",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "node": "v22.21.1",
+  "v8": "12.4.254.21-node.33",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "sourceChanges": [],
+  "checks": [
+    {
+      "command": "cargo test --workspace --locked",
+      "exitCode": 0,
+      "testsAndDocs": 247,
+      "compileFailDocs": 13,
+      "log": "target/integration-native-final.log",
+      "sha256": "664cb5c92373811cd85dce040e8f766ae87fe956f130dd230206f07ce861c3f8"
+    },
+    {
+      "command": "cargo clippy --workspace --locked --all-targets -- -D warnings",
+      "exitCode": 0,
+      "log": "target/integration-clippy-final.log",
+      "sha256": "f35473cf1bfab66f74b41620ec3d6872e85aec93994d7a83c1dad8e1f881eaf1"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @demlik/parity typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @demlik/parity exec biome check mutations.mjs resilient-call-runtime.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @demlik/parity exec node run.mjs",
+      "exitCode": 0,
+      "compared": 5172,
+      "report": "target/parity/report.json",
+      "sha256": "64d88db91b46d8848162627b9aef05aed58f79fded2752b38a3b607be645474e",
+      "nativeBinarySha256": "210645c77593d003a187ad919d0c99b823e0781e4697a9cbf882471cc9dc4650",
+      "includes": [
+        "families40",
+        "timing112",
+        "queue150",
+        "flow48/847 transitions",
+        "monitored61/1046 transitions",
+        "real TS/Rust storage processes"
+      ]
+    },
+    {
+      "command": "pnpm --filter @demlik/parity exec node resilient-call-mutations.mjs",
+      "exitCode": 0,
+      "baselineScripts": 59,
+      "baselineActions": 444,
+      "protocolRefusals": 11,
+      "baselineReport": "target/parity/resilient-call.json",
+      "baselineSha256": "97fd28280e67f7164b63ce9f0da61119e504aa87a4c191c3dad1b0b4b5169400",
+      "nativeBinarySha256": "7fa296da3706031cd0a831a8fa2113694bf399161985c9b7ac7aed06232886b3"
+    },
+    {
+      "command": "pnpm --filter @demlik/parity exec node resilient-call-runtime.mjs",
+      "exitCode": 0,
+      "observedProfiles": ["Promise", "Effect"],
+      "timerOverride": false,
+      "subscriptionOverride": false,
+      "report": "target/parity/resilient-call-runtime.json",
+      "sha256": "4e606c2b4491e36bf41f9ddb2bf6d7806a3d9374f3abd9f93c84e2910f5c73a7"
+    },
+    {
+      "command": "pnpm --filter @demlik/parity exec node resilient-call-coverage.mjs",
+      "exitCode": 1,
+      "status": "Expected incomplete: six previously declared name/tag limitations remain visible to the strict completion guard.",
+      "mappings": 66,
+      "missingEvidenceOrSignatureDrift": [],
+      "knownParityGaps": [
+        {
+          "id": "@demlik/tea:./resilience#DeadlineNameOf",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        },
+        {
+          "id": "@demlik/tea:./resilience#DefaultResilientName",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        },
+        {
+          "id": "@demlik/tea:./resilience#ResilientDeadlineType",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        },
+        {
+          "id": "@demlik/tea:./resilience#ResilientErrType",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        },
+        {
+          "id": "@demlik/tea:./resilience#ResilientOkType",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        },
+        {
+          "id": "@demlik/tea:./resilience#ResilientRunType",
+          "reason": "Known parity gap: Rust owns dynamic UTF-8 family metadata; it does not infer a distinct string-literal type for each runtime name. The shared tag interface cannot represent a lone UTF-16 name."
+        }
+      ],
+      "report": "target/parity/resilient-call-coverage.json",
+      "sha256": "a384d30e0d2efa483c389e57c1f7c8497fca486b1264113e2cb7eba3dfd5d364"
+    }
+  ],
+  "mutations": {
+    "count": 54,
+    "status": "All controls built and detected their intended behavioral regressions without modifying active source.",
+    "reports": [
+      {
+        "report": "target/parity/mutations.json",
+        "sha256": "0d4c0c9afb8287c16927b22ae618f2893e57a62343ac21aea182199ce41434f6",
+        "count": 18
+      },
+      {
+        "report": "target/parity/resilient-call-mutations.json",
+        "sha256": "ad17de5a39a1b3088f0705c989fe8dbc6e43f541b725460c2b14d7be9d0bfa09",
+        "count": 9
+      },
+      {
+        "report": "target/parity/timing-mutations.json",
+        "sha256": "1ddb492d22f7744d7618d7a23d97c41f20bdebf29b77edd88fd17aff78da1a74",
+        "count": 7
+      },
+      {
+        "report": "target/parity/command-families-mutations.json",
+        "sha256": "0ece145e208f9269d183a37b52cf3181357b667f44343f72df5bef94df6aa847",
+        "count": 3
+      },
+      {
+        "report": "target/parity/paginate-queue-mutations.json",
+        "sha256": "3e7f9e5b6ddb40253a647fa2894ee1bd223984a6e4aba14c6b1aeefa536597e3",
+        "count": 10
+      },
+      {
+        "report": "target/parity/ledger-mutations.json",
+        "sha256": "b50f8a57c78beff6a0d791888cec66c3a032cba9bcaff7be99113f67d236d77b",
+        "count": 1
+      },
+      {
+        "report": "target/parity/runtime-contract-mutation.json",
+        "sha256": "7b3b43b2f090d270888b337d39c9a0ebcc1a16a3e3813c6deabd17fa9d5e2afb",
+        "count": 1
+      },
+      {
+        "report": "target/parity/runtime-deadline-mutation.json",
+        "sha256": "77b2f389d4da33710270ab3bcbf4c0d7d2ba846abe35e7d1c329c99dab48c3a4",
+        "count": 1
+      },
+      {
+        "report": "target/parity/flow-mutation.json",
+        "sha256": "3560191422fe9e040f12076fb26a8b1ebcc1738d8246493e709407550a39378f",
+        "count": 2
+      },
+      {
+        "report": "target/parity/monitored-run-mutation.json",
+        "sha256": "908defc9ff3c980e7e847bb7c1e9682e0afe3d5e5be261c1219d7603e956d44a",
+        "count": 2
+      }
+    ],
+    "foreignTimerDetectedIds": [
+      "runtime-deadline.promise.fire",
+      "runtime-deadline.promise.stop",
+      "runtime-deadline.effect.fire",
+      "runtime-deadline.effect.stop"
+    ]
+  },
+  "adaptations": [
+    "Retain main EitherSub/runtime exports and the one canonical TimerDeps.",
+    "Keep nullable delivered timestamps and wire snapshots intact; coerce only the unused batch-window time argument.",
+    "Copy the now-identical monitored deadline number directly; inspect PlainData failure fields without JSON conversion.",
+    "Mount the RC default-runtime consumer in the native test owner and reuse that file from the archive verifier.",
+    "Update exactly the circuit, bucket and cache mutation needles to target the same regression through QueueTime accessors."
+  ],
+  "qualification": "Shared family/tag names remain UTF-8 and do not infer TypeScript string-literal types. The existing raw CmdContract/Settled restore retains its serde_json::Value profile. Central registration/contracts, graph scripts and L2 walk are outside this integration slice.",
+  "adaptedSourcesSha256": {
+    "crates/parity/src/bin/flow_driver.rs": "278c7ec3402c1d2d9b1cb1238f823eb026b750f31ae09b34508a6f87c6aa8901",
+    "crates/parity/src/bin/monitored_run_driver.rs": "ceb85094ddc5dbc6e91ace947fe4ccc9818aa814007ec13fc83da184f75a7b74",
+    "crates/tea/examples/runtime_deadline_driver.rs": "c571eb3b7650b22cc0abcbc408af826372f7b5e9a5c04768c5494290453ed996",
+    "crates/tea/src/flow/monitored_run.rs": "3bb3599c6cfa6efa1285c66702c46e0ac2a7bebfef0e0a98274717323d16c1fc",
+    "crates/tea/tests/flow_batch_window_runtime.rs": "350b953c94c76d6b694306045010ade0655dd0faa1f865b7ba8c6027cc71ca64",
+    "crates/tea/tests/resilient_call_runtime.rs": "10ee71204916674fc3ab26b6be19f1fcd97bb316aac4ca860b8b71f9d98bf97f",
+    "crates/tea/tests/runtime_commands.rs": "7e8cad9e00764a3a6c6a7fcf729e1e6c00ba4d7540f37042e278404f171a2f86",
+    "crates/tea/tests/runtime_deadline.rs": "53a0beb3fd0628a19e67f03a704b62b9f8710d7c911f6c3be4254eeeeb7d17fd",
+    "verification/parity/fixtures/resilient-call-runtime.rs": null,
+    "verification/parity/mutations.mjs": "e9189cc9d6c62c9038b82855b69caeefe181bca42d781f6efddcd0864bac498d",
+    "verification/parity/resilient-call-runtime.mjs": "3343cb39faa2f04c7f6e86661671a521b0ca5180ddfddef6ad4f24e15527f101"
+  },
+  "environment": {
+    "RUSTUP_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "CARGO_HOME": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo",
+    "RUSTUP_TOOLCHAIN": "stable",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+    "CARGO_TARGET_DIR": "/private/tmp/demlik-rust-resilient-integration-01a16c9d/target"
+  }
+}

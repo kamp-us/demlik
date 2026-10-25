@@ -49,7 +49,7 @@ for (const file of files) {
   await mkdir(path.dirname(path.join(directory, file)), { recursive: true });
   await cp(path.join(root, file), path.join(directory, file));
 }
-const fixture = path.join(here, "fixtures/resilient-call-runtime.rs");
+const fixture = path.join(root, "crates/tea/tests/resilient_call_runtime.rs");
 const consumer = await readFile(fixture);
 await writeFile(
   path.join(directory, "crates/tea/tests/resilient_call_runtime.rs"),

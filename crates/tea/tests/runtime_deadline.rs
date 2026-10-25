@@ -6,7 +6,7 @@ use demlik_tea::timing::{Timer, TimerCallback, TimerError};
 use demlik_tea::{Machine, Step, Sub, Tagged, Update};
 use std::{cell::RefCell, convert::Infallible, rc::Rc, time::Duration};
 struct Model {
-    delivered: Option<(JsText, f64)>,
+    delivered: Option<(JsText, deadline::DeadlineNumber)>,
     local: Rc<()>,
 }
 impl Tagged for Model {
@@ -112,7 +112,7 @@ async fn deadline_next_timer_data_runs_through_the_automatic_builtin_and_preserv
                     .await
                     .unwrap()
                     .unwrap();
-                assert_eq!(state.delivered, Some(("watch".into(), 130.5)));
+                assert_eq!(state.delivered, Some(("watch".into(), 130.5.into())));
                 runtime.stop().await;
             }
         })

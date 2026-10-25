@@ -114,7 +114,7 @@ fn machine(absolute: bool) -> Machine<'static, Model, DeadlineExceeded, Flush, D
     cells.insert(
         "deadline_exceeded".into(),
         Box::new(|state, msg| {
-            let step = batch::on_window(&config(), &state.batch, msg.at_ms);
+            let step = batch::on_window(&config(), &state.batch, msg.at_ms.number_or_zero());
             Step::new(Model { batch: step.state }, step.commands)
         }),
     );

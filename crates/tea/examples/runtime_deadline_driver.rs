@@ -37,7 +37,7 @@ struct Script {
     action: Action,
 }
 struct Model {
-    delivered: Option<(String, demlik_tea::data::JsText, f64)>,
+    delivered: Option<(String, demlik_tea::data::JsText, deadline::DeadlineNumber)>,
     local: Rc<()>,
 }
 impl Tagged for Model {

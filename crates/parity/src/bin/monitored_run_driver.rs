@@ -486,8 +486,8 @@ fn run_monitor(
         let value = wire::snapshot(state);
         let failure_keys = value.get("failure").map_or_else(Vec::new, keys);
         json!({"stateKeys":keys(&value),"failureKeys":failure_keys,"state":value,"commands":commands,"sameState":same,"sameSnapshot":same_snapshot,"priorStateUnchanged":unchanged,"event":event,
-            "deadlines":deadlines.iter().map(|deadline|json!({"id":text(&deadline.id),"type":"deadline","atMs":number(deadline.at_ms)})).collect::<Vec<_>>(),
-            "timer":timer.map(|timer|json!({"ms":number(timer.ms),"msg":{"type":timer.msg.kind,"id":text(&timer.msg.id),"atMs":number(timer.msg.at_ms)}}))})
+            "deadlines":deadlines.iter().map(|deadline|json!({"id":text(&deadline.id),"type":"deadline","atMs":wire::snapshot(&deadline.at_ms)})).collect::<Vec<_>>(),
+            "timer":timer.map(|timer|json!({"ms":number(timer.ms),"msg":{"type":timer.msg.kind,"id":text(&timer.msg.id),"atMs":wire::snapshot(&timer.msg.at_ms)}}))})
     };
     let mut rows = vec![row(&state, vec![], None, None, true, None)];
     for action in actions {

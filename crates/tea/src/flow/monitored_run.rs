@@ -561,9 +561,7 @@ impl<S, V, E> MonitoredRun<S, V, E> {
         let mut next = state.as_ref().clone();
         next.phase = RunPhase::Failed {
             run_id: run_id.clone(),
-            failure: Rc::new(RunFailure::Deadline {
-                at: msg.at_ms.into(),
-            }),
+            failure: Rc::new(RunFailure::Deadline { at: msg.at_ms }),
         };
         Step::new(Rc::new(next), vec![])
     }

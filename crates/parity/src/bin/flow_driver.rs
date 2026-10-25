@@ -246,8 +246,8 @@ fn window_row(
     deadlines: Vec<batch::BatchWindowSub>,
 ) -> Value {
     json!({"state":window_state(state),"commands":commands.iter().map(command).collect::<Vec<_>>(),"sameState":same,"priorStateUnchanged":unchanged,"event":event,
-      "timer":timer.map(|timer|json!({"ms":number(timer.ms),"msg":{"type":timer.msg.kind,"id":text(&timer.msg.id),"atMs":number(timer.msg.at_ms)}})),
-      "deadlines":deadlines.iter().map(|deadline|json!({"id":text(&deadline.id),"type":"deadline","atMs":number(deadline.at_ms)})).collect::<Vec<_>>()})
+      "timer":timer.map(|timer|json!({"ms":number(timer.ms),"msg":{"type":timer.msg.kind,"id":text(&timer.msg.id),"atMs":wire::snapshot(&timer.msg.at_ms)}})),
+      "deadlines":deadlines.iter().map(|deadline|json!({"id":text(&deadline.id),"type":"deadline","atMs":wire::snapshot(&deadline.at_ms)})).collect::<Vec<_>>()})
 }
 fn run_window(
     max_items: f64,
@@ -357,7 +357,9 @@ fn run_window(
             }
             BatchAction::Expired { id, at } => {
                 let msg = observe!(calls, batch::batch_window_expired, id, at.value());
-                event = Some(json!({"type":msg.kind,"id":text(&msg.id),"atMs":number(msg.at_ms)}));
+                event = Some(
+                    json!({"type":msg.kind,"id":text(&msg.id),"atMs":wire::snapshot(&msg.at_ms)}),
+                );
                 Step::new(Rc::clone(&state), vec![])
             }
             BatchAction::Reset => Step::new(init(), vec![]),

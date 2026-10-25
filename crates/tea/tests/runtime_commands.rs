@@ -335,7 +335,7 @@ async fn defined_defects_and_forgery_report_interpret_failures_and_still_run_the
             let reports=runtime.reports();
             assert!(reports.iter().all(|report|report.phase==ErrorPhase::Interpret));
             match mode {
-                Mode::Undeclared=>assert!(matches!(&*reports[0].error,RuntimeError::Contract(error) if matches!(error.as_ref(),CommandContractError::UndeclaredFailure{failure,..} if failure["reason"]=="undeclared detail"))),
+                Mode::Undeclared=>assert!(matches!(&*reports[0].error,RuntimeError::Contract(error) if matches!(error.as_ref(),CommandContractError::UndeclaredFailure{failure,..} if matches!(failure,demlik_tea::PlainData::Object(fields) if matches!(fields.get("reason"),Some(demlik_tea::PlainData::String(reason)) if reason.as_utf8()==Some("undeclared detail")))))),
                 Mode::Defect=>assert!(matches!(&*reports[0].error,RuntimeError::Handler("defined handler defect"))),
                 Mode::Panic=>assert!(matches!(&*reports[0].error,RuntimeError::Panic(cause) if cause.summary=="defined panic payload")),
                 Mode::Forged=>{assert_eq!(reports.len(),2);assert!(reports.iter().all(|report|matches!(&*report.error,RuntimeError::Contract(error) if error.name()=="OutcomeContractError")));assert_eq!(runtime.get_state().unwrap().progress,1);},
