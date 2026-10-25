@@ -14,6 +14,25 @@ const reports = path.join(root, "target/parity");
 const target = path.join(reports, "reconcile-mutation-build");
 const faults = [
   {
+    name: "entry-prefers-last-form",
+    file: "shape/entry_file.rs",
+    before: '.nodes("body").into_iter().find_map(form_of)',
+    after: '.nodes("body").into_iter().rev().find_map(form_of)',
+    script: "graph-shape-entry.mts",
+    driver: "boundary_domain_driver",
+    witness: "first-default",
+  },
+  {
+    name: "entry-accepts-empty-named-reexport",
+    file: "shape/entry_file.rs",
+    before:
+      'statement.nodes("specifiers").is_empty() {\n                Some("statement")',
+    after: 'statement.nodes("specifiers").is_empty() {\n                None',
+    script: "graph-shape-entry.mts",
+    driver: "boundary_domain_driver",
+    witness: "form-25",
+  },
+  {
     name: "binding-main-is-not-clean",
     file: "deployables/bindings.rs",
     before: "let clean = if file.is_main {",
@@ -196,6 +215,7 @@ try {
       },
     );
     const reportFile = path.join(reports, `${fault.name}.json`);
+    await rm(reportFile, { force: true });
     const result = spawnSync(
       process.execPath,
       [

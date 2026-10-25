@@ -138,6 +138,22 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
     match request.operation.as_str() {
+        "code_graph.entry-form" => {
+            let input: ImpureUsesInput =
+                serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
+            let syntax = observe!(
+                calls,
+                demlik_code_graph::engine::oxc::parse_type_script,
+                Path::new(&input.file),
+                &input.source
+            )
+            .map_err(|error| error.to_string())?;
+            json(&observe!(
+                calls,
+                demlik_code_graph::boundaries::shape::entry_file::first_offending_form,
+                &syntax
+            ))
+        }
         "code_graph.zone-impurity" => {
             let input: ZoneImpurityInput =
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;

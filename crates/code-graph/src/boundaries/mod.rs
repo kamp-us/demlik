@@ -8,5 +8,6 @@ pub mod libraries;
 pub mod migrate;
 pub mod reconcile;
 pub mod rules;
+pub mod shape;
 pub mod violation;
 pub mod zones;
