@@ -332,13 +332,36 @@ fn resolve_edge_ts_config_in(
     find_nearest_tsconfig(start).ok_or_else(|| MissingTsConfig::new(start, scope, display))
 }
 
+fn workspace_root_index(ancestors: impl Iterator<Item = PathBuf>) -> Option<usize> {
+    ancestors.enumerate().find_map(|(index, directory)| {
+        directory
+            .join("pnpm-workspace.yaml")
+            .exists()
+            .then_some(index)
+    })
+}
+
 /// The nearest pnpm workspace root; a standalone scope retains its own root.
 pub fn find_repo_root(start: &Path) -> PathBuf {
-    start
-        .ancestors()
-        .find(|directory| directory.join("pnpm-workspace.yaml").exists())
+    workspace_root_index(start.ancestors().map(Path::to_path_buf))
+        .and_then(|index| start.ancestors().nth(index))
         .unwrap_or(start)
         .to_path_buf()
+}
+
+/// Resolve the same workspace marker while retaining the caller's JavaScript path text.
+pub fn find_repo_root_text(start: &JsString) -> JsString {
+    let ancestors: Vec<_> = std::iter::successors(Some(start.clone()), |directory| {
+        let parent = dirname_path_text(directory);
+        (parent != *directory).then_some(parent)
+    })
+    .collect();
+    workspace_root_index(
+        ancestors
+            .iter()
+            .map(|directory| PathBuf::from(directory.to_lossy())),
+    )
+    .map_or_else(|| start.clone(), |index| ancestors[index].clone())
 }
 
 #[derive(Debug)]

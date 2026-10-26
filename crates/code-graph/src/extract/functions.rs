@@ -112,9 +112,7 @@ pub fn binding_name_text(id: NodeRef<'_>) -> String {
         .to_owned()
 }
 
-pub(crate) fn js_space(ch: char) -> bool {
-    matches!(ch as u32, 9..=13 | 32 | 0xa0 | 0x1680 | 0x2000..=0x200a | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 | 0xfeff)
-}
+pub(crate) use crate::text::js_space;
 
 fn name_from_binding(node: NodeRef<'_>) -> Option<String> {
     let parent = node.parent()?;

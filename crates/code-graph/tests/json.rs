@@ -96,3 +96,41 @@ fn serializes_ecmascript_number_boundaries_and_deep_valid_json() {
         text
     );
 }
+
+#[test]
+fn javascript_json_text_keeps_lone_units_without_repairing_invalid_contexts() {
+    let mut text = JsString::from("{\"");
+    text.extend(&JsString::from_units(vec![0xd800]));
+    text.push_str("\":\"");
+    text.extend(&JsString::from_units(vec![0xdc00]));
+    text.push_str("\"}");
+    let value = JsValue::parse_js(&text).unwrap();
+    assert_eq!(
+        value
+            .as_object()
+            .unwrap()
+            .get(&JsString::from_units(vec![0xd800]))
+            .unwrap()
+            .as_string()
+            .unwrap()
+            .units(),
+        &[0xdc00]
+    );
+    let mut invalid = JsString::from("{\"x\":\"\\");
+    invalid.extend(&JsString::from_units(vec![0xd800]));
+    invalid.push_str("\"}");
+    assert!(JsValue::parse_js(&invalid).is_err());
+    let mut outside = JsString::from("{}");
+    outside.extend(&JsString::from_units(vec![0xdfff]));
+    assert!(JsValue::parse_js(&outside).is_err());
+    assert_eq!(
+        JsValue::parse_js(&"{\"x\":\"𐀀\"}".into())
+            .unwrap()
+            .get("x")
+            .unwrap()
+            .as_string()
+            .unwrap()
+            .units(),
+        &[0xd800, 0xdc00]
+    );
+}

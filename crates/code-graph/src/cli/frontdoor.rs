@@ -17,9 +17,14 @@ use crate::{
     engine::tsgo::TsgoBinary,
     hexagon::cli::{HexagonOutput, HexagonRunError, HexagonRunOutcome, run_hexagon},
     kinds::rules::{NodeKindRules, RuleInputError},
-    project::resolve_path_text_from,
+    project::{find_repo_root_text, resolve_path_text_from},
     schema::Thresholds,
+    smells::{
+        gate::{SmellGateOpts, SmellPreparation, SmellPreparationError, prepare_smell_gate},
+        ledger::RuleNameConversionError,
+    },
     text::JsString,
+    unreachable::gate::{UnreachableOpts, UnreachablePreparation, prepare_unreachable_gate},
 };
 use std::{cell::RefCell, error::Error, fs, io};
 
@@ -97,13 +102,49 @@ pub enum HexagonDispatch {
     Complete(HexagonRunOutcome),
     Continue(Box<PreparedCli>),
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GatePreparationKind {
+    Unreachable,
+    Smell,
+}
+#[derive(Debug)]
+pub struct GatePreflightRefusal {
+    pub stage: GatePreparationKind,
+    pub message: JsString,
+    pub source: Option<io::Error>,
+}
+#[derive(Debug)]
+pub struct PreparedGatesCli {
+    pub prepared: Box<PreparedCli>,
+    pub repo_root: JsString,
+    pub unreachable: UnreachablePreparation,
+    pub smells: SmellPreparation,
+}
+#[derive(Debug)]
+pub enum GatePreflightDispatch {
+    Stopped(GatePreflightRefusal),
+    Continue(Box<PreparedGatesCli>),
+}
 #[derive(Debug)]
 pub enum FrontdoorError {
-    Resolve { target: JsString, source: io::Error },
-    Realpath { path: JsString, source: io::Error },
+    Resolve {
+        target: JsString,
+        source: io::Error,
+    },
+    Realpath {
+        path: JsString,
+        source: io::Error,
+    },
     NodeKinds(NodeKindConfigError),
     Api(ApiRunError),
     Hexagon(HexagonRunError),
+    RuleNameConversion(RuleNameConversionError),
+    GateScope {
+        stage: GatePreparationKind,
+        root: JsString,
+        repo_root: JsString,
+        source: io::Error,
+    },
     ExitCode(ExitCodeError),
 }
 impl FrontdoorError {
@@ -114,21 +155,23 @@ impl FrontdoorError {
             }
             Self::Api(error) => error.visible().name(),
             Self::Hexagon(error) => error.name(),
+            Self::RuleNameConversion(error) => error.name(),
             Self::ExitCode(error) => error.name(),
             _ => "Error",
         }
     }
     pub fn message(&self) -> JsString {
         match self {
-            Self::Resolve { source, .. } | Self::Realpath { source, .. } => {
-                source.to_string().into()
-            }
+            Self::Resolve { source, .. }
+            | Self::Realpath { source, .. }
+            | Self::GateScope { source, .. } => source.to_string().into(),
             Self::NodeKinds(NodeKindConfigError::Rules(RuleInputError::TypeError(message))) => {
                 message.clone()
             }
             Self::NodeKinds(error) => error.to_string().into(),
             Self::Api(error) => error.message(),
             Self::Hexagon(error) => error.message(),
+            Self::RuleNameConversion(error) => error.message(),
             Self::ExitCode(error) => error.message(),
         }
     }
@@ -141,10 +184,13 @@ impl std::fmt::Display for FrontdoorError {
 impl Error for FrontdoorError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(match self {
-            Self::Resolve { source, .. } | Self::Realpath { source, .. } => source,
+            Self::Resolve { source, .. }
+            | Self::Realpath { source, .. }
+            | Self::GateScope { source, .. } => source,
             Self::NodeKinds(error) => error,
             Self::Api(error) => error,
             Self::Hexagon(error) => error,
+            Self::RuleNameConversion(error) => error,
             Self::ExitCode(error) => error,
         })
     }
@@ -262,6 +308,80 @@ pub fn prepare_cli(
     })))
 }
 impl PreparedCli {
+    /// Resolve both ledgers after HexagonDispatch::Continue, before dispatching a later mode.
+    pub fn prepare_gates(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<GatePreflightDispatch, FrontdoorError> {
+        let repo_root = find_repo_root_text(&self.root_absolute);
+        let opts = &self.options;
+        let unreachable = prepare_unreachable_gate(
+            UnreachableOpts {
+                unreachable: opts.unreachable() == Some(true),
+                ci: opts.ci() == Some(true),
+                accept_dead: opts.accept_dead() == Some(true),
+                dead_only: opts.dead_only() == Some(true),
+                boundaries: opts.boundaries() == Some(true),
+                reason: opts.reason(),
+            },
+            &self.root_absolute,
+            &repo_root,
+        )
+        .map_err(|source| FrontdoorError::GateScope {
+            stage: GatePreparationKind::Unreachable,
+            root: self.root_absolute.clone(),
+            repo_root: repo_root.clone(),
+            source,
+        })?;
+        if let UnreachablePreparation::Refused { message, source } = unreachable {
+            clean_exit(host, &message);
+            return Ok(GatePreflightDispatch::Stopped(GatePreflightRefusal {
+                stage: GatePreparationKind::Unreachable,
+                message,
+                source,
+            }));
+        }
+        let smells = prepare_smell_gate(
+            SmellGateOpts {
+                ci: opts.ci() == Some(true),
+                accept_smells: opts.accept_smells() == Some(true),
+                unreachable: opts.unreachable() == Some(true),
+                boundaries: opts.boundaries() == Some(true),
+                comments: opts.comments() == Some(true),
+                collapse: opts.collapse() == Some(true),
+                layers: opts.layers() == Some(true),
+                reason: opts.reason(),
+            },
+            &self.root_absolute,
+            &repo_root,
+        )
+        .map_err(|error| match error {
+            SmellPreparationError::RuleName(error) => FrontdoorError::RuleNameConversion(error),
+            SmellPreparationError::Scope(source) => FrontdoorError::GateScope {
+                stage: GatePreparationKind::Smell,
+                root: self.root_absolute.clone(),
+                repo_root: repo_root.clone(),
+                source,
+            },
+        })?;
+        if let SmellPreparation::Refused { message, source } = smells {
+            clean_exit(host, &message);
+            return Ok(GatePreflightDispatch::Stopped(GatePreflightRefusal {
+                stage: GatePreparationKind::Smell,
+                message,
+                source,
+            }));
+        }
+        Ok(GatePreflightDispatch::Continue(Box::new(
+            PreparedGatesCli {
+                prepared: self,
+                repo_root,
+                unreachable,
+                smells,
+            },
+        )))
+    }
+
     /// Run the next early mode after ApiDispatch::Continue, retaining all later modes.
     pub fn dispatch_hexagon(
         self: Box<Self>,

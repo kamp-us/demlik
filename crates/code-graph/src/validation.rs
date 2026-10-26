@@ -92,6 +92,27 @@ pub(crate) fn checked_number(
     ])))
 }
 
+pub(crate) fn nonempty_string(
+    value: Option<&JsValue>,
+    path: Vec<PathSegment>,
+) -> Result<&JsString, InputIssue> {
+    let Some(JsValue::String(text)) = value else {
+        return Err(InputIssue::invalid_type(path, "string", value));
+    };
+    if text.is_empty() {
+        return Err(
+            InputIssue::new(path, "Too small: expected string to have >=1 characters")
+                .with_details(JsObject::from([
+                    ("origin".into(), JsValue::String("string".into())),
+                    ("code".into(), JsValue::String("too_small".into())),
+                    ("minimum".into(), JsValue::Number(1.0)),
+                    ("inclusive".into(), JsValue::Bool(true)),
+                ])),
+        );
+    }
+    Ok(text)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum PathSegment {

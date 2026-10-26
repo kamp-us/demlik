@@ -405,3 +405,26 @@ fn preserves_native_failure_details_while_matching_the_missing_path_facade() {
         Err(ResolveError::Specifier(_))
     ));
 }
+
+#[test]
+fn text_repo_roots_keep_raw_spelling_at_the_selected_native_ancestor() {
+    use demlik_code_graph::{project::find_repo_root_text, text::JsString};
+    let project = Project::new();
+    project.write("raw�/file.ts", "export {};");
+    let mut raw = JsString::from(project.0.to_string_lossy().as_ref());
+    raw.push_str("/raw");
+    raw.extend(&JsString::from_units(vec![0xd800]));
+    assert_eq!(find_repo_root_text(&raw), raw);
+    project.write("raw�/pnpm-workspace.yaml", "packages: []\n");
+    assert_eq!(find_repo_root_text(&raw), raw);
+    project.write("pnpm-workspace.yaml", "packages: []\n");
+    project.write("plain�/file.ts", "export {};");
+    let mut nested = JsString::from(project.0.to_string_lossy().as_ref());
+    nested.push_str("/plain");
+    nested.extend(&JsString::from_units(vec![0xdfff]));
+    assert_eq!(
+        find_repo_root_text(&nested),
+        JsString::from(project.0.to_string_lossy().as_ref())
+    );
+    assert_eq!(find_repo_root(&project.0), project.0);
+}

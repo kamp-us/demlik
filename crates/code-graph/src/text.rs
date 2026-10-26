@@ -6,6 +6,10 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use serde_json::value::RawValue;
 
+pub(crate) fn js_space(ch: char) -> bool {
+    matches!(ch as u32, 9..=13 | 32 | 0xa0 | 0x1680 | 0x2000..=0x200a | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 | 0xfeff)
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JsString(Vec<u16>);
 
@@ -77,6 +81,20 @@ impl JsString {
     /// Node replaces lone surrogates when encoding strings for native filesystem calls.
     pub fn to_lossy(&self) -> String {
         String::from_utf16_lossy(&self.0)
+    }
+    pub(crate) fn trim_js(&self) -> Self {
+        let is_space = |unit: &u16| char::from_u32(u32::from(*unit)).is_some_and(js_space);
+        let start = self
+            .0
+            .iter()
+            .position(|unit| !is_space(unit))
+            .unwrap_or(self.0.len());
+        let end = self
+            .0
+            .iter()
+            .rposition(|unit| !is_space(unit))
+            .map_or(start, |index| index + 1);
+        Self(self.0[start..end].to_vec())
     }
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -276,6 +294,41 @@ pub fn object_keys<V>(object: &IndexMap<JsString, V>) -> Vec<&JsString> {
 }
 
 impl JsValue {
+    /// Encode JavaScript JSON text for the existing UTF-8 parser, retaining lone units.
+    pub fn parse_js(text: &JsString) -> Result<Self, serde_json::Error> {
+        let mut encoded = String::new();
+        let mut in_string = false;
+        let mut escaped = false;
+        for unit in char::decode_utf16(text.units().iter().copied()) {
+            match unit {
+                Ok(ch) => {
+                    encoded.push(ch);
+                    if in_string {
+                        if escaped {
+                            escaped = false;
+                        } else if ch == '\\' {
+                            escaped = true;
+                        } else if ch == '"' {
+                            in_string = false;
+                        }
+                    } else if ch == '"' {
+                        in_string = true;
+                    }
+                }
+                Err(unit) => {
+                    if in_string && !escaped {
+                        write!(&mut encoded, "\\u{:04x}", unit.unpaired_surrogate())
+                            .expect("String formatting is infallible");
+                    } else {
+                        // JSON rejects these original contexts; leave syntax validation to serde.
+                        encoded.push('\0');
+                    }
+                    escaped = false;
+                }
+            }
+        }
+        Self::parse(&encoded)
+    }
     pub fn parse(text: &str) -> Result<Self, serde_json::Error> {
         let mut deserializer = serde_json::Deserializer::from_str(text);
         deserializer.disable_recursion_limit();
