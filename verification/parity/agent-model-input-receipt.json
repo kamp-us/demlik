@@ -1,0 +1,67 @@
+{
+  "scope": "Direct BrainHandler Missing/Undefined input parity, canonical access cause ownership and Error JSON; full agent and malformed err_of/decode not claimed.",
+  "sourceCommit": "3527c986e5101eaacaa6b42939c929cdb24c7454",
+  "baseCommit": "599e65861c71e4e07ee1c89d4368195659629101",
+  "referenceCommit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "worktree": "/private/tmp/demlik-rust-model-input-gap-01a16c9d",
+  "counts": {
+    "strictPairs": 92,
+    "promotedInputPairs": 2,
+    "protocolRefusals": 7,
+    "newNativeTests": 2,
+    "newCompiledControls": 3,
+    "oldModelControls": 14,
+    "oldLlmControls": 4,
+    "nativeChecks": {
+      "default": 375,
+      "feature": 389
+    }
+  },
+  "archive": {
+    "path": "/private/tmp/demlik-model-input-exact-3527c986-01a16c9d",
+    "manifestSha256": "d34682d171f7eb2820c0e9cd2e934b0b4fe314449680657e9e8c84f8c953a150",
+    "tar": "/private/tmp/demlik-model-input-exact-3527c986-01a16c9d.tar",
+    "tarSha256": "b76fb712f229d8f6c9a25cb8d4d73fedbf62e3763069b098f027ad2fce4fc96d",
+    "sources": 13,
+    "evidenceFiles": 103,
+    "selectedLibraryCopies": 2,
+    "coldBuild": false
+  },
+  "evidence": {
+    "model-input-pairs.json": "455731e7193c56f073fd3cd21696a6b5eb36580b591e9e46e92e6d5753746be9",
+    "model-input-mutations.json": "f67f96822380d4bc3f69d8ab8b661b8605924221086805c9d86765686aae5f39",
+    "model-input-old-model-controls.json": "c2e16e798355c370d136e7cca03c47e48857e12375e499375cce542a8f6247eb",
+    "llm-call-controls/summary.json": "9e47119094f94c4ba5a62ba0b3359872fde56c39ea4597cba9896afcea6d266f",
+    "model-input-scope-checks.json": "e9511bf5ee2e61216e6e3efb02849a6887d53ae6e0aae1e7f1cbe38aab0ffb70",
+    "model-input-final-parent-audit.json": "de356b10bdc7bbe357c44554520c6bde2600d376f12d364bfe0112e1f7849466",
+    "model-input-old-verifier-repair.json": "9df9323722052e1faf02f6a0b6b94de12c7cb6c124d6c9d035b627d97da9adaa",
+    "llm-call-configured.json": "f96e111bcba9e592dc223fff5a582d2a8b00277b257d6088ea84114fca408882"
+  },
+  "static": {
+    "sevenScopedGates": true,
+    "finalTwoVerifierFilesBiome": true,
+    "diffCheck": true
+  },
+  "independentReview": "rust_machine_flexible found no scoped production finding; valid replay command limitation explicitly recorded.",
+  "qualifications": [
+    "Warm isolated targets, baseline/mutant targets separate; no cold archive build.",
+    "Scoped seven gates precede only the identified old-mutator and model-contract verifier updates; final targeted Biome passed.",
+    "All three new mutant executables and the red executable/library are preserved. Old model controls retain reports and source/mutant hashes, not every overwritten intermediate mutant executable.",
+    "Malformed-command err_of/decode remains OPEN. Retained-cause continuation law uses a valid replay command."
+  ],
+  "recoveries": [
+    "Initial verifier whole-Outcome Serialize bound failed; fixed Err-only projection, opaque answer/library bounds unchanged.",
+    "Old model verifier expected90 in two assertions; both restored92, two precompile failures retained; dedicated mutant target.",
+    "Old LLM task-local controller only root/tsx/warm-target and retention adaptation; four original sites/witnesses unchanged."
+  ],
+  "integrity": {
+    "frozenTsSourceTreesUnchanged": true,
+    "sourceFilesSnapshot": 2319,
+    "lateVerifierOnlyChanges": 2,
+    "otherFilesUnchanged": 2317,
+    "baselineAndMutantTargetsSeparate": true,
+    "noNewDependencies": true,
+    "noRemoteWrites": true,
+    "noDocker": true
+  }
+}
