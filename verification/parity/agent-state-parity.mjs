@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -26,6 +26,11 @@ const checkpoints = {
     module: "agent-state-fanout-restore.mts",
     run: "fanoutRestoreParity",
   },
+  base: {
+    driver: "agent_base_driver",
+    module: "agent-base-run.mjs",
+    run: "agentBaseParity",
+  },
 };
 
 async function checkpointParity(cargo, name, options = {}) {
@@ -33,7 +38,7 @@ async function checkpointParity(cargo, name, options = {}) {
   assert.equal(process.version, scope.referenceEngine.node);
   assert.equal(process.versions.v8, scope.referenceEngine.v8);
   const checkpoint = checkpoints[name];
-  const binary = path.resolve(
+  let binary = path.resolve(
     options.binary ??
       path.join(
         process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
@@ -41,26 +46,69 @@ async function checkpointParity(cargo, name, options = {}) {
         checkpoint.driver,
       ),
   );
-  if (!options.binary)
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "--offline",
-        "-p",
-        "demlik-tea",
-        "--example",
-        checkpoint.driver,
-      ],
-      { cwd: root, stdio: "inherit" },
-    );
   const reportFile = path.resolve(
     options.reportFile ??
       path.join(root, `target/parity/agent-checkpoint-${name}.json`),
   );
   await mkdir(path.dirname(reportFile), { recursive: true });
   await rm(reportFile, { force: true });
+  let cargoArtifacts;
+  if (!options.binary) {
+    const args = [
+      "build",
+      "--locked",
+      "--offline",
+      "--message-format=json",
+      "-p",
+      "demlik-tea",
+      "--example",
+      checkpoint.driver,
+    ];
+    const build = spawnSync(cargo, args, {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    if (build.error) throw build.error;
+    const file = `${reportFile}.cargo.jsonl`;
+    await writeFile(file, build.stdout);
+    await writeFile(`${reportFile}.cargo.stderr`, build.stderr);
+    assert.equal(build.status, 0, `${build.stdout}\n${build.stderr}`);
+    const events = build.stdout.trim().split("\n").map(JSON.parse);
+    const executables = events.filter(
+      (event) =>
+        event.reason === "compiler-artifact" &&
+        event.target.name === checkpoint.driver &&
+        event.executable,
+    );
+    const libraries = events.filter(
+      (event) =>
+        event.reason === "compiler-artifact" &&
+        event.target.name === "demlik_tea" &&
+        event.target.kind.includes("lib") &&
+        event.filenames.some((file) => file.endsWith(".rlib")),
+    );
+    assert.equal(executables.length, 1);
+    assert.equal(libraries.length, 1);
+    const artifact = async (file) => ({
+      path: file,
+      sha256: createHash("sha256")
+        .update(await readFile(file))
+        .digest("hex"),
+    });
+    const executable = await artifact(executables[0].executable);
+    const library = await artifact(
+      libraries[0].filenames.find((file) => file.endsWith(".rlib")),
+    );
+    binary = `${reportFile}.${executable.sha256}.bin`;
+    await copyFile(executable.path, binary);
+    cargoArtifacts = {
+      file,
+      command: [cargo, ...args],
+      executable,
+      libraries: { demlik_tea: library },
+    };
+  }
   const child = spawnSync(
     process.execPath,
     [
@@ -97,7 +145,7 @@ async function checkpointParity(cargo, name, options = {}) {
       .update(await readFile(binary))
       .digest("hex"),
   );
-  return { ...report, reportFile };
+  return { ...report, reportFile, binary, cargoArtifacts };
 }
 
 export const agentStatePrerequisiteParity = (cargo, options) =>
@@ -106,6 +154,8 @@ export const agentStateParity = (cargo, options) =>
   checkpointParity(cargo, "state", options);
 export const agentStateFanoutParity = (cargo, options) =>
   checkpointParity(cargo, "fanout", options);
+export const agentBaseCheckpointParity = (cargo, options) =>
+  checkpointParity(cargo, "base", options);
 
 if (
   process.argv[1] &&

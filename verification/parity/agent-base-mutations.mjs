@@ -200,8 +200,13 @@ export function agentBaseMutations(options = {}) {
       process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
     mutationTarget =
       options.mutationTarget ??
-      path.join(root, "target/agent-state-mutation-build"),
-    binary = path.join(baselineTarget, "debug/examples/agent_base_driver");
+      path.join(root, "target/parity/agent-base-mutation-build"),
+    binary = options.binary;
+  assert.ok(binary, "An explicit compiled baseline binary is required");
+  assert.ok(
+    options.libraries?.length,
+    "Actual Cargo JSON library artifacts are required",
+  );
   assert.notEqual(path.resolve(baselineTarget), path.resolve(mutationTarget));
   const sources = [
       knob,
@@ -217,13 +222,7 @@ export function agentBaseMutations(options = {}) {
     sourceHashes = Object.fromEntries(
       sources.map((f) => [f, hash(fs.readFileSync(path.join(root, f)))]),
     ),
-    artifacts = [
-      binary,
-      ...fs
-        .readdirSync(path.join(baselineTarget, "debug/deps"))
-        .filter((f) => /^libdemlik_tea-.*\.rlib$/.test(f))
-        .map((f) => path.join(baselineTarget, "debug/deps", f)),
-    ],
+    artifacts = [binary, ...options.libraries],
     artifactHashes = Object.fromEntries(
       artifacts.map((f) => [f, hash(fs.readFileSync(f))]),
     );
@@ -374,5 +373,17 @@ export function agentBaseMutations(options = {}) {
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-)
-  agentBaseMutations();
+) {
+  const { agentBaseCheckpointParity } = await import(
+    "./agent-state-parity.mjs"
+  );
+  const baseline = await agentBaseCheckpointParity(
+    process.env.CARGO ?? "cargo",
+  );
+  agentBaseMutations({
+    binary: baseline.binary,
+    libraries: Object.values(baseline.cargoArtifacts.libraries).map(
+      (a) => a.path,
+    ),
+  });
+}

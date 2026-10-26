@@ -1,0 +1,99 @@
+{
+  "checkpoint": "Base pure agent knob integrated; whole Rust port remains incomplete",
+  "parent": "857f2b8a04f2fc2fdef775c6114d2d03e50ab9d0",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "sourceLeaf": "d22b921b19611a6ff46e2c064ed6aab6cf8ac984",
+  "sourceReceipt": "5701c98216bbc3b1170a4a9a06f980afb0a90c7a",
+  "mainSourcePick": "bb70db66",
+  "mainReceiptPick": "857f2b8a",
+  "localOnly": true,
+  "newCases": {
+    "strictScripts": 43,
+    "actions": 268,
+    "protocolRefusals": 8,
+    "openUnsupportedProfilesExcluded": 2
+  },
+  "combined": {
+    "comparisons": 14273,
+    "passed": 14273,
+    "behavioralFailures": 0,
+    "referenceEdits": 0,
+    "nativeEvidence": 14179,
+    "rawQualified": 94,
+    "defaultNativeAndDocs": 556,
+    "pbtFeatureNativeAndDocs": 570,
+    "defaultAndFeatureOverlap": true,
+    "docChecks": 26,
+    "compileFailDocs": 24,
+    "runnableDocs": 2,
+    "format": true,
+    "verificationTypes": true,
+    "verificationLint": true,
+    "clippyDefaultAllTargets": true,
+    "clippyFeatureAllTargets": true,
+    "completeCliExit": 1,
+    "completeCliExitReason": "Only remaining explicitly recorded coverage gaps"
+  },
+  "controls": {
+    "newCompiledFaultsCaught": 24,
+    "affectedExistingCompiledFaultsCaught": 32,
+    "existingBreakdown": {
+      "conversationPrerequisites": 12,
+      "stateAndFanOut": 20
+    },
+    "escaped": 0,
+    "evidenceGuards": 11,
+    "typingPositive": 1,
+    "typingIntendedRefusals": 2,
+    "sourceAndVerificationFilesUnchangedBeforeIntentionalReceipt": 2266,
+    "baselineExecutablesUnchanged": 1448,
+    "sourceFileAdditionsDuringControls": [],
+    "sourceFileRemovalsDuringControls": []
+  },
+  "coverage": {
+    "inventory": 3445,
+    "registeredMappings": 817,
+    "gapRows": 2769,
+    "newRealMappings": 14,
+    "newScopedComplete": 7,
+    "newPartialOpen": 7,
+    "cliGapsRetained": 53,
+    "countsAreNotCompletionPercentage": true
+  },
+  "ownership": "Canonical lifecycle owner retains Rc note handles across append. Base agent composes the original LlmCall, monitored run, fan-out, State and Conversation owners; no duplicate model or global Clone/serde/Send/static bounds.",
+  "portableVerification": "Four fixed agent checkpoints use actual Cargo JSON, effective library hashes and independent baseline binary copies. New base checks build their own baseline and inventory, run borrowed native fixture typing and24 compiled faults on an isolated source copy/dedicated target. Full runner provides directly affected regression comparisons.",
+  "knownLimits": [
+    "Base pure knob only; no full Runtime/SDK/brainInterpret/toMachine/router/snapshot/compaction/tool-policy/provider/children execution claim.",
+    "Raw builtin AGENT_TURN_SCHEMA retained PlainData output has no borrowed typed turn projection; no DTO clone substitutes for it.",
+    "Explicit generic payload callback is required; Source omitted-null convenience remains open.",
+    "Arbitrary JS callback throws/getters/prototypes/shared mutable objects and native panic behavior are separate profiles.",
+    "Two restored optional profiles visibly refuse and remain OPEN outside strict/nativeEvidence.",
+    "14,273 comparisons include94 explicitly qualified raw observations. Remaining public APIs, CLI distribution and hosts are unfinished.",
+    "Historical worker base archive is exact source plus retained-target artifacts, not a fresh cold library rebuild."
+  ],
+  "proofs": {
+    "checks": {
+      "path": "target/parity/agent-base-main-checks.json",
+      "sha256": "2b6d8b225a86d5304452005a6ed7fa3ac1fa1d6f4e0752901576690584737844"
+    },
+    "controls": {
+      "path": "target/parity/agent-base-main-controls.json",
+      "sha256": "d7ec0f3826768540756244086f996d2b870d718c9d41994b22facc502e60322f"
+    },
+    "combinedReport": {
+      "path": "target/parity/agent-base-main/report-before-controls.json",
+      "sha256": "2cf4bba8cf8fee86f4e83344ad3b41e62ec109c62ca38d7e20a9092b38fba5c5"
+    },
+    "integrity": {
+      "path": "target/parity/agent-base-main-after-controls-audit.json",
+      "sha256": "828557181572da1d70ac5fd382e02fc0c9fd7466936ab33d59065c148c0fae5a"
+    },
+    "archive": {
+      "path": "target/parity/history/857f2b8a-agent-base-main-accepted",
+      "manifest": "target/parity/history/857f2b8a-agent-base-main-accepted/manifest.json",
+      "manifestSha256": "4ae7d6bf4c972b07450abfeb596ac773a2147306c76e3e8994e3a151fbbc3150",
+      "files": 224,
+      "bytes": 185785187
+    }
+  }
+}

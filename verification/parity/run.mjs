@@ -9,6 +9,7 @@ import { agentContentParity } from "./agent-content-run.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
 import {
+  agentBaseCheckpointParity,
   agentStateFanoutParity,
   agentStateParity,
   agentStatePrerequisiteParity,
@@ -1059,6 +1060,12 @@ if (!mutationSuite) {
       operation: "tea.agent-fanout-restore",
       binaryArgument: "--agent-state-fanout-bin",
       run: (options) => agentStateFanoutParity(cargo, options),
+    },
+    {
+      name: "agentBase",
+      operation: "tea.agent-base-knob",
+      binaryArgument: "--agent-base-bin",
+      run: (options) => agentBaseCheckpointParity(cargo, options),
     },
     {
       name: "testingHelpers",
