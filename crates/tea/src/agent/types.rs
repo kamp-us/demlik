@@ -437,6 +437,7 @@ impl Awaiting {
     }
 }
 
+type LifecycleNotes<A, E> = Rc<Vec<Rc<AgentLifecycleNote<A, E>>>>;
 type ToolLadders<A, E> =
     Rc<crate::js_record::JsRecord<crate::resilience::resilient_call::State<ToolCall<A>, (), E>>>;
 type ToolLedger<R, E, A> = Rc<crate::flow::fan_out::FanOutState<ToolCall<A>, ToolOutcome<R, E>, E>>;
@@ -480,7 +481,7 @@ pub struct AgentState<
     #[serde(default)]
     pub refused_calls: AgentField<Rc<Vec<JsText>>>,
     #[serde(default)]
-    pub lifecycle: AgentField<Rc<Vec<AgentLifecycleNote<A, TE>>>>,
+    pub lifecycle: AgentField<LifecycleNotes<A, TE>>,
     #[serde(default)]
     pub failure: AgentField<Option<Rc<AgentFailure<FE>>>>,
     #[serde(default)]

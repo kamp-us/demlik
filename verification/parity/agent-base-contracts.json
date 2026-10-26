@@ -1,0 +1,259 @@
+{
+  "@demlik/tea:./agent#createAgent": {
+    "signature": "961974484f586089f3a8a7731bbc632caffedd065b41e9a748f34550cb210d88",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::create_agent",
+        "demlik_tea::agent::Agent::start",
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::tool_ok",
+        "demlik_tea::agent::Agent::boot"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentConfigCore": {
+    "signature": "32dcd3a26331358fe267ccb817789de012c53850bdf6f903d8db21a1fe2b729f",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::AgentConfig::new",
+        "demlik_tea::agent::create_agent"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentConfig": {
+    "signature": "74414f1be01276b8157a5e3e4eb66fc4f854c68fd5705981779d43ac19db54cc",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::AgentConfig::new",
+        "demlik_tea::agent::create_agent"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentKnob": {
+    "signature": "c39d9c30bf8a7de9cb0ea2e037f8ff1eb77b29e76406ba122451ea3820454246",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::init",
+        "demlik_tea::agent::Agent::start",
+        "demlik_tea::agent::Agent::turn",
+        "demlik_tea::agent::Agent::tool_ok",
+        "demlik_tea::agent::Agent::tool_err",
+        "demlik_tea::agent::Agent::tool_err_reason",
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::fail",
+        "demlik_tea::agent::Agent::boot",
+        "demlik_tea::agent::Agent::on_timer",
+        "demlik_tea::agent::Agent::subs"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentCmd": {
+    "signature": "1d66b5670fd557670e7b80b171fc9bacca5ec75e0093dfea5dc774c9d96e8e2d",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::tool_ok"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentConfigCore/member:published:65d3ee991b28a0b22a5ecf4eaafa8e3af9f51caca25a08503d46068571e32485": {
+    "signature": "65d3ee991b28a0b22a5ecf4eaafa8e3af9f51caca25a08503d46068571e32485",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::tool_ok"
+      ]
+    },
+    "cases": ["agent-base.three-stage-audit", "agent-base.fanout-1"],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentConfigCore/member:published:068f0ef8ca6d093969d9fac6b6a6e4055f613ae4fbb83c4010d085bd008f741e": {
+    "signature": "068f0ef8ca6d093969d9fac6b6a6e4055f613ae4fbb83c4010d085bd008f741e",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::start",
+        "demlik_tea::agent::Agent::boot"
+      ]
+    },
+    "cases": ["agent-base.three-stage-audit", "agent-base.purpose-raw-unit"],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentConfigCore/member:published:7705754305ddbfff3ac628c178de006d7440fbeb63c230dd4ff0d279d23b3811": {
+    "signature": "7705754305ddbfff3ac628c178de006d7440fbeb63c230dd4ff0d279d23b3811",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::start",
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::boot"
+      ]
+    },
+    "cases": ["agent-base.three-stage-audit", "agent-base.legacy-null"],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentConfigCore/member:published:e3746573d24d7f1af93aee79711fae4019b2345ea22aee26bbfe3ba4bf51e1e4": {
+    "signature": "e3746573d24d7f1af93aee79711fae4019b2345ea22aee26bbfe3ba4bf51e1e4",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::tool_err",
+        "demlik_tea::agent::Agent::tool_ok"
+      ]
+    },
+    "cases": [
+      "agent-base.note-retention-1",
+      "agent-base.guard-{\"stopAfter\":1}"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentKnob/member:published:f401dc2ff3a555c5c7b1f81e94099ca0404ddb0d7e5a04cbe5b920aefa0e3693": {
+    "signature": "f401dc2ff3a555c5c7b1f81e94099ca0404ddb0d7e5a04cbe5b920aefa0e3693",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": ["demlik_tea::agent::Agent::init"]
+    },
+    "cases": ["agent-base.three-stage-audit", "agent-base.empty-turns-0"],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentKnob/member:published:32a78e792740e135f1777d63d4763ea22a0e3ae39035bc48614f362f85e30913": {
+    "signature": "32a78e792740e135f1777d63d4763ea22a0e3ae39035bc48614f362f85e30913",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": ["demlik_tea::agent::Agent::is_settled"]
+    },
+    "cases": [
+      "agent-base.cancel-late-fail",
+      "agent-base.guard-{\"maxTurns\":1}"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentKnob/member:published:8c558558bdd748a2a7d00d2437d374efb4ba610d46c25a223d05d6ff152ae348": {
+    "signature": "8c558558bdd748a2a7d00d2437d374efb4ba610d46c25a223d05d6ff152ae348",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": ["demlik_tea::agent::Agent::current_stage"]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.cancel-tools-success"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed."
+  },
+  "@demlik/tea:./agent#AgentKnob/member:published:3820f00ff121c50b66bc5757775302814e6fd8e359c37d907c81ae77b94fd19e": {
+    "signature": "3820f00ff121c50b66bc5757775302814e6fd8e359c37d907c81ae77b94fd19e",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": ["demlik_tea::agent::Agent::subs"]
+    },
+    "cases": ["agent-base.cancel-late-retry", "agent-base.watchdog-stale-boot"],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  },
+  "@demlik/tea:./agent#AgentKnob/member:src/agent/machine.d.ts#AgentVerb1:c8872241282a97f392c1264164cf07741629cf193b027f5f8f6dc7e4875a534d": {
+    "signature": "c8872241282a97f392c1264164cf07741629cf193b027f5f8f6dc7e4875a534d",
+    "rust": {
+      "file": "crates/tea/src/agent/knob.rs",
+      "symbols": [
+        "demlik_tea::agent::Agent::start",
+        "demlik_tea::agent::Agent::turn",
+        "demlik_tea::agent::Agent::tool_ok",
+        "demlik_tea::agent::Agent::tool_err",
+        "demlik_tea::agent::Agent::tool_err_reason",
+        "demlik_tea::agent::Agent::succeed",
+        "demlik_tea::agent::Agent::fail",
+        "demlik_tea::agent::Agent::boot",
+        "demlik_tea::agent::Agent::on_timer"
+      ]
+    },
+    "cases": [
+      "agent-base.three-stage-audit",
+      "agent-base.fanout-1",
+      "agent-base.retry-0",
+      "agent-base.stale-and-note-clearing"
+    ],
+    "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
+    "knownGaps": [
+      "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
+      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
+      "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
+    ]
+  }
+}

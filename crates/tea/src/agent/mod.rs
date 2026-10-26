@@ -11,3 +11,9 @@ pub use schema::{GuardedSchema, StructuredOutputError};
 mod wire;
 
 mod state;
+
+mod knob;
+pub use knob::{
+    Agent, AgentCommand, AgentConfig, AgentError, BrainCommandOf, BrainMessageOf, CommandOf,
+    OptionalProfile, SharedStateOf, StateOf, StepOf, create_agent,
+};
