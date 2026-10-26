@@ -1,0 +1,419 @@
+{
+  "scope": "Checkpoint2: canonical AgentState, precise AgentFailure/AgentLifecycleNote facts, four pure state helpers, and conditional restore at the existing FanOut owner. No agent factory/machine/status projector/provider/SDK/network/children.",
+  "sourceCommit": "730f361cb5bedf9c691962730a865c19b712aad1",
+  "base": "98d622c537ca3bf6700995efc2270dcb3ba7cf74",
+  "branch": "can/rust-agent-state-helpers",
+  "worktree": "/private/tmp/demlik-rust-agent-state-01a16c9d",
+  "archive": {
+    "path": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d",
+    "tar": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d.tar",
+    "sha256": "2448e711a07758a57d6a7efcf2d1fa4e05b7976d3e143d4262cce1b02a4e275f",
+    "all16SourceFilesMatch": true,
+    "rebuiltFreshTarget": false,
+    "qualification": "Native/static/shared/controls used identical frozen production bytes in the isolated baseline target. Complete committed source tar, copied baseline binaries/rlibs and proof bytes are retained; no fresh archive-target rebuild claim."
+  },
+  "reference": {
+    "commit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "sourceHashes": {
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/compaction.ts": "0875e95beac85e5eabe16ca8a7a80786b09031a0cbcfe23fa644a387faad6aad",
+      "packages/tea/src/agent/schema.ts": "8b7b7f0706e053063f87a2e99a75662dc01b5e0e2ca1941a76af720262cfc864",
+      "packages/tea/src/internal/flow/fan-out/index.ts": "5cd5ee63fd71e0e9fdc682134426a88ea4760637ff5a71d64ded0e371dc8a4f8"
+    },
+    "sourceUnchanged": true,
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+  },
+  "interface": {
+    "state": "14 explicit caller-owned generic parameters/defaults compose canonical MonitoredRun, LlmCall/resilient-call, FanOut, Conversation and JsRecord owners. Manual shallow Clone clones retained handles only. Six public consumers include borrowed non-Clone/non-serde/non-Send/non-static opaque values.",
+    "helpers": [
+      "AgentState::with_usage_defaults(self: &Rc<Self>) -> Rc<Self>",
+      "AgentState::current_stage(&self) -> Option<Rc<Stage>>",
+      "AgentState::is_settled(&self) -> bool",
+      "AgentState::require_awaiting(&self,AwaitingKind) -> Option<&Rc<Conversation<...>>>"
+    ],
+    "identity": "No-op returns the original outer Rc. Migration remints only State/Conversation outer owners, retains original arrays/composed/cause/output handles, lifts current then legacy non-null usage or shared local NO_USAGE, and drops the known legacy usage copy. A defined null top usage can remain null on the fast path. Legacy null is defined, triggers migration, and falls through nullish usage fallback.",
+    "presence": "Existing AgentField distinguishes absent/undefined/null. In particular failure: AgentField<Option<Rc<AgentFailure>>> is not normalized to null; missing/undefined therefore makes is_settled true exactly like Source failure !== null.",
+    "stage": "First running ledger entry is selected before looking at input; undefined first input does not fall through. Returned original Rc remains live after cancellation/queue mutation/state drop.",
+    "facts": "AgentFailure has the exact turn_limit/elapsed_limit/llm variants; lifecycle has brain_started/tool_started/tool_failed/run_ended. Persisted numbers reuse canonical NumberOrNull via AgentNumber, retaining null until actual arithmetic. Conditional wire is flat and omission-aware; RawValue per-variant decoding preserves UTF16.",
+    "fanout": "Conditional Deserialize on the existing FanOutState/Done/Failed owner restores entries, order, duplicates, joined and wave cursors directly. Missing item/result recovers Undefined only when the caller decoder supports canonical decode_missing; String refuses missing values. No initialization, normalization, numeric or transition changes."
+  },
+  "verification": {
+    "newShared": {
+      "state": {
+        "cases": 205,
+        "passed": 205,
+        "nativeEvidenceCases": 205
+      },
+      "fanoutRestore": {
+        "cases": 8,
+        "passed": 8,
+        "nativeEvidenceCases": 8
+      }
+    },
+    "affectedStrict": {
+      "content": {
+        "cases": 79,
+        "passed": 79,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-content.json"
+      },
+      "guards": {
+        "cases": 158,
+        "passed": 158,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-guards.json"
+      },
+      "model": {
+        "cases": 90,
+        "passed": 90,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-model.json"
+      },
+      "prerequisite": {
+        "cases": 49,
+        "passed": 49,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-prerequisite.json"
+      },
+      "state": {
+        "cases": 205,
+        "passed": 205,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-state.json"
+      },
+      "fanout": {
+        "cases": 8,
+        "passed": 8,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-fanout.json"
+      },
+      "flow": {
+        "cases": 48,
+        "passed": 48,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-flow.json"
+      },
+      "llm": {
+        "cases": 91,
+        "passed": 91,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-llm.json"
+      },
+      "timestamps": {
+        "cases": 36,
+        "passed": 36,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-state-regression-timestamps.json"
+      }
+    },
+    "affectedStrictTotal": 764,
+    "modelRuntime36IncludedIn90": true,
+    "qualifiedExcluded": {
+      "contentMalformedCallId": 4,
+      "modelMissingUndefinedOpen": 2,
+      "prerequisiteOwnResultReflection": 1
+    },
+    "native": {
+      "teaPassed": 356,
+      "compileFailDocsIncluded": 24,
+      "newPublicStateConsumers": 6,
+      "allTargetClippy": "passed",
+      "fmt": "passed",
+      "verificationTypecheck": "passed",
+      "biome": "passed",
+      "graphWorkspaceNotRerun": "Unrelated Graph build excluded; parent owns complete composition."
+    },
+    "faults": {
+      "compiledDetected": 20,
+      "escaped": 0,
+      "mandatoryBaselines": {
+        "state": 205,
+        "restore": 8,
+        "flow": 48
+      },
+      "declaredWitnessRequired": true,
+      "fanoutControls": [
+        "fanout-missing-value-becomes-null",
+        "fanout-restore-drops-pending-entry",
+        "fanout-restore-reinitializes-joined",
+        "fanout-cumulative-wave-regression"
+      ],
+      "separateTargets": {
+        "baselineTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1
+      },
+      "sourceAndBaselineArtifactsUnchanged": true,
+      "earlier32Controls": "Checkpoint1 guards20/prerequisite12 remain attributed to source3f2e753a, not relabeled as a new final-State run."
+    },
+    "redGreen": [
+      "Missing AgentState/helper public interface: intended E0432; six real public consumers now pass.",
+      "Full-state restore initially failed because canonical FanOutState lacked Deserialize; narrow owner restore now passes8direct pairs and public round-trip/refusal tests.",
+      "Final regression wrapper initially mistook flow cases array for a numeric count; production stayed unchanged, original failure log preserved, repaired full764 run passes.",
+      "Mapping-list formatter refusal preserved and repaired; all final static checks green."
+    ],
+    "commands": {
+      "native": "lean env cargo test --locked --offline -p demlik-tea",
+      "clippy": "lean env cargo clippy --locked --offline -p demlik-tea --all-targets -- -D warnings",
+      "regressions": "lean env pnpm exec node --import ./verification/parity/node_modules/tsx/dist/loader.mjs verification/parity/agent-state-regressions.mjs",
+      "faults": "lean env pnpm exec node --import ./verification/parity/node_modules/tsx/dist/loader.mjs verification/parity/agent-state-mutations.mjs",
+      "directConsumers": "Unchanged real crates/parity/src/bin/{flow_driver,llm_call_driver}.rs are compiled against freshly rebuilt own-checkout tea/serde/tokio rlibs with exact rustc commands/library/source hashes in retained consumer-build reports. No adapted substitute or Graph build."
+    }
+  },
+  "blindSpots": [
+    "Only canonical dense own-data State/Conversation facts are modeled. Unknown spread fields, getters/prototypes, sparse/custom-iterator JavaScript arrays and arbitrary malformed raw shapes remain outside the native typed profile; no JS object runtime.",
+    "The separate raw missing own-tool-result-property observation stays QUALIFIED with both actual pure snapshots and excluded strict/nativeEvidence. Exact JSON wire/original-owner companion is independently strict; no ToolOutcome variant expansion.",
+    "Existing brainHandler supported Missing/Undefined input mismatch remains OPEN and separately qualified in model mappings. This State checkpoint does not close it or the whole port.",
+    "No factory/reducer/status/event projector/provider/SDK/streaming host/children implementation is claimed."
+  ],
+  "capabilityMappings": {
+    "file": "verification/parity/agent-state-contracts.json",
+    "ownedExactExports": [
+      "@demlik/tea:./agent#AgentState",
+      "@demlik/tea:./agent#AgentFailure",
+      "@demlik/tea:./agent#AgentLifecycleNote"
+    ],
+    "proof": "target/parity/agent-state-mapping-proof.json",
+    "allSelectedCasesStrict": true,
+    "allSymbolsObserved": true,
+    "noInternalHelperAliases": true
+  },
+  "integrity": {
+    "sourcePackagesUnchanged": true,
+    "noNewDependencies": true,
+    "noMainRootNetworkDockerRemoteWrites": true,
+    "licenses": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    },
+    "previousCheckpoint": {
+      "source": "3f2e753a3f44bed801e0890fae086151092a98ba",
+      "receiptSha256": "71c612629eaad189b8be5f0ac92a2bd5868381e35c56232d04ec3651e3f02a72",
+      "all17SourceFiles44Reports34Logs10LinkedArtifactsPreserved": true
+    },
+    "preservedLinkedArtifacts": {
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_state_driver",
+        "sha256": "ca67bcf2bddaacb7d2db0fe03c9490dea0f1f520e8d0d271dd57aa804610d050"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_fanout_restore_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_fanout_restore_driver",
+        "sha256": "890e1866e9ec8d20ec57246c42f78b31b789f9a3ffa18fa66739b8cb212f3e0b"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_prerequisite_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_state_prerequisite_driver",
+        "sha256": "5ab11ee63237298cf64e6cf9da03fadf576ae357dd85f1b847a8f56c35252c26"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_content_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_content_driver",
+        "sha256": "7c5d37175f2815ba59a69532d2bd71d0e4c045672ab3798792537f9026aaf761"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_guards_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_guards_driver",
+        "sha256": "11eebcfb2233e920f9a0bb3463fc8f2be5f534c324464bf452f845803b4f295b"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_model_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent_model_driver",
+        "sha256": "60b3ebea0b1dc5d0075c8834e86d2f310d9bde80dc8c14c66ecb3546f937a8ba"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/timestamp_runtime_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/timestamp_runtime_driver",
+        "sha256": "50b3f82dca9bec01e75aa0bec402463bfb79b95118516f5b3469722e5741b079"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-flow-driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent-state-flow-driver",
+        "sha256": "fa2b8f5da0ab24670dcb51ed2b1b5df73367826d0850a0efa2c67667c9a1c56a"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-llm-call-driver": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/agent-state-llm-call-driver",
+        "sha256": "58f8234e617cf12b2df3d67d58b1a5e6233961a76f2a4c685316a891b0aca356"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/libdemlik_tea-ef4c9c64b773b701.rlib",
+        "sha256": "fbf747677e45b560200c4de5f1dce3c0f42ad2483aa9ae1e24989db1bb115738"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/libserde-1e121e747c37db81.rlib",
+        "sha256": "359f13057abb52a9aa679c17946e96115a4adc28f10e71a458d3225ac83208e7"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/libserde_json-bae62904d1b7570d.rlib",
+        "sha256": "5fb10b3fcb3950435998dde0ad715762168d51d1d732faf54d2dce7a222c05a0"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libtokio-bee55f6657e963fa.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-exact-730f361c-01a16c9d/artifacts/libtokio-bee55f6657e963fa.rlib",
+        "sha256": "5a83aec996c0eb6da8ac82b46c909c92ecce200b6b5cf79ba003d079f0950f0d"
+      }
+    },
+    "externalHelpers": {
+      "/private/tmp/demlik-agent-state-flow-build-01a16c9d.py": "8a9ebd299c47b18cde151d6efc42537acede28d510d03ef5494d110bcf289f16",
+      "/private/tmp/demlik-agent-state-llm-build-01a16c9d.py": "94bd7ba620e90f431fc8d2c59e4a7135e124cd625531bf6598571b5fa9667b12",
+      "/private/tmp/demlik-agent-state-final-gates-01a16c9d.py": "e4d4bd4e735a45376bfd60e7f465fd8fb9bb2fc4d4788a3d0212791e95196903",
+      "/private/tmp/demlik-agent-state-source-probe-01a16c9d.json": "800c0fd872a69307ffdd275311e55b49f8640151a1285257479b321fe6fcbc73"
+    }
+  },
+  "ownedFilesSha256": {
+    "crates/tea/examples/agent_fanout_restore_driver.rs": "1844f90cf44d181609130666bba0d88e09494878abb469f3cbe4e954d8cf9bea",
+    "crates/tea/examples/agent_state_driver.rs": "ad5c6918c5ed334aa638a1020eddcd84b53e05e69668d63168559ca3b9955c36",
+    "crates/tea/src/agent/compaction.rs": "4705fa83e3a7318a8ad1dd065a38e6ff6160e7ce40dd88dc183f4236abd23e3d",
+    "crates/tea/src/agent/mod.rs": "c433802a1ec0c9bf53e58303f5ee058da54dad62556919a2869a763e0de46c00",
+    "crates/tea/src/agent/state.rs": "ddb427353338b78255bc14ca50ec2d6045879bfc5608e6f3254935b3d5f03b0a",
+    "crates/tea/src/agent/types.rs": "778b6ec237530348d68ee03a275d41777dcfbfc6b74192f29f30939730d86d21",
+    "crates/tea/src/agent/wire.rs": "f268296414c9d0576a84648a2b4b0e8ed0035ace1854acf2ca408b38b6c2d01f",
+    "crates/tea/src/flow/fan_out.rs": "77cc7f64275e6fb32b4223dc0dba87c61362bb4ef8583c7e7550b949b8362dd7",
+    "crates/tea/tests/agent_state.rs": "d2fe5269352074800eb1424b77105c4796e6b1c5389d333ede4a8e6848221135",
+    "verification/parity/agent-state-cases.mts": "844a55b57703d979d1348f617b7930fc08bec9d9e7ab86b66c89a85cc30b093f",
+    "verification/parity/agent-state-contracts.json": "fbfef07faf11deaf2c637117dc9e34707124969d0c1223a5dcb141bd1421177a",
+    "verification/parity/agent-state-fanout-restore.mts": "e5b45ff50482ac161fc192a909846e6700e361110215689aa58462add7b8482e",
+    "verification/parity/agent-state-mutations.mjs": "7ec991771d4d21b4c4a472940d3c5cacc99b18fdf8aa91a8f6a0d6936bb2779b",
+    "verification/parity/agent-state-reference.mts": "a0be9f44d8f3402c7f7bf286d99ee283802237d71c78a4deef2bd71e47c66594",
+    "verification/parity/agent-state-regressions.mjs": "098f124065961d136f8626f050068a951fa9b67854dcdf586bdfedb204cbbebd",
+    "verification/parity/agent-state-run.mts": "7905d2be716ba91a13eae246477b6a33986c5f8c3dba46b64132142d381b90c5"
+  },
+  "reportsSha256": {
+    "target/parity/agent-state-fanout-mutation-baseline.json": "37b768140ff6ab9cac48652863c9ff5c2e34cb87f5be0d2459282c7aa016314a",
+    "target/parity/agent-state-fanout-restore.json": "37b768140ff6ab9cac48652863c9ff5c2e34cb87f5be0d2459282c7aa016314a",
+    "target/parity/agent-state-final-gates.json": "17975a97a320fb661b0faf73ed3e7b9fec748fcd7b26f9e7427a1b08d4305875",
+    "target/parity/agent-state-flow-consumer-build.json": "c795141dff2d56e2bbd44b40a48c9624067d196ce086e89a9916fd210300951e",
+    "target/parity/agent-state-flow-mutation-baseline.json": "fdccfa07466d65fdb931a99d18ed1397944a9fa0074bafc7b1b7e1998e300da3",
+    "target/parity/agent-state-flow.json": "0bcd40ef4b08c6f01702c32e120edb402c0415072c2521e13562bb6cbc617ded",
+    "target/parity/agent-state-llm-consumer-build.json": "2b3cd922604c7cac00347551bce54c9a7f2291b993f96e31c6d2b3de727a2abe",
+    "target/parity/agent-state-mapping-proof.json": "5be77f3dffd42fa9ef99312f9dc91060051294c66d670d7dea0fff4640ad519f",
+    "target/parity/agent-state-model-integration-llm.json": "65df91ee0d458538471840e1bbb7a0e594ca4a61b8e00cbf58560fc54180d730",
+    "target/parity/agent-state-model-integration-timestamps.json": "c3dc20721f7ebdae23f40aca84bf7764af5b4177899ba5e135de07b67b2772c4",
+    "target/parity/agent-state-model-integration-types.json": "7d5a1a5157b5a798b27d67554645ab6df404b9e9bf40244a9a5ae157d04962f8",
+    "target/parity/agent-state-model-integration.json": "afa6fe2af2edb243ea21f31d086ea2c65d0680a5b47c192e10001d68f3c97b9a",
+    "target/parity/agent-state-mutants/awaiting-kind-is-ignored.json": "dfcaf0b65a72eb812c9cd727ea920f91623d0df407e430c72e0d034b80926248",
+    "target/parity/agent-state-mutants/cancelled-is-not-terminal.json": "904307f860d9a97c01a7e750839b36f7be0c08868e9772fc5b9d5d0ee12ca049",
+    "target/parity/agent-state-mutants/copied-state-remints-run-owner.json": "20dd9410160d57fd416c7b0e3bedf402e354005a18bb5125b08e5dd764ee2519",
+    "target/parity/agent-state-mutants/copied-state-remints-tools-owner.json": "3c276d9d65d9c69ef9f4260595c58bee17a7239124f1505e0c1593b870aa35e6",
+    "target/parity/agent-state-mutants/current-stage-is-gated-by-terminal-state.json": "423847a9c45614ccfc2d3e455f68a1866ad9edacfaede880d23403bbd0fba91a",
+    "target/parity/agent-state-mutants/current-stage-picks-last-running.json": "aa82e2bce2603033400238625c3e59511f0e4b366c9f75dcd8b11d807ef295fd",
+    "target/parity/agent-state-mutants/defaults-are-gated-by-terminal-state.json": "02fb93c60fd23d94e8069a25f35840922e424403c9612508b641c27810d33b7a",
+    "target/parity/agent-state-mutants/defined-null-context-is-reinitialized.json": "e275b2ccf7f510377190a9f4971f13333ecbd3267d1aac9179263827ae9e7ebf",
+    "target/parity/agent-state-mutants/fanout-cumulative-wave-regression.json": "abd8955a9b2d0cc37d79a155fa2f30b47471214ea684f50c249dc3cd53282c68",
+    "target/parity/agent-state-mutants/fanout-missing-value-becomes-null.json": "cecb56b59a1087e83b8f7d9396d1505cbdfca89769340d5ce34a51cd283a7a39",
+    "target/parity/agent-state-mutants/fanout-restore-drops-pending-entry.json": "650b29f80cb14aca0e517f64ce4f5cc36f5e6322402059f513cbd89f4d6fa898",
+    "target/parity/agent-state-mutants/fanout-restore-reinitializes-joined.json": "82dced0b1afb2aeb6b1dcf4688f07837c6535717798f9de1970973ae47424efe",
+    "target/parity/agent-state-mutants/idle-is-terminal.json": "8574226af15d8182c17faba4b77b8c4fcc6eccbaafa20455d8967ba09f5d4919",
+    "target/parity/agent-state-mutants/legacy-null-is-treated-as-undefined.json": "816be56a11f583e3af946d0a849c6e78b5c9d21c4d7db39ddfd150357d584085",
+    "target/parity/agent-state-mutants/migration-invents-zero-context.json": "31f170de79bb1e0a5c9dc7e00a90704d8e6da7605bc92e433a595562f0c41170",
+    "target/parity/agent-state-mutants/migration-keeps-legacy-copy.json": "fb7e83a14f79bc1111b00fc7eb4bb9cd4907a505d1f448355ac9b4b0cfb4a00c",
+    "target/parity/agent-state-mutants/missing-failure-is-normalized-to-null.json": "805750dbf575a492abed1835e4f75ee10577aeb1a00fd1379c1488ae9fdc7c2e",
+    "target/parity/agent-state-mutants/noop-remints-state-owner.json": "6cd926f73bb0ddc9d5fe8b0d8c88626e8bac649b6026abde10d26b67ec039378",
+    "target/parity/agent-state-mutants/null-usage-is-treated-as-absent.json": "62c2cc906c46f06532ddf553a576f5891225d410ac5565998ccb676cf54d6caf",
+    "target/parity/agent-state-mutants/stale-is-terminal.json": "14adab7228ae4988f0e289e4addf073c04972b394a1654d5b8d4af93aa4ab8b7",
+    "target/parity/agent-state-mutation-baseline.json": "32d09cded7b1a259646718b2a375c912e5d1e32828715e91225a61574f4227b3",
+    "target/parity/agent-state-mutations.json": "d3f1d37c5a59351f46449c5e16372af27ba7df1e825d96d878d9e3290b5881f4",
+    "target/parity/agent-state-prerequisite-affected-content.json": "112b95bd52751fe37422fc64d9a91f316db15534117edc9b6adade28d944b04b",
+    "target/parity/agent-state-prerequisite-affected-guards.json": "1cd835f49222bbd70a0d8e8f34628e114b469b47aca3da63c677f0d541f4806e",
+    "target/parity/agent-state-prerequisite-affected-llm.json": "5d8c67080be0d09e19bf74619ac81e4c9d934fb37e782ba0e66d911733e2ee0f",
+    "target/parity/agent-state-prerequisite-affected-model.json": "b7b654ea6a89f01d3d89d2f60f6aef62afb5428d4dea20ecc7a5d79ee771a2f9",
+    "target/parity/agent-state-prerequisite-affected-timestamps.json": "f3eb461280581701ea18a6974025af84e6bdbf82062956fe8847b86735c55251",
+    "target/parity/agent-state-prerequisite-guards-mutations.json": "a0f3e8c5250ab85cb019f5dc70434fcc24fbb1c03050c1098745a27f92043f55",
+    "target/parity/agent-state-prerequisite-mutation-baseline.json": "4a8c64929dae0d4e10e05724e97dde67f6c037fbee4406d406e27bb70624c4a8",
+    "target/parity/agent-state-prerequisite-mutations.json": "569477134cc4d2edbe05671a5fb4b66787592aad074c3b076baddf8a783cfe6a",
+    "target/parity/agent-state-prerequisite-observer-red.json": "5f965075284cd395a4b40270a9612051d3f6e68cb963f2cf382f3fc23538fdeb",
+    "target/parity/agent-state-prerequisite-result-presence-red.json": "622b7a50fed7bb7772c2a971700947173ac041c2de64dbda82dc6d795f11682e",
+    "target/parity/agent-state-prerequisite.json": "4a8c64929dae0d4e10e05724e97dde67f6c037fbee4406d406e27bb70624c4a8",
+    "target/parity/agent-state-regression-content.json": "c4f4f0bd6fb9e8a510e0d26b5aecc8ef17f2b87955f0a1ea01169ce80ec217f0",
+    "target/parity/agent-state-regression-fanout.json": "37b768140ff6ab9cac48652863c9ff5c2e34cb87f5be0d2459282c7aa016314a",
+    "target/parity/agent-state-regression-flow.json": "fdccfa07466d65fdb931a99d18ed1397944a9fa0074bafc7b1b7e1998e300da3",
+    "target/parity/agent-state-regression-guards.json": "6934b90e14429f31419c7cc3262b1bf6aae12a26d0d074c935ae6b436bafa926",
+    "target/parity/agent-state-regression-llm.json": "cf325ba35fe5bdaf2b938046288c6f78ec6005edb6bd5f9b36d266f699253aa1",
+    "target/parity/agent-state-regression-model.json": "e99b174cb6445231e1dd929b49d29060d6a789a292f0e5b03158a953e46bdac1",
+    "target/parity/agent-state-regression-prerequisite.json": "8ad076d8adbf5949f536f9149b40379d29155f83fa93e94f9ee0a37bf5e87d46",
+    "target/parity/agent-state-regression-state.json": "32d09cded7b1a259646718b2a375c912e5d1e32828715e91225a61574f4227b3",
+    "target/parity/agent-state-regression-timestamps.json": "8d6322c4d2247b549d3bf4553a959fdc4f0ca310cedc1b61399c7d8b4182d7af",
+    "target/parity/agent-state-regressions.json": "7a7bcff72f677c13de02c80e8dffee6f86000547a47f0d7e1ede3cc825ae6dec",
+    "target/parity/agent-state.json": "32d09cded7b1a259646718b2a375c912e5d1e32828715e91225a61574f4227b3"
+  },
+  "logsSha256": {
+    "target/agent-state-clippy-first.log": "a44100fccd8ad3290c044700fbc853cfe3c36ed97179941e8d32f5ade686395a",
+    "target/agent-state-driver-build.log": "09a9d1d46b45aba11a2038482206f2e3d76853b2ce0be8b71a00c24bc5e81b6a",
+    "target/agent-state-fanout-restore-build.log": "76e2db91c47af437c0af0c3bab0acf43fbad6e5e67991a706d7eb235ccbc9a69",
+    "target/agent-state-fanout-restore.log": "4b4b4c3cf697c28a484d83fd2201b0dfaad87027d641378673c35c18694d07f4",
+    "target/agent-state-final-added-format.log": "736e2dc391c55fd9f4a346c9a8f88c2eb4bec0ce90027b161d109dcd978fbbf0",
+    "target/agent-state-final-biome.log": "a366dcbffc94ce363c8fe8f263fde74de30a322fa4253a9c335a8f8c14feeb9c",
+    "target/agent-state-final-build.log": "492249c9f550482a9a491739745144c5a474b15b27fd7de5717f8cd83c68916d",
+    "target/agent-state-final-clippy.log": "1094a36867300c1838cdc4ee40efe961d83bac574665f8ee57a40d5b1e88698c",
+    "target/agent-state-final-contracts-biome-green.log": "9db65e5b8464d24822105a525af2b621ca9d3a5e56b109b66ca01893241df743",
+    "target/agent-state-final-contracts-biome.log": "4b6937e70aace37f17c2732b5cef894c557b02051f100ae390aaaf25bb1bc726",
+    "target/agent-state-final-contracts-format.log": "895a0973abf6a87cf66ba6b630dfc50ade1cdf2c1ebe27b5bf2398fe0a5feda1",
+    "target/agent-state-final-flow-build.log": "0a23610dcc6f56d9c3ae785e49e863eb272852f3e77ae13838a25a963fc41354",
+    "target/agent-state-final-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-final-llm-build.log": "5600fd1504a2dd5ebbd2a20a59c200d153225f611d86c72e511e104e84b87bdd",
+    "target/agent-state-final-native.log": "d1237cc75bed75c5b5b79a0db18901d6ab240f20dae656a3e974f4c1bc60ba83",
+    "target/agent-state-final-regressions-format.log": "aa3e1aa2bc1275998a2ec0cde817df7170800609b7c546a11567590ecfc48467",
+    "target/agent-state-final-regressions-repaired.log": "7e05464890b81a6a15d96ff6c8b2e7334e3ab5fafae2c69c5cd3e8d653fdda2d",
+    "target/agent-state-final-regressions.log": "52d37b27ae2787a83cc466560962416872ec5f9e0a5868bb5729031d77c60c62",
+    "target/agent-state-final-typecheck.log": "7eb57ffe6b698c88489b2aeeee3fcb54df1f81007043d2b05c14004f4b431f4b",
+    "target/agent-state-first-pairs.log": "95ead7075ea8b8d8b0098cb2389f515931507ee5c6ab80746f27d3a80c1490d4",
+    "target/agent-state-flow-build.log": "0a23610dcc6f56d9c3ae785e49e863eb272852f3e77ae13838a25a963fc41354",
+    "target/agent-state-flow-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-flow-green.log": "cd54ca4f8c0ed652ccf4d2b52f04f9adb6e1cc0b795ac8a3979889af662a1e7d",
+    "target/agent-state-flow.log": "21af296d8bb1cc9d2f1bd9e1ff35ac13920b4b33e7cc8254137b2285b2e1a531",
+    "target/agent-state-llm-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-model-integration-build.log": "e9e6c7fc13c88bccf1b5b6d3807b783c7c469172a852dd7cda9719386b86b8b6",
+    "target/agent-state-model-integration-clippy.log": "9f788eef6e69d5288058071d164902041cbd6c1c244b776412e5769b9c53c42d",
+    "target/agent-state-model-integration-llm-build.log": "0cbea22c7bf2f4fa2c1eafbff8f180790cc3894b595e54be46cf3be8f2d1ef6e",
+    "target/agent-state-model-integration-llm.log": "c49fdcd666c47e27e5e9a180bce4267786df52ce4e8bd5a93aeb910d8c73d79c",
+    "target/agent-state-model-integration-native-green.log": "2937c431c74ae32316c14057a9a06055646f3afe8cf1e48baa56dd5cda07d3b4",
+    "target/agent-state-model-integration-native.log": "28f389badd64205b0e10b4e2b426217375682951f1d7db68d9ab2943a84b6446",
+    "target/agent-state-model-integration-pairs.log": "01d6d72a48175aaa53e285a6b8ff0ee2479745c38eced1f285c3b1848143e3e3",
+    "target/agent-state-model-integration-receipt-format.log": "fd06ed1906864d862af1b302e14f95710bd4ba5d86680bb0976e34e5bf20f03a",
+    "target/agent-state-model-integration-timestamp-build.log": "6b71de35fc020026899492306195734c470fd2d7060b70a9ddc6121755954af2",
+    "target/agent-state-model-integration-timestamps.log": "e0e3238ab2e471fd464c1a3581ab2d0ef3e03bbbafa84cc068a9b5d0329a5853",
+    "target/agent-state-model-integration-types.log": "5cced603de5e5885af0e114a362d5f68e1d682723ccaf83bff876e0d5fc9f981",
+    "target/agent-state-mutants-format.log": "8695c5318cbc8597f70a8881d6c055f2f0e96208532029692ae1d23610eb0e65",
+    "target/agent-state-mutations-first.log": "386c69d260a1daf38c6fc188ee76cdc9f3fd99e48d6640e2962386e212e68d95",
+    "target/agent-state-native-first.log": "693d481ae5214eb9f9e24a94f3894b52bde18f98ec0e68c6d5c196334315c4b9",
+    "target/agent-state-note-format.log": "ccfebc79f7598bc69ce8a65c6d04b7de141f387ff15133e465919e3a807d10a4",
+    "target/agent-state-prerequisite-affected-build.log": "9ddcb7a97f3589835ba8f354c41d25b0a805bd5f85ddbccaff009e6f6dc7236c",
+    "target/agent-state-prerequisite-affected-llm.log": "2ca1cc040194c5469dafc02850e2123ca897677d87cc56dd88b3b638257284a5",
+    "target/agent-state-prerequisite-affected-pairs.log": "7ddd68dea9ed91cba769086974a9615d6da0cf59d755752c2b1c2d897f0c356b",
+    "target/agent-state-prerequisite-affected-timestamps.log": "e0e3238ab2e471fd464c1a3581ab2d0ef3e03bbbafa84cc068a9b5d0329a5853",
+    "target/agent-state-prerequisite-biome-final.log": "180ed8b0729a4219f52b55e040891463268cc2381f45f3608acb6b405807ef7a",
+    "target/agent-state-prerequisite-clippy.log": "36bc5058acd80c9e0300c46960e9322a9fced0fa2e4e7386bcfd0df9f0b487c6",
+    "target/agent-state-prerequisite-controls-format.log": "9f04d63ef8b1d4df708c3e953105fbfabededf120b51f71177d8cedae64a1f41",
+    "target/agent-state-prerequisite-driver-build.log": "b08fe553cccfb2468e1a4e1dfb30084cf9a53883c18715ea8327878a115ee214",
+    "target/agent-state-prerequisite-driver-green-build.log": "ccb22593207c51f22834fdeab23463c1fc8671d9e28475effaa7a014f37bddde",
+    "target/agent-state-prerequisite-drivers-build.log": "fe0ea583028744c252baf66a8ff247b5223300316ba385da8ae9c3337d9ed150",
+    "target/agent-state-prerequisite-first-pairs.log": "9e0f3dd5db75a06ad098d81eeace9dfb241e7d10ca7fa70e4eac6f9a36d96cd6",
+    "target/agent-state-prerequisite-fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-green-pairs.log": "1fc056f419f7caa2656a2f31b9b98ba814b8691f3799c537a4b6db60da8a1d8d",
+    "target/agent-state-prerequisite-guards-mutations.log": "491c553371ac6779649372e39fc10541a190cbe95413ef64a9d53471f80824e4",
+    "target/agent-state-prerequisite-llm-build.log": "0cbea22c7bf2f4fa2c1eafbff8f180790cc3894b595e54be46cf3be8f2d1ef6e",
+    "target/agent-state-prerequisite-mutant-companion-format.log": "0e0e4d67ce292c695bc25fc61158807f7c5902ec2003dd624e65e30ff2524da7",
+    "target/agent-state-prerequisite-mutations-final.log": "33cb329535ff6250ea95631d51683bc5c2144d4b64ce1e279a917aeba448f79a",
+    "target/agent-state-prerequisite-mutations-green.log": "7778d0031b2f2093c6a3719759bbe2ef4b45fe8347b8d65d8a44431ec42b37c6",
+    "target/agent-state-prerequisite-mutations-inference-red.log": "33cb329535ff6250ea95631d51683bc5c2144d4b64ce1e279a917aeba448f79a",
+    "target/agent-state-prerequisite-mutations.log": "3dfbc8ebbec2ff3f6a339e5044f55d600b317ff88bff859fb23898f873de2f07",
+    "target/agent-state-prerequisite-native.log": "a55d46b1e43772570e13268e308f8bea268b8272cb421844cb7c68fd92fd989d",
+    "target/agent-state-prerequisite-post-controls.log": "842e88066091de203e49ffe08297528728174994db520f3b99a60f60c41680b6",
+    "target/agent-state-prerequisite-profile-format.log": "b6705256aa13385be4f8dc22311bebc6c9b2640fed9b51a5d8d517912a35959c",
+    "target/agent-state-prerequisite-public-green-first.log": "b75e12233b21f905519dd32675ea2825364075c8d8ccf4b1bc23f395dee6db78",
+    "target/agent-state-prerequisite-public-green-fixed.log": "64a31c02a757d3f405f9d5e1dc2ba1e89b1119dc77e1702562d868b8e59734cb",
+    "target/agent-state-prerequisite-public-green.log": "a5cfd417cbc951b7bae046b79e165799799a64bba4ad01b68146154dff190052",
+    "target/agent-state-prerequisite-public-red.log": "660ee1df3f0e9ec77b28a6fa909a65037e3a11175b134c060743f29a08349b20",
+    "target/agent-state-prerequisite-qualification-format.log": "0eb3fc0c946575a48abc678a8c74efb29773b660c4279913564e83d932e3de84",
+    "target/agent-state-prerequisite-qualified-green-pairs.log": "842e88066091de203e49ffe08297528728174994db520f3b99a60f60c41680b6",
+    "target/agent-state-prerequisite-receipt-format-final.log": "7d732a79fb196f6d1d40a5adaf0c281271e325e8d3169bcf1dc370e21636d6b9",
+    "target/agent-state-prerequisite-receipt-format.log": "e5c30fc07d09bf4c6e4bebda58977489ec426c11c066f667073812b4cad1e1af",
+    "target/agent-state-prerequisite-typecheck-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-typecheck-post-controls.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-verifier-format-green.log": "3a3e1442c2c884f192bad3cfef0428134f56a91c5695de3ef91b3494cbb49c65",
+    "target/agent-state-prerequisite-verifier-format.log": "63aac03cd025910346daf9ddb995bef1ff2d9eaf7f0a09c3c78515c189cddc55",
+    "target/agent-state-public-green-first.log": "23cf5538527e54da3b25891a76b2230a3c13bc21748aa88a719b08f673e8320f",
+    "target/agent-state-public-green.log": "c11bb53004fc36db74899f6586088a22eed06d4761d004f28ac87db3fd4564af",
+    "target/agent-state-public-red.log": "44b40756476fd8b5b9f7e8ddb70585cf2ecb1c9dab0d0b15b75875d98d6010a5",
+    "target/agent-state-public-wire-green-first.log": "77394eab1578d4f96290b1dedbe53a36b7772ebeda0d25c32ab77955814babb2",
+    "target/agent-state-public-wire-green.log": "25bbe4954b5ab71edd456bc7b5d45d5f8493ff69394c9069e5ac13fd8a3b0c1f",
+    "target/agent-state-restore-verifier-format.log": "95f200efea5ab7000745e08bdc7ff6ca6f2143ec8aeba49508b7cf4fc27e3ca4",
+    "target/agent-state-second-pairs.log": "d16e59738569476ff9909b2df18dc6951f9393b4dda1a0c1da19803828e702fc",
+    "target/agent-state-typecheck-first.log": "d0a8ad0502860f611b461567b6392a1a86b5fb044bf16cc6604e223bcaaba1ce",
+    "target/agent-state-typecheck-fix-format.log": "2eef4d6e7fda1d3a3427bc39ac82b6ff90ebacb18be1355a2688027c7d2bd7c4",
+    "target/agent-state-typecheck-format-repaired.log": "b6705256aa13385be4f8dc22311bebc6c9b2640fed9b51a5d8d517912a35959c",
+    "target/agent-state-typecheck-green.log": "8185fab823bce35f397b9612958e6b8066ef31d025e84affe2a93b14930fec33",
+    "target/agent-state-typecheck-repaired.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-verifier-format.log": "039245be6a299cbfb5fbcd367874ff4141466d0114000c1a49ac3a4423b5ed6d"
+  }
+}
