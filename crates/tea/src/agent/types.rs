@@ -387,3 +387,124 @@ impl<T: Serialize, F: Serialize> Serialize for AgentEndedStatus<T, F> {
         JsonData(&fields).serialize(serializer)
     }
 }
+
+/// Agent-owned terminal annotations, separate from monitored-run failures.
+pub enum AgentFailure<E = PlainData> {
+    TurnLimit {
+        at: AgentNumber,
+    },
+    ElapsedLimit {
+        at: AgentNumber,
+    },
+    Llm {
+        error: AgentField<Rc<E>>,
+        at: AgentNumber,
+    },
+}
+pub enum AgentLifecycleNote<A = PlainData, E = PlainData> {
+    BrainStarted {
+        turn: AgentNumber,
+        purpose: JsText,
+        model: Option<JsText>,
+        at: AgentNumber,
+    },
+    ToolStarted {
+        call: Rc<ToolCall<A>>,
+        at: AgentNumber,
+    },
+    ToolFailed {
+        call: Rc<ToolCall<A>>,
+        failure: Rc<E>,
+        at: AgentNumber,
+    },
+    RunEnded {
+        at: AgentNumber,
+    },
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AwaitingKind {
+    Llm,
+    Tools,
+    Compacting,
+}
+impl Awaiting {
+    pub fn kind(&self) -> AwaitingKind {
+        match self {
+            Self::Llm => AwaitingKind::Llm,
+            Self::Tools { .. } => AwaitingKind::Tools,
+            Self::Compacting { .. } => AwaitingKind::Compacting,
+        }
+    }
+}
+
+type ToolLadders<A, E> =
+    Rc<crate::js_record::JsRecord<crate::resilience::resilient_call::State<ToolCall<A>, (), E>>>;
+type ToolLedger<R, E, A> = Rc<crate::flow::fan_out::FanOutState<ToolCall<A>, ToolOutcome<R, E>, E>>;
+/// Existing composed owners and retained agent facts. Legacy presence is data;
+/// constructing or copying this model does not initialize any composed knob.
+#[derive(Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    bound(
+        deserialize = "Stage:serde::de::DeserializeOwned,P:serde::de::DeserializeOwned,O:serde::de::DeserializeOwned,R:serde::de::DeserializeOwned,I:serde::de::DeserializeOwned,LE:serde::de::DeserializeOwned,TE:serde::de::DeserializeOwned,SE:serde::de::DeserializeOwned,A:serde::de::DeserializeOwned,T:serde::de::DeserializeOwned,CI:serde::de::DeserializeOwned,CO:serde::de::DeserializeOwned,CE:serde::de::DeserializeOwned,FE:serde::de::DeserializeOwned"
+    )
+)]
+pub struct AgentState<
+    Stage,
+    P,
+    O,
+    R,
+    I = PlainData,
+    LE = PlainData,
+    TE = PlainData,
+    SE = PlainData,
+    A = PlainData,
+    T = AgentTurn<A>,
+    CI = PlainData,
+    CO = super::compaction::CompactionSummary,
+    CE = PlainData,
+    FE = PlainData,
+> {
+    pub run: Rc<crate::flow::monitored_run::MonitoredRunState<Stage, SE>>,
+    pub resilience: crate::llm_call::State<P, I, O, LE>,
+    pub tools: ToolLedger<R, TE, A>,
+    #[serde(deserialize_with = "super::wire::required_nullable")]
+    pub conversation: Option<Rc<Conversation<R, T, TE, A>>>,
+    #[serde(default)]
+    pub usage: AgentField<Option<Rc<TurnUsage>>>,
+    #[serde(default)]
+    pub compaction:
+        AgentField<crate::llm_call::State<super::compaction::CompactionPurpose, CI, CO, CE>>,
+    #[serde(default)]
+    pub tool_resilience: AgentField<ToolLadders<A, TE>>,
+    #[serde(default)]
+    pub refused_calls: AgentField<Rc<Vec<JsText>>>,
+    #[serde(default)]
+    pub lifecycle: AgentField<Rc<Vec<AgentLifecycleNote<A, TE>>>>,
+    #[serde(default)]
+    pub failure: AgentField<Option<Rc<AgentFailure<FE>>>>,
+    #[serde(default)]
+    pub output: AgentField<Option<Rc<T>>>,
+    #[serde(default)]
+    pub instructions: AgentField<Option<JsText>>,
+}
+impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE> Clone
+    for AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
+{
+    fn clone(&self) -> Self {
+        Self {
+            run: Rc::clone(&self.run),
+            resilience: self.resilience.clone(),
+            tools: Rc::clone(&self.tools),
+            conversation: self.conversation.as_ref().map(Rc::clone),
+            usage: self.usage.clone(),
+            compaction: self.compaction.clone(),
+            tool_resilience: self.tool_resilience.clone(),
+            refused_calls: self.refused_calls.clone(),
+            lifecycle: self.lifecycle.clone(),
+            failure: self.failure.clone(),
+            output: self.output.clone(),
+            instructions: self.instructions.clone(),
+        }
+    }
+}

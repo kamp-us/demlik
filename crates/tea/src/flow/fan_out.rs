@@ -7,7 +7,7 @@ use crate::{
     data::JsText,
     work_queue::{Queue, QueueItemStatus, claim_next_op, enqueue_op},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, rc::Rc};
 
 #[derive(Debug, Serialize)]
@@ -20,8 +20,13 @@ pub struct FanOutFailed<I, E> {
     pub item: Rc<I>,
     pub error: Rc<E>,
 }
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    bound(
+        deserialize = "I: serde::de::DeserializeOwned,R: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned"
+    )
+)]
 pub struct FanOutState<I, R, E = PlainData> {
     pub pending: Vec<Rc<I>>,
     pub running: Vec<Rc<I>>,
@@ -283,5 +288,53 @@ impl<R> FanOutCompletion<R> {
 impl<I, R, C, E> FanOut<'_, I, R, C, E> {
     pub fn completion(&self, ports: FanOutPorts<R>) -> FanOutCompletion<R> {
         FanOutCompletion { ports }
+    }
+}
+
+fn restored_payload<T: serde::de::DeserializeOwned, E: serde::de::Error>(
+    field: crate::work_queue::QueueField<Box<serde_json::value::RawValue>>,
+    name: &'static str,
+) -> Result<Rc<T>, E> {
+    match field {
+        crate::work_queue::QueueField::Value(raw) => serde_json::from_str(raw.get())
+            .map(Rc::new)
+            .map_err(E::custom),
+        _ => crate::data::decode_missing(name).map(Rc::new),
+    }
+}
+impl<'de, I: serde::de::DeserializeOwned, R: serde::de::DeserializeOwned> Deserialize<'de>
+    for FanOutDone<I, R>
+{
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Fields {
+            #[serde(default)]
+            item: crate::work_queue::QueueField<Box<serde_json::value::RawValue>>,
+            #[serde(default)]
+            result: crate::work_queue::QueueField<Box<serde_json::value::RawValue>>,
+        }
+        let f = Fields::deserialize(deserializer)?;
+        Ok(Self {
+            item: restored_payload(f.item, "item")?,
+            result: restored_payload(f.result, "result")?,
+        })
+    }
+}
+impl<'de, I: serde::de::DeserializeOwned, E: serde::de::DeserializeOwned> Deserialize<'de>
+    for FanOutFailed<I, E>
+{
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Fields {
+            #[serde(default)]
+            item: crate::work_queue::QueueField<Box<serde_json::value::RawValue>>,
+            #[serde(default)]
+            error: crate::work_queue::QueueField<Box<serde_json::value::RawValue>>,
+        }
+        let f = Fields::deserialize(deserializer)?;
+        Ok(Self {
+            item: restored_payload(f.item, "item")?,
+            error: restored_payload(f.error, "error")?,
+        })
     }
 }

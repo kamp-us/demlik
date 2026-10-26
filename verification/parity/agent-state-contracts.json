@@ -1,0 +1,51 @@
+{
+  "@demlik/tea:./agent#AgentState": {
+    "signature": "c63025ce95fbcab959fb1026a17da44dfc5b69dcc4fc19238bf4f5f28f0df180",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::types::AgentState::with_usage_defaults",
+        "demlik_tea::agent::types::AgentState::current_stage",
+        "demlik_tea::agent::types::AgentState::is_settled",
+        "demlik_tea::agent::types::AgentState::require_awaiting"
+      ]
+    },
+    "cases": [
+      "agent-state.usage-current-null-absent",
+      "agent-state.usage-current-null-null",
+      "agent-state.stage-running-undefined-first",
+      "agent-state.inspect-running-undefined-llm",
+      "agent-state.inspect-cancelled-null-tools",
+      "agent-state.cold-absent-absent"
+    ],
+    "nativeProfile": "Canonical composed state facts, conditional JSON restoration, and four conversation/state pure helpers only. Native borrowed opaque consumers impose no Clone/serde/Send/static on pure state values. Rc state/composed owners, fresh migration outer owners, first running stage, nullable persisted numbers, and missing/undefined/null legacy usage and failure remain observable. Unknown state/conversation extras, getters/prototypes, sparse/custom-iterator arrays, and raw own-tool-result-property reflection remain outside the typed owner profile. The separate prerequisite raw own-result row stays QUALIFIED and excluded from strict/nativeEvidence. No agent factory, reducer, status projector, provider, SDK, child, or model-handler claim. Internal helpers are not fabricated published exports."
+  },
+  "@demlik/tea:./agent#AgentFailure": {
+    "signature": "b0738e2fedd3660bf9c0b6630ec6c1b43b934a53202f70034ae28639895d263f",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentState::is_settled"]
+    },
+    "cases": [
+      "agent-state.annotation-turn_limit-running",
+      "agent-state.annotation-elapsed_limit-running",
+      "agent-state.annotation-llm-running",
+      "agent-state.inspect-running-absent-llm",
+      "agent-state.inspect-running-undefined-llm"
+    ],
+    "nativeProfile": "The actual turn_limit, elapsed_limit, and llm variants retain nullable persisted timestamps and caller-owned llm cause handles. Conditional wire decoding retains lone UTF16 and optional cause presence. The state annotation distinguishes missing/undefined from explicit null; no failure/status projector, schema guard, or arbitrary JavaScript thrown-value profile is claimed."
+  },
+  "@demlik/tea:./agent#AgentLifecycleNote": {
+    "signature": "43dd2652290a5c8e0754f8623461512c91a8f8aad5bbd9e818e93ae4571a6353",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentState::with_usage_defaults"]
+    },
+    "cases": [
+      "agent-state.usage-absent-undefined-value",
+      "agent-state.usage-current-null-absent",
+      "agent-state.cold-absent-absent"
+    ],
+    "nativeProfile": "All four actual lifecycle-note variants are restored through the canonical state and retained unchanged by the pure migration helper. Native opaque consumers prove original call/cause/composed-owner handles without serialization bounds; shared cases cover flat conditional wire fields, nullable timestamps, and raw UTF16. No event projection or agent transition is claimed."
+  }
+}

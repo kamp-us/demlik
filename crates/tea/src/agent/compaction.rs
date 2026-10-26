@@ -2,9 +2,9 @@
 //! command wiring and the agent factory are separate consumers of these facts.
 
 use crate::{PlainData, data::JsText, llm_call::Purpose};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompactionPurpose {
     #[serde(rename = "$compact")]
     Compact,
@@ -18,6 +18,7 @@ impl Purpose for CompactionPurpose {
     }
 }
 
+#[derive(Deserialize)]
 pub struct CompactionSummary {
     pub summary: JsText,
 }
