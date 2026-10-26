@@ -1,0 +1,465 @@
+{
+  "scope": "BASE PURE AGENT KNOB checkpoint only: trusted typed retained output and borrowed turn projection; real collect/check/summarize loop, bare tools, retry/watchdog/usage/guards/notes/boot/restart and pure cancellation. No status/brainInterpret/toMachine/router/optional profiles/SDK/children/Runtime claim.",
+  "sourceCommit": "d22b921b19611a6ff46e2c064ed6aab6cf8ac984",
+  "base": "6302f2195622ea1faa4557567eae4df48f810637",
+  "branch": "can/rust-agent-base-knob",
+  "worktree": "/private/tmp/demlik-rust-agent-state-01a16c9d",
+  "archive": {
+    "path": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d",
+    "tar": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d.tar",
+    "sha256": "2cd12fdda570c9ec18adb8309ae9d4063f21eddc52f313736fe0f6cb1999dc7c",
+    "all14SourceFilesMatch": true,
+    "rebuiltFreshTarget": false,
+    "qualification": "All native/static/shared/fault gates used the same frozen production bytes in the existing lean isolated target. Exact git source tar and copied actual binaries/rlibs/reports/logs retained. No cold archive-target rebuild claim; parent explicitly requested no redundant reruns."
+  },
+  "reference": {
+    "commit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "sourceHashes": {
+      "packages/tea/src/agent/index.ts": "28edeb15977cf7008576574ee8589715272784f1feef260f36b70242da922d65",
+      "packages/tea/src/agent/machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042",
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/tool-resilience.ts": "c75d3eea8092070dd5784d7047c6331fdfcee403ebb3821715f70def1b19e002"
+    },
+    "sourceUnchanged": true
+  },
+  "interface": {
+    "construction": "create_agent(AgentConfig::new(Rc<LlmCall>, retained stages, turn_of, tool_of, payload_of, borrowed TurnView)). Ordinary aliases derive Schema output/error; real AgentCommand::Brain/Tool retains precise leaf values. The real opaque consumer uses inference with one domain Conversation annotation, not fourteen caller type annotations.",
+    "ownership": "Canonical AgentState/Conversation/MonitoredRun/FanOut/LlmCall/Schema owners; opaque borrowed stage/argument/provider/result/turn/model cause/tool failure/context have no blanket Clone/serde/Send/static. Only retained Args/Command callbacks earn finite cfg lifetime relations. Conditional AgentCommand serialization delegates the actual flat leaf wire.",
+    "lifecyclePrerequisite": "Canonical lifecycle is now Rc<Vec<Rc<AgentLifecycleNote>>>. Source stopWhen can retain an existing tool_failed note before transition appends run_ended. New outer array retains that original note, call and cause handle; the genuine E0308 public red and Source witness are preserved. Prior730 helper proof is not relabeled as append-identity proof.",
+    "laws": [
+      "Pure init invokes no model/loader/schema/rng callbacks. Brain request uses restored current stage/instructions and invokes turnOf before payloadOf.",
+      "The actual Source toolOf is invoked twice per new launch: FanOut builds then discards its Cmd, and armLaunch builds the emitted one. Boot bare-tool reissue calls once.",
+      "Guards run only after a fully drained tool batch, in maxTurns, elapsed, then predicate order. Empty tool turns can complete all stages even under zero guards.",
+      "Transitions migrate legacy usage, clear the old nonempty note outbox once, retain notes appended within the transition, and append run_ended only on the unsettled-to-settled edge.",
+      "Success settles the real LlmCall before folding the turn. Terminal failure retains the full typed LlmErr and original opaque cause.",
+      "Boot preserves original startedAt and re-seeds the watchdog before the settled guard. Restart resets the source-owned slices and retains the existing brain ledger.",
+      "No blanket terminal gate: late brain success/failure updates resilience after cancel; terminal late fail can retain cancelled run phase plus Llm failure; retry deadlines/timers can remain active after cancel."
+    ],
+    "nativeCancel": "Agent::cancel is a documented hand-driving convenience for the frozen wired agent_cancel reducer fold; no invented Source AgentKnob.cancel mapping."
+  },
+  "verification": {
+    "newShared": {
+      "strictCases": 43,
+      "strictPassed": 43,
+      "actions": 268,
+      "nativeEvidenceCases": 43,
+      "protocolRefusals": 8,
+      "qualifiedOptionalRowsExcluded": 2,
+      "report": "target/parity/agent-base-mutation-baseline.json"
+    },
+    "qualifiedOptionalObservations": [
+      {
+        "id": "agent-base.unsupported-compacting",
+        "status": "OPEN",
+        "strictParity": false,
+        "reason": "OPEN unsupported restored compacting profile; Source resumes it, native must return an observable refusal. Excluded from strict/nativeEvidence."
+      },
+      {
+        "id": "agent-base.unsupported-tool-ladder",
+        "status": "OPEN",
+        "strictParity": false,
+        "reason": "OPEN unsupported restored tool-ladder profile; Source resumes it, native must return an observable refusal. Excluded from strict/nativeEvidence."
+      }
+    ],
+    "affectedStrict": {
+      "content": {
+        "cases": 79,
+        "passed": 79,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-content.json"
+      },
+      "guards": {
+        "cases": 158,
+        "passed": 158,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-guards.json"
+      },
+      "model": {
+        "cases": 90,
+        "passed": 90,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-model.json"
+      },
+      "prerequisite": {
+        "cases": 49,
+        "passed": 49,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-prerequisite.json"
+      },
+      "state": {
+        "cases": 205,
+        "passed": 205,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-state.json"
+      },
+      "fanout": {
+        "cases": 8,
+        "passed": 8,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-fanout.json"
+      },
+      "flow": {
+        "cases": 48,
+        "passed": 48,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-flow.json"
+      },
+      "llm": {
+        "cases": 91,
+        "passed": 91,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-llm.json"
+      },
+      "timestamps": {
+        "cases": 36,
+        "passed": 36,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-base-regression-timestamps.json"
+      }
+    },
+    "affectedStrictTotal": 764,
+    "totalStrictIncludingBase": 807,
+    "modelRuntime36IncludedIn90": true,
+    "baseRuntimeIntegrationClaim": false,
+    "regressionQualifiedExcluded": {
+      "content": 4,
+      "modelOpen": 2,
+      "prerequisiteOwnResult": 1
+    },
+    "native": {
+      "teaPassed": 358,
+      "compileFailDocsIncluded": 24,
+      "newPublicConsumers": 2,
+      "allTargetClippy": "passed",
+      "fmt": "passed",
+      "verificationTypecheck": "passed",
+      "biome7OwnedVerificationFiles": "passed",
+      "unrelatedGraphWorkspace": "Not rebuilt; parent owns full composition."
+    },
+    "faults": {
+      "compiledDetected": 24,
+      "escaped": 0,
+      "declaredWitnessRequired": true,
+      "mandatoryBaseline": {
+        "strict": 43,
+        "protocolRefusals": 8,
+        "qualifiedExcluded": 2
+      },
+      "targetsSeparated": true,
+      "baselineArtifactsAndSourceUnchanged": true,
+      "targets": {
+        "baselineTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1
+      },
+      "report": "target/parity/agent-base-mutations.json",
+      "initialSetupRefusal": "An initial boot-time fault tried to mutate through a read-only Deref, yielding E0594. That setup red/log is retained, is not credited as a semantic detection, and the corrected core-field mutant compiled and was detected in the final24."
+    },
+    "redGreen": {
+      "missingProductionInterface": "target/agent-base-public-interface-red.log E0432/E0425, followed by actual production native consumers. First leftover prototype-import setup failure is separately retained and not credited.",
+      "retainedLifecycleElement": "target/agent-base-note-owner-red.log two E0308 diagnostics, then original Rc note retention through real stopWhen plus run_ended append passes.",
+      "firstSharedLiteral": "Initial39 Source/native semantic outputs matched; one independent expected literal selected boot instead of done. Original failing report/log retained; corrected literal and expanded43 final baseline pass.",
+      "mutants": "Actual production Rust source was changed only inside disposable copies, compiled, and detected by declared strict case IDs. Compile refusal or unrelated failure does not count."
+    }
+  },
+  "capabilityMappings": {
+    "file": "verification/parity/agent-base-contracts.json",
+    "proof": "target/parity/agent-base-mapping-proof.json",
+    "proposedExactIds": 14,
+    "completeWithinDeclaredProfile": 7,
+    "partialOpen": 7,
+    "allSelectedCasesStrict": true,
+    "allSymbolsObserved": true,
+    "noFabricatedInternalHelperAliases": true,
+    "parentOwnsCentralRegistration": true,
+    "canonicalOwnerUpdate": "AgentLifecycleNote retains its existing exact public ID/signature. The element-handle identity witness is a new factory-earned owner extension, not another invented capability."
+  },
+  "blindSpots": [
+    "OPEN raw builtin AGENT_TURN_SCHEMA-to-loop composition: schema parsing retains raw Rc<PlainData>, while this loop requires trusted typed Rc<T> with a borrowed AgentTurn projection. No raw DTO cloning/JSON replacement is implemented.",
+    "OPEN optional restored compaction/tool-ladder profiles: actual Source/native rows are retained as two QUALIFIED observations and excluded from strict/nativeEvidence. Native emits UnsupportedRestoredAgentProfile instead of silently omitting work.",
+    "OPEN status, brainInterpret, toMachine, router, snapshots, compaction/tool-policy verbs/config, providers/SDK/children and actual base Runtime integration remain outside this bounded checkpoint.",
+    "OPEN omitted payloadOf default-null convenience is not supplied; generic callers pass an explicit payload constructor.",
+    "Native Fn panic behavior, mutable JS methods/getters/prototypes, arbitrary sparse/custom-iterator arrays and raw own-result-property reflection are not a JavaScript runtime profile. Source-only/manual qualifiers remain in their existing owner receipts.",
+    "Existing model Missing/Undefined command-input OPEN rows remain outside strict/nativeEvidence. Factory emits valid shared typed requests, which does not solve those handler protocol cases.",
+    "Source/model/runtime36 regressions and old standalone interface proof are not counted as additional new base-loop parity cases; the existing State730 source and all historical receipts/artifacts remain unchanged."
+  ],
+  "commands": [
+    "env RUSTUP_HOME=/private/tmp/demlik-rust-toolchain-01a16c9d/rustup CARGO_HOME=/private/tmp/demlik-rust-toolchain-01a16c9d/cargo RUSTUP_TOOLCHAIN=stable CARGO_NET_OFFLINE=true CARGO_TARGET_DIR=/private/tmp/demlik-rust-agent-state-01a16c9d/target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 /private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo test --locked --offline -p demlik-tea",
+    "Same lean Cargo environment: cargo clippy --locked --offline -p demlik-tea --all-targets -- -D warnings; cargo fmt --all -- --check",
+    "pnpm --filter @demlik/parity exec tsc --noEmit -p tsconfig.json",
+    "pnpm --filter @demlik/parity exec biome check agent-base-{cases,reference,run,regressions,mutations,coverage}.mjs agent-base-contracts.json",
+    "Same lean/offline environment plus CARGO=/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo: pnpm --filter @demlik/parity exec node agent-base-mutations.mjs",
+    "Same environment: pnpm --filter @demlik/parity exec node --import tsx agent-base-regressions.mjs",
+    "pnpm --filter @demlik/parity exec node agent-base-coverage.mjs /private/tmp/demlik-rust-driver-01a16c9d/target/parity/inventory.json",
+    "python3 /private/tmp/demlik-agent-base-{flow,llm}-build-01a16c9d.py <worktree> <target>, each separately, exact rustc arguments/library/source hashes retained in its consumer-build report."
+  ],
+  "integrity": {
+    "prior730": {
+      "sourceCommit": "730f361cb5bedf9c691962730a865c19b712aad1",
+      "receiptSha256": "23c9107d2d98fc06d0cea7a0888ae51396634c7035ef133ac49a5216358cabd6",
+      "archiveSha256": "2448e711a07758a57d6a7efcf2d1fa4e05b7976d3e143d4262cce1b02a4e275f",
+      "verified": {
+        "ownedFilesSha256": 16,
+        "reportsSha256": 56,
+        "logsSha256": 89,
+        "preservedArtifacts": 13
+      }
+    },
+    "interface": {
+      "receiptSha256": "0e6bfd1dd69869b50988285aa3d404bcbd3f1a189c2e42bec5c764ca91de825c",
+      "filesVerified": 22,
+      "binaryPreserved": true,
+      "originalLibraryPreserved": true,
+      "oldProofNotCountedAsParity": true
+    },
+    "frozenSourceHashes": {
+      "packages/tea/src/agent/index.ts": "28edeb15977cf7008576574ee8589715272784f1feef260f36b70242da922d65",
+      "packages/tea/src/agent/machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042",
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/tool-resilience.ts": "c75d3eea8092070dd5784d7047c6331fdfcee403ebb3821715f70def1b19e002"
+    },
+    "licenses": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    },
+    "sourcePackagesAndDependenciesUnchanged": true,
+    "sourceAndBaselineArtifactsMatchMutationGate": true,
+    "noNetworkDockerRemoteOrMainRootWrites": true
+  },
+  "preservedLinkedArtifacts": {
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_base_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_base_driver",
+      "sha256": "572ce150036165eefc290c06f59f0e3d2d0e6627e6886c448487b701a37a9ac1"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_content_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_content_driver",
+      "sha256": "cd2e15f47a9976fde75a550b6b6193ee62ddd98d9222c21f7a54437ed5cf1608"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_guards_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_guards_driver",
+      "sha256": "fdce012316831cf92884213db0f054f4fdd760fb21477911a97fcd2fa37716bc"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_model_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_model_driver",
+      "sha256": "49149252ffde7cf03be385ec9bae4ffeebecc7e39e0900a34204610d2fa9982b"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_prerequisite_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_state_prerequisite_driver",
+      "sha256": "73a606bc5611267b622471e8c2b0d3a46e35e8bb0ec45a306c477943e44b1142"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_state_driver",
+      "sha256": "a4911441df19e0d1d090cc6f5e34290564d350ae39a04c4cd1f143c2ac766f6d"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_fanout_restore_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_fanout_restore_driver",
+      "sha256": "de480d6fa8ed89fb91edcc1d509909e8c323bfddbb4f6d01f844428aad233129"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/timestamp_runtime_driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/timestamp_runtime_driver",
+      "sha256": "1c32258b0bc690d881d68a254d0ddd788afffaac1e649b1621a769af1d9acdaa"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-base-flow-driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent-base-flow-driver",
+      "sha256": "6834b1f5fe62bedb61daa2a32cb5b50a75315d26c971190da442a5b9a411fb78"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-base-llm-call-driver": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent-base-llm-call-driver",
+      "sha256": "8df6e29d41b533d42578171ca5d86a7b413da00852bb4033b0105f67cb0b5007"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/agent_base-9ed880efc275d11f": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/agent_base-9ed880efc275d11f",
+      "sha256": "4b742dcf6a00c5b0b6bf81e2bcc6742d4b84499d4a14ffe01d841a10ca055301"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/libdemlik_tea-ef4c9c64b773b701.rlib",
+      "sha256": "1f02042493c51c1801e536e92f097242d1778bfb8ee7e4a78aa85cfb550ce3c5"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/libserde-1e121e747c37db81.rlib",
+      "sha256": "359f13057abb52a9aa679c17946e96115a4adc28f10e71a458d3225ac83208e7"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/libserde_json-bae62904d1b7570d.rlib",
+      "sha256": "5fb10b3fcb3950435998dde0ad715762168d51d1d732faf54d2dce7a222c05a0"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libtokio-bee55f6657e963fa.rlib": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/libtokio-bee55f6657e963fa.rlib",
+      "sha256": "5a83aec996c0eb6da8ac82b46c909c92ecce200b6b5cf79ba003d079f0950f0d"
+    }
+  },
+  "preservedExternalProbesAndHelpers": {
+    "/private/tmp/demlik-agent-base-flow-build-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-flow-build-01a16c9d.py",
+      "sha256": "8eab7503ce04d926654ed9d78fcd5d8428f519607533ef940a26333ddf13bfb0"
+    },
+    "/private/tmp/demlik-agent-base-llm-build-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-llm-build-01a16c9d.py",
+      "sha256": "098032a48c3da7f65c80e5bb11764a5ca8236c774544910dfa425ed194555b5d"
+    },
+    "/private/tmp/demlik-agent-base-integrity-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-integrity-01a16c9d.py",
+      "sha256": "655781db22b02176cb721d19ff51b60e8cddb3f8081d7a11d72987d6df9ddf06"
+    },
+    "/private/tmp/demlik-agent-base-note-source-01a16c9d.mjs": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-note-source-01a16c9d.mjs",
+      "sha256": "63d57e4940c22d1ab67c9c8549249c0da4f9af0a9c7a22b368097f5694c877a1"
+    },
+    "/private/tmp/demlik-agent-base-note-source-01a16c9d.json": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-note-source-01a16c9d.json",
+      "sha256": "ba15a123f8533bc461c3781fb0c147b168f5c005031a84ca0aa89c37c5813d2a"
+    },
+    "/private/tmp/demlik-agent-factory-source-probe-01a16c9d.json": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-factory-source-probe-01a16c9d.json",
+      "sha256": "7bb419105b31391ac66f470cffadba29c336d04ea0964f9574a8ba53b86539a5"
+    },
+    "/private/tmp/demlik-agent-factory-edge-probe-01a16c9d.json": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-factory-edge-probe-01a16c9d.json",
+      "sha256": "3431b811a16f00e388dbf6ba88e356b5687559f33ad5e2782e1c37efb75b33ea"
+    },
+    "/private/tmp/demlik-agent-factory-proposal-01a16c9d.md": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-factory-proposal-01a16c9d.md",
+      "sha256": "0d5b1e480c6c2e7309a043475a29279a5a0fe113d5a9d88864f86cfa41712e34"
+    },
+    "/private/tmp/demlik-agent-factory-interface-library-preserved-01a16c9d.json": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-factory-interface-library-preserved-01a16c9d.json",
+      "sha256": "62eca14020185c6efc0e47b38f461e1dd3efaf8c417cad27d44d89267fe731d2"
+    },
+    "/private/tmp/demlik-agent-base-package-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-base-exact-d22b921b-01a16c9d/artifacts/demlik-agent-base-package-01a16c9d.py",
+      "sha256": "d6c376a50d59dfeb053695a692b8f91555c1f22006a3ad1155321a78c079b35d"
+    }
+  },
+  "ownedFilesSha256": {
+    "crates/tea/examples/agent_base_driver.rs": "ab04fc2e48149c49cf9f9ee48645f26cb75c689d98feb2ebfad914cbb1906a63",
+    "crates/tea/src/agent/knob.rs": "308124e66faf07ffc0ad89ceaa7367c1a947fd7b2b62f401a59f249c34bf5bda",
+    "crates/tea/src/agent/knob/command.rs": "4272544d387006f7fc291e872abe5e1ac44d4b80c833b7612791133087a1aa3b",
+    "crates/tea/src/agent/knob/error.rs": "68598af1dc2a564ede873757994c07f182aa009bc09a4782469289ddb9d6729b",
+    "crates/tea/src/agent/mod.rs": "718d56f8269f51ba0e6c2330a89b7129134c3978fbdba8e29a78f91fd22414b4",
+    "crates/tea/src/agent/types.rs": "e393e784987019f5a5033e08efa2f4af0f657a395545fb81f8eb1cd6f6e96332",
+    "crates/tea/tests/agent_base.rs": "acdf3bfa18294402e9f466bdd3ea29010a08cf5d4c3dcde257e15f339c006949",
+    "verification/parity/agent-base-cases.mjs": "70d5af3436d5582cb1ee3d6057f5666be51fc3fc8bebcc352dde40b0c97f6a35",
+    "verification/parity/agent-base-contracts.json": "66e1fa23f1bb9a2bf048ab4fc6a88f68991f70765a68cd392acb3c57996e1a53",
+    "verification/parity/agent-base-coverage.mjs": "5ea7023c8a0c7b2d43e1e134b38260d37aeee78084359603478cd1aa241f758b",
+    "verification/parity/agent-base-mutations.mjs": "029f50cdb63847a08e17484e670abe19cfa39db502e6d7f83ae17c9134ed63e8",
+    "verification/parity/agent-base-reference.mjs": "cca3f48ba3828069865527f846c6f581845a12beb0faba36c0e39230908bcd65",
+    "verification/parity/agent-base-regressions.mjs": "0da04e69c95b595caa79b43505d2865f22a76b7964ddb1862ae747b6f07c97fa",
+    "verification/parity/agent-base-run.mjs": "daed27ccd52e9c518a5e4af66e007033583506a46d5047b90ef2af71e86f5662"
+  },
+  "reportsSha256": {
+    "target/parity/agent-base-first-pairs.json": "5175f6e881ffcc53b6c53c9a2d9ecf47de6010b096282ae51e8c681c07b270c6",
+    "target/parity/agent-base-flow-consumer-build.json": "afcfe804c7629ea9ec507dfb22617a36d12360ca2831112bbfd7c4b86f346c8b",
+    "target/parity/agent-base-integrity.json": "cf7c4c5e6dff4e1e1db83a9e2d4d6bfbf37dc9ee65b869ce27a7fa4c8f113853",
+    "target/parity/agent-base-llm-consumer-build.json": "abee3b08dae71e87061b11e0556662d5689a05e95979c647d55c46f2b77bb56f",
+    "target/parity/agent-base-mapping-proof.json": "b128fd0ede0d49503a320ffec8411d97cb4882e9f318428fce6ad4d3d4dd3d91",
+    "target/parity/agent-base-mutation-baseline.json": "3c371a7a1babeb53e79371a613889250a530e147bfe6a0bb0eb833133fd922b0",
+    "target/parity/agent-base-mutations-progress.json": "54eb07ea4c1083687466c5902d748f74f2b7a9954ae9179b1eb6ca4ec17777ec",
+    "target/parity/agent-base-mutations.json": "f438e8ecc9eb79961e9cf702cd830aee0c583e2f25c0d0c94c412e1eb993e355",
+    "target/parity/agent-base-regression-content.json": "0a42e842b269a4787e2e3fa504c88a55d4991dc6b8044ffc0bec8922e073b8c4",
+    "target/parity/agent-base-regression-fanout.json": "73d6d90af46da0ef08e244b6057a54b2e760d77c24ae933a89acba70f781639b",
+    "target/parity/agent-base-regression-flow.json": "230c402dedfde5aed02e49f3de4d26322bff87afba9d8429b406e2beabcb5981",
+    "target/parity/agent-base-regression-guards.json": "9ecb35dad3d01f5ff58e1f21323cc86eb68abc5329bcc251676f4e70d57a6945",
+    "target/parity/agent-base-regression-llm.json": "6aaca702bb8f15519d2394c25b3e3cba0e13de989f91f178a4c8e89f5ccdae96",
+    "target/parity/agent-base-regression-model.json": "d4b84c927ae1cf2f37060ed07e6036fe019b9e409ef40e467e5ab3781c62bf9b",
+    "target/parity/agent-base-regression-prerequisite.json": "1633c80722a4d75f26339728d31f05289d062b8d7357df27da55c7b8f8deda6f",
+    "target/parity/agent-base-regression-state.json": "bc142175032b42bca8f555268173fc03accabaec7bd406ae5c0d013151552e84",
+    "target/parity/agent-base-regression-timestamps.json": "3951a3089cb5d1ec7d20c1b505f0aeffc9390a928da23e1667513b341339472d",
+    "target/parity/agent-base-regressions.json": "58947574d19d1f18dbbc633fe1fddece0fc2dbec1ed6f3167541ef1a80f214d4",
+    "target/parity/agent-base-source-red.json": "a12977e75c76144fe6e8afb63d7b8c71e16806699172e9ff3a26d2b59a94ea72",
+    "target/parity/agent-base.json": "21077f3aa9672f7af653af7e7898288a4bb31f59815c8ec0bf5d9e62dcf77dc0",
+    "target/parity/agent-base-mutants/backfill-skips-second-tool-of.json": "745bae00a0b841cba2d2e2069101c6c08b94acb841bdfc5ed4eb60ecc09b8b1a",
+    "target/parity/agent-base-mutants/blanket-terminal-transition-gate.json": "b0db67bc5948129593265b0b4535b45596d5e52ab0240e01d132aff912e54675",
+    "target/parity/agent-base-mutants/boot-reissues-after-cancel.json": "1241ee296741348ddf9ee2ebd5ee311e742df8e5300cbadfe0ab6248379d21ce",
+    "target/parity/agent-base-mutants/boot-resets-original-start-time.json": "cf2767157b51d2c1dbff8107fefe85d07f2675075301f07ffde3ce5820abb611",
+    "target/parity/agent-base-mutants/coerce-retained-null-turn.json": "7189fde0ee06c2a72cec3ad1001f52714f7863c984d6ac39cdbb773cd327277d",
+    "target/parity/agent-base-mutants/duplicate-terminal-note.json": "f5807f66e654638bb47293d0aa6347ba0f696d7f4ff6ff2c51600dad0f68985d",
+    "target/parity/agent-base-mutants/elapsed-reason-overrides-turn-limit.json": "27a790b878b5ef004fc8822e0576e807bca9f1f4195f7952a6929b010dfbe60c",
+    "target/parity/agent-base-mutants/final-output-is-lost.json": "f5cb05cd37fbfd90be7cb2966040248f8fdabe24fe69fd91a8234e6a9bf7bd93",
+    "target/parity/agent-base-mutants/next-stage-retains-prior-conversation.json": "22bba58c3a25e621a50eb12108d9174ca83b101d53fe56a1b9e21df34a7e72a4",
+    "target/parity/agent-base-mutants/payload-reads-configured-instructions.json": "5a4ffee7ae2f685080a39930484e99c6c76321c96c1628c8345b4bb77cf26abc",
+    "target/parity/agent-base-mutants/remint-retained-note-handles.json": "40da109529a4aa0908f9a2104756571c738e858bed51a5231013c95f94291de9",
+    "target/parity/agent-base-mutants/restart-resets-brain-ledger.json": "ff132fc4cc42516be21918520b54b2a280e97e93982cf462100b140aa2e059d8",
+    "target/parity/agent-base-mutants/restart-retains-usage.json": "55971cf3229c908a9a9fdedf592a36dbeb61656df9312d1cd111d981e3086fa5",
+    "target/parity/agent-base-mutants/retain-prior-lifecycle.json": "b8e6ac04a4f55d6f3e83cd7f5fc62bff466fb387c2df6edf24f0768466506e55",
+    "target/parity/agent-base-mutants/run-guards-on-empty-turns.json": "1a1c6243223f8e45c47ae71466ea791a7c9833487e4acacd33000e88f3c49ff2",
+    "target/parity/agent-base-mutants/scatter-skips-second-tool-of.json": "29a6ccdafe9a26cbc9768d34221d4d8ab50d04db3ee1bfbe1f33ff8c85b02b40",
+    "target/parity/agent-base-mutants/skip-dedupe-first-call-id.json": "dcbfc3ea536d722be0078ef2f02514f8a8a30591b6f3d06df25c8333459eea55",
+    "target/parity/agent-base-mutants/skip-drained-tool-turn-increment.json": "d1a90f7590a6d4d38cd124127c0ed9b22651ccfa16dfbc5135252a977c3a400e",
+    "target/parity/agent-base-mutants/skip-usage-migration.json": "4f674c5e74e08a38047992d0eaf909bb85298568db672f65ae5d6c9bcdd5562c",
+    "target/parity/agent-base-mutants/success-retains-prior-brain-state.json": "6cb1a8487e3ade70a01aee8bf8f5c24dded915bfcb5fa6e08f3447c8ca238d97",
+    "target/parity/agent-base-mutants/terminal-failure-drops-full-error.json": "3d1ef004e57694482a8fb090578ef0c8aa28c721ed85990cf49be0911c17330e",
+    "target/parity/agent-base-mutants/terminal-filter-drops-retry-sub.json": "db05368885b1f44cb2306c013851df339b1db2ec36d0f8b159224ae571655d8f",
+    "target/parity/agent-base-mutants/terminal-filter-drops-retry-timer.json": "2cbf8befb3157231c4bd0d6a72d2699c6b7159df75046e495b9f1964910b2722",
+    "target/parity/agent-base-mutants/unknown-tool-id-folds-first-call.json": "bc3cb1d5d9b4c0037ab56104dc052485a55dfa5cbc7dd028d9c3a09e6565b1b0"
+  },
+  "logsSha256": {
+    "target/agent-base-biome-construction.log": "bbd3a777998524ec0e43617f4e810c0887b376bcae97779f4e77a805ebab3eaa",
+    "target/agent-base-biome-controls.log": "736e2dc391c55fd9f4a346c9a8f88c2eb4bec0ce90027b161d109dcd978fbbf0",
+    "target/agent-base-biome-final.log": "ae4a3667534db6ee7abbbf6d889af79362b4c27bce1411febed1f7038b30e463",
+    "target/agent-base-biome-mapping.log": "ffb30113d89ce91a5a3b8abd29843ee15a06c97325430609cbd22bc5440e8066",
+    "target/agent-base-biome-packaging.log": "f6488776278839ea08b486e6aecf52dd30575414e869057e11367eafe39ae1bf",
+    "target/agent-base-clippy-alias.log": "6a5ac33d0fac995d5cb1157ced634526a32b3dc66ab156c24b1e57e4e26d23ed",
+    "target/agent-base-clippy-final.log": "b2de8546c0d82ca9c1a75a02a5780c8e931ebcd7044363d0f5ff1ee2b56241f0",
+    "target/agent-base-clippy-first.log": "09eeae0ce87c4516490cbf8436c68fc5cc94cad66a5d3178b1974015709e85da",
+    "target/agent-base-clippy-post-alias.log": "ebd30645f06d7af9c2d2ec83ab0dba55b061aaeaa905294b705a022628185438",
+    "target/agent-base-driver-first-compile.log": "1d5446cc1d015ea19745790a84967af5a0ad8c817bb4936a29a2f697e05942eb",
+    "target/agent-base-driver-second-compile.log": "b62e4f76348ebbf1634e19147d5975c981f722f1134be7920a0815bd0a7fd45c",
+    "target/agent-base-driver-third-compile.log": "0361bb6d900d386bf41ca69f7d036b8735cf4af350ad31e2cac796d1fe34cb6b",
+    "target/agent-base-expanded-driver-build.log": "61ad986b39b5374adebfbfce7d75fd26ac59cc5d1beeebe4e119cc25de5cd424",
+    "target/agent-base-expanded-pairs-first.log": "7e248eaad02efae4ae98343d6920905ae5289e85ac9a4086d9bbeb95dae5cdb0",
+    "target/agent-base-first-compile.log": "06d4385b0137cb0d79380e85fda3f1e310129d8f9a6e7a1d5427089f527cec33",
+    "target/agent-base-first-pairs.log": "69cbb986d36ceb841a6dc36f48bcadc671d7d4840e367ced82a2b94193ac457c",
+    "target/agent-base-first-public-green.log": "4896f2df23b25a53240ecc25ed71649f36a3c5ca024b56f5512d37c7689a73a7",
+    "target/agent-base-flow-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-base-fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-base-format-first.log": "fb95a3ab43166c81cf91ae5d95eb93bc71f16888e1906535f265f6e441a84e12",
+    "target/agent-base-format-fourth.log": "0eb3fc0c946575a48abc678a8c74efb29773b660c4279913564e83d932e3de84",
+    "target/agent-base-format-second.log": "220eeb0999b067212ffa7ee705f9bb9eb7c3d6c99ba333402244e861e0e13955",
+    "target/agent-base-format-third.log": "4be563439b805808419b4d015d0e9deb799cfb3d9c9354a80dfd314a6ee212c1",
+    "target/agent-base-llm-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-base-mapping-proof.log": "92f979402ecca7705af63f4d12c7c9a7d5da7340bb3de527e4111eb68c739838",
+    "target/agent-base-mutant-backfill-skips-second-tool-of-compile.log": "37ff33845b8a8f857a035846cbf7fbb4025e6267ea77e15557efa8c0e954127e",
+    "target/agent-base-mutant-blanket-terminal-transition-gate-compile.log": "7e1e5f7c3e846c2834805a53ec949b2a64857e420357ba999a6c6532593f100c",
+    "target/agent-base-mutant-boot-reissues-after-cancel-compile.log": "8b144331088890f180312fa598acda4671f503c5ed60143c63925387c0912f40",
+    "target/agent-base-mutant-boot-resets-original-start-time-compile-initial-red.log": "ee42d8777e2081a105257b56bb1fd71270e792e7971e029cc0a260f6f8effbfc",
+    "target/agent-base-mutant-boot-resets-original-start-time-compile.log": "6ae02900939b0babba4afeb63cfc6eec1437b644a0d557eb028f0762a7f0c075",
+    "target/agent-base-mutant-coerce-retained-null-turn-compile.log": "d03164c003a756fec8b2deb080b19e0e116b638a36c1e748bc8ae6d60fadb30b",
+    "target/agent-base-mutant-duplicate-terminal-note-compile.log": "e3ffea7b5ad59c4cdc8f8d76ea2a0797435dca3e187558cced257c5cfbb78520",
+    "target/agent-base-mutant-elapsed-reason-overrides-turn-limit-compile.log": "8b144331088890f180312fa598acda4671f503c5ed60143c63925387c0912f40",
+    "target/agent-base-mutant-final-output-is-lost-compile.log": "4ad01057f8e5ea9bb461a569026279579128c71e6b3d5385920f79d23131db1d",
+    "target/agent-base-mutant-next-stage-retains-prior-conversation-compile.log": "37ff33845b8a8f857a035846cbf7fbb4025e6267ea77e15557efa8c0e954127e",
+    "target/agent-base-mutant-payload-reads-configured-instructions-compile.log": "9ee1aaf70564b333811690866056415b5aa19e0df8a5ef5c1edbc637a2a2860c",
+    "target/agent-base-mutant-remint-retained-note-handles-compile.log": "9ee1aaf70564b333811690866056415b5aa19e0df8a5ef5c1edbc637a2a2860c",
+    "target/agent-base-mutant-restart-resets-brain-ledger-compile.log": "9ee1aaf70564b333811690866056415b5aa19e0df8a5ef5c1edbc637a2a2860c",
+    "target/agent-base-mutant-restart-retains-usage-compile.log": "0b2da940794b2e8c292b439c9ac3b39eb969ebe0e3d4d487fe2ac691ee5f850d",
+    "target/agent-base-mutant-retain-prior-lifecycle-compile.log": "37ff33845b8a8f857a035846cbf7fbb4025e6267ea77e15557efa8c0e954127e",
+    "target/agent-base-mutant-run-guards-on-empty-turns-compile.log": "d03164c003a756fec8b2deb080b19e0e116b638a36c1e748bc8ae6d60fadb30b",
+    "target/agent-base-mutant-scatter-skips-second-tool-of-compile.log": "284e91c817a63ae937c209453a69751d04f5aef9e1c0062f5efdbaf518a712e9",
+    "target/agent-base-mutant-skip-dedupe-first-call-id-compile.log": "88fdff2a52ea54176d7647706700506043e02b78a87e5ed12c3e718f305d84c5",
+    "target/agent-base-mutant-skip-drained-tool-turn-increment-compile.log": "0bb93592be4212d962ee15aff91e5c629a55226748d33c4e28c66540a4f3a3c2",
+    "target/agent-base-mutant-skip-usage-migration-compile.log": "37ff33845b8a8f857a035846cbf7fbb4025e6267ea77e15557efa8c0e954127e",
+    "target/agent-base-mutant-success-retains-prior-brain-state-compile.log": "9ee1aaf70564b333811690866056415b5aa19e0df8a5ef5c1edbc637a2a2860c",
+    "target/agent-base-mutant-terminal-failure-drops-full-error-compile.log": "70282a43b6c9dcdd076e17e6469658e26eff50e97b7a9d820cc106c59518a92a",
+    "target/agent-base-mutant-terminal-filter-drops-retry-sub-compile.log": "64f37b459ffd6f3aec46fbafb47f43c4567736d756f974b4f0fb82fcb6ad1ee5",
+    "target/agent-base-mutant-terminal-filter-drops-retry-timer-compile.log": "9ee1aaf70564b333811690866056415b5aa19e0df8a5ef5c1edbc637a2a2860c",
+    "target/agent-base-mutant-unknown-tool-id-folds-first-call-compile.log": "c754e0541c306041f34cfdaf9f1bdfbff00862b52aff8b02221d201e1a3c6257",
+    "target/agent-base-mutations-final.log": "7ea0e55aa961160900e711dd3b4de638f6f7041b6ff08a8f877373bc512213c9",
+    "target/agent-base-mutations-initial-red.log": "83bc6fe0e2669870436d07661c5f408e6c6efabcb9f19889f6e7b8482503df25",
+    "target/agent-base-mutations.log": "83bc6fe0e2669870436d07661c5f408e6c6efabcb9f19889f6e7b8482503df25",
+    "target/agent-base-note-driver-build.log": "16bfecad3e16eed83fb36bcbb6af6e0c41a58524625476ce029436e6c176531c",
+    "target/agent-base-note-owner-green.log": "ab88085a7ff54513f0efa4194903a8f682b5cd14133126d94d4d9eee8b41dc2f",
+    "target/agent-base-note-owner-red.log": "1dddcfd6700e6257c453e35511d5461ee49775e8b2bcd8849954830a612d28ec",
+    "target/agent-base-note-pairs-first.log": "6a9122186edb0d926ad915cb640736150b6c0516b074bf834b794e475a368fd3",
+    "target/agent-base-note-source.log": "5da9a1101079e1b6af2c0924e308438c62c2d9b72b1d3913929d272b9fcd40a1",
+    "target/agent-base-opaque-loop-first.log": "775d23f0fc4cd090dd96e344aaee7f06e6b90d796dc01992075235cabf21d1ea",
+    "target/agent-base-protocol-driver-build.log": "2c41e64a3a407958d7fa73d6e8f3ffa7ba95db24de177b01745ce0e341b714ed",
+    "target/agent-base-protocol-pairs-first.log": "7e248eaad02efae4ae98343d6920905ae5289e85ac9a4086d9bbeb95dae5cdb0",
+    "target/agent-base-public-interface-red.log": "9219b223d522c0bf67945a940e61fcffe81a75c8b5d191ef4962cc7707004a4e",
+    "target/agent-base-public-red.log": "81c32d6100134fafb06e00521c6bb5220b71974f70fdea5cbef86af0e1b9a9c1",
+    "target/agent-base-regression-drivers-build.log": "d54e1817b65426d31319d5e836cc7a373190f7c250467301c2a2272ac9819a6d",
+    "target/agent-base-regressions.log": "9994f7689b331a8b18c486ee3f4b32669f6fd81ffa09bd7ff48818937868eedc",
+    "target/agent-base-second-pairs.log": "46c5e6b64ce85144f60b6b7ff374db28dce1f661b46033002d711e96b7ce5498",
+    "target/agent-base-source-red.log": "d3013c51c9ec69677c4833abe9833a9e9dca5d74b5520db8bad86e560b3da9d8",
+    "target/agent-base-tea-tests.log": "c0749520619968530c56c1a570b8ffbeb121d68019a4a310ba20a952c6d47cb4",
+    "target/agent-base-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
