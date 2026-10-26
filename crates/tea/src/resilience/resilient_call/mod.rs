@@ -600,5 +600,5 @@ pub fn lift_resilience<S, I, R, E, C>(
     result: Step<State<I, R, E>, C>,
     replace: impl FnOnce(S, State<I, R, E>) -> S,
 ) -> Step<S, C> {
-    Step::new(replace(state, result.state), result.commands)
+    crate::compose::lift_slice(state, result, replace)
 }

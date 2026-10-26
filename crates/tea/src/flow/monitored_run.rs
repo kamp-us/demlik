@@ -350,7 +350,7 @@ pub fn lift_run<H, S, E, C>(
     step: Step<Rc<MonitoredRunState<S, E>>, C>,
     replace_run: impl FnOnce(H, Rc<MonitoredRunState<S, E>>) -> H,
 ) -> Step<H, C> {
-    Step::new(replace_run(host, step.state), step.commands)
+    crate::compose::lift_slice(host, step, replace_run)
 }
 pub fn create_monitored_run<S, V>(config: MonitoredRunConfig<S>) -> MonitoredRun<S, V> {
     MonitoredRun::new(config)

@@ -165,7 +165,7 @@ pub fn lift_walk<S, C, P, E, O>(
     result: WalkStep<C, P, E, O>,
     replace: impl FnOnce(S, State<C, P, E>) -> S,
 ) -> Step<S, O> {
-    Step::new(replace(state, result.state), result.commands)
+    crate::compose::lift_slice(state, result, replace)
 }
 impl<'a, C, P, E, F, O: From<RunCommand<C, P, E>>> PaginatedWalk<'a, C, P, E, F, O> {
     pub fn new(config: Config<'a, C, P, O, F>) -> Self {

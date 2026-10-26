@@ -511,5 +511,5 @@ pub fn lift_reconciler<S, A, C, P, K, E, O>(
     result: ReconcileStep<A, C, P, K, E, O>,
     replace: impl FnOnce(S, State<A, C, P, K, E>) -> S,
 ) -> Step<S, O> {
-    Step::new(replace(state, result.state), result.commands)
+    crate::compose::lift_slice(state, result, replace)
 }
