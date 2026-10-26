@@ -55,11 +55,13 @@ impl Default for PropertyOptions {
     }
 }
 
-pub enum InvariantFailure<E> {
+pub enum PredicateFailure<E> {
     False,
     Error(E),
     Panic(PanicCause),
 }
+pub use PredicateFailure as InvariantFailure;
+
 pub enum FailedCase<S, M, C, E> {
     LoadedPanic(PanicCause),
     FoldRefused(NoCellError),
@@ -68,6 +70,14 @@ pub enum FailedCase<S, M, C, E> {
         trace: FoldTrace<S, M, C>,
         step: usize,
         failure: InvariantFailure<E>,
+    },
+    Terminates {
+        trace: FoldTrace<S, M, C>,
+        failure: PredicateFailure<E>,
+    },
+    Trace {
+        trace: FoldTrace<S, M, C>,
+        failure: PredicateFailure<E>,
     },
 }
 /// The messages and trace belong to an actual failing callback evaluation.
@@ -117,12 +127,23 @@ impl<S, M, C, E> fmt::Debug for PropertyFailure<S, M, C, E> {
     }
 }
 
+fn predicate_result<E>(
+    predicate: impl FnOnce() -> Result<bool, E>,
+) -> Result<(), PredicateFailure<E>> {
+    match catch_unwind(AssertUnwindSafe(predicate)) {
+        Ok(Ok(true)) => Ok(()),
+        Ok(Ok(false)) => Err(PredicateFailure::False),
+        Ok(Err(error)) => Err(PredicateFailure::Error(error)),
+        Err(cause) => Err(PredicateFailure::Panic(PanicCause::new(cause))),
+    }
+}
+
 fn evaluate<S: Tagged, M: Tagged, C, U: Subscription, X, E>(
     machine: &Machine<'_, S, M, C, U, X>,
     input: &X,
     messages: &[Arc<M>],
     loaded: &impl Fn() -> Option<S>,
-    invariant: &impl Fn(&FoldStep<S, M, C>) -> Result<bool, E>,
+    check: &impl Fn(FoldTrace<S, M, C>) -> Result<(), FailedCase<S, M, C, E>>,
 ) -> Result<(), FailedCase<S, M, C, E>> {
     let loaded = catch_unwind(AssertUnwindSafe(loaded))
         .map_err(|cause| FailedCase::LoadedPanic(PanicCause::new(cause)))?;
@@ -131,39 +152,101 @@ fn evaluate<S: Tagged, M: Tagged, C, U: Subscription, X, E>(
     }))
     .map_err(|cause| FailedCase::FoldPanic(PanicCause::new(cause)))?
     .map_err(FailedCase::FoldRefused)?;
-    for (step, transition) in trace.steps.iter().enumerate() {
-        let failure = match catch_unwind(AssertUnwindSafe(|| invariant(transition))) {
-            Ok(Ok(true)) => continue,
-            Ok(Ok(false)) => InvariantFailure::False,
-            Ok(Err(error)) => InvariantFailure::Error(error),
-            Err(cause) => InvariantFailure::Panic(PanicCause::new(cause)),
-        };
-        return Err(FailedCase::Invariant {
-            trace,
-            step,
-            failure,
-        });
-    }
-    Ok(())
+    check(trace)
 }
 
-/// Fully fold each generated case before checking steps in order. Boot, fold,
-/// predicate and backend failures remain distinct data. `loaded` supplies one
-/// owned snapshot per evaluation, without a Clone/serde bound on the model.
-///
-/// The retained counterexample is the last actual failing evaluation. Standard
-/// deterministic Proptest trees associate it with the backend's logical minimum;
-/// no equivalence is promised for arbitrary nondeterministic/custom value trees.
-/// No callbacks are rerun to reconstruct a failure, and no regression files are
-/// read or written. Proptest's native rejection/shrink limits remain backend
-/// behavior; `PROPTEST_*` settings other than the fields explicitly set here may
-/// affect those limits.
+/// Fully fold each case before checking its steps in order. Original failure
+/// data and evaluated handles are retained; no callbacks rerun to reconstruct it.
 pub fn property_invariant<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, E>(
     machine: &Machine<'_, S, M, C, U, X>,
     input: &X,
     strategy: &impl Strategy<Value = Vec<Arc<M>>>,
     loaded: impl Fn() -> Option<S>,
     invariant: impl Fn(&FoldStep<S, M, C>) -> Result<bool, E>,
+    options: PropertyOptions,
+) -> Result<(), PropertyFailure<S, M, C, E>> {
+    run_property(
+        machine,
+        input,
+        strategy,
+        loaded,
+        |trace| {
+            for (step, transition) in trace.steps.iter().enumerate() {
+                if let Err(failure) = predicate_result(|| invariant(transition)) {
+                    return Err(FailedCase::Invariant {
+                        trace,
+                        step,
+                        failure,
+                    });
+                }
+            }
+            Ok(())
+        },
+        options,
+    )
+}
+
+/// Check the actual final state once after the complete finite fold, including
+/// empty cases. This does not drive effects or prove eventual runtime termination.
+/// Predicate errors/panics and the original completed trace remain typed data.
+/// False diagnostics do not serialize the model; Source JSON/toJSON formatting
+/// effects are a separate compatibility profile.
+pub fn property_terminates<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, E>(
+    machine: &Machine<'_, S, M, C, U, X>,
+    input: &X,
+    strategy: &impl Strategy<Value = Vec<Arc<M>>>,
+    loaded: impl Fn() -> Option<S>,
+    terminal: impl Fn(&S) -> Result<bool, E>,
+    options: PropertyOptions,
+) -> Result<(), PropertyFailure<S, M, C, E>> {
+    run_property(
+        machine,
+        input,
+        strategy,
+        loaded,
+        |trace| match predicate_result(|| terminal(&trace.final_state)) {
+            Ok(()) => Ok(()),
+            Err(failure) => Err(FailedCase::Terminates { trace, failure }),
+        },
+        options,
+    )
+}
+
+/// Check the full chronological steps and actual final state once, including
+/// empty cases. Inputs borrow the original completed trace; failure retains it.
+/// Native typed false/error/panic diagnostics do not invoke Source JSON/toJSON.
+pub fn property_trace<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, E>(
+    machine: &Machine<'_, S, M, C, U, X>,
+    input: &X,
+    strategy: &impl Strategy<Value = Vec<Arc<M>>>,
+    loaded: impl Fn() -> Option<S>,
+    predicate: impl Fn(&[FoldStep<S, M, C>], &S) -> Result<bool, E>,
+    options: PropertyOptions,
+) -> Result<(), PropertyFailure<S, M, C, E>> {
+    run_property(
+        machine,
+        input,
+        strategy,
+        loaded,
+        |trace| match predicate_result(|| predicate(&trace.steps, &trace.final_state)) {
+            Ok(()) => Ok(()),
+            Err(failure) => Err(FailedCase::Trace { trace, failure }),
+        },
+        options,
+    )
+}
+
+// One backend execution/failure owner for the authored post-fold checks. Standard
+// deterministic trees associate the retained last actual failure with the logical
+// minimum; arbitrary nondeterministic/custom trees are not promised equivalent.
+// Persistence/cache remain off. Other PROPTEST_* rejection limits are backend
+// settings, not fast-check configuration/seed/shrink compatibility.
+fn run_property<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, E>(
+    machine: &Machine<'_, S, M, C, U, X>,
+    input: &X,
+    strategy: &impl Strategy<Value = Vec<Arc<M>>>,
+    loaded: impl Fn() -> Option<S>,
+    check: impl Fn(FoldTrace<S, M, C>) -> Result<(), FailedCase<S, M, C, E>>,
     options: PropertyOptions,
 ) -> Result<(), PropertyFailure<S, M, C, E>> {
     let failure = RefCell::new(None);
@@ -180,7 +263,7 @@ pub fn property_invariant<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription,
         });
         runner
             .run(strategy, |messages| {
-                match evaluate(machine, input, &messages, &loaded, &invariant) {
+                match evaluate(machine, input, &messages, &loaded, &check) {
                     Ok(()) => Ok(()),
                     Err(outcome) => {
                         // RefCell::replace ends its borrow before old opaque values

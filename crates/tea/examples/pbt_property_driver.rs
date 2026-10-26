@@ -16,6 +16,8 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
+#[path = "pbt_property_driver/invoice.rs"]
+mod invoice;
 #[expect(
     dead_code,
     reason = "This driver uses only numbers from the shared parity wire module; sibling drivers use its other projections."
@@ -81,9 +83,19 @@ enum Kind {
     Property,
     Sequence,
 }
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum Check {
+    #[default]
+    Invariant,
+    Terminates,
+    Trace,
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Script {
+    #[serde(default)]
+    check: Check,
     kind: Kind,
     form: Form,
     loaded: Option<Seed>,
@@ -209,6 +221,7 @@ fn execute(case: Case) -> Value {
     let runs = Rc::new(Cell::new(0));
     let updates = Rc::new(Cell::new(0));
     let index = Cell::new(0);
+    let boot_state = RefCell::new(None::<Arc<State>>);
     let payload = Rc::new(Payload {
         _opaque: Box::new(|| {}),
     });
@@ -330,6 +343,7 @@ fn execute(case: Case) -> Value {
             } else {
                 vec![]
             };
+            boot_state.replace(Some(Arc::clone(&s)));
             Step::new(s, commands)
         }),
         update,
@@ -342,42 +356,82 @@ fn execute(case: Case) -> Value {
             vec![]
         }),
     };
-    let result = observe!(
-        calls,
-        pbt::property_invariant,
-        &machine,
-        &(),
-        &strategy,
-        || loaded.clone(),
-        |step| {
-            let at = index.get();
-            index.set(at + 1);
-            log.borrow_mut().push(json!(["check", at]));
-            let mut message = json!({"type":step.msg.kind});
-            if let Some(by) = step.msg.by {
-                message["by"] = wire::number(by);
-            }
-            checks.borrow_mut().push(json!({"index":at,"prev":state(&step.prev),"next":state(&step.next),"msg":message,"commands":step.commands.iter().map(|c|json!({"type":c.kind,"n":wire::number(c.n),"samePayload":Rc::ptr_eq(&c.payload,&payload)})).collect::<Vec<_>>(),"sameState":Arc::ptr_eq(step.prev.as_ref(),step.next.as_ref()),"sameInput":Arc::ptr_eq(&step.msg,&expected[at]),"sameAsPrevious":at>0&&Arc::ptr_eq(&step.msg,&expected[at-1]),"samePayload":Rc::ptr_eq(&step.msg.payload,&payload),"fullFoldComplete":updates.get()==runs.get()*expected.len()}));
-            if at == script.predicate.at {
-                match script.predicate.kind {
-                    PredicateKind::False => return Ok(false),
-                    PredicateKind::Error => {
-                        return Err(AppError {
-                            cause: Rc::clone(&error_cause),
-                        });
-                    }
-                    PredicateKind::True => {}
-                }
-            }
-            Ok(true)
-        },
-        PropertyOptions {
-            num_runs: script
-                .runs
-                .unwrap_or_else(|| PropertyOptions::default().num_runs),
-            seed: Some(42)
+    let step_view = |step: &pbt::FoldStep<Arc<State>, Msg, Cmd>, at: usize| {
+        let mut message = json!({"type":step.msg.kind});
+        if let Some(by) = step.msg.by {
+            message["by"] = wire::number(by);
         }
-    );
+        json!({"index":at,"prev":state(&step.prev),"next":state(&step.next),"msg":message,"commands":step.commands.iter().map(|c|json!({"type":c.kind,"n":wire::number(c.n),"samePayload":Rc::ptr_eq(&c.payload,&payload)})).collect::<Vec<_>>(),"sameState":Arc::ptr_eq(step.prev.as_ref(),step.next.as_ref()),"sameInput":Arc::ptr_eq(&step.msg,&expected[at]),"sameAsPrevious":at>0&&Arc::ptr_eq(&step.msg,&expected[at-1]),"samePayload":Rc::ptr_eq(&step.msg.payload,&payload),"fullFoldComplete":updates.get()==runs.get()*expected.len()})
+    };
+    let final_view = |s: &Arc<State>| json!({"state":state(s),"samePayload":Rc::ptr_eq(&s.payload,&payload),"sameBoot":boot_state.borrow().as_ref().is_some_and(|boot|Arc::ptr_eq(boot,s)),"fullFoldComplete":updates.get()==runs.get()*expected.len()});
+    let predicate = || match script.predicate.kind {
+        PredicateKind::False => Ok(false),
+        PredicateKind::Error => Err(AppError {
+            cause: Rc::clone(&error_cause),
+        }),
+        PredicateKind::True => Ok(true),
+    };
+    let options = PropertyOptions {
+        num_runs: script
+            .runs
+            .unwrap_or_else(|| PropertyOptions::default().num_runs),
+        seed: Some(42),
+    };
+    let result = match script.check {
+        Check::Invariant => observe!(
+            calls,
+            pbt::property_invariant,
+            &machine,
+            &(),
+            &strategy,
+            || loaded.clone(),
+            |step| {
+                let at = index.get();
+                index.set(at + 1);
+                log.borrow_mut().push(json!(["check", at]));
+                checks.borrow_mut().push(step_view(step, at));
+                if at == script.predicate.at {
+                    predicate()
+                } else {
+                    Ok(true)
+                }
+            },
+            options
+        ),
+        Check::Terminates => observe!(
+            calls,
+            pbt::property_terminates,
+            &machine,
+            &(),
+            &strategy,
+            || loaded.clone(),
+            |s| {
+                log.borrow_mut().push(json!(["terminal"]));
+                checks.borrow_mut().push(final_view(s));
+                predicate()
+            },
+            options
+        ),
+        Check::Trace => observe!(
+            calls,
+            pbt::property_trace,
+            &machine,
+            &(),
+            &strategy,
+            || loaded.clone(),
+            |steps, final_state| {
+                log.borrow_mut().push(json!(["trace"]));
+                checks.borrow_mut().push(json!({
+                    "steps": steps.iter().enumerate().map(|(i,s)|step_view(s,i)).collect::<Vec<_>>(),
+                    "final": final_view(final_state),
+                    "finalIsLast": steps.last().is_none_or(|s|std::ptr::eq(s.next.as_ref(),final_state)),
+                    "links": steps.windows(2).all(|s|Arc::ptr_eq(&s[0].next,&s[1].prev))
+                }));
+                predicate()
+            },
+            options
+        ),
+    };
     let mut diagnostics = json!(null);
     let (status, failure) = match result {
         Ok(()) => ("ok", json!(null)),
@@ -429,6 +483,33 @@ fn execute(case: Case) -> Value {
                         }));
                         ("callback", json!({"phase":script.fail.unwrap().name()}))
                     }
+                    FailedCase::Terminates { trace, failure }
+                    | FailedCase::Trace { trace, failure } => {
+                        diagnostics["retainedMessages"] = json!(
+                            evaluated
+                                .messages
+                                .iter()
+                                .map(|m| m.kind)
+                                .collect::<Vec<_>>()
+                        );
+                        diagnostics["traceLinksOriginal"] = json!(
+                            trace
+                                .steps
+                                .iter()
+                                .zip(&evaluated.messages)
+                                .all(|(s, m)| Arc::ptr_eq(&s.msg, m))
+                        );
+                        let status = match failure {
+                            InvariantFailure::False => "false",
+                            InvariantFailure::Error(error) => {
+                                diagnostics["originalErrorIdentity"] =
+                                    json!(Rc::ptr_eq(&error.cause, &error_cause));
+                                "callback"
+                            }
+                            InvariantFailure::Panic(_) => panic!("not scripted"),
+                        };
+                        (status, json!({"phase":"predicate"}))
+                    }
                     FailedCase::LoadedPanic(_) => panic!("not scripted"),
                 },
                 other => panic!("unexpected {other:?}"),
@@ -465,10 +546,16 @@ fn main() {
         );
         return;
     }
+    let invoice = std::env::args().any(|a| a == "--invoice");
     for line in io::stdin().lock().lines() {
         let line = line.unwrap();
         if !line.trim().is_empty() {
-            println!("{}", execute(serde_json::from_str(&line).unwrap()));
+            let output = if invoice {
+                invoice::execute(serde_json::from_str(&line).unwrap())
+            } else {
+                execute(serde_json::from_str(&line).unwrap())
+            };
+            println!("{output}");
         }
     }
 }

@@ -55,6 +55,7 @@ pub fn fold_events<S: Tagged, M: Tagged, C, U: Subscription, X>(
 mod proptest;
 #[cfg(feature = "pbt")]
 pub use self::proptest::{
-    EvaluatedFailure, FailedCase, InvariantFailure, PropertyFailure, PropertyOptions,
-    SequenceOptions, msg_sequence, property_invariant,
+    EvaluatedFailure, FailedCase, InvariantFailure, PredicateFailure, PropertyFailure,
+    PropertyOptions, SequenceOptions, msg_sequence, property_invariant, property_terminates,
+    property_trace,
 };

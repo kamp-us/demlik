@@ -20,7 +20,7 @@ const faults = [
     id: "pbt-reruns-failing-callbacks",
     needle: "let evaluated = failure.into_inner();",
     fault:
-      "let mut evaluated = failure.into_inner(); if let Some(captured) = &mut evaluated { if let Err(second) = evaluate(machine, input, &captured.messages, &loaded, &invariant) { captured.failure = second; } }",
+      "let mut evaluated = failure.into_inner(); if let Some(captured) = &mut evaluated { if let Err(second) = evaluate(machine, input, &captured.messages, &loaded, &check) { captured.failure = second; } }",
     witness: "pbt-property.reducer.false-first",
   },
   {
@@ -56,8 +56,8 @@ const faults = [
   },
   {
     id: "pbt-swallows-original-error",
-    needle: "Ok(Err(error)) => InvariantFailure::Error(error),",
-    fault: "Ok(Err(error)) => { drop(error); InvariantFailure::False },",
+    needle: "Ok(Err(error)) => Err(PredicateFailure::Error(error)),",
+    fault: "Ok(Err(error)) => { drop(error); Err(PredicateFailure::False) },",
     witness: "pbt-property.reducer.original-error-first",
   },
   {
@@ -121,6 +121,7 @@ export function pbtPropertyMutations({
   binary,
   reportFile = "target/parity/pbt-property-controls.json",
   only,
+  binaryDirectory = "target/parity/control-binaries",
 } = {}) {
   assert(binary, "baseline binary required");
   const root = process.cwd();
@@ -243,7 +244,7 @@ export function pbtPropertyMutations({
           : result.report.failures.map((c) => c.id);
         assert(detectedIds.includes(f.witness));
       }
-      const saved = resolve(`target/parity/control-binaries/${f.id}`);
+      const saved = resolve(binaryDirectory, f.id);
       mkdirSync(dirname(saved), { recursive: true });
       cpSync(executable, saved);
       controls.push({
@@ -293,6 +294,7 @@ if (
       "native-bin": { type: "string" },
       report: { type: "string" },
       only: { type: "string", multiple: true },
+      "binary-directory": { type: "string" },
     },
     strict: true,
   });
@@ -300,6 +302,7 @@ if (
     binary: values["native-bin"],
     reportFile: values.report,
     only: values.only,
+    binaryDirectory: values["binary-directory"],
   });
   console.log(
     JSON.stringify({

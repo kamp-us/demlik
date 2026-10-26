@@ -6,6 +6,8 @@ import { defineMachine } from "../../packages/tea/src/index.js";
 import {
   arbMsgSequence,
   propertyInvariant,
+  propertyTerminates,
+  propertyTrace,
 } from "../../packages/tea/src/pbt/index.js";
 import type { PbtPropertyScript } from "./pbt-property-cases.mts";
 import { encodeNumber, numeric } from "./timing-clock.mts";
@@ -15,7 +17,10 @@ const require = createRequire(
 );
 const fc: typeof FastCheck = require("fast-check");
 const fastCheckVersion: unknown = require("fast-check/package.json").version;
-export function executePbtProperty(input: PbtPropertyScript) {
+export function executePbtProperty(
+  input: PbtPropertyScript,
+  operation: "invariant" | "terminates" | "trace" = "invariant",
+) {
   const log: unknown[] = [],
     checks: unknown[] = [],
     payload = { capability: () => 17 };
@@ -33,6 +38,8 @@ export function executePbtProperty(input: PbtPropertyScript) {
   type State = { type: string; n: number; payload: object };
   type Msg = { type: string; by?: number; payload: object };
   type Cmd = { type: string; n: number; payload: object };
+  type Step = { prev: State; msg: Msg; next: State; cmds: readonly Cmd[] };
+  let bootState: State | undefined;
   const seed = input.loaded
     ? {
         type: input.loaded.done ? "done" : "active",
@@ -95,6 +102,7 @@ export function executePbtProperty(input: PbtPropertyScript) {
       let s = loaded ?? { type: "active", n: 0, payload };
       const delta = numeric.parse(input.initDelta);
       if (delta !== 0) s = { ...s, n: s.n + delta };
+      bootState = s;
       return [s, input.bootCommand ? [{ type: "boot", n: s.n, payload }] : []];
     },
     update:
@@ -130,56 +138,85 @@ export function executePbtProperty(input: PbtPropertyScript) {
           maxLength: input.tail,
           prefix,
         });
+  const stepView = ({ prev, msg, next, cmds }: Step, at: number) => ({
+    index: at,
+    prev: stateView(prev),
+    next: stateView(next),
+    msg: {
+      type: msg.type,
+      ...(msg.by === undefined ? {} : { by: encodeNumber(msg.by) }),
+    },
+    commands: cmds.map((c) => ({
+      type: c.type,
+      n: encodeNumber(c.n),
+      samePayload: c.payload === payload,
+    })),
+    sameState: prev === next,
+    sameInput: msg === expected[at],
+    sameAsPrevious: at > 0 && msg === expected[at - 1],
+    samePayload: msg.payload === payload,
+    fullFoldComplete: updates === runs * expected.length,
+  });
+  const finalView = (s: State) => ({
+    state: stateView(s),
+    samePayload: s.payload === payload,
+    sameBoot: s === bootState,
+    fullFoldComplete: updates === runs * expected.length,
+  });
+  const predicate = (at?: number) => {
+    if (
+      (at === undefined || at === input.predicate.at) &&
+      input.predicate.kind !== "true"
+    ) {
+      failure =
+        at === undefined
+          ? { phase: "predicate" }
+          : { phase: "invariant", step: at };
+      if (input.predicate.kind === "error") {
+        originalCallbackSeen = true;
+        status = "callback";
+        throw cause;
+      }
+      status = "false";
+      return false;
+    }
+    return true;
+  };
+  const callbacks = {
+    invariant: (step: Step) => {
+      const at = index++;
+      log.push(["check", at]);
+      checks.push(stepView(step, at));
+      return predicate(at);
+    },
+    terminates: (s: State) => {
+      log.push(["terminal"]);
+      checks.push(finalView(s));
+      return predicate();
+    },
+    trace: (steps: readonly Step[], finalState: State) => {
+      log.push(["trace"]);
+      checks.push({
+        steps: steps.map(stepView),
+        final: finalView(finalState),
+        finalIsLast: steps.length === 0 || steps.at(-1)?.next === finalState,
+        links: steps.every((s, i) => i === 0 || steps[i - 1].next === s.prev),
+      });
+      return predicate();
+    },
+  };
+  const runners = {
+    invariant: propertyInvariant,
+    terminates: propertyTerminates,
+    trace: propertyTrace,
+  };
   let diagnostics: unknown = null;
   try {
-    Reflect.apply(propertyInvariant, undefined, [
+    Reflect.apply(runners[operation], undefined, [
       machine,
       undefined,
       sequence,
-      ({
-        prev,
-        msg,
-        next,
-        cmds,
-      }: {
-        prev: State;
-        msg: Msg;
-        next: State;
-        cmds: readonly Cmd[];
-      }) => {
-        const at = index++;
-        log.push(["check", at]);
-        checks.push({
-          index: at,
-          prev: stateView(prev),
-          next: stateView(next),
-          msg: {
-            type: msg.type,
-            ...(msg.by === undefined ? {} : { by: encodeNumber(msg.by) }),
-          },
-          commands: cmds.map((c) => ({
-            type: c.type,
-            n: encodeNumber(c.n),
-            samePayload: c.payload === payload,
-          })),
-          sameState: prev === next,
-          sameInput: msg === expected[at],
-          sameAsPrevious: at > 0 && msg === expected[at - 1],
-          samePayload: msg.payload === payload,
-          fullFoldComplete: updates === runs * expected.length,
-        });
-        if (at === input.predicate.at && input.predicate.kind !== "true") {
-          failure = { phase: "invariant", step: at };
-          if (input.predicate.kind === "error") {
-            originalCallbackSeen = true;
-            status = "callback";
-            throw cause;
-          }
-          status = "false";
-          return false;
-        }
-        return true;
-      },
+      callbacks[operation],
       {
         loaded: seed,
         ...(input.runs === undefined ? {} : { numRuns: input.runs }),
