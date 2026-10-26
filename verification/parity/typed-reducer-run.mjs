@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildTeaExample } from "./tea-example.mjs";
 import {
   invalidTypedReducerRequests,
   typedReducerCases,
@@ -197,6 +198,17 @@ function independentActor(input, c) {
 }
 
 export async function typedReducerParity(options = {}) {
+  const reportFile =
+    options.reportFile ??
+    path.join(root, "target/typed-reducer-conformance/pairs.json");
+  const built = options.binary
+    ? undefined
+    : buildTeaExample(
+        process.env.CARGO ?? "cargo",
+        "typed_reducer_driver",
+        reportFile,
+      );
+  options = { ...options, binary: options.binary ?? built.binary, reportFile };
   const scope = JSON.parse(
     await readFile(path.join(here, "scope.json"), "utf8"),
   );
@@ -330,9 +342,6 @@ export async function typedReducerParity(options = {}) {
       ),
     ),
   };
-  const reportFile =
-    options.reportFile ??
-    path.join(root, "target/typed-reducer-conformance/pairs.json");
   await mkdir(path.dirname(reportFile), { recursive: true });
   report.rawProof = {
     input: `${reportFile}.input.jsonl`,

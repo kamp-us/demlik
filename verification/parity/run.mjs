@@ -35,6 +35,7 @@ import { llmCallParity } from "./llm-call-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
+import { pbtConstructorsCheckpointParity } from "./pbt-constructors-run.mjs";
 import { pbtFinalParity } from "./pbt-final-run.mjs";
 import { pbtFoldParity } from "./pbt-fold-run.mjs";
 import { pbtPropertyParity } from "./pbt-property-run.mjs";
@@ -54,6 +55,7 @@ import { storedCellParity } from "./stored-cell-run.mjs";
 import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
+import { typedReducerParity } from "./typed-reducer-run.mjs";
 import { workflowParity } from "./workflow-run.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -1044,6 +1046,18 @@ if (!mutationSuite) {
       operation: "tea.pbt-final-state-and-trace",
       binaryArgument: "--pbt-final-bin",
       run: (options) => pbtFinalParity(cargo, options),
+    },
+    {
+      name: "pbtConstructors",
+      operation: "tea.pbt-message-constructors",
+      binaryArgument: "--pbt-constructors-bin",
+      run: (options) => pbtConstructorsCheckpointParity(cargo, options),
+    },
+    {
+      name: "typedReducer",
+      operation: "tea.typed-reducer",
+      binaryArgument: "--typed-reducer-bin",
+      run: typedReducerParity,
     },
     {
       name: "agentStatePrerequisite",

@@ -1,0 +1,619 @@
+{
+  "status": "Bounded two-constructor full conformance passed under explicit profiles; STOP for parent review/integration",
+  "createdAt": "2026-10-26T21:11:05.195225+00:00",
+  "worktree": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d",
+  "branch": "can/rust-pbt-constructors-full-01a16c9d",
+  "commit": "108d9835430e316951d36531ae12ce50e5d4ee91",
+  "parent": "6013e20c291dc7a74a567508b89e05655a202245",
+  "production": "Accepted interface6013 helper bodies/re-exports and existing sequence/fold/property/last-failure owners unchanged. This9file checkpoint adds only the conformance driver/action adapters/control tooling and one4line required-feature example registration.",
+  "sourceFiles": [
+    {
+      "path": "crates/tea/Cargo.toml",
+      "sha256": "cb42485fc65c7d2467096877782c280fd45f6d513f46ce23ab990d7a1262efe8",
+      "bytes": 883
+    },
+    {
+      "path": "crates/tea/examples/pbt_constructors_driver.rs",
+      "sha256": "7247f5759febf24c5b188b759341cb5fbe4f0162d10c4254a7ce2b5eafadb18a",
+      "bytes": 10807
+    },
+    {
+      "path": "crates/tea/examples/pbt_constructors_driver/invoice.rs",
+      "sha256": "77f746394abae70c568cd08271df6b24ccb66dfa0931a23fbf093675748ce56e",
+      "bytes": 19342
+    },
+    {
+      "path": "crates/tea/examples/pbt_constructors_driver/native.rs",
+      "sha256": "ae45944af46b4fe48ad312e46d93adb21ce9e7102a7e6f2303fbb16e29d1bbc3",
+      "bytes": 12811
+    },
+    {
+      "path": "verification/parity/pbt-constructors-cases.mts",
+      "sha256": "0096b908fc9053eabd55c2a853ecd5ebf88c62365005ecf69a5be01710fcee8b",
+      "bytes": 7052
+    },
+    {
+      "path": "verification/parity/pbt-constructors-reference.mts",
+      "sha256": "4f9cba3b433c268743721db83b297d21160c35776e95e2093947cb4ffcb2c270",
+      "bytes": 5498
+    },
+    {
+      "path": "verification/parity/pbt-constructors-invoice.mts",
+      "sha256": "6cfd8c6154a069ee6ef95e78b620232c5c7483c2b9d161f5d3b24b5fb4b055a9",
+      "bytes": 11650
+    },
+    {
+      "path": "verification/parity/pbt-constructors.mts",
+      "sha256": "5a5411b178d78c739fec4fcb3917e47b3deb389ca5becf6b6061e50de7c86faa",
+      "bytes": 9455
+    },
+    {
+      "path": "verification/parity/pbt-constructors-mutations.mjs",
+      "sha256": "f829eefcf7ca96bcd564e6bead5b506fec0403ab00a8c897cd675e12756d9a8d",
+      "bytes": 9784
+    }
+  ],
+  "sourceArchive": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-source-108d9835.tar",
+    "sha256": "73c8c96f0441ce3f7cc22b8e3c5cae4f8a9016901bda20ac1828aa1682b38f08",
+    "bytes": 24330240
+  },
+  "publicInterface": {
+    "constant_msg": "pub fn constant_msg<M:Tagged+fmt::Debug>(message:M)->Just<Arc<M>>",
+    "record_msg": "pub fn record_msg<A:Strategy,M:Tagged+fmt::Debug>(fields:A,build:impl Fn(A::Value)->M)->impl Strategy<Value=Arc<M>>",
+    "bounds": "No blanket Clone/serde/Send/static on generated fields/payloads/context/commands/E. Backend Debug only on generatedM/Strategy::Value, manualtag-only Debug keeps actual opaque containedvalues unconstrained."
+  },
+  "results": {
+    "sharedNewCases": 90,
+    "sharedPassed": 90,
+    "fixedConstructorScripts": 64,
+    "nativeLawCases": 3,
+    "nativeGeneratedHistories": 48,
+    "nativeSemanticPairs": 0,
+    "oldRegressionComparisons": 161,
+    "oldPropertyComparisons": 53,
+    "oldFinalComparisons": 108,
+    "newControls": 3,
+    "oldControls": 16,
+    "featureTests": 19,
+    "typePositive": 1,
+    "intendedTypeRefusals": 4,
+    "finalCheckCommandsExitZero": 13,
+    "scopedClippyExit": 0,
+    "sourceGitsTarEqual": true,
+    "oldOriginalAndBackupPinsVerified": 448,
+    "invoiceRecipes": 26,
+    "restoredInvoiceRecipes": 18,
+    "freshInvoiceRecipes": 8
+  },
+  "comparisons": {
+    "paired": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-paired-final.json",
+      "sha256": "4d6249c5e7c68eb96a9b7807dc5c6a514e45b3ae610bc030f20d95e1351a406b",
+      "bytes": 1228035
+    },
+    "native": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-native-final.json",
+      "sha256": "22c57da2bdd03e23a77bfd199e344609c5f5ef78b696d4bb075263c046197f64",
+      "bytes": 19922
+    },
+    "regressions": [
+      {
+        "report": {
+          "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-old-property-52.json",
+          "sha256": "bbdf2823b00b2e64b28cf277cc0f0003f468b9da90ec7c2833e9dc1923be4cb8",
+          "bytes": 847124
+        },
+        "compared": 52,
+        "passed": 52,
+        "newSemanticCases": 0
+      },
+      {
+        "report": {
+          "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-old-property-file.json",
+          "sha256": "e90ec528ac564941761a228247144a161cbd3f145c705c11783997f008a4c720",
+          "bytes": 26022
+        },
+        "compared": 1,
+        "passed": 1,
+        "newSemanticCases": 0
+      },
+      {
+        "report": {
+          "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-old-final-108.json",
+          "sha256": "8337dac417fb42a36a8f65d9d53af72929d8cb86f924dc505cacb174b59754bb",
+          "bytes": 1418880
+        },
+        "compared": 108,
+        "passed": 108,
+        "newSemanticCases": 0
+      }
+    ],
+    "policy": "90means the declared comparison view only, with full raw Source/native diagnostics and separate native post-return ownership laws.26invoice rows callbothhelpers;34constant+82record case memberships must not be summed."
+  },
+  "sourceErrorObservation": {
+    "firstFailedHarnessRun": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-paired-90-1-run.json",
+      "sha256": "6d63485eb3846b54e3531ee490822bf85f1fabfd73f9412eba6210c1bf7efd49",
+      "bytes": 2721
+    },
+    "actualBoundary": "packages/tea/node_modules/fast-check/lib/esm/check/runner/utils/RunDetailsFormatter.js:124ff: default !errorWithCause throws new Error(errorMessage), without cause.",
+    "repair": "Fixed only reference observation/masks. No Source/backend global configuration or production owner edits. Actual callback capture and full inspect/stack retained; native original typed E/cause/message/snapshot flags separately checked as semantic failures.",
+    "controlCount": 0
+  },
+  "nativeShrink": {
+    "firstActualFailure": 87,
+    "literalExpectedMinimum": 13,
+    "observedMinimum": 13,
+    "actualEvaluations": 9,
+    "owners": "Actual original messages/trace/commandpayload/E/cause/snapshot/model all checked by identity; no callback replay, serialization reconstruction or lookup table."
+  },
+  "controls": [
+    {
+      "report": {
+        "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-controls.json",
+        "sha256": "6bed9ddde02e0619d91be47b4b89209598b8e470f384ff5fac711036d4acd4f5",
+        "bytes": 258879
+      },
+      "count": 3,
+      "controls": [
+        {
+          "id": "constant-msg-rejects-valid-value",
+          "witness": "constructors.constant.stop",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors/constant-msg-rejects-valid-value",
+            "sha256": "9fb37d4bb0a5cb401758978086a22cc2eb759169479bdecb28d76406f377c836"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "aa38a4a2829af5cd92b84ce232c00c3013d68257790027fd2f7f17665886dadb",
+            "needle": "pub fn constant_msg<M: Tagged + fmt::Debug>(message: M) -> Just<Arc<M>> {\n    Just(Arc::new(message))\n}",
+            "fault": "pub fn constant_msg<M: Tagged + fmt::Debug>(message: M) -> impl Strategy<Value = Arc<M>> {\n    Just(Arc::new(message)).prop_filter(\"fault: rejected constant\", |_| false)\n}"
+          }
+        },
+        {
+          "id": "record-msg-reuses-first-outer",
+          "witness": "constructors.record.value-1",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors/record-msg-reuses-first-outer",
+            "sha256": "57e4c171bb6d617402e1190cb1408fbb34cca5b2eb399b28905f211ffee27248"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "cf5e361d4a8b69040e87fb25ab18a590aae7faa22175bd479efcb53fb80970d9",
+            "needle": "    fields.prop_map(move |value| Arc::new(build(value)))",
+            "fault": "    let cached: RefCell<Option<Arc<M>>> = RefCell::new(None);\n    fields.prop_map(move |value| {\n        let copy = cached.borrow().as_ref().map(Arc::clone);\n        if let Some(first) = copy { return first; }\n        let message = Arc::new(build(value));\n        let old = cached.replace(Some(Arc::clone(&message)));\n        drop(old);\n        message\n    })"
+          }
+        },
+        {
+          "id": "record-msg-disables-field-shrinking",
+          "witness": "constructors.native.field-shrink",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors/record-msg-disables-field-shrinking",
+            "sha256": "12f59425e7de1d7275dcee859a1e72e1686f313f5f1ca5e7b0a0159244b579ed"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "1b818d181d88cf633e7df76e88c408b4be0ed2f3a4fce4d5194611c93183a5c9",
+            "needle": "    fields.prop_map(move |value| Arc::new(build(value)))",
+            "fault": "    fields.no_shrink().prop_map(move |value| Arc::new(build(value)))"
+          }
+        }
+      ]
+    },
+    {
+      "report": {
+        "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-old-property-controls.json",
+        "sha256": "0fe840b4a19e4c9175e4553ee93df0d8ec39396811b82bf14532675dcbeae0f1",
+        "bytes": 3204807
+      },
+      "count": 9,
+      "controls": [
+        {
+          "id": "pbt-reruns-failing-callbacks",
+          "witness": "pbt-property.reducer.false-first",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-reruns-failing-callbacks",
+            "sha256": "1a4fe2acb07f7150b8bce00b3ccd19d933a511ea4d04b6b6c43ad92a19cb3098"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "f974854197fd6e2e4afeb597295c40fe0d8797f871d40460a4cd531ebfcb5abf",
+            "needle": "let evaluated = failure.into_inner();",
+            "fault": "let mut evaluated = failure.into_inner(); if let Some(captured) = &mut evaluated { if let Err(second) = evaluate(machine, input, &captured.messages, &loaded, &check) { captured.failure = second; } }"
+          }
+        },
+        {
+          "id": "pbt-wrong-default-runs",
+          "witness": "pbt-property.count.default-200",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-wrong-default-runs",
+            "sha256": "0eb90806bb1ef1352c001b5b28c7f37dc3b0ddb3d005d8c1b3e9577cb0d1dba4"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "5622b72c0e9a852b0d9196f32487ecbaf870dec8bc5d28ecc46a379e07b43829",
+            "needle": "num_runs: 200,",
+            "fault": "num_runs: 201,"
+          }
+        },
+        {
+          "id": "pbt-prefix-counted-in-tail-bounds",
+          "witness": "pbt-sequence.tail-3.prefix-1",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-prefix-counted-in-tail-bounds",
+            "sha256": "786f67feba3cde78561806447db4811ee51cdfde47657012a35b70bc79879ae3"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "69967dcb75072c6c36638c53a7deb9d7384b491587a587802e0c5957e8545050",
+            "needle": "vec(message, options.tail)",
+            "fault": "vec(message, options.tail.start().saturating_sub(options.prefix.len())..options.tail.end_excl().saturating_sub(options.prefix.len()))"
+          }
+        },
+        {
+          "id": "pbt-drops-fixed-prefix",
+          "witness": "pbt-sequence.tail-3.prefix-1",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-drops-fixed-prefix",
+            "sha256": "9569630e3f8c3f968f0218532b9076ed21c4cfe2bf71d32299451a05515f0645"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "f2849d63e80044db4370a986fab73c91992d2b44c9b3b2d7aa0b8b3620fea492",
+            "needle": "options.prefix.iter().cloned().chain(tail).collect()",
+            "fault": "tail"
+          }
+        },
+        {
+          "id": "pbt-skips-first-invariant",
+          "witness": "pbt-property.reducer.false-first",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-skips-first-invariant",
+            "sha256": "94ef74f35bf6ed0cb0c2e9888392a686e9ff2bddfc8402b871e92ea58c05ca64"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "af041fcf8fab1db6ad41a5ec0f98ecb65047cf61447638b986c6b5b2951ead6d",
+            "needle": "trace.steps.iter().enumerate()",
+            "fault": "trace.steps.iter().enumerate().skip(1)"
+          }
+        },
+        {
+          "id": "pbt-truncates-fold-before-check",
+          "witness": "pbt-property.reducer.complete-before-check",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-truncates-fold-before-check",
+            "sha256": "ecb63d9de1117a62ba1ac7421595c53edf9274b598156c5f3543a0969f59248d"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "d6ae67b4151e6dd2dea4338f295a263f0b8efcbcb34502b5e36d782dd6dbe9e1",
+            "needle": "messages.iter().cloned()",
+            "fault": "messages.iter().take(1).cloned()"
+          }
+        },
+        {
+          "id": "pbt-swallows-original-error",
+          "witness": "pbt-property.reducer.original-error-first",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-swallows-original-error",
+            "sha256": "1f779b19359c6988a18430653e8bd94a7122eb5a02663148161463498b3e55a0"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "646738cc5a33ad9211ffe1c5eb14611d06c8f36b3ceab7c056be19058794eae7",
+            "needle": "Ok(Err(error)) => Err(PredicateFailure::Error(error)),",
+            "fault": "Ok(Err(error)) => { drop(error); Err(PredicateFailure::False) },"
+          }
+        },
+        {
+          "id": "pbt-enables-regression-file",
+          "witness": "pbt-property.no-regression-files",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-enables-regression-file",
+            "sha256": "8f91ff46c501c13b86cbfc5446aa8244ed4c94e6a10ada724e17114f7b6389f6"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "4ffa41258e161e9bc5a645dc1c96f9d10aad2dfa4f5178db11f82bb46961fdfd",
+            "needle": "failure_persistence: None,",
+            "fault": "failure_persistence: Some(Box::new(::proptest::test_runner::FileFailurePersistence::Direct(\"proptest-regressions.txt\"))),"
+          }
+        },
+        {
+          "id": "pbt-substitutes-recreated-minimum-handles",
+          "witness": "standard_native_shrinking_keeps_the_evaluated_handles_and_replays_its_minimum",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-constructors-old-property/pbt-substitutes-recreated-minimum-handles",
+            "sha256": "00eb38259c391e3a9fb8ce4f0bde9cce4d8691888351250be07901bc25ab224f"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "c3bb155cc329f3076acd48a0d7d706d55567d57430448a5b3439e526f1553bb2",
+            "needle": "drop(minimum);",
+            "fault": "if let Some(evaluated) = failure.borrow_mut().as_mut() { evaluated.messages = minimum; }"
+          }
+        }
+      ]
+    },
+    {
+      "report": {
+        "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-old-final-controls.json",
+        "sha256": "0b95c627136273ddcd1f1e002e88cb325e5411edf7fc0758b6307ea90a2d5ef7",
+        "bytes": 601804
+      },
+      "count": 7,
+      "controls": [
+        {
+          "id": "pbt-final-skips-empty-terminal",
+          "witness": "pbt-terminates.loaded-empty-false",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-skips-empty-terminal",
+            "sha256": "c7c74383965c5392ee51e83864bfa6fd77bcd73fdd518670f8669672df6bfa0d"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "1c37f67af3fc83719e8378093a21bb8f5aba95eca3186ef01dac42500aa4b952",
+            "needle": "predicate_result(|| terminal(&trace.final_state))",
+            "fault": "if trace.steps.is_empty() { Ok(()) } else { predicate_result(|| terminal(&trace.final_state)) }"
+          }
+        },
+        {
+          "id": "pbt-final-terminal-gets-boot-state",
+          "witness": "pbt-terminates.reducer.terminal-following",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-terminal-gets-boot-state",
+            "sha256": "4f1f990e82a6fa7e80ec9e83f7c6f21847d37d6c1a00be80336d4461d085c478"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "9c210ff4c6b8a6a7685039e1d1096843b77f7b5c849b49eb721abc7ebe2e032e",
+            "needle": "terminal(&trace.final_state)",
+            "fault": "terminal(&trace.states[0])"
+          }
+        },
+        {
+          "id": "pbt-final-trace-gets-boot-state",
+          "witness": "pbt-trace.reducer.terminal-following",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-trace-gets-boot-state",
+            "sha256": "cffea08f60d74d032f51f32fd40fff96a5f05464960cff73e420154c898f28c5"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "83dbef2c5afa758a529ccde5785b0f352a5b9e3da70feb4909f8bc2da259155d",
+            "needle": "predicate(&trace.steps, &trace.final_state)",
+            "fault": "predicate(&trace.steps, &trace.states[0])"
+          }
+        },
+        {
+          "id": "pbt-final-trace-clips-history",
+          "witness": "pbt-trace.reducer.complete-before-check",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-trace-clips-history",
+            "sha256": "fb420894119078db9fb038a734efc6a7226a55010d7211790648c40a7ee3cb62"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "e589623b651a62f5c55a7491b8af495ce903b4a2caee481635901c5b1469459b",
+            "needle": "predicate(&trace.steps, &trace.final_state)",
+            "fault": "predicate(&trace.steps[..trace.steps.len().min(1)], &trace.final_state)"
+          }
+        },
+        {
+          "id": "pbt-final-trace-checks-each-prefix",
+          "witness": "pbt-trace.reducer.complete-before-check",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-trace-checks-each-prefix",
+            "sha256": "22be6474ae2e28201161492ed137fd39872723da6a18d7d5f1d921e952610a9e"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "bc27782995073c8cc571f72bd1c6226b772c23260c2b5e9101f45fc6c60e81fe",
+            "needle": "predicate_result(|| predicate(&trace.steps, &trace.final_state))",
+            "fault": "predicate_result(|| { let mut result = Ok(true); for end in 1..=trace.steps.len() { result = predicate(&trace.steps[..end], &trace.steps[end - 1].next); if !matches!(&result, Ok(true)) { break; } } result })"
+          }
+        },
+        {
+          "id": "pbt-final-swallows-original-error",
+          "witness": "pbt-trace.reducer.original-error-first",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-swallows-original-error",
+            "sha256": "1f779b19359c6988a18430653e8bd94a7122eb5a02663148161463498b3e55a0"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "646738cc5a33ad9211ffe1c5eb14611d06c8f36b3ceab7c056be19058794eae7",
+            "needle": "Ok(Err(error)) => Err(PredicateFailure::Error(error)),",
+            "fault": "Ok(Err(error)) => { drop(error); Err(PredicateFailure::False) },"
+          }
+        },
+        {
+          "id": "pbt-final-substitutes-backend-handles",
+          "witness": "final_modes_shrink_and_replay_original_evaluations_with_borrowed_typed_causes",
+          "compileExit": 0,
+          "binary": {
+            "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/control-binaries/pbt-final-controls/pbt-final-substitutes-backend-handles",
+            "sha256": "3aed60a02f509f473beab19e1bfaddaeb81e0d0377c5fb5647bc78e63cca1abd"
+          },
+          "source": {
+            "path": "crates/tea/src/pbt/proptest.rs",
+            "originalSha256": "e42b1eb6f5eb86d85b56e3e66c4b9458a1d2982d817104d389b19fde2ecb4d1f",
+            "mutatedSha256": "c3bb155cc329f3076acd48a0d7d706d55567d57430448a5b3439e526f1553bb2",
+            "needle": "drop(minimum);",
+            "fault": "if let Some(evaluated) = failure.borrow_mut().as_mut() { evaluated.messages = minimum; }"
+          }
+        }
+      ]
+    }
+  ],
+  "all19MutatedTeaLibrariesFreshFalse": true,
+  "artifactEvidence": {
+    "cargoJson": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-final-build.jsonl",
+      "sha256": "019fbce2de69694601df3d110aeeb8ca9aed2c4c7908a7c473c475f181e1b489",
+      "bytes": 62028
+    },
+    "demlik_tea": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-artifacts/final/libdemlik_tea-313b48d060fb1efe.rlib",
+      "sha256": "6f0ef0c79ea808d6443e1a0174681a333ed5de4767d01c2d234c5b82a5d41c8c",
+      "bytes": 11691168,
+      "actualArtifact": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/deps/libdemlik_tea-313b48d060fb1efe.rlib",
+      "dependencies": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/deps",
+      "features": ["default", "pbt"]
+    },
+    "proptest": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-artifacts/final/libproptest-c82c3e90a5c66078.rlib",
+      "sha256": "8d1e1e63b0f3d323fddaba8a7915869361379f7bfe0bf9b68512fa19d80a470a",
+      "bytes": 8670160,
+      "actualArtifact": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/deps/libproptest-c82c3e90a5c66078.rlib",
+      "dependencies": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/deps",
+      "features": ["regex-syntax", "std"]
+    },
+    "pbt_constructors_driver": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-artifacts/final/pbt_constructors_driver",
+      "sha256": "1ed5ca7307d93153a26ffc0d60be684cf0ea2a8274c846e0b40623bf7ea53704",
+      "bytes": 4511152,
+      "actualArtifact": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/examples/pbt_constructors_driver",
+      "requiredFeatures": ["pbt"]
+    },
+    "pbt_property_driver": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-artifacts/final/pbt_property_driver",
+      "sha256": "06eeb19187927eb577a3d15395a8f4e4b7a881abc644b32474c5cb96957adc14",
+      "bytes": 4227136,
+      "actualArtifact": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/examples/pbt_property_driver",
+      "requiredFeatures": ["pbt"]
+    },
+    "pbt_constructors_interface": {
+      "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-artifacts/final/pbt_constructors_interface",
+      "sha256": "14908f8ec4c9bce0c532e65eee6e47a95f72204f7fd28f52e14de7b8611f6725",
+      "bytes": 1382976,
+      "actualArtifact": "/private/tmp/demlik-pbt-constructors-full-target-01a16c9d/debug/examples/pbt_constructors_interface",
+      "requiredFeatures": ["pbt"]
+    }
+  },
+  "checkRuns": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-check-runs.json",
+    "sha256": "799e531c2c25765ecb650317a1026b38b17d9837dba83aa73a1be5b170bb0220",
+    "bytes": 14743
+  },
+  "clippy": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-clippy-2-run.json",
+    "sha256": "04e04c2c1304dacd531b6b81cb605d8aefdcd1a2f535605b79be85bdacf28645",
+    "bytes": 605
+  },
+  "adapter": {
+    "module": "verification/parity/pbt-constructors.mts",
+    "imports": [
+      "pbtConstructorsParity({binary,reportFile?,caseIds?})",
+      "pbtConstructorsNative({binary,reportFile?,caseIds?})"
+    ],
+    "cli": "pnpm exec node --import ./verification/parity/node_modules/tsx/dist/loader.mjs verification/parity/pbt-constructors.mts --native-bin <binary> --report <new-report.json> [--native-only] [--case-id <id> ...]",
+    "normalReturn": "compared,passed,failures,cases[].{id,equal,observedRustCalls,comparison,reference,diagnostics,sourceDiagnostics},binary,nativeCommand,qualifications,openGaps",
+    "nativeReturn": "nativeCases,passed,failures,semanticPairs:0,cases[].{id,passed,observedRustCalls,comparison,expected,diagnostics},binary,nativeCommand,qualifications",
+    "runtime": {
+      "node": "v22.21.1",
+      "v8": "12.4.254.21-node.33"
+    },
+    "fastCheck": "3.23.2",
+    "proptest": "1.11.0(std,regex-syntax)",
+    "centralRegistration": "Not edited; parent owns descriptor/run/package/contracts integration."
+  },
+  "mappingProposal": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-mapping-proposal.json",
+    "sha256": "36d5c3089dc25d80e2d21d1e623d7ce444e872c5aade96d9ec89a51f9606da92",
+    "bytes": 17045
+  },
+  "finalVerification": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-final-verification.json",
+    "sha256": "c5b48ab3cc224a79c195c6cc80bf158bef9c6cffd2948053f983fc0f94eb6f28",
+    "bytes": 32675
+  },
+  "evidenceManifest": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-evidence-manifest.json",
+    "sha256": "7d52b430457b755f734ffcc577ae8e231f1a200c8ec58f562b47f8f478059259",
+    "bytes": 50551
+  },
+  "sourceControlAudit": {
+    "path": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-source-control-audit.json",
+    "sha256": "fbc8337aebc7496d475e9b1b52c6a095fa7b5a703f72b83aa78cdf522332d136",
+    "bytes": 19347
+  },
+  "knownGaps": [
+    "Declared typed constructor/profile equivalence only. Native authored enum/value constructors own tags and fields; no arbitrary JS record reflection, getter/prototype/symbol/key-order/descriptor/discriminator-override emulation or runtime shape inspector.",
+    "Tagged uses &str; unpaired UTF16 discriminators remain outside the native tag profile. Actual JsText UTF16 payloads, undefined/null and nonfinite numbers are in the fixed payload cases.",
+    "Source constant payload-free/type-literal shape is a type-authoring responsibility in this API. The native constructor accepts an authored M rather than an untyped type string.",
+    "Proptest1.11 versus fast-check3.23.2 seeds, streams, distributions, generation/current/shrink order/minima, callback counts, refusal diagnostics, global/backend options and error decoration are not equated. Native seed/shrink laws are separate, not additional shared cases.",
+    "Default frozen fast-check decorates thrown callback/fold errors into Error without cause. Full Source inspect/stack and captured callback observations are preserved; post-return original native typed E/cause/message/snapshot ownership is separately required and checked, not claimed equal to the Source outer Error.",
+    "Record constructor Fn must be deterministic and may be invoked repeatedly by standard prop_map. Only original actual evaluated failure/message/trace handles are retained; recreated backend handles are not presented as originals. No callback replay, lookup-token tables or reconstruction was added.",
+    "Source DEV freeze/assertPureResult and JSON.stringify/toJSON-sensitive property failure diagnostics remain existing OPEN profiles. No core/runtime/error/exception semantics changed or universal JS throw equivalence is claimed.",
+    "Retained-model restoration uses the real before-fold model handle. No new persistence codec, IO/durable hosting, eventual runtime termination, effect/handler/timer claim.",
+    "Generated M and A::Value need Debug at the Proptest boundary; contained opaque payload/context/command/E fields need no blanket Debug/Clone/serde/Send/static bounds.",
+    "Previous27Source-only reflection/backend observations, native statistics, controls and old regression reruns are not new shared comparisons. Weighted tables/MsgArbitraryTable/guided/proxy/key families are outside this task.",
+    "All builds used protected APFS-cloned warm task-owned targets. Source/archive/hash proof is exact, but no fresh/cold/archive-target build is claimed. Temporary mutant workspaces/targets are removed after saved source substitutions, binary and full command/output evidence."
+  ],
+  "setupFailures": [
+    "FirstSourceBiomeexhaustivereturn, nativeinvoiceFn/PanicCauseformatting, firstSource90harnesscauseassumption, Clippyunusedimport/unreadowner. Exact logs retained; none counted as semantic fault detections."
+  ],
+  "targetPolicy": {
+    "warmClone": true,
+    "archiveBuildPerformed": false,
+    "noColdBuildClaim": true,
+    "jobs": 1,
+    "incremental": false,
+    "debug": 0,
+    "offline": true,
+    "oldControlWarmShim": {
+      "path": "/private/tmp/demlik-pbt-constructors-warm-cargo-01a16c9d.py",
+      "sha256": "929a856be2bc23be667abae564c859fbd5ebbff023c9a2889cc4ba143e3a911f",
+      "bytes": 1159
+    },
+    "oldControlWarmCloneInvocations": 16,
+    "independentCleanup": false
+  },
+  "stop": "All authorized two-constructor construction/verification complete. No other generators, weightedtable/dependency/core/runtime/Main/central/remote work.",
+  "parentIntegrationQualification": {
+    "sourceReceipt": "/private/tmp/demlik-rust-pbt-constructors-full-01a16c9d/target/parity/pbt-constructors-full-receipt.json",
+    "sourceReceiptSha256": "227028afada802791007fdc57471a012640068a9a9b52cd18532ed6101f6bb40",
+    "correction": "Original restoredInvoiceRecipes26 included eight fresh-only rows; corrected to invoiceRecipes26, restored18/fresh8. Source cases/counts/proof remain unchanged.",
+    "independentReview": "/private/tmp/demlik-pbt-constructors-full-independent-review-01a16c9d.json",
+    "combinedAcceptancePending": true
+  }
+}

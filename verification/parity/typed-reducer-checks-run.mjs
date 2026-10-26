@@ -5,6 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildTeaExample, buildTeaTest } from "./tea-example.mjs";
 import { typedReducerControls } from "./typed-reducer-controls.mjs";
 import { typedReducerParity } from "./typed-reducer-run.mjs";
 
@@ -267,10 +268,15 @@ if (
     const at = process.argv.indexOf(name);
     return at < 0 ? undefined : process.argv[at + 1];
   };
-  const report = await typedReducerChecks({
-    binary: option("--binary"),
-    ownerBinary: option("--owner-binary"),
-  });
+  const cargo = process.env.CARGO ?? "cargo";
+  const prefix = path.join(root, "target/parity/typed-reducer-baselines");
+  const binary =
+    option("--binary") ??
+    buildTeaExample(cargo, "typed_reducer_driver", `${prefix}/driver`).binary;
+  const ownerBinary =
+    option("--owner-binary") ??
+    buildTeaTest(cargo, "typed_reducer_lifecycle", `${prefix}/owner`).binary;
+  const report = await typedReducerChecks({ binary, ownerBinary });
   console.log(
     JSON.stringify({
       detected: report.detected,
