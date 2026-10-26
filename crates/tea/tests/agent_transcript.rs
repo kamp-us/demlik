@@ -45,7 +45,7 @@ fn borrowed_opaque_values_are_retained_without_clone_serde_send_or_static_bounds
     assert!(Rc::ptr_eq(&first.tools[0].result, &result));
     assert!(first.outcome.same_identity(&second.outcome));
     let status = Rc::new(AgentEndedStatus::Failed {
-        failure: Rc::clone(&failure),
+        failure: QueueField::Value(Rc::clone(&failure)),
     });
     listener(&AgentEvent::RunDone {
         head: head(),
@@ -60,6 +60,7 @@ fn borrowed_opaque_values_are_retained_without_clone_serde_send_or_static_bounds
     else {
         panic!("failed")
     };
+    let retained = retained.value().unwrap();
     assert!(Rc::ptr_eq(retained, &failure));
     assert_eq!(retained.0.get(), 2);
     assert!(matches!(first.outcome, TranscriptOutcome::Running(_)));
@@ -138,7 +139,7 @@ fn ignored_events_add_nothing_and_late_events_and_repeated_statuses_are_kept() {
     assert!(t.read().turns.is_empty());
     assert!(t.read().tools.is_empty());
     let status = Rc::new(AgentEndedStatus::Done {
-        output: None,
+        output: QueueField::Value(None),
         usage: Rc::new(TurnUsage::new(0.0, 0.0)),
     });
     let event: AgentEvent<PlainData> = AgentEvent::RunDone {
@@ -158,11 +159,11 @@ fn ignored_events_add_nothing_and_late_events_and_repeated_statuses_are_kept() {
     assert!(first.turns.is_empty());
     let cancel: AgentEvent<PlainData> = AgentEvent::RunDone {
         head: head(),
-        status: Rc::new(AgentEndedStatus::Cancelled { at: 3.5 }),
+        status: Rc::new(AgentEndedStatus::Cancelled { at: 3.5.into() }),
     };
     t.on_event(&cancel);
     assert!(
-        matches!(t.read().outcome.ended().unwrap().as_ref(),AgentEndedStatus::Cancelled{at} if *at==3.5)
+        matches!(t.read().outcome.ended().unwrap().as_ref(),AgentEndedStatus::Cancelled{at} if at.number()==Some(3.5))
     );
 }
 #[test]
@@ -178,7 +179,7 @@ fn wire_output_flattens_the_ended_arm_and_omits_only_undefined_object_values() {
     t.on_event(&AgentEvent::<PlainData, PlainData, PlainData>::RunDone {
         head: head(),
         status: Rc::new(AgentEndedStatus::Done {
-            output: None,
+            output: QueueField::Value(None),
             usage: Rc::new(TurnUsage::new(0.0, 0.0)),
         }),
     });
@@ -305,7 +306,7 @@ fn replacing_an_opaque_owned_cause_releases_the_state_borrow_before_drop_code_ru
     let collector = Transcript::<PlainData, PlainData, Notify<'_>>::new();
     let bound = collector.clone();
     let status = Rc::new(AgentEndedStatus::Failed {
-        failure: Rc::new(Notify(Box::new(move || {
+        failure: QueueField::Value(Rc::new(Notify(Box::new(move || {
             bound.on_event(
                 &AgentEvent::<PlainData, PlainData, Notify<'_>>::TurnSettled {
                     head: head(),
@@ -313,7 +314,7 @@ fn replacing_an_opaque_owned_cause_releases_the_state_borrow_before_drop_code_ru
                     usage: QueueField::Absent,
                 },
             )
-        }))),
+        })))),
     });
     collector.on_event(&AgentEvent::<PlainData, PlainData, Notify<'_>>::RunDone {
         head: head(),
@@ -322,7 +323,7 @@ fn replacing_an_opaque_owned_cause_releases_the_state_borrow_before_drop_code_ru
     drop(status);
     collector.on_event(&AgentEvent::<PlainData, PlainData, Notify<'_>>::RunDone {
         head: head(),
-        status: Rc::new(AgentEndedStatus::Cancelled { at: 2.0 }),
+        status: Rc::new(AgentEndedStatus::Cancelled { at: 2.0.into() }),
     });
     assert_eq!(collector.read().turns.len(), 1);
 }

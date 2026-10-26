@@ -525,6 +525,14 @@ impl Observer {
                 fields.push(("subsError", error_data(&e)));
             }
         }
+        fields.push((
+            "projectedStatus",
+            wire(&observe!(
+                &self.calls,
+                demlik_tea::agent::status,
+                state.as_ref()
+            )),
+        ));
         if let Some(e) = error {
             fields.push(("error", error_data(e)));
         }

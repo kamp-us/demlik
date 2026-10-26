@@ -1,0 +1,56 @@
+{
+  "@demlik/tea:./agent#status": {
+    "signature": "c17dd308acb47b54073f8f3af23699fdea655937dea037f43b7a4c73872b5d93",
+    "rust": {
+      "file": "crates/tea/src/agent/status.rs",
+      "symbols": ["demlik_tea::agent::status"]
+    },
+    "cases": [
+      "agent-status.precedence-done-absent",
+      "agent-status.live-stale-tools",
+      "agent-status.done-object-object",
+      "agent-status.cancel-null-cold"
+    ],
+    "nativeProfile": "Canonical pure status over precise typed/known legacy state: original Rc failure/output/usage retention, Undefined versus null, shared NO_USAGE fallback, nullable stored cancellation time, exact original pending Vec. Suspended is a borrowed view whose state owner must stay alive; terminal extraction retains values independently. Raw primitive annotations and extra TurnUsage fields are measured QUALIFIED observations excluded from strict/nativeEvidence; getters/prototypes/custom arrays and execution/optional construction remain outside this profile. Existing AgentEndedStatus ID receives additive owner proof; prior content/transcript proofs are preserved, not duplicated as new exports."
+  },
+  "@demlik/tea:./agent#AgentStatus": {
+    "signature": "307c50639f8f8fcd5dfdc7fd1f2ec91379d283ec345f712e00d36464aacee71c",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::status"]
+    },
+    "cases": [
+      "agent-status.precedence-idle-null",
+      "agent-status.live-running-tools",
+      "agent-status.done-object-object",
+      "agent-status.original-agent-failure"
+    ],
+    "nativeProfile": "Canonical pure status over precise typed/known legacy state: original Rc failure/output/usage retention, Undefined versus null, shared NO_USAGE fallback, nullable stored cancellation time, exact original pending Vec. Suspended is a borrowed view whose state owner must stay alive; terminal extraction retains values independently. Raw primitive annotations and extra TurnUsage fields are measured QUALIFIED observations excluded from strict/nativeEvidence; getters/prototypes/custom arrays and execution/optional construction remain outside this profile. Existing AgentEndedStatus ID receives additive owner proof; prior content/transcript proofs are preserved, not duplicated as new exports."
+  },
+  "@demlik/tea:./agent#AgentTerminalFailure": {
+    "signature": "1cdf1a8e1929736d68cc41517acb7dd39c52ad58aa1a92e591af5b9fb92ce6d4",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::status"]
+    },
+    "cases": [
+      "agent-status.original-agent-failure",
+      "agent-status.original-run-stage-failure",
+      "agent-status.original-run-deadline-failure"
+    ],
+    "nativeProfile": "Canonical pure status over precise typed/known legacy state: original Rc failure/output/usage retention, Undefined versus null, shared NO_USAGE fallback, nullable stored cancellation time, exact original pending Vec. Suspended is a borrowed view whose state owner must stay alive; terminal extraction retains values independently. Raw primitive annotations and extra TurnUsage fields are measured QUALIFIED observations excluded from strict/nativeEvidence; getters/prototypes/custom arrays and execution/optional construction remain outside this profile. Existing AgentEndedStatus ID receives additive owner proof; prior content/transcript proofs are preserved, not duplicated as new exports."
+  },
+  "@demlik/tea:./agent#AgentEndedStatus": {
+    "signature": "f56ac43e4e2c196c4da9447ef14499c80f2029bc6e5018e7860ac8dbf7445a87",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::status"]
+    },
+    "cases": [
+      "agent-status.done-undefined-null",
+      "agent-status.precedence-done-undefined",
+      "agent-status.cancel-null-cold"
+    ],
+    "nativeProfile": "Canonical pure status over precise typed/known legacy state: original Rc failure/output/usage retention, Undefined versus null, shared NO_USAGE fallback, nullable stored cancellation time, exact original pending Vec. Suspended is a borrowed view whose state owner must stay alive; terminal extraction retains values independently. Raw primitive annotations and extra TurnUsage fields are measured QUALIFIED observations excluded from strict/nativeEvidence; getters/prototypes/custom arrays and execution/optional construction remain outside this profile. Existing AgentEndedStatus ID receives additive owner proof; prior content/transcript proofs are preserved, not duplicated as new exports."
+  }
+}

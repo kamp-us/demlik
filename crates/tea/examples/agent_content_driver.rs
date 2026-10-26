@@ -481,13 +481,13 @@ fn transcript(
         .map(|s| {
             Ok(Rc::new(match s {
                 Status::Done { output, usage } => Ended::Done {
-                    output: output.map(|i| at(&values, i)).transpose()?,
+                    output: QueueField::Value(output.map(|i| at(&values, i)).transpose()?),
                     usage: usage.make(),
                 },
                 Status::Failed { failure } => Ended::Failed {
-                    failure: at(&values, failure)?,
+                    failure: QueueField::Value(at(&values, failure)?),
                 },
-                Status::Cancelled { at } => Ended::Cancelled { at },
+                Status::Cancelled { at } => Ended::Cancelled { at: at.into() },
             }))
         })
         .collect::<Result<Vec<_>, String>>()?;

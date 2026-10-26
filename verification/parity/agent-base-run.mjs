@@ -13,6 +13,7 @@ const prefix = "demlik_tea::agent::",
     `${prefix}Agent::current_stage`,
     `${prefix}Agent::is_settled`,
     `${prefix}Agent::subs`,
+    `${prefix}status`,
   ];
 function expected(test) {
   const calls = [
@@ -212,7 +213,7 @@ export function agentBaseParity(options = {}) {
         ].map((f) => [f, sha(fs.readFileSync(path.join(root, f)))]),
       ),
       profile:
-        "Base pure knob only: trusted typed Rc output with borrowed turn projection, bare tools/concurrency, retry/watchdog/usage/guards/notes/boot/restart/cancel. Actual replay constructors, no interpreter/Runtime/SDK. Wire snapshots compare JSON values with separate original-owner observations, not generic JS object behavior. Raw builtin schema, optional restored profiles, default-null convenience, native panic-vs-JS throws, and status/brainInterpret/toMachine/router/optional features remain OPEN/outside this checkpoint.",
+        "Base pure knob only: trusted typed Rc output with borrowed turn projection, bare tools/concurrency, retry/watchdog/usage/guards/notes/boot/restart/cancel. Actual replay constructors, no interpreter/Runtime/SDK. Wire snapshots compare JSON values with separate original-owner observations, not generic JS object behavior. Raw builtin schema, optional restored profiles, default-null convenience, native panic-vs-JS throws, and brainInterpret/toMachine/router/optional features remain OPEN/outside this checkpoint.",
     };
   const out =
     options.reportFile ?? path.join(root, "target/parity/agent-base.json");

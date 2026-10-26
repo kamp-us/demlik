@@ -3,6 +3,7 @@ import readline from "node:readline";
 import {
   agentCancelMsg,
   createAgent,
+  status,
 } from "../../packages/tea/src/agent/index.ts";
 import { foldUpdates } from "../../packages/tea/src/pure/core.ts";
 
@@ -284,6 +285,7 @@ export function execute(script) {
           : -1,
       settled: agent.isSettled(state),
       deadlines: wire(agent.subs(state)),
+      projectedStatus: wire(status(state)),
       ...(error ? { error: { name: error.name, message: error.message } } : {}),
     };
     snapshots.push(out);

@@ -20,7 +20,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -43,7 +43,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -66,7 +66,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -98,7 +98,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -121,7 +121,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -221,7 +221,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]
@@ -251,7 +251,7 @@
     "nativeProfile": "Base pure knob only, using the canonical LlmCall/Schema, monitored run, fan-out and agent State owners. Trusted Schema::Output=Rc<T> and a borrowed turn projection preserve original opaque values without Clone/serde/Send/static. Strict scripts exercise actual public native calls, JSON cold restore and separate original-handle observations. Callback function panic/JS throw, getters/prototypes/custom arrays and arbitrary raw shape reflection are outside this typed dense profile. No Runtime/SDK execution is claimed.",
     "knownGaps": [
       "OPEN raw builtin guard-output composition: AGENT_TURN_SCHEMA produces retained raw Rc<PlainData>, which has no borrowed typed AgentTurn projection. This checkpoint does not replace or clone that raw owner into a DTO.",
-      "OPEN full factory/wiring/profile surface: status, brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
+      "OPEN full factory/wiring/profile surface: brainInterpret, toMachine, router, snapshot, compaction, tool resilience policies, provider/SDK/children are not implemented here; restored optional profiles visibly refuse and their two measured rows are excluded from strict/nativeEvidence.",
       "OPEN omitted payloadOf convenience: the generic native constructor requires an explicit payload callback; Source omitted-null convenience is not claimed.",
       "OPEN arbitrary callback exceptions/prototype/getter and mutable JS function/array profiles: native pure callbacks are Fn with native panic behavior, not a JavaScript throw model."
     ]

@@ -171,14 +171,14 @@ impl<R, T, E, A> Clone for Conversation<R, T, E, A> {
 /// ```
 pub enum AgentEndedStatus<T = AgentTurn, F = PlainData> {
     Done {
-        output: Option<Rc<T>>,
+        output: AgentField<Option<Rc<T>>>,
         usage: Rc<TurnUsage>,
     },
     Failed {
-        failure: Rc<F>,
+        failure: AgentField<Rc<F>>,
     },
     Cancelled {
-        at: f64,
+        at: AgentNumber,
     },
 }
 #[derive(Clone)]
@@ -369,19 +369,26 @@ impl<T: Serialize, F: Serialize> Serialize for AgentEndedStatus<T, F> {
                 (
                     "output",
                     match output {
-                        Some(value) => field::<S, _>(value)?,
-                        None => PlainData::Null,
+                        AgentField::Value(Some(value)) => field::<S, _>(value)?,
+                        AgentField::Value(None) => PlainData::Null,
+                        AgentField::Absent | AgentField::Undefined => PlainData::Undefined,
                     },
                 ),
                 ("usage", field::<S, _>(usage)?),
             ]),
             Self::Failed { failure } => object([
                 ("kind", PlainData::String("failed".into())),
-                ("failure", field::<S, _>(failure)?),
+                (
+                    "failure",
+                    match failure {
+                        AgentField::Value(value) => field::<S, _>(value)?,
+                        AgentField::Absent | AgentField::Undefined => PlainData::Undefined,
+                    },
+                ),
             ]),
             Self::Cancelled { at } => object([
                 ("kind", PlainData::String("cancelled".into())),
-                ("at", PlainData::Number(*at)),
+                ("at", field::<S, _>(at)?),
             ]),
         };
         JsonData(&fields).serialize(serializer)
@@ -506,6 +513,46 @@ impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE> Clone
             failure: self.failure.clone(),
             output: self.output.clone(),
             instructions: self.instructions.clone(),
+        }
+    }
+}
+
+/// The original failure from either canonical agent channel.
+pub enum AgentTerminalFailure<Stage, SE = PlainData, FE = PlainData> {
+    Agent(Rc<AgentFailure<FE>>),
+    Run(Rc<crate::flow::monitored_run::RunFailure<Stage, SE>>),
+}
+impl<Stage: Serialize, SE: Serialize, FE: Serialize> Serialize
+    for AgentTerminalFailure<Stage, SE, FE>
+{
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Agent(value) => value.serialize(serializer),
+            Self::Run(value) => value.serialize(serializer),
+        }
+    }
+}
+/// A live view borrows the exact running collection, including its empty owner.
+/// Moving the Ended value out retains terminal facts independently of the state.
+pub enum AgentStatus<'s, T = AgentTurn, F = PlainData, A = PlainData> {
+    Idle,
+    Running,
+    Suspended { pending: &'s Vec<Rc<ToolCall<A>>> },
+    Ended(AgentEndedStatus<T, F>),
+}
+impl<T: Serialize, F: Serialize, A: Serialize> Serialize for AgentStatus<'_, T, F, A> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Ended(value) => value.serialize(serializer),
+            Self::Idle => JsonData(&object([("kind", PlainData::String("idle".into()))]))
+                .serialize(serializer),
+            Self::Running => JsonData(&object([("kind", PlainData::String("running".into()))]))
+                .serialize(serializer),
+            Self::Suspended { pending } => JsonData(&object([
+                ("kind", PlainData::String("suspended".into())),
+                ("pending", field::<S, _>(pending)?),
+            ]))
+            .serialize(serializer),
         }
     }
 }

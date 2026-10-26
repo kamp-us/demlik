@@ -17,3 +17,7 @@ pub use knob::{
     Agent, AgentCommand, AgentConfig, AgentError, BrainCommandOf, BrainMessageOf, CommandOf,
     OptionalProfile, SharedStateOf, StateOf, StepOf, create_agent,
 };
+
+mod status;
+pub use status::{ProjectedStatus, status};
+pub use types::{AgentStatus, AgentTerminalFailure};
