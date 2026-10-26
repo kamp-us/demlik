@@ -15,6 +15,9 @@ use crate::{
         run_boundary_gate_text,
     },
     collapse::settings::CollapseSettings,
+    comments::gate::{
+        CommentGateError, CommentGateResult, CommentGateTextArgs, run_comment_gate_text,
+    },
     config::{
         ConfigResolution, NodeKindConfigError, resolve_collapse_settings, resolve_node_kind_rules,
         resolve_thresholds, with_entry_presets,
@@ -143,6 +146,11 @@ pub enum BoundaryDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum CommentDispatch {
+    Complete(CommentGateResult),
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum EnvKeyDispatch {
     Complete(EnvKeyReport),
     Continue(Box<PreparedGatesCli>),
@@ -164,6 +172,8 @@ pub enum FrontdoorError {
     LayerEmit(ApiError),
     Boundaries(BoundaryGateError),
     BoundaryEmit(ApiError),
+    Comments(CommentGateError),
+    CommentEmit(ApiError),
     EnvKeys(EnvKeyError),
     EnvKeyEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
@@ -186,6 +196,8 @@ impl FrontdoorError {
             Self::LayerEmit(error) => error.name(),
             Self::Boundaries(error) => error.name(),
             Self::BoundaryEmit(error) => error.name(),
+            Self::Comments(error) => error.name(),
+            Self::CommentEmit(error) => error.name(),
             Self::EnvKeys(error) => error.name(),
             Self::EnvKeyEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
@@ -208,6 +220,8 @@ impl FrontdoorError {
             Self::LayerEmit(error) => error.message(),
             Self::Boundaries(error) => error.message(),
             Self::BoundaryEmit(error) => error.message(),
+            Self::Comments(error) => error.message(),
+            Self::CommentEmit(error) => error.message(),
             Self::EnvKeys(error) => error.message(),
             Self::EnvKeyEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
@@ -233,6 +247,8 @@ impl Error for FrontdoorError {
             Self::LayerEmit(error) => error,
             Self::Boundaries(error) => error,
             Self::BoundaryEmit(error) => error,
+            Self::Comments(error) => error,
+            Self::CommentEmit(error) => error,
             Self::EnvKeys(error) => error,
             Self::EnvKeyEmit(error) => error,
             Self::RuleNameConversion(error) => error,
@@ -513,6 +529,37 @@ impl PreparedCli {
 }
 
 impl PreparedGatesCli {
+    /// Run comments after environment keys, or retain the same continuation.
+    pub fn dispatch_comments(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<CommentDispatch, FrontdoorError> {
+        if self.prepared.options.comments() != Some(true) {
+            return Ok(CommentDispatch::Continue(self));
+        }
+        let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let options = &self.prepared.options;
+        let result = run_comment_gate_text(CommentGateTextArgs {
+            root_absolute: &self.prepared.root_absolute,
+            repo_root: &repo_root,
+            ci: options.ci() == Some(true),
+            write_ceilings: options.write_ceilings() == Some(true),
+            json: options.json() == Some(true),
+            pretty: options.pretty() == Some(true),
+        })
+        .map_err(FrontdoorError::Comments)?;
+        for message in &result.reports {
+            clean_exit(host, message);
+        }
+        for payload in &result.emitted {
+            output_to(options.out())
+                .emit(host, payload)
+                .map_err(FrontdoorError::CommentEmit)?;
+        }
+        exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
+        Ok(CommentDispatch::Complete(result))
+    }
+
     /// Read and emit environment keys after boundaries, or retain the same continuation.
     pub fn dispatch_env_keys(
         self: Box<Self>,

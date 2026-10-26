@@ -1,7 +1,7 @@
 use super::{
     ceilings::{CEILINGS_FILENAME, ceilings_from_census},
     census::load_comment_census,
-    config::{CommentConfigResolution, resolve_comment_ceilings},
+    config::{CommentConfigResolution, resolve_comment_ceilings, resolve_comment_ceilings_text},
     ratchet::{evaluate_ratchet, render_ratchet},
     render::render_comments,
 };
@@ -23,7 +23,17 @@ pub struct CommentGateArgs<'a> {
     pub json: bool,
     pub pretty: bool,
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CommentGateTextArgs<'a> {
+    pub root_absolute: &'a JsString,
+    pub repo_root: &'a JsString,
+    pub ci: bool,
+    pub write_ceilings: bool,
+    pub json: bool,
+    pub pretty: bool,
+}
+#[derive(Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommentGateResult {
     pub exit_code: u8,
     pub emitted: Vec<JsString>,
@@ -35,6 +45,20 @@ pub enum CommentGateError {
     Json(serde_json::Error),
     Record(RecordTypeError),
     Write { file: PathBuf, source: io::Error },
+}
+impl CommentGateError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Record(error) => error.name(),
+            Self::Census(_) | Self::Json(_) | Self::Write { .. } => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Record(error) => error.message().clone(),
+            Self::Census(_) | Self::Json(_) | Self::Write { .. } => self.to_string().into(),
+        }
+    }
 }
 impl std::fmt::Display for CommentGateError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,6 +98,29 @@ impl From<RecordTypeError> for CommentGateError {
     }
 }
 pub fn run_comment_gate(args: CommentGateArgs<'_>) -> Result<CommentGateResult, CommentGateError> {
+    run(args, None)
+}
+pub(crate) fn run_comment_gate_text(
+    args: CommentGateTextArgs<'_>,
+) -> Result<CommentGateResult, CommentGateError> {
+    let root_native = args.root_absolute.to_lossy();
+    let repo_native = args.repo_root.to_lossy();
+    run(
+        CommentGateArgs {
+            root_absolute: Path::new(&root_native),
+            repo_root: Path::new(&repo_native),
+            ci: args.ci,
+            write_ceilings: args.write_ceilings,
+            json: args.json,
+            pretty: args.pretty,
+        },
+        Some(args.repo_root),
+    )
+}
+fn run(
+    args: CommentGateArgs<'_>,
+    logical_repo: Option<&JsString>,
+) -> Result<CommentGateResult, CommentGateError> {
     if !args.ci && !args.write_ceilings {
         let census = load_comment_census(args.root_absolute)?;
         return Ok(CommentGateResult {
@@ -83,22 +130,27 @@ pub fn run_comment_gate(args: CommentGateArgs<'_>) -> Result<CommentGateResult, 
             ..CommentGateResult::default()
         });
     }
+    let native_repo = JsString::from(args.repo_root.to_string_lossy().as_ref());
     let text = join_path_text(
-        &args.repo_root.to_string_lossy().as_ref().into(),
+        logical_repo.unwrap_or(&native_repo),
         &CEILINGS_FILENAME.into(),
     );
     let file = PathBuf::from(text.to_lossy());
-    let ceilings =
-        match resolve_comment_ceilings((file.exists() || args.ci).then_some(file.as_path()))? {
-            CommentConfigResolution::Resolved(ceilings) => ceilings,
-            CommentConfigResolution::Refused { message } => {
-                return Ok(CommentGateResult {
-                    exit_code: 2,
-                    reports: vec![message],
-                    emitted: Vec::new(),
-                });
-            }
-        };
+    let requested = file.exists() || args.ci;
+    let resolved = match logical_repo {
+        Some(_) => resolve_comment_ceilings_text(requested.then_some(&text)),
+        None => resolve_comment_ceilings(requested.then_some(file.as_path())),
+    }?;
+    let ceilings = match resolved {
+        CommentConfigResolution::Resolved(ceilings) => ceilings,
+        CommentConfigResolution::Refused { message } => {
+            return Ok(CommentGateResult {
+                exit_code: 2,
+                reports: vec![message],
+                emitted: Vec::new(),
+            });
+        }
+    };
     let census = load_comment_census(args.root_absolute)?;
     if args.write_ceilings {
         let recorded = ceilings_from_census(&census, &ceilings);
@@ -107,15 +159,14 @@ pub fn run_comment_gate(args: CommentGateArgs<'_>) -> Result<CommentGateResult, 
             file: file.clone(),
             source,
         })?;
+        let mut acknowledgement = JsString::from(format!(
+            "wrote {} scope ceiling(s) to ",
+            recorded.scopes.len()
+        ));
+        acknowledgement.extend(&text);
+        acknowledgement.push_str("\n");
         return Ok(CommentGateResult {
-            emitted: vec![
-                format!(
-                    "wrote {} scope ceiling(s) to {}\n",
-                    recorded.scopes.len(),
-                    file.display()
-                )
-                .into(),
-            ],
+            emitted: vec![acknowledgement],
             ..CommentGateResult::default()
         });
     }
