@@ -15,6 +15,13 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "text-interface",
+    driver: "text_assembly_driver",
+    script: "graph-text-interface.mjs",
+    format: "process",
+    traceField: "native",
+  },
+  {
     name: "hexagon",
     driver: "hexagon_driver",
     script: "graph-hexagon.mts",

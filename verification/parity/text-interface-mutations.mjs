@@ -5,6 +5,10 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  cargoCheckEnvironment,
+  createCheckWorktree,
+} from "./check-worktree.mjs";
 
 const baseline = process.argv[2],
   reportFile = process.argv[3];
@@ -18,20 +22,17 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 const directory = fs.mkdtempSync(
   path.join(path.dirname(reportFile), "text-interface-faults-"),
 );
-const workspace = path.join(directory, "workspace");
-const target = path.join(root, "target/parity/comments-mutation-build");
+let check;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const baselineHash = hash(fs.readFileSync(baseline));
-const environment = {
-  ...process.env,
-  CARGO_TARGET_DIR: target,
+const environment = cargoCheckEnvironment({
   CARGO_NET_OFFLINE: "true",
   CARGO_PROFILE_DEV_DEBUG: "0",
   CARGO_PROFILE_TEST_DEBUG: "0",
   CARGO_INCREMENTAL: "0",
   CARGO_BUILD_JOBS: "1",
   TSX_DISABLE_CACHE: "1",
-};
+});
 const mutations = [
   {
     name: "config-text-replaced-before-rpc",
@@ -145,10 +146,9 @@ try {
   assert.equal(before.status, 0, JSON.stringify(before.report.failures));
   assert.equal(before.report.passed, witnesses.length);
   assert.equal(before.report.rejectedInvalidInputs, 6);
-  for (const entry of ["Cargo.toml", "Cargo.lock", "crates"])
-    fs.cpSync(path.join(root, entry), path.join(workspace, entry), {
-      recursive: true,
-    });
+  check = createCheckWorktree(root, "text-interface", directory);
+  const workspace = check.root;
+  const target = check.target;
   for (const mutation of mutations) {
     for (const [file, original] of originals)
       fs.writeFileSync(
@@ -252,7 +252,7 @@ try {
   }
   fs.writeFileSync(
     reportFile,
-    `${JSON.stringify({ detected: controls.length, escaped: 0, baseline: before, baselineDriverSha256: baselineHash, baselineDriverUnchanged: true, reference: before.report.reference, verifierSha256: hash(fs.readFileSync(path.join(root, "verification/parity/graph-text-interface.mts"))), scriptSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))), sourceHashes: Object.fromEntries([...originals].map(([file, text]) => [file, hash(text)])), buildProfile: { target, offline: true, devDebug: 0, testDebug: 0, incremental: false, jobs: 1, note: "Existing dedicated warm mutation target; Cargo aliases are temporary, effectiveExecutable copies are authoritative." }, controls }, null, 2)}\n`,
+    `${JSON.stringify({ detected: controls.length, escaped: 0, baseline: before, baselineDriverSha256: baselineHash, baselineDriverUnchanged: true, reference: before.report.reference, verifierSha256: hash(fs.readFileSync(path.join(root, "verification/parity/graph-text-interface.mts"))), scriptSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))), sourceHashes: Object.fromEntries([...originals].map(([file, text]) => [file, hash(text)])), buildProfile: { target, worktree: workspace, defaultTarget: true, offline: true, devDebug: 0, testDebug: 0, incremental: false, jobs: 1, note: "Disposable registered worktree with default target; evidence is retained before forced worktree removal." }, controls }, null, 2)}\n`,
   );
   console.log(JSON.stringify({ detected: controls.length, escaped: 0 }));
 } catch (error) {
@@ -261,4 +261,6 @@ try {
     `${JSON.stringify({ incomplete: true, planned: mutations.length, detected: controls.length, failure: String(error), baseline: before, controls }, null, 2)}\n`,
   );
   throw error;
+} finally {
+  check?.remove();
 }

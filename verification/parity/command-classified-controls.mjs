@@ -3,22 +3,36 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
+import {
+  cargoCheckEnvironment,
+  checkEvidenceDirectory,
+  createCheckWorktree,
+} from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-/** Build one disposable mutation in a caller-owned, separate warm target. */
+/** Build one mutation in a registered worktree with Cargo's default target. */
 export function classifiedCommandControl(cargo, options) {
-  const mutantRoot = path.resolve(options.mutantRoot);
-  const target = path.resolve(options.target);
   const directory = path.resolve(options.directory);
+  const check = createCheckWorktree(root, "classified-command", directory);
+  try {
+    return classifiedCommandControlIn(
+      cargo,
+      directory,
+      check.root,
+      check.target,
+    );
+  } finally {
+    check.remove();
+  }
+}
+
+function classifiedCommandControlIn(cargo, directory, mutantRoot, target) {
   assert.notEqual(mutantRoot, path.resolve(root));
-  assert.notEqual(
-    target,
-    path.resolve(process.env.CARGO_TARGET_DIR ?? path.join(root, "target")),
-  );
-  assert.ok(fs.statSync(target).isDirectory(), "reuse a separate warm target");
+  assert.equal(target, path.join(mutantRoot, "target"));
   fs.mkdirSync(directory, { recursive: true });
   const relative = "crates/tea/src/command.rs";
   const baseline = fs.readFileSync(path.join(root, relative), "utf8");
@@ -49,15 +63,13 @@ export function classifiedCommandControl(cargo, options) {
     const built = spawnSync(cargo, command, {
       cwd: mutantRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: cargoCheckEnvironment({
         CARGO_NET_OFFLINE: "true",
         CARGO_PROFILE_DEV_DEBUG: "0",
         CARGO_PROFILE_TEST_DEBUG: "0",
         CARGO_INCREMENTAL: "0",
         CARGO_BUILD_JOBS: "1",
-        CARGO_TARGET_DIR: target,
-      },
+      }),
       maxBuffer: 16 * 1024 * 1024,
     });
     if (built.error) throw built.error;
@@ -88,6 +100,8 @@ export function classifiedCommandControl(cargo, options) {
     assert.equal(ran.status, 101, ran.stdout + ran.stderr);
     assert.match(ran.stdout, new RegExp(`${witness}.*FAILED`));
     assert.match(ran.stderr, /undeclared classifier view reached the model/);
+    const effectiveBinary = path.join(directory, "guard-bypass.bin");
+    fs.copyFileSync(artifact.executable, effectiveBinary);
     const report = {
       name: "classified-command-tag-guard-bypass",
       baselineSourceSha256: hash(baseline),
@@ -98,10 +112,13 @@ export function classifiedCommandControl(cargo, options) {
       compileExit: built.status,
       artifact,
       binarySha256: hash(fs.readFileSync(artifact.executable)),
+      effectiveBinary,
       witness,
       executionExit: ran.status,
       detectedSemanticFailure: true,
       baselineTargetWasUsed: false,
+      defaultTarget: target,
+      checkWorktree: mutantRoot,
     };
     fs.writeFileSync(
       path.join(directory, "report.json"),
@@ -112,4 +129,22 @@ export function classifiedCommandControl(cargo, options) {
     fs.writeFileSync(file, baseline);
     assert.equal(fs.readFileSync(path.join(root, relative), "utf8"), baseline);
   }
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  const { values } = parseArgs({ options: { directory: { type: "string" } } });
+  const report = classifiedCommandControl(process.env.CARGO ?? "cargo", {
+    directory:
+      values.directory ?? checkEvidenceDirectory(root, "classified-command"),
+  });
+  console.log(
+    JSON.stringify({
+      detected: report.detectedSemanticFailure,
+      compileExit: report.compileExit,
+      executionExit: report.executionExit,
+    }),
+  );
 }
