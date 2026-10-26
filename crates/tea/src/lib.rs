@@ -22,6 +22,7 @@ pub mod retry_backoff;
 pub mod runtime;
 mod schema;
 pub mod storage;
+pub mod testing;
 pub mod timing;
 pub mod work_queue;
 pub use core::{
