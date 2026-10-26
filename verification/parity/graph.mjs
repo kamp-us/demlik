@@ -38,6 +38,14 @@ const suites = [
     format: "process",
   },
   {
+    name: "cli-layers",
+    driver: "layer_cli_driver",
+    script: "graph-cli-layers.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",
@@ -204,6 +212,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "layer_cli_driver",
   "gate_preflight_driver",
   "hexagon_driver",
   "cli_config_driver",
@@ -323,7 +332,8 @@ export async function graphParity(cargo) {
     for (const answer of passing) {
       const calls =
         suite.format === "process"
-          ? answer.native.trace.observedCalls
+          ? (suite.traceField ? answer[suite.traceField] : answer.native.trace)
+              .observedCalls
           : answer.observedCalls;
       assert.ok(
         calls.length > 0,
@@ -343,7 +353,12 @@ export async function graphParity(cargo) {
         const declared = qualified
           ? report.qualifiedNativeEvidence
           : report.nativeEvidence;
-        assert.deepEqual(declared[answer.id], calls);
+        assert.deepEqual(
+          suite.evidenceField
+            ? declared[answer.id][suite.evidenceField]
+            : declared[answer.id],
+          calls,
+        );
       }
       const evidence = qualified ? qualifiedNativeEvidence : nativeEvidence;
       evidence[id] = calls;
@@ -352,6 +367,9 @@ export async function graphParity(cargo) {
       name: suite.name,
       passed: report.passed,
       rejectedInvalidInputs: report.rejectedInvalidInputs,
+      ...(report.responseGuards === undefined
+        ? {}
+        : { responseGuards: report.responseGuards }),
       reference: report.reference,
       steps: report.steps,
       queries: report.queries,

@@ -1,0 +1,101 @@
+{
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "recordedAt": "2026-10-26T08:05:14.306873+00:00",
+  "parent": "d789b412",
+  "sourceCheckpoint": "6d345bb82aa112cd9cbf2b0d25cfdc55f8caed41",
+  "scope": "Layers-only CLI dispatch after actual API/hexagon and ordered ledger preparation. Full monorepo Rust port remains incomplete. Local only, no Docker or remote action.",
+  "production": "Single gate/analyze/resolver kernels preserve legacy Path behavior; crate-private text path retains raw logical roots. Active layers repeat Source root lookup, inactive returns original boxes, existing IO/error/exit owners preserve ordering and original failures.",
+  "verification": {
+    "compared": 14122,
+    "passed": 14122,
+    "failures": [],
+    "referenceChanges": [],
+    "nativeEvidence": 14028,
+    "rawQualifiedEvidence": 94,
+    "newLayersPairs": {
+      "total": 46,
+      "unqualified": 33,
+      "qualified": 13,
+      "protocolRefusals": 7,
+      "responseGuards": 3
+    },
+    "nativeAndDocs": {
+      "default": 554,
+      "pbtFeature": 561,
+      "note": "Overlapping default/feature runs, not additional shared cases."
+    },
+    "gates": [
+      "cargo fmt",
+      "parity TSC",
+      "Biome",
+      "workspace tests default and all-features",
+      "all-target Clippy -D warnings default and all-features"
+    ],
+    "compiledFaults": {
+      "detected": 17,
+      "escaped": 0,
+      "allCompiled": true,
+      "onlySemanticWitnessFailuresAccepted": true,
+      "prior82And62And180": "Retained existing proof, not rerun or counted as new."
+    },
+    "coverage": {
+      "total": 3445,
+      "mapped": 801,
+      "gapRows": 2745,
+      "cliRowsStillOpen": 53
+    },
+    "comparisonViewQualification": "Existing150declared helper/PBT comparison views retained; raw94qualified cases and priormodel/own-result OPEN observations remain separate from strict capability mappings."
+  },
+  "integrity": {
+    "status": "passed",
+    "at": "2026-10-26T08:05:13.946245+00:00",
+    "sourceFilesUnchanged": 2238,
+    "baselineExecutablesUnchanged": 1438,
+    "referenceChanges": []
+  },
+  "implementationNotes": [
+    "Graph process adapter explicitly reads nativeTrace and observedCalls for this leaf report shape, then validates against the declared evidence. Existing process formats are unchanged.",
+    "Two actual CLI flag mappings add the actual dispatch symbol and three exact process cases, retaining all53known gaps. No helper/export IDs fabricated.",
+    "Layer mutations use their own cli-layers-mutation-build; old shape-judgment proof library paths are untouched."
+  ],
+  "artifacts": {
+    "fullReport": {
+      "cases": 14122,
+      "passed": 14122,
+      "failures": [],
+      "nativeEvidence": 14028,
+      "mapped": 801,
+      "gapRows": 2745,
+      "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/cli-layers-main/report-before-controls.json",
+      "sha256": "5bd69729ac99562bb42bde9c049e2dcadfab5096c06f36e8be8b3507212b70ae",
+      "completeExitReason": "Onlyremainingcoveragegaps"
+    },
+    "controls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/cli-layers-main-controls.json",
+      "sha256": "d92cf6a7ce1f5b9b463816ee108a11382bd0de602b1e69fdbc0b02decc60b351"
+    },
+    "beforeControls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/cli-layers-main-before-controls.json",
+      "sha256": "94c2fe0c13db4fed5d9cd5d69187341fd15565ba6d274ca029c9d71fc81ac4f0"
+    },
+    "afterControlsAudit": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/cli-layers-main-after-controls-audit.json",
+      "sha256": "acbbb524e51bc8ea26752f08987693422ccd72985d0908ce9af4ebc6a565d8bc"
+    },
+    "archive": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/d789b412-cli-layers-main-accepted/manifest.json",
+      "sha256": "81c8c651f268db282cfaa893dcd0fb39c17a95952fa85dd82d5bd309235ec2d8",
+      "files": 104,
+      "bytes": 158905561
+    },
+    "parentReview": {
+      "path": "/private/tmp/demlik-cli-layers-parent-review-01a16c9d.json",
+      "sha256": "c12e6ff6e2b2c6798a89cca9008f7500cb11bf5d33d78cb1b826121fd34d4ab2"
+    }
+  },
+  "blindSpots": [
+    "Standalone argv/bootstrap/distribution and later CLI modes remain open.",
+    "JS argv overrides, controlled filesystem transition, backend exception output, pending stdio notification and inactive later-mode continuation are explicitly qualified.",
+    "Native/PBT runtime/host/agent and broader API gaps remain as recorded in the preceding state/preflight/PBT receipt. This checkpoint is not full-goal completion."
+  ]
+}

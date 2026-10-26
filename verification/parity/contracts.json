@@ -8381,36 +8381,50 @@
     "signature": "7d6a8faec0eb20177c8145a78e3c222ae4de0ce2c09bc75f379afb8864e8da8d",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.layerRules.space",
       "graph.cli-parser.option.layerRules.equal",
       "graph.cli-parser.option.layerRules.empty",
       "graph.cli-parser.option.layerRules.missing",
-      "graph.cli-parser.option.layerRules.raw-0"
+      "graph.cli-parser.option.layerRules.raw-0",
+      "graph.cli-layers.text",
+      "graph.cli-layers.pretty-text",
+      "graph.cli-layers.json"
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Existing parser/config/frontdoor/ledger preparation plus actual layers dispatch. Native continuation preserves original boxes, performs a second root lookup and uses the shared layer gate/IO owners. Only exact process cases bind here; JS argv, controlled filesystem changes, backend exception text, pending stdio and inactive later-mode continuation stay qualified. Standalone/bootstrap and remaining modes remain open."
   },
   "@demlik/code-graph:cli:option:--layers": {
     "signature": "35e7971270e740372e6cb39afc9a18c9ea4c26961ea271c795705e9a1c23eb0d",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.layers.before",
       "graph.cli-parser.option.layers.after",
       "graph.cli-parser.option.layers.equal-is-unknown",
-      "graph.cli-parser.option.layers.negated-is-unknown"
+      "graph.cli-parser.option.layers.negated-is-unknown",
+      "graph.cli-layers.text",
+      "graph.cli-layers.pretty-text",
+      "graph.cli-layers.json"
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Existing parser/config/frontdoor/ledger preparation plus actual layers dispatch. Native continuation preserves original boxes, performs a second root lookup and uses the shared layer gate/IO owners. Only exact process cases bind here; JS argv, controlled filesystem changes, backend exception text, pending stdio and inactive later-mode continuation stay qualified. Standalone/bootstrap and remaining modes remain open."
   },
   "@demlik/code-graph:cli:option:--api-base <rev>": {
     "signature": "6036aa4622d285ab2ca4b3264189204b2eb577061213d7db27673a2bc7f6e118",

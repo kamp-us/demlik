@@ -18,7 +18,7 @@ const directory = fs.mkdtempSync(
   path.join(os.tmpdir(), "demlik-layer-cli-faults-"),
 );
 const workspace = path.join(directory, "workspace");
-const target = path.join(root, "target/parity/shape-judgment-mutation-build");
+const target = path.join(root, "target/parity/cli-layers-mutation-build");
 const binary = path.join(target, "debug/examples/layer_cli_driver");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const baselineHash = hash(fs.readFileSync(baseline));
