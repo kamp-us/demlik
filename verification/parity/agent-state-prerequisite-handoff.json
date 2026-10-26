@@ -1,0 +1,479 @@
+{
+  "scope": "Checkpoint1 only: canonical Conversation owners, stored nullable agent numeric facts, known legacy usage presence and shared local NO_USAGE. AgentState/factory/machine/provider/SDK/children absent.",
+  "sourceCommit": "3f2e753a3f44bed801e0890fae086151092a98ba",
+  "base": "44405c366d851b691ca1a8ba7d1c5de636ea609d",
+  "branch": "can/rust-agent-state-helpers",
+  "worktree": "/private/tmp/demlik-rust-agent-state-01a16c9d",
+  "archive": {
+    "path": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d",
+    "tar": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d.tar",
+    "sha256": "52a99678ec1f455c8ecabd36835ed9c8df75990cc77c37404d9de3401ebb3569",
+    "all17SourceFilesMatch": true,
+    "rebuiltFreshTarget": false,
+    "qualification": "Tests/controls ran on the frozen committed bytes in the isolated baseline target; source tar and linked baseline binaries/rlibs plus copied proof bytes are retained before further state changes."
+  },
+  "reference": {
+    "commit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "sourceHashes": {
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/transcript.ts": "c9294ff5a370f03f4662db4667b56fbaddce877341987b030391a83ae88b80da",
+      "packages/tea/src/agent/content.ts": "e44f3636e5025ef333f86bc6a910a75078d46c1047ba2cb82adf54e13fb5a8c6"
+    },
+    "sourceUnchanged": true
+  },
+  "changes": {
+    "arrays": "Conversation turns/tool_records are original retained Rc<Vec<Rc<_>>> owners. Manual shallow Clone has no opaque Clone bounds. fold_summary creates fresh arrays and record objects while retaining actual turns/calls/outcomes/results. Transcript seeding still copies outer arrays.",
+    "nullableFacts": [
+      "TurnUsage input_tokens/output_tokens/reasoning_tokens/cached_input_tokens",
+      "ToolRecord.turn",
+      "Awaiting::Tools.batch_turn / Compacting.folding",
+      "Conversation.turn_count / context_tokens"
+    ],
+    "numberOwner": "Existing data::NumberOrNull, exported as AgentNumber. Stored null remains null until exact add/filter/subtract; no generic numeric owner/runtime changes. Transient event clocks and fold arguments stay f64.",
+    "legacy": "Conversation.legacy_usage is AgentField<Option<Rc<TurnUsage>>> and serializes as usage. Absent/undefined/null remain distinct in pure data.",
+    "zero": "shared_no_usage returns one retained local Rc derived at the existing NO_USAGE owner, without a registry.",
+    "wire": "Conditional serde only; original RawValue variant reads preserve UTF16 payloads. Missing tool result uses canonical decode_missing only when its typed decoder supports absence. Raw agent guards remain unchanged."
+  },
+  "verification": {
+    "strict": {
+      "total": 49,
+      "passed": 49,
+      "qualifiedRawRowsExcluded": 1,
+      "nativeEvidenceCases": 49,
+      "wireIdentityCompanion": "agent-state-prerequisite.copy-undefined-tool-result-wire"
+    },
+    "qualified": [
+      {
+        "id": "agent-state-prerequisite.copy-undefined-tool-result",
+        "status": "QUALIFIED",
+        "strictParity": false,
+        "source": {
+          "before": {
+            "json": "{\"turns\":[{\"content\":\"a\\ud800\",\"toolCalls\":[]},{\"content\":\"b\",\"toolCalls\":[]}],\"toolRecords\":[{\"call\":{\"callId\":\"a\",\"name\":\"t\",\"args\":{\"\\udfff\":1}},\"outcome\":{\"kind\":\"ok\"},\"turn\":null},{\"call\":{\"callId\":\"b\",\"name\":\"t\",\"args\":{}},\"outcome\":{\"kind\":\"error\",\"reason\":\"bad\",\"_tag\":\"failure\",\"detail\":\"\\ud800\"},\"turn\":2}],\"turnCount\":null,\"awaiting\":{\"kind\":\"tools\",\"batchTurn\":null},\"contextTokens\":null,\"usage\":null}",
+            "value": {
+              "turns": [
+                {
+                  "content": "a\ud800",
+                  "toolCalls": []
+                },
+                {
+                  "content": "b",
+                  "toolCalls": []
+                }
+              ],
+              "toolRecords": [
+                {
+                  "call": {
+                    "callId": "a",
+                    "name": "t",
+                    "args": {
+                      "\udfff": 1
+                    }
+                  },
+                  "outcome": {
+                    "kind": "ok"
+                  },
+                  "turn": null
+                },
+                {
+                  "call": {
+                    "callId": "b",
+                    "name": "t",
+                    "args": {}
+                  },
+                  "outcome": {
+                    "kind": "error",
+                    "reason": "bad",
+                    "_tag": "failure",
+                    "detail": "\ud800"
+                  },
+                  "turn": 2
+                }
+              ],
+              "turnCount": null,
+              "awaiting": {
+                "kind": "tools",
+                "batchTurn": null
+              },
+              "contextTokens": null,
+              "usage": null
+            }
+          },
+          "after": {
+            "json": "{\"turns\":[{\"content\":\"a\\ud800\",\"toolCalls\":[]},{\"content\":\"b\",\"toolCalls\":[]}],\"toolRecords\":[{\"call\":{\"callId\":\"a\",\"name\":\"t\",\"args\":{\"\\udfff\":1}},\"outcome\":{\"kind\":\"ok\"},\"turn\":null},{\"call\":{\"callId\":\"b\",\"name\":\"t\",\"args\":{}},\"outcome\":{\"kind\":\"error\",\"reason\":\"bad\",\"_tag\":\"failure\",\"detail\":\"\\ud800\"},\"turn\":2}],\"turnCount\":null,\"awaiting\":{\"kind\":\"tools\",\"batchTurn\":null},\"contextTokens\":null,\"usage\":null}",
+            "value": {
+              "turns": [
+                {
+                  "content": "a\ud800",
+                  "toolCalls": []
+                },
+                {
+                  "content": "b",
+                  "toolCalls": []
+                }
+              ],
+              "toolRecords": [
+                {
+                  "call": {
+                    "callId": "a",
+                    "name": "t",
+                    "args": {
+                      "\udfff": 1
+                    }
+                  },
+                  "outcome": {
+                    "kind": "ok"
+                  },
+                  "turn": null
+                },
+                {
+                  "call": {
+                    "callId": "b",
+                    "name": "t",
+                    "args": {}
+                  },
+                  "outcome": {
+                    "kind": "error",
+                    "reason": "bad",
+                    "_tag": "failure",
+                    "detail": "\ud800"
+                  },
+                  "turn": 2
+                }
+              ],
+              "turnCount": null,
+              "awaiting": {
+                "kind": "tools",
+                "batchTurn": null
+              },
+              "contextTokens": null,
+              "usage": null
+            }
+          },
+          "turnArraySame": true,
+          "recordArraySame": true,
+          "elementsSame": true,
+          "outcomesSame": true,
+          "legacyBefore": "null",
+          "legacyAfter": "null",
+          "usageSame": true
+        },
+        "native": {
+          "before": {
+            "json": "{\"turns\":[{\"content\":\"a\\ud800\",\"toolCalls\":[]},{\"content\":\"b\",\"toolCalls\":[]}],\"toolRecords\":[{\"call\":{\"callId\":\"a\",\"name\":\"t\",\"args\":{\"\\udfff\":1}},\"outcome\":{\"kind\":\"ok\"},\"turn\":null},{\"call\":{\"callId\":\"b\",\"name\":\"t\",\"args\":{}},\"outcome\":{\"kind\":\"error\",\"reason\":\"bad\",\"_tag\":\"failure\",\"detail\":\"\\ud800\"},\"turn\":2}],\"turnCount\":null,\"awaiting\":{\"kind\":\"tools\",\"batchTurn\":null},\"contextTokens\":null,\"usage\":null}",
+            "value": {
+              "turns": [
+                {
+                  "content": "a\ud800",
+                  "toolCalls": []
+                },
+                {
+                  "content": "b",
+                  "toolCalls": []
+                }
+              ],
+              "toolRecords": [
+                {
+                  "call": {
+                    "callId": "a",
+                    "name": "t",
+                    "args": {
+                      "\udfff": 1
+                    }
+                  },
+                  "outcome": {
+                    "kind": "ok",
+                    "result": {
+                      "$undefined": true
+                    }
+                  },
+                  "turn": null
+                },
+                {
+                  "call": {
+                    "callId": "b",
+                    "name": "t",
+                    "args": {}
+                  },
+                  "outcome": {
+                    "kind": "error",
+                    "reason": "bad",
+                    "_tag": "failure",
+                    "detail": "\ud800"
+                  },
+                  "turn": 2
+                }
+              ],
+              "turnCount": null,
+              "awaiting": {
+                "kind": "tools",
+                "batchTurn": null
+              },
+              "contextTokens": null,
+              "usage": null
+            }
+          },
+          "after": {
+            "json": "{\"turns\":[{\"content\":\"a\\ud800\",\"toolCalls\":[]},{\"content\":\"b\",\"toolCalls\":[]}],\"toolRecords\":[{\"call\":{\"callId\":\"a\",\"name\":\"t\",\"args\":{\"\\udfff\":1}},\"outcome\":{\"kind\":\"ok\"},\"turn\":null},{\"call\":{\"callId\":\"b\",\"name\":\"t\",\"args\":{}},\"outcome\":{\"kind\":\"error\",\"reason\":\"bad\",\"_tag\":\"failure\",\"detail\":\"\\ud800\"},\"turn\":2}],\"turnCount\":null,\"awaiting\":{\"kind\":\"tools\",\"batchTurn\":null},\"contextTokens\":null,\"usage\":null}",
+            "value": {
+              "turns": [
+                {
+                  "content": "a\ud800",
+                  "toolCalls": []
+                },
+                {
+                  "content": "b",
+                  "toolCalls": []
+                }
+              ],
+              "toolRecords": [
+                {
+                  "call": {
+                    "callId": "a",
+                    "name": "t",
+                    "args": {
+                      "\udfff": 1
+                    }
+                  },
+                  "outcome": {
+                    "kind": "ok",
+                    "result": {
+                      "$undefined": true
+                    }
+                  },
+                  "turn": null
+                },
+                {
+                  "call": {
+                    "callId": "b",
+                    "name": "t",
+                    "args": {}
+                  },
+                  "outcome": {
+                    "kind": "error",
+                    "reason": "bad",
+                    "_tag": "failure",
+                    "detail": "\ud800"
+                  },
+                  "turn": 2
+                }
+              ],
+              "turnCount": null,
+              "awaiting": {
+                "kind": "tools",
+                "batchTurn": null
+              },
+              "contextTokens": null,
+              "usage": null
+            }
+          },
+          "turnArraySame": true,
+          "recordArraySame": true,
+          "elementsSame": true,
+          "outcomesSame": true,
+          "legacyBefore": "null",
+          "legacyAfter": "null",
+          "usageSame": true
+        },
+        "reason": "A missing undefined tool-result property is recovered as the typed Undefined value. JSON wire and original owners agree; raw own-result-property reflection is outside this native typed owner profile."
+      }
+    ],
+    "compiledControls": {
+      "owned": 12,
+      "existingGuards": 20,
+      "escaped": 0,
+      "allCompiledAndDeclaredWitnessesDetected": true,
+      "separateMutationTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-mutation-build",
+      "recordReuseCompileCompanion": "Only mutant receives an explicit Vec<_> annotation because discarding the collected value removes production inference; source/mutant hashes and companion are recorded."
+    },
+    "native": {
+      "totalIncludingDocs": 350,
+      "compileFailDocsIncluded": 24,
+      "newPublicTestsIncluded": 4,
+      "opaqueBorrowedConsumer": true
+    },
+    "static": [
+      "fmt --all --check",
+      "tea all-target Clippy -Dwarnings",
+      "all-verifier TSC",
+      "owned Biome"
+    ],
+    "affected": {
+      "content": 79,
+      "guards": 158,
+      "model": 90,
+      "llmCurrent": 91,
+      "runtimeTimestampsSeparate": 36,
+      "modelRuntime36IncludedInModel90": true,
+      "modelKnownMissingUndefined2Excluded": true
+    },
+    "publicRed": "target/agent-state-prerequisite-public-red.log",
+    "observerReds": [
+      "target/parity/agent-state-prerequisite-observer-red.json",
+      "target/parity/agent-state-prerequisite-result-presence-red.json"
+    ],
+    "postControlsFull49": true
+  },
+  "profile": "Canonical known fields and JSON-produced field order. Raw own-result-property reflection remains QUALIFIED with both actual snapshots retained and excluded from strict/nativeEvidence. Exact wire and original-owner checks have a distinct strict companion. Unknown extra properties/prototypes/getters/sparse arrays/custom iterators remain Source-only. No new ToolOutcome variant or JS object model.",
+  "mappingUpdates": [
+    "verification/parity/agent-content-contracts.json: Conversation profile explicitly records own-result limitation; existing proof IDs/signature retained. No fabricated public aliases."
+  ],
+  "integrity": {
+    "sourcePackagesUnchanged": true,
+    "baselineAndMutantTargetsSeparate": true,
+    "mutantsLeftBaselineDriverSourceUnchanged": true,
+    "newDependencies": [],
+    "noMainRootNetworkDockerRemoteWrites": true,
+    "preservedLinkedArtifacts": {
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_prerequisite_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/agent_state_prerequisite_driver",
+        "sha256": "aadb2871c65e4c9c93af412ef75307c203ecfa286bc39a5508eba08157284843"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_content_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/agent_content_driver",
+        "sha256": "91285f1c5b76849f60b34b8aea670b9dc50544aa6f575e683da64ee1a749a006"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_guards_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/agent_guards_driver",
+        "sha256": "8c7555dcb39c635fded5b77d4eaa53e23d1ac1b5a7347f274a856bcf2bc18df3"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_model_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/agent_model_driver",
+        "sha256": "55e5a8acb6a784d21dd25acdde652ea136d18d339b82f82d427b98fd7a347b1f"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/timestamp_runtime_driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/timestamp_runtime_driver",
+        "sha256": "3a95550c94ec524a7d0fe40943b85967b99326fafb4b403fb9d197b20ad3c416"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-model-llm-call-driver": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/agent-model-llm-call-driver",
+        "sha256": "751338173a029892af2b22a6eb10664580ce5ba68b9e8d77bff36c294ba5893d"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/libdemlik_tea-ef4c9c64b773b701.rlib",
+        "sha256": "5a135cb53e5fe3e8c072f0123a846e7665d1cd373b4742b0f9cbbae55ff2f20f"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/libserde-1e121e747c37db81.rlib",
+        "sha256": "359f13057abb52a9aa679c17946e96115a4adc28f10e71a458d3225ac83208e7"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/libserde_json-bae62904d1b7570d.rlib",
+        "sha256": "5fb10b3fcb3950435998dde0ad715762168d51d1d732faf54d2dce7a222c05a0"
+      },
+      "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libtokio-bee55f6657e963fa.rlib": {
+        "preserved": "/private/tmp/demlik-agent-state-prerequisite-3f2e753a-01a16c9d/artifacts/libtokio-bee55f6657e963fa.rlib",
+        "sha256": "5a83aec996c0eb6da8ac82b46c909c92ecce200b6b5cf79ba003d079f0950f0d"
+      }
+    },
+    "licenses": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    }
+  },
+  "ownedFilesSha256": {
+    "crates/tea/examples/agent_content_driver.rs": "46ee81f11621189c640fbd890008fd75f4061403da37796667627646d780d28b",
+    "crates/tea/examples/agent_guards_driver.rs": "c00cfff0ce67c635286cdfbbdd98daa3ab08207288f6fbcd43e40979b96882be",
+    "crates/tea/examples/agent_state_prerequisite_driver.rs": "1bb82838f3b8e332c1b21b662f6185cef14c20099fe196740c13988eb6794766",
+    "crates/tea/src/agent/conversation.rs": "74f9a2d33ea4ff828f392327547fa1884dfd0dcc867684d4d851dd4b9e30f02a",
+    "crates/tea/src/agent/mod.rs": "9cea51b15984257631fd69bd50d2b0ea2ba79a22234f3f30a5315ebd763e1c2f",
+    "crates/tea/src/agent/transcript.rs": "6023c85f2f3047809e0c7a21a2dd265c4390e5fadcc9131e112c358bc943da8e",
+    "crates/tea/src/agent/types.rs": "d23c2bc6e501c54ad42ed295adc5021c23f6dc13ade98640abc49420b8c00866",
+    "crates/tea/src/agent/wire.rs": "dbc6ceda489833c4b7a2d86f18cbf7025d9bf386819408dd388e3e04f06e963a",
+    "crates/tea/tests/agent_conversation.rs": "d9401748500d77e55a45644366b013f82ad94967113fdda1fb2de7cc11e567b4",
+    "crates/tea/tests/agent_conversation_owners.rs": "c586bb3a7309dabc1f301c4ffde1fb777f3dbca8fea8ab5e0c4e8f7780d7fd1f",
+    "crates/tea/tests/agent_transcript.rs": "202b715b16e01b040ca064027d940a1bddc183f757fb171714a2af13abdd9cf3",
+    "verification/parity/agent-content-contracts.json": "595085e3024279d3f95a7b733e4b3f55fbd21d678fb830bc8f987f332dd4c923",
+    "verification/parity/agent-guards-mutations.mjs": "59bd66f25fa95432d22a30a34db37e2100f4bc777ee87d6c6de4324236ca3e7a",
+    "verification/parity/agent-state-prerequisite-cases.mjs": "1cdc4a3a43c6db3a652d41fa6fbddb317dfce32ec0c6d5278e130f1b2846330a",
+    "verification/parity/agent-state-prerequisite-mutations.mjs": "0ea8d16060a39a68565096609c3581de6ef14a77fba9664dccdbdc369d9206c5",
+    "verification/parity/agent-state-prerequisite-reference.mts": "be43852494f829ac5f9080d8edf93e706e9d3bae417d4fc7a76fb098717ba3a4",
+    "verification/parity/agent-state-prerequisite-run.mjs": "ec80ef8216b36cec84d91f304a0d79657187727b5757d4f6f41fe26149c06d4b"
+  },
+  "reportsSha256": {
+    "target/parity/agent-state-prerequisite-affected-content.json": "112b95bd52751fe37422fc64d9a91f316db15534117edc9b6adade28d944b04b",
+    "target/parity/agent-state-prerequisite-affected-guards.json": "1cd835f49222bbd70a0d8e8f34628e114b469b47aca3da63c677f0d541f4806e",
+    "target/parity/agent-state-prerequisite-affected-llm.json": "5d8c67080be0d09e19bf74619ac81e4c9d934fb37e782ba0e66d911733e2ee0f",
+    "target/parity/agent-state-prerequisite-affected-model.json": "b7b654ea6a89f01d3d89d2f60f6aef62afb5428d4dea20ecc7a5d79ee771a2f9",
+    "target/parity/agent-state-prerequisite-affected-timestamps.json": "f3eb461280581701ea18a6974025af84e6bdbf82062956fe8847b86735c55251",
+    "target/parity/agent-state-prerequisite-guards-mutations.json": "a0f3e8c5250ab85cb019f5dc70434fcc24fbb1c03050c1098745a27f92043f55",
+    "target/parity/agent-state-prerequisite-mutation-baseline.json": "4a8c64929dae0d4e10e05724e97dde67f6c037fbee4406d406e27bb70624c4a8",
+    "target/parity/agent-state-prerequisite-mutations.json": "569477134cc4d2edbe05671a5fb4b66787592aad074c3b076baddf8a783cfe6a",
+    "target/parity/agent-state-prerequisite-observer-red.json": "5f965075284cd395a4b40270a9612051d3f6e68cb963f2cf382f3fc23538fdeb",
+    "target/parity/agent-state-prerequisite-result-presence-red.json": "622b7a50fed7bb7772c2a971700947173ac041c2de64dbda82dc6d795f11682e",
+    "target/parity/agent-state-prerequisite.json": "4a8c64929dae0d4e10e05724e97dde67f6c037fbee4406d406e27bb70624c4a8",
+    "target/parity/agent-state-prerequisite-mutants/null-record-is-not-zero-for-filter.json": "dabb5cd75b9c87aed4062c8c4121e4b7979ac9a9f37fc3d4254f42e0696c37ba",
+    "target/parity/agent-state-prerequisite-mutants/copy-collapses-null-legacy.json": "d4431fb803afeb8e8329d7a7adfa1d9358d386f7f63525fb9e9c0f054c109188",
+    "target/parity/agent-state-prerequisite-mutants/copy-reallocates-record-array.json": "4871b8bc23b992d3d3091c710bf77344dd61dc51b126840fe9e657e554b4428a",
+    "target/parity/agent-state-prerequisite-mutants/null-optional-is-treated-as-undefined.json": "d04418306f179d992d30941653f6d6866433b7162ab0d13a4a26fa791b2dddf3",
+    "target/parity/agent-state-prerequisite-mutants/wire-missing-tool-result-becomes-null.json": "74679f71bbaab0321dba5dbf84662f2e375a34e2752e35e51cad0105c250047c",
+    "target/parity/agent-state-prerequisite-mutants/fold-drops-legacy-usage.json": "fc8491d89e21db469c7e1791d2d59454747ff74e73ff44199f9b8ce53bd0f46a",
+    "target/parity/agent-state-prerequisite-mutants/serialization-coerces-null-count.json": "13674e68d28a79cf631bcdc5396c9071b6266a951810ed840700d8d758613105",
+    "target/parity/agent-state-prerequisite-mutants/null-record-is-not-zero-for-subtraction.json": "38362707a7f54f9c9f2b50ca8b6ebfc75f168c0c715d6f2bae5eb7fb5389ff87",
+    "target/parity/agent-state-prerequisite-mutants/fold-reuses-record-array.json": "be743a2232cf5d5d10e07ca1493eef3d3b7a0e64563b2cdfe4ac49ac809fa98d",
+    "target/parity/agent-state-prerequisite-mutants/copy-reallocates-turn-array.json": "10220cc7e8b358788327b3676f82c2422aa9f66be286b73cfe9c4cb58f73e195",
+    "target/parity/agent-state-prerequisite-mutants/zero-usage-owner-is-fresh.json": "8d3a965bde624e051e56fcac167d1eabd58b1ed57e5ccf33d212aaabe3b24da8",
+    "target/parity/agent-state-prerequisite-mutants/fold-reuses-turn-array.json": "25852810d4dd5d904f217a2f9a94c87b74f390e798ad3b379a30973fb53f20d6",
+    "target/parity/agent-guards-mutants/dedupe-keeps-duplicates.json": "e2449e63ed4379437cf0351d01ddd6c9e75ae8ad288fde6a6faca9ba58307d64",
+    "target/parity/agent-guards-mutants/negative-slice-index-rounds-down.json": "980576f31e8943624b2353cb24b406387565f92ead3fa74e1f844516512129ee",
+    "target/parity/agent-guards-mutants/negative-slice-branches-before-truncation.json": "3507c3ca5de78a87deaa8636669345475b4ebad98ccd177559d4f9cbb30afd4f",
+    "target/parity/agent-guards-mutants/invent-cached-less-than-input-rule.json": "37d1a98d360a1445ce4a1c9570150366a765fe8bfa001a46e88445cec66b9ab9",
+    "target/parity/agent-guards-mutants/fold-keeps-stale-context.json": "3fdd9334ec3db4f430da8bf8bab7b118a2afa7e9cab562ffc6480efc42359c1d",
+    "target/parity/agent-guards-mutants/fold-record-boundary-is-exclusive.json": "ff5f3858153efe6379bf5dadada94474389a79b3bcee93b79325cdc44afff888",
+    "target/parity/agent-guards-mutants/accept-fractional-count.json": "287409842f603e71153b3162c2d197783c74532015d2ca3536e3bbc3473abdca",
+    "target/parity/agent-guards-mutants/summary-number-accepted.json": "9e1340608859196d4327dd249764065b9eefd56d7a767ca00defd41b7773b2f4",
+    "target/parity/agent-guards-mutants/only-first-tool-is-guarded.json": "4970ffead8cffbf7c3aa3017118aeb27e8d44a2921a06823dd9916da662afc21",
+    "target/parity/agent-guards-mutants/schema-remints-the-original.json": "f398fdf50d7246735cfc9df8fa96aa649c83cdfb9d26be90a654afec15582f1f",
+    "target/parity/agent-guards-mutants/fold-shift-loses-summary-slot.json": "4bed1fbbb7f62349d1a15d2e9249295f3f7dab3e06d158ebbeef12f12a074949",
+    "target/parity/agent-guards-mutants/sum-invents-optional-zero.json": "2d5d2fb8c7b9a0e3324c3b54f8ad931ff48cb66f1a2affcad298700065620880",
+    "target/parity/agent-guards-mutants/fold-copies-the-outcome-object.json": "9d3832ec47ae5aff7daf5233b4683873dd96f6b5865811d800e22cb36b84bc4d",
+    "target/parity/agent-guards-mutants/reject-max-safe-count.json": "a10b7b9f8e065165d6f0a9ce70e4f57bed0a7a09c0385f5dae4a372f823fa8e3",
+    "target/parity/agent-guards-mutants/schema-refusal-message-lost.json": "7c9f29f9b7862214604ef1c682feb978a7e3eaf6779302058be46fdbe0f5c46a",
+    "target/parity/agent-guards-mutants/null-tool-args-accepted.json": "dc93df2880a76bad22b821da95e7b5e366fbddf18bb07ed85f9b22fd1b23b37c",
+    "target/parity/agent-guards-mutants/optional-undefined-is-rejected.json": "9a6f11fd9a1ed524d9e3cb6003ffdeb652490aad45228316f62f0ebcbccec2ac",
+    "target/parity/agent-guards-mutants/fold-resets-total-turn-count.json": "779019c314082329d50a1510ec2975f45a50e7bd5064e24efd2b1572da2e2553",
+    "target/parity/agent-guards-mutants/sum-clamps-to-safe-count.json": "ffeeb7a8bd631d47ec6b482b82029b7a625075771ad235bcc252d67945a88506",
+    "target/parity/agent-guards-mutants/opaque-null-provider-refused.json": "3cefd00072831f7c472ab9dd6366bd0dc450a695ddaf17692afe63f3fa0e6e7a",
+    "target/parity/agent-guards-mutation-baseline.json": "1cd835f49222bbd70a0d8e8f34628e114b469b47aca3da63c677f0d541f4806e"
+  },
+  "logsSha256": {
+    "target/agent-state-prerequisite-affected-build.log": "9ddcb7a97f3589835ba8f354c41d25b0a805bd5f85ddbccaff009e6f6dc7236c",
+    "target/agent-state-prerequisite-affected-llm.log": "2ca1cc040194c5469dafc02850e2123ca897677d87cc56dd88b3b638257284a5",
+    "target/agent-state-prerequisite-affected-pairs.log": "7ddd68dea9ed91cba769086974a9615d6da0cf59d755752c2b1c2d897f0c356b",
+    "target/agent-state-prerequisite-affected-timestamps.log": "e0e3238ab2e471fd464c1a3581ab2d0ef3e03bbbafa84cc068a9b5d0329a5853",
+    "target/agent-state-prerequisite-biome-final.log": "180ed8b0729a4219f52b55e040891463268cc2381f45f3608acb6b405807ef7a",
+    "target/agent-state-prerequisite-clippy.log": "36bc5058acd80c9e0300c46960e9322a9fced0fa2e4e7386bcfd0df9f0b487c6",
+    "target/agent-state-prerequisite-controls-format.log": "9f04d63ef8b1d4df708c3e953105fbfabededf120b51f71177d8cedae64a1f41",
+    "target/agent-state-prerequisite-driver-build.log": "b08fe553cccfb2468e1a4e1dfb30084cf9a53883c18715ea8327878a115ee214",
+    "target/agent-state-prerequisite-driver-green-build.log": "ccb22593207c51f22834fdeab23463c1fc8671d9e28475effaa7a014f37bddde",
+    "target/agent-state-prerequisite-drivers-build.log": "fe0ea583028744c252baf66a8ff247b5223300316ba385da8ae9c3337d9ed150",
+    "target/agent-state-prerequisite-first-pairs.log": "9e0f3dd5db75a06ad098d81eeace9dfb241e7d10ca7fa70e4eac6f9a36d96cd6",
+    "target/agent-state-prerequisite-fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-green-pairs.log": "1fc056f419f7caa2656a2f31b9b98ba814b8691f3799c537a4b6db60da8a1d8d",
+    "target/agent-state-prerequisite-guards-mutations.log": "491c553371ac6779649372e39fc10541a190cbe95413ef64a9d53471f80824e4",
+    "target/agent-state-prerequisite-llm-build.log": "0cbea22c7bf2f4fa2c1eafbff8f180790cc3894b595e54be46cf3be8f2d1ef6e",
+    "target/agent-state-prerequisite-mutant-companion-format.log": "0e0e4d67ce292c695bc25fc61158807f7c5902ec2003dd624e65e30ff2524da7",
+    "target/agent-state-prerequisite-mutations-final.log": "33cb329535ff6250ea95631d51683bc5c2144d4b64ce1e279a917aeba448f79a",
+    "target/agent-state-prerequisite-mutations-green.log": "7778d0031b2f2093c6a3719759bbe2ef4b45fe8347b8d65d8a44431ec42b37c6",
+    "target/agent-state-prerequisite-mutations-inference-red.log": "33cb329535ff6250ea95631d51683bc5c2144d4b64ce1e279a917aeba448f79a",
+    "target/agent-state-prerequisite-mutations.log": "3dfbc8ebbec2ff3f6a339e5044f55d600b317ff88bff859fb23898f873de2f07",
+    "target/agent-state-prerequisite-native.log": "a55d46b1e43772570e13268e308f8bea268b8272cb421844cb7c68fd92fd989d",
+    "target/agent-state-prerequisite-post-controls.log": "842e88066091de203e49ffe08297528728174994db520f3b99a60f60c41680b6",
+    "target/agent-state-prerequisite-profile-format.log": "b6705256aa13385be4f8dc22311bebc6c9b2640fed9b51a5d8d517912a35959c",
+    "target/agent-state-prerequisite-public-green-first.log": "b75e12233b21f905519dd32675ea2825364075c8d8ccf4b1bc23f395dee6db78",
+    "target/agent-state-prerequisite-public-green-fixed.log": "64a31c02a757d3f405f9d5e1dc2ba1e89b1119dc77e1702562d868b8e59734cb",
+    "target/agent-state-prerequisite-public-green.log": "a5cfd417cbc951b7bae046b79e165799799a64bba4ad01b68146154dff190052",
+    "target/agent-state-prerequisite-public-red.log": "660ee1df3f0e9ec77b28a6fa909a65037e3a11175b134c060743f29a08349b20",
+    "target/agent-state-prerequisite-qualification-format.log": "0eb3fc0c946575a48abc678a8c74efb29773b660c4279913564e83d932e3de84",
+    "target/agent-state-prerequisite-qualified-green-pairs.log": "842e88066091de203e49ffe08297528728174994db520f3b99a60f60c41680b6",
+    "target/agent-state-prerequisite-typecheck-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-typecheck-post-controls.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-state-prerequisite-verifier-format-green.log": "3a3e1442c2c884f192bad3cfef0428134f56a91c5695de3ef91b3494cbb49c65",
+    "target/agent-state-prerequisite-verifier-format.log": "63aac03cd025910346daf9ddb995bef1ff2d9eaf7f0a09c3c78515c189cddc55"
+  }
+}
