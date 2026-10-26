@@ -27,7 +27,7 @@ impl ScopeFailure {
     pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
         self.cause.downcast_ref()
     }
-    fn new<SE: 'static, HE: 'static>(error: Failure<SE, HE>) -> Self {
+    fn new<SE: 'static, HE: 'static, RE: 'static>(error: Failure<SE, HE, RE>) -> Self {
         Self {
             name: error.name(),
             cause: error,
@@ -100,9 +100,10 @@ impl EffectScope {
         SE: 'static,
         HE: 'static,
         E: Tagged + 'static,
+        RE: 'static,
     >(
         &self,
-        runtime: &Runtime<S, M, SE, HE, E>,
+        runtime: &Runtime<S, M, SE, HE, E, RE>,
     ) -> Result<(), ScopeProfileError> {
         if runtime.profile() != Profile::Effect {
             return Err(ScopeProfileError {

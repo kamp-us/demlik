@@ -4,6 +4,7 @@ use crate::{Tagged, storage::PanicCause};
 use futures::{FutureExt, future::LocalBoxFuture};
 use std::{
     cell::RefCell,
+    convert::Infallible,
     fmt,
     future::Future,
     panic::AssertUnwindSafe,
@@ -76,14 +77,14 @@ impl<S, M> Default for DriveOptions<S, M> {
         }
     }
 }
-pub enum DriveError<S, SE, HE> {
+pub enum DriveError<S, SE, HE, RE = Infallible> {
     Failed { state: Arc<S> },
     Stalled { state: Arc<S> },
-    Runtime(Failure<SE, HE>),
+    Runtime(Failure<SE, HE, RE>),
     Panic(PanicCause),
     Interrupted,
 }
-impl<S, SE, HE> DriveError<S, SE, HE> {
+impl<S, SE, HE, RE> DriveError<S, SE, HE, RE> {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Failed { .. } => "DriveFailedError",
@@ -100,7 +101,7 @@ impl<S, SE, HE> DriveError<S, SE, HE> {
         }
     }
 }
-impl<S, SE, HE> fmt::Debug for DriveError<S, SE, HE> {
+impl<S, SE, HE, RE> fmt::Debug for DriveError<S, SE, HE, RE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Failed { .. } => f.write_str("DriveFailedError"),
@@ -111,37 +112,37 @@ impl<S, SE, HE> fmt::Debug for DriveError<S, SE, HE> {
         }
     }
 }
-impl<S, SE, HE> fmt::Display for DriveError<S, SE, HE> {
+impl<S, SE, HE, RE> fmt::Display for DriveError<S, SE, HE, RE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
-impl<S, SE, HE> std::error::Error for DriveError<S, SE, HE> {}
-type Outcome<S, SE, HE> = Result<Arc<S>, DriveError<S, SE, HE>>;
-type Receipt<S, SE, HE> = oneshot::Receiver<Outcome<S, SE, HE>>;
-type Starter<S, SE, HE> = Box<dyn FnOnce() -> Receipt<S, SE, HE>>;
+impl<S, SE, HE, RE> std::error::Error for DriveError<S, SE, HE, RE> {}
+type Outcome<S, SE, HE, RE> = Result<Arc<S>, DriveError<S, SE, HE, RE>>;
+type Receipt<S, SE, HE, RE> = oneshot::Receiver<Outcome<S, SE, HE, RE>>;
+type Starter<S, SE, HE, RE> = Box<dyn FnOnce() -> Receipt<S, SE, HE, RE>>;
 /// Promise drives start eagerly and retain ownership after their waiter drops.
 /// Effect drives start on first poll; dropping a started waiter requests an
 /// interrupt. The owned driver always awaits stop before settling its receipt.
 #[must_use = "await the drive to observe the terminal state and awaited teardown"]
-pub struct DriveTask<S, SE, HE> {
-    starter: Option<Starter<S, SE, HE>>,
-    receiver: Option<Receipt<S, SE, HE>>,
+pub struct DriveTask<S, SE, HE, RE = Infallible> {
+    starter: Option<Starter<S, SE, HE, RE>>,
+    receiver: Option<Receipt<S, SE, HE, RE>>,
     cancel: Arc<Cancel>,
     profile: Profile,
     completed: bool,
 }
-impl<S, SE, HE> DriveTask<S, SE, HE> {
+impl<S, SE, HE, RE> DriveTask<S, SE, HE, RE> {
     pub fn request_interrupt(&self) {
         self.cancel.cancel();
     }
-    pub async fn interrupt(self) -> Outcome<S, SE, HE> {
+    pub async fn interrupt(self) -> Outcome<S, SE, HE, RE> {
         self.request_interrupt();
         self.await
     }
 }
-impl<S, SE, HE> Future for DriveTask<S, SE, HE> {
-    type Output = Outcome<S, SE, HE>;
+impl<S, SE, HE, RE> Future for DriveTask<S, SE, HE, RE> {
+    type Output = Outcome<S, SE, HE, RE>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         if let Some(start) = this.starter.take() {
@@ -156,7 +157,7 @@ impl<S, SE, HE> Future for DriveTask<S, SE, HE> {
         }
     }
 }
-impl<S, SE, HE> Drop for DriveTask<S, SE, HE> {
+impl<S, SE, HE, RE> Drop for DriveTask<S, SE, HE, RE> {
     fn drop(&mut self) {
         if self.profile == Profile::Effect && !self.completed && self.receiver.is_some() {
             self.cancel.cancel();
@@ -170,19 +171,20 @@ pub fn drive_to_done<
     SE: 'static,
     HE: 'static,
     E: Tagged + 'static,
+    RE: 'static,
 >(
-    runtime: &Runtime<S, M, SE, HE, E>,
+    runtime: &Runtime<S, M, SE, HE, E, RE>,
     start: impl Into<DriveStart<S, M>>,
     is_terminal: impl Fn(&S) -> bool + 'static,
     options: DriveOptions<S, M>,
-) -> DriveTask<S, SE, HE> {
+) -> DriveTask<S, SE, HE, RE> {
     let profile = runtime.profile();
     let cancel = Arc::new(Cancel::new());
     let signal = Arc::clone(&cancel);
     let runtime = runtime.clone();
     let start = start.into();
     let is_terminal: Terminal<S> = Rc::new(is_terminal);
-    let launch: Starter<S, SE, HE> = Box::new(move || {
+    let launch: Starter<S, SE, HE, RE> = Box::new(move || {
         let (tx, rx) = oneshot::channel();
         tokio::task::spawn_local(async move {
             let detach = Rc::new(RefCell::new(None::<Unsubscribe>));
@@ -209,13 +211,20 @@ pub fn drive_to_done<
         completed: false,
     }
 }
-async fn drive<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>(
-    runtime: &Runtime<S, M, SE, HE, E>,
+async fn drive<
+    S: 'static,
+    M: Tagged + 'static,
+    SE: 'static,
+    HE: 'static,
+    E: Tagged + 'static,
+    RE: 'static,
+>(
+    runtime: &Runtime<S, M, SE, HE, E, RE>,
     start: DriveStart<S, M>,
     terminal: Terminal<S>,
     options: DriveOptions<S, M>,
     detach: Rc<RefCell<Option<Unsubscribe>>>,
-) -> Outcome<S, SE, HE> {
+) -> Outcome<S, SE, HE, RE> {
     runtime.ready().await.map_err(DriveError::Runtime)?;
     let booted = runtime.get_state().expect("ready runtime has state");
     let failed = options.failed.unwrap_or_else(|| Rc::new(|_| false));
@@ -258,7 +267,7 @@ async fn drive<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tag
             answer=&mut dispatch=>{answer.map_err(DriveError::Runtime)?;outcome(terminal_rx.await.expect("observer retains terminal receipt"))},
         };
     }
-    let mut cancel_failed: LocalBoxFuture<'_, Outcome<S, SE, HE>> =
+    let mut cancel_failed: LocalBoxFuture<'_, Outcome<S, SE, HE, RE>> =
         if let Some(cancellation) = options.cancellation {
             async move {
                 cancellation.signal.0.cancelled().await;
@@ -284,7 +293,7 @@ async fn drive<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tag
         if !settles(&parked) && runtime.live_work() == (0, 0) {
             return Err(DriveError::Stalled { state: parked });
         }
-        futures::future::pending::<Outcome<S, SE, HE>>().await
+        futures::future::pending::<Outcome<S, SE, HE, RE>>().await
     };
     tokio::pin!(started);
     let state = tokio::select! {biased;state=&mut terminal_rx=>Ok(state.expect("observer retains terminal receipt")),answer=&mut started=>answer,answer=&mut cancel_failed=>answer}?;

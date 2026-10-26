@@ -27,8 +27,9 @@ pub mod testing;
 pub mod timing;
 pub mod work_queue;
 pub use core::{
-    Machine, NoCellError, Replay, Step, Tagged, Update, fold_msgs, fold_msgs_shared, fold_updates,
-    fold_updates_shared, replay,
+    ApplyError, Machine, NoCellError, Replay, Step, Tagged, TryUpdate, Update, fold_msgs,
+    fold_msgs_shared, fold_updates, fold_updates_shared, replay, try_fold_msgs,
+    try_fold_msgs_shared, try_fold_updates, try_fold_updates_shared,
 };
 pub use data::{
     EitherSub, PlainData, Sub, SubId, Subscription, TimerDeps, structural_hash, sub_id_of,

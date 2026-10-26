@@ -7,6 +7,7 @@ pub use subscriptions::{
 };
 
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 
@@ -69,15 +70,29 @@ impl<S, C> Step<S, C> {
 
 pub type Cell<'a, S, M, C> = Box<dyn Fn(&S, &M) -> Step<S, C> + 'a>;
 pub type Row<'a, S, M, C> = IndexMap<String, Cell<'a, S, M, C>>;
+type TryCell<'a, S, M, C, E> = Box<dyn Fn(&S, &M) -> Result<Step<S, C>, E> + 'a>;
 
-pub enum Update<'a, S, M, C> {
+#[derive(Debug)]
+pub enum ApplyError<E> {
+    NoCell(NoCellError),
+    Reduce(E),
+}
+
+pub enum TryUpdate<'a, S, M, C, E> {
     RawReducer(Row<'a, S, M, C>),
     RawTransitions(IndexMap<String, Row<'a, S, M, C>>),
     Exhaustive {
         cell: Cell<'a, S, M, C>,
         accepted_types: &'static [&'static str],
     },
+    Fallible {
+        cell: TryCell<'a, S, M, C, E>,
+        accepted_types: &'static [&'static str],
+    },
 }
+
+/// The existing infallible interface keeps raw-table inference and NoCell results.
+pub type Update<'a, S, M, C> = TryUpdate<'a, S, M, C, Infallible>;
 
 impl<'a, S, M: Message, C> Update<'a, S, M, C> {
     /// A pure function over enum messages uses Rust's exhaustive match checking.
@@ -98,12 +113,29 @@ impl<'a, S, M: Message, C> Update<'a, S, M, C> {
     }
 }
 
-impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
+impl<'a, S, M: Message, C, E> TryUpdate<'a, S, M, C, E> {
+    /// A typed failure is returned without imposing bounds on its owned cause.
+    ///
+    /// ```compile_fail,E0308
+    /// use demlik_tea::{messages, TryUpdate};
+    /// messages! { enum Msg { Rejected } }
+    /// let update: TryUpdate<'_, (), Msg, (), &'static str> =
+    ///     TryUpdate::try_reducer(|_, _| Err(7_u8));
+    /// ```
+    pub fn try_reducer(cell: impl Fn(&S, &M) -> Result<Step<S, C>, E> + 'a) -> Self {
+        Self::Fallible {
+            cell: Box::new(cell),
+            accepted_types: M::TYPES,
+        }
+    }
+}
+
+impl<S: Tagged, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
     fn row(&self, state: &S) -> Option<&Row<'_, S, M, C>> {
         match self {
             Self::RawReducer(row) => Some(row),
             Self::RawTransitions(rows) => rows.get(state.tag()),
-            Self::Exhaustive { .. } => None,
+            Self::Exhaustive { .. } | Self::Fallible { .. } => None,
         }
     }
 
@@ -111,7 +143,9 @@ impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
         if state.is_none() {
             return vec![];
         }
-        if let Self::Exhaustive { accepted_types, .. } = self {
+        if let Self::Exhaustive { accepted_types, .. } | Self::Fallible { accepted_types, .. } =
+            self
+        {
             return accepted_types.iter().map(|kind| (*kind).into()).collect();
         }
         state
@@ -120,17 +154,31 @@ impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
             .unwrap_or_default()
     }
 
-    pub fn apply(&self, state: &S, message: &M) -> Result<Step<S, C>, NoCellError> {
-        if let Self::Exhaustive { cell, .. } = self {
-            return Ok(cell(state, message));
+    pub fn try_apply(&self, state: &S, message: &M) -> Result<Step<S, C>, ApplyError<E>> {
+        match self {
+            Self::Exhaustive { cell, .. } => return Ok(cell(state, message)),
+            Self::Fallible { cell, .. } => {
+                return cell(state, message).map_err(ApplyError::Reduce);
+            }
+            _ => {}
         }
         match self.row(state).and_then(|row| row.get(message.tag())) {
             Some(cell) => Ok(cell(state, message)),
-            None => Err(NoCellError::new(
+            None => Err(ApplyError::NoCell(NoCellError::new(
                 message.tag(),
                 state.tag(),
                 self.accepted_types(Some(state)),
-            )),
+            ))),
+        }
+    }
+}
+
+impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
+    pub fn apply(&self, state: &S, message: &M) -> Result<Step<S, C>, NoCellError> {
+        match self.try_apply(state, message) {
+            Ok(step) => Ok(step),
+            Err(ApplyError::NoCell(error)) => Err(error),
+            Err(ApplyError::Reduce(never)) => match never {},
         }
     }
 }
@@ -194,9 +242,9 @@ impl std::error::Error for NoCellError {}
 
 pub type Init<'a, S, C, X> = Box<dyn Fn(Option<S>, &X) -> Step<S, C> + 'a>;
 
-pub struct Machine<'a, S, M, C, U, X = ()> {
+pub struct Machine<'a, S, M, C, U, X = (), RE = Infallible> {
     pub init: Init<'a, S, C, X>,
-    pub update: Update<'a, S, M, C>,
+    pub update: TryUpdate<'a, S, M, C, RE>,
     pub subscriptions: Subscriptions<'a, S, U>,
 }
 
@@ -208,11 +256,11 @@ pub struct Replay<S, C, U> {
     pub subs: Vec<U>,
 }
 
-fn fold_using<S, M, C>(
+fn fold_using<S, M, C, E>(
     mut state: S,
     messages: impl IntoIterator<Item = M>,
-    mut apply: impl FnMut(&S, M) -> Result<Step<S, C>, NoCellError>,
-) -> Result<Step<S, C>, NoCellError> {
+    mut apply: impl FnMut(&S, M) -> Result<Step<S, C>, E>,
+) -> Result<Step<S, C>, E> {
     let mut commands = Vec::new();
     for message in messages {
         let next = apply(&state, message)?;
@@ -260,6 +308,45 @@ pub fn fold_msgs_shared<S: Tagged, M: Tagged, C, U, X>(
     messages: impl IntoIterator<Item = Arc<M>>,
 ) -> Result<Arc<S>, NoCellError> {
     Ok(fold_updates_shared(&machine.update, state, messages)?.state)
+}
+
+pub fn try_fold_updates<S: Tagged, M: Tagged, C, E>(
+    update: &TryUpdate<'_, S, M, C, E>,
+    state: S,
+    messages: impl IntoIterator<Item = M>,
+) -> Result<Step<S, C>, ApplyError<E>> {
+    fold_using(state, messages, |state, message| {
+        update.try_apply(state, &message)
+    })
+}
+
+pub fn try_fold_updates_shared<S: Tagged, M: Tagged, C, E>(
+    update: &TryUpdate<'_, S, M, C, E>,
+    state: Arc<S>,
+    messages: impl IntoIterator<Item = Arc<M>>,
+) -> Result<Step<Arc<S>, C>, ApplyError<E>> {
+    fold_using(state, messages, |state, message| {
+        let next = update.try_apply(state, &message)?;
+        Ok(Step::new(Arc::new(next.state), next.commands))
+    })
+}
+
+/// Update-only folding returns the original typed cause before further Msgs run.
+pub fn try_fold_msgs<S: Tagged, M: Tagged, C, U, X, E>(
+    machine: &Machine<'_, S, M, C, U, X, E>,
+    state: S,
+    messages: impl IntoIterator<Item = M>,
+) -> Result<S, ApplyError<E>> {
+    Ok(try_fold_updates(&machine.update, state, messages)?.state)
+}
+
+/// Retained update-only replay does not call init, subscriptions or effects.
+pub fn try_fold_msgs_shared<S: Tagged, M: Tagged, C, U, X, E>(
+    machine: &Machine<'_, S, M, C, U, X, E>,
+    state: Arc<S>,
+    messages: impl IntoIterator<Item = Arc<M>>,
+) -> Result<Arc<S>, ApplyError<E>> {
+    Ok(try_fold_updates_shared(&machine.update, state, messages)?.state)
 }
 
 pub fn replay<S: Tagged, M: Tagged, C, U: Subscription, X>(

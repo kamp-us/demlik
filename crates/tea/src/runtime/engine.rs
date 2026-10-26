@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
@@ -12,7 +13,7 @@ use tokio::sync::{Notify, oneshot};
 use crate::command::{CommandEdge, CommandFamily};
 use crate::core::{AuthoredMachine, Identity};
 use crate::storage::PanicCause;
-use crate::{Machine, Step, SubId, Subscription, Tagged};
+use crate::{ApplyError, Machine, Step, SubId, Subscription, Tagged};
 
 use super::listeners::Listeners;
 use super::persistence::Backend;
@@ -22,17 +23,18 @@ use super::work::{Cancel, Cleanup, WorkFailure, perform};
 use super::{CommandContext, Interpreter, Producer, SubscriptionWork, Subscriptions};
 use super::{NoEvent, Telemetry, TelemetryEvent};
 
-type Answer<SE, HE> = Result<(), Failure<SE, HE>>;
-type Receipt<SE, HE> = oneshot::Sender<Answer<SE, HE>>;
-type DoneReceipt<S, SE, HE> = oneshot::Sender<Result<Arc<S>, Failure<SE, HE>>>;
-enum SaveStatus<SE, HE> {
+type Answer<SE, HE, RE> = Result<(), Failure<SE, HE, RE>>;
+type Receipt<SE, HE, RE> = oneshot::Sender<Answer<SE, HE, RE>>;
+type ReceiptReceiver<SE, HE, RE> = oneshot::Receiver<Answer<SE, HE, RE>>;
+type DoneReceipt<S, SE, HE, RE> = oneshot::Sender<Result<Arc<S>, Failure<SE, HE, RE>>>;
+enum SaveStatus<SE, HE, RE> {
     Pending,
     Saved,
-    Failed(Failure<SE, HE>),
+    Failed(Failure<SE, HE, RE>),
 }
-struct View<S, SE, HE> {
+struct View<S, SE, HE, RE> {
     state: Option<Arc<S>>,
-    saved: SaveStatus<SE, HE>,
+    saved: SaveStatus<SE, HE, RE>,
 }
 type ObserverFn<S, M> = dyn Fn(&M, &S);
 type RetainedObserverFn<S, M> = dyn Fn(&Arc<M>, &Arc<S>);
@@ -76,19 +78,19 @@ impl<S> Boot<S> {
         }
     }
 }
-type ScopeWatcher<SE, HE> = dyn Fn(Failure<SE, HE>);
-struct Core<S, M, SE, HE, E> {
+type ScopeWatcher<SE, HE, RE> = dyn Fn(Failure<SE, HE, RE>);
+struct Core<S, M, SE, HE, E, RE> {
     ports: Rc<super::ports::PortRegistry>,
-    view: RefCell<View<S, SE, HE>>,
-    ready: RefCell<Option<Answer<SE, HE>>>,
+    view: RefCell<View<S, SE, HE, RE>>,
+    ready: RefCell<Option<Answer<SE, HE, RE>>>,
     ready_changed: Notify,
-    receipts: RefCell<HashMap<u64, Receipt<SE, HE>>>,
-    done: RefCell<Vec<DoneReceipt<S, SE, HE>>>,
+    receipts: RefCell<HashMap<u64, Receipt<SE, HE, RE>>>,
+    done: RefCell<Vec<DoneReceipt<S, SE, HE, RE>>>,
     stop_started: Cell<bool>,
     stop_done: Cell<bool>,
     stop_changed: Notify,
-    reports: RefCell<Vec<Report<SE, HE>>>,
-    sink: Option<ErrorSink<SE, HE>>,
+    reports: RefCell<Vec<Report<SE, HE, RE>>>,
+    sink: Option<ErrorSink<SE, HE, RE>>,
     terminal: Option<Terminal<S>>,
     commits: Vec<Commit<S, M>>,
     listeners: Rc<Listeners<dyn Fn()>>,
@@ -99,16 +101,16 @@ struct Core<S, M, SE, HE, E> {
     telemetry: Option<Telemetry<HE>>,
     telemetry_seq: Cell<f64>,
     clock: Rc<dyn Fn() -> f64>,
-    scope_failure: RefCell<Option<Failure<SE, HE>>>,
-    scope_watchers: Rc<Listeners<ScopeWatcher<SE, HE>>>,
+    scope_failure: RefCell<Option<Failure<SE, HE, RE>>>,
+    scope_watchers: Rc<Listeners<ScopeWatcher<SE, HE, RE>>>,
 }
-impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
-    Core<S, M, SE, HE, E>
+impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static, RE: 'static>
+    Core<S, M, SE, HE, E, RE>
 {
     fn state(&self) -> Option<Arc<S>> {
         self.view.borrow().state.clone()
     }
-    fn report(&self, error: Failure<SE, HE>, phase: ErrorPhase) {
+    fn report(&self, error: Failure<SE, HE, RE>, phase: ErrorPhase) {
         self.reports.borrow_mut().push(Report {
             phase,
             error: Rc::clone(&error),
@@ -125,7 +127,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             eprintln!("@demlik/tea: {:?}: {}", phase, error.name());
         }
     }
-    fn fail_scope(&self, error: Failure<SE, HE>) {
+    fn fail_scope(&self, error: Failure<SE, HE, RE>) {
         if self.scope_failure.borrow().is_some() {
             return;
         }
@@ -165,7 +167,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
         drop(view);
         self.holds(&state).then_some(state)
     }
-    fn done_receiver(&self) -> oneshot::Receiver<Result<Arc<S>, Failure<SE, HE>>> {
+    fn done_receiver(&self) -> oneshot::Receiver<Result<Arc<S>, Failure<SE, HE, RE>>> {
         let (tx, rx) = oneshot::channel();
         if let Some(state) = self.state()
             && self.holds(&state)
@@ -186,7 +188,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
         self.done.borrow_mut().push(tx);
         rx
     }
-    fn save_failed(&self, error: Failure<SE, HE>) {
+    fn save_failed(&self, error: Failure<SE, HE, RE>) {
         self.view.borrow_mut().saved = SaveStatus::Failed(Rc::clone(&error));
         if self.done.borrow().is_empty() {
             return;
@@ -275,7 +277,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             }
         });
     }
-    fn finish_receipt(&self, seq: u64, result: Answer<SE, HE>) {
+    fn finish_receipt(&self, seq: u64, result: Answer<SE, HE, RE>) {
         if let Some(sender) = self.receipts.borrow_mut().remove(&seq) {
             let _ = sender.send(result);
         }
@@ -283,15 +285,15 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
 }
 
 /// Local runtime facade. Its narrow [`Producer`] can cross threads without its callbacks.
-pub struct Runtime<S, M, SE, HE, E = NoEvent> {
-    core: Rc<Core<S, M, SE, HE, E>>,
+pub struct Runtime<S, M, SE, HE, E = NoEvent, RE = Infallible> {
+    core: Rc<Core<S, M, SE, HE, E, RE>>,
     producer: Producer<M>,
     stopper: Rc<dyn Fn()>,
     live_work: Rc<dyn Fn() -> (usize, usize)>,
     profile: Profile,
     idle_cap: usize,
 }
-impl<S, M, SE, HE, E> Clone for Runtime<S, M, SE, HE, E> {
+impl<S, M, SE, HE, E, RE> Clone for Runtime<S, M, SE, HE, E, RE> {
     fn clone(&self) -> Self {
         Self {
             core: Rc::clone(&self.core),
@@ -303,8 +305,8 @@ impl<S, M, SE, HE, E> Clone for Runtime<S, M, SE, HE, E> {
         }
     }
 }
-impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>
-    Runtime<S, M, SE, HE, E>
+impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static, RE: 'static>
+    Runtime<S, M, SE, HE, E, RE>
 {
     pub(crate) fn live_work(&self) -> (usize, usize) {
         (self.live_work)()
@@ -323,10 +325,13 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
     pub fn profile(&self) -> Profile {
         self.profile
     }
-    pub(crate) fn scope_failure(&self) -> Option<Failure<SE, HE>> {
+    pub(crate) fn scope_failure(&self) -> Option<Failure<SE, HE, RE>> {
         self.core.scope_failure.borrow().clone()
     }
-    pub(crate) fn watch_scope(&self, watcher: Rc<dyn Fn(Failure<SE, HE>)>) -> super::Unsubscribe {
+    pub(crate) fn watch_scope(
+        &self,
+        watcher: Rc<dyn Fn(Failure<SE, HE, RE>)>,
+    ) -> super::Unsubscribe {
         self.core.scope_watchers.add(watcher)
     }
     pub fn subscribe_port<T: 'static>(
@@ -351,14 +356,14 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
     pub fn result(&self) -> Option<Arc<S>> {
         self.core.result()
     }
-    pub fn reports(&self) -> Vec<Report<SE, HE>> {
+    pub fn reports(&self) -> Vec<Report<SE, HE, RE>> {
         self.core.notices(&self.producer.mailbox);
         self.core.reports.borrow().clone()
     }
     pub fn gate(&self) -> Gate {
         self.producer.mailbox.gate()
     }
-    pub fn ready(&self) -> impl std::future::Future<Output = Result<Self, Failure<SE, HE>>> {
+    pub fn ready(&self) -> impl std::future::Future<Output = Result<Self, Failure<SE, HE, RE>>> {
         let runtime = self.clone();
         async move {
             loop {
@@ -370,7 +375,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             }
         }
     }
-    fn enqueue(&self, message: M) -> Result<oneshot::Receiver<Answer<SE, HE>>, Failure<SE, HE>> {
+    fn enqueue(&self, message: M) -> Result<ReceiptReceiver<SE, HE, RE>, Failure<SE, HE, RE>> {
         let (tx, rx) = oneshot::channel();
         // The actor is local, so it cannot pop the synchronously enqueued job
         // before this receipt is registered; cross-thread producers hold no core.
@@ -386,7 +391,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
         &self,
         message: M,
         once: bool,
-    ) -> impl std::future::Future<Output = Answer<SE, HE>> {
+    ) -> impl std::future::Future<Output = Answer<SE, HE, RE>> {
         let runtime = self.clone();
         let mut pending = Some(message);
         let eager = if self.profile == Profile::Promise {
@@ -408,13 +413,16 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             Ok(())
         }
     }
-    pub fn dispatch(&self, message: M) -> impl std::future::Future<Output = Answer<SE, HE>> {
+    pub fn dispatch(&self, message: M) -> impl std::future::Future<Output = Answer<SE, HE, RE>> {
         self.dispatch_with(message, false)
     }
-    pub fn dispatch_once(&self, message: M) -> impl std::future::Future<Output = Answer<SE, HE>> {
+    pub fn dispatch_once(
+        &self,
+        message: M,
+    ) -> impl std::future::Future<Output = Answer<SE, HE, RE>> {
         self.dispatch_with(message, true)
     }
-    pub fn idle(&self) -> impl std::future::Future<Output = Answer<SE, HE>> {
+    pub fn idle(&self) -> impl std::future::Future<Output = Answer<SE, HE, RE>> {
         let mailbox = Arc::clone(&self.producer.mailbox);
         let cap = self.idle_cap;
         async move {
@@ -428,7 +436,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             Err(Rc::new(RuntimeError::QuiescenceTimeout { cap }))
         }
     }
-    pub fn done(&self) -> impl std::future::Future<Output = Result<Arc<S>, Failure<SE, HE>>> {
+    pub fn done(&self) -> impl std::future::Future<Output = Result<Arc<S>, Failure<SE, HE, RE>>> {
         let core = Rc::clone(&self.core);
         let eager = if self.profile == Profile::Promise {
             Some(core.done_receiver())
@@ -531,14 +539,14 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             .add_equivalent(Rc::new(Boot::Retained(handler)), Boot::same)
     }
 }
-fn refusal<SE, HE>(error: super::DispatchRefused) -> Failure<SE, HE> {
+fn refusal<SE, HE, RE>(error: super::DispatchRefused) -> Failure<SE, HE, RE> {
     Rc::new(match error {
         super::DispatchRefused::Stopping { msg_type } => RuntimeError::Discarded { msg_type },
         super::DispatchRefused::Stopped { msg_type } => RuntimeError::Stopped { msg_type },
         super::DispatchRefused::Contract(error) => RuntimeError::Contract(error),
     })
 }
-fn work_error<SE, HE>(error: WorkFailure<HE>) -> Failure<SE, HE> {
+fn work_error<SE, HE, RE>(error: WorkFailure<HE>) -> Failure<SE, HE, RE> {
     Rc::new(match error {
         WorkFailure::Failed(error) => RuntimeError::Handler(error),
         WorkFailure::Panic(panic) => RuntimeError::Panic(panic),
@@ -568,31 +576,31 @@ struct Running<HE> {
     cleanup: Cleanup<'static, HE>,
     source_done: Option<oneshot::Receiver<()>>,
 }
-struct Signals<SE, HE> {
-    parent: Option<Receipt<SE, HE>>,
-    barrier: Option<Receipt<SE, HE>>,
+struct Signals<SE, HE, RE> {
+    parent: Option<Receipt<SE, HE, RE>>,
+    barrier: Option<Receipt<SE, HE, RE>>,
 }
-struct Env<S, M, C, U, X, SE, HE, I, R, E> {
-    machine: Machine<'static, S, M, C, U, X>,
+struct Env<S, M, C, U, X, SE, HE, I, R, E, RE> {
+    machine: Machine<'static, S, M, C, U, X, RE>,
     identity: Option<Identity<'static, S, M>>,
     input: X,
     interpreter: I,
     subscriptions: R,
     timer: super::RuntimeTimer,
     store: Option<Rc<dyn Backend<S, SE>>>,
-    core: Rc<Core<S, M, SE, HE, E>>,
+    core: Rc<Core<S, M, SE, HE, E, RE>>,
     producer: Producer<M>,
     edge: CommandEdge,
     profile: Profile,
     timeout: std::time::Duration,
-    supervision: Supervision<S, M, SE, HE>,
+    supervision: Supervision<S, M, SE, HE, RE>,
     cancel: Arc<Cancel>,
     running: RefCell<IndexMap<SubId, Running<HE>>>,
     in_flight: RefCell<IndexMap<u64, Option<String>>>,
     next_work: Cell<u64>,
     disposals: RefCell<IndexMap<u64, ()>>,
     disposal_changed: Notify,
-    barriers: RefCell<HashMap<u64, oneshot::Receiver<Answer<SE, HE>>>>,
+    barriers: RefCell<HashMap<u64, ReceiptReceiver<SE, HE, RE>>>,
 }
 impl<
     S: Tagged + 'static,
@@ -605,14 +613,15 @@ impl<
     I: Interpreter<C, Error = HE> + 'static,
     R: Subscriptions<U, M, Error = HE> + 'static,
     E: Tagged + 'static,
-> Env<S, M, C, U, X, SE, HE, I, R, E>
+    RE: 'static,
+> Env<S, M, C, U, X, SE, HE, I, R, E, RE>
 {
     fn token(&self) -> u64 {
         let token = self.next_work.get();
         self.next_work.set(token + 1);
         token
     }
-    async fn boot(self: Rc<Self>, initial: Option<Initial<S, C>>) -> Answer<SE, HE> {
+    async fn boot(self: Rc<Self>, initial: Option<Initial<S, C>>) -> Answer<SE, HE, RE> {
         let initial = match initial {
             Some(initial) => initial,
             None => {
@@ -629,7 +638,7 @@ impl<
         };
         self.commit(initial.state, None, initial.commands).await
     }
-    async fn worker(self: Rc<Self>, boot: LocalBoxFuture<'static, Answer<SE, HE>>) {
+    async fn worker(self: Rc<Self>, boot: LocalBoxFuture<'static, Answer<SE, HE, RE>>) {
         let boot = boot.await;
         *self.core.ready.borrow_mut() = Some(boot.clone());
         self.core.ready_changed.notify_waiters();
@@ -686,7 +695,7 @@ impl<
             tokio::task::yield_now().await;
         }
     }
-    async fn step(self: Rc<Self>, message: Arc<M>) -> Answer<SE, HE> {
+    async fn step(self: Rc<Self>, message: Arc<M>) -> Answer<SE, HE, RE> {
         let state = self.core.state().expect("dispatch waits for boot");
         let transition = match std::panic::catch_unwind(AssertUnwindSafe(|| {
             if self
@@ -702,30 +711,21 @@ impl<
                 );
                 return Ok(None);
             }
-            self.machine.update.apply(&state, &message).map(Some)
+            self.machine.update.try_apply(&state, &message).map(Some)
         })) {
-            Ok(result) => match result.map_err(|error| Rc::new(RuntimeError::NoCell(error)))? {
-                Some(transition) => transition,
-                None => return Ok(()),
-            },
-            Err(payload) => {
-                let error = Rc::new(RuntimeError::Panic(PanicCause::new(payload)));
-                self.core.report(Rc::clone(&error), ErrorPhase::Reduce);
-                match &self.supervision {
-                    Supervision::Stop => {
-                        self.producer.mailbox.with(|queue| {
-                            if queue.gate != Gate::Abandoned {
-                                queue.gate = Gate::Closed
-                            }
-                        });
-                        return Err(error);
-                    }
-                    Supervision::Escalate => return Err(error),
-                    Supervision::Restart(rehydrate) => {
-                        Step::new(rehydrate(&state, &message, &error), vec![])
-                    }
-                }
+            Ok(Ok(Some(transition))) => transition,
+            Ok(Ok(None)) => return Ok(()),
+            Ok(Err(ApplyError::NoCell(error))) => {
+                return Err(Rc::new(RuntimeError::NoCell(error)));
             }
+            Ok(Err(ApplyError::Reduce(error))) => {
+                self.reduce_failed(&state, &message, Rc::new(RuntimeError::Reduce(error)))?
+            }
+            Err(payload) => self.reduce_failed(
+                &state,
+                &message,
+                Rc::new(RuntimeError::Panic(PanicCause::new(payload))),
+            )?,
         };
         self.commit(
             Arc::new(transition.state),
@@ -734,12 +734,34 @@ impl<
         )
         .await
     }
+    fn reduce_failed(
+        &self,
+        state: &S,
+        message: &M,
+        error: Failure<SE, HE, RE>,
+    ) -> Result<Step<S, C>, Failure<SE, HE, RE>> {
+        self.core.report(Rc::clone(&error), ErrorPhase::Reduce);
+        match &self.supervision {
+            Supervision::Stop => {
+                self.producer.mailbox.with(|queue| {
+                    if queue.gate != Gate::Abandoned {
+                        queue.gate = Gate::Closed;
+                    }
+                });
+                Err(error)
+            }
+            Supervision::Escalate => Err(error),
+            Supervision::Restart(rehydrate) => {
+                Ok(Step::new(rehydrate(state, message, &error), vec![]))
+            }
+        }
+    }
     async fn commit(
         self: &Rc<Self>,
         state: Arc<S>,
         message: Option<Arc<M>>,
         commands: Vec<C>,
-    ) -> Answer<SE, HE> {
+    ) -> Answer<SE, HE, RE> {
         *self.core.view.borrow_mut() = View {
             state: Some(Arc::clone(&state)),
             saved: if self.store.is_some() {
@@ -775,7 +797,7 @@ impl<
         self.core.committed(message.as_ref(), &state);
         result
     }
-    async fn run_commands(self: &Rc<Self>, commands: Vec<C>) -> Answer<SE, HE> {
+    async fn run_commands(self: &Rc<Self>, commands: Vec<C>) -> Answer<SE, HE, RE> {
         for command in commands {
             if self.producer.mailbox.gate() == Gate::Abandoned {
                 return Ok(());
@@ -830,8 +852,8 @@ impl<
     async fn command(
         self: Rc<Self>,
         command: C,
-        signals: Rc<RefCell<Signals<SE, HE>>>,
-    ) -> Answer<SE, HE> {
+        signals: Rc<RefCell<Signals<SE, HE, RE>>>,
+    ) -> Answer<SE, HE, RE> {
         let guard = command.dispatch_guard(&self.edge);
         let reporter = Rc::clone(&self);
         let detached = Rc::clone(&self);
@@ -935,7 +957,7 @@ impl<
             env.producer.mailbox.changed.notify_waiters();
         });
     }
-    fn reconcile(self: &Rc<Self>, state: &S) -> Answer<SE, HE> {
+    fn reconcile(self: &Rc<Self>, state: &S) -> Answer<SE, HE, RE> {
         let evaluation = self.machine.subscriptions.evaluate(state);
         let unread = evaluation
             .failures
@@ -1022,7 +1044,7 @@ impl<
         }
         first.map_or(Ok(()), Err)
     }
-    fn fail_sub(self: &Rc<Self>, error: Failure<SE, HE>) {
+    fn fail_sub(self: &Rc<Self>, error: Failure<SE, HE, RE>) {
         self.core.report(Rc::clone(&error), ErrorPhase::Sub);
         if self.profile == Profile::Effect && self.producer.mailbox.gate() == Gate::Open {
             self.core.fail_scope(error);
@@ -1233,6 +1255,31 @@ pub fn launch<
     subscriptions: R,
     options: Options<S, M, SE, HE, E>,
 ) -> Runtime<S, M, SE, HE, E> {
+    try_launch(machine, input, interpreter, subscriptions, options)
+}
+
+/// Starts the existing local actor with a declared reducer-error family.
+/// State, services and failures are owned by the actor; no Send or cause-formatting
+/// bound is added to the pure reducer or its error.
+pub fn try_launch<
+    S: Tagged + 'static,
+    M: Tagged + 'static,
+    C: CommandFamily<Msg = M> + 'static,
+    U: Subscription + 'static,
+    X: 'static,
+    SE: fmt::Display + fmt::Debug + 'static,
+    HE: fmt::Debug + 'static,
+    I: Interpreter<C, Error = HE> + 'static,
+    R: Subscriptions<U, M, Error = HE> + 'static,
+    E: Tagged + 'static,
+    RE: 'static,
+>(
+    machine: impl Into<AuthoredMachine<'static, S, M, C, U, X, RE>>,
+    input: X,
+    interpreter: I,
+    subscriptions: R,
+    options: Options<S, M, SE, HE, E, RE>,
+) -> Runtime<S, M, SE, HE, E, RE> {
     let (machine, identity) = machine.into().into_parts();
     let Options {
         profile,
@@ -1385,4 +1432,27 @@ pub async fn run<
     options: Options<S, M, SE, HE, E>,
 ) -> Runtime<S, M, SE, HE, E> {
     launch(machine, input, interpreter, subscriptions, options)
+}
+
+/// Lazy typed-error launch; polling it starts the same actor as try_launch.
+pub async fn try_run<
+    S: Tagged + 'static,
+    M: Tagged + 'static,
+    C: CommandFamily<Msg = M> + 'static,
+    U: Subscription + 'static,
+    X: 'static,
+    SE: fmt::Display + fmt::Debug + 'static,
+    HE: fmt::Debug + 'static,
+    I: Interpreter<C, Error = HE> + 'static,
+    R: Subscriptions<U, M, Error = HE> + 'static,
+    E: Tagged + 'static,
+    RE: 'static,
+>(
+    machine: impl Into<AuthoredMachine<'static, S, M, C, U, X, RE>>,
+    input: X,
+    interpreter: I,
+    subscriptions: R,
+    options: Options<S, M, SE, HE, E, RE>,
+) -> Runtime<S, M, SE, HE, E, RE> {
+    try_launch(machine, input, interpreter, subscriptions, options)
 }

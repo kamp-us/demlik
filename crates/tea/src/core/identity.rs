@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{convert::Infallible, ops::Deref};
 
 use super::Machine;
 use crate::data::{PlainData, structural_hash};
@@ -28,34 +28,40 @@ impl<'a, S, M> Identity<'a, S, M> {
 }
 
 /// Authored metadata stays with the machine; runtimes consume this declaration.
-pub struct AuthoredMachine<'a, S, M, C, U, X = ()> {
-    machine: Machine<'a, S, M, C, U, X>,
+pub struct AuthoredMachine<'a, S, M, C, U, X = (), RE = Infallible> {
+    machine: Machine<'a, S, M, C, U, X, RE>,
     identity: Option<Identity<'a, S, M>>,
 }
-impl<'a, S, M, C, U, X> Machine<'a, S, M, C, U, X> {
-    pub fn with_identity(self, identity: Identity<'a, S, M>) -> AuthoredMachine<'a, S, M, C, U, X> {
+impl<'a, S, M, C, U, X, RE> Machine<'a, S, M, C, U, X, RE> {
+    pub fn with_identity(
+        self,
+        identity: Identity<'a, S, M>,
+    ) -> AuthoredMachine<'a, S, M, C, U, X, RE> {
         AuthoredMachine {
             machine: self,
             identity: Some(identity),
         }
     }
 }
-impl<'a, S, M, C, U, X> From<Machine<'a, S, M, C, U, X>> for AuthoredMachine<'a, S, M, C, U, X> {
-    fn from(machine: Machine<'a, S, M, C, U, X>) -> Self {
+impl<'a, S, M, C, U, X, RE> From<Machine<'a, S, M, C, U, X, RE>>
+    for AuthoredMachine<'a, S, M, C, U, X, RE>
+{
+    fn from(machine: Machine<'a, S, M, C, U, X, RE>) -> Self {
         Self {
             machine,
             identity: None,
         }
     }
 }
-type MachineParts<'a, S, M, C, U, X> = (Machine<'a, S, M, C, U, X>, Option<Identity<'a, S, M>>);
-impl<'a, S, M, C, U, X> AuthoredMachine<'a, S, M, C, U, X> {
-    pub(crate) fn into_parts(self) -> MachineParts<'a, S, M, C, U, X> {
+type MachineParts<'a, S, M, C, U, X, RE> =
+    (Machine<'a, S, M, C, U, X, RE>, Option<Identity<'a, S, M>>);
+impl<'a, S, M, C, U, X, RE> AuthoredMachine<'a, S, M, C, U, X, RE> {
+    pub(crate) fn into_parts(self) -> MachineParts<'a, S, M, C, U, X, RE> {
         (self.machine, self.identity)
     }
 }
-impl<'a, S, M, C, U, X> Deref for AuthoredMachine<'a, S, M, C, U, X> {
-    type Target = Machine<'a, S, M, C, U, X>;
+impl<'a, S, M, C, U, X, RE> Deref for AuthoredMachine<'a, S, M, C, U, X, RE> {
+    type Target = Machine<'a, S, M, C, U, X, RE>;
     fn deref(&self) -> &Self::Target {
         &self.machine
     }

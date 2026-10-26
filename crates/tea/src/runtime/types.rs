@@ -1,7 +1,7 @@
-use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{convert::Infallible, fmt};
 
 use serde::Serialize;
 
@@ -42,18 +42,19 @@ pub enum ErrorPhase {
 }
 
 #[derive(Debug)]
-pub enum RuntimeError<SE, HE> {
+pub enum RuntimeError<SE, HE, RE = Infallible> {
     IdentityDrop(IdentityDropNotice),
     Timer(crate::timing::TimerError),
     NoCell(NoCellError),
+    Reduce(RE),
     Restore(StoreRefusedError<SE>),
     Save(SE),
     Handler(HE),
     Contract(Arc<CommandContractError>),
     Panic(PanicCause),
     Cleanup {
-        prior: Option<Failure<SE, HE>>,
-        cause: Failure<SE, HE>,
+        prior: Option<Failure<SE, HE, RE>>,
+        cause: Failure<SE, HE, RE>,
     },
     Stopped {
         msg_type: String,
@@ -83,12 +84,13 @@ pub enum RuntimeError<SE, HE> {
         kind: String,
     },
 }
-impl<SE, HE> RuntimeError<SE, HE> {
+impl<SE, HE, RE> RuntimeError<SE, HE, RE> {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Timer(_) => "TimerError",
             Self::IdentityDrop(_) => "IdentityDropNotice",
             Self::NoCell(_) => "NoCellError",
+            Self::Reduce(_) => "ReduceError",
             Self::Restore(_) => "StoreRefusedError",
             Self::Save(_) => "StoreFailed",
             Self::Handler(_) => "CellFailure",
@@ -140,18 +142,21 @@ impl Serialize for IdentityDropNotice {
         error.end()
     }
 }
-impl<SE: fmt::Debug, HE: fmt::Debug> fmt::Display for RuntimeError<SE, HE> {
+impl<SE: fmt::Debug, HE: fmt::Debug, RE: fmt::Debug> fmt::Display for RuntimeError<SE, HE, RE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {self:?}", self.name())
     }
 }
-impl<SE: fmt::Debug, HE: fmt::Debug> std::error::Error for RuntimeError<SE, HE> {}
-
-pub struct Report<SE, HE> {
-    pub phase: ErrorPhase,
-    pub error: Rc<RuntimeError<SE, HE>>,
+impl<SE: fmt::Debug, HE: fmt::Debug, RE: fmt::Debug> std::error::Error
+    for RuntimeError<SE, HE, RE>
+{
 }
-impl<SE, HE> Clone for Report<SE, HE> {
+
+pub struct Report<SE, HE, RE = Infallible> {
+    pub phase: ErrorPhase,
+    pub error: Rc<RuntimeError<SE, HE, RE>>,
+}
+impl<SE, HE, RE> Clone for Report<SE, HE, RE> {
     fn clone(&self) -> Self {
         Self {
             phase: self.phase,
@@ -159,18 +164,18 @@ impl<SE, HE> Clone for Report<SE, HE> {
         }
     }
 }
-pub type Failure<SE, HE> = Rc<RuntimeError<SE, HE>>;
+pub type Failure<SE, HE, RE = Infallible> = Rc<RuntimeError<SE, HE, RE>>;
 pub type Commit<S, M> = Rc<dyn Fn(Option<&M>, &S)>;
-pub type ErrorSink<SE, HE> = Rc<dyn Fn(&RuntimeError<SE, HE>, ErrorPhase)>;
+pub type ErrorSink<SE, HE, RE = Infallible> = Rc<dyn Fn(&RuntimeError<SE, HE, RE>, ErrorPhase)>;
 pub type Terminal<S> = Rc<dyn Fn(&S) -> bool>;
-pub type Rehydrate<S, M, SE, HE> = Rc<dyn Fn(&S, &M, &RuntimeError<SE, HE>) -> S>;
-pub enum Supervision<S, M, SE, HE> {
+pub type Rehydrate<S, M, SE, HE, RE = Infallible> =
+    Rc<dyn Fn(&S, &M, &RuntimeError<SE, HE, RE>) -> S>;
+pub enum Supervision<S, M, SE, HE, RE = Infallible> {
     Stop,
     Escalate,
-    Restart(Rehydrate<S, M, SE, HE>),
+    Restart(Rehydrate<S, M, SE, HE, RE>),
 }
-pub struct Options<S, M, SE = std::convert::Infallible, HE = std::convert::Infallible, E = NoEvent>
-{
+pub struct Options<S, M, SE = Infallible, HE = Infallible, E = NoEvent, RE = Infallible> {
     pub events: Option<EventProjector<S, M, E>>,
     pub telemetry: Option<Telemetry<HE>>,
     pub timer: Option<super::RuntimeTimer>,
@@ -178,13 +183,13 @@ pub struct Options<S, M, SE = std::convert::Infallible, HE = std::convert::Infal
     pub store: Option<Persistence<S, SE>>,
     pub terminal: Option<Terminal<S>>,
     pub on_commit: Vec<Commit<S, M>>,
-    pub on_error: Option<ErrorSink<SE, HE>>,
+    pub on_error: Option<ErrorSink<SE, HE, RE>>,
     pub clock: Rc<dyn Fn() -> f64>,
     pub dispose_timeout: Duration,
     pub idle_cap: usize,
-    pub supervision: Supervision<S, M, SE, HE>,
+    pub supervision: Supervision<S, M, SE, HE, RE>,
 }
-impl<S, M, SE, HE> Options<S, M, SE, HE> {
+impl<S, M, SE, HE, RE> Options<S, M, SE, HE, NoEvent, RE> {
     pub fn new(profile: Profile) -> Self {
         Self {
             events: None,
@@ -207,11 +212,11 @@ impl<S, M, SE, HE> Options<S, M, SE, HE> {
         }
     }
 }
-impl<S, M, SE, HE, E> Options<S, M, SE, HE, E> {
+impl<S, M, SE, HE, E, RE> Options<S, M, SE, HE, E, RE> {
     pub fn with_events<F: 'static>(
         self,
         project: impl Fn(&M, &S) -> Vec<F> + 'static,
-    ) -> Options<S, M, SE, HE, F> {
+    ) -> Options<S, M, SE, HE, F, RE> {
         Options {
             profile: self.profile,
             store: self.store,

@@ -200,8 +200,15 @@ impl<'a, S, M> Recorder<'a, S, M> {
         }
     }
 }
-pub fn recorder<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'static>(
-    runtime: &Runtime<S, M, SE, HE, E>,
+pub fn recorder<
+    S: 'static,
+    M: Tagged + 'static,
+    SE: 'static,
+    HE: 'static,
+    E: Tagged + 'static,
+    RE: 'static,
+>(
+    runtime: &Runtime<S, M, SE, HE, E, RE>,
     options: RecorderOptions,
 ) -> Recorder<'static, S, M> {
     recorder_with(runtime, options, fastrand::f64, |_| StateKind::Value)
@@ -212,8 +219,9 @@ pub fn recorder_with<
     SE: 'static,
     HE: 'static,
     E: Tagged + 'static,
+    RE: 'static,
 >(
-    runtime: &Runtime<S, M, SE, HE, E>,
+    runtime: &Runtime<S, M, SE, HE, E, RE>,
     options: RecorderOptions,
     rng: impl Fn() -> f64 + 'static,
     state_kind: fn(&S) -> StateKind,
