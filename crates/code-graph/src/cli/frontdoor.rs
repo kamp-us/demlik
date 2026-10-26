@@ -20,6 +20,7 @@ use crate::{
         resolve_thresholds, with_entry_presets,
     },
     engine::tsgo::TsgoBinary,
+    env_keys::{EnvKeyError, EnvKeyReport, load_env_key_report, render_env_keys},
     hexagon::cli::{HexagonOutput, HexagonRunError, HexagonRunOutcome, run_hexagon},
     kinds::rules::{NodeKindRules, RuleInputError},
     layers::gate::{LayerGateError, LayerGateResult, LayerGateTextArgs, run_layer_gate_text},
@@ -142,6 +143,11 @@ pub enum BoundaryDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum EnvKeyDispatch {
+    Complete(EnvKeyReport),
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum FrontdoorError {
     Resolve {
         target: JsString,
@@ -158,6 +164,8 @@ pub enum FrontdoorError {
     LayerEmit(ApiError),
     Boundaries(BoundaryGateError),
     BoundaryEmit(ApiError),
+    EnvKeys(EnvKeyError),
+    EnvKeyEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
     GateScope {
         stage: GatePreparationKind,
@@ -178,6 +186,8 @@ impl FrontdoorError {
             Self::LayerEmit(error) => error.name(),
             Self::Boundaries(error) => error.name(),
             Self::BoundaryEmit(error) => error.name(),
+            Self::EnvKeys(error) => error.name(),
+            Self::EnvKeyEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
             Self::ExitCode(error) => error.name(),
             _ => "Error",
@@ -198,6 +208,8 @@ impl FrontdoorError {
             Self::LayerEmit(error) => error.message(),
             Self::Boundaries(error) => error.message(),
             Self::BoundaryEmit(error) => error.message(),
+            Self::EnvKeys(error) => error.message(),
+            Self::EnvKeyEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
             Self::ExitCode(error) => error.message(),
         }
@@ -221,6 +233,8 @@ impl Error for FrontdoorError {
             Self::LayerEmit(error) => error,
             Self::Boundaries(error) => error,
             Self::BoundaryEmit(error) => error,
+            Self::EnvKeys(error) => error,
+            Self::EnvKeyEmit(error) => error,
             Self::RuleNameConversion(error) => error,
             Self::ExitCode(error) => error,
         })
@@ -499,6 +513,30 @@ impl PreparedCli {
 }
 
 impl PreparedGatesCli {
+    /// Read and emit environment keys after boundaries, or retain the same continuation.
+    pub fn dispatch_env_keys(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<EnvKeyDispatch, FrontdoorError> {
+        if self.prepared.options.env_keys() != Some(true) {
+            return Ok(EnvKeyDispatch::Continue(self));
+        }
+        let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let report = load_env_key_report(&self.prepared.root_absolute, &repo_root)
+            .map_err(FrontdoorError::EnvKeys)?;
+        let mut payload = render_env_keys(
+            &report,
+            self.prepared.options.json() == Some(true),
+            self.prepared.options.pretty() == Some(true),
+        )
+        .map_err(|error| FrontdoorError::EnvKeys(EnvKeyError::Render(error)))?;
+        payload.push_str("\n");
+        output_to(self.prepared.options.out())
+            .emit(host, &payload)
+            .map_err(FrontdoorError::EnvKeyEmit)?;
+        Ok(EnvKeyDispatch::Complete(report))
+    }
+
     /// Run boundaries after layers, or retain the same continuation for later modes.
     pub fn dispatch_boundaries(
         self: Box<Self>,

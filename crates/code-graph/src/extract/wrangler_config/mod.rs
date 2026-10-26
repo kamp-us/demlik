@@ -60,7 +60,28 @@ impl std::fmt::Display for CatalogError {
         }
     }
 }
-impl std::error::Error for CatalogError {}
+impl CatalogError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Record(error) => error.name(),
+            Self::WorkingDirectory(_) => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Record(error) => error.message().clone(),
+            Self::WorkingDirectory(error) => error.to_string().into(),
+        }
+    }
+}
+impl std::error::Error for CatalogError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Record(error) => error,
+            Self::WorkingDirectory(error) => error,
+        })
+    }
+}
 impl From<RecordTypeError> for CatalogError {
     fn from(error: RecordTypeError) -> Self {
         Self::Record(error)

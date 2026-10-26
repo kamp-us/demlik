@@ -102,10 +102,9 @@ impl BoundaryGateError {
             Self::Config(BoundaryConfigError::Declaration(error)) => error.name(),
             Self::Pattern(GlobError::Syntax(_)) => "Error",
             Self::Pattern(GlobError::Pattern(_)) => "SyntaxError",
-            Self::Catalog(CatalogError::Record(error)) | Self::Ceiling(error) => error.name(),
-            Self::Catalog(CatalogError::WorkingDirectory(_)) | Self::Io(_) | Self::Render(_) => {
-                "Error"
-            }
+            Self::Catalog(error) => error.name(),
+            Self::Ceiling(error) => error.name(),
+            Self::Io(_) | Self::Render(_) => "Error",
         }
     }
     pub fn message(&self) -> JsString {
@@ -114,12 +113,9 @@ impl BoundaryGateError {
             Self::Config(BoundaryConfigError::Declaration(error)) => error.message(),
             Self::Pattern(GlobError::Syntax(message)) => message.clone(),
             Self::Pattern(GlobError::Pattern(error)) => error.to_string().into(),
-            Self::Catalog(CatalogError::Record(error)) | Self::Ceiling(error) => {
-                error.message().clone()
-            }
-            Self::Catalog(CatalogError::WorkingDirectory(error)) | Self::Io(error) => {
-                error.to_string().into()
-            }
+            Self::Catalog(error) => error.message(),
+            Self::Ceiling(error) => error.message().clone(),
+            Self::Io(error) => error.to_string().into(),
             Self::Render(error) => error.to_string().into(),
         }
     }
