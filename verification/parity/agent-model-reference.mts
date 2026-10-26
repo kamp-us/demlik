@@ -421,6 +421,7 @@ for await (const line of readline.createInterface({
         outcome: out._tag,
         tag: out.error._tag,
         cause: snapshotError(out.error.cause),
+        wire: JSON.parse(JSON.stringify(out)),
         trace,
       };
     } else if (request.operation === "vocabulary") {

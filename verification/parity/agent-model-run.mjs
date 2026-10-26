@@ -18,6 +18,8 @@ const fn = {
   invoke: "demlik_tea::agent::model::BrainHandler::handle",
 };
 function calls(test, source) {
+  if (test.operation === "input-boundary")
+    return [fn.plain, fn.handler, fn.invoke];
   if (test.operation === "vocabulary")
     return ["demlik_tea::agent::model::PLAIN_MODEL_MISROUTE_REASON"];
   const model = test.input.style === "factory" ? fn.factory : fn.plain;
@@ -47,6 +49,21 @@ function calls(test, source) {
 }
 function literals(test, out) {
   if (test.operation === "vocabulary") return;
+  if (test.operation === "input-boundary") {
+    assert.deepEqual(out, {
+      outcome: "Err",
+      tag: "port_rejected",
+      cause: {
+        error: {
+          name: "TypeError",
+          message: "Cannot read properties of undefined (reading 'model')",
+        },
+      },
+      wire: { _tag: "Err", error: { _tag: "port_rejected", cause: {} } },
+      trace: [],
+    });
+    return;
+  }
   const ports = test.operation === "scenario" ? out : out.ports;
   if (
     test.id === "agent-model.plain-loaded-transform-raw" ||
@@ -220,49 +237,7 @@ export async function agentModelParity(options = {}) {
   assert.equal(badNative.length, invalid.length);
   assert.ok(badSource.every((x) => !x.ok));
   assert.ok(badNative.every((x) => !x.ok && x.observedCalls.length === 0));
-  const qualified = ["missing", "undefined"].map((variant) => ({
-    id: `agent-model.input-${variant}`,
-    operation: "input-boundary",
-    input: { variant },
-  }));
-  const qualifiedText = `${qualified.map((x) => JSON.stringify(x)).join("\n")}\n`;
-  const qualifiedSource = run(
-      process.execPath,
-      [
-        "--import",
-        require.resolve("tsx"),
-        path.join(root, "verification/parity/agent-model-reference.mts"),
-      ],
-      qualifiedText,
-    ),
-    qualifiedNative = run(binary, [], qualifiedText);
-  assert.equal(qualifiedSource.length, 2);
-  assert.equal(qualifiedNative.length, 2);
-  const qualifiedObservations = qualified.map((test, index) => {
-    const left = qualifiedSource[index],
-      right = qualifiedNative[index];
-    assert.equal(left.id, test.id);
-    assert.equal(right.id, test.id);
-    assert.equal(left.ok, true);
-    assert.equal(right.ok, true);
-    assert.equal(left.output.outcome, "Err");
-    assert.equal(left.output.tag, "port_rejected");
-    assert.equal(left.output.cause.error.name, "TypeError");
-    assert.deepEqual(left.output.trace, []);
-    assert.deepEqual(right.output, {
-      refusal: { kind: "MissingInput", command: "resilient_run" },
-      trace: [],
-    });
-    assert.ok(!Object.hasOwn(nativeEvidence, test.id));
-    return {
-      id: test.id,
-      status: "OPEN",
-      strictParity: false,
-      source: left.output,
-      native: right.output,
-      observedCalls: right.observedCalls,
-    };
-  });
+  const qualifiedObservations = [];
   const report = {
     reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
     node: process.version,
@@ -284,9 +259,7 @@ export async function agentModelParity(options = {}) {
         "packages/tea/src/internal/llm-call/index.ts",
       ].map((file) => [file, hash(fs.readFileSync(path.join(root, file)))]),
     ),
-    openGaps: [
-      "OPEN: supported native RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler returns LlmRejected port_rejected with caught TypeError. Qualified observations are excluded from strict/nativeEvidence.",
-    ],
+    openGaps: [],
     nativeProfile:
       "Explicit native plain/factory kinds and caller-driven local futures with declared Result failures. JS function tags, arity/prototypes/thenables/getters/mutable methods and native panic-vs-Result are separately measured Source-only profiles. No arbitrary Promise scheduling, provider/SDK/streaming host or full-agent claim.",
   };

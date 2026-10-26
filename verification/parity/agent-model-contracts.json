@@ -9,12 +9,12 @@
       "agent-model.factory-loaded-transform-raw",
       "agent-model.factory-failure-bind",
       "agent-model.promise-factory-success",
-      "agent-model.effect-factory-invoke"
+      "agent-model.effect-factory-invoke",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#Llm/member:published:38fd39df0307a0752209391009dbdb341332244158b9a7dd9577f0f5a4198570": {
     "signature": "38fd39df0307a0752209391009dbdb341332244158b9a7dd9577f0f5a4198570",
@@ -26,12 +26,12 @@
       "agent-model.factory-loaded-transform-raw",
       "agent-model.factory-failure-bind",
       "agent-model.promise-factory-success",
-      "agent-model.effect-factory-invoke"
+      "agent-model.effect-factory-invoke",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#Llm/member:published:00543f38d0950ad2dc56977d673bdb4a8d13fe805392cda6f88f8778ecf44a99": {
     "signature": "00543f38d0950ad2dc56977d673bdb4a8d13fe805392cda6f88f8778ecf44a99",
@@ -43,12 +43,12 @@
       "agent-model.factory-loaded-transform-raw",
       "agent-model.factory-failure-bind",
       "agent-model.promise-factory-success",
-      "agent-model.effect-factory-invoke"
+      "agent-model.effect-factory-invoke",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#MessageLoader": {
     "signature": "1229fb9d6a6a03d1930d4a11c0ed96e0f1826d71b49866d1d4b20490a3fd2fed",
@@ -62,12 +62,12 @@
     "cases": [
       "agent-model.factory-failure-loader",
       "agent-model.plain-shared-loaded-repeated",
-      "agent-model.promise-plain-success"
+      "agent-model.promise-plain-success",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#MessageLoader/member:published:3a1f16b2106c99619fc63e45eb97a16378e6cfd10dde09f465a5e5060a5e3163": {
     "signature": "3a1f16b2106c99619fc63e45eb97a16378e6cfd10dde09f465a5e5060a5e3163",
@@ -81,12 +81,12 @@
     "cases": [
       "agent-model.factory-failure-loader",
       "agent-model.plain-shared-loaded-repeated",
-      "agent-model.promise-plain-success"
+      "agent-model.promise-plain-success",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#ModelFactory": {
     "signature": "39723f84ee3767f2ac8d0ee56e2572173593dea9d9f821f8d69c94fc9a7d5868",
@@ -100,12 +100,12 @@
     "cases": [
       "agent-model.factory-loaded-transform-raw",
       "agent-model.factory-failure-factory",
-      "agent-model.factory-unicode"
+      "agent-model.factory-unicode",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#ModelFactory/member:published:3c708d9b394442a8d9d07ecaade0e29707c2eff64fd9bd76fbc003f70931f12c": {
     "signature": "3c708d9b394442a8d9d07ecaade0e29707c2eff64fd9bd76fbc003f70931f12c",
@@ -119,12 +119,12 @@
     "cases": [
       "agent-model.factory-loaded-transform-raw",
       "agent-model.factory-failure-factory",
-      "agent-model.factory-unicode"
+      "agent-model.factory-unicode",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#ModelPort": {
     "signature": "8b827ceb53217966bc1791e1eb3f31696aa1d3cc25ffb49f7bab4ae52073ca70",
@@ -139,12 +139,12 @@
     "cases": [
       "agent-model.factory-loaded-transform-raw",
       "agent-model.plain-loaded-transform-raw",
-      "agent-model.wrapped-loaded-transform-raw"
+      "agent-model.wrapped-loaded-transform-raw",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#PlainModel": {
     "signature": "b239ee109b220cb18ca1fe7d914d757885bf1846b979a426cbc425296888c541",
@@ -158,12 +158,12 @@
     "cases": [
       "agent-model.plain-loaded-transform-raw",
       "agent-model.wrapped-loaded-transform-raw",
-      "agent-model.plain-second-parse-failure"
+      "agent-model.plain-second-parse-failure",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#PlainModel/member:published:f7dbef52b44522bf5380b17243c5a91508b1171ab9480c07b228fc218ad5426f": {
     "signature": "f7dbef52b44522bf5380b17243c5a91508b1171ab9480c07b228fc218ad5426f",
@@ -177,12 +177,12 @@
     "cases": [
       "agent-model.plain-loaded-transform-raw",
       "agent-model.wrapped-loaded-transform-raw",
-      "agent-model.plain-second-parse-failure"
+      "agent-model.plain-second-parse-failure",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#PLAIN_MODEL_MISROUTE_REASON": {
     "signature": "2e66731facce2c26d47061d0a4c5f49a11163cccfd91114a13e4f56a62d29237",
@@ -191,7 +191,8 @@
       "symbols": ["demlik_tea::agent::model::PLAIN_MODEL_MISROUTE_REASON"]
     },
     "cases": ["agent-model.vocabulary"],
-    "nativeProfile": "Exact exported reason vocabulary only. Native factory return types prevent the Source JS thenable misroute; this mapping does not claim dynamic misroute handling."
+    "nativeProfile": "Exact exported reason vocabulary only. Native factory return types prevent the Source JS thenable misroute; this mapping does not claim dynamic misroute handling.",
+    "knownGaps": []
   },
   "@demlik/tea:./agent#plainModel": {
     "signature": "171010f3013e97c95e275c7f1f9b07e9e7c2544232f6dc93a203d7f35b03ddce",
@@ -205,11 +206,11 @@
     "cases": [
       "agent-model.wrapped-loaded-transform-raw",
       "agent-model.wrapped-failure-parse1",
-      "agent-model.wrapped-second-schema"
+      "agent-model.wrapped-second-schema",
+      "agent-model.input-missing",
+      "agent-model.input-undefined"
     ],
-    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
-    "knownGaps": [
-      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
-    ]
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim. Direct Missing/Undefined handler inputs settle as port_rejected with an owned access-error cause; live diagnostics and empty Error JSON are checked. These direct cases do not establish malformed-command errOf/decode continuation or full agent wiring.",
+    "knownGaps": []
   }
 }

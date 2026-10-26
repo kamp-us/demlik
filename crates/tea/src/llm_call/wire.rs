@@ -74,6 +74,7 @@ impl<E: Serialize> Serialize for LlmCause<E> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::Value(value) => value.serialize(serializer),
+            Self::AccessError(_) => serializer.serialize_map(Some(0))?.end(),
             Self::Undefined | Self::Missing => PlainData::Undefined.serialize(serializer),
             Self::Carrier(value) => value.serialize(serializer),
             Self::Malformed(value) => value.serialize(serializer),
@@ -91,8 +92,13 @@ impl<E: Serialize> Serialize for Rejected<E> {
         for (key, value) in &self.0.fields {
             map.serialize_entry(key, value)?;
         }
-        if let CauseField::Own(CallValue::Shared(value)) = &self.0.cause {
-            map.serialize_entry("cause", value)?;
+        match &self.0.cause {
+            CauseField::Own(CallValue::Shared(value)) => map.serialize_entry("cause", value)?,
+            // A JS property Error retains diagnostics, but no enumerable JSON fields.
+            CauseField::AccessError(_) => {
+                map.serialize_entry("cause", &PlainData::Object(IndexMap::new()))?;
+            }
+            _ => {}
         }
         map.end()
     }

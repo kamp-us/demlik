@@ -81,5 +81,7 @@ export function agentModelCases() {
       );
     }
   add("vocabulary", {}, "vocabulary");
+  for (const variant of ["missing", "undefined"])
+    add(`input-${variant}`, { variant }, "input-boundary");
   return result;
 }

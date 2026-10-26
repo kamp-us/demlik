@@ -1,5 +1,5 @@
 use demlik_tea::{
-    PlainData,
+    PlainData, Tagged,
     agent::model::{BrainPorts, Llm, MessageLoader, Messages},
     command::Outcome,
     data::{JsText, JsonData},
@@ -634,6 +634,31 @@ pub async fn input_boundary(variant: &str, calls: &Calls) -> PlainData {
         &handler,
         &cmd
     ) {
+        Ok(Outcome::Err { error }) => {
+            let wire = demlik_tea::data::plain_data(&Outcome::<(), _>::err(&error)).unwrap();
+            let CauseField::AccessError(cause) = error.details.cause() else {
+                panic!("the input error must retain its library cause")
+            };
+            object([
+                ("outcome", string("Err")),
+                ("tag", string(error.tag())),
+                (
+                    "cause",
+                    object([(
+                        "error",
+                        object([
+                            ("name", string(cause.name)),
+                            ("message", string(cause.message.clone())),
+                        ]),
+                    )]),
+                ),
+                ("wire", wire),
+                (
+                    "trace",
+                    PlainData::Array(ctx.trace.borrow().iter().cloned().map(string).collect()),
+                ),
+            ])
+        }
         Err(LlmCallError::MissingInput { command }) => object([
             (
                 "refusal",
@@ -647,6 +672,6 @@ pub async fn input_boundary(variant: &str, calls: &Calls) -> PlainData {
                 PlainData::Array(ctx.trace.borrow().iter().cloned().map(string).collect()),
             ),
         ]),
-        _ => panic!("the open native typed boundary changed"),
+        _ => panic!("unexpected model input-boundary result"),
     }
 }

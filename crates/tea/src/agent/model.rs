@@ -7,7 +7,6 @@
 //! reflected here. A Rust panic remains an unwind, rather than a port failure.
 
 use crate::{
-    Tagged,
     data::JsText,
     llm_call::{LlmCall, LlmCallError, LlmOutcome, Purpose, Request, RunCmd, Schema},
     resilience::resilient_call::CallValue,
@@ -221,18 +220,16 @@ where
     pub fn model_kind(&self) -> ModelKind {
         self.ports.model.kind()
     }
-    /// Missing/Undefined replay inputs are native typed refusals, returned as
-    /// LlmCallError::MissingInput. Source catches a dynamic TypeError and emits
-    /// a rejected outcome instead; that remains an explicit open parity gap.
-    /// Declared port and schema Result failures keep their original causes.
+    /// Missing/Undefined inputs settle with their property-access error before
+    /// model work. Declared port and schema failures retain their own causes.
     pub async fn handle(
         &self,
         cmd: &RunCmd<P, I, S::Output, S::Error>,
     ) -> Result<LlmOutcome<P, S::Output, S::Error>, LlmCallError> {
         let CallValue::Shared(input) = &cmd.input().input else {
-            return Err(LlmCallError::MissingInput {
-                command: cmd.tag().into(),
-            });
+            let cause = crate::js_record::property(&crate::PlainData::Undefined, "model")
+                .expect_err("reading model from undefined is a property error");
+            return Ok(self.llm.rejected_access_error(cause));
         };
         let answer = async {
             let model = self.ports.model.model_of(input.model.as_ref())?;

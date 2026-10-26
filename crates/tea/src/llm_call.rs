@@ -94,6 +94,7 @@ pub struct LlmErr<P, E> {
 }
 pub enum LlmCause<E> {
     Value(Rc<E>),
+    AccessError(Rc<JsAccessError>),
     Undefined,
     Missing,
     Carrier(Rc<RunError<Rejected<E>>>),
@@ -103,6 +104,8 @@ pub enum CauseField<E> {
     Missing,
     Own(CallValue<E>),
     Inherited(CallValue<E>),
+    /// An own library-raised cause, independent of the caller's error family.
+    AccessError(Rc<JsAccessError>),
 }
 struct Rejection<E> {
     cause: CauseField<E>,
@@ -139,6 +142,12 @@ impl<E> Rejected<E> {
         };
         Self(Rc::new(Rejection {
             cause: CauseField::Own(cause),
+            fields: IndexMap::new(),
+        }))
+    }
+    pub(crate) fn access_error(cause: JsAccessError) -> Self {
+        Self(Rc::new(Rejection {
+            cause: CauseField::AccessError(Rc::new(cause)),
             fields: IndexMap::new(),
         }))
     }
@@ -302,6 +311,12 @@ impl<'a, P: Purpose, I, S: Schema + ?Sized, B: Budget> LlmCall<'a, P, I, S, B> {
     pub fn rejected(&self, cause: CallValue<S::Error>) -> LlmOutcome<P, S::Output, S::Error> {
         Outcome::err(RunError::port_rejected(Rejected::new(cause)))
     }
+    pub(crate) fn rejected_access_error(
+        &self,
+        cause: JsAccessError,
+    ) -> LlmOutcome<P, S::Output, S::Error> {
+        Outcome::err(RunError::port_rejected(Rejected::access_error(cause)))
+    }
     pub fn err_of(
         &self,
         msg: &LlmMsg<P, I, S::Output, S::Error>,
@@ -319,6 +334,7 @@ impl<'a, P: Purpose, I, S: Schema + ?Sized, B: Budget> LlmCall<'a, P, I, S, B> {
         };
         let error = match failure {
             Failure::Declared(error) => match error.details.cause() {
+                CauseField::AccessError(cause) => LlmCause::AccessError(Rc::clone(cause)),
                 CauseField::Missing => LlmCause::Carrier(Rc::new(RunError {
                     kind: error.kind,
                     details: error.details.clone(),
@@ -336,6 +352,9 @@ impl<'a, P: Purpose, I, S: Schema + ?Sized, B: Budget> LlmCall<'a, P, I, S, B> {
         };
         let reason = match &error {
             LlmCause::Value(value) => (self.describe)(value)?,
+            LlmCause::AccessError(error) => crate::describe_error::describe_error(
+                crate::describe_error::ErrorView::ErrorMessage(&error.message.as_str().into()),
+            )?,
             LlmCause::Undefined | LlmCause::Missing => crate::describe_error::describe_error(
                 crate::describe_error::ErrorView::Value(&PlainData::Undefined),
             )?,

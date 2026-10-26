@@ -107,7 +107,7 @@ export async function agentModelMutations(options = {}) {
       process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
     target =
       options.mutationTarget ??
-      path.join(root, "target/agent-content-mutation-build");
+      path.join(root, "target/parity/agent-model-mutation-build");
   assert.notEqual(path.resolve(target), path.resolve(baselineTarget));
   const binary =
       options.binary ??
@@ -144,8 +144,8 @@ export async function agentModelMutations(options = {}) {
         "target/parity/agent-model-mutation-baseline.json",
       ),
     });
-    assert.equal(baseline.cases, 90);
-    assert.equal(baseline.passed, 90);
+    assert.equal(baseline.cases, 92);
+    assert.equal(baseline.passed, 92);
     for (const entry of ["Cargo.toml", "Cargo.lock", "crates"])
       fs.cpSync(path.join(root, entry), path.join(workspace, entry), {
         recursive: true,
