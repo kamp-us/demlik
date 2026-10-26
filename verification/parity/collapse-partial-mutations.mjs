@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 const baseline = process.argv[2],
   reportFile = process.argv[3];
 assert.ok(baseline && reportFile);

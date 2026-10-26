@@ -20,6 +20,7 @@ import {
   FunctionNodeSchema,
   ThresholdsSchema,
 } from "../../packages/code-graph/src/schema.js";
+
 const binary = process.argv[2],
   reportFile = process.argv[3];
 assert.ok(
