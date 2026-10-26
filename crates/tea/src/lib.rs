@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod command;
+pub mod compose;
 pub mod core;
 pub mod data;
 pub mod describe_error;
@@ -32,3 +33,5 @@ pub use core::{
 pub use data::{
     EitherSub, PlainData, Sub, SubId, Subscription, TimerDeps, structural_hash, sub_id_of,
 };
+
+pub use compose::{ReadStep, lift_slice, read_in_order};
