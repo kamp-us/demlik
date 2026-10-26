@@ -1,5 +1,5 @@
 use super::{
-    analyze::{LayerAnalysisError, analyze_layers},
+    analyze::{LayerAnalysisError, analyze_layers, analyze_layers_text},
     config::{LayerConfigResolution, resolve_layer_rules},
     render::render_layers,
 };
@@ -45,7 +45,37 @@ impl std::error::Error for LayerGateError {
         })
     }
 }
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LayerGateTextArgs<'a> {
+    pub root_absolute: &'a JsString,
+    pub repo_root: &'a JsString,
+    pub layer_rules_file: Option<&'a JsString>,
+    pub json: bool,
+    pub pretty: bool,
+}
 pub fn run_layer_gate(args: LayerGateArgs<'_>) -> Result<LayerGateResult, LayerGateError> {
+    run(args, None)
+}
+pub(crate) fn run_layer_gate_text(
+    args: LayerGateTextArgs<'_>,
+) -> Result<LayerGateResult, LayerGateError> {
+    let root_native = args.root_absolute.to_lossy();
+    let repo_native = args.repo_root.to_lossy();
+    run(
+        LayerGateArgs {
+            root_absolute: Path::new(&root_native),
+            repo_root: Path::new(&repo_native),
+            layer_rules_file: args.layer_rules_file,
+            json: args.json,
+            pretty: args.pretty,
+        },
+        Some((args.root_absolute, args.repo_root)),
+    )
+}
+fn run(
+    args: LayerGateArgs<'_>,
+    text: Option<(&JsString, &JsString)>,
+) -> Result<LayerGateResult, LayerGateError> {
     let rules = match resolve_layer_rules(args.layer_rules_file) {
         LayerConfigResolution::Resolved(rules) => rules,
         LayerConfigResolution::Refused { message } => {
@@ -57,7 +87,11 @@ pub fn run_layer_gate(args: LayerGateArgs<'_>) -> Result<LayerGateResult, LayerG
         }
     };
     let loaded = load_cheap_project(args.root_absolute, None).map_err(LayerGateError::Project)?;
-    let analysis = match analyze_layers(&loaded, args.repo_root, &rules) {
+    let measured = match text {
+        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules),
+        None => analyze_layers(&loaded, args.repo_root, &rules),
+    };
+    let analysis = match measured {
         Ok(report) => report,
         Err(LayerAnalysisError::Tie(error)) => {
             return Ok(LayerGateResult {

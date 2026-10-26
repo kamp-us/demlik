@@ -5,6 +5,7 @@ use super::{
     parse,
 };
 use crate::{
+    api::map::ApiError,
     api::{
         cli::{ApiFlags, ApiHost, ApiRunError, ApiRunOutcome, run_api_flags_with_warning_blocking},
         real_path,
@@ -17,6 +18,7 @@ use crate::{
     engine::tsgo::TsgoBinary,
     hexagon::cli::{HexagonOutput, HexagonRunError, HexagonRunOutcome, run_hexagon},
     kinds::rules::{NodeKindRules, RuleInputError},
+    layers::gate::{LayerGateError, LayerGateResult, LayerGateTextArgs, run_layer_gate_text},
     project::{find_repo_root_text, resolve_path_text_from},
     schema::Thresholds,
     smells::{
@@ -126,6 +128,11 @@ pub enum GatePreflightDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum LayerDispatch {
+    Complete(LayerGateResult),
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum FrontdoorError {
     Resolve {
         target: JsString,
@@ -138,6 +145,8 @@ pub enum FrontdoorError {
     NodeKinds(NodeKindConfigError),
     Api(ApiRunError),
     Hexagon(HexagonRunError),
+    Layers(LayerGateError),
+    LayerEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
     GateScope {
         stage: GatePreparationKind,
@@ -155,6 +164,7 @@ impl FrontdoorError {
             }
             Self::Api(error) => error.visible().name(),
             Self::Hexagon(error) => error.name(),
+            Self::LayerEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
             Self::ExitCode(error) => error.name(),
             _ => "Error",
@@ -171,6 +181,8 @@ impl FrontdoorError {
             Self::NodeKinds(error) => error.to_string().into(),
             Self::Api(error) => error.message(),
             Self::Hexagon(error) => error.message(),
+            Self::Layers(error) => error.to_string().into(),
+            Self::LayerEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
             Self::ExitCode(error) => error.message(),
         }
@@ -190,6 +202,8 @@ impl Error for FrontdoorError {
             Self::NodeKinds(error) => error,
             Self::Api(error) => error,
             Self::Hexagon(error) => error,
+            Self::Layers(error) => error,
+            Self::LayerEmit(error) => error,
             Self::RuleNameConversion(error) => error,
             Self::ExitCode(error) => error,
         })
@@ -464,5 +478,36 @@ impl PreparedCli {
             }
             None => Ok(ApiDispatch::Continue(self)),
         }
+    }
+}
+
+impl PreparedGatesCli {
+    /// Run layers after both preparations, or retain the same continuation for later modes.
+    pub fn dispatch_layers(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<LayerDispatch, FrontdoorError> {
+        if self.prepared.options.layers() != Some(true) {
+            return Ok(LayerDispatch::Continue(self));
+        }
+        let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let result = run_layer_gate_text(LayerGateTextArgs {
+            root_absolute: &self.prepared.root_absolute,
+            repo_root: &repo_root,
+            layer_rules_file: self.prepared.options.layer_rules(),
+            json: self.prepared.options.json() == Some(true),
+            pretty: self.prepared.options.pretty() == Some(true),
+        })
+        .map_err(FrontdoorError::Layers)?;
+        for message in &result.reports {
+            clean_exit(host, message);
+        }
+        for payload in &result.emitted {
+            output_to(self.prepared.options.out())
+                .emit(host, payload)
+                .map_err(FrontdoorError::LayerEmit)?;
+        }
+        exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
+        Ok(LayerDispatch::Complete(result))
     }
 }

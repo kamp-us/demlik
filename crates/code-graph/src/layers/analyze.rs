@@ -1,10 +1,13 @@
 use super::{
     classify::{EdgeDirection, LayerTieError, compile_matchers, direction_of, layer_of},
-    resolve_target::{ResolvedTarget, create_target_resolver},
+    resolve_target::{ResolvedTarget, create_target_resolver, create_target_resolver_text},
     rules::LayerRules,
 };
 use crate::{
-    project::{LoadedProject, locale_compare_units, relative_path_text},
+    project::{
+        LoadedProject, join_path_text, locale_compare_units, relative_path_text,
+        relative_path_text_from,
+    },
     syntax::imports::import_literals,
     text::JsString,
 };
@@ -83,16 +86,47 @@ pub fn analyze_layers(
     repo_root: &Path,
     rules: &LayerRules,
 ) -> Result<LayerReport, LayerAnalysisError> {
+    analyze(loaded, repo_root, rules, None)
+}
+pub(super) fn analyze_layers_text(
+    loaded: &LoadedProject,
+    root_absolute: &JsString,
+    repo_root: &JsString,
+    rules: &LayerRules,
+) -> Result<LayerReport, LayerAnalysisError> {
+    let repo_native = repo_root.to_lossy();
+    analyze(
+        loaded,
+        Path::new(&repo_native),
+        rules,
+        Some((root_absolute, repo_root)),
+    )
+}
+fn analyze(
+    loaded: &LoadedProject,
+    repo_root: &Path,
+    rules: &LayerRules,
+    text: Option<(&JsString, &JsString)>,
+) -> Result<LayerReport, LayerAnalysisError> {
     let matchers = compile_matchers(&rules.layers).map_err(LayerAnalysisError::Pattern)?;
-    let mut resolver = create_target_resolver(repo_root)?;
+    let mut resolver = match text {
+        Some((_, repo)) => create_target_resolver_text(repo)?,
+        None => create_target_resolver(repo_root)?,
+    };
     let mut census = LayerCensus::default();
     let mut violations = Vec::new();
     let mut unresolved = Vec::new();
     for unit in &loaded.source_files {
-        let from = relative_path_text(
-            repo_root,
-            &unit.absolute_path.to_string_lossy().as_ref().into(),
-        )?;
+        let from = match text {
+            // The gate loaded these relative files beneath the supplied logical root.
+            Some((root, repo)) => {
+                relative_path_text_from(repo, &join_path_text(root, &unit.file.as_str().into()))?
+            }
+            None => relative_path_text(
+                repo_root,
+                &unit.absolute_path.to_string_lossy().as_ref().into(),
+            )?,
+        };
         let from_layer = layer_of(&from, &matchers)?;
         for literal in import_literals(&unit.syntax) {
             let line = unit.syntax.line_of(literal.start);

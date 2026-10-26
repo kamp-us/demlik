@@ -1,12 +1,13 @@
 //! Resolve import targets for the layer census, retaining real missing local imports.
 
 use crate::{
+    api::real_path,
     engine::oxc::{FileResolution, NearestTsconfigResolver, create_nearest_tsconfig_resolver},
     extract::package_exports::{package_name, package_source_entry, read_manifest},
     extract::wrangler_config::document::jsonc_recovered,
     project::{
         dirname_path_text, discover_package_roots, find_nearest_tsconfig, join_path_text,
-        relative_path_text,
+        relative_path_text_from,
     },
     text::JsString,
 };
@@ -82,20 +83,40 @@ pub enum ResolvedTarget {
 
 /// A resolver snapshots workspace packages at creation and caches tsconfig alias keys on use.
 pub struct TargetResolver {
-    repo_root: PathBuf,
     root_text: JsString,
-    real_root: PathBuf,
+    real_root_text: JsString,
     packages: WorkspacePackages,
     nearest: NearestTsconfigResolver,
     keys_by_config: HashMap<PathBuf, Option<Vec<JsString>>>,
 }
 
+#[derive(Clone, Copy)]
+enum ResolverRoot<'a> {
+    Native(&'a Path),
+    Text(&'a JsString),
+}
 pub fn create_target_resolver(repo_root: &Path) -> io::Result<TargetResolver> {
-    let packages = workspace_packages(repo_root, &discover_package_roots(repo_root, None));
+    create(ResolverRoot::Native(repo_root))
+}
+pub(super) fn create_target_resolver_text(repo_root: &JsString) -> io::Result<TargetResolver> {
+    create(ResolverRoot::Text(repo_root))
+}
+fn create(root: ResolverRoot<'_>) -> io::Result<TargetResolver> {
+    let (repo_native, root_text) = match root {
+        ResolverRoot::Native(path) => (
+            path.to_path_buf(),
+            JsString::from(path.to_string_lossy().as_ref()),
+        ),
+        ResolverRoot::Text(text) => (PathBuf::from(text.to_lossy()), text.clone()),
+    };
+    let packages = workspace_packages(&repo_native, &discover_package_roots(&repo_native, None));
+    let real_root_text = match root {
+        ResolverRoot::Native(path) => fs::canonicalize(path)?.to_string_lossy().as_ref().into(),
+        ResolverRoot::Text(text) => real_path(text)?,
+    };
     Ok(TargetResolver {
-        repo_root: repo_root.to_path_buf(),
-        root_text: repo_root.to_string_lossy().as_ref().into(),
-        real_root: fs::canonicalize(repo_root)?,
+        root_text,
+        real_root_text,
         packages,
         nearest: create_nearest_tsconfig_resolver(),
         keys_by_config: HashMap::new(),
@@ -120,8 +141,10 @@ impl TargetResolver {
             .resolve(Path::new(&absolute.to_lossy()), &specifier.to_lossy())
         {
             FileResolution::Path(path) => {
-                let relative =
-                    relative_path_text(&self.real_root, &path.to_string_lossy().as_ref().into())?;
+                let relative = relative_path_text_from(
+                    &self.real_root_text,
+                    &path.to_string_lossy().as_ref().into(),
+                )?;
                 let node_modules = JsString::from("node_modules");
                 if relative
                     .units()
@@ -176,7 +199,7 @@ impl TargetResolver {
             let path = Path::new(&native);
             if path.exists() && fs::metadata(path)?.is_file() {
                 return Ok(ResolvedTarget::File {
-                    file: relative_path_text(&self.repo_root, &candidate)?,
+                    file: relative_path_text_from(&self.root_text, &candidate)?,
                 });
             }
         }
