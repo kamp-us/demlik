@@ -15,6 +15,12 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "hexagon",
+    driver: "hexagon_driver",
+    script: "graph-hexagon.mts",
+    format: "process",
+  },
+  {
     name: "cli-config",
     driver: "cli_config_driver",
     script: "graph-cli-config.mts",
@@ -23,7 +29,7 @@ const suites = [
     name: "cli-frontdoor",
     driver: "cli_frontdoor_driver",
     script: "graph-cli-frontdoor.mts",
-    format: "frontdoor",
+    format: "process",
   },
   {
     name: "cli-parser",
@@ -192,6 +198,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "hexagon_driver",
   "cli_config_driver",
   "cli_frontdoor_driver",
   "cli_parser_driver",
@@ -273,7 +280,7 @@ export async function graphParity(cargo) {
     );
     const report = JSON.parse(await readFile(reportFile, "utf8"));
     const passing =
-      suite.format === "frontdoor"
+      suite.format === "process"
         ? report.cases.filter(
             (row) => row.valid !== false && row.passed === true,
           )
@@ -287,7 +294,7 @@ export async function graphParity(cargo) {
       report.cases.length,
       report.passed + report.rejectedInvalidInputs,
     );
-    if (suite.format === "frontdoor") {
+    if (suite.format === "process") {
       assert.deepEqual(report.failures, []);
       assert.equal(report.attempted, report.passed);
       assert.equal(
@@ -305,7 +312,7 @@ export async function graphParity(cargo) {
     }
     for (const answer of passing) {
       const calls =
-        suite.format === "frontdoor"
+        suite.format === "process"
           ? answer.native.trace.observedCalls
           : answer.observedCalls;
       assert.ok(
@@ -319,10 +326,10 @@ export async function graphParity(cargo) {
         `duplicate case ${id}`,
       );
       const qualified =
-        suite.format === "frontdoor"
+        suite.format === "process"
           ? answer.qualifications.length > 0
           : answer.backendOffsetQualified;
-      if (suite.format === "frontdoor") {
+      if (suite.format === "process") {
         const declared = qualified
           ? report.qualifiedNativeEvidence
           : report.nativeEvidence;
@@ -339,7 +346,7 @@ export async function graphParity(cargo) {
       steps: report.steps,
       queries: report.queries,
       functions: report.functions,
-      ...(suite.format === "frontdoor"
+      ...(suite.format === "process"
         ? {
             unqualifiedPairs: report.unqualifiedPairs,
             qualifiedPairs: report.qualifiedPairs,

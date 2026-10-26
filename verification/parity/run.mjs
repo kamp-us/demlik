@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentContentParity } from "./agent-content-run.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
+import { agentModelParity } from "./agent-model-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
@@ -26,6 +27,7 @@ import { llmCallParity } from "./llm-call-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
+import { pbtFoldParity } from "./pbt-fold-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { pollerParity } from "./poller-run.mjs";
 import { reconcilerParity } from "./reconciler-run.mjs";
@@ -39,6 +41,7 @@ import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { sagaParity } from "./saga-run.mjs";
 import { snapshotInputParity } from "./snapshot-input-run.mjs";
 import { storedCellParity } from "./stored-cell-run.mjs";
+import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
 import { workflowParity } from "./workflow-run.mjs";
@@ -112,6 +115,7 @@ assert.equal(
   scope.referenceEngine.v8,
   "the strict numeric reference requires the recorded V8 implementation",
 );
+await mkdir(path.dirname(reportFile), { recursive: true });
 const referenceChanges = execFileSync(
   "git",
   [
@@ -1007,6 +1011,24 @@ if (!mutationSuite) {
       binaryArgument: "--agent-guards-bin",
       run: agentGuardsParity,
     },
+    {
+      name: "agentModel",
+      operation: "tea.agent-model",
+      binaryArgument: "--agent-model-bin",
+      run: agentModelParity,
+    },
+    {
+      name: "pbtFold",
+      operation: "tea.pbt-fold",
+      binaryArgument: "--pbt-fold-bin",
+      run: (options) => pbtFoldParity(cargo, options),
+    },
+    {
+      name: "testingHelpers",
+      operation: "tea.testing-helpers",
+      binaryArgument: "--testing-helpers-bin",
+      run: (options) => testingHelpersParity(cargo, options),
+    },
   ];
   for (const suite of suites) {
     try {
@@ -1341,7 +1363,6 @@ const report = {
     }),
   ),
 };
-await mkdir(path.dirname(reportFile), { recursive: true });
 if (args.includes("--complete")) {
   report.coverage = await checkCoverage(
     new Map(

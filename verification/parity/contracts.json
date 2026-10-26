@@ -7794,18 +7794,25 @@
     "signature": "134fb59cef3955437b7e3f2e330d7aac16bc33e488653b9f6babf726a7fddf3a",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.hexagon.before",
       "graph.cli-parser.option.hexagon.after",
       "graph.cli-parser.option.hexagon.equal-is-unknown",
-      "graph.cli-parser.option.hexagon.negated-is-unknown"
+      "graph.cli-parser.option.hexagon.negated-is-unknown",
+      "graph.hexagon.cli.fixture-full-text",
+      "graph.hexagon.cli.fixture-full-json",
+      "graph.hexagon.cli.fixture-full-pretty"
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
       "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
-    ]
+    ],
+    "nativeProfile": "Native typed option parsing plus exact actual-process hexagon early-dispatch observations. Full-entrypoint and remaining-mode gaps remain explicit."
   },
   "@demlik/code-graph:cli:option:--tree": {
     "signature": "31d228b06c755b403fe0e1d5163c3be0a6db6bdeaaff3d5b8de81e71c0db6e3e",
@@ -9129,5 +9136,639 @@
       "command-input.snapshot.negative-zero.json"
     ],
     "nativeProfile": "Caller-owned decode_input route retains consumed-field presence/order, known opaque handles and unknown plain fields. The unchanged static generic parse_input route still refuses; it is not used by this binding. Decoders and wire codecs belong to the application. Arbitrary mutable unknown JS heap references/getters/prototypes/cycles remain qualified."
+  },
+  "@demlik/tea:./agent#Llm": {
+    "signature": "6b76b8a321f46324a7e26a7e5b2502b8ff1d9e443f3876342749592a1a1dcb1e",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": ["demlik_tea::agent::model::BrainHandler::handle"]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.factory-failure-bind",
+      "agent-model.promise-factory-success",
+      "agent-model.effect-factory-invoke"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#Llm/member:published:38fd39df0307a0752209391009dbdb341332244158b9a7dd9577f0f5a4198570": {
+    "signature": "38fd39df0307a0752209391009dbdb341332244158b9a7dd9577f0f5a4198570",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": ["demlik_tea::agent::model::BrainHandler::handle"]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.factory-failure-bind",
+      "agent-model.promise-factory-success",
+      "agent-model.effect-factory-invoke"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#Llm/member:published:00543f38d0950ad2dc56977d673bdb4a8d13fe805392cda6f88f8778ecf44a99": {
+    "signature": "00543f38d0950ad2dc56977d673bdb4a8d13fe805392cda6f88f8778ecf44a99",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": ["demlik_tea::agent::model::BrainHandler::handle"]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.factory-failure-bind",
+      "agent-model.promise-factory-success",
+      "agent-model.effect-factory-invoke"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#MessageLoader": {
+    "signature": "1229fb9d6a6a03d1930d4a11c0ed96e0f1826d71b49866d1d4b20490a3fd2fed",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::BrainPorts::with_loader",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.factory-failure-loader",
+      "agent-model.plain-shared-loaded-repeated",
+      "agent-model.promise-plain-success"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#MessageLoader/member:published:3a1f16b2106c99619fc63e45eb97a16378e6cfd10dde09f465a5e5060a5e3163": {
+    "signature": "3a1f16b2106c99619fc63e45eb97a16378e6cfd10dde09f465a5e5060a5e3163",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::BrainPorts::with_loader",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.factory-failure-loader",
+      "agent-model.plain-shared-loaded-repeated",
+      "agent-model.promise-plain-success"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#ModelFactory": {
+    "signature": "39723f84ee3767f2ac8d0ee56e2572173593dea9d9f821f8d69c94fc9a7d5868",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::model_factory",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.factory-failure-factory",
+      "agent-model.factory-unicode"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#ModelFactory/member:published:3c708d9b394442a8d9d07ecaade0e29707c2eff64fd9bd76fbc003f70931f12c": {
+    "signature": "3c708d9b394442a8d9d07ecaade0e29707c2eff64fd9bd76fbc003f70931f12c",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::model_factory",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.factory-failure-factory",
+      "agent-model.factory-unicode"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#ModelPort": {
+    "signature": "8b827ceb53217966bc1791e1eb3f31696aa1d3cc25ffb49f7bab4ae52073ca70",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::model_factory",
+        "demlik_tea::agent::model::plain_model",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.factory-loaded-transform-raw",
+      "agent-model.plain-loaded-transform-raw",
+      "agent-model.wrapped-loaded-transform-raw"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#PlainModel": {
+    "signature": "b239ee109b220cb18ca1fe7d914d757885bf1846b979a426cbc425296888c541",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::plain_model",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.plain-loaded-transform-raw",
+      "agent-model.wrapped-loaded-transform-raw",
+      "agent-model.plain-second-parse-failure"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#PlainModel/member:published:f7dbef52b44522bf5380b17243c5a91508b1171ab9480c07b228fc218ad5426f": {
+    "signature": "f7dbef52b44522bf5380b17243c5a91508b1171ab9480c07b228fc218ad5426f",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::plain_model",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.plain-loaded-transform-raw",
+      "agent-model.wrapped-loaded-transform-raw",
+      "agent-model.plain-second-parse-failure"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./agent#PLAIN_MODEL_MISROUTE_REASON": {
+    "signature": "2e66731facce2c26d47061d0a4c5f49a11163cccfd91114a13e4f56a62d29237",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": ["demlik_tea::agent::model::PLAIN_MODEL_MISROUTE_REASON"]
+    },
+    "cases": ["agent-model.vocabulary"],
+    "nativeProfile": "Exact exported reason vocabulary only. Native factory return types prevent the Source JS thenable misroute; this mapping does not claim dynamic misroute handling."
+  },
+  "@demlik/tea:./agent#plainModel": {
+    "signature": "171010f3013e97c95e275c7f1f9b07e9e7c2544232f6dc93a203d7f35b03ddce",
+    "rust": {
+      "file": "crates/tea/src/agent/model.rs",
+      "symbols": [
+        "demlik_tea::agent::model::plain_model",
+        "demlik_tea::agent::model::BrainHandler::handle"
+      ]
+    },
+    "cases": [
+      "agent-model.wrapped-loaded-transform-raw",
+      "agent-model.wrapped-failure-parse1",
+      "agent-model.wrapped-second-schema"
+    ],
+    "nativeProfile": "Explicit native plain/factory kinds, borrowed local futures and declared Result causes; controlled awaited scripts only. Supplied parsers share the caller-owned Schema cause family (the builtin/host-family adapter is demonstrated in the actual native consumer). MessageLoader receives the original &Rc<Request> and can retain it without cloning opaque payloads. JS function tags/arity/thenables/getters/prototypes/mutable methods/eager Promise prefixes and native panic-vs-Result are separately measured Source-only profiles, not native strict evidence. No provider/SDK/agent machine/streaming host claim.",
+    "knownGaps": [
+      "OPEN: native supported RunInput::Missing/Undefined returns LlmCallError::MissingInput; frozen brainHandler catches TypeError and returns port_rejected. Actual agent-model.input-missing/input-undefined observations are qualified, excluded from strict/nativeEvidence, and remain unresolved for the overall port."
+    ]
+  },
+  "@demlik/tea:./pbt#foldEvents": {
+    "signature": "131b4d3af7a6d6063de5bd455bc0c32e266e3534ee65c51a912692f02be69b25",
+    "rust": {
+      "file": "crates/tea/src/pbt.rs",
+      "symbols": ["fold_events"]
+    },
+    "cases": [
+      "pbt-fold.reducer.empty-fresh",
+      "pbt-fold.reducer.empty-loaded",
+      "pbt-fold.reducer.ordered-and-terminal",
+      "pbt-fold.reducer.loaded-transform",
+      "pbt-fold.reducer.no-subs",
+      "pbt-fold.reducer.unknown",
+      "pbt-fold.reducer.init-error",
+      "pbt-fold.reducer.subs-error",
+      "pbt-fold.reducer.update-error",
+      "pbt-fold.reducer.negative-zero",
+      "pbt-fold.reducer.nonfinite",
+      "pbt-fold.transitions.empty-fresh",
+      "pbt-fold.transitions.empty-loaded",
+      "pbt-fold.transitions.ordered-and-terminal",
+      "pbt-fold.transitions.loaded-transform",
+      "pbt-fold.transitions.no-subs",
+      "pbt-fold.transitions.unknown",
+      "pbt-fold.transitions.init-error",
+      "pbt-fold.transitions.subs-error",
+      "pbt-fold.transitions.update-error",
+      "pbt-fold.transitions.negative-zero",
+      "pbt-fold.transitions.nonfinite",
+      "pbt-fold.transitions.terminal-refusal",
+      "pbt-fold.disambiguated.empty-fresh",
+      "pbt-fold.disambiguated.empty-loaded",
+      "pbt-fold.disambiguated.ordered-and-terminal",
+      "pbt-fold.disambiguated.loaded-transform",
+      "pbt-fold.disambiguated.no-subs",
+      "pbt-fold.disambiguated.unknown",
+      "pbt-fold.disambiguated.init-error",
+      "pbt-fold.disambiguated.subs-error",
+      "pbt-fold.disambiguated.update-error",
+      "pbt-fold.disambiguated.negative-zero",
+      "pbt-fold.disambiguated.nonfinite",
+      "pbt-fold.disambiguated.terminal-refusal",
+      "pbt-fold.intake.duplicate-complete-boot-eight",
+      "pbt-fold.intake.pending-never-expires",
+      "pbt-fold.intake.ttl-half-open",
+      "pbt-fold.intake.running-resume-retained",
+      "pbt-fold.intake.done-before-crash-retained",
+      "pbt-fold.intake.running-resume-json",
+      "pbt-fold.intake.done-before-crash-json",
+      "pbt-fold.intake.empty-loaded-boot"
+    ],
+    "nativeProfile": "One faithful replay boot, then existing Update::apply for every input message; boot commands excluded; pure initial subscription/error/refusal and original-handle behavior. Fixed sequences only. Native trace bookkeeping Arcs and caller-owned inner state/message/payload handles are verified separately. Fixed sequences only; no generation/shrinking/property-runner claim."
+  },
+  "@demlik/tea:./pbt#Step": {
+    "signature": "43a56468080f900e6c388bb3d12d2bc5da51773bb2ba61938e60259968a8d1a7",
+    "rust": {
+      "file": "crates/tea/src/pbt.rs",
+      "symbols": ["fold_events"]
+    },
+    "cases": [
+      "pbt-fold.reducer.ordered-and-terminal",
+      "pbt-fold.reducer.loaded-transform",
+      "pbt-fold.reducer.no-subs",
+      "pbt-fold.reducer.negative-zero",
+      "pbt-fold.reducer.nonfinite",
+      "pbt-fold.transitions.ordered-and-terminal",
+      "pbt-fold.transitions.loaded-transform",
+      "pbt-fold.transitions.no-subs",
+      "pbt-fold.transitions.negative-zero",
+      "pbt-fold.transitions.nonfinite",
+      "pbt-fold.disambiguated.ordered-and-terminal",
+      "pbt-fold.disambiguated.loaded-transform",
+      "pbt-fold.disambiguated.no-subs",
+      "pbt-fold.disambiguated.negative-zero",
+      "pbt-fold.disambiguated.nonfinite",
+      "pbt-fold.intake.duplicate-complete-boot-eight",
+      "pbt-fold.intake.pending-never-expires",
+      "pbt-fold.intake.ttl-half-open",
+      "pbt-fold.intake.running-resume-retained",
+      "pbt-fold.intake.done-before-crash-retained",
+      "pbt-fold.intake.running-resume-json",
+      "pbt-fold.intake.done-before-crash-json"
+    ],
+    "nativeProfile": "Actual returned prev/msg/next/commands fields read in compiled consumers. Adjacent/final bookkeeping Arc links and inner caller-chosen model/payload/message identities checked separately. Native trace bookkeeping Arcs and caller-owned inner state/message/payload handles are verified separately. Fixed sequences only; no generation/shrinking/property-runner claim."
+  },
+  "@demlik/tea:./testing#expectFinalState": {
+    "signature": "7d014f9f207549b8ee19b7b427eebb4d379c9f2b24ef31652183edb01e43666f",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::expect_final_state"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.final",
+      "testing-helpers.free.counter.final-mismatch",
+      "testing-helpers.free.counter.nan",
+      "testing-helpers.free.counter.signed-zero-mismatch",
+      "testing-helpers.free.counter.transitions-final",
+      "testing-helpers.free.counter.disambiguated-final",
+      "testing-helpers.free.counter.failure-init",
+      "testing-helpers.free.counter.failure-update",
+      "testing-helpers.free.counter.failure-subs",
+      "testing-helpers.free.counter.final-refusal",
+      "testing-helpers.free.counter.final-matcher-error",
+      "testing-helpers.free.counter.final-matcher-panic",
+      "testing-helpers.free.poller.final",
+      "testing-helpers.free.poller.final-mismatch",
+      "testing-helpers.free.poller.mid-state"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::expect_final_state. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#expectCmdEmitted": {
+    "signature": "e1330eb9d044ef4468bdcabf35fa066e269bf3c61c7ca59c02400d16600a8ebd",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::expect_cmd_emitted"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.contains-middle",
+      "testing-helpers.free.counter.contains-miss",
+      "testing-helpers.free.counter.empty-contains",
+      "testing-helpers.free.counter.contains-refusal",
+      "testing-helpers.free.counter.contains-matcher-error",
+      "testing-helpers.free.counter.contains-matcher-panic",
+      "testing-helpers.free.poller.contains"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::expect_cmd_emitted. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#expectCmdSequence": {
+    "signature": "eac7e81bcec326a547011b41c7eaa1569cefe715004d795b930ce64db15d8d13",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::expect_cmd_sequence"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.sequence",
+      "testing-helpers.free.counter.sequence-reordered",
+      "testing-helpers.free.counter.sequence-short",
+      "testing-helpers.free.counter.empty-sequence",
+      "testing-helpers.free.counter.loaded",
+      "testing-helpers.free.counter.commands-refusal",
+      "testing-helpers.free.counter.commands-matcher-error",
+      "testing-helpers.free.counter.commands-matcher-panic",
+      "testing-helpers.free.poller.sequence",
+      "testing-helpers.free.poller.sequence-short",
+      "testing-helpers.free.poller.loaded"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::expect_cmd_sequence. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#expectActiveSubs": {
+    "signature": "0cc687be2cf954bc377e7a3c261421f79fa2923b41ab6f8e6b4f322d3942acd5",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::expect_active_subs"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.subs",
+      "testing-helpers.free.counter.subs-reordered",
+      "testing-helpers.free.counter.subs-short",
+      "testing-helpers.free.counter.empty-subs",
+      "testing-helpers.free.counter.subs-refusal",
+      "testing-helpers.free.counter.subs-matcher-error",
+      "testing-helpers.free.counter.subs-matcher-panic",
+      "testing-helpers.free.poller.subs-done",
+      "testing-helpers.free.poller.subs-mid"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::expect_active_subs. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#step": {
+    "signature": "80d1e78bac2c522d3f43564ffc108cf678b5e78a9a349fc78b398bd32a3789fb",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::step"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.step",
+      "testing-helpers.free.counter.signed-zero",
+      "testing-helpers.free.counter.transitions-step",
+      "testing-helpers.free.counter.disambiguated-step",
+      "testing-helpers.free.poller.step"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::step. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#bindMachine": {
+    "signature": "23b4dc250ebc340a26152e429549a53af0477ad4157d89ecc1f5d0dc5ad84941",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::bind_machine"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.step",
+      "testing-helpers.bound.counter.final",
+      "testing-helpers.bound.counter.final-mismatch",
+      "testing-helpers.bound.counter.contains-middle",
+      "testing-helpers.bound.counter.contains-miss",
+      "testing-helpers.bound.counter.sequence",
+      "testing-helpers.bound.counter.sequence-reordered",
+      "testing-helpers.bound.counter.sequence-short",
+      "testing-helpers.bound.counter.subs",
+      "testing-helpers.bound.counter.subs-reordered",
+      "testing-helpers.bound.counter.subs-short",
+      "testing-helpers.bound.counter.empty-sequence",
+      "testing-helpers.bound.counter.empty-contains",
+      "testing-helpers.bound.counter.empty-subs",
+      "testing-helpers.bound.counter.loaded",
+      "testing-helpers.bound.counter.nan",
+      "testing-helpers.bound.counter.signed-zero",
+      "testing-helpers.bound.counter.signed-zero-mismatch",
+      "testing-helpers.bound.counter.transitions-step",
+      "testing-helpers.bound.counter.transitions-final",
+      "testing-helpers.bound.counter.disambiguated-step",
+      "testing-helpers.bound.counter.disambiguated-final",
+      "testing-helpers.bound.counter.failure-init",
+      "testing-helpers.bound.counter.failure-update",
+      "testing-helpers.bound.counter.failure-subs",
+      "testing-helpers.bound.counter.final-refusal",
+      "testing-helpers.bound.counter.final-matcher-error",
+      "testing-helpers.bound.counter.final-matcher-panic",
+      "testing-helpers.bound.counter.contains-refusal",
+      "testing-helpers.bound.counter.contains-matcher-error",
+      "testing-helpers.bound.counter.contains-matcher-panic",
+      "testing-helpers.bound.counter.commands-refusal",
+      "testing-helpers.bound.counter.commands-matcher-error",
+      "testing-helpers.bound.counter.commands-matcher-panic",
+      "testing-helpers.bound.counter.subs-refusal",
+      "testing-helpers.bound.counter.subs-matcher-error",
+      "testing-helpers.bound.counter.subs-matcher-panic",
+      "testing-helpers.bound.counter.replay",
+      "testing-helpers.bound.poller.step",
+      "testing-helpers.bound.poller.final",
+      "testing-helpers.bound.poller.final-mismatch",
+      "testing-helpers.bound.poller.contains",
+      "testing-helpers.bound.poller.sequence",
+      "testing-helpers.bound.poller.sequence-short",
+      "testing-helpers.bound.poller.subs-done",
+      "testing-helpers.bound.poller.subs-mid",
+      "testing-helpers.bound.poller.mid-state",
+      "testing-helpers.bound.poller.loaded",
+      "testing-helpers.bound.poller.replay",
+      "testing-helpers.bound.poller.replay-loaded"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::bind_machine. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:1561efb78574f7d98553bb034343c9602ebfa26a1a1776071c591b3cd6e6fec9": {
+    "signature": "1561efb78574f7d98553bb034343c9602ebfa26a1a1776071c591b3cd6e6fec9",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::step"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.step",
+      "testing-helpers.bound.counter.signed-zero",
+      "testing-helpers.bound.counter.transitions-step",
+      "testing-helpers.bound.counter.disambiguated-step",
+      "testing-helpers.bound.poller.step"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::step. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:8003f6666e61a35581eb2eec6d94ccf7662350c0b285f01320dc664f366ab11d": {
+    "signature": "8003f6666e61a35581eb2eec6d94ccf7662350c0b285f01320dc664f366ab11d",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::expect_final_state"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.final",
+      "testing-helpers.bound.counter.final-mismatch",
+      "testing-helpers.bound.counter.nan",
+      "testing-helpers.bound.counter.signed-zero-mismatch",
+      "testing-helpers.bound.counter.transitions-final",
+      "testing-helpers.bound.counter.disambiguated-final",
+      "testing-helpers.bound.counter.failure-init",
+      "testing-helpers.bound.counter.failure-update",
+      "testing-helpers.bound.counter.failure-subs",
+      "testing-helpers.bound.counter.final-refusal",
+      "testing-helpers.bound.counter.final-matcher-error",
+      "testing-helpers.bound.counter.final-matcher-panic",
+      "testing-helpers.bound.poller.final",
+      "testing-helpers.bound.poller.final-mismatch",
+      "testing-helpers.bound.poller.mid-state"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::expect_final_state. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:d17edba75489b1d879cb7e95d0283ed1458cec27ce20cbf821d0e4fa3ea7adb5": {
+    "signature": "d17edba75489b1d879cb7e95d0283ed1458cec27ce20cbf821d0e4fa3ea7adb5",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::expect_cmd_emitted"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.contains-middle",
+      "testing-helpers.bound.counter.contains-miss",
+      "testing-helpers.bound.counter.empty-contains",
+      "testing-helpers.bound.counter.contains-refusal",
+      "testing-helpers.bound.counter.contains-matcher-error",
+      "testing-helpers.bound.counter.contains-matcher-panic",
+      "testing-helpers.bound.poller.contains"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::expect_cmd_emitted. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:e7f3d38a3720efb9c74385b1e0c1b9061249efcb6281b060fe54d877d3fdd77d": {
+    "signature": "e7f3d38a3720efb9c74385b1e0c1b9061249efcb6281b060fe54d877d3fdd77d",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::expect_cmd_sequence"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.sequence",
+      "testing-helpers.bound.counter.sequence-reordered",
+      "testing-helpers.bound.counter.sequence-short",
+      "testing-helpers.bound.counter.empty-sequence",
+      "testing-helpers.bound.counter.loaded",
+      "testing-helpers.bound.counter.commands-refusal",
+      "testing-helpers.bound.counter.commands-matcher-error",
+      "testing-helpers.bound.counter.commands-matcher-panic",
+      "testing-helpers.bound.poller.sequence",
+      "testing-helpers.bound.poller.sequence-short",
+      "testing-helpers.bound.poller.loaded"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::expect_cmd_sequence. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:57160818dd3ca269179cea5260f9f0fd1d0a3387e515924d1fa784bb50935cb7": {
+    "signature": "57160818dd3ca269179cea5260f9f0fd1d0a3387e515924d1fa784bb50935cb7",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::expect_active_subs"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.subs",
+      "testing-helpers.bound.counter.subs-reordered",
+      "testing-helpers.bound.counter.subs-short",
+      "testing-helpers.bound.counter.empty-subs",
+      "testing-helpers.bound.counter.subs-refusal",
+      "testing-helpers.bound.counter.subs-matcher-error",
+      "testing-helpers.bound.counter.subs-matcher-panic",
+      "testing-helpers.bound.poller.subs-done",
+      "testing-helpers.bound.poller.subs-mid"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::expect_active_subs. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine/member:published:da3d7270a22084d60329a935f1cd5aa0688281e1e913a50b6c204fc0a390ea33": {
+    "signature": "da3d7270a22084d60329a935f1cd5aa0688281e1e913a50b6c204fc0a390ea33",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["BoundMachine::replay"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.replay",
+      "testing-helpers.bound.poller.replay",
+      "testing-helpers.bound.poller.replay-loaded"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine::replay. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies."
+    ]
+  },
+  "@demlik/tea:./testing#ReplayOpts": {
+    "signature": "ffe4b6c0b518d330ce8b75c48eefe887bc77097c612d01311bc3c67b58574883",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::expect_final_state", "BoundMachine::replay"]
+    },
+    "cases": [
+      "testing-helpers.free.counter.final",
+      "testing-helpers.free.poller.final",
+      "testing-helpers.bound.counter.replay",
+      "testing-helpers.bound.poller.replay-loaded"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::ReplayOpts. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies. Native ReplayOpts carries loaded+msgs while the context is supplied separately/captured; the iterator is consumed without Clone."
+    ]
+  },
+  "@demlik/tea:./testing#BoundMachine": {
+    "signature": "32abcac1081ceb67b3103914ce6c354990fc9eaaaaed4eb0e9a25bc5192054ea",
+    "rust": {
+      "file": "crates/tea/src/testing.rs",
+      "symbols": ["testing::bind_machine"]
+    },
+    "cases": [
+      "testing-helpers.bound.counter.step",
+      "testing-helpers.bound.counter.replay",
+      "testing-helpers.bound.poller.sequence"
+    ],
+    "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
+    "knownGaps": [
+      "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies. Native bound surface borrows machine/context; matchers are supplied per assertion and never retained."
+    ]
   }
 }

@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-26T01:20:37.721357+00:00",
+  "scope": "Local combined agent model ports, per-message fold traces, hexagon CLI continuation and explicit pure testing helpers. Full Rust monorepo goal remains incomplete.",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "headBeforeReceipt": "9c8f5ea6653846c06a68edd74039746010064c1b",
+  "priorAcceptedCheckpoint": "8c81cd6d378440b81a929e13c355f6d8b5b5d682",
+  "crossLanguage": {
+    "report": "target/parity/model-fold-hex-helpers/report-before-controls.json",
+    "sha256": "8cb4e4e2f47a44d938264e7bb3622ad14c13113e1d2471b538091b8f68c56ae2",
+    "cases": 13320,
+    "passed": 13320,
+    "failures": 0,
+    "sourceChanges": 0,
+    "declaredTestingComparisonViews": 97,
+    "helperEqualityScope": "Only the explicit comparison view is equal; full Source/native diagnostics and five suite qualifications remain retained. No universal Vitest/DEV/traversal/diagnostic equality claim.",
+    "nativeEvidenceCases": 13247,
+    "qualifiedRawCases": 73,
+    "qualificationCounts": {
+      "cliFrontdoor": 35,
+      "hexagon": 14,
+      "git": 15,
+      "apiMode": 4,
+      "rawGoBackendOffsetsThisRun": 5
+    },
+    "excludedModelInputOpenObservations": 2,
+    "completeExitCode": 1,
+    "completeExitReason": "2741 explicit uncovered or known-gap rows; no behavioral failure.",
+    "actualExitRecord": "target/parity/model-fold-hex-helpers-complete-exit.json"
+  },
+  "native": {
+    "allTargetsAndDocs": 530,
+    "unitAndIntegration": 504,
+    "doctests": 26,
+    "compileFailDocs": 24,
+    "runnableDocs": 2,
+    "clippyAllTargetsDenyWarnings": true,
+    "fmtAll": true,
+    "extraRustTyping": {
+      "modelIntendedRefusals": 3,
+      "helperPositive": 1,
+      "helperIntendedRefusals": 4
+    },
+    "sourceExpectedTypeErrors": 4
+  },
+  "static": {
+    "parityTypecheck": true,
+    "parityLint": true,
+    "evidenceGuardsPassed": 11,
+    "gitDiffCheck": true
+  },
+  "affectedFaultChecks": {
+    "groups": [
+      {
+        "name": "model",
+        "startedAt": "2026-10-26T00:56:48.928012+00:00",
+        "finishedAt": "2026-10-26T00:58:15.796092+00:00",
+        "exitCode": 0,
+        "compiledFaults": 14,
+        "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/agent-model-mutations.json",
+        "sha256": "48154ababef667c2304ef974739c5d9ed25e282105f65a5beb2ecb3b60bdeedc"
+      },
+      {
+        "name": "fold",
+        "startedAt": "2026-10-26T00:58:15.796980+00:00",
+        "finishedAt": "2026-10-26T00:59:23.963173+00:00",
+        "exitCode": 0,
+        "compiledFaults": 4,
+        "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-fold-controls.json",
+        "sha256": "0772542f26afce40f780760802011e40b17f891685186e5bf0e588eca5256af4"
+      },
+      {
+        "name": "hexagon",
+        "startedAt": "2026-10-26T00:59:23.972185+00:00",
+        "finishedAt": "2026-10-26T01:05:28.668403+00:00",
+        "exitCode": 0,
+        "compiledFaults": 39,
+        "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/hexagon-mutations.json",
+        "sha256": "f5a7fc3b24704932ecdd3693af9df3b71dc61b4651c94837bcbb004f0019a8ee"
+      },
+      {
+        "name": "testing-helpers",
+        "startedAt": "2026-10-26T01:12:21.482347+00:00",
+        "finishedAt": "2026-10-26T01:13:56.870715+00:00",
+        "exitCode": 0,
+        "compiledFaults": 5,
+        "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/testing-helpers-controls.json",
+        "sha256": "14d94cf3296ece7acae0b2c7f27339c9cd5bb2321e05c1bbda536abdd16d9909"
+      }
+    ],
+    "compiledFaults": 62,
+    "escaped": 0,
+    "prior180AcceptedFaults": "Not rerun without an affected production-owner change; prior archived receipt remains valid.",
+    "semanticDetectionOnly": true,
+    "plan": "/private/tmp/demlik-model-fold-hex-main-controls-plan-01a16c9d.json",
+    "planSha256": "3b4253e964fc5b87f46ddf02532e0b9204a92cfdd4cc7a87db35e322961d783c",
+    "collectorCorrection": {
+      "originalExecExit": 1,
+      "originalGroupExit": 0,
+      "scope": "Only post-run result collector expected witness as a string, but hexagon report stores the actual case object. All39controls already compiled and detected, independently revalidated. No source/test/controller edits or semantic rerun.",
+      "field": "controls[].witness.id",
+      "priorPlan": "/private/tmp/demlik-model-fold-hex-main-controls-plan-before-witness-fix-01a16c9d.json",
+      "priorPlanSha256": "f0f422424a26bd12aee015ec10a2743ba97a3d2290e0bf214c5e12771632fe05"
+    }
+  },
+  "integrity": {
+    "checkedSourceFilesUnchanged": 2184,
+    "baselineExecutablesUnchanged": 1089,
+    "sourceAndExecutableManifest": "target/parity/model-fold-hex-helpers-before-checks.json",
+    "manifestSha256": "44407135ad4cd84868a067d8b0d5940fa37088fdcac275cce95ef701fbfa9124",
+    "sourceAndFileAdditionsAudited": true,
+    "completionAudit": "target/parity/model-fold-hex-helpers-after-controls-audit.json",
+    "completionAuditSha256": "3b4253e964fc5b87f46ddf02532e0b9204a92cfdd4cc7a87db35e322961d783c"
+  },
+  "coverage": {
+    "inventory": 3445,
+    "mappings": 796,
+    "inheritedReferences": 14,
+    "gapRows": 2741,
+    "all53CliKnownGapsRetained": true,
+    "newModelKnownGapMappings": 11,
+    "newHelperKnownGapMappings": 14
+  },
+  "archives": {
+    "preControls": {
+      "manifest": "target/parity/history/9c8f5ea6-model-fold-hex-helpers-before-controls/manifest.json",
+      "sha256": "fa2e7a2a21647ef7856c2c30ad1e4d2b6d3a7c42115c943401632c719168f6ac",
+      "files": 105
+    },
+    "controls": {
+      "manifest": "target/parity/history/9c8f5ea6-model-fold-hex-helpers-controls/manifest.json",
+      "sha256": "b3cefe5e7add2f9ea630b379a340f0b5f64c693eeac57ba41abc5a37e07cf229",
+      "files": 44,
+      "bytes": 44751579
+    },
+    "firstAttemptInfrastructureFailures": {
+      "manifest": "target/parity/history/cb901d8c-model-fold-hex-first-attempt/manifest.json",
+      "sha256": "2c3f1df9149e7da4c5e5cef739021cf4b61d0ae5d0ef5feda91084d101dddfd3",
+      "scope": "Two ENOENT report-write failures and outer relative-output lookup, fixed by moving mkdir before child suites and using an absolute fresh directory. New full run verified runtime16 and2process results. No behavioral detection credited for infrastructure failures."
+    }
+  },
+  "blindSpots": [
+    "Full monorepo still unfinished: agent state/factory/tools/providers, remaining CLI modes, generators and host adapters/packaging.",
+    "Two supported malformed model input outcomes remain OPEN and excluded from strict/native evidence.",
+    "Native scheduling/tag/host/backend profiles and comparison qualifications remain explicit; counts are not completion percentages."
+  ]
+}

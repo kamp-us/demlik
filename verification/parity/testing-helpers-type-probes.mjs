@@ -33,6 +33,7 @@ const body = `fn channels(machine:&Machine<'_,State,Msg,Cmd,Sub,Context>,ctx:&Co
 `;
 export function testingHelperTypeProbes({
   rlib,
+  dependencyDirectory,
   reportFile = "target/parity/testing-helpers-type-probes.json",
 } = {}) {
   assert(rlib, "compiled demlik_tea rlib required");
@@ -92,7 +93,7 @@ export function testingHelperTypeProbes({
           "--extern",
           `demlik_tea=${rlib}`,
           "-L",
-          `dependency=${dirname(rlib)}`,
+          `dependency=${dependencyDirectory ?? dirname(rlib)}`,
           source,
           "-o",
           join(temporary, `${p.id}.rmeta`),
@@ -120,6 +121,7 @@ export function testingHelperTypeProbes({
   assert.equal(version.status, 0, version.stderr);
   const report = {
     compiler: version.stdout.trim(),
+    dependencyDirectory: dependencyDirectory ?? dirname(rlib),
     rlib: { path: rlib, sha256: digest(readFileSync(rlib)) },
     positive: 1,
     negative: 4,
@@ -136,11 +138,16 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   const { values } = parseArgs({
-    options: { rlib: { type: "string" }, report: { type: "string" } },
+    options: {
+      rlib: { type: "string" },
+      deps: { type: "string" },
+      report: { type: "string" },
+    },
     strict: true,
   });
   const r = testingHelperTypeProbes({
     rlib: values.rlib,
+    dependencyDirectory: values.deps,
     reportFile: values.report,
   });
   console.log(

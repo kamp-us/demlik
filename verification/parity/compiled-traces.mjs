@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -41,9 +41,34 @@ const reportFormats = {
 };
 
 export async function compiledTraceParity(cargo, name, options = {}) {
+  const scope = JSON.parse(
+    await readFile(path.join(here, "scope.json"), "utf8"),
+  );
+  assert.equal(process.version, scope.referenceEngine.node);
+  assert.equal(process.versions.v8, scope.referenceEngine.v8);
   const formatName = options.format ?? "trace";
   assert.ok(Object.hasOwn(reportFormats, formatName), "unknown report format");
   const format = reportFormats[formatName];
+  let binary = options.binary;
+  if (!binary && options.example) {
+    execFileSync(
+      cargo,
+      [
+        "build",
+        "--locked",
+        "-p",
+        options.example.package,
+        "--example",
+        options.example.name,
+      ],
+      { cwd: root, stdio: "inherit" },
+    );
+    binary = path.join(
+      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
+      "debug/examples",
+      options.example.name,
+    );
+  }
   const reportFile =
     options.reportFile ?? path.join(root, `target/parity/${name}.json`);
   await mkdir(path.dirname(reportFile), { recursive: true });
@@ -56,7 +81,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
       path.join(here, `${name}.mts`),
       "--report",
       reportFile,
-      ...(options.binary ? [format.binaryArgument, options.binary] : []),
+      ...(binary ? [format.binaryArgument, binary] : []),
       ...(options.mutation ? ["--mutation-check"] : []),
     ],
     {
