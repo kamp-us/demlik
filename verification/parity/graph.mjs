@@ -54,6 +54,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-env-keys",
+    driver: "env_keys_cli_driver",
+    script: "graph-cli-env-keys.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",

@@ -13,12 +13,14 @@ import {
   agentStateFanoutParity,
   agentStateParity,
   agentStatePrerequisiteParity,
+  agentStatusCheckpointParity,
 } from "./agent-state-parity.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { commandInputParity } from "./command-input-run.mjs";
+import { composeCheckpointParity } from "./compose-run.mjs";
 import { checkCoverage } from "./coverage.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
@@ -1066,6 +1068,18 @@ if (!mutationSuite) {
       operation: "tea.agent-base-knob",
       binaryArgument: "--agent-base-bin",
       run: (options) => agentBaseCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentStatus",
+      operation: "tea.agent-status",
+      binaryArgument: "--agent-status-bin",
+      run: (options) => agentStatusCheckpointParity(cargo, options),
+    },
+    {
+      name: "compose",
+      operation: "tea.composition",
+      binaryArgument: "--compose-bin",
+      run: (options) => composeCheckpointParity(cargo, options),
     },
     {
       name: "testingHelpers",

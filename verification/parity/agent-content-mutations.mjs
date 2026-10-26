@@ -85,7 +85,7 @@ const controls = [
     file: transcript,
     edits: [
       [
-        "state.turns = conversation.turns.clone();",
+        "state.turns = conversation.turns.as_ref().clone();",
         "state.turns = Vec::new();",
       ],
     ],
@@ -110,7 +110,7 @@ const controls = [
         "TranscriptOutcome::Ended(Rc::clone(status)),",
         `TranscriptOutcome::Ended(Rc::new(match status.as_ref() {
  AgentEndedStatus::Done {output,usage} => AgentEndedStatus::Done {output:output.clone(),usage:Rc::clone(usage)},
- AgentEndedStatus::Failed {failure} => AgentEndedStatus::Failed {failure:Rc::clone(failure)},
+ AgentEndedStatus::Failed {failure} => AgentEndedStatus::Failed {failure:failure.clone()},
  AgentEndedStatus::Cancelled {at} => AgentEndedStatus::Cancelled {at:*at},
  })),`,
       ],
@@ -145,7 +145,7 @@ const controls = [
     edits: [
       [
         '("kind", PlainData::String("done".into())),',
-        '("kind", PlainData::String(if output.is_none() {"running"}else{"done"}.into())),',
+        '("kind", PlainData::String(if matches!(output, AgentField::Value(None)) {"running"}else{"done"}.into())),',
       ],
     ],
     ids: ["agent-transcript.ending-0"],

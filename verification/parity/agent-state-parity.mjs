@@ -31,6 +31,11 @@ const checkpoints = {
     module: "agent-base-run.mjs",
     run: "agentBaseParity",
   },
+  status: {
+    driver: "agent_status_driver",
+    module: "agent-status-run.mjs",
+    run: "agentStatusParity",
+  },
 };
 
 async function checkpointParity(cargo, name, options = {}) {
@@ -100,13 +105,26 @@ async function checkpointParity(cargo, name, options = {}) {
     const library = await artifact(
       libraries[0].filenames.find((file) => file.endsWith(".rlib")),
     );
+    const selectedLibraries = { demlik_tea: library };
+    if (name === "status") {
+      const jsonLibraries = events.filter(
+        (event) =>
+          event.reason === "compiler-artifact" &&
+          event.target.name === "serde_json" &&
+          event.target.kind.includes("lib"),
+      );
+      assert.equal(jsonLibraries.length, 1);
+      selectedLibraries.serde_json = await artifact(
+        jsonLibraries[0].filenames.find((file) => file.endsWith(".rlib")),
+      );
+    }
     binary = `${reportFile}.${executable.sha256}.bin`;
     await copyFile(executable.path, binary);
     cargoArtifacts = {
       file,
       command: [cargo, ...args],
       executable,
-      libraries: { demlik_tea: library },
+      libraries: selectedLibraries,
     };
   }
   const child = spawnSync(
@@ -156,6 +174,8 @@ export const agentStateFanoutParity = (cargo, options) =>
   checkpointParity(cargo, "fanout", options);
 export const agentBaseCheckpointParity = (cargo, options) =>
   checkpointParity(cargo, "base", options);
+export const agentStatusCheckpointParity = (cargo, options) =>
+  checkpointParity(cargo, "status", options);
 
 if (
   process.argv[1] &&

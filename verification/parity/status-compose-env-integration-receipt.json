@@ -1,0 +1,231 @@
+{
+  "checkpoint": "Pure status, composition and environment-key prepared CLI integrated; whole port remains incomplete",
+  "parent": "39269eb5304130c192e57210ed3bd4bfe7ec73fb",
+  "previousAccepted": "d51cad26f0db3baeda85350526e2477e01d2ee76",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "localOnly": true,
+  "newCases": {
+    "statusStrict": 64,
+    "statusOpenExcluded": 3,
+    "compositionStrict": 119,
+    "compositionBreakdown": {
+      "reads": 65,
+      "lifts": 36,
+      "invoiceReplay": 18
+    },
+    "environment": {
+      "observations": 58,
+      "exact": 47,
+      "qualified": 11,
+      "protocolRefusals": 7,
+      "responseGuards": 3
+    },
+    "enhancedExistingBaseCases": 43,
+    "enhancedBaseNotAdditionalCases": true
+  },
+  "combined": {
+    "comparisons": 14585,
+    "passed": 14585,
+    "behavioralFailures": 0,
+    "referenceEdits": 0,
+    "nativeEvidence": 14461,
+    "rawQualified": 124,
+    "defaultNativeAndDocs": 573,
+    "pbtFeatureNativeAndDocs": 587,
+    "defaultAndFeatureOverlap": true,
+    "docChecks": 26,
+    "compileFailDocs": 24,
+    "runnableDocs": 2,
+    "format": true,
+    "verificationTypes": true,
+    "verificationLint": true,
+    "clippyDefaultAllTargets": true,
+    "clippyFeatureAllTargets": true,
+    "completeCliExit": 1,
+    "completeCliExitReason": "Only remaining explicitly recorded coverage gaps"
+  },
+  "controls": {
+    "newCompiledFaultsCaught": 49,
+    "newBreakdown": {
+      "status": 18,
+      "composition": 8,
+      "environment": 23
+    },
+    "affectedExistingCompiledFaultsCaught": 76,
+    "existingBreakdown": {
+      "baseAgent": 24,
+      "contentTranscript": 16,
+      "boundaryCli": 22,
+      "boundaryGate": 14
+    },
+    "escaped": 0,
+    "evidenceGuards": 11,
+    "typing": {
+      "statusPositivePrograms": 2,
+      "statusIntendedRefusals": 3,
+      "composeProbes": 8,
+      "composePositive": 1,
+      "composeIntendedRefusals": 5,
+      "composeInferenceQualifications": 2,
+      "existingBasePositive": 1,
+      "existingBaseIntendedRefusals": 2
+    },
+    "integrity": {
+      "status": "passed",
+      "at": "2026-10-26T19:10:34.986475+00:00",
+      "sourceFilesUnchangedDuringResumedControls": 2315,
+      "baselineExecutablesUnchanged": 1469,
+      "historicalShapeLibrariesUnchanged": 2,
+      "sourceFileAdditions": [],
+      "sourceFileRemovals": [],
+      "sourceChangesFromFull": [
+        {
+          "at": "2026-10-26T18:48:06.821334+00:00",
+          "file": "verification/parity/package.json",
+          "beforeSha256": "24b25f4010e51f5c9cbc2b7e44e9aac3d4c54f2e4e08bfaa1c18ea468d468bc3",
+          "afterSha256": "69562d172d7414b8716e0ee1d92e181bd8384270ac27e09a7e72d2ca8d470585",
+          "cause": "Status cases import frozen TypeScript to construct canonical init input. Parent fault runner lacked the tsx loader; Node22 extensionless Source imports failed before any status control executed.",
+          "repair": "Package status/fault commands now preload tsx; root control command preloads the exact local tsx loader. No production/oracle/case change.",
+          "firstAttemptArchive": "target/parity/history/39269eb5-status-compose-env-first-loader-attempt",
+          "fullParityAlreadyPassed": 14585
+        },
+        {
+          "at": "2026-10-26T19:03:11.684746+00:00",
+          "file": "verification/parity/agent-content-mutations.mjs",
+          "beforeSha256": "9b9f834d324999cd616725fcf13afc1b094e465a86b04f05b732c4cbb4cff495",
+          "afterSha256": "683383b112ad194c87478448317d6eeb5d94f6b748db5a76295eef0ec4187671",
+          "cause": "Older content control literals predate canonical retained Conversation turns and AgentField ended fields. The seed patch found zero sites; two later control bodies also needed current field access.",
+          "edits": [
+            "Target actual state.turns = conversation.turns.as_ref().clone(); for the unchanged discard-seed fault.",
+            "Copy the AgentField failure presence value with .clone() while deliberately reminting the same outer status wrapper.",
+            "Use matches!(output, AgentField::Value(None)) for the unchanged done-null-as-running fault."
+          ],
+          "productionChanges": 0,
+          "oracleChanges": 0,
+          "fixtureChanges": 0,
+          "allUniqueFaultSitesChecked": 16,
+          "targetedBiomePassed": true,
+          "countCorrection": {
+            "planned": 17,
+            "actualExistingControls": 16,
+            "priorStoredReport": 16,
+            "controlsRemoved": 0,
+            "correctAffectedTotal": 76
+          },
+          "failedAttemptArchive": "target/parity/history/39269eb5-status-compose-env-stale-content-control-attempt",
+          "resumePolicy": "Retain the already-passed49new+24base and guards with original logs/reports; rerun all16 content then22boundary and14gate. Source hashes across failed attempt checked unchanged; only this independent content verifier adapted before resuming."
+        }
+      ],
+      "priorAttemptIntegrity": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/39269eb5-status-compose-env-stale-content-control-attempt/integrity-audit.json",
+      "qualification": "Two verifier-only repairs across the three attempts are explicit. Prior49new+24base and11guards completed before content-verifier adaptation; all16content+22boundary+14gate passed afterward. No production/oracle/fixture changes during any attempt."
+    }
+  },
+  "coverage": {
+    "inventory": 3445,
+    "registeredMappings": 824,
+    "gapRows": 2767,
+    "newRealStatusIds": 3,
+    "existingEndedOwnerExtended": 1,
+    "newRealCompositionIds": 4,
+    "existingEnvFlagStrengthened": 1,
+    "cliGapsRetained": 53,
+    "countsAreNotCompletionPercentage": true
+  },
+  "implementation": [
+    "Pure status reads canonical phase/annotation first, retains original pending Vec and inner Rc failure/output/usage owners, preserves undefined/null and nullable cancellation time; ended owner stays canonical.",
+    "One std-only composition module, Result/Option ordered reads and FnOnce domain-owned host replacement. Four existing lifts delegate without signature changes; core/Cell/runtime/Step::map unchanged.",
+    "Environment-key scan, ownership, mismatch report, text/JSON render and same-Box prepared dispatch reuse catalog/OXC/path/IO owners. CatalogError owns raw metadata/source chain; source-first load, second root, raw prefix and no exit assignment retained."
+  ],
+  "verification": "Portable status checkpoint uses actual Cargo JSON and supplied effective libraries, independent baseline binary and dedicated mutation target; no hardcoded private Rust paths. Persistent native positive/refusal consumers. Composition reuses the compiled-trace runner and actual Cargo-selected library probes; env joins existing graph process evidence with all response guards.",
+  "blindSpots": [
+    "Whole agent factory/runtime wiring, optional profiles, providers and hosts remain unfinished.",
+    "Suspended status is a borrowed native view; its state owner must live. Native failure union carrier retains original inner Rc records. Three raw annotation/usage-extra rows remain OPEN outside strict/nativeEvidence.",
+    "JS reflection/record-spread/shared mutable command-array aliasing and DEV/typed reducer-error protections remain explicitly qualified for composition; moved Vec ownership does not imply arbitrary JS alias equivalence.",
+    "Empty read orders and Ok-only callbacks require documented native type hints. Receiver/live iteration use the tested explicit adapters.",
+    "Environment-qualified argv/filesystem/backend/stdio/prepared-only observations remain distinct; standalone bootstrap, Windows, later modes and distribution stay open.",
+    "Status worker archive tar contains exact source only; copied artifacts are separately verified. No cold status-archive rebuild is claimed. Compose fresh archive gates and env external cold caller have their own explicitly bounded proof."
+  ],
+  "proofs": {
+    "checks": {
+      "path": "target/parity/status-compose-env-main-checks.json",
+      "sha256": "c6aff6ab707ab0043adac84514e28f31be9cdec5d2f812d35f41be1f2c7f5807"
+    },
+    "controls": {
+      "path": "target/parity/status-compose-env-main-controls.json",
+      "sha256": "b751d07a006ff68accee4b378394cdadf4b4ed957578a9ec1cd5ebcad5755c47"
+    },
+    "combinedReport": {
+      "path": "target/parity/status-compose-env-main/report-before-controls.json",
+      "sha256": "805d795e338aafa4b829309bddf3a45ae735c5948289dd515b7924905f8d3b46"
+    },
+    "archive": {
+      "path": "target/parity/history/39269eb5-status-compose-env-main-accepted",
+      "manifest": "target/parity/history/39269eb5-status-compose-env-main-accepted/manifest.json",
+      "manifestSha256": "6dac6375226681a567c1785225a833e41f4049a400a70a0356fcfa75fd5f2f47",
+      "files": 350,
+      "bytes": 328744625
+    }
+  },
+  "recoveries": [
+    {
+      "at": "2026-10-26T18:48:06.821334+00:00",
+      "file": "verification/parity/package.json",
+      "beforeSha256": "24b25f4010e51f5c9cbc2b7e44e9aac3d4c54f2e4e08bfaa1c18ea468d468bc3",
+      "afterSha256": "69562d172d7414b8716e0ee1d92e181bd8384270ac27e09a7e72d2ca8d470585",
+      "cause": "Status cases import frozen TypeScript to construct canonical init input. Parent fault runner lacked the tsx loader; Node22 extensionless Source imports failed before any status control executed.",
+      "repair": "Package status/fault commands now preload tsx; root control command preloads the exact local tsx loader. No production/oracle/case change.",
+      "firstAttemptArchive": "target/parity/history/39269eb5-status-compose-env-first-loader-attempt",
+      "fullParityAlreadyPassed": 14585,
+      "metadata": {
+        "path": "target/parity/status-compose-env-main-loader-repair.json",
+        "sha256": "7fcea0d38e158d6985b997ea5c49f4e1fa13f0e399540f6132ba17595808914f"
+      }
+    },
+    {
+      "at": "2026-10-26T19:03:11.684746+00:00",
+      "file": "verification/parity/agent-content-mutations.mjs",
+      "beforeSha256": "9b9f834d324999cd616725fcf13afc1b094e465a86b04f05b732c4cbb4cff495",
+      "afterSha256": "683383b112ad194c87478448317d6eeb5d94f6b748db5a76295eef0ec4187671",
+      "cause": "Older content control literals predate canonical retained Conversation turns and AgentField ended fields. The seed patch found zero sites; two later control bodies also needed current field access.",
+      "edits": [
+        "Target actual state.turns = conversation.turns.as_ref().clone(); for the unchanged discard-seed fault.",
+        "Copy the AgentField failure presence value with .clone() while deliberately reminting the same outer status wrapper.",
+        "Use matches!(output, AgentField::Value(None)) for the unchanged done-null-as-running fault."
+      ],
+      "productionChanges": 0,
+      "oracleChanges": 0,
+      "fixtureChanges": 0,
+      "allUniqueFaultSitesChecked": 16,
+      "targetedBiomePassed": true,
+      "countCorrection": {
+        "planned": 17,
+        "actualExistingControls": 16,
+        "priorStoredReport": 16,
+        "controlsRemoved": 0,
+        "correctAffectedTotal": 76
+      },
+      "failedAttemptArchive": "target/parity/history/39269eb5-status-compose-env-stale-content-control-attempt",
+      "resumePolicy": "Retain the already-passed49new+24base and guards with original logs/reports; rerun all16 content then22boundary and14gate. Source hashes across failed attempt checked unchanged; only this independent content verifier adapted before resuming.",
+      "metadata": {
+        "path": "target/parity/status-compose-env-main-control-site-repair.json",
+        "sha256": "c7f7ec2d60a12a7833faefb1694efd9af7226781214fc3e4edfb21dc62e1f6cb"
+      }
+    }
+  ],
+  "verificationQualification": {
+    "sourceDifferenceAfterFullChecks": [
+      "verification/parity/package.json",
+      "verification/parity/agent-content-mutations.mjs"
+    ],
+    "unchangedFullCheckSourceFiles": 2313,
+    "currentSourceFiles": 2315,
+    "controlsResume": {
+      "previousAttempt": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/39269eb5-status-compose-env-stale-content-control-attempt",
+      "passedStepsRetained": 5,
+      "failedSuiteRerunInFull": "content16",
+      "pendingSuites": ["boundary22", "gate14"],
+      "qualification": "Only the independent content mutation verifier changed after five completed steps. Native source, oracles, fixtures, baseline executables and unrelated control definitions remain identical. The completed49new+24base and11guards retain their original observed run facts."
+    },
+    "qualification": "Full comparisons/native/static gates passed before two verifier-only repairs. Targeted Biome and actual unique-site audit passed. The49new+24base and11guards completed after loader repair; full16content+22boundary+14gate completed after independent content-fault adaptation. All production/oracle/fixtures and baseline executables remained unchanged across attempts. Original failed logs/snapshots and resumed integrity are retained."
+  }
+}

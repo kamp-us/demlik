@@ -148,18 +148,15 @@ export function agentStatusMutations(options = {}) {
       process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
     mutationTarget =
       options.mutationTarget ??
-      path.join(root, "target/agent-state-mutation-build"),
-    binary = path.join(baselineTarget, "debug/examples/agent_status_driver");
+      path.join(root, "target/parity/agent-status-mutation-build"),
+    binary = options.binary;
+  assert.ok(binary, "An explicit compiled baseline binary is required");
+  assert.ok(
+    options.libraries?.length,
+    "Actual Cargo JSON library artifacts are required",
+  );
   assert.notEqual(path.resolve(baselineTarget), path.resolve(mutationTarget));
-  const effective = JSON.parse(
-      fs.readFileSync(
-        path.join(root, "target/parity/agent-status-effective-artifacts.json"),
-      ),
-    ),
-    artifacts = [
-      binary,
-      ...Object.values(effective.libraries).map((v) => v.path),
-    ],
+  const artifacts = [binary, ...options.libraries],
     artifactHashes = Object.fromEntries(
       artifacts.map((f) => [f, hash(fs.readFileSync(f))]),
     ),
@@ -199,11 +196,8 @@ export function agentStatusMutations(options = {}) {
   fs.mkdirSync(workspace);
   const env = {
     ...process.env,
-    PATH: `/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin:${process.env.PATH}`,
-    CARGO_HOME: "/private/tmp/demlik-pbt-cargo-home-01a16c9d",
     CARGO_TARGET_DIR: mutationTarget,
-    RUSTC: "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
-    RUSTDOC: "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustdoc",
+    CARGO_NET_OFFLINE: "true",
     CARGO_PROFILE_DEV_DEBUG: "0",
     CARGO_PROFILE_TEST_DEBUG: "0",
     CARGO_INCREMENTAL: "0",
@@ -340,5 +334,17 @@ export function agentStatusMutations(options = {}) {
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-)
-  agentStatusMutations();
+) {
+  const { agentStatusCheckpointParity } = await import(
+    "./agent-state-parity.mjs"
+  );
+  const baseline = await agentStatusCheckpointParity(
+    process.env.CARGO ?? "cargo",
+  );
+  agentStatusMutations({
+    binary: baseline.binary,
+    libraries: Object.values(baseline.cargoArtifacts.libraries).map(
+      (a) => a.path,
+    ),
+  });
+}
