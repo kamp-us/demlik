@@ -71,7 +71,7 @@ const controls = [
   },
   {
     name: "accept-reason-is-not-trimmed",
-    before: "flags.reason.map(trimmed_reason).unwrap_or_default()",
+    before: "flags.reason.map(JsString::trim_js).unwrap_or_default()",
     after: "flags.reason.cloned().unwrap_or_default()",
     witness: 'reason." \\t\\r\\n"',
   },

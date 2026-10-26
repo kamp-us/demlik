@@ -37,7 +37,7 @@ use crate::{
     kinds::glob::GlobError,
     project::{EdgeScope, RepoListing, join_path_text, list_repo, load_edge_project_text},
     ratchet::scope_count::{ScopeCeilingsResolution, read_scope_ceilings, scope_of, scopes_under},
-    syntax::imports::{ImportedNames, resolve_imports, runtime_specifiers},
+    syntax::imports::{ImportedNames, resolve_imports, resolve_imports_text, runtime_specifiers},
     text::{JsString, object_keys},
     validation::RecordTypeError,
 };
@@ -65,6 +65,20 @@ pub struct BoundaryGateArgs<'a> {
     pub json: bool,
     pub pretty: bool,
 }
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BoundaryGateTextArgs<'a> {
+    pub root_absolute: &'a JsString,
+    pub repo_root: &'a JsString,
+    pub boundary_rules_file: Option<&'a JsString>,
+    pub flags: BoundaryFlags<'a>,
+    pub json: bool,
+    pub pretty: bool,
+}
+#[derive(Clone, Copy)]
+struct GateInput<'a> {
+    native: BoundaryGateArgs<'a>,
+    text_roots: Option<(&'a JsString, &'a JsString)>,
+}
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoundaryGateResult {
@@ -80,6 +94,35 @@ pub enum BoundaryGateError {
     Io(io::Error),
     Ceiling(RecordTypeError),
     Render(serde_json::Error),
+}
+impl BoundaryGateError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Config(BoundaryConfigError::RecordType(error)) => error.name(),
+            Self::Config(BoundaryConfigError::Declaration(error)) => error.name(),
+            Self::Pattern(GlobError::Syntax(_)) => "Error",
+            Self::Pattern(GlobError::Pattern(_)) => "SyntaxError",
+            Self::Catalog(CatalogError::Record(error)) | Self::Ceiling(error) => error.name(),
+            Self::Catalog(CatalogError::WorkingDirectory(_)) | Self::Io(_) | Self::Render(_) => {
+                "Error"
+            }
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Config(BoundaryConfigError::RecordType(error)) => error.message().clone(),
+            Self::Config(BoundaryConfigError::Declaration(error)) => error.message(),
+            Self::Pattern(GlobError::Syntax(message)) => message.clone(),
+            Self::Pattern(GlobError::Pattern(error)) => error.to_string().into(),
+            Self::Catalog(CatalogError::Record(error)) | Self::Ceiling(error) => {
+                error.message().clone()
+            }
+            Self::Catalog(CatalogError::WorkingDirectory(error)) | Self::Io(error) => {
+                error.to_string().into()
+            }
+            Self::Render(error) => error.to_string().into(),
+        }
+    }
 }
 impl std::fmt::Display for BoundaryGateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -112,19 +155,6 @@ enum Mode {
     Accept { reason: JsString },
     Migrate,
 }
-fn trimmed_reason(reason: &JsString) -> JsString {
-    let whitespace = |unit: &u16| matches!(*unit, 9..=13 | 32 | 0xa0 | 0x1680 | 0x2000..=0x200a | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 | 0xfeff);
-    let units = reason.units();
-    let start = units
-        .iter()
-        .position(|unit| !whitespace(unit))
-        .unwrap_or(units.len());
-    let end = units
-        .iter()
-        .rposition(|unit| !whitespace(unit))
-        .map_or(start, |index| index + 1);
-    JsString::from_units(units[start..end].to_vec())
-}
 fn mode_of(flags: BoundaryFlags<'_>) -> std::result::Result<Mode, JsString> {
     if flags.write_ceilings {
         return Err(format!("`--boundaries --write-ceilings` is retired: crossings live one per entry in {LEDGER_FILENAME}. Add the current ones with `--boundaries --accept-crossings --reason \"<why>\"`.").into());
@@ -143,7 +173,7 @@ fn mode_of(flags: BoundaryFlags<'_>) -> std::result::Result<Mode, JsString> {
         return Err("--reason only rides `--boundaries --accept-crossings`.".into());
     }
     if flags.accept_crossings {
-        let reason = flags.reason.map(trimmed_reason).unwrap_or_default();
+        let reason = flags.reason.map(JsString::trim_js).unwrap_or_default();
         if reason.is_empty() {
             return Err(
                 "`--accept-crossings` needs a non-empty `--reason \"<why>\"`; nothing was written."
@@ -214,11 +244,17 @@ fn read_run<'a>(
         shape,
     }))
 }
-fn scope_root(repo_root: &Path, scope: &JsString) -> JsString {
-    join_path_text(&repo_root.to_string_lossy().as_ref().into(), scope)
+fn scope_root(input: GateInput<'_>, scope: &JsString) -> JsString {
+    match input.text_roots {
+        Some((_, repo_root)) => join_path_text(repo_root, scope),
+        None => join_path_text(
+            &input.native.repo_root.to_string_lossy().as_ref().into(),
+            scope,
+        ),
+    }
 }
-fn src_entries(scope: &JsString, repo_root: &Path) -> Vec<JsString> {
-    let native = PathBuf::from(scope_root(repo_root, scope).to_lossy());
+fn src_entries(scope: &JsString, input: GateInput<'_>) -> Vec<JsString> {
+    let native = PathBuf::from(scope_root(input, scope).to_lossy());
     let Ok(entries) = fs::read_dir(native.join("src")) else {
         return Vec::new();
     };
@@ -244,12 +280,13 @@ fn analyze_scope(
     rules: &BoundaryRules,
     reads: &Reads<'_>,
     listing: Option<&RepoListing>,
-    args: BoundaryGateArgs<'_>,
+    input: GateInput<'_>,
 ) -> std::result::Result<ScopeAnalysis, JsString> {
+    let args = input.native;
     let folders = feature_folders_of(rules, scope);
     if folders.is_defined()
         && let Some(message) = folders
-            .unlisted_port_folder_issue(scope, &src_entries(scope, args.repo_root))
+            .unlisted_port_folder_issue(scope, &src_entries(scope, input))
             .map_err(|error| JsString::from(error.to_string()))?
     {
         return Err(message);
@@ -262,7 +299,7 @@ fn analyze_scope(
     let loaded = if reads_files {
         Some(
             load_edge_project_text(
-                &scope_root(args.repo_root, scope),
+                &scope_root(input, scope),
                 EdgeScope::Package,
                 args.repo_root,
                 listing,
@@ -272,13 +309,22 @@ fn analyze_scope(
     } else {
         None
     };
-    let graph = loaded.as_ref().map(|loaded| {
-        resolve_imports(
-            &loaded.project.root_absolute,
-            &loaded.project.source_files,
-            &loaded.ts_config_path,
-        )
-    });
+    let graph = loaded
+        .as_ref()
+        .map(|loaded| match input.text_roots {
+            Some(_) => resolve_imports_text(
+                &scope_root(input, scope),
+                &loaded.project.source_files,
+                &loaded.ts_config_path,
+            )
+            .map_err(|error| JsString::from(error.to_string())),
+            None => Ok(resolve_imports(
+                &loaded.project.root_absolute,
+                &loaded.project.source_files,
+                &loaded.ts_config_path,
+            )),
+        })
+        .transpose()?;
     let facts: Vec<_> = loaded
         .as_ref()
         .into_iter()
@@ -360,7 +406,7 @@ fn analyze_all(
     reads: &Reads<'_>,
     listing: Option<&RepoListing>,
     under: &JsString,
-    args: BoundaryGateArgs<'_>,
+    input: GateInput<'_>,
 ) -> std::result::Result<Analysis, JsString> {
     let mut analysis = Analysis {
         reports: Vec::new(),
@@ -368,7 +414,7 @@ fn analyze_all(
         sites: Vec::new(),
     };
     for scope in scopes {
-        let scope = analyze_scope(scope, rules, reads, listing, args)?;
+        let scope = analyze_scope(scope, rules, reads, listing, input)?;
         analysis.unjudged += scope.unjudged;
         analysis.sites.extend(scope.sites);
         analysis.reports.push(scope.report);
@@ -392,15 +438,38 @@ fn analyze_all(
 fn current_ledger(
     ledger: &Path,
     legacy: &Path,
+    ledger_text: &JsString,
 ) -> Result<std::result::Result<BoundaryLedger, JsString>> {
     Ok(match read_boundary_ledger(ledger).map_err(BoundaryGateError::Io)? {
         LedgerRead::Read { ledger } => Ok(ledger),
-        LedgerRead::Invalid { message } => Err(interpolate(&["invalid boundary ledger \"".into(), ledger.to_string_lossy().as_ref().into(), "\": ".into(), message])),
+        LedgerRead::Invalid { message } => Err(interpolate(&["invalid boundary ledger \"".into(), ledger_text.clone(), "\": ".into(), message])),
         LedgerRead::Absent if legacy.exists() => Err(format!("{LEGACY_CEILINGS_FILENAME} holds per-scope counts and there is no {LEDGER_FILENAME}: run `code-graph . --boundaries --migrate-ceilings` once to seed the ledger.").into()),
         LedgerRead::Absent => Ok(BoundaryLedger::default()),
     })
 }
 pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResult> {
+    run(GateInput {
+        native: args,
+        text_roots: None,
+    })
+}
+pub(crate) fn run_boundary_gate_text(args: BoundaryGateTextArgs<'_>) -> Result<BoundaryGateResult> {
+    let root_native = args.root_absolute.to_lossy();
+    let repo_native = args.repo_root.to_lossy();
+    run(GateInput {
+        native: BoundaryGateArgs {
+            root_absolute: Path::new(&root_native),
+            repo_root: Path::new(&repo_native),
+            boundary_rules_file: args.boundary_rules_file,
+            flags: args.flags,
+            json: args.json,
+            pretty: args.pretty,
+        },
+        text_roots: Some((args.root_absolute, args.repo_root)),
+    })
+}
+fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
+    let args = input.native;
     let mode = match mode_of(args.flags) {
         Ok(mode) => mode,
         Err(message) => return Ok(refused(message)),
@@ -432,6 +501,16 @@ pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResul
     };
     let ledger_file = args.repo_root.join(LEDGER_FILENAME);
     let legacy_file = args.repo_root.join(LEGACY_CEILINGS_FILENAME);
+    let (ledger_text, legacy_text) = match input.text_roots {
+        Some(_) => (
+            scope_root(input, &LEDGER_FILENAME.into()),
+            scope_root(input, &LEGACY_CEILINGS_FILENAME.into()),
+        ),
+        None => (
+            ledger_file.to_string_lossy().as_ref().into(),
+            legacy_file.to_string_lossy().as_ref().into(),
+        ),
+    };
     let declared: Vec<_> = object_keys(&rules.features)
         .into_iter()
         .cloned()
@@ -450,19 +529,18 @@ pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResul
                 format!("no {LEGACY_CEILINGS_FILENAME} at the repo root to migrate.").into(),
             ));
         }
-        let ceilings = match read_scope_ceilings(&legacy_file.to_string_lossy().as_ref().into())
-            .map_err(BoundaryGateError::Ceiling)?
-        {
-            ScopeCeilingsResolution::Resolved(ceilings) => ceilings,
-            ScopeCeilingsResolution::Refused { message } => return Ok(refused(message)),
-        };
+        let ceilings =
+            match read_scope_ceilings(&legacy_text).map_err(BoundaryGateError::Ceiling)? {
+                ScopeCeilingsResolution::Resolved(ceilings) => ceilings,
+                ScopeCeilingsResolution::Refused { message } => return Ok(refused(message)),
+            };
         let reports = match analyze_all(
             &scopes_under(&declared, &".".into()),
             &rules,
             &reads,
             listing.as_ref(),
             &".".into(),
-            args,
+            input,
         ) {
             Ok(analysis) => analysis.reports,
             Err(message) => return Ok(refused(message)),
@@ -481,10 +559,13 @@ pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResul
             0,
         ));
     }
-    let under = scope_of(
-        &args.repo_root.to_string_lossy().as_ref().into(),
-        &args.root_absolute.to_string_lossy().as_ref().into(),
-    )
+    let under = match input.text_roots {
+        Some((root, repo_root)) => scope_of(repo_root, root),
+        None => scope_of(
+            &args.repo_root.to_string_lossy().as_ref().into(),
+            &args.root_absolute.to_string_lossy().as_ref().into(),
+        ),
+    }
     .map_err(BoundaryGateError::Io)?;
     let analysis = match analyze_all(
         &scopes_under(&declared, &under),
@@ -492,7 +573,7 @@ pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResul
         &reads,
         listing.as_ref(),
         &under,
-        args,
+        input,
     ) {
         Ok(analysis) => analysis,
         Err(message) => return Ok(refused(message)),
@@ -538,7 +619,7 @@ pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResul
             ))
         }
         Mode::Gate | Mode::Accept { .. } => {
-            let ledger = match current_ledger(&ledger_file, &legacy_file)? {
+            let ledger = match current_ledger(&ledger_file, &legacy_file, &ledger_text)? {
                 Ok(ledger) => ledger,
                 Err(message) => return Ok(refused(message)),
             };

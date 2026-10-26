@@ -10,6 +10,10 @@ use crate::{
         cli::{ApiFlags, ApiHost, ApiRunError, ApiRunOutcome, run_api_flags_with_warning_blocking},
         real_path,
     },
+    boundaries::gate::{
+        BoundaryFlags, BoundaryGateError, BoundaryGateResult, BoundaryGateTextArgs,
+        run_boundary_gate_text,
+    },
     collapse::settings::CollapseSettings,
     config::{
         ConfigResolution, NodeKindConfigError, resolve_collapse_settings, resolve_node_kind_rules,
@@ -133,6 +137,11 @@ pub enum LayerDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum BoundaryDispatch {
+    Complete(BoundaryGateResult),
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum FrontdoorError {
     Resolve {
         target: JsString,
@@ -147,6 +156,8 @@ pub enum FrontdoorError {
     Hexagon(HexagonRunError),
     Layers(LayerGateError),
     LayerEmit(ApiError),
+    Boundaries(BoundaryGateError),
+    BoundaryEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
     GateScope {
         stage: GatePreparationKind,
@@ -165,6 +176,8 @@ impl FrontdoorError {
             Self::Api(error) => error.visible().name(),
             Self::Hexagon(error) => error.name(),
             Self::LayerEmit(error) => error.name(),
+            Self::Boundaries(error) => error.name(),
+            Self::BoundaryEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
             Self::ExitCode(error) => error.name(),
             _ => "Error",
@@ -183,6 +196,8 @@ impl FrontdoorError {
             Self::Hexagon(error) => error.message(),
             Self::Layers(error) => error.to_string().into(),
             Self::LayerEmit(error) => error.message(),
+            Self::Boundaries(error) => error.message(),
+            Self::BoundaryEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
             Self::ExitCode(error) => error.message(),
         }
@@ -204,6 +219,8 @@ impl Error for FrontdoorError {
             Self::Hexagon(error) => error,
             Self::Layers(error) => error,
             Self::LayerEmit(error) => error,
+            Self::Boundaries(error) => error,
+            Self::BoundaryEmit(error) => error,
             Self::RuleNameConversion(error) => error,
             Self::ExitCode(error) => error,
         })
@@ -482,6 +499,43 @@ impl PreparedCli {
 }
 
 impl PreparedGatesCli {
+    /// Run boundaries after layers, or retain the same continuation for later modes.
+    pub fn dispatch_boundaries(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+    ) -> Result<BoundaryDispatch, FrontdoorError> {
+        if self.prepared.options.boundaries() != Some(true) {
+            return Ok(BoundaryDispatch::Continue(self));
+        }
+        let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let options = &self.prepared.options;
+        let result = run_boundary_gate_text(BoundaryGateTextArgs {
+            root_absolute: &self.prepared.root_absolute,
+            repo_root: &repo_root,
+            boundary_rules_file: options.boundary_rules(),
+            flags: BoundaryFlags {
+                ci: options.ci() == Some(true),
+                write_ceilings: options.write_ceilings() == Some(true),
+                accept_crossings: options.accept_crossings() == Some(true),
+                reason: options.reason(),
+                migrate_ceilings: options.migrate_ceilings() == Some(true),
+            },
+            json: options.json() == Some(true),
+            pretty: options.pretty() == Some(true),
+        })
+        .map_err(FrontdoorError::Boundaries)?;
+        for message in &result.reports {
+            clean_exit(host, message);
+        }
+        for payload in &result.emitted {
+            output_to(options.out())
+                .emit(host, payload)
+                .map_err(FrontdoorError::BoundaryEmit)?;
+        }
+        exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
+        Ok(BoundaryDispatch::Complete(result))
+    }
+
     /// Run layers after both preparations, or retain the same continuation for later modes.
     pub fn dispatch_layers(
         self: Box<Self>,

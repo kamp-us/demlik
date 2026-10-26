@@ -191,9 +191,15 @@ const original = new Map(
     fs.readFileSync(path.join(root, "crates/code-graph/src", file), "utf8"),
   ]),
 );
+function layerBody(file, text) {
+  if (file !== "cli/frontdoor.rs") return { prefix: "", body: text };
+  const start = text.indexOf("    pub fn dispatch_layers(");
+  assert.ok(start >= 0);
+  return { prefix: text.slice(0, start), body: text.slice(start) };
+}
 for (const row of mutations)
   assert.equal(
-    original.get(row.file).split(row.before).length,
+    layerBody(row.file, original.get(row.file)).body.split(row.before).length,
     row.matches + 1,
     row.name,
   );
@@ -237,7 +243,11 @@ try {
       );
     fs.writeFileSync(
       path.join(workspace, "crates/code-graph/src", mutation.file),
-      original.get(mutation.file).replace(mutation.before, mutation.after),
+      layerBody(mutation.file, original.get(mutation.file)).prefix +
+        layerBody(mutation.file, original.get(mutation.file)).body.replace(
+          mutation.before,
+          mutation.after,
+        ),
     );
     const build = spawnSync(
       process.env.CARGO ?? "cargo",

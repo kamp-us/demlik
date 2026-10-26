@@ -4,7 +4,6 @@ use demlik_code_graph::{
         gate::{BoundaryFlags, BoundaryGateArgs, BoundaryGateError, run_boundary_gate},
         rules::BoundaryRules,
     },
-    kinds::glob::GlobError,
     text::JsString,
 };
 use serde::{Deserialize, Deserializer, Serialize};
@@ -107,24 +106,11 @@ impl From<BoundaryConfigError> for DriverError {
 impl From<BoundaryGateError> for DriverError {
     fn from(error: BoundaryGateError) -> Self {
         match error {
-            BoundaryGateError::Config(error) => error.into(),
-            BoundaryGateError::Pattern(GlobError::Syntax(message)) => {
-                Self::thrown("Error", message)
-            }
-            BoundaryGateError::Pattern(error) => {
-                Self::thrown("SyntaxError", error.to_string().into())
-            }
-            BoundaryGateError::Catalog(
-                demlik_code_graph::extract::wrangler_config::CatalogError::Record(error),
-            )
-            | BoundaryGateError::Ceiling(error) => {
-                Self::thrown(error.name(), error.message().clone())
-            }
             BoundaryGateError::Catalog(
                 demlik_code_graph::extract::wrangler_config::CatalogError::WorkingDirectory(error),
             )
             | BoundaryGateError::Io(error) => Self::io(error),
-            BoundaryGateError::Render(error) => Self::thrown("Error", error.to_string().into()),
+            error => Self::thrown(error.name(), error.message()),
         }
     }
 }

@@ -1,14 +1,17 @@
 use std::collections::HashSet;
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::{fs, io};
 
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 
 use super::file::{NodeRef, SyntaxFile};
+use crate::api::real_path;
 use crate::engine::oxc::create_module_resolver;
-use crate::project::{SourceUnit, locale_compare, locale_compare_units, to_relative};
+use crate::project::{
+    SourceUnit, locale_compare, locale_compare_units, relative_path_text_from, to_relative,
+};
 use crate::text::JsString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -326,8 +329,46 @@ pub fn resolve_imports(
     source_files: &[Rc<SourceUnit>],
     ts_config: &Path,
 ) -> ImportGraph {
+    resolve(
+        ImportRoot::Native {
+            logical: root,
+            real: fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()),
+        },
+        source_files,
+        ts_config,
+    )
+    .expect("native Path comparisons do not have the text branch's working-directory failure")
+}
+pub(crate) fn resolve_imports_text(
+    root: &JsString,
+    source_files: &[Rc<SourceUnit>],
+    ts_config: &Path,
+) -> io::Result<ImportGraph> {
+    resolve(
+        ImportRoot::Text {
+            logical: root,
+            real: real_path(root).unwrap_or_else(|_| root.clone()),
+        },
+        source_files,
+        ts_config,
+    )
+}
+enum ImportRoot<'a> {
+    Native {
+        logical: &'a Path,
+        real: PathBuf,
+    },
+    Text {
+        logical: &'a JsString,
+        real: JsString,
+    },
+}
+fn resolve(
+    root: ImportRoot<'_>,
+    source_files: &[Rc<SourceUnit>],
+    ts_config: &Path,
+) -> io::Result<ImportGraph> {
     let resolver = create_module_resolver(ts_config);
-    let root_real = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let units: IndexMap<_, _> = source_files
         .iter()
         .map(|unit| (unit.file.as_str(), unit))
@@ -337,17 +378,36 @@ pub fn resolve_imports(
         .filter(|unit| is_external_module(&unit.syntax))
         .map(|unit| unit.file.as_str())
         .collect();
-    let in_scope = |resolved: &Path| {
-        let direct = to_relative(root, resolved);
-        let file = if units.contains_key(direct.as_str()) {
-            direct
-        } else {
-            to_relative(
-                &root_real,
-                &fs::canonicalize(resolved).unwrap_or_else(|_| resolved.to_path_buf()),
-            )
+    let in_scope = |resolved: &Path| -> io::Result<Option<String>> {
+        let file = match &root {
+            ImportRoot::Native { logical, real } => {
+                let direct = to_relative(logical, resolved);
+                if units.contains_key(direct.as_str()) {
+                    direct
+                } else {
+                    to_relative(
+                        real,
+                        &fs::canonicalize(resolved).unwrap_or_else(|_| resolved.to_path_buf()),
+                    )
+                }
+            }
+            ImportRoot::Text { logical, real } => {
+                let resolved: JsString = resolved.to_string_lossy().as_ref().into();
+                let direct = relative_path_text_from(logical, &resolved)?;
+                match direct.to_utf8() {
+                    Ok(direct) if units.contains_key(direct.as_str()) => direct,
+                    _ => {
+                        let resolved_real = real_path(&resolved).unwrap_or(resolved);
+                        let relative = relative_path_text_from(real, &resolved_real)?;
+                        let Ok(file) = relative.to_utf8() else {
+                            return Ok(None);
+                        };
+                        file
+                    }
+                }
+            }
         };
-        (units.contains_key(file.as_str()) && modules.contains(file.as_str())).then_some(file)
+        Ok((units.contains_key(file.as_str()) && modules.contains(file.as_str())).then_some(file))
     };
     let mut imports_by_file = IndexMap::new();
     let mut import_edges_by_file = IndexMap::new();
@@ -359,9 +419,11 @@ pub fn resolve_imports(
         let mut edges = Vec::new();
         let mut seen = HashSet::new();
         for literal in import_literals(&unit.syntax) {
-            let target = resolver
-                .resolve(&unit.absolute_path, &literal.specifier.to_lossy())
-                .and_then(|resolved| in_scope(&resolved));
+            let target = match resolver.resolve(&unit.absolute_path, &literal.specifier.to_lossy())
+            {
+                Some(resolved) => in_scope(&resolved)?,
+                None => None,
+            };
             if let Some(file) = &target {
                 imported_by_file
                     .get_mut(file)
@@ -397,9 +459,9 @@ pub fn resolve_imports(
         dedup.sort_by(|left, right| locale_compare(left, right));
         *values = dedup;
     }
-    ImportGraph {
+    Ok(ImportGraph {
         imports_by_file,
         imported_by_file,
         import_edges_by_file,
-    }
+    })
 }
