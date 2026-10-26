@@ -7,3 +7,5 @@ pub mod transcript;
 pub mod types;
 
 pub use schema::{GuardedSchema, StructuredOutputError};
+
+mod wire;

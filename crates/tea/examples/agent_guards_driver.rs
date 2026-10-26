@@ -3,7 +3,10 @@ use demlik_tea::{
     agent::{
         GuardedSchema,
         compaction::CompactionSummary,
-        types::{AgentField, Awaiting, Conversation, ToolCall, ToolOutcome, ToolRecord, TurnUsage},
+        types::{
+            AgentField, AgentNumber, Awaiting, Conversation, ToolCall, ToolOutcome, ToolRecord,
+            TurnUsage,
+        },
     },
     data::{JsText, JsonData, plain_data, stringify_json},
     resilience::resilient_call::CallValue,
@@ -234,7 +237,7 @@ fn usage(value: PlainData) -> Result<TurnUsage, String> {
     {
         None => Ok(AgentField::Absent),
         Some(PlainData::Undefined) => Ok(AgentField::Undefined),
-        Some(PlainData::Number(value)) => Ok(AgentField::Value(value)),
+        Some(PlainData::Number(value)) => Ok(AgentField::Value(value.into())),
         _ => Err(format!("expected optional numeric {key}")),
     };
     result.reasoning_tokens = optional(&mut fields, "reasoningTokens")?;
@@ -244,10 +247,13 @@ fn usage(value: PlainData) -> Result<TurnUsage, String> {
     }
     Ok(result)
 }
+fn stored(value: AgentNumber) -> PlainData {
+    value.number().map_or(PlainData::Null, PlainData::Number)
+}
 fn usage_data(value: &TurnUsage) -> PlainData {
     let mut fields = vec![
-        ("inputTokens", PlainData::Number(value.input_tokens)),
-        ("outputTokens", PlainData::Number(value.output_tokens)),
+        ("inputTokens", stored(value.input_tokens)),
+        ("outputTokens", stored(value.output_tokens)),
     ];
     for (key, value) in [
         ("reasoningTokens", &value.reasoning_tokens),
@@ -256,7 +262,7 @@ fn usage_data(value: &TurnUsage) -> PlainData {
         match value {
             AgentField::Absent => {}
             AgentField::Undefined => fields.push((key, PlainData::Undefined)),
-            AgentField::Value(value) => fields.push((key, PlainData::Number(*value))),
+            AgentField::Value(value) => fields.push((key, stored(*value))),
         }
     }
     object(fields)
@@ -431,7 +437,7 @@ fn fold(input: FoldInput, observed: &mut Vec<&'static str>) -> Result<PlainData,
             Ok(Rc::new(ToolRecord {
                 call: at(&calls, input.call)?,
                 outcome: at(&outcomes, input.outcome)?,
-                turn: number(input.turn)?,
+                turn: number(input.turn)?.into(),
             }))
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -440,26 +446,27 @@ fn fold(input: FoldInput, observed: &mut Vec<&'static str>) -> Result<PlainData,
         AgentField::Undefined => AgentField::Undefined,
         AgentField::Value(value) => match inflate(value)? {
             PlainData::Undefined => AgentField::Undefined,
-            PlainData::Null => AgentField::Value(None),
-            PlainData::Number(value) => AgentField::Value(Some(value)),
+            PlainData::Null => AgentField::Value(AgentNumber(None)),
+            PlainData::Number(value) => AgentField::Value(value.into()),
             _ => return Err("invalid context fixture".into()),
         },
     };
     let awaiting = match input.awaiting {
         AwaitingInput::Llm => Awaiting::Llm,
         AwaitingInput::Tools(value) => Awaiting::Tools {
-            batch_turn: number(value)?,
+            batch_turn: number(value)?.into(),
         },
         AwaitingInput::Compacting(value) => Awaiting::Compacting {
-            folding: number(value)?,
+            folding: number(value)?.into(),
         },
     };
     let conversation = Conversation {
-        turns,
-        tool_records: records,
-        turn_count: number(input.turn_count)?,
+        turns: Rc::new(turns),
+        tool_records: Rc::new(records),
+        turn_count: number(input.turn_count)?.into(),
         awaiting,
         context_tokens,
+        legacy_usage: AgentField::Absent,
     };
     let folding = number(input.folding)?;
     let summary = retained(input.summary)?;
@@ -546,11 +553,11 @@ fn fold(input: FoldInput, observed: &mut Vec<&'static str>) -> Result<PlainData,
         ("fresh", boolean(!std::ptr::eq(&conversation, &folded))),
         (
             "freshTurns",
-            boolean(!std::ptr::eq(&conversation.turns, &folded.turns)),
+            boolean(!Rc::ptr_eq(&conversation.turns, &folded.turns)),
         ),
         (
             "freshRecords",
-            boolean(!std::ptr::eq(
+            boolean(!Rc::ptr_eq(
                 &conversation.tool_records,
                 &folded.tool_records,
             )),
@@ -571,11 +578,11 @@ fn fresh(calls: &mut Vec<&'static str>) -> Result<PlainData, String> {
         ("fresh", boolean(!std::ptr::eq(&first, &second))),
         (
             "freshTurns",
-            boolean(!std::ptr::eq(&first.turns, &second.turns)),
+            boolean(!Rc::ptr_eq(&first.turns, &second.turns)),
         ),
         (
             "freshRecords",
-            boolean(!std::ptr::eq(&first.tool_records, &second.tool_records)),
+            boolean(!Rc::ptr_eq(&first.tool_records, &second.tool_records)),
         ),
         ("hasUsage", boolean(has_usage)),
     ]))

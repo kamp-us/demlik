@@ -360,14 +360,14 @@ struct Usage {
 impl Usage {
     fn make(self) -> Rc<TurnUsage> {
         Rc::new(TurnUsage {
-            input_tokens: self.input_tokens,
-            output_tokens: self.output_tokens,
+            input_tokens: self.input_tokens.into(),
+            output_tokens: self.output_tokens.into(),
             reasoning_tokens: self
                 .reasoning_tokens
-                .map_or(QueueField::Absent, QueueField::Value),
+                .map_or(QueueField::Absent, |v| QueueField::Value(v.into())),
             cached_input_tokens: self
                 .cached_input_tokens
-                .map_or(QueueField::Absent, QueueField::Value),
+                .map_or(QueueField::Absent, |v| QueueField::Value(v.into())),
         })
     }
 }
@@ -506,7 +506,7 @@ fn transcript(
                         args: Rc::new(PlainData::Object(Default::default())),
                     }),
                     outcome: Rc::new(ToolOutcome::Ok(at(&values, result)?)),
-                    turn: 1.0,
+                    turn: 1.0.into(),
                 }),
                 SeedTool::Error { call_id } => Rc::new(ToolRecord {
                     call: Rc::new(ToolCall {
@@ -515,21 +515,23 @@ fn transcript(
                         args: Rc::new(PlainData::Object(Default::default())),
                     }),
                     outcome: Rc::new(ToolOutcome::Error(Rc::new(PlainData::Null))),
-                    turn: 1.0,
+                    turn: 1.0.into(),
                 }),
             };
             records.push(record)
         }
         Some(Conversation {
-            turns: seed
-                .turns
-                .into_iter()
-                .map(|i| at(&values, i))
-                .collect::<Result<_, _>>()?,
-            tool_records: records,
-            turn_count: 1.0,
+            turns: Rc::new(
+                seed.turns
+                    .into_iter()
+                    .map(|i| at(&values, i))
+                    .collect::<Result<_, _>>()?,
+            ),
+            tool_records: Rc::new(records),
+            turn_count: 1.0.into(),
             awaiting: Awaiting::Llm,
-            context_tokens: QueueField::Value(None),
+            context_tokens: QueueField::Value(demlik_tea::data::NumberOrNull(None)),
+            legacy_usage: QueueField::Absent,
         })
     } else {
         None
@@ -551,8 +553,8 @@ fn transcript(
         &collector
     )];
     if let Some(c) = &mut conversation {
-        c.turns.clear();
-        c.tool_records.clear();
+        Rc::make_mut(&mut c.turns).clear();
+        Rc::make_mut(&mut c.tool_records).clear();
     }
     let mut emitted_types = Vec::new();
     for event in input.events {

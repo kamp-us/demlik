@@ -1,7 +1,10 @@
 use demlik_tea::{
     agent::{
         conversation::{NO_USAGE, add_usage, dedupe_by_call_id, fold_summary, fresh_conversation},
-        types::{AgentField, Awaiting, Conversation, ToolCall, ToolOutcome, ToolRecord, TurnUsage},
+        types::{
+            AgentField, AgentNumber, Awaiting, Conversation, ToolCall, ToolOutcome, ToolRecord,
+            TurnUsage,
+        },
     },
     data::{JsText, plain_data, stringify_json},
 };
@@ -14,7 +17,10 @@ fn fresh_conversation_and_usage_sum_keep_optional_presence_without_guarding_arit
     assert!(fresh.tool_records.is_empty());
     assert_eq!(fresh.turn_count, 0.0);
     assert!(matches!(fresh.awaiting, Awaiting::Llm));
-    assert!(matches!(fresh.context_tokens, AgentField::Value(None)));
+    assert!(matches!(
+        fresh.context_tokens,
+        AgentField::Value(AgentNumber(None))
+    ));
     assert_eq!(
         stringify_json(&plain_data(&NO_USAGE).unwrap()).unwrap(),
         r#"{"inputTokens":0,"outputTokens":0}"#
@@ -22,12 +28,15 @@ fn fresh_conversation_and_usage_sum_keep_optional_presence_without_guarding_arit
     let mut left = TurnUsage::new(-0.0, f64::MAX);
     left.reasoning_tokens = AgentField::Undefined;
     let mut right = TurnUsage::new(-0.0, f64::MAX);
-    right.cached_input_tokens = AgentField::Value(0.0);
+    right.cached_input_tokens = AgentField::Value(AgentNumber(Some(0.0)));
     let sum = add_usage(&left, &right);
-    assert!(sum.input_tokens.is_sign_negative());
+    assert!(sum.input_tokens.number().unwrap().is_sign_negative());
     assert_eq!(sum.output_tokens, f64::INFINITY);
     assert!(matches!(sum.reasoning_tokens, AgentField::Absent));
-    assert!(matches!(sum.cached_input_tokens, AgentField::Value(0.0)));
+    assert!(matches!(
+        sum.cached_input_tokens,
+        AgentField::Value(AgentNumber(Some(0.0)))
+    ));
     assert!(matches!(left.cached_input_tokens, AgentField::Absent));
 }
 
@@ -52,7 +61,7 @@ fn conversation_wire_encoding_is_conditional_and_keeps_failed_outcome_data_flat(
             args: Rc::new(PlainData::Undefined),
         }),
         outcome: Rc::clone(&failure),
-        turn: f64::NAN,
+        turn: f64::NAN.into(),
     };
     assert_eq!(
         stringify_json(&plain_data(&record).unwrap()).unwrap(),
@@ -88,16 +97,18 @@ fn dedupe_and_fold_keep_borrowed_opaque_values_and_original_call_outcome_identit
             Rc::new(ToolRecord {
                 call: Rc::clone(&surviving),
                 outcome: Rc::clone(&outcome),
-                turn,
+                turn: turn.into(),
             })
         })
         .collect();
     let mut conv = Conversation::fresh();
-    conv.turns = turns;
-    conv.tool_records = records;
-    conv.turn_count = 9.0;
-    conv.awaiting = Awaiting::Tools { batch_turn: 2.0 };
-    conv.context_tokens = AgentField::Value(Some(33.0));
+    conv.turns = Rc::new(turns);
+    conv.tool_records = Rc::new(records);
+    conv.turn_count = 9.0.into();
+    conv.awaiting = Awaiting::Tools {
+        batch_turn: 2.0.into(),
+    };
+    conv.context_tokens = AgentField::Value(33.0.into());
     let folded = fold_summary(&conv, 2.0, Rc::clone(&summary));
     assert_eq!(folded.turns.len(), 2);
     assert!(Rc::ptr_eq(&folded.turns[0], &summary));
@@ -109,7 +120,10 @@ fn dedupe_and_fold_keep_borrowed_opaque_values_and_original_call_outcome_identit
     assert_eq!(folded.tool_records[0].turn, 1.0);
     assert_eq!(folded.turn_count, 9.0);
     assert!(matches!(folded.awaiting, Awaiting::Llm));
-    assert!(matches!(folded.context_tokens, AgentField::Value(None)));
+    assert!(matches!(
+        folded.context_tokens,
+        AgentField::Value(AgentNumber(None))
+    ));
     changed.set(2);
     assert_eq!(folded.turns[1].0.get(), 2);
     assert_eq!(folded.tool_records[0].call.args.0.get(), 2);

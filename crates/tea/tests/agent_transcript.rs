@@ -76,25 +76,26 @@ fn dense_seed_copies_outer_arrays_keeps_only_ok_results_and_does_not_deduplicate
     let ok = Rc::new(ToolRecord {
         call: Rc::clone(&call),
         outcome: Rc::new(ToolOutcome::Ok(Rc::clone(&result))),
-        turn: 1.0,
+        turn: 1.0.into(),
     });
     let failed = Rc::new(ToolRecord {
         call: Rc::clone(&call),
         outcome: Rc::new(ToolOutcome::Error(Rc::new(PlainData::Null))),
-        turn: 1.0,
+        turn: 1.0.into(),
     });
     let mut conversation = Conversation {
-        turns: vec![Rc::clone(&turn)],
-        tool_records: vec![failed, ok.clone(), ok],
-        turn_count: 1.0,
+        turns: Rc::new(vec![Rc::clone(&turn)]),
+        tool_records: Rc::new(vec![failed, ok.clone(), ok]),
+        turn_count: 1.0.into(),
         awaiting: Awaiting::Llm,
-        context_tokens: QueueField::Value(None),
+        context_tokens: QueueField::Value(demlik_tea::data::NumberOrNull(None)),
+        legacy_usage: QueueField::Absent,
     };
     let t = Transcript::<PlainData>::from_seed(TranscriptSeed {
         conversation: Some(&conversation),
     });
-    conversation.turns.clear();
-    conversation.tool_records.clear();
+    Rc::make_mut(&mut conversation.turns).clear();
+    Rc::make_mut(&mut conversation.tool_records).clear();
     let mut first = t.read();
     let second = t.read();
     assert_eq!(first.turns.len(), 1);

@@ -235,7 +235,7 @@
       "agent-transcript.seed-only",
       "agent-transcript.seed-order-not-numeric-keys"
     ],
-    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases. The raw own-result-property observation agent-state-prerequisite.copy-undefined-tool-result is QUALIFIED and excluded from strict/nativeEvidence: a missing undefined tool result recovers as typed Undefined; exact JSON wire and original owner checks have the separate explicit wire-identity case. This does not claim JavaScript own-property reflection."
   },
   "@demlik/tea:./agent#AgentEndedStatus": {
     "signature": "f56ac43e4e2c196c4da9447ef14499c80f2029bc6e5018e7860ac8dbf7445a87",

@@ -1,12 +1,13 @@
 //! Shared agent data and its load-bearing guards. The factory, providers and
 //! lifecycle projection are separate consumers.
 
+pub use crate::data::NumberOrNull as AgentNumber;
 pub use crate::work_queue::QueueField as AgentField;
 use crate::{
     PlainData, Tagged,
     data::{JsText, JsonData, plain_data},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
 fn is_token_count(value: Option<&PlainData>) -> bool {
@@ -60,15 +61,24 @@ pub fn is_agent_turn(value: &PlainData) -> bool {
 pub const AGENT_TURN_SCHEMA: super::GuardedSchema =
     super::schema::schema_from_guard(is_agent_turn, "an AgentTurn");
 
+#[derive(Deserialize)]
+#[serde(bound(deserialize = "A: Deserialize<'de>"), rename_all = "camelCase")]
 pub struct ToolCall<A = PlainData> {
     pub call_id: JsText,
     pub name: JsText,
     pub args: Rc<A>,
 }
+#[derive(Deserialize)]
+#[serde(
+    bound(deserialize = "A: Deserialize<'de>, P: Deserialize<'de>"),
+    rename_all = "camelCase"
+)]
 pub struct AgentTurn<A = PlainData, P = PlainData> {
     pub content: JsText,
     pub tool_calls: Vec<Rc<ToolCall<A>>>,
+    #[serde(default)]
     pub provider: AgentField<Rc<P>>,
+    #[serde(default)]
     pub usage: AgentField<Rc<TurnUsage>>,
 }
 impl<A, P> AgentTurn<A, P> {
@@ -81,17 +91,21 @@ impl<A, P> AgentTurn<A, P> {
         }
     }
 }
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TurnUsage {
-    pub input_tokens: f64,
-    pub output_tokens: f64,
-    pub reasoning_tokens: AgentField<f64>,
-    pub cached_input_tokens: AgentField<f64>,
+    pub input_tokens: AgentNumber,
+    pub output_tokens: AgentNumber,
+    #[serde(default)]
+    pub reasoning_tokens: AgentField<AgentNumber>,
+    #[serde(default)]
+    pub cached_input_tokens: AgentField<AgentNumber>,
 }
 impl TurnUsage {
     pub fn new(input_tokens: f64, output_tokens: f64) -> Self {
         Self {
-            input_tokens,
-            output_tokens,
+            input_tokens: input_tokens.into(),
+            output_tokens: output_tokens.into(),
             reasoning_tokens: AgentField::Absent,
             cached_input_tokens: AgentField::Absent,
         }
@@ -102,23 +116,51 @@ pub enum ToolOutcome<R, E = PlainData> {
     /// The original failed outcome. A transcript does not inspect or keep it.
     Error(Rc<E>),
 }
+#[derive(Deserialize)]
+#[serde(bound(
+    deserialize = "R: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,A: serde::de::DeserializeOwned"
+))]
 pub struct ToolRecord<R, E = PlainData, A = PlainData> {
     pub call: Rc<ToolCall<A>>,
     pub outcome: Rc<ToolOutcome<R, E>>,
-    pub turn: f64,
+    pub turn: AgentNumber,
 }
+#[derive(Clone)]
 pub enum Awaiting {
     Llm,
-    Tools { batch_turn: f64 },
-    Compacting { folding: f64 },
+    Tools { batch_turn: AgentNumber },
+    Compacting { folding: AgentNumber },
 }
+#[derive(Deserialize)]
+#[serde(
+    bound(
+        deserialize = "R: serde::de::DeserializeOwned,T: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,A: serde::de::DeserializeOwned"
+    ),
+    rename_all = "camelCase"
+)]
 pub struct Conversation<R, T = AgentTurn, E = PlainData, A = PlainData> {
-    pub turns: Vec<Rc<T>>,
-    pub tool_records: Vec<Rc<ToolRecord<R, E, A>>>,
-    pub turn_count: f64,
+    pub turns: Rc<Vec<Rc<T>>>,
+    pub tool_records: Rc<Vec<Rc<ToolRecord<R, E, A>>>>,
+    pub turn_count: AgentNumber,
     pub awaiting: Awaiting,
     /// Preserves a missing legacy field separately from an explicit null.
-    pub context_tokens: AgentField<Option<f64>>,
+    #[serde(default)]
+    pub context_tokens: AgentField<AgentNumber>,
+    /// A persisted pre-354 conversation may still carry the run total here.
+    #[serde(default, rename = "usage")]
+    pub legacy_usage: AgentField<Option<Rc<TurnUsage>>>,
+}
+impl<R, T, E, A> Clone for Conversation<R, T, E, A> {
+    fn clone(&self) -> Self {
+        Self {
+            turns: Rc::clone(&self.turns),
+            tool_records: Rc::clone(&self.tool_records),
+            turn_count: self.turn_count,
+            awaiting: self.awaiting.clone(),
+            context_tokens: self.context_tokens.clone(),
+            legacy_usage: self.legacy_usage.clone(),
+        }
+    }
 }
 /// An ended run cannot carry a running status. A done run may have no output.
 /// The terminal failure value stays caller-typed until the factory binds it.
@@ -250,14 +292,14 @@ impl<A: Serialize, P: Serialize> Serialize for AgentTurn<A, P> {
 impl Serialize for TurnUsage {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut fields = vec![
-            ("inputTokens", PlainData::Number(self.input_tokens)),
-            ("outputTokens", PlainData::Number(self.output_tokens)),
+            ("inputTokens", field::<S, _>(&self.input_tokens)?),
+            ("outputTokens", field::<S, _>(&self.output_tokens)?),
         ];
         if let AgentField::Value(value) = self.reasoning_tokens {
-            fields.push(("reasoningTokens", PlainData::Number(value)));
+            fields.push(("reasoningTokens", field::<S, _>(&value)?));
         }
         if let AgentField::Value(value) = self.cached_input_tokens {
-            fields.push(("cachedInputTokens", PlainData::Number(value)));
+            fields.push(("cachedInputTokens", field::<S, _>(&value)?));
         }
         JsonData(&object(fields)).serialize(serializer)
     }
@@ -279,7 +321,7 @@ impl<R: Serialize, E: Serialize, A: Serialize> Serialize for ToolRecord<R, E, A>
         JsonData(&object([
             ("call", field::<S, _>(&self.call)?),
             ("outcome", field::<S, _>(&self.outcome)?),
-            ("turn", PlainData::Number(self.turn)),
+            ("turn", field::<S, _>(&self.turn)?),
         ]))
         .serialize(serializer)
     }
@@ -290,11 +332,11 @@ impl Serialize for Awaiting {
             Self::Llm => object([("kind", PlainData::String("llm".into()))]),
             Self::Tools { batch_turn } => object([
                 ("kind", PlainData::String("tools".into())),
-                ("batchTurn", PlainData::Number(*batch_turn)),
+                ("batchTurn", field::<S, _>(&batch_turn)?),
             ]),
             Self::Compacting { folding } => object([
                 ("kind", PlainData::String("compacting".into())),
-                ("folding", PlainData::Number(*folding)),
+                ("folding", field::<S, _>(&folding)?),
             ]),
         };
         JsonData(&fields).serialize(serializer)
@@ -307,14 +349,14 @@ impl<R: Serialize, T: Serialize, E: Serialize, A: Serialize> Serialize
         let mut fields = vec![
             ("turns", field::<S, _>(&self.turns)?),
             ("toolRecords", field::<S, _>(&self.tool_records)?),
-            ("turnCount", PlainData::Number(self.turn_count)),
+            ("turnCount", field::<S, _>(&self.turn_count)?),
             ("awaiting", field::<S, _>(&self.awaiting)?),
         ];
         if let AgentField::Value(value) = self.context_tokens {
-            fields.push((
-                "contextTokens",
-                value.map_or(PlainData::Null, PlainData::Number),
-            ));
+            fields.push(("contextTokens", field::<S, _>(&value)?));
+        }
+        if let AgentField::Value(value) = &self.legacy_usage {
+            fields.push(("usage", field::<S, _>(value)?));
         }
         JsonData(&object(fields)).serialize(serializer)
     }

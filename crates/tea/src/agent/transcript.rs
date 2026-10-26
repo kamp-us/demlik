@@ -115,7 +115,7 @@ impl<R, T, F> Transcript<R, T, F> {
             )
             .unwrap_or_else(|never| match never {});
             let mut state = this.inner.borrow_mut();
-            state.turns = conversation.turns.clone();
+            state.turns = conversation.turns.as_ref().clone();
             state.tools = tools;
         }
         this
