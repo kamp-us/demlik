@@ -1,0 +1,78 @@
+{
+  "scope": "Full bounded typed reducer conformance on accepted61dd interface, no production modifications/agent wiring/higher helper/dependency/central changes. STOP for Root full review/integration.",
+  "sourceCommit": "9b7bfaaa3d94d2c53e4767fabc32252c0ea00fe1",
+  "interfaceCommit": "61ddf29a3fcb8888299f89ac90f0a205ca81bb70",
+  "referenceCommit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "counts": {
+    "shared": 94,
+    "pureIncluded": 32,
+    "actorIncluded": 62,
+    "protocolRefusals": 4,
+    "nativeLifecycle": 6,
+    "nativeLifecycleIncludedInNativeTotals": true,
+    "newCompiledControls": 16,
+    "sourceNativeControls": 12,
+    "nativeOwnerControls": 4,
+    "affectedOldPairs": 517,
+    "affectedOldBreakdown": {
+      "core": 10,
+      "runtime": 16,
+      "contracts": 48,
+      "hooks": 38,
+      "recorder": 397,
+      "recorderRuntime": 8
+    },
+    "oldCompiledRetainedOwnerControls": 4,
+    "nativeDefaultIncluding25Docs": 384,
+    "nativeAllFeaturesIncluding25Docs": 398,
+    "sourceFocusedTests": 56,
+    "sourceFocusedFiles": 4,
+    "typeRefusals": [
+      "sole E0308 wrong error family",
+      "sole E0597 borrowed actor error"
+    ],
+    "exactPreExistingSourceCapabilityMappings": 7
+  },
+  "archive": {
+    "path": "/private/tmp/demlik-typed-reducer-conformance-exact-9b7bfaaa-01a16c9d",
+    "tar": "/private/tmp/demlik-typed-reducer-conformance-exact-9b7bfaaa-01a16c9d.tar",
+    "tarSha256": "eaaf51ba16e243c65e0c5f90b751c88186ae28b780585f11f4357a9bcaddaf56",
+    "manifest": "/private/tmp/demlik-typed-reducer-conformance-exact-9b7bfaaa-01a16c9d/manifest.json",
+    "manifestSha256": "e65ffa2c772d27029f66f50eeb7ee3736191dce13d035ba0eace85615e898aa0",
+    "committedSources": 22,
+    "cargoArtifacts": 352,
+    "evidenceFiles": 215,
+    "coldBuild": false
+  },
+  "mappingFile": "verification/parity/typed-reducer-contracts.json",
+  "qualifications": [
+    "Comparison is the declared domain/data/identity/ordering projection. Raw error profiles are retained separately: native ApplyError::Reduce/RuntimeError::Reduce transport is not a claim that arbitrary Source throws have native names/prototypes.",
+    "Native panics remain separate from declared Result errors. Source Error throws and native catch_unwind panic transport compare only their explicit boundary behavior and message.",
+    "Controlled caller schedules only. No Promise scheduler, JS mutable getter/prototype or serialization framework is introduced; pure borrowed errors and actor-owned static lifetimes have independent compiled proofs.",
+    "Existing8uncoordinated ready-future scheduling qualifications are not closed by these controlled action scripts. No JS Promise/exception/prototype/mutable-callback framework or arbitrary scheduling equivalence claimed.",
+    "Native infallible callback panic behavior remains distinct from declared Result errors; original caller cause data/identity is retained without pretending ReduceError has the caller raw JS name/prototype.",
+    "Pure E remains free of Clone/Debug/serde/Send/static. Actual actor E retains static ownership; native pending borrow/lifetime and formatting/serialization boundaries are explicit.",
+    "No new Source exports are fabricated for native try_* names. Seven mappings reuse exact pre-existing IDs and signatures; all symbols were actually observed in successful trusted cases.",
+    "This checkpoint adds verification only. Full agent wiring/tags/router/replay-time changes and higher TraceReplay/testing/PBT fallible helper APIs remain outside it."
+  ],
+  "static": {
+    "fmt": true,
+    "clippyDefaultAllTargets": true,
+    "clippyAllFeaturesAllTargets": true,
+    "typescriptAllParityMts": true,
+    "biome7NewFiles": true
+  },
+  "commands": {
+    "leanEnvironment": "RUSTUP_HOME=/private/tmp/demlik-rust-toolchain-01a16c9d/rustup CARGO_HOME=/private/tmp/demlik-pbt-cargo-home-01a16c9d RUSTUP_TOOLCHAIN=stable CARGO_NET_OFFLINE=true CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1; PATH includes isolated cargo/bin",
+    "native": "cargo test -p demlik-tea --locked --offline --message-format=json [--all-features]",
+    "static": "cargo clippy -p demlik-tea --all-targets [--all-features] -- -D warnings; cargo fmt --all --check; pnpm exec tsc --noEmit -p verification/parity/tsconfig.json; pnpm exec biome check verification/parity/typed-reducer-*",
+    "shared": "pnpm exec node verification/parity/typed-reducer-run.mjs --binary <actual Cargo-selected typed_reducer_driver>",
+    "controls": "pnpm exec node verification/parity/typed-reducer-checks-run.mjs --binary <actual selected driver> --owner-binary <actual selected typed_reducer_lifecycle>; uses existing separate target/agent-state-mutation-build",
+    "oldRegressionRunner": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/typed-reducer-conformance/regressions/run.mjs",
+    "sourceFocused": "pnpm --filter @demlik/tea exec vitest run src/supervision.test.ts src/fold-msgs.test.ts src/effect/conformance.test.ts src/promise/small-core.test.ts --maxWorkers=1 --no-file-parallelism --cache=false --fsModuleCachePath=<own target>"
+  },
+  "handoff": {
+    "path": "/private/tmp/demlik-typed-reducer-conformance-handoff-01a16c9d.json",
+    "sha256": "56c60678b056ef194636587837e45133019dd332d0607be96968f52ba3b1afa7"
+  }
+}
