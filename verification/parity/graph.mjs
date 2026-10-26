@@ -32,6 +32,12 @@ const suites = [
     format: "process",
   },
   {
+    name: "cli-ledger-preflight",
+    driver: "gate_preflight_driver",
+    script: "graph-cli-ledger-preflight.mts",
+    format: "process",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",
@@ -198,6 +204,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "gate_preflight_driver",
   "hexagon_driver",
   "cli_config_driver",
   "cli_frontdoor_driver",
@@ -282,7 +289,10 @@ export async function graphParity(cargo) {
     const passing =
       suite.format === "process"
         ? report.cases.filter(
-            (row) => row.valid !== false && row.passed === true,
+            (row) =>
+              row.valid !== false &&
+              row.protocol !== true &&
+              row.passed === true,
           )
         : report.cases.slice(0, report.passed);
     assert.equal(

@@ -1,0 +1,165 @@
+{
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "recordedAt": "2026-10-26T07:30:42.345167+00:00",
+  "scope": "Reviewed local conversation/state/ordered CLI preparation and optional PBT siblings. Full monorepo Rust parity remains incomplete. No TypeScript production edits, Docker or remote actions.",
+  "parent": "01693b13",
+  "leaves": {
+    "conversationPrerequisite": [
+      "3f2e753a3f44bed801e0890fae086151092a98ba",
+      "98d622c537ca3bf6700995efc2270dcb3ba7cf74"
+    ],
+    "agentState": [
+      "730f361cb5bedf9c691962730a865c19b712aad1",
+      "6302f2195622ea1faa4557567eae4df48f810637"
+    ],
+    "cliPreflight": "bfc4638c6d611edf434c3875ec929788eb8e4842",
+    "pbt": "2c8269e6974555e45be4789a7f2e6c298c1612a5",
+    "pbtAdapters": "4c63e755e4dd3a72de7bf47e2d86936674d5fb98"
+  },
+  "verification": {
+    "comparisons": 14076,
+    "passed": 14076,
+    "behavioralFailures": 0,
+    "referenceChanges": [],
+    "nativeEvidence": 13995,
+    "rawQualifiedEvidence": 81,
+    "rawQualifiedStrictMapping": false,
+    "declaredTestingComparisonViews": {
+      "testingHelpers": 97,
+      "pbt": 53,
+      "total": 150,
+      "qualification": "Declared comparison views, with full actual Source/native diagnostics retained. No universal Vitest/DEV/reflection/fast-check/native RNG/shrink/options/diagnostics equality."
+    },
+    "excludedObservations": [
+      "agent-model.input-missing",
+      "agent-model.input-undefined",
+      "agent-state-prerequisite.copy-undefined-tool-result"
+    ],
+    "newSharedChecks": {
+      "conversation": 49,
+      "agentState": 205,
+      "fanoutRestore": 8,
+      "cliPreflight": 441,
+      "pbtFixed": 52,
+      "pbtSeparateFileLaw": 1
+    },
+    "nativeAndDocs": {
+      "default": 547,
+      "pbtFeature": 554,
+      "docs": 26,
+      "compileFailDocs": 24,
+      "runnableDocs": 2,
+      "qualification": "Default and feature runs overlap; counts are not added together."
+    },
+    "gates": {
+      "format": 0,
+      "biome": 0,
+      "parityTypecheck": 0,
+      "allTargetsClippyDefault": 0,
+      "allTargetsClippyFeature": 0,
+      "evidenceGuards": 11,
+      "modelTypingRefusals": 3,
+      "helperTyping": {
+        "positive": 1,
+        "refusals": 4
+      },
+      "pbtTyping": {
+        "positive": 1,
+        "refusals": 3
+      }
+    },
+    "faultControls": {
+      "newDetected": 82,
+      "escaped": 0,
+      "groups": {
+        "conversation": 12,
+        "stateAndFanout": 20,
+        "cliPreflight": 41,
+        "pbt": 9
+      },
+      "allSuccessfullyCompiled": true,
+      "pbtFreshlyExecuted": true,
+      "additionalSemanticCases": 0,
+      "priorAccepted62And180": "Retained historical proof; not redundantly rerun or counted as new."
+    },
+    "report": {
+      "cases": 14076,
+      "passed": 14076,
+      "failures": [],
+      "referenceChanges": [],
+      "nativeEvidence": 13995,
+      "gapRows": 2745,
+      "mapped": 801,
+      "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-r2/report-before-controls.json",
+      "sha256": "e289e7e73f00ec881ddfa0f78d367fd6878f5c6018f79544f64ac2182640ef12",
+      "completeExitReason": "Only explicit remaining full-port gaps"
+    },
+    "coverage": {
+      "total": 3445,
+      "mapped": 801,
+      "inheritedMemberReferences": 14,
+      "gapRows": 2745,
+      "cliRowsStillOpen": 53,
+      "unexplainedGaps": 0,
+      "metadataUpdate": "All53CLIrows remain open. Stale argv-only wording corrected; coverage recomputed against the same actual passing nativeEvidence, no semantic cases added."
+    }
+  },
+  "integrity": {
+    "status": "passed",
+    "at": "2026-10-26T07:25:14.086203+00:00",
+    "sourceAndVerificationFilesUnchanged": 2230,
+    "baselineExecutablesUnchanged": 1435,
+    "fileAdditionsAndRemovals": [],
+    "referenceChanges": []
+  },
+  "artifacts": {
+    "fullReport": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-r2/report-before-controls.json",
+      "sha256": "e289e7e73f00ec881ddfa0f78d367fd6878f5c6018f79544f64ac2182640ef12"
+    },
+    "checks": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-main-checks.json",
+      "sha256": "996e659d872a8981a61d4a4d90bc27f40b5d1b2079dd70344575350cd06c577b"
+    },
+    "controls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-main-controls.json",
+      "sha256": "7080500e2d2ad0cdb7d037fcff4017d91e80641c7b1a9c5b8a76406b74dd99c7"
+    },
+    "beforeControls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-before-controls.json",
+      "sha256": "0eb31b11f0c51526757592e8289e44a3baccd3654b4761599e223fadadb45c46"
+    },
+    "afterControls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-after-controls-audit.json",
+      "sha256": "484e74f129db3047a6dca13d17afbf36270015ec542a241a90bbf047b604a193"
+    },
+    "coverageRefresh": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/state-preflight-property-coverage-refresh.json",
+      "sha256": "590724d1f16b081f71c7397edb8baa8359423885825d329c0321c962a7db1014"
+    },
+    "archive": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/01693b13-state-preflight-property-accepted/manifest.json",
+      "sha256": "ad66938f70e0c0ddf5af0f8f743cccc86f2775885f8581091a1eed0310981e37",
+      "files": 534,
+      "bytes": 730668456
+    }
+  },
+  "recoveries": [
+    {
+      "kind": "guard-environment",
+      "detail": "Initial recorder evidence guard missed task Cargo PATH and failed ENOENT. Ten coverage guards passed; only affected recorder guard rerun with lean env passed. No semantic failure or test edit."
+    },
+    {
+      "kind": "process-report-contract",
+      "detail": "First combined graph adapter selected7passing protocol refusals along with441behaviorpairs. Its existing count guard rejected448!=441. Filter now excludes protocol:true, preserving7refusal checks and all53CLI gaps. First reports retained; fresh fullR2 passed. No native/oracle/case change."
+    }
+  ],
+  "blindSpots": [
+    "Full factory/machine/status/tools/providers/children and other agent profiles remain incomplete.",
+    "Remaining CLI modes/distribution, native/Node/browser/Wasm/React/DO/extension hosts and packaging/targets/MSRV still require full coverage.",
+    "Raw own-tool-result property reflection and model Missing/Undefined input differences remain qualified/OPEN outside strict evidence.",
+    "PBT native seed streams, shrink/minimum behavior, bounded typed options and full framework diagnostics remain qualified.",
+    "Historical first c1 PBT native-control binary was overwritten before parent handoff. Effective final f94 control and current82 freshly executed controls are independently verified; unavailable historical binary is not reused as proof."
+  ],
+  "remainingWork": "Continue whole-goal API coverage; do not mark the goal complete at this checkpoint."
+}

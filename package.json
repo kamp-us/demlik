@@ -17,7 +17,7 @@
     "parity": "pnpm --filter @demlik/parity verify",
     "parity:complete": "pnpm --filter @demlik/parity verify:complete",
     "parity:mutations": "pnpm --filter @demlik/parity verify:mutations",
-    "rust:check": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "rust:check": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace && cargo test --workspace --all-features",
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
     "check:codeowners": "node scripts/check-codeowners.mjs",
     "check:catalog": "fabrika guard catalog-guard check",

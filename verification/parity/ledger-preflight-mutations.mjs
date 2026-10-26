@@ -18,8 +18,9 @@ const directory = fs.mkdtempSync(
   path.join(os.tmpdir(), "demlik-ledger-preflight-faults-"),
 );
 const workspace = path.join(directory, "workspace");
-const target = path.join(root, "target/parity/shape-judgment-mutation-build");
+const target = path.join(root, "target/parity/ledger-preflight-mutation-build");
 const binary = path.join(target, "debug/examples/gate_preflight_driver");
+assert.notEqual(path.resolve(binary), path.resolve(baseline));
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const baselineHash = hash(fs.readFileSync(baseline));
 const environment = {

@@ -8,6 +8,11 @@ import { fileURLToPath } from "node:url";
 import { agentContentParity } from "./agent-content-run.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
+import {
+  agentStateFanoutParity,
+  agentStateParity,
+  agentStatePrerequisiteParity,
+} from "./agent-state-parity.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
@@ -28,6 +33,7 @@ import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
 import { pbtFoldParity } from "./pbt-fold-run.mjs";
+import { pbtPropertyParity } from "./pbt-property-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
 import { pollerParity } from "./poller-run.mjs";
 import { reconcilerParity } from "./reconciler-run.mjs";
@@ -1022,6 +1028,30 @@ if (!mutationSuite) {
       operation: "tea.pbt-fold",
       binaryArgument: "--pbt-fold-bin",
       run: (options) => pbtFoldParity(cargo, options),
+    },
+    {
+      name: "pbtProperty",
+      operation: "tea.pbt-property",
+      binaryArgument: "--pbt-property-bin",
+      run: (options) => pbtPropertyParity(cargo, options),
+    },
+    {
+      name: "agentStatePrerequisite",
+      operation: "tea.agent-conversation-owners",
+      binaryArgument: "--agent-state-prerequisite-bin",
+      run: (options) => agentStatePrerequisiteParity(cargo, options),
+    },
+    {
+      name: "agentState",
+      operation: "tea.agent-state",
+      binaryArgument: "--agent-state-bin",
+      run: (options) => agentStateParity(cargo, options),
+    },
+    {
+      name: "agentStateFanout",
+      operation: "tea.agent-fanout-restore",
+      binaryArgument: "--agent-state-fanout-bin",
+      run: (options) => agentStateFanoutParity(cargo, options),
     },
     {
       name: "testingHelpers",

@@ -184,7 +184,7 @@ export async function stateMutations(options = {}) {
         baselineTarget,
         "debug/examples/agent_fanout_restore_driver",
       ),
-      flow: path.join(baselineTarget, "agent-state-flow-driver"),
+      flow: path.join(baselineTarget, "debug/flow_driver"),
     },
     hashes = Object.fromEntries(
       Object.entries(binaries).map(([k, v]) => [k, hash(fs.readFileSync(v))]),
@@ -257,9 +257,9 @@ export async function stateMutations(options = {}) {
         "--locked",
         "--offline",
         "-p",
-        "demlik-tea",
+        item.mode === "flow" ? "demlik-parity" : "demlik-tea",
         ...(item.mode === "flow"
-          ? ["--lib"]
+          ? ["--bin", "flow_driver"]
           : [
               "--example",
               item.mode === "fanout"
@@ -312,18 +312,9 @@ export async function stateMutations(options = {}) {
         for (const id of failures)
           assert.ok(!Object.hasOwn(r.nativeEvidence, id));
       } else {
-        execFileSync(
-          "python3",
-          [
-            "/private/tmp/demlik-agent-state-flow-build-01a16c9d.py",
-            workspace,
-            target,
-          ],
-          { cwd: workspace, env, stdio: "pipe" },
-        );
         const r = verifyFlow(
           output,
-          path.join(target, "agent-state-flow-driver"),
+          path.join(target, "debug/flow_driver"),
           false,
         );
         failures = r.failures.map((x) => x.id);

@@ -670,37 +670,64 @@
     "signature": "5e77ca7e17376b2cb81418f3e07f5468a097a268a14a60ee0394fdabdf723134",
     "rust": {
       "file": "crates/code-graph/src/project.rs",
-      "symbols": ["demlik_code_graph::project::find_repo_root"]
+      "symbols": [
+        "demlik_code_graph::project::find_repo_root",
+        "demlik_code_graph::project::find_repo_root_text"
+      ]
     },
     "cases": [
       "graph.project.walk-sources",
       "graph.project.git-visible",
-      "graph.project.missing-directory"
-    ]
+      "graph.project.missing-directory",
+      "graph.cli-ledger-preflight.root.closest",
+      "graph.cli-ledger-preflight.root.relative",
+      "graph.cli-ledger-preflight.root.raw-marker",
+      "graph.cli-ledger-preflight.root.raw-fallback",
+      "graph.cli-ledger-preflight.root.raw-parent"
+    ],
+    "nativeProfile": "Path and logical UTF16 text entrypoints share the canonical workspace-marker search. The text entrypoint preserves raw root spelling while filesystem access follows the existing Node-compatible text adapter."
   },
   "@demlik/code-graph:./dist/chunk-MOVBGT3I.js#findRepoRoot": {
     "signature": "0600756d636d09d36f0000774ec5d583bcea2da9b731fa861bc48a69b82ea76d",
     "rust": {
       "file": "crates/code-graph/src/project.rs",
-      "symbols": ["demlik_code_graph::project::find_repo_root"]
+      "symbols": [
+        "demlik_code_graph::project::find_repo_root",
+        "demlik_code_graph::project::find_repo_root_text"
+      ]
     },
     "cases": [
       "graph.project.walk-sources",
       "graph.project.git-visible",
-      "graph.project.missing-directory"
-    ]
+      "graph.project.missing-directory",
+      "graph.cli-ledger-preflight.root.closest",
+      "graph.cli-ledger-preflight.root.relative",
+      "graph.cli-ledger-preflight.root.raw-marker",
+      "graph.cli-ledger-preflight.root.raw-fallback",
+      "graph.cli-ledger-preflight.root.raw-parent"
+    ],
+    "nativeProfile": "Path and logical UTF16 text entrypoints share the canonical workspace-marker search. The text entrypoint preserves raw root spelling while filesystem access follows the existing Node-compatible text adapter."
   },
   "@demlik/code-graph:./dist/project.js#findRepoRoot": {
     "signature": "0600756d636d09d36f0000774ec5d583bcea2da9b731fa861bc48a69b82ea76d",
     "rust": {
       "file": "crates/code-graph/src/project.rs",
-      "symbols": ["demlik_code_graph::project::find_repo_root"]
+      "symbols": [
+        "demlik_code_graph::project::find_repo_root",
+        "demlik_code_graph::project::find_repo_root_text"
+      ]
     },
     "cases": [
       "graph.project.walk-sources",
       "graph.project.git-visible",
-      "graph.project.missing-directory"
-    ]
+      "graph.project.missing-directory",
+      "graph.cli-ledger-preflight.root.closest",
+      "graph.cli-ledger-preflight.root.relative",
+      "graph.cli-ledger-preflight.root.raw-marker",
+      "graph.cli-ledger-preflight.root.raw-fallback",
+      "graph.cli-ledger-preflight.root.raw-parent"
+    ],
+    "nativeProfile": "Path and logical UTF16 text entrypoints share the canonical workspace-marker search. The text entrypoint preserves raw root spelling while filesystem access follows the existing Node-compatible text adapter."
   },
   "@demlik/code-graph:./project#listSourceFiles": {
     "signature": "362c11eca844c51277b4b578beefa2b30ca8e0362cd855b4348e7c34fafc1e8d",
@@ -7595,7 +7622,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--accept-smells": {
@@ -7612,7 +7639,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--max <n>": {
@@ -7630,7 +7657,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--fail-on <level>": {
@@ -7648,7 +7675,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--ci": {
@@ -7665,7 +7692,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--html": {
@@ -7682,7 +7709,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--find <name>": {
@@ -7700,7 +7727,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--blast <id>": {
@@ -7718,7 +7745,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--deep": {
@@ -7735,7 +7762,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--headers": {
@@ -7752,7 +7779,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--edges": {
@@ -7769,7 +7796,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--file <f>": {
@@ -7787,7 +7814,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hexagon": {
@@ -7810,7 +7837,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
     "nativeProfile": "Native typed option parsing plus exact actual-process hexagon early-dispatch observations. Full-entrypoint and remaining-mode gaps remain explicit."
   },
@@ -7828,7 +7855,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--smells": {
@@ -7845,7 +7872,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--by <axis>": {
@@ -7863,7 +7890,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--plan": {
@@ -7880,7 +7907,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--graph": {
@@ -7897,7 +7924,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--entry-preset <name>": {
@@ -7915,7 +7942,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--node-kinds <file>": {
@@ -7933,7 +7960,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--cycles": {
@@ -7950,7 +7977,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--data": {
@@ -7967,7 +7994,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--interface-width": {
@@ -7984,7 +8011,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--clusters": {
@@ -8001,7 +8028,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--unguarded": {
@@ -8018,7 +8045,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--dead-only": {
@@ -8035,7 +8062,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--accept-dead": {
@@ -8052,7 +8079,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--unreachable": {
@@ -8069,7 +8096,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--kinds": {
@@ -8086,7 +8113,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--cross-runtime": {
@@ -8103,7 +8130,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--write-ceilings": {
@@ -8120,7 +8147,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--comments": {
@@ -8137,7 +8164,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--env-keys": {
@@ -8154,7 +8181,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-limit <n>": {
@@ -8172,7 +8199,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-since <iso>": {
@@ -8190,7 +8217,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-days <n>": {
@@ -8208,7 +8235,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots": {
@@ -8225,7 +8252,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--collapse-config <file>": {
@@ -8243,7 +8270,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--collapse": {
@@ -8260,7 +8287,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--boundary-rules <file>": {
@@ -8278,7 +8305,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--migrate-ceilings": {
@@ -8295,7 +8322,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--reason <text>": {
@@ -8313,7 +8340,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--accept-crossings": {
@@ -8330,7 +8357,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--boundaries": {
@@ -8347,7 +8374,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--layer-rules <file>": {
@@ -8365,7 +8392,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--layers": {
@@ -8382,7 +8409,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--api-base <rev>": {
@@ -8400,7 +8427,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--api-policy <file>": {
@@ -8418,7 +8445,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--api <map>": {
@@ -8436,7 +8463,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--out <file>": {
@@ -8454,7 +8481,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--json": {
@@ -8471,7 +8498,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--pretty": {
@@ -8488,7 +8515,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:argument:<path>": {
@@ -8506,7 +8533,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Only argv parsing, help and explicit-source metadata are verified; functional global CLI and mode execution remain unported."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/tea:./agent#MediaSource": {
@@ -8745,7 +8772,7 @@
       "agent-transcript.seed-only",
       "agent-transcript.seed-order-not-numeric-keys"
     ],
-    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases."
+    "nativeProfile": "Dense ordered native sequences with actual retained Rc handles. Sparse/prototype/custom-iterator JavaScript arrays are measured in agent-content-manual-profile.mjs and excluded from this native interface. Raw malformed non-string callId differences are separate observations, never strict mapping cases. The raw own-result-property observation agent-state-prerequisite.copy-undefined-tool-result is QUALIFIED and excluded from strict/nativeEvidence: a missing undefined tool result recovers as typed Undefined; exact JSON wire and original owner checks have the separate explicit wire-identity case. This does not claim JavaScript own-property reflection."
   },
   "@demlik/tea:./agent#AgentEndedStatus": {
     "signature": "f56ac43e4e2c196c4da9447ef14499c80f2029bc6e5018e7860ac8dbf7445a87",
@@ -9769,6 +9796,153 @@
     "nativeProfile": "Declared pure Counter/Poller comparison view. Actual native public path demlik_tea::testing::BoundMachine. Full Source/native diagnostics and all five suite qualifications are retained; no universal Vitest, DEV or diagnostic-decoration equivalence. ReplayOpts/BoundMachine evidence uses actual typed construction/consumption and the public operations that consume them, not fabricated constructor calls.",
     "knownGaps": [
       "Source DEV deepFreeze and generic top-level function-command checks are absent natively, including replay-based updates. Typed Step prevents async/non-tuple update results. Caller comparison is explicit; no universal Vitest equality/asymmetric/prototype/function/reflection/traversal/diagnostic equivalence. See measured Source-only profiles and bounded paired policies. Native bound surface borrows machine/context; matchers are supplied per assertion and never retained."
+    ]
+  },
+  "@demlik/tea:./agent#AgentState": {
+    "signature": "c63025ce95fbcab959fb1026a17da44dfc5b69dcc4fc19238bf4f5f28f0df180",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": [
+        "demlik_tea::agent::types::AgentState::with_usage_defaults",
+        "demlik_tea::agent::types::AgentState::current_stage",
+        "demlik_tea::agent::types::AgentState::is_settled",
+        "demlik_tea::agent::types::AgentState::require_awaiting"
+      ]
+    },
+    "cases": [
+      "agent-state.usage-current-null-absent",
+      "agent-state.usage-current-null-null",
+      "agent-state.stage-running-undefined-first",
+      "agent-state.inspect-running-undefined-llm",
+      "agent-state.inspect-cancelled-null-tools",
+      "agent-state.cold-absent-absent"
+    ],
+    "nativeProfile": "Canonical composed state facts, conditional JSON restoration, and four conversation/state pure helpers only. Native borrowed opaque consumers impose no Clone/serde/Send/static on pure state values. Rc state/composed owners, fresh migration outer owners, first running stage, nullable persisted numbers, and missing/undefined/null legacy usage and failure remain observable. Unknown state/conversation extras, getters/prototypes, sparse/custom-iterator arrays, and raw own-tool-result-property reflection remain outside the typed owner profile. The separate prerequisite raw own-result row stays QUALIFIED and excluded from strict/nativeEvidence. No agent factory, reducer, status projector, provider, SDK, child, or model-handler claim. Internal helpers are not fabricated published exports."
+  },
+  "@demlik/tea:./agent#AgentFailure": {
+    "signature": "b0738e2fedd3660bf9c0b6630ec6c1b43b934a53202f70034ae28639895d263f",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentState::is_settled"]
+    },
+    "cases": [
+      "agent-state.annotation-turn_limit-running",
+      "agent-state.annotation-elapsed_limit-running",
+      "agent-state.annotation-llm-running",
+      "agent-state.inspect-running-absent-llm",
+      "agent-state.inspect-running-undefined-llm"
+    ],
+    "nativeProfile": "The actual turn_limit, elapsed_limit, and llm variants retain nullable persisted timestamps and caller-owned llm cause handles. Conditional wire decoding retains lone UTF16 and optional cause presence. The state annotation distinguishes missing/undefined from explicit null; no failure/status projector, schema guard, or arbitrary JavaScript thrown-value profile is claimed."
+  },
+  "@demlik/tea:./agent#AgentLifecycleNote": {
+    "signature": "43dd2652290a5c8e0754f8623461512c91a8f8aad5bbd9e818e93ae4571a6353",
+    "rust": {
+      "file": "crates/tea/src/agent/types.rs",
+      "symbols": ["demlik_tea::agent::types::AgentState::with_usage_defaults"]
+    },
+    "cases": [
+      "agent-state.usage-absent-undefined-value",
+      "agent-state.usage-current-null-absent",
+      "agent-state.cold-absent-absent"
+    ],
+    "nativeProfile": "All four actual lifecycle-note variants are restored through the canonical state and retained unchanged by the pure migration helper. Native opaque consumers prove original call/cause/composed-owner handles without serialization bounds; shared cases cover flat conditional wire fields, nullable timestamps, and raw UTF16. No event projection or agent transition is claimed."
+  },
+  "@demlik/tea:./pbt#arbMsgSequence": {
+    "signature": "98759b0dcb37ff3b30794a1b2d3b4ec9cce9f3285f8773885da1e01827860c76",
+    "rust": {
+      "file": "crates/tea/src/pbt/proptest.rs",
+      "symbols": ["pbt::msg_sequence"]
+    },
+    "cases": [
+      "pbt-sequence.tail-0.prefix-0",
+      "pbt-sequence.tail-0.prefix-1",
+      "pbt-sequence.tail-0.prefix-3",
+      "pbt-sequence.tail-1.prefix-0",
+      "pbt-sequence.tail-1.prefix-1",
+      "pbt-sequence.tail-1.prefix-3",
+      "pbt-sequence.tail-3.prefix-0",
+      "pbt-sequence.tail-3.prefix-1",
+      "pbt-sequence.tail-3.prefix-3",
+      "pbt-sequence.tail-30.prefix-0",
+      "pbt-sequence.tail-30.prefix-1",
+      "pbt-sequence.tail-30.prefix-3"
+    ],
+    "nativeProfile": "Optional pbt feature. bounded tail+fixed prefix laws via established native Strategy; generator distributions/shrink order remain backend-specific. Full actual Source/native diagnostics are retained separately from the explicitly declared comparison view.",
+    "knownGaps": [
+      "Native SizeRange/usize validation and diagnostics differ from Source JavaScript numeric options; only exact inclusive tail/fixed-prefix shape laws are paired.",
+      "Native Proptest1.11 random streams/distribution/shrink order/minima are separate from fast-check3.23.2.",
+      "Measured standard deterministic value trees only; no arbitrary/nondeterministic custom-tree minimum association guarantee.",
+      "The proven graph is std/regex-syntax without fork/timeout/persistence/cache. Unifying additional downstream backend features/settings is outside this receipt."
+    ]
+  },
+  "@demlik/tea:./pbt#propertyInvariant": {
+    "signature": "1d9063f03057af20845a5bb1c27b29fbf9ac9b734c69b6c751ebd3ebc66e16b2",
+    "rust": {
+      "file": "crates/tea/src/pbt/proptest.rs",
+      "symbols": ["pbt::property_invariant"]
+    },
+    "cases": [
+      "pbt-property.reducer.complete-before-check",
+      "pbt-property.reducer.empty",
+      "pbt-property.reducer.one",
+      "pbt-property.reducer.terminal-following",
+      "pbt-property.reducer.shared-message",
+      "pbt-property.reducer.false-first",
+      "pbt-property.reducer.false-later",
+      "pbt-property.reducer.original-error-first",
+      "pbt-property.reducer.original-error-later",
+      "pbt-property.reducer.init-error",
+      "pbt-property.reducer.subs-error",
+      "pbt-property.reducer.update-error",
+      "pbt-property.reducer.fold-refusal-precedes-false",
+      "pbt-property.reducer.refusal-first",
+      "pbt-property.reducer.loaded-transform-resume",
+      "pbt-property.reducer.loaded-terminal",
+      "pbt-property.reducer.nonfinite",
+      "pbt-property.reducer.negative-zero",
+      "pbt-property.transitions.complete-before-check",
+      "pbt-property.transitions.empty",
+      "pbt-property.transitions.one",
+      "pbt-property.transitions.terminal-following",
+      "pbt-property.transitions.shared-message",
+      "pbt-property.transitions.false-first",
+      "pbt-property.transitions.false-later",
+      "pbt-property.transitions.original-error-first",
+      "pbt-property.transitions.original-error-later",
+      "pbt-property.transitions.init-error",
+      "pbt-property.transitions.subs-error",
+      "pbt-property.transitions.update-error",
+      "pbt-property.transitions.fold-refusal-precedes-false",
+      "pbt-property.transitions.refusal-first",
+      "pbt-property.transitions.loaded-transform-resume",
+      "pbt-property.transitions.loaded-terminal",
+      "pbt-property.transitions.nonfinite",
+      "pbt-property.transitions.negative-zero",
+      "pbt-property.transitions.terminal-refusal",
+      "pbt-property.count.0",
+      "pbt-property.count.3",
+      "pbt-property.count.default-200",
+      "pbt-sequence.tail-0.prefix-0",
+      "pbt-sequence.tail-0.prefix-1",
+      "pbt-sequence.tail-0.prefix-3",
+      "pbt-sequence.tail-1.prefix-0",
+      "pbt-sequence.tail-1.prefix-1",
+      "pbt-sequence.tail-1.prefix-3",
+      "pbt-sequence.tail-3.prefix-0",
+      "pbt-sequence.tail-3.prefix-1",
+      "pbt-sequence.tail-3.prefix-3",
+      "pbt-sequence.tail-30.prefix-0",
+      "pbt-sequence.tail-30.prefix-1",
+      "pbt-sequence.tail-30.prefix-3",
+      "pbt-property.no-regression-files"
+    ],
+    "nativeProfile": "Optional pbt feature. full-fold-before-step predicate, default200, restored/failure behavior under qualified native typed options; no universal fast-check parameter/exception/report equivalence. Full actual Source/native diagnostics are retained separately from the explicitly declared comparison view.",
+    "knownGaps": [
+      "Native u32 counts/u64 seeds and caller loaded factory are a typed ownership adaptation; manually coerced JS options and global fast-check config are not universally reproduced.",
+      "Native errors retain original typed E/panic/trace; default Source fast-check error decoration can lose raw thrown cause. No universal exception/diagnostic formatting equivalence.",
+      "Native Proptest1.11 random streams/distribution/shrink order/minima are separate from fast-check3.23.2.",
+      "Measured standard deterministic value trees only; no arbitrary/nondeterministic custom-tree minimum association guarantee.",
+      "The proven graph is std/regex-syntax without fork/timeout/persistence/cache. Unifying additional downstream backend features/settings is outside this receipt."
     ]
   }
 }
