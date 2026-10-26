@@ -30,3 +30,7 @@ libc.workspace = true
 [[example]]
 name = "pbt_property_driver"
 required-features = ["pbt"]
+
+[[example]]
+name = "pbt_constructors_interface"
+required-features = ["pbt"]

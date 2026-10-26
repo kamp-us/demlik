@@ -2,7 +2,7 @@ use super::{FoldStep, FoldTrace, fold_events};
 use crate::{Machine, NoCellError, Subscription, Tagged, storage::PanicCause};
 use ::proptest::{
     collection::{SizeRange, vec},
-    strategy::Strategy,
+    strategy::{Just, Strategy},
     test_runner::{
         Config, RngAlgorithm, RngSeed, TestCaseError, TestError, TestRunner, noop_result_cache,
     },
@@ -13,6 +13,23 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     sync::Arc,
 };
+
+/// Move one authored message into a shared constant. Proptest clones its Arc,
+/// without cloning the message or its borrowed, opaque payloads.
+pub fn constant_msg<M: Tagged + fmt::Debug>(message: M) -> Just<Arc<M>> {
+    Just(Arc::new(message))
+}
+
+/// Map generated fields through their authored message constructor. Fields move
+/// into the constructor; the message owns its tag and a new shared outer value.
+/// Proptest may call this deterministic Fn repeatedly while reading or shrinking
+/// a tree. Its standard mapper owns that behavior, without a stored message cache.
+pub fn record_msg<A: Strategy, M: Tagged + fmt::Debug>(
+    fields: A,
+    build: impl Fn(A::Value) -> M,
+) -> impl Strategy<Value = Arc<M>> {
+    fields.prop_map(move |value| Arc::new(build(value)))
+}
 
 /// Bounds apply only to the generated tail. Prefix handles are retained verbatim
 /// and are never part of the backend's array shrinking.

@@ -3,6 +3,11 @@
 //!
 //! Property runners fully fold each case before checking it. Their `loaded`
 //! factory supplies one owned snapshot per evaluation, without a Clone bound.
+//!
+//! Native message constructors own their tags and fields. The optional constructor
+//! helpers do not inspect JavaScript record shapes, symbols, getters or prototype
+//! behavior. Generated values need Debug for Proptest; opaque fields need no
+//! Clone, serialization, Send or static lifetime.
 use crate::{Machine, NoCellError, Subscription, Tagged, core::replay};
 use std::sync::Arc;
 
@@ -59,6 +64,6 @@ mod proptest;
 #[cfg(feature = "pbt")]
 pub use self::proptest::{
     EvaluatedFailure, FailedCase, InvariantFailure, PredicateFailure, PropertyFailure,
-    PropertyOptions, SequenceOptions, msg_sequence, property_invariant, property_terminates,
-    property_trace,
+    PropertyOptions, SequenceOptions, constant_msg, msg_sequence, property_invariant,
+    property_terminates, property_trace, record_msg,
 };
