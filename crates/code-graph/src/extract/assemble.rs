@@ -7,7 +7,9 @@ use super::directories::build_directories;
 use super::edges::{EdgeResult, resolve_edges_with_cross_runtime};
 use super::functions::{DiscoveredFunction, discover_functions, is_test_file};
 use super::metrics::{compute_function_metrics, module_comment_lines, module_loc};
-use crate::checker::context::{TypeContextInput, with_type_context};
+use crate::checker::context::{
+    TypeContext, TypeContextInput, with_type_context, with_type_context_text,
+};
 use crate::data::extract::load_data_report;
 use crate::declarations::discover::{build_declaration_nodes, discover_declarations};
 use crate::declarations::uses::resolve_declaration_uses;
@@ -26,7 +28,10 @@ use crate::smells::evaluate::{compare_flat_smells, smells_for_function, smells_f
 use crate::smells::health::{HealthInput, health_band};
 use crate::smells::plan::{PlanAxis, rank_plan};
 use crate::syntax::headers::function_header;
-use crate::syntax::imports::{import_declaration_specifiers, resolve_imports};
+use crate::syntax::imports::{
+    import_declaration_specifiers, resolve_imports, resolve_imports_text,
+};
+use crate::text::JsString;
 use indexmap::IndexMap;
 use std::{io, path::Path};
 
@@ -47,6 +52,24 @@ pub enum AssemblyError {
     Compiler(TsgoError),
     Analysis(AnalysisError),
     Data(CatalogError),
+}
+impl AssemblyError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Analysis(error) => error.name(),
+            Self::Data(error) => error.name(),
+            Self::WorkingDirectory(_) | Self::Threshold(_) | Self::Compiler(_) => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Analysis(error) => error.message(),
+            Self::Data(error) => error.message(),
+            Self::WorkingDirectory(_) | Self::Threshold(_) | Self::Compiler(_) => {
+                self.to_string().into()
+            }
+        }
+    }
 }
 impl std::fmt::Display for AssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -139,6 +162,27 @@ pub fn assemble_graph_with_analysis(
     assemble_graph_with_reports(loaded, thresholds, binary, fields, Some(options), None)
 }
 
+/// Reuse the original logical root supplied to `load_edge_project_text`.
+/// Its Path-backed loaded input retains filesystem identity; the same text is sent to tsgo.
+pub fn assemble_graph_with_analysis_text(
+    loaded: &LoadedEdgeProject,
+    root_text: &JsString,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+    options: &AnalysisOptions<'_>,
+) -> Result<Graph, AssemblyError> {
+    assemble_graph_with_reports_in(
+        loaded,
+        thresholds,
+        binary,
+        fields,
+        Some(options),
+        None,
+        Some(root_text),
+    )
+}
+
 pub fn assemble_graph_with_reports(
     loaded: &LoadedEdgeProject,
     thresholds: Thresholds,
@@ -147,76 +191,96 @@ pub fn assemble_graph_with_reports(
     options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
 ) -> Result<Graph, AssemblyError> {
+    assemble_graph_with_reports_in(loaded, thresholds, binary, fields, options, data, None)
+}
+
+fn assemble_graph_with_reports_in(
+    loaded: &LoadedEdgeProject,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+    options: Option<&AnalysisOptions<'_>>,
+    data: Option<DataOptions<'_>>,
+    root_text: Option<&JsString>,
+) -> Result<Graph, AssemblyError> {
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let functions = discover_functions(&loaded.project.source_files).functions;
     let ids: Vec<_> = functions
         .iter()
         .map(|function| function.id.clone())
         .collect();
-    let imports = resolve_imports(
-        &loaded.project.root_absolute,
-        &loaded.project.source_files,
-        &loaded.ts_config_path,
-    );
-    let (result, declaration_uses, analysis) = with_type_context(
-        binary,
-        TypeContextInput {
-            project: &loaded.project,
-            ts_config_path: &loaded.ts_config_path,
-            functions: &functions,
-        },
-        |context| {
-            report_unjoined(
-                &context.unjoined,
-                "function(s) have no node in tsgo's tree, so their calls are not resolved",
-            );
-            Ok((|| -> Result<_, AnalysisError> {
-                let prep = options
-                    .map(prepare_analysis)
-                    .transpose()?
-                    .unwrap_or_else(AnalysisPrep::default);
-                let mut resolver = options
-                    .zip(prep.catalog.as_ref())
-                    .map(|(options, catalog)| {
-                        create_cross_runtime_resolver(
-                            CrossRuntimeInput {
-                                catalog,
-                                root_absolute: &loaded.project.root_absolute,
-                                repo_root: options.repo_root,
-                            },
-                            context,
-                        )
-                    })
-                    .transpose()?;
-                let result =
-                    resolve_edges_with_cross_runtime(context, imports, &ids, resolver.as_mut())?;
-                let uses = resolve_declaration_uses(
-                    context,
-                    &discover_declarations(&loaded.project.source_files),
-                )?;
-                report_unjoined(
-                    &uses.unjoined,
-                    "declaration(s) have no node in tsgo's tree, so their uses are unknown",
-                );
-                let analysis = options
-                    .map(|options| {
-                        complete_analysis(CompleteInput {
-                            options,
-                            prep: &prep,
+    let imports = match root_text {
+        Some(root) => {
+            resolve_imports_text(root, &loaded.project.source_files, &loaded.ts_config_path)
+                .map_err(AssemblyError::WorkingDirectory)?
+        }
+        None => resolve_imports(
+            &loaded.project.root_absolute,
+            &loaded.project.source_files,
+            &loaded.ts_config_path,
+        ),
+    };
+    let input = TypeContextInput {
+        project: &loaded.project,
+        ts_config_path: &loaded.ts_config_path,
+        functions: &functions,
+    };
+    let read = |context: &mut TypeContext<'_, '_>| {
+        report_unjoined(
+            &context.unjoined,
+            "function(s) have no node in tsgo's tree, so their calls are not resolved",
+        );
+        Ok((|| -> Result<_, AnalysisError> {
+            let prep = options
+                .map(prepare_analysis)
+                .transpose()?
+                .unwrap_or_else(AnalysisPrep::default);
+            let mut resolver = options
+                .zip(prep.catalog.as_ref())
+                .map(|(options, catalog)| {
+                    create_cross_runtime_resolver(
+                        CrossRuntimeInput {
+                            catalog,
                             root_absolute: &loaded.project.root_absolute,
-                            context,
-                            functions: &functions,
-                            inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
-                            resolver: resolver.as_ref(),
-                        })
+                            repo_root: options.repo_root,
+                        },
+                        context,
+                    )
+                })
+                .transpose()?;
+            let result =
+                resolve_edges_with_cross_runtime(context, imports, &ids, resolver.as_mut())?;
+            let uses = resolve_declaration_uses(
+                context,
+                &discover_declarations(&loaded.project.source_files),
+            )?;
+            report_unjoined(
+                &uses.unjoined,
+                "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+            );
+            let analysis = options
+                .map(|options| {
+                    complete_analysis(CompleteInput {
+                        options,
+                        prep: &prep,
+                        root_absolute: &loaded.project.root_absolute,
+                        context,
+                        functions: &functions,
+                        inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
+                        resolver: resolver.as_ref(),
                     })
-                    .transpose()?;
-                Ok((result, uses.uses_by_id, analysis))
-            })())
-        },
-    )
-    .map_err(AssemblyError::Compiler)?
-    .map_err(AssemblyError::from)?;
+                })
+                .transpose()?;
+            Ok((result, uses.uses_by_id, analysis))
+        })())
+    };
+    let resolved = match root_text {
+        Some(root) => with_type_context_text(binary, input, root, read),
+        None => with_type_context(binary, input, read),
+    };
+    let (result, declaration_uses, analysis) = resolved
+        .map_err(AssemblyError::Compiler)?
+        .map_err(AssemblyError::from)?;
     build(
         &loaded.project,
         thresholds,
@@ -225,7 +289,12 @@ pub fn assemble_graph_with_reports(
             result,
             declaration_uses,
             scope: loaded.scope,
-            ts_config: loaded.ts_config_path.to_string_lossy().into_owned(),
+            ts_config: match root_text {
+                Some(root) => {
+                    crate::project::selected_config_text(root, &loaded.ts_config_path).to_lossy()
+                }
+                None => loaded.ts_config_path.to_string_lossy().into_owned(),
+            },
         }),
         Some(functions),
         analysis,

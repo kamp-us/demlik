@@ -312,8 +312,11 @@ pub fn resolve_edge_ts_config_text(
         EdgeScope::Package => root.clone(),
         EdgeScope::Deep => repo_root.to_string_lossy().as_ref().into(),
     };
-    let relative = to_relative(Path::new(&start.to_lossy()), &selected);
-    Ok(join_path_text(&start, &relative.into()))
+    Ok(selected_config_text(&start, &selected))
+}
+pub(crate) fn selected_config_text(start: &JsString, selected: &Path) -> JsString {
+    let relative = to_relative(Path::new(&start.to_lossy()), selected);
+    join_path_text(start, &relative.into())
 }
 fn resolve_edge_ts_config_in(
     root: &Path,

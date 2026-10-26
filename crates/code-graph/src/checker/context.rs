@@ -6,11 +6,14 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 
 use crate::engine::tsgo::{
-    LibraryKind, NativeFile, NativeNode, NativeSymbol, ProgramInput, TsgoBinary, TsgoError,
-    TypeProgram, native_kind, open_type_session,
+    LibraryKind, NativeFile, NativeNode, NativeSymbol, ProgramInput, TextProgramInput, TsgoBinary,
+    TsgoError, TypeProgram, native_kind, open_type_session, open_type_session_text,
 };
 use crate::extract::functions::{DiscoveredFunction, FunctionKind};
-use crate::project::{LoadedProject, SourceUnit, to_relative};
+use crate::project::{
+    LoadedProject, SourceUnit, join_path_text, selected_config_text, to_relative,
+};
+use crate::text::JsString;
 
 #[derive(Clone)]
 pub struct TypedFile {
@@ -54,36 +57,85 @@ pub fn with_type_context<T>(
     input: TypeContextInput<'_>,
     read: impl FnOnce(&mut TypeContext<'_, '_>) -> Result<T, TsgoError>,
 ) -> Result<T, TsgoError> {
-    let mut session = open_type_session(binary, input.ts_config_path)?;
-    let roots: Vec<_> = input
-        .project
-        .source_files
-        .iter()
-        .map(|unit| unit.absolute_path.clone())
-        .collect();
-    session.with_compilation(
-        ProgramInput {
-            root_files: &roots,
-            include_config_files: true,
-        },
-        |program| {
-            let mut context = TypeContext::new(program, input)?;
-            read(&mut context)
-        },
-    )
+    with_type_context_in(binary, input, None, read)
+}
+
+/// Reuse the original logical root supplied to `load_edge_project_text`.
+/// The loaded input owns filesystem Paths; this spelling retains its UTF-16 for the compiler.
+pub fn with_type_context_text<T>(
+    binary: &TsgoBinary,
+    input: TypeContextInput<'_>,
+    root_text: &JsString,
+    read: impl FnOnce(&mut TypeContext<'_, '_>) -> Result<T, TsgoError>,
+) -> Result<T, TsgoError> {
+    with_type_context_in(binary, input, Some(root_text), read)
+}
+
+fn with_type_context_in<T>(
+    binary: &TsgoBinary,
+    input: TypeContextInput<'_>,
+    root_text: Option<&JsString>,
+    read: impl FnOnce(&mut TypeContext<'_, '_>) -> Result<T, TsgoError>,
+) -> Result<T, TsgoError> {
+    let config_text = root_text.map(|root| selected_config_text(root, input.ts_config_path));
+    let mut session = match config_text.as_ref() {
+        Some(config) => open_type_session_text(binary, config)?,
+        None => open_type_session(binary, input.ts_config_path)?,
+    };
+    let text_roots = root_text.map(|root| {
+        input
+            .project
+            .source_files
+            .iter()
+            .map(|unit| join_path_text(root, &unit.file.as_str().into()))
+            .collect::<Vec<_>>()
+    });
+    let read_program = |program: &mut TypeProgram<'_>| {
+        let mut context = TypeContext::new(program, input, text_roots.as_deref())?;
+        read(&mut context)
+    };
+    match text_roots.as_ref() {
+        Some(roots) => session.with_compilation_text(
+            TextProgramInput {
+                root_files: roots,
+                include_config_files: true,
+            },
+            read_program,
+        ),
+        None => {
+            let roots: Vec<_> = input
+                .project
+                .source_files
+                .iter()
+                .map(|unit| unit.absolute_path.clone())
+                .collect();
+            session.with_compilation(
+                ProgramInput {
+                    root_files: &roots,
+                    include_config_files: true,
+                },
+                read_program,
+            )
+        }
+    }
 }
 
 impl<'program, 'channel> TypeContext<'program, 'channel> {
     fn new(
         program: &'program mut TypeProgram<'channel>,
         input: TypeContextInput<'_>,
+        text_roots: Option<&[JsString]>,
     ) -> Result<Self, TsgoError> {
         let root_absolute = input.project.root_absolute.clone();
         let root_real = fs::canonicalize(&root_absolute).unwrap_or_else(|_| root_absolute.clone());
         let mut files = Vec::new();
         let mut by_file_name = HashMap::new();
-        for unit in &input.project.source_files {
-            let Some(source) = program.source_file(&unit.absolute_path)? else {
+        for (index, unit) in input.project.source_files.iter().enumerate() {
+            let source = match text_roots {
+                Some(roots) => program.source_file_text(&roots[index])?,
+                None => program.source_file(&unit.absolute_path)?,
+            };
+            let Some(source) = source else {
                 continue;
             };
             by_file_name.insert(source.file_name().to_path_buf(), unit.clone());

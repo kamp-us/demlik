@@ -51,6 +51,31 @@ pub enum AnalysisError {
     WorkingDirectory(io::Error),
     ExportPatterns(ExportPatternError),
 }
+impl AnalysisError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Catalog(error) => error.name(),
+            Self::Pattern(_)
+            | Self::Convention(GlobError::Pattern(_))
+            | Self::ExportPatterns(ExportPatternError::Pattern(_)) => "SyntaxError",
+            Self::Compiler(_)
+            | Self::Convention(GlobError::Syntax(_))
+            | Self::WorkingDirectory(_)
+            | Self::ExportPatterns(ExportPatternError::WorkingDirectory(_)) => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Catalog(error) => error.message(),
+            Self::Convention(GlobError::Syntax(message)) => message.clone(),
+            Self::Compiler(_)
+            | Self::Pattern(_)
+            | Self::Convention(GlobError::Pattern(_))
+            | Self::WorkingDirectory(_)
+            | Self::ExportPatterns(_) => self.to_string().into(),
+        }
+    }
+}
 impl std::fmt::Display for AnalysisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -63,7 +88,18 @@ impl std::fmt::Display for AnalysisError {
         }
     }
 }
-impl std::error::Error for AnalysisError {}
+impl std::error::Error for AnalysisError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Catalog(error) => error,
+            Self::Compiler(error) => error,
+            Self::Pattern(error) => error,
+            Self::Convention(error) => error,
+            Self::WorkingDirectory(error) => error,
+            Self::ExportPatterns(error) => error,
+        })
+    }
+}
 impl From<TsgoError> for AnalysisError {
     fn from(error: TsgoError) -> Self {
         Self::Compiler(error)
