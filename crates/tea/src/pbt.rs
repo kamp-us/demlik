@@ -1,5 +1,5 @@
-//! Pure per-message traces for machine properties. Generation and execution
-//! of commands remain outside this module.
+//! Dependency-free per-message traces. The optional `pbt` feature adds native
+//! Proptest generation and invariant checks. Command execution stays outside.
 use crate::{Machine, NoCellError, Subscription, Tagged, core::replay};
 use std::sync::Arc;
 
@@ -50,3 +50,11 @@ pub fn fold_events<S: Tagged, M: Tagged, C, U: Subscription, X>(
         final_state: current,
     })
 }
+
+#[cfg(feature = "pbt")]
+mod proptest;
+#[cfg(feature = "pbt")]
+pub use self::proptest::{
+    EvaluatedFailure, FailedCase, InvariantFailure, PropertyFailure, PropertyOptions,
+    SequenceOptions, msg_sequence, property_invariant,
+};

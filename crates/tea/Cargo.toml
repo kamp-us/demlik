@@ -7,7 +7,12 @@ rust-version.workspace = true
 repository.workspace = true
 license = "MIT"
 
+[features]
+default = []
+pbt = ["dep:proptest"]
+
 [dependencies]
+proptest = { workspace = true, optional = true }
 serde.workspace = true
 libm.workspace = true
 serde_json.workspace = true
@@ -21,3 +26,7 @@ tokio.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[[example]]
+name = "pbt_property_driver"
+required-features = ["pbt"]

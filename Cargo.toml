@@ -20,5 +20,6 @@ getrandom = { version = "0.4.3", features = ["wasm_js"] }
 futures = "0.3"
 libc = "0.2"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs", "io-util"] }
+proptest = { version = "=1.11.0", default-features = false, features = ["std"] }
 demlik-tea = { path = "crates/tea" }
 demlik-code-graph = { path = "crates/code-graph" }
