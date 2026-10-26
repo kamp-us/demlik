@@ -1,0 +1,96 @@
+{
+  "@demlik/tea:.#foldMsgs": {
+    "signature": "930e07f0f709a7abe44baf45a17a8fb2ea9774376817df297263737183a8e48d",
+    "rust": {
+      "file": "crates/tea/src/core.rs",
+      "symbols": [
+        "demlik_tea::try_fold_msgs",
+        "demlik_tea::try_fold_msgs_shared"
+      ]
+    },
+    "cases": [
+      "typed-reducer.pure.msgs.ordered",
+      "typed-reducer.pure.msgs-shared.reject-middle",
+      "typed-reducer.pure.msgs-shared.empty"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:./promise#run": {
+    "signature": "4d620c5089f3e5672c8bebcdd48e6b9ac16badb418e5658e07fea94066d7313f",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::try_launch"]
+    },
+    "cases": [
+      "typed-reducer.actor.promise.stop.declared.dispatch",
+      "typed-reducer.actor.promise.escalate.declared.dispatch",
+      "typed-reducer.actor.promise.restart.declared.dispatch"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:./effect#run": {
+    "signature": "197124b0444c5c9b3f2965171dc40817b69a81c5cdba7678c85d9f26dadd93fb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::try_run"]
+    },
+    "cases": [
+      "typed-reducer.actor.effect.stop.declared.dispatch",
+      "typed-reducer.actor.effect.escalate.declared.dispatch",
+      "typed-reducer.actor.effect.restart.declared.dispatch"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb": {
+    "signature": "c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch"]
+    },
+    "cases": [
+      "typed-reducer.actor.promise.stop.declared.dispatch",
+      "typed-reducer.actor.promise.escalate.declared.dispatch",
+      "typed-reducer.actor.promise.restart.declared.dispatch"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9": {
+    "signature": "463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch_once"]
+    },
+    "cases": [
+      "typed-reducer.actor.promise.stop.declared.once",
+      "typed-reducer.actor.promise.escalate.declared.once",
+      "typed-reducer.actor.promise.restart.declared.once"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:6d783f343f7082d6db1b13b3148091b1cfda445985cebcbe8b74b0b581c20a6c": {
+    "signature": "6d783f343f7082d6db1b13b3148091b1cfda445985cebcbe8b74b0b581c20a6c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch"]
+    },
+    "cases": [
+      "typed-reducer.actor.effect.stop.declared.dispatch",
+      "typed-reducer.actor.effect.escalate.declared.dispatch",
+      "typed-reducer.actor.effect.restart.declared.dispatch"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:85a099fd43453c122a2a58fe18e1c73d7f78a4735ded5f9661bed1b3d2775f13": {
+    "signature": "85a099fd43453c122a2a58fe18e1c73d7f78a4735ded5f9661bed1b3d2775f13",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch_once"]
+    },
+    "cases": [
+      "typed-reducer.actor.effect.stop.declared.once",
+      "typed-reducer.actor.effect.escalate.declared.once",
+      "typed-reducer.actor.effect.restart.declared.once"
+    ],
+    "nativeProfile": "Typed native Result reducers preserve the compared Source fold/dispatch/report/supervision/commit and retained-cause behavior. Native ApplyError::Reduce/RuntimeError::Reduce, Source arbitrary throw names/prototypes and Effect defect channels remain explicitly distinct raw profiles. Controlled caller schedules only, no generic JS/Promise/serialization or mutable callback emulation. Pure borrowed errors have no blanket bounds; actor-owned errors retain the existing static lifetime requirement."
+  }
+}
