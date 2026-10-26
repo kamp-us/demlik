@@ -296,7 +296,9 @@ try {
       assert.equal(artifacts.length, 1);
       const artifact = artifacts[0];
       assert.ok(
-        artifact.executable.startsWith(path.join(item.physicalPath, "target") + path.sep),
+        artifact.executable.startsWith(
+          path.join(item.physicalPath, "target") + path.sep,
+        ),
       );
       assert.equal(artifact.fresh, false);
       const binaryBytes = fs.readFileSync(artifact.executable);
