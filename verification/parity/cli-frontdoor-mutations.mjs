@@ -18,7 +18,7 @@ const directory = fs.mkdtempSync(
   path.join(os.tmpdir(), "demlik-cli-frontdoor-faults-"),
 );
 const workspace = path.join(directory, "workspace");
-const target = path.join(root, "target/parity/shape-judgment-mutation-build");
+const target = path.join(root, "target/parity/cli-frontdoor-mutation-build");
 const binary = path.join(target, "debug/examples/cli_frontdoor_driver");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const baselineHash = hash(fs.readFileSync(baseline));
@@ -92,6 +92,7 @@ const mutations = [
   },
   {
     name: "default-options-incorrectly-given",
+    scope: "api",
     file: "cli/frontdoor.rs",
     before: ".given()",
     after: ".keys()",
@@ -99,6 +100,7 @@ const mutations = [
   },
   {
     name: "explicit-given-order-reversed",
+    scope: "api",
     file: "cli/frontdoor.rs",
     edits: [
       ["let given = self", "let mut given = self"],
@@ -111,6 +113,7 @@ const mutations = [
   },
   {
     name: "out-file-opened-before-api-preconditions",
+    scope: "api",
     file: "cli/frontdoor.rs",
     before: "let output = output_to(self.options.out());",
     after:
@@ -168,6 +171,7 @@ const mutations = [
   },
   {
     name: "warning-newline-lost",
+    scope: "api",
     file: "cli/frontdoor.rs",
     before: 'line.push_str("\\n");',
     after: 'line.push_str("");',
@@ -197,6 +201,7 @@ const mutations = [
   },
   {
     name: "empty-api-value-incorrectly-inactive",
+    scope: "api",
     file: "cli/frontdoor.rs",
     before: "api: self.options.api(),",
     after: "api: self.options.api().filter(|value| !value.is_empty()),",
@@ -204,6 +209,7 @@ const mutations = [
   },
   {
     name: "pretty-option-not-forwarded",
+    scope: "api",
     file: "cli/frontdoor.rs",
     before: "pretty: self.options.pretty() == Some(true),",
     after: "pretty: false,",
@@ -234,15 +240,28 @@ const mutations = [
       "empty_stdio_write_calls_the_sink_and_pending_failures_reset_only_on_drain",
   },
 ];
-for (const mutation of mutations) {
-  let text = original.get(mutation.file);
+function changedSource(mutation) {
+  const full = original.get(mutation.file);
+  let start = 0;
+  let end = full.length;
+  if (mutation.scope === "api") {
+    start = full.indexOf("    pub fn dispatch_api_blocking(");
+    end = full.indexOf("\n}\n\nimpl PreparedGatesCli", start);
+    assert.ok(
+      start >= 0 && end > start,
+      "API controls belong to the API method",
+    );
+  }
+  let text = full.slice(start, end);
   for (const [before, after] of mutation.edits ?? [
     [mutation.before, mutation.after],
   ]) {
     assert.equal(text.split(before).length, 2, mutation.name);
     text = text.replace(before, after);
   }
+  return full.slice(0, start) + text + full.slice(end);
 }
+for (const mutation of mutations) changedSource(mutation);
 function pairs(executable, name, ids) {
   const report = path.join(directory, `${name}.json`);
   const run = spawnSync(
@@ -295,11 +314,7 @@ try {
         path.join(workspace, "crates/code-graph/src", file),
         text,
       );
-    let source = original.get(mutation.file);
-    for (const [old, replacement] of mutation.edits ?? [
-      [mutation.before, mutation.after],
-    ])
-      source = source.replace(old, replacement);
+    const source = changedSource(mutation);
     fs.writeFileSync(
       path.join(workspace, "crates/code-graph/src", mutation.file),
       source,

@@ -62,6 +62,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-comments",
+    driver: "comment_cli_driver",
+    script: "graph-cli-comments.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",
