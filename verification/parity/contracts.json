@@ -7622,7 +7622,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--accept-smells": {
@@ -7639,7 +7639,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--max <n>": {
@@ -7657,7 +7657,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--fail-on <level>": {
@@ -7675,25 +7675,32 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--ci": {
     "signature": "4a926ef4afc08b0c1dd52bcf1d121c7de52b008d4864b17e0377709934978670",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.ci.before",
       "graph.cli-parser.option.ci.after",
       "graph.cli-parser.option.ci.equal-is-unknown",
-      "graph.cli-parser.option.ci.negated-is-unknown"
+      "graph.cli-parser.option.ci.negated-is-unknown",
+      "graph.cli-boundaries.ci-text",
+      "graph.cli-boundaries.ci-json",
+      "graph.cli-boundaries.out-ci"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--html": {
     "signature": "c733e003bd5e690ca8cea7efa6cba4beb3954208154d49bbe40c1ad98d183854",
@@ -7709,7 +7716,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--find <name>": {
@@ -7727,7 +7734,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--blast <id>": {
@@ -7745,7 +7752,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--deep": {
@@ -7762,7 +7769,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--headers": {
@@ -7779,7 +7786,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--edges": {
@@ -7796,7 +7803,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--file <f>": {
@@ -7814,7 +7821,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hexagon": {
@@ -7837,7 +7844,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
     "nativeProfile": "Native typed option parsing plus exact actual-process hexagon early-dispatch observations. Full-entrypoint and remaining-mode gaps remain explicit."
   },
@@ -7855,7 +7862,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--smells": {
@@ -7872,7 +7879,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--by <axis>": {
@@ -7890,7 +7897,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--plan": {
@@ -7907,7 +7914,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--graph": {
@@ -7924,7 +7931,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--entry-preset <name>": {
@@ -7942,7 +7949,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--node-kinds <file>": {
@@ -7960,7 +7967,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--cycles": {
@@ -7977,7 +7984,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--data": {
@@ -7994,7 +8001,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--interface-width": {
@@ -8011,7 +8018,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--clusters": {
@@ -8028,7 +8035,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--unguarded": {
@@ -8045,7 +8052,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--dead-only": {
@@ -8062,7 +8069,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--accept-dead": {
@@ -8079,7 +8086,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--unreachable": {
@@ -8096,7 +8103,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--kinds": {
@@ -8113,7 +8120,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--cross-runtime": {
@@ -8130,25 +8137,30 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--write-ceilings": {
     "signature": "6fd95a1056e8559847dbf51aea6bd8e834a7e9a36ad145f51ca1823e7116c889",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.writeCeilings.before",
       "graph.cli-parser.option.writeCeilings.after",
       "graph.cli-parser.option.writeCeilings.equal-is-unknown",
-      "graph.cli-parser.option.writeCeilings.negated-is-unknown"
+      "graph.cli-parser.option.writeCeilings.negated-is-unknown",
+      "graph.cli-boundaries.retired-before-rules"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--comments": {
     "signature": "7f032256cb96be19feb79d31864a7d34ceae67a1d5d350f95f4cc3574f4cd515",
@@ -8164,7 +8176,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--env-keys": {
@@ -8181,7 +8193,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-limit <n>": {
@@ -8199,7 +8211,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-since <iso>": {
@@ -8217,7 +8229,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots-days <n>": {
@@ -8235,7 +8247,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--hotspots": {
@@ -8252,7 +8264,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--collapse-config <file>": {
@@ -8270,7 +8282,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--collapse": {
@@ -8287,95 +8299,128 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--boundary-rules <file>": {
     "signature": "04407e7e660512542b6a5685737ef751d9b123dc7804b799b756e4c4b9519c1e",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.boundaryRules.space",
       "graph.cli-parser.option.boundaryRules.equal",
       "graph.cli-parser.option.boundaryRules.empty",
       "graph.cli-parser.option.boundaryRules.missing",
-      "graph.cli-parser.option.boundaryRules.raw-0"
+      "graph.cli-parser.option.boundaryRules.raw-0",
+      "graph.cli-boundaries.report-json",
+      "graph.cli-boundaries.missing-rules",
+      "graph.cli-boundaries.malformed-rules"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--migrate-ceilings": {
     "signature": "a861f96ef6f01716788232a7be1e54f6d92fd5475aa9fdae8c88cc785c746a1c",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.migrateCeilings.before",
       "graph.cli-parser.option.migrateCeilings.after",
       "graph.cli-parser.option.migrateCeilings.equal-is-unknown",
-      "graph.cli-parser.option.migrateCeilings.negated-is-unknown"
+      "graph.cli-parser.option.migrateCeilings.negated-is-unknown",
+      "graph.cli-boundaries.migrate-text",
+      "graph.cli-boundaries.migrate-json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--reason <text>": {
     "signature": "92c27dc811d2b8c5667fd9b7a5de9ab70b0ddfe98a918a9da86c58848db580b5",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.reason.space",
       "graph.cli-parser.option.reason.equal",
       "graph.cli-parser.option.reason.empty",
       "graph.cli-parser.option.reason.missing",
-      "graph.cli-parser.option.reason.raw-0"
+      "graph.cli-parser.option.reason.raw-0",
+      "graph.cli-boundaries.accept-text",
+      "graph.cli-boundaries.accept-json",
+      "graph.cli-boundaries.blank-reason"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--accept-crossings": {
     "signature": "4cd8e9e589fc174ace89898fbb7bbe13782ae7a286835107945a6bd12381209b",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.acceptCrossings.before",
       "graph.cli-parser.option.acceptCrossings.after",
       "graph.cli-parser.option.acceptCrossings.equal-is-unknown",
-      "graph.cli-parser.option.acceptCrossings.negated-is-unknown"
+      "graph.cli-parser.option.acceptCrossings.negated-is-unknown",
+      "graph.cli-boundaries.accept-text",
+      "graph.cli-boundaries.accept-json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--boundaries": {
     "signature": "702268b74bdcab86d495aca49181e67c86e7ad573fd23b3a50637e896eeccf69",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.boundaries.before",
       "graph.cli-parser.option.boundaries.after",
       "graph.cli-parser.option.boundaries.equal-is-unknown",
-      "graph.cli-parser.option.boundaries.negated-is-unknown"
+      "graph.cli-parser.option.boundaries.negated-is-unknown",
+      "graph.cli-boundaries.report-text",
+      "graph.cli-boundaries.report-json",
+      "graph.cli-boundaries.report-pretty-text"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--layer-rules <file>": {
     "signature": "7d6a8faec0eb20177c8145a78e3c222ae4de0ce2c09bc75f379afb8864e8da8d",
@@ -8396,9 +8441,9 @@
       "graph.cli-layers.pretty-text",
       "graph.cli-layers.json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared layers dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
     "nativeProfile": "Existing parser/config/frontdoor/ledger preparation plus actual layers dispatch. Native continuation preserves original boxes, performs a second root lookup and uses the shared layer gate/IO owners. Only exact process cases bind here; JS argv, controlled filesystem changes, backend exception text, pending stdio and inactive later-mode continuation stay qualified. Standalone/bootstrap and remaining modes remain open."
   },
@@ -8420,9 +8465,9 @@
       "graph.cli-layers.pretty-text",
       "graph.cli-layers.json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared layers dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
     "nativeProfile": "Existing parser/config/frontdoor/ledger preparation plus actual layers dispatch. Native continuation preserves original boxes, performs a second root lookup and uses the shared layer gate/IO owners. Only exact process cases bind here; JS argv, controlled filesystem changes, backend exception text, pending stdio and inactive later-mode continuation stay qualified. Standalone/bootstrap and remaining modes remain open."
   },
@@ -8441,7 +8486,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--api-policy <file>": {
@@ -8459,7 +8504,7 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--api <map>": {
@@ -8477,78 +8522,103 @@
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
   },
   "@demlik/code-graph:cli:option:--out <file>": {
     "signature": "3ce3755ebf6f438eb4c64108031cfe1c5c36531ba3e2440552abc4cab49d1f79",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.out.space",
       "graph.cli-parser.option.out.equal",
       "graph.cli-parser.option.out.empty",
       "graph.cli-parser.option.out.missing",
-      "graph.cli-parser.option.out.raw-0"
+      "graph.cli-parser.option.out.raw-0",
+      "graph.cli-boundaries.out-ci",
+      "graph.cli-boundaries.stdout-unused-with-out"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--json": {
     "signature": "bdf56d6571184b1d2dde7d4f51354eeb61f6134da40b7e528b0cb72246ae74d7",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.json.before",
       "graph.cli-parser.option.json.after",
       "graph.cli-parser.option.json.equal-is-unknown",
-      "graph.cli-parser.option.json.negated-is-unknown"
+      "graph.cli-parser.option.json.negated-is-unknown",
+      "graph.cli-boundaries.report-json",
+      "graph.cli-boundaries.ci-json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:option:--pretty": {
     "signature": "a97c92bb69ef9ec69eaddbcfb0b2c1844269a6d78880e4b1834eaeefe99de9c0",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.pretty.before",
       "graph.cli-parser.option.pretty.after",
       "graph.cli-parser.option.pretty.equal-is-unknown",
-      "graph.cli-parser.option.pretty.negated-is-unknown"
+      "graph.cli-parser.option.pretty.negated-is-unknown",
+      "graph.cli-boundaries.report-pretty-text",
+      "graph.cli-boundaries.report-pretty-json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/code-graph:cli:argument:<path>": {
     "signature": "4258a1e79987c9c3bab87314071d2c5ce6ca079f79a2799253b4c0415db9ea1b",
     "rust": {
       "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+      ]
     },
     "cases": [
       "graph.cli-parser.parse.fixed-0",
       "graph.cli-parser.parse.fixed-2",
       "graph.cli-parser.parse.fixed-3",
       "graph.cli-parser.parse.fixed-8",
-      "graph.cli-parser.target.raw-1"
+      "graph.cli-parser.target.raw-1",
+      "graph.cli-boundaries.no-tsconfig",
+      "graph.cli-boundaries.replacement-self-root",
+      "graph.cli-boundaries.supplementary-self-root"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch and ordered gate preparation have bounded native proof; remaining modes, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
+    ],
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
   },
   "@demlik/tea:./agent#MediaSource": {
     "signature": "fb8241f24178d26bd49577696455649a0896e752ec2f15b8c63bbecba859d767",

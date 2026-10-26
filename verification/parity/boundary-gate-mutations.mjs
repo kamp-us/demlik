@@ -18,7 +18,7 @@ const directory = await mkdtemp(
   path.join(tmpdir(), "demlik-boundary-gate-faults-"),
 );
 const workspace = path.join(directory, "workspace");
-const target = path.join(root, "target/parity/shape-judgment-mutation-build");
+const target = path.join(root, "target/parity/boundary-gate-mutation-build");
 const baselineTarget = path.resolve(
   process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
 );

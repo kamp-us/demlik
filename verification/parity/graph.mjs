@@ -46,6 +46,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-boundaries",
+    driver: "boundary_cli_driver",
+    script: "graph-cli-boundaries.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",

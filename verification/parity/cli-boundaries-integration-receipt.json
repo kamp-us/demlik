@@ -1,0 +1,137 @@
+{
+  "checkpoint": "Prepared boundaries CLI integrated; whole Rust port remains incomplete",
+  "parent": "83884787e07682e45f1267353fb052ad01380a83",
+  "sourceLeaf": "ce1abb6684b973ff4add7d6d4e23cbd18b80aa7e",
+  "sourcePick": "83884787",
+  "previousAccepted": "46895fae5267d2769eb65159993df90cf9def1a7",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "localOnly": true,
+  "newObservations": {
+    "total": 71,
+    "exact": 52,
+    "qualified": 19,
+    "fullSourceProcesses": 70,
+    "preparedContinuation": 1,
+    "protocolRefusals": 7,
+    "responseGuards": 3,
+    "dispatchCalls": 65,
+    "boundaryResults": 59,
+    "payloadRecords": 46,
+    "reportRecords": 13,
+    "outputFiles": 5,
+    "observationKindsAreNotAdditiveCaseCounts": true
+  },
+  "combined": {
+    "comparisons": 14344,
+    "passed": 14344,
+    "behavioralFailures": 0,
+    "referenceEdits": 0,
+    "nativeEvidence": 14231,
+    "rawQualified": 113,
+    "defaultNativeAndDocs": 563,
+    "pbtFeatureNativeAndDocs": 577,
+    "defaultAndFeatureOverlap": true,
+    "docChecks": 26,
+    "compileFailDocs": 24,
+    "runnableDocs": 2,
+    "format": true,
+    "verificationTypes": true,
+    "verificationLint": true,
+    "clippyDefaultAllTargets": true,
+    "clippyFeatureAllTargets": true,
+    "completeCliExit": 1,
+    "completeCliExitReason": "Only remaining explicitly recorded coverage gaps"
+  },
+  "controls": {
+    "newCompiledFaultsCaught": 22,
+    "affectedExistingCompiledFaultsCaught": 31,
+    "existingBreakdown": {
+      "layers": 17,
+      "boundaryGate": 14
+    },
+    "escaped": 0,
+    "evidenceGuards": 11,
+    "integrity": {
+      "status": "passed",
+      "at": "2026-10-26T17:17:20.114348+00:00",
+      "sourceFilesUnchangedDuringControls": 2274,
+      "baselineExecutablesUnchanged": 1451,
+      "historicalShapeLibrariesUnchanged": 2,
+      "sourceFileAdditions": [],
+      "sourceFileRemovals": [],
+      "verificationOnlyTargetChangeAfterFull": {
+        "at": "2026-10-26T17:08:28.690555+00:00",
+        "file": "verification/parity/boundary-gate-mutations.mjs",
+        "beforeSha256": "f35fab0d4ba59282e02061fe11a2b02957659050ecc478877c9ad17c13dba9cd",
+        "afterSha256": "b45073eba29f7073dce1deb25cf1d56d58e64fe82ec047342397553b0b371b01",
+        "change": "Only mutation target changes from target/parity/shape-judgment-mutation-build to target/parity/boundary-gate-mutation-build. Same14 controls, sites, witnesses and Source/native comparison.",
+        "reason": "Keep older shape proof libraries unchanged while rerunning affected boundary controls.",
+        "targetedBiomeExit": 0,
+        "productionSourceOrOracleChange": false
+      }
+    }
+  },
+  "coverage": {
+    "inventory": 3445,
+    "registeredMappings": 817,
+    "gapRows": 2769,
+    "existingRealCliMappingsStrengthened": 11,
+    "newHelperAliasIds": 0,
+    "cliGapsRetained": 53,
+    "countsAreNotCompletionPercentage": true
+  },
+  "implementation": "Prepared continuation dispatch preserves same Box when inactive, performs Source second repo lookup and uses the existing aggregate gate/analyzer/import resolver and IO owners. Crate-private text entrance preserves raw logical roots while legacy Path behavior remains unchanged. Error metadata stays at its typed owner. Actual file writes occur before banners and exit updates.",
+  "verificationMaintenance": "Old layers fault replacements are scoped to dispatch_layers. Existing trim control follows canonical JsString::trim_js. After the full parity pass, only the legacy gate mutation target moved to its dedicated directory, preserving historical shape libraries; targeted Biome and the same14 controls pass. No production/oracle/case change.",
+  "knownLimits": [
+    "Only prepared boundaries continuation, not standalone native argv/bootstrap or later modes. All53 full CLI gaps remain open.",
+    "71 observations include19 qualifications: raw JavaScript argv, controlled root-marker transition, inactive prepared-only continuation, backend exception text and pending stdio notification. Only52 exact rows enter capability evidence.",
+    "Windows and complete assets/distribution remain unverified.",
+    "The whole agent/host/public API port remains incomplete.",
+    "Worker cold external Rc caller used its exact built native library and PATH=/nonexistent; no fresh archive library rebuild is claimed."
+  ],
+  "recovery": "First manual adapter command used a relative executable path from a fixture cwd and got ENOENT. Absolute-path R2 passed71; no source/oracle/case change, failed log retained.",
+  "proofs": {
+    "checks": {
+      "path": "target/parity/cli-boundaries-main-checks.json",
+      "sha256": "df346fda57b98ad58694d007f8dbf12b7658006c3078e07a5b6cb5d668207d99"
+    },
+    "controls": {
+      "path": "target/parity/cli-boundaries-main-controls.json",
+      "sha256": "b6b105d45761668e6698f97dee87e821f3b283c4e803c17c394a18d10ee86620"
+    },
+    "combinedReport": {
+      "path": "target/parity/cli-boundaries-main/report-before-controls.json",
+      "sha256": "22d8e359a1a2eb807666b5a9b0808c30443b8f6ff69cb313d14d5a54cdd5e3c1"
+    },
+    "actualFinalCargo": {
+      "path": "target/parity/cli-boundaries-main-final-cargo.jsonl",
+      "sha256": "d1bb9cc9acfb1c2201cfb9a9f4c85fa1469d7b7a5d17781831396940b9698c3c",
+      "command": [
+        "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "demlik-code-graph",
+        "--example",
+        "boundary_cli_driver",
+        "--message-format=json"
+      ],
+      "library": {
+        "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rlib",
+        "sha256": "e3bd749e5ecbe0e4151f453bd6688a6b844defc8d68bd31a895cec5ec9cb6ca6"
+      },
+      "binary": {
+        "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/debug/examples/boundary_cli_driver",
+        "sha256": "5ee22b5eed864c672783b3c191c9a146c044a8e7852612216884fad62a9de334"
+      }
+    },
+    "archive": {
+      "path": "target/parity/history/83884787-cli-boundaries-main-accepted",
+      "manifest": "target/parity/history/83884787-cli-boundaries-main-accepted/manifest.json",
+      "manifestSha256": "bf6d8026f3321343ea9c75fb60b67d17d17f05e6e8ff405112ce936b627b6d79",
+      "files": 130,
+      "bytes": 296018915
+    }
+  }
+}
