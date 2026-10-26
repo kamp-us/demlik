@@ -221,6 +221,7 @@ try {
     const registration = git(["worktree", "add", "--detach", tree, checkpoint]);
     const item = {
       path: tree,
+      physicalPath: fs.realpathSync(tree),
       checkpoint,
       registration,
       worktreeRegistry: git(["worktree", "list", "--porcelain"]),
@@ -295,7 +296,7 @@ try {
       assert.equal(artifacts.length, 1);
       const artifact = artifacts[0];
       assert.ok(
-        artifact.executable.startsWith(path.join(tree, "target") + path.sep),
+        artifact.executable.startsWith(path.join(item.physicalPath, "target") + path.sep),
       );
       assert.equal(artifact.fresh, false);
       const binaryBytes = fs.readFileSync(artifact.executable);
