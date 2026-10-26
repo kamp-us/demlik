@@ -1,0 +1,191 @@
+{
+  "scope": "Opaque-error command-owner prerequisite and interface proof only; not agent runtime wiring or combined Main acceptance",
+  "base": "7fd08736c82caf0953385a2729a23e8ca51d9246",
+  "sourceCommit": "1751607b5c17711ce017a21eb9c887596f11d178",
+  "branch": "can/rust-defined-error-settlement-01a16c9d",
+  "productionFiles": ["crates/tea/src/command.rs"],
+  "sourceFiles": 5,
+  "interface": {
+    "method": "Cmd::with_error_classifier(fn(&D::Error)->Result<PlainData,CommandContractError>)->ClassifiedCmd<D>",
+    "owner": "CmdDef/Cmd remain authoritative; ClassifiedCmd is an execution view adapter",
+    "output": "same Settled<D>",
+    "bounds": "No Error Serialize/Clone/Debug/Send/static added; pure borrowed opaque error is retained",
+    "algorithm": "One canonical private settle_over and settle_in_over body serves serialized and classified paths"
+  },
+  "red": {
+    "closedOpaqueRunErrorBound": {
+      "receipt": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/interface/before.json",
+      "codes": ["E0277", "E0277"],
+      "issue": "Only Opaque:Serialize through RunError<Rc<Opaque>>"
+    },
+    "missingInterface": {
+      "receipt": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/interface/missing-interface-inferred.json",
+      "codes": ["E0599"],
+      "sameConsumerAsFinal": true
+    }
+  },
+  "checks": {
+    "tea": {
+      "default": {
+        "native": 368,
+        "docs": 25,
+        "total": 393
+      },
+      "feature": {
+        "native": 382,
+        "docs": 25,
+        "total": 407
+      }
+    },
+    "newNativeTests": 7,
+    "types": {
+      "positive": 1,
+      "intendedRefusals": 3,
+      "codes": ["E0308", "E0308", "E0277"],
+      "report": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/types-default/report.json"
+    },
+    "compiledSemanticControls": {
+      "count": 1,
+      "compileExit": 0,
+      "executionExit": 101,
+      "namedWitness": "classifier_view_is_checked_and_preserved_as_undeclared_failure_data",
+      "report": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/control/report.json"
+    },
+    "existingStrictRegressionCases": {
+      "families": 40,
+      "timing": 112,
+      "llm": 91,
+      "timestamps": 36,
+      "total": 279,
+      "newSharedCases": 0,
+      "report": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/regressions.json"
+    },
+    "sourceOnlyProbe": {
+      "rows": 4,
+      "node": "v22.21.1",
+      "v8": "12.4.254.21-node.33",
+      "notSharedParity": true,
+      "report": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/source-observations.json"
+    },
+    "static": [
+      "fmt --all --check",
+      "Clippy tea all-targets default -Dwarnings",
+      "Clippy tea all-targets all-features -Dwarnings",
+      "Biome both new verification modules"
+    ],
+    "staticReport": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/static-commands.json"
+  },
+  "ownershipProof": [
+    "Closed RunError tag comes from existing Tagged/kind owner, not a duplicated tag table",
+    "Accepted declared failure retains original Rc<opaque borrowed cause> and actual io::Error owner",
+    "Original command input Rc and fields are retained; no serde/DTO replacement",
+    "Same-edge token accepted; foreign edge, pure/replay builder and wrong typed channels refused",
+    "Output transform, malformed_result and asynchronous-schema refusal unchanged",
+    "Existing serialized-tag guard/raw/wire/replay facades unchanged"
+  ],
+  "qualifications": [
+    "Classifier is an explicit error-family contract/diagnostic view. For malformed opaque failures, UndeclaredFailure retains only the supplied PlainData view, not the opaque original object. No raw-JS-object identity/prototype claim is made for that refusal.",
+    "Accepted typed errors retain original data independently of the projected view; settled serialization still requires its real wire codec.",
+    "Classifier is a noncapturing function pointer. Borrowed data stays on the actual typed error owner; no E:static is required.",
+    "ClassifiedCmd has input-only Serialize forwarding and no guessed Deserialize classifier. Restored Cmd values need explicit adaptation.",
+    "Existing UTF8 Tagged-name boundary remains unchanged.",
+    "No new opaque-classified actor execution proof is claimed; old real-runtime LLM/timestamp regressions remain existing controlled evidence. Agent wiring/admitted-state/subscriptions are separate pending checkpoints.",
+    "All checks use retained warm baseline and one existing separate warm mutation target. Source-only archive was frozen but not rebuilt; no cold/archive build claim."
+  ],
+  "unscoredAttempts": [
+    "Original missing-interface linkage attempt E0463 lacked preserved proc macros; repaired, retained separately, not counted.",
+    "Initial focused test compile E0369 used PlainData equality; repaired with an independent structural literal, not semantic-fault credit.",
+    "Initial Biome check requested formatting; final same Rust sources and formatted verification modules pass.",
+    "Initial basename-only artifact copying stopped at a collision; repaired with hash-qualified filenames. After feature builds, a final actual Cargo --examples invocation rebound all28 default aliases. Five unused auxiliary aliases required corrected pins; neither executed timestamp nor opaque consumer alias changed. Original copies/hashes remain retained and are not credited as default proofs."
+  ],
+  "aliasAudit": {
+    "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/evidence/default-example-alias-audit.json",
+    "aliasesConfirmed": 28,
+    "correctedUnusedAliases": [
+      "stored_cell_driver",
+      "runtime_driver",
+      "runtime_contract_driver",
+      "pbt_fold_driver",
+      "json_text_driver"
+    ],
+    "executedAliasesUnchanged": true
+  },
+  "artifacts": {
+    "selection": "Actual Cargo JSON; no warm directory scan",
+    "manifestReferences": {
+      "default": {
+        "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-default.json",
+        "sha256": "c2f6fe983b86107d5d35152b6207d1f0bf9cab9300ffe629a2c2b0bd3f9bf21d",
+        "entries": 220
+      },
+      "feature": {
+        "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-feature.json",
+        "sha256": "f53fb4e563709f2838bd36d2cba1d1ac981a6b5c045161feb695f18f9ef4a95d",
+        "entries": 247
+      },
+      "control": {
+        "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-control.json",
+        "sha256": "3fc59c802e3c0d3c7ec49a9599889d3d16ac9898fbad6df324a2294e3ee4d227",
+        "entries": 88
+      },
+      "base": {
+        "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-base.json",
+        "sha256": "125039fffade834642b3cbd3276f2b6336c7e7fe796a528c2420d6c3b1c36896",
+        "entries": 40
+      }
+    },
+    "entries": 595,
+    "distinctPreservedPaths": 595
+  },
+  "archive": {
+    "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/source.tar.gz",
+    "sha256": "8b94ccacce3793a995ece255bb38ba93b06fc8f1e2045e5e429ea50d441a36a2",
+    "content": "Full committed source only; evidence and artifact manifests are separate",
+    "coldBuild": false
+  },
+  "exactDirectory": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d",
+  "manifests": {
+    "artifacts-base.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-base.json",
+      "sha256": "125039fffade834642b3cbd3276f2b6336c7e7fe796a528c2420d6c3b1c36896"
+    },
+    "artifacts-control.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-control.json",
+      "sha256": "3fc59c802e3c0d3c7ec49a9599889d3d16ac9898fbad6df324a2294e3ee4d227"
+    },
+    "artifacts-default.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-default.json",
+      "sha256": "c2f6fe983b86107d5d35152b6207d1f0bf9cab9300ffe629a2c2b0bd3f9bf21d"
+    },
+    "artifacts-feature.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/artifacts-feature.json",
+      "sha256": "f53fb4e563709f2838bd36d2cba1d1ac981a6b5c045161feb695f18f9ef4a95d"
+    },
+    "driver-source-files.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/driver-source-files.json",
+      "sha256": "e82fcc5aaecef7f1c19cf2ee8e82978c412a2912a7605ceacd057fa1e7feff9c"
+    },
+    "evidence-files.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/evidence-files.json",
+      "sha256": "fd180fb2e7bc804641acf472d9cc4bd7c7c8345b3ba1e27f3cb6f501a4b274dc"
+    },
+    "integrity.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/integrity.json",
+      "sha256": "e5da8fe5e7950a174ce74d22276175eadca69ebdf7aabd269d58376030546004"
+    },
+    "reference-files.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/reference-files.json",
+      "sha256": "87131f0103834ac6e5864d1cc5e13e430dc2c8d8015da44c85a1a2afeec364c2"
+    },
+    "source-files.json": {
+      "path": "/private/tmp/demlik-command-classified-exact-1751607b-01a16c9d/manifests/source-files.json",
+      "sha256": "3a3f0bb720cbc2a5899811e81945284c97538b89f158e14d2a17da5216e18ba5"
+    }
+  },
+  "evidenceFiles": 93,
+  "newSourceCapabilityIds": [],
+  "centralFilesChanged": false,
+  "newDependencies": false,
+  "mainEdited": false,
+  "stopBoundary": "STOP for parent review before admitted-state/subscription prerequisites or agent wiring."
+}
