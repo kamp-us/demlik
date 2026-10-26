@@ -1,0 +1,104 @@
+{
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "recordedAt": "2026-10-26T16:07:36.404508+00:00",
+  "parent": "48c0fc58",
+  "sourceCheckpoint": "9177f4258b558366a3e524d53699b8ac52a8f85e",
+  "scope": "Final-state and whole-trace pure property runners; full monorepo port remains incomplete. Local only, no Docker/network/remote actions.",
+  "implementation": "Two public runners share the existing private postfold execution/failure owner. PredicateFailure retains compatible InvariantFailure reexport and Invariant shape. Original completed trace/messages/typed error/panic are retained with no callback reconstruction or new model Clone/serde/Send/static/Debug bounds. Common minimum/backend environment qualifications restored on public documentation.",
+  "verification": {
+    "compared": 14230,
+    "passed": 14230,
+    "behavioralFailures": 0,
+    "referenceChanges": [],
+    "nativeEvidence": 14136,
+    "rawQualifiedEvidence": 94,
+    "newSharedPairs": 108,
+    "newCounterPairs": 84,
+    "newInvoicePairs": 24,
+    "openToJsonObservationsExcluded": 4,
+    "declaredTestingComparisonViews": 258,
+    "nativeAndDocs": {
+      "default": 554,
+      "pbtFeature": 568,
+      "qualification": "Overlapping feature runs; not added together or to shared comparisons."
+    },
+    "gates": [
+      "fmt",
+      "parity TSC",
+      "Biome",
+      "workspace tests default and all-features",
+      "all-target Clippy -D warnings default and all-features"
+    ],
+    "compiledFaults": {
+      "newDetected": 7,
+      "existingDetected": 9,
+      "escaped": 0,
+      "allCompiledSuccessfully": true,
+      "existingNineRerunReason": "Private shared execution owner moved; affected invariant regressions verified."
+    },
+    "typing": {
+      "new": 4,
+      "existing": 4,
+      "semanticCases": 0
+    },
+    "coverage": {
+      "total": 3445,
+      "mapped": 803,
+      "gapRows": 2755,
+      "cliRowsStillOpen": 53,
+      "note": "Two actual new bindings remain qualified with six measured gaps each. Counts are not whole-goal percentage."
+    }
+  },
+  "integrity": {
+    "status": "passed",
+    "at": "2026-10-26T16:07:36.025050+00:00",
+    "sourceFilesUnchanged": 2250,
+    "baselineExecutablesUnchanged": 1442,
+    "referenceChanges": []
+  },
+  "artifacts": {
+    "fullReport": {
+      "cases": 14230,
+      "passed": 14230,
+      "failures": [],
+      "nativeEvidence": 14136,
+      "mapped": 803,
+      "gapRows": 2755,
+      "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-final-main/report-before-controls.json",
+      "sha256": "64021a84ab218b1cb22126ac820b595b7b90c9757c4788492ab3aa0f75154060",
+      "completeExitReason": "Onlyremainingcoveragegaps"
+    },
+    "checks": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-final-main-checks.json",
+      "sha256": "0a660e94460048695dd203d734fd58d61bcf95a377edeea5e5dc3425d19e0c87"
+    },
+    "controls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-final-main-controls.json",
+      "sha256": "adfe1a4da201823a64f0e6abc3347f714062ae2281df03db9fa680b9feb285a6"
+    },
+    "beforeControls": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-final-main-before-controls.json",
+      "sha256": "46418f4a2666d6272239aa33f63d41ad5233eaab8573084cb3fbfecf5bc8b726"
+    },
+    "afterControlsAudit": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/pbt-final-main-after-controls-audit.json",
+      "sha256": "6d63154ed700dce9f744833d437478e6538327380b26420562df934208e0f998"
+    },
+    "archive": {
+      "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/48c0fc58-pbt-final-main-accepted/manifest.json",
+      "sha256": "d5dac2d2ab4a5f77a2c2355b06bba2e0c3e57b34444dfc448365ce4c5418b643",
+      "files": 82,
+      "bytes": 130529899
+    },
+    "parentReview": {
+      "path": "/private/tmp/demlik-pbt-final-parent-review-01a16c9d.json",
+      "sha256": "f976643984e7b738c03995c3ac4172fe7fb5862c44ca57e712dd6676f47c8acf"
+    }
+  },
+  "blindSpots": [
+    "Native random streams, shrink/minimum association, bounded typed options and framework diagnostics remain explicit backend profiles.",
+    "Source false predicates serialize final state and may invoke toJSON/getters or fail on cycles/BigInt. Four actual observations stay OPEN and outside strict/nativeEvidence; no blanket Serialize bound introduced.",
+    "Arbitrary nondeterministic/custom strategy tree equivalence is not promised.",
+    "Remaining full-agent/runtime/CLI/host/packaging/target/MSRV and API gaps remain open. This checkpoint does not complete the goal."
+  ]
+}

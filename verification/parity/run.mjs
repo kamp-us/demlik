@@ -32,6 +32,7 @@ import { llmCallParity } from "./llm-call-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
+import { pbtFinalParity } from "./pbt-final-run.mjs";
 import { pbtFoldParity } from "./pbt-fold-run.mjs";
 import { pbtPropertyParity } from "./pbt-property-run.mjs";
 import { POLICY_SEED, policyCases } from "./policies-generated.mjs";
@@ -1034,6 +1035,12 @@ if (!mutationSuite) {
       operation: "tea.pbt-property",
       binaryArgument: "--pbt-property-bin",
       run: (options) => pbtPropertyParity(cargo, options),
+    },
+    {
+      name: "pbtFinal",
+      operation: "tea.pbt-final-state-and-trace",
+      binaryArgument: "--pbt-final-bin",
+      run: (options) => pbtFinalParity(cargo, options),
     },
     {
       name: "agentStatePrerequisite",

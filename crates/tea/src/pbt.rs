@@ -1,5 +1,8 @@
 //! Dependency-free per-message traces. The optional `pbt` feature adds native
 //! Proptest generation and invariant checks. Command execution stays outside.
+//!
+//! Property runners fully fold each case before checking it. Their `loaded`
+//! factory supplies one owned snapshot per evaluation, without a Clone bound.
 use crate::{Machine, NoCellError, Subscription, Tagged, core::replay};
 use std::sync::Arc;
 

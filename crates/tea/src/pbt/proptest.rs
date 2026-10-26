@@ -41,6 +41,8 @@ pub fn msg_sequence<M: Tagged + fmt::Debug>(
 
 /// Native Proptest parameters. Seeds, random streams, shrinking and diagnostics
 /// are backend-specific, not fast-check seed/coercion compatibility.
+/// Persistence and result caching are disabled. Proptest's other rejection
+/// limits remain backend settings and may read `PROPTEST_*` environment values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PropertyOptions {
     pub num_runs: u32,
@@ -83,6 +85,9 @@ pub enum FailedCase<S, M, C, E> {
 /// The messages and trace belong to an actual failing callback evaluation.
 /// Proptest may reconstruct equivalent values with different handles when it
 /// returns its logical minimum; those reconstructed values are not exposed here.
+/// This retains the last actual failing evaluation without replaying callbacks.
+/// Standard deterministic trees associate it with the logical minimum; arbitrary
+/// nondeterministic or custom value trees have no such equivalence guarantee.
 pub struct EvaluatedFailure<S, M, C, E> {
     pub messages: Vec<Arc<M>>,
     pub failure: FailedCase<S, M, C, E>,
@@ -236,11 +241,6 @@ pub fn property_trace<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, 
     )
 }
 
-// One backend execution/failure owner for the authored post-fold checks. Standard
-// deterministic trees associate the retained last actual failure with the logical
-// minimum; arbitrary nondeterministic/custom trees are not promised equivalent.
-// Persistence/cache remain off. Other PROPTEST_* rejection limits are backend
-// settings, not fast-check configuration/seed/shrink compatibility.
 fn run_property<S: Tagged, M: Tagged + fmt::Debug, C, U: Subscription, X, E>(
     machine: &Machine<'_, S, M, C, U, X>,
     input: &X,
