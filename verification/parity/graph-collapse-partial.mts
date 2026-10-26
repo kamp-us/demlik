@@ -10,16 +10,16 @@ import { z } from "zod";
 import { isCandidateFunction } from "../../packages/code-graph/src/collapse/candidates.js";
 import { findPartialTwins } from "../../packages/code-graph/src/collapse/partial.js";
 import { CollapseSettingsSchema } from "../../packages/code-graph/src/collapse/settings.js";
+import { tsgoBinary } from "../../packages/code-graph/src/engine/tsgo.js";
 import { assembleGraphWithEdges } from "../../packages/code-graph/src/extract/assemble.js";
 import { loadEdgeProject } from "../../packages/code-graph/src/extract/project.js";
 import { NodeKindRulesSchema } from "../../packages/code-graph/src/kinds/rules.js";
 import {
   FunctionKindSchema,
+  type FunctionNode,
   FunctionNodeSchema,
   ThresholdsSchema,
-  type FunctionNode,
 } from "../../packages/code-graph/src/schema.js";
-import { tsgoBinary } from "../../packages/code-graph/src/engine/tsgo.js";
 const binary = process.argv[2],
   reportFile = process.argv[3];
 assert.ok(
@@ -101,7 +101,7 @@ const outputSchema = z.strictObject({
   eligible: z.array(z.boolean()),
   twins: z.array(twinSchema),
   borrowedOwners: z.boolean(),
-  functions: z.array(FunctionNodeSchema).optional(),
+  functions: FunctionNodeSchema.array().optional(),
   moduleFiles: z.array(z.string()).optional(),
 });
 const thrownSchema = z.strictObject({
@@ -381,6 +381,26 @@ pure(
   false,
   1,
 );
+for (const [id, decoy] of [
+  ["left-extension-through-skipped-bucket", ["p", "q", "r", "decoy"]],
+  ["right-extension-through-skipped-bucket", ["q", "r", "s", "decoy"]],
+] as const) {
+  const constantsAt = id.startsWith("left") ? 0 : 3;
+  const nodes = [
+    node("a", [], {
+      calls: ["p", "q", "r", "s", "left"].map((c, i) =>
+        call(c, i + 1, i === constantsAt ? ["LIMIT"] : []),
+      ),
+    }),
+    node("b", [], {
+      calls: ["p", "q", "r", "s", "right"].map((c, i) =>
+        call(c, i + 1, i === constantsAt ? ["LIMIT"] : []),
+      ),
+    }),
+    node("decoy", [...decoy]),
+  ];
+  pure(id, nodes, { partialMaxBlockSize: 2 }, false, 1);
+}
 for (const limit of [0, 1, 2, 3, 40])
   pure(
     `bucket.${limit}`,
@@ -442,7 +462,7 @@ const manyBlocks = (id: string, last: string, constants: string[]) =>
       call("p", 10, ["ONE"]),
       call("q", 11, []),
       call("r", 12, []),
-      call(id + "-split", 13, []),
+      call(`${id}-split`, 13, []),
       call("x", 20, constants),
       call("y", 21, []),
       call("z", 22, []),
@@ -471,7 +491,7 @@ pure(
   [
     node("a", [], {
       calls: [
-        ...base()[0].calls!.slice(0, 3),
+        ...(base()[0].calls?.slice(0, 3) ?? []),
         call("a-split", 14, []),
         call("x", 20, ["L"]),
         call("y", 21, []),
@@ -482,7 +502,7 @@ pure(
     }),
     node("b", [], {
       calls: [
-        ...base()[1].calls!.slice(0, 3),
+        ...(base()[1].calls?.slice(0, 3) ?? []),
         call("b-split", 14, []),
         call("x", 20, ["L"]),
         call("y", 21, []),
@@ -670,14 +690,14 @@ cases.push(
 cases.push(
   graphCase(
     "graph.raw-config",
-    { ...high, root: high.root.slice(0, -1) + "\ud800" },
+    { ...high, root: `${high.root.slice(0, -1)}\ud800` },
     undefined,
     true,
   ),
   graphCase("graph.replacement-config", high, 1),
   graphCase(
     "graph.raw-source",
-    { ...child, root: child.root.slice(0, -1) + "\ud800" },
+    { ...child, root: `${child.root.slice(0, -1)}\ud800` },
     undefined,
     true,
   ),
@@ -832,7 +852,10 @@ function pair(test: Case) {
         assert.equal(response.output.twins.length, test.expectedCount);
       }
     }
-    let actual;
+    let actual: {
+      output?: Omit<z.infer<typeof outputSchema>, "borrowedOwners">;
+      thrown?: z.infer<typeof thrownSchema>;
+    };
     if (response.output) {
       const { borrowedOwners: _, ...output } = response.output;
       actual = { output };
@@ -902,7 +925,7 @@ for (const test of cases) pair(test);
 const workflowSetup = regular.setup,
   workflowChanges = [];
 for (const [index, id] of workflowIds.entries()) {
-  let change;
+  let change: Case["fixtureChange"];
   if (index === 2 || index === 3) {
     const before = snapshot(regular.base),
       file = path.join(regular.root, "retry.ts");
