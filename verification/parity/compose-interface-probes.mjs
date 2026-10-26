@@ -53,6 +53,22 @@ function probes(source) {
       ok: false,
       needles: ["lifetime may not live long enough", "'input", "'static"],
     },
+    {
+      id: "compose.empty-order-needs-item-type",
+      kind: "inference-annotation",
+      source: `${source}\nfn empty_untyped(input:&Query<'_>){let _:Result<&Query<'_>,Infallible>=demlik_tea::read_in_order(input,[],input);}\n`,
+      ok: false,
+      needles: ["type annotations needed", "type parameter `T`"],
+      codes: ["E0283"],
+    },
+    {
+      id: "compose.Ok-only-needs-error-type",
+      kind: "inference-annotation",
+      source: `${source}\nfn ok_untyped(input:&Query<'_>){let reader=ReadStep{name:"ok".into(),read:Box::new(|_:&Query<'_>|Ok(Some(17u8)))};let _=demlik_tea::read_in_order(input,[reader],0u8);}\n`,
+      ok: false,
+      needles: ["type annotations needed", "Result<u8, _>"],
+      codes: ["E0282"],
+    },
   ];
 }
 export function composeInterfaceProbes({

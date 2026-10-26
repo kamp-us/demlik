@@ -201,10 +201,10 @@ fn main() {
     assert!(std::ptr::eq(error.cause.owner, payload.as_ref()));
     (error.seal.capability)();
     assert_eq!(payload.label, "borrowed host");
-    // Inferred callback/input/output/error types, with no type arguments on the call.
-    let read_answer = ReadStep {
+    // One domain annotation resolves the default Infallible error for Ok-only reads.
+    let read_answer: ReadStep<'_, '_, Query<'_>, &Answer<'_>> = ReadStep {
         name: "answer".into(),
-        read: Box::new(|_: &Query<'_>| Ok::<_, Infallible>(Some(answer.as_ref()))),
+        read: Box::new(|_| Ok(Some(answer.as_ref()))),
     };
     let chosen = observe!(
         calls,
@@ -218,8 +218,38 @@ fn main() {
         Err(never) => match never {},
     };
     assert!(std::ptr::eq(chosen, answer.as_ref()));
+    // An empty literal needs an item type; it cannot infer the Borrow adapter.
+    let empty: [ReadStep<'_, '_, Query<'_>, &Answer<'_>>; 0] = [];
+    let absent = observe!(
+        calls,
+        demlik_tea::read_in_order,
+        &query,
+        empty,
+        answer.as_ref()
+    );
+    let absent = match absent {
+        Ok(answer) => answer,
+        Err(never) => match never {},
+    };
+    assert!(std::ptr::eq(absent, answer.as_ref()));
+    let defer: ReadStep<'_, '_, Query<'_>, &Answer<'_>> = ReadStep {
+        name: "defer".into(),
+        read: Box::new(|_| Ok(None)),
+    };
+    let absent = observe!(
+        calls,
+        demlik_tea::read_in_order,
+        &query,
+        [&defer],
+        answer.as_ref()
+    );
+    let absent = match absent {
+        Ok(answer) => answer,
+        Err(never) => match never {},
+    };
+    assert!(std::ptr::eq(absent, answer.as_ref()));
     println!(
-        "{{\"status\":\"passed\",\"borrowedOpaqueInputOutputError\":true,\"readerForms\":[\"borrowed-array\",\"owned-Rc-iterator\"],\"observedRustCalls\":{:?}}}",
+        "{{\"status\":\"passed\",\"borrowedOpaqueInputOutputError\":true,\"readerForms\":[\"borrowed-array\",\"owned-Rc-iterator\",\"typed-empty-array\",\"Ok-only-domain-annotation\"],\"observedRustCalls\":{:?}}}",
         calls.into_inner()
     );
 }

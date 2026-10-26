@@ -23,6 +23,8 @@ pub fn lift_slice<H, L, C>(
 /// One authored read. None defers; Some answers, including falsy/null-like values.
 /// Err preserves the caller's original failure. The input loan is independent of
 /// the callback environment so returned values may borrow the original input.
+/// Ok-only readers need a type hint: annotate `ReadStep`'s domain types
+/// (default error `Infallible`) or use `Ok::<_, Infallible>`.
 pub struct ReadStep<'env, 'input, I: ?Sized, O, E = Infallible> {
     pub name: JsText,
     pub read: Box<dyn Fn(&'input I) -> Result<Option<O>, E> + 'env>,
@@ -31,6 +33,7 @@ pub struct ReadStep<'env, 'input, I: ?Sized, O, E = Infallible> {
 /// Read left to right, stopping at the first answer or original error. Names are
 /// retained data and are not consulted. No callback panic is caught or decorated.
 /// Iterators over mutable storage should yield owners after releasing guards.
+/// An empty iterator needs a declared item type.
 pub fn read_in_order<'env, 'input, I: ?Sized, O, E, T>(
     input: &'input I,
     order: impl IntoIterator<Item = T>,
