@@ -1,0 +1,62 @@
+{
+  "scope": "Accepted combined local checkpoint for typed reducers, PBT constructors, direct model input rejection and comments CLI. Full port remains incomplete.",
+  "status": "passed",
+  "at": "2026-10-26T22:20:25.637251+00:00",
+  "sourceCommit": "7fd08736c82caf0953385a2729a23e8ca51d9246",
+  "cases": 14823,
+  "nativeEvidence": 14682,
+  "qualifiedObservations": 141,
+  "mapped": 828,
+  "inventory": 3445,
+  "gapRows": 2775,
+  "all53CliGapsOpen": true,
+  "nativeAndDocChecks": {
+    "default": 592,
+    "pbtFeature": 606
+  },
+  "compiledControlsRunOnMain": {
+    "new": 40,
+    "existing": 30,
+    "escaped": 0
+  },
+  "evidenceGuards": 11,
+  "sourceFilesUnchanged": 2354,
+  "priorIndependentCopiesUnchanged": 1821,
+  "inheritedComponentControls": {
+    "commentsExistingNotRerunHere": 112,
+    "modelExistingNotRerunHere": 18,
+    "pbtExistingNotRerunHere": 16
+  },
+  "inheritanceQualification": "CG source is byte-identical to audited ba46; model/LLM owners are byte-identical to their audited leaf. The PBT constructor/property owner differs only in previously accepted documentation/comment placement, verified by a saved exact diff; module conflict also retained documentation only. Cross-cutting typed core/runtime integration is verified by the full comparison/native/static suites and all16new typed plus4existing owner controls. These146other component controls are preserved leaf proof, not claimed rerun on Main.",
+  "parentAuditRecovery": "Initial conservative owner-byte check found PBT comment/doc placement differences from6013; exact changed lines are exclusively Rust comments. No Main source, oracle, case, binary or completed gate changed; actual frozen7fd gates and controls remain authoritative.",
+  "pbtCommentOnlyDiffSha256": "a11e1bc6f7f6277fb6d43c6cd9072197af5c5c49a16a954d379f7fe328cf9a7f",
+  "reportSha256": "f5f53afe54ebddba691ad7bdd9dc5dfaef2606bd9606820a53f0027d258b1a73",
+  "goalComplete": false,
+  "baseAcceptedCheckpoint": "599e65861c71e4e07ee1c89d4368195659629101",
+  "nativeTotalsOverlap": true,
+  "fullGates": {
+    "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/integration-batch-main-checks.json",
+    "sha256": "a2a7b08dbd0cd1b8cf3d4d9f5f4e551c56de13263352d9488732875859e7eca6"
+  },
+  "controls": {
+    "report": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/integration-batch-7fd08736/controls.json",
+    "sha256": "a6a5c3a2a17d9a1970d2d9b94cf1dc726dcb43eeeef54140a0eefba1e857e1ee"
+  },
+  "archive": {
+    "path": "/private/tmp/demlik-rust-driver-01a16c9d/target/parity/history/7fd08736-integrated-checkpoint",
+    "manifestSha256": "e888750aed4fc3f2007c4f1a6d1c94fa5b43e42eb6071874e4f07e49a5e87ea5",
+    "sourceFiles": 2354,
+    "evidenceFiles": 351,
+    "sourceTarSha256": "b5a6ab2813f0e0ae2e93648add1cecabf6674e85b5f532d4a56d0e0af40b67a7",
+    "coldBuild": false,
+    "packagingSupplementSha256": "518bb02a18b75e6a731dd7ea43a2c59b5ebde6bfe2f232cae2b341c79efb2827"
+  },
+  "qualifications": [
+    "All new model/typed/PBT mutant binaries are copied; comments keeps complete Cargo/process/witness records and hashes for18mutants plus its final executable. Earlier overwritten CG/frontdoor intermediate mutant executables are not claimed retained. Source tar is source-only; evidence/artifacts are independent directory copies. No cold/archive-target build.",
+    "CG source is byte-identical to audited ba46; model/LLM owners are byte-identical to their audited leaf. The PBT constructor/property owner differs only in previously accepted documentation/comment placement, verified by a saved exact diff; module conflict also retained documentation only. Cross-cutting typed core/runtime integration is verified by the full comparison/native/static suites and all16new typed plus4existing owner controls. These146other component controls are preserved leaf proof, not claimed rerun on Main.",
+    "141 raw/backend observations are explicitly qualified, outside strict native-call evidence.90constructor cases and3native laws are distinct; overlapping binding memberships are not additional cases.",
+    "All53CLI gaps remainOPEN. Remaining agent wiring/optional profiles/APIs/hosts/packaging/targets/MSRV/consumer review remain incomplete.",
+    "Original constructor receipt label corrected to26invoice recipes=18restored+8fresh; original receipt/proof preserved.",
+    "Two narrow integration conflicts retained both package scripts and both PBT module documentation paragraphs; production bodies equal reviewed leaves. Root verification setup/audit assumptions were corrected before these frozen gates; no production or oracle changes during checks."
+  ]
+}
