@@ -1,0 +1,594 @@
+{
+  "scope": "Pure canonical exported status projection plus minimal AgentStatus/AgentTerminalFailure/AgentEndedStatus owner adaptation. No Runtime/brainInterpret/toMachine/router/optional-profile construction, SDK, dependency, Source package or central registration changes.",
+  "sourceCommit": "ab8ce908b00bfd407e82b1cff60256bcb2407bb7",
+  "base": "5701c98216bbc3b1170a4a9a06f980afb0a90c7a",
+  "branch": "can/rust-agent-status-01a16c9d",
+  "worktree": "/private/tmp/demlik-rust-agent-state-01a16c9d",
+  "archive": {
+    "path": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d",
+    "tar": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d.tar",
+    "sha256": "40dc6b4571d727d9c0a8ee9dbf0026a4892f199490c1308b46fa9969b21fece6",
+    "all18CommittedSourceFilesMatch": true,
+    "coldArchiveBuild": false,
+    "qualification": "All final native/static/shared/type/control gates used the identical frozen production bytes in the existing lean target. Union CARGO_HOME caused a real dependency/library rebuild, whose actual fresh flags and paths are retained in Cargo JSON. The archive freezes committed source and copies actual proof artifacts; no cold archive-target rebuild or warm-directory library-selection claim."
+  },
+  "reference": {
+    "commit": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "sourceHashes": {
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/index.ts": "28edeb15977cf7008576574ee8589715272784f1feef260f36b70242da922d65",
+      "packages/tea/src/agent/machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042"
+    }
+  },
+  "interface": {
+    "entry": "demlik_tea::agent::status(&AgentState) -> ProjectedStatus, with all existing state slots inferred and no opaque Clone/serde/Send/static bounds.",
+    "closedStatus": "AgentStatus::Idle / Running / Suspended{pending:&Vec<Rc<ToolCall>>} / Ended(AgentEndedStatus). The existing terminal owner remains the only Done/Failed/Cancelled declaration; nested exhaustive matches cover all six logical arms.",
+    "terminalFailure": "AgentTerminalFailure::Agent(original Rc<AgentFailure<FE>>) or Run(original Rc<RunFailure<Stage,SE>>). The sum carrier wraps the existing records rather than reconstructing failure facts; original stage/cause handles remain accessible.",
+    "minimalEndedRepair": "Done.output is AgentField<Option<Rc<T>>>; Failed.failure is AgentField<Rc<F>>; Cancelled.at is canonical AgentNumber/NumberOrNull. Pure status creates Undefined for a missing/undefined read and preserves explicit output null. Conditional serialization stays flat and omits undefined fields.",
+    "borrowedPending": "Suspended exposes the original Vec header, including distinct empty collection identity. A caller retaining that view keeps its immutable state owner alive while advancing another state. It is not an independently owned pending-array promise. Moving an Ended value out retains its original terminal handles after dropping the state.",
+    "laws": [
+      "Agent annotation, including missing/undefined, wins before every run phase. A late brain failure after cancellation projects failed while the run remains cancelled.",
+      "Explicit null annotation falls through the exhaustive phase match: idle, failed original monitored-run cause, done, cancelled, running/stale.",
+      "Done preserves original output/usage handles. Nullish usage uses the existing shared NO_USAGE; no state migration, conversation-usage lifting, zero reminting or validation occurs.",
+      "Running/stale with awaiting tools projects suspended using tools.running, even when empty. Compaction awaiting remains running.",
+      "Cancelled preserves stored nullable/nonfinite/signed-zero/fractional time without arithmetic coercion."
+    ],
+    "lint": "One function-scoped expect(clippy::type_complexity), justified by the fourteen unconstrained canonical state slots and an inferred one-reference call. No projection trait or global lint change."
+  },
+  "verification": {
+    "newShared": {
+      "strictCases": 64,
+      "passed": 64,
+      "protocolRefusals": 3,
+      "qualifiedExcluded": 3,
+      "report": "target/parity/agent-status-final.json",
+      "nativeEvidenceCases": 64
+    },
+    "qualifiedObservations": [
+      {
+        "id": "agent-status.raw-annotation-number",
+        "status": "OPEN",
+        "strictParity": false,
+        "reason": "OPEN existing precise typed-state input profile: Source returns the primitive annotation; native state decoding refuses it before status. Excluded from strict/nativeEvidence."
+      },
+      {
+        "id": "agent-status.raw-annotation-string",
+        "status": "OPEN",
+        "strictParity": false,
+        "reason": "OPEN existing precise typed-state input profile: Source returns the primitive annotation; native state decoding refuses it before status. Excluded from strict/nativeEvidence."
+      },
+      {
+        "id": "agent-status.raw-usage-extra",
+        "status": "OPEN",
+        "strictParity": false,
+        "reason": "OPEN existing typed TurnUsage DTO-extra profile: Source retains unmodeled fields; native canonical DTO retains its typed Rc but has no extension bag. Excluded from strict/nativeEvidence."
+      }
+    ],
+    "affectedStrict": {
+      "base": {
+        "cases": 43,
+        "passed": 43,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-base.json"
+      },
+      "content": {
+        "cases": 79,
+        "passed": 79,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-content.json"
+      },
+      "guards": {
+        "cases": 158,
+        "passed": 158,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-guards.json"
+      },
+      "model": {
+        "cases": 90,
+        "passed": 90,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-model.json"
+      },
+      "prerequisite": {
+        "cases": 49,
+        "passed": 49,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-prerequisite.json"
+      },
+      "state": {
+        "cases": 205,
+        "passed": 205,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-state.json"
+      },
+      "fanout": {
+        "cases": 8,
+        "passed": 8,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-fanout.json"
+      },
+      "flow": {
+        "cases": 48,
+        "passed": 48,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-flow.json"
+      },
+      "llm": {
+        "cases": 91,
+        "passed": 91,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-llm.json"
+      },
+      "timestamps": {
+        "cases": 36,
+        "passed": 36,
+        "report": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/parity/agent-status-regression-timestamps.json"
+      }
+    },
+    "affectedStrictTotal": 807,
+    "totalStrictStatusAndAffected": 871,
+    "modelRuntime36IncludedIn90": true,
+    "statusRuntimeConstructionClaim": false,
+    "affectedQualifiedExcluded": {
+      "content": 4,
+      "modelOpen": 2,
+      "prerequisiteOwnResult": 1
+    },
+    "actualBaseTraceComposition": "The unchanged base43 action corpus now observes the real public native status function after each actual collect/check/summarize/tool/retry/watchdog/restart/cancel transition, including late failure. Source adapters call the frozen Source status. These remain43 affected cases, not additional duplicated counts.",
+    "native": {
+      "teaPassed": 360,
+      "compileFailDocsIncluded": 24,
+      "newPublicTests": 2,
+      "allTargetClippy": "passed",
+      "fmt": "passed",
+      "verificationTypecheck": "passed",
+      "biomeTenOwnedVerificationFiles": "passed",
+      "unrelatedGraphOrPbtFeature": "Not rebuilt in this older isolated base; parent owns current Main default/PBT composition."
+    },
+    "typing": {
+      "positivePrograms": 2,
+      "opaqueFixture": "Unchanged crates/tea/tests/agent_status.rs compiled separately against Cargo-selected libraries with -D warnings and executed. Its two tests retain borrowed opaque stage/args/provider/result/schema-cause data through actual base verbs, empty/nonempty Vec identity, owned terminal extraction and RunDone\u2192Transcript retention.",
+      "endedFields": "The original three-field constructor refusal fixture now compiles and runs.",
+      "intendedRefusals": [
+        {
+          "name": "missing-idle",
+          "command": [
+            "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+            "--edition",
+            "2024",
+            "-C",
+            "debuginfo=0",
+            "-D",
+            "warnings",
+            "-L",
+            "dependency=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps",
+            "--extern",
+            "demlik_tea=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib",
+            "--crate-name",
+            "agent_status_missing_idle",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-idle.rs",
+            "-o",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-idle"
+          ],
+          "exit": 1,
+          "errorCodes": ["E0004"],
+          "source": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-idle.rs",
+          "sourceSha256": "52e15a095d25a83a33a82282ad1b661b0ad2c51fd8359d8442e2dad8183d4c48",
+          "log": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-missing-idle-refusal.log"
+        },
+        {
+          "name": "missing-cancelled",
+          "command": [
+            "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+            "--edition",
+            "2024",
+            "-C",
+            "debuginfo=0",
+            "-D",
+            "warnings",
+            "-L",
+            "dependency=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps",
+            "--extern",
+            "demlik_tea=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib",
+            "--crate-name",
+            "agent_status_missing_cancelled",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-cancelled.rs",
+            "-o",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-cancelled"
+          ],
+          "exit": 1,
+          "errorCodes": ["E0004"],
+          "source": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-cancelled.rs",
+          "sourceSha256": "7129f8a3aefac9aff7128bd663949523420d170c177c3bc4400bf7db55b44536",
+          "log": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-missing-cancelled-refusal.log"
+        },
+        {
+          "name": "pending-outlives-owner",
+          "command": [
+            "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+            "--edition",
+            "2024",
+            "-C",
+            "debuginfo=0",
+            "-D",
+            "warnings",
+            "-L",
+            "dependency=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps",
+            "--extern",
+            "demlik_tea=/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib",
+            "--crate-name",
+            "agent_status_pending_outlives_owner",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/pending-outlives-owner.rs",
+            "-o",
+            "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/pending-outlives-owner"
+          ],
+          "exit": 1,
+          "errorCodes": ["E0515"],
+          "source": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/pending-outlives-owner.rs",
+          "sourceSha256": "dbf18255e1a35c149084f34b12dd967b572e924ace17fbde6996f7992cf7277b",
+          "log": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-pending-outlives-owner-refusal.log"
+        }
+      ],
+      "report": "target/parity/agent-status-types.json",
+      "sourceRed": "Genuine E0432 missing public function and three E0308 ended-field refusals use the preserved actual preimplementation Cargo-selected library. These and Source-only probes are not native parity counts."
+    },
+    "faults": {
+      "compiledDetected": 18,
+      "escaped": 0,
+      "declaredWitnessRequired": true,
+      "mandatoryBaseline": {
+        "strict": 64,
+        "qualifiedExcluded": 3,
+        "protocolRefusals": 3
+      },
+      "activeSourceAndBaselineArtifactsUnchanged": true,
+      "targetsSeparated": true,
+      "report": "target/parity/agent-status-mutations.json",
+      "targets": {
+        "baselineTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target",
+        "mutationTarget": "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-state-mutation-build",
+        "debug": 0,
+        "incremental": false,
+        "jobs": 1,
+        "cargoHome": "/private/tmp/demlik-pbt-cargo-home-01a16c9d"
+      },
+      "historicalBase24": "Preserved at d22/5701; not reclassified as new status controls."
+    },
+    "setupFailures": "Initial union-home tool lookup and one direct-rustc -L directory setup were corrected and retained separately. The first affected run passed seven groups, then lacked RUSTUP_HOME for an existing Flow negative compiler consumer; the fully scoped807 rerun passed. An overbroad mechanical content-driver field wrapper was corrected before final gates. None is credited as behavior or semantic fault detection."
+  },
+  "capabilityMappings": {
+    "file": "verification/parity/agent-status-contracts.json",
+    "proof": "target/parity/agent-status-mapping-proof.json",
+    "exactIds": 4,
+    "newIds": 3,
+    "existingEndedOwnerUpdate": 1,
+    "allSelectedCasesStrict": true,
+    "allSymbolsObserved": true,
+    "noInternalAliasesOrInheritedInflation": true,
+    "parentOwnsCentralRegistration": true,
+    "existingProofPreserved": "AgentEndedStatus keeps its existing inventory ID/signature and receives additive precise-owner proof; prior content/transcript mappings remain valid and are not fabricated again."
+  },
+  "blindSpots": [
+    "Suspended is a borrowed view: the old state owner must outlive it. E0515 is the intentional native lifetime rule; independently owned pending after dropping all state owners is not promised.",
+    "Raw primitive failure annotations are Source-accepted malformed typed-state inputs that native state decoding refuses; unknown TurnUsage extras are retained by Source but have no extension bag in the current native DTO. All three actual observations are QUALIFIED and excluded from strict/nativeEvidence.",
+    "Arbitrary getters/prototypes/custom arrays, other malformed raw states and raw DTO reflection remain existing explicit input profiles; this checkpoint introduces no JS runtime, throw-value engine or new validation framework.",
+    "No native Runtime/brainInterpret/toMachine/router/optional-profile construction, provider/SDK/children work is included. Existing raw builtin schema-to-factory, explicit-null payload convenience and model Missing/Undefined handler gaps remain open.",
+    "Source-only proposal probes and preimplementation compiler reds are evidence of the design/absence, not passing native parity. No cold archive build is claimed."
+  ],
+  "cargoEnvironment": {
+    "cargoHome": "/private/tmp/demlik-pbt-cargo-home-01a16c9d",
+    "rustupHome": "/private/tmp/demlik-rust-toolchain-01a16c9d/rustup",
+    "toolchain": "stable",
+    "rustc": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+    "rustdoc": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustdoc",
+    "offline": true,
+    "target": "/private/tmp/demlik-rust-agent-state-01a16c9d/target",
+    "debug": 0,
+    "incremental": false,
+    "jobs": 1,
+    "librarySelection": "Actual compiler-artifact filenames and package IDs from final Cargo JSON, with hash verification; no warm-directory scans."
+  },
+  "commands": [
+    "cargo test --locked --offline -p demlik-tea --message-format=json",
+    "cargo clippy --locked --offline -p demlik-tea --all-targets -- -D warnings",
+    "cargo fmt --all -- --check",
+    "pnpm --filter @demlik/parity exec tsc --noEmit -p tsconfig.json",
+    "pnpm --filter @demlik/parity exec node --import tsx agent-status-run.mjs",
+    "pnpm --filter @demlik/parity exec node --import tsx agent-status-regressions.mjs",
+    "pnpm --filter @demlik/parity exec node --import tsx agent-status-mutations.mjs",
+    "pnpm --filter @demlik/parity exec node agent-status-coverage.mjs <canonical-inventory.json>",
+    "python3 /private/tmp/demlik-agent-status-consumers-build-01a16c9d.py <worktree> <target> <actual-cargo-jsonl>",
+    "python3 /private/tmp/demlik-agent-status-types-01a16c9d.py"
+  ],
+  "integrity": {
+    "previousBase": {
+      "source": "d22b921b19611a6ff46e2c064ed6aab6cf8ac984",
+      "receiptSha256": "dd0996de568efdffbc9bbaac3fa39eaa929becb4edb02534642b52558924db05",
+      "archiveSha256": "2cd12fdda570c9ec18adb8309ae9d4063f21eddc52f313736fe0f6cb1999dc7c",
+      "verified": {
+        "ownedFilesSha256": 14,
+        "reportsSha256": 44,
+        "logsSha256": 69
+      },
+      "archivedArtifacts": 15,
+      "priorProofNotReclassified": true
+    },
+    "approvedProposal": {
+      "filesVerified": 9,
+      "receiptSha256": "0b2a9ef9b1b50542bc6f3da136dcc4d0a7437047a17424db936731bc385ed56c"
+    },
+    "referenceSourceHashes": {
+      "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+      "packages/tea/src/agent/internal.ts": "8b738aab644e8ff33ea03226f60a0c17103989791bb22c082e929dc8b72e107d",
+      "packages/tea/src/agent/index.ts": "28edeb15977cf7008576574ee8589715272784f1feef260f36b70242da922d65",
+      "packages/tea/src/agent/machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042"
+    },
+    "sourcePackagesDependenciesRuntimeUnchanged": true,
+    "licenses": {
+      "LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "packages/tea/LICENSE": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "crates/tea/THIRD-PARTY-NOTICES": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+    },
+    "activeSourceAndBaselineArtifactsMatchMutationGate": true,
+    "strictStatusCases": 64,
+    "qualifiedRowsExcluded": 3,
+    "affected807Green": true,
+    "noMainCentralRemoteNetworkDockerOrCacheEdits": true
+  },
+  "preservedLinkedArtifacts": {
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_fanout_restore_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_fanout_restore_driver",
+      "sha256": "30340af17bf947d45b26af6598a0c1002dd130b938eb273bf4d059baf80eeb9e"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_content_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_content_driver",
+      "sha256": "5d1af7c95f80b0a7ec386706f9888c1adde4daf1cf5e2dc3bb7a1df57cb72baa"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_base_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_base_driver",
+      "sha256": "36f74e8fd3472f511dca8c16346fb660ccc3b92ef905a551172879ccf8476ab0"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_prerequisite_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_state_prerequisite_driver",
+      "sha256": "e4601854e30b0730e4c8e59d3ab5ec93eee2f69b810fa9cd995995a3720f42d9"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_status_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_status_driver",
+      "sha256": "db0c687606530fb5ae9f09303371d384ea5764c0000e7e6f280faaddda6a26cd"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/timestamp_runtime_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/timestamp_runtime_driver",
+      "sha256": "33bf5610a97e3e7333eea576507f3be85da0a216ff1efc0cbfbbe29b5fee7f22"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_state_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_state_driver",
+      "sha256": "cba24bfa437df72d503a6697b0f23c945d5f11b4076cfbcd5e1a66b31d6ebc45"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_model_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_model_driver",
+      "sha256": "b17e773570314cca88191599ba6e3d19ee780e5ba66fe50961698a046275d4d9"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/examples/agent_guards_driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_guards_driver",
+      "sha256": "b8e6e834d6a4c7e3a06278cd0af3e51d6376fa78db1346a7f0f1d0f1ed083c07"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/agent_status-4bf2527d86995a70": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent_status-4bf2527d86995a70",
+      "sha256": "4e3eb1c278a4794a8f672297117192b63c38897b50cf0fe1b5fbcfb75a7f4835"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-flow-driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent-status-flow-driver",
+      "sha256": "e166269ad923b8d0601184797a4ace31119b709dc03c26577910555fc9e3fd8f"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-llm-call-driver": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/agent-status-llm-call-driver",
+      "sha256": "83d9d58ffbb91e3c71d1f90baa4faa18c1e206885fb6a7270f7954b85e85d0e9"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/opaque": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/opaque",
+      "sha256": "81b2dc84c49341ea8f11139602c1bd99809186a6c7e36a268a520a9ab83876ce"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/ended-fields": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/ended-fields",
+      "sha256": "0299958fe3c0e08f8990c68f5fcc8178f6732ff4efba367a68f84206e3edc46f"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libdemlik_tea-ef4c9c64b773b701.rlib": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/libdemlik_tea-ef4c9c64b773b701.rlib",
+      "sha256": "d83fb47391cfebe9e555c4bb829ae7dac75b32ed7d3103666ddbf4f41fa64907"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde-1e121e747c37db81.rlib": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/libserde-1e121e747c37db81.rlib",
+      "sha256": "1731e0ad0ca136de37ac187324b184f463a71ddad4e689a5228f46b31adc6b16"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libserde_json-bae62904d1b7570d.rlib": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/libserde_json-bae62904d1b7570d.rlib",
+      "sha256": "fc47c1edb0cb614bcacf011f879e51c1b235203b5a655505bf833fadc339e96e"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/debug/deps/libtokio-bee55f6657e963fa.rlib": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/libtokio-bee55f6657e963fa.rlib",
+      "sha256": "97ef5eab48c5d4c1e22a7f234d8254dce96fc359a2b8c1a362f109a6e8f89e06"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-proof/preimplementation-libdemlik_tea.rlib": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/preimplementation-libdemlik_tea.rlib",
+      "sha256": "11ab87a5c5787cafa2c1023c260dab09d4998732d64fb177c77748907caa1ae3"
+    }
+  },
+  "preservedExternalHelpersAndTypeFixtures": {
+    "/private/tmp/demlik-agent-status-consumers-build-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-consumers-build-01a16c9d.py",
+      "sha256": "c7e1b4edc633101104fb1c0da5fc0b116d20792f8f9eefa1c0f8fe7463aaa0a0"
+    },
+    "/private/tmp/demlik-agent-status-types-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-types-01a16c9d.py",
+      "sha256": "2c9cfcbc7e0cf21274dd0403d6a4c6282174e4aedafdbd20ca92b1c2a20eb770"
+    },
+    "/private/tmp/demlik-agent-status-integrity-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-integrity-01a16c9d.py",
+      "sha256": "8b475710d58a902ba98afe4fe16e357c91be7923feb55615385365ed5749ade1"
+    },
+    "/private/tmp/demlik-agent-status-package-01a16c9d.py": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-package-01a16c9d.py",
+      "sha256": "46d07f20481c0aad16d8e12a36073e09336fa5467d14483e8c156013bc6fda96"
+    },
+    "/private/tmp/demlik-agent-status-public-red-01a16c9d.rs": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-public-red-01a16c9d.rs",
+      "sha256": "d22dfe7d86367c300327aa852a2881af7b00b5f2bb3ce21b6d9f2adc68a2ae58"
+    },
+    "/private/tmp/demlik-agent-status-ended-fields-01a16c9d.rs": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/demlik-agent-status-ended-fields-01a16c9d.rs",
+      "sha256": "6bb647a75541893ee647da86745c63318679f31fbf0149b8f539096e5929c5b7"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-cancelled.rs": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/missing-cancelled.rs",
+      "sha256": "7129f8a3aefac9aff7128bd663949523420d170c177c3bc4400bf7db55b44536"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/missing-idle.rs": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/missing-idle.rs",
+      "sha256": "52e15a095d25a83a33a82282ad1b661b0ad2c51fd8359d8442e2dad8183d4c48"
+    },
+    "/private/tmp/demlik-rust-agent-state-01a16c9d/target/agent-status-type-consumers/pending-outlives-owner.rs": {
+      "preserved": "/private/tmp/demlik-agent-status-exact-ab8ce908-01a16c9d/artifacts/pending-outlives-owner.rs",
+      "sha256": "dbf18255e1a35c149084f34b12dd967b572e924ace17fbde6996f7992cf7277b"
+    }
+  },
+  "ownedFilesSha256": {
+    "crates/tea/examples/agent_base_driver.rs": "cb7b08598ffaf3cc1b109daedf572147d4825862bbe259dd239bddbc452dfab0",
+    "crates/tea/examples/agent_content_driver.rs": "34b739b9e0b5ed34971f2f54f14d9c8862a6934e942aedaf1c0520718518e747",
+    "crates/tea/examples/agent_status_driver.rs": "e3ec497fa82910083d3721c6644a7f61fbf4509b0405861281e284dd2c4ea6b7",
+    "crates/tea/src/agent/mod.rs": "e35e2588c4eb290ba3f3ab5917f8a905416d18b7d5f3f6a1d065252e41de17ab",
+    "crates/tea/src/agent/status.rs": "68bb00669a4c60235e3c77a131681f8393069e47f2c204c98c2aef2fa17c0c67",
+    "crates/tea/src/agent/types.rs": "f4faeac1a8ed2b38b5ed44f8ca0a8894456240ef85c4db502090dde3e9bf1ffe",
+    "crates/tea/tests/agent_status.rs": "c90335d63276a742c94236b263d650ad026d31e80f028dd3261bb1d5995d3cce",
+    "crates/tea/tests/agent_transcript.rs": "6f8465575d17d19d1cf5aa38e022f667cb413476d83012ce97068267dd03e318",
+    "verification/parity/agent-base-contracts.json": "fee4225d170c09d81efdbe9c0d6766ff81887f679649d66000c534d99ecb6dfe",
+    "verification/parity/agent-base-reference.mjs": "a5ff5f724fcbc7bd4f9b58a154bf5cd451a023949a9bc0245afad1da3ca274a1",
+    "verification/parity/agent-base-run.mjs": "6b3bf44bd9098d4df36b8029082187df1f656b67ef95490bf5312e1f9a1a7be2",
+    "verification/parity/agent-status-cases.mjs": "1e2ca56baca71267ae4886213967e190a2d6c0393610afeac2a910dcaa10b7ff",
+    "verification/parity/agent-status-contracts.json": "fda407aee3fb3b9c19bffe9b9a5c10e3100014dc927a78350d9b60d482fdf6fd",
+    "verification/parity/agent-status-coverage.mjs": "0ec2feca32040ccc420c822390c842e18cd496d0085e40562b95805ec3dc6c99",
+    "verification/parity/agent-status-mutations.mjs": "bceba11b692c8484f259ab743002529d12d1edff8d384f150af904da0de9422b",
+    "verification/parity/agent-status-reference.mjs": "8d6e73f4b25c7aac88e600bbb445deaa03856abb75b1746048e3829b371a07ac",
+    "verification/parity/agent-status-regressions.mjs": "ba62d155dbbcb4b0aab91fdf0729aeac273b805d143281b74679fc035d5e7e01",
+    "verification/parity/agent-status-run.mjs": "96c9a0c6ee7d030c00540393281093335ad53510ccd75ad525df2d4a56b4f37c"
+  },
+  "reportsSha256": {
+    "target/parity/agent-status-effective-artifacts.json": "7191e92fd96180e406b45f2e117b4321148b55e67718fc26bfa988fa853d2357",
+    "target/parity/agent-status-ended-fields-red.json": "134ffe1768d97bd293f3a037f55f9b6a2f1b82e673d1941d32c188a6098ae45d",
+    "target/parity/agent-status-final.json": "9fbbfe5ec3f81f8745a81397cfc50f6ce7ff6d27dc6b1ddc453e426dd62161e1",
+    "target/parity/agent-status-flow-consumer-build.json": "c88acb5960ce56cc62d233515b0b65020d65896f34b538f091f349d6bd2c4f65",
+    "target/parity/agent-status-integrity.json": "fbf789276dd04df27957a5dd5a7957ae957103e557139e4332216245c84af5f1",
+    "target/parity/agent-status-llm-call-consumer-build.json": "40ff6b8031fc25e02299c2b5f7d6524c5adda71dbc0fc44b9738cd95c3664ab7",
+    "target/parity/agent-status-mapping-proof.json": "e3c0a7caa2950e26777b4f66df1772b04dedda567f3854768890ec5906aafa8d",
+    "target/parity/agent-status-mutation-baseline.json": "9fbbfe5ec3f81f8745a81397cfc50f6ce7ff6d27dc6b1ddc453e426dd62161e1",
+    "target/parity/agent-status-mutations-progress.json": "28146a46b9daeae11af1e54fb4780ed86eda836f76a5b0e5797588ed4c5b8169",
+    "target/parity/agent-status-mutations.json": "415e1603785b48e177ce4a84900c12f10dd0467f0308043a8bda3f8375cd004d",
+    "target/parity/agent-status-public-red.json": "1203f256bbb37f0abcf8777fd2a495d1ea658d38a3068f07566e5b719209c7d6",
+    "target/parity/agent-status-regression-base.json": "acb4ead687086668172b7113345db50ae730252e1279980ec4b546ce17484f38",
+    "target/parity/agent-status-regression-content.json": "965eac5a8af80ddfbe1e038ed9cadc694cc4917ccc946a43d2bc3453ac649c40",
+    "target/parity/agent-status-regression-fanout.json": "fe5feaf2ccbf493502e343aa8ef1ef64d762d9f1b420483d3d0d93e778170a7d",
+    "target/parity/agent-status-regression-flow.json": "22ba9c03b4ef3b71416d998c53909f22b839ee2f977b8a4c8b533adcbbe76814",
+    "target/parity/agent-status-regression-guards.json": "a069cb0c40b2cf44605b1fcfe04d5cd696481024fd98b3e7466f304f0955862e",
+    "target/parity/agent-status-regression-llm.json": "13724e9de7aae7dbf9aa0c38e4d293eb24b6b2217846ec959163f61ef18f2712",
+    "target/parity/agent-status-regression-model.json": "dfcfb9116cb94d56f2483e426fad32846709be4bbc0a9b68204480665605a577",
+    "target/parity/agent-status-regression-prerequisite.json": "3d20e39ee199245b44608ec3c738a7b4fc3cb5d4a8ccad15833b6aa598d75aed",
+    "target/parity/agent-status-regression-state.json": "1ac332bdf2672d3faac640039a12aab505b3b9e1bb27751870137bbf54a4bad6",
+    "target/parity/agent-status-regression-timestamps.json": "fd54e819a6a49e2872280193d5672f31708d08433aed2429a31918a1c55697cb",
+    "target/parity/agent-status-regressions.json": "7a89254d340c14a611fe56261f090fe8d3f8924ddc1bfedc2eaf4909226323d8",
+    "target/parity/agent-status-types.json": "34fbf5a759dac48b74c299a6977da416b805295fba53b25d60c4f8facec370a8",
+    "target/parity/agent-status.json": "04677dca5c851b27e61ed94d471d7a134802f005a1ad6680152b808df71175de",
+    "target/parity/agent-status-mutants/all-conversations-are-suspended.json": "986c4f9ca8710a40284ab234c1c515ad4ae4e58a08f3b00075d399f4061e64f1",
+    "target/parity/agent-status-mutants/cancel-wire-null-is-zero.json": "a0b31892c2403eb9fc8ab6f3eb281c1dc969d2ed7687f8900d785074cb6dfe32",
+    "target/parity/agent-status-mutants/cancelled-preempts-annotation.json": "f44ca0b4e2094a27733906a79f422e7cc8f45f6c500843e41edc6ee9d7fb3a26",
+    "target/parity/agent-status-mutants/compacting-is-suspended.json": "03a821a18d83f657d3825f68770fec2c9ea93d4a8129d7ea728e72b41711d5b8",
+    "target/parity/agent-status-mutants/empty-running-is-not-suspended.json": "66d26699a4e6091de1238b9d8db4450db01e133e941b55d8973dc2301a0e7eb8",
+    "target/parity/agent-status-mutants/fallback-lifts-legacy-total.json": "c2eb1d8e67cb04f27ae25101bd6aad1b2779a4c62e97e0ccdf89115a54a30c7b",
+    "target/parity/agent-status-mutants/fallback-zero-owner-is-reminted.json": "97a2666b8141905d6b6bb0ad5cc44d3142dbf0f02757c19df140704620157001",
+    "target/parity/agent-status-mutants/missing-annotation-becomes-null.json": "e7a38cbbb319049d7eb1aa4c6d49746279aa3d93d961660cccae1e5ef95323f7",
+    "target/parity/agent-status-mutants/null-cancel-time-is-coerced.json": "d2f42e9c396e7051162dc0d66a9763f2a7079eefd8e82024ce2f9bb5b5fed320",
+    "target/parity/agent-status-mutants/pending-is-queued-array.json": "b5c7f3c5b959d36d485258b5660d560a98ddefefff816ef5e5894ee1b45292bf",
+    "target/parity/agent-status-mutants/remint-original-agent-failure.json": "eb467ccf7ec73900e3d1c315a53b53e0bdaa3441e9dc730803c4151a11e789cd",
+    "target/parity/agent-status-mutants/remint-original-run-failure.json": "89a654fb07e669e3a53df5e239f5de930cbe67033acbf2aed784cf9e15cfab4c",
+    "target/parity/agent-status-mutants/stale-is-idle.json": "3f2c8fd4f43f7f5cec7209ac20f6d6d6b27298c255574d29294a06029e6f5f87",
+    "target/parity/agent-status-mutants/terminal-output-is-dropped.json": "ffdf8566af92669ef3a660b29dded68417191ad7860a4e182d99bb684c292f26",
+    "target/parity/agent-status-mutants/undefined-failure-wire-is-null.json": "2340c293953585cd1c9759b428aeb14df1bd62de85cfbd03cba0d5605cc6a4c0",
+    "target/parity/agent-status-mutants/undefined-output-becomes-null.json": "af64ec8691826f494a9c86db3f3c42ae7b2d485abd756c1419baa7118194ce81",
+    "target/parity/agent-status-mutants/undefined-output-copies-absence.json": "9359bcfc1102504ae68fc12f7a6576f5b9ca8178c31be576f94d82e9283f7e33",
+    "target/parity/agent-status-mutants/usage-value-is-discarded.json": "34485d8b468d8fa0159178e5208d9e6ea4aa82f461c918fd96142d14250f14bd"
+  },
+  "logsSha256": {
+    "target/agent-status-biome-construction.log": "7a9dce53e5f5d10dd35504ab672534fc0421579dbd69f289d135a46a5c8fdbde",
+    "target/agent-status-biome-coverage.log": "7ba4d2072aee365323e5420b6839b1e93ac7cb10c827b7cf955ee4dd4ded92e6",
+    "target/agent-status-biome-final-construction.log": "7016e934e88dbcadde7e97135cee0e4a7ced948f57c3e6da5337bdb9ce060252",
+    "target/agent-status-biome-final.log": "57d87df3577e4e1be3fabdc0f0954fdb10ed9013ce7e45b0b7da17f88ad44c43",
+    "target/agent-status-biome-templates.log": "141bd211eb83343516d68d8167e31f694bc95b615a3e95ccdfb7ac4bc9932a56",
+    "target/agent-status-clippy-after-fixture.log": "e91228e43f99f2487d3cb8684e3117a6a12b68c636121ff87b3e724fd48d0dfe",
+    "target/agent-status-clippy-first.log": "f0fafb48d5f612cb607c17aa2cc8e509035805135ff9c0af7b41196aecd746f2",
+    "target/agent-status-clippy-post-expect.log": "b4818b77381da6ee5af24a7048ec10650c70a4ef2228c7f3378223b766e792d9",
+    "target/agent-status-driver-build.log": "b700e390f1c42e028463b11abae87b67fc0a5139ad54fc7c9f527d91ac4b1d31",
+    "target/agent-status-ended-fields-red.log": "5835e5258f697f846fae071137284f4fd3c6ee6db14e329691c408e6a3406c3c",
+    "target/agent-status-final-native.log": "cad9a089b685e877201d6f74b53894548c1945aab5a1d3fb5f3da733d6008b30",
+    "target/agent-status-final-pairs.log": "074bdbfce55cf4bd2845a0f495da9694d5fc6ced3c1ffa13f85d42e4113b662c",
+    "target/agent-status-first-native.log": "3a690fc28fa24d6b9cdd20693a87bb95eae7e4e77ecbf3382347b7de3308c5e4",
+    "target/agent-status-first-pairs.log": "d6648e64b44012fc8a9f62d98715f477f93f9bc3aa03dc555e03d1a3d8dccea4",
+    "target/agent-status-flow-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-llm-call-consumer-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-mapping-proof.log": "c91dc175e002723ca123db78de2777fd08c585428984e8100c354b74896d916a",
+    "target/agent-status-mutant-all-conversations-are-suspended-compile.log": "ca6c34684842bef668ddcb345ab02378cfe1ac3a0af5c056ee9e56ec31916e50",
+    "target/agent-status-mutant-cancel-wire-null-is-zero-compile.log": "c11f2c5e9d22e7e1969edaaf6ac69ea37d213a092debd256eb8cb5e0626dab2e",
+    "target/agent-status-mutant-cancelled-preempts-annotation-compile.log": "a2a3bc5be2ac19612a5e17e1b05eccd0f36d7453c030dd7111dc25784cac81b0",
+    "target/agent-status-mutant-compacting-is-suspended-compile.log": "e6d3b84fd47568e85ccc5901e373d6b82f4df8521ca17d0c1e3b4023945b4e68",
+    "target/agent-status-mutant-empty-running-is-not-suspended-compile.log": "a7c8f6d7a048df3359a886a77f5f8861c32868df2ca17f5895fd33d8ff0b74b7",
+    "target/agent-status-mutant-fallback-lifts-legacy-total-compile.log": "58bbe4fea395b70b28915604e21425a684db691eff545289e931aea6c0a0ec5f",
+    "target/agent-status-mutant-fallback-zero-owner-is-reminted-compile.log": "224cf650484b71d4790c37215c6717d3cf413463c61cceb146ef295a8cb8b04a",
+    "target/agent-status-mutant-missing-annotation-becomes-null-compile.log": "b3d75445f4a579b13dc34da075d35690dbf3f06d1422a6f06248afa68d9074ef",
+    "target/agent-status-mutant-null-cancel-time-is-coerced-compile.log": "a7c8f6d7a048df3359a886a77f5f8861c32868df2ca17f5895fd33d8ff0b74b7",
+    "target/agent-status-mutant-pending-is-queued-array-compile.log": "58bbe4fea395b70b28915604e21425a684db691eff545289e931aea6c0a0ec5f",
+    "target/agent-status-mutant-remint-original-agent-failure-compile.log": "e87788129aa4f594388c266380b6736e06d7df4a981ba16bacb6599f0a86da8f",
+    "target/agent-status-mutant-remint-original-run-failure-compile.log": "62e9c4544de801d0146b3e0ebe226bc25e5e5ea666c2d724f47c310a5a1d6738",
+    "target/agent-status-mutant-stale-is-idle-compile.log": "58bbe4fea395b70b28915604e21425a684db691eff545289e931aea6c0a0ec5f",
+    "target/agent-status-mutant-terminal-output-is-dropped-compile.log": "62e9c4544de801d0146b3e0ebe226bc25e5e5ea666c2d724f47c310a5a1d6738",
+    "target/agent-status-mutant-undefined-failure-wire-is-null-compile.log": "ca6c34684842bef668ddcb345ab02378cfe1ac3a0af5c056ee9e56ec31916e50",
+    "target/agent-status-mutant-undefined-output-becomes-null-compile.log": "4caa3b7d23feb12bc76939742cd7d3606591d6a3eee40a665ea6cf8c3065ac19",
+    "target/agent-status-mutant-undefined-output-copies-absence-compile.log": "3f9401200d8165e2727e0687ba36d8c23745e4052f28283b8e8938461d5297dc",
+    "target/agent-status-mutant-usage-value-is-discarded-compile.log": "a7c8f6d7a048df3359a886a77f5f8861c32868df2ca17f5895fd33d8ff0b74b7",
+    "target/agent-status-mutations.log": "ede94314553c52052e172e87b47d5eea3de9952883d7f55fd331537bf9e9a315",
+    "target/agent-status-preimplementation-cargo-lookup-red.log": "235382520425c4841a699c405e75ba1b581db26e68d7ff626656e0302cd25dec",
+    "target/agent-status-preimplementation-cargo.log": "8c99bfc80bb0033a9ce19d6bb891441d861c509ddbc2847d6d5828c9ae662cdf",
+    "target/agent-status-public-interface-red.log": "6ae234db0f80e762956cfa97711c202ccfeeddb2c68c6043c9bc04f11d8e60a8",
+    "target/agent-status-public-rustc-link-setup-red.log": "343cd97436f7c24591f8840a723cf969376d550801cb3e8ce9dea3e446838864",
+    "target/agent-status-regression-drivers-build.log": "5c82de82a7418c6ebb39ec6fa1231ce44a1c65011eb0f84f7a2db2976c7fa035",
+    "target/agent-status-regressions-final.log": "7ff24c1d38b5dbd41aaba57772c10d6ce9daa35b763be371dad10bc823bee9ba",
+    "target/agent-status-regressions-initial-environment.log": "fd42b3f6eec7b1ddf763d23d6e7863228b6be879f7638e5f5588b9f446a2474f",
+    "target/agent-status-regressions.log": "fd42b3f6eec7b1ddf763d23d6e7863228b6be879f7638e5f5588b9f446a2474f",
+    "target/agent-status-type-ended-fields-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-type-ended-fields-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-type-missing-cancelled-refusal.log": "d8d80f16382495aabdb23adb0a735b1badb689bb5e4fc86016c62369358bb3b6",
+    "target/agent-status-type-missing-idle-refusal.log": "8c1caabaa3d5cee46ddbb79c9d1c95c5ff8b00650c1b733e741380fd19db829e",
+    "target/agent-status-type-opaque-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-type-opaque-run.log": "cb96fa161297e5be5bbb8cc3f51a4e9b5eae3856fcd0ff33f3c172145a15a3bb",
+    "target/agent-status-type-pending-outlives-owner-refusal.log": "52614bc6334fbaaf56023b58e7109d7a5ac5829b535ab1a7d7c31fefb66c2bd9",
+    "target/agent-status-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/agent-status-types.log": "dfdc2b703d8c00456c841db8e56d9a64caf77798c4dac35cbed4fc80d2bdcff4"
+  },
+  "cargoJsonSha256": {
+    "target/agent-status-driver-build-cargo.jsonl": "e95b6864d2454c213eb4d4c98baa3a1a7f365a621461001ae36e58d3abc29728",
+    "target/agent-status-final-native-cargo.jsonl": "d0dbc16672939e658ccbdd36fcb27ab71f62012faddd5b63ff5e576afe7e7a9c",
+    "target/agent-status-first-native-cargo.jsonl": "e20ff72edbcc8b89cf03723a1b7a076cd75e54a70148d72a2754399e6b2053ae",
+    "target/agent-status-mutant-all-conversations-are-suspended-cargo.jsonl": "adf6f5a17d99e0477ab05f045399e873f991f71ebb3cdf5fc973fa95e3dee91e",
+    "target/agent-status-mutant-cancel-wire-null-is-zero-cargo.jsonl": "c800d744019f28e81b269b46f8c02b562812f4e4587f26a44cbd2e5267323a18",
+    "target/agent-status-mutant-cancelled-preempts-annotation-cargo.jsonl": "94b2cf09ee628f17a00c4f19f1f95693ad956fde2c6d9ba0f136d11475803ca3",
+    "target/agent-status-mutant-compacting-is-suspended-cargo.jsonl": "3b4531350adc2a200082f36427a247e11e398be5b846bab6edd68f863d56271b",
+    "target/agent-status-mutant-empty-running-is-not-suspended-cargo.jsonl": "c3f4d26dd0aea01600c423b1cd72dd5f6387b92c66d7b67377ebae0c3d751487",
+    "target/agent-status-mutant-fallback-lifts-legacy-total-cargo.jsonl": "3af41e95737cca8987734a62a631102b0ed1c75a552203d3e1c9cf7fc2688a18",
+    "target/agent-status-mutant-fallback-zero-owner-is-reminted-cargo.jsonl": "4fd64084ef3925231f02084634ad579d0805d25fb2d09b15e5581b19d2507a6d",
+    "target/agent-status-mutant-missing-annotation-becomes-null-cargo.jsonl": "8d77b594bc226ed21e497a00fd87c14edd99ee736987c0074d4fdb16594adcd9",
+    "target/agent-status-mutant-null-cancel-time-is-coerced-cargo.jsonl": "0e1e47a6f76650ea1ea5073f2b5e098255234051fe421f050e9788ab9fbaa58b",
+    "target/agent-status-mutant-pending-is-queued-array-cargo.jsonl": "fbe3b5cb040cda25d38f0df3c2fa8214d25867f951c4cb206498d394823fc488",
+    "target/agent-status-mutant-remint-original-agent-failure-cargo.jsonl": "47503dd3cd9353a214fb467d1f5cefe5ab1c4a31f6ffe7d815602a485424ff02",
+    "target/agent-status-mutant-remint-original-run-failure-cargo.jsonl": "f2dc6f18cb444d4fa778ec71a559fe3c2b05b7f124a8fb0cc4ae16f38408a7ea",
+    "target/agent-status-mutant-stale-is-idle-cargo.jsonl": "94b2cf09ee628f17a00c4f19f1f95693ad956fde2c6d9ba0f136d11475803ca3",
+    "target/agent-status-mutant-terminal-output-is-dropped-cargo.jsonl": "f90239630cb7a8fedf0ca6896cb1ed53f0b07c91b28527f41e6082cafbeae531",
+    "target/agent-status-mutant-undefined-failure-wire-is-null-cargo.jsonl": "47503dd3cd9353a214fb467d1f5cefe5ab1c4a31f6ffe7d815602a485424ff02",
+    "target/agent-status-mutant-undefined-output-becomes-null-cargo.jsonl": "fbe3b5cb040cda25d38f0df3c2fa8214d25867f951c4cb206498d394823fc488",
+    "target/agent-status-mutant-undefined-output-copies-absence-cargo.jsonl": "94b2cf09ee628f17a00c4f19f1f95693ad956fde2c6d9ba0f136d11475803ca3",
+    "target/agent-status-mutant-usage-value-is-discarded-cargo.jsonl": "b6e582b1570c9e36cbddc71d3b0e29f84edfbe41488f1f117434ef8ecc46f023",
+    "target/agent-status-preimplementation-cargo.jsonl": "3d0f9545483a0abe71cb170758de818997543d1e5f551c17be37c624c61e246f",
+    "target/agent-status-regression-drivers-cargo.jsonl": "fcbf83c3cc7f3e24c940247ed34c487d760a0f8b9c0b2d88aade9c1d45abf2e5"
+  }
+}
