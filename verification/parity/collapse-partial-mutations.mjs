@@ -159,20 +159,6 @@ function git(args) {
   return run.stdout;
 }
 const checkpoint = git(["rev-parse", "HEAD"]).trim();
-function links(tree) {
-  const rows = [];
-  for (const name of [
-    "node_modules",
-    "packages/code-graph/node_modules",
-    "verification/parity/node_modules",
-  ]) {
-    const link = path.join(tree, name),
-      target = path.join(root, name);
-    fs.symlinkSync(target, link, "dir");
-    rows.push({ path: link, target, resolved: fs.realpathSync(link) });
-  }
-  return rows;
-}
 function compare(tree, binary, name, ids) {
   const report = path.join(evidence, `${name}.json`),
     command = [
@@ -202,167 +188,259 @@ function compare(tree, binary, name, ids) {
     report: JSON.parse(fs.readFileSync(report, "utf8")),
   };
 }
-const controls = [],
-  trees = [];
-let before;
+const controls = [];
+let before, suite, operationError, cleanupError;
 function record(extra = {}) {
   fs.writeFileSync(
     reportFile,
-    `${JSON.stringify({ checkpoint, detected: controls.length, planned: edits.length, escaped: 0, baseline: before, baselineDriverSha256: baselineHash, sourceHashes: Object.fromEntries([...originals].map(([file, text]) => [file, hash(text)])), scriptSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))), profile: { registeredDisposableWorktrees: true, CARGO_TARGET_DIR: null, cargoDefaultTarget: true, offline: true, jobs: 1, debug: 0, incremental: false, retention: "Compact reports/Cargo diagnostics/source diff/observed artifact hashes only. Mutant executables/dependency caches removed with completed worktrees, not claimed as retained immutable binaries." }, trees, controls, ...extra }, null, 2)}\n`,
+    `${JSON.stringify({ checkpoint, detected: controls.length, planned: edits.length, escaped: 0, baseline: before, baselineDriverSha256: baselineHash, sourceHashes: Object.fromEntries([...originals].map(([file, text]) => [file, hash(text)])), scriptSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))), profile: { registeredDisposableWorktree: true, CARGO_TARGET_DIR: null, cargoDefaultTarget: true, sequentialSuite: true, offline: true, jobs: 1, debug: 0, incremental: false, retention: "Compact results, actual Cargo JSON/diagnostics, source diffs and immutable selected executables. No library/dependency caches copied; complete suite/default target removed afterward." }, suite, controls, ...extra }, null, 2)}\n`,
   );
+}
+function restore(tree) {
+  const hashes = {};
+  for (const [file, text] of originals) {
+    const target = path.join(tree, "crates/code-graph/src/collapse", file);
+    fs.writeFileSync(target, text);
+    hashes[file] = hash(fs.readFileSync(target));
+    assert.equal(hashes[file], hash(text));
+  }
+  return hashes;
 }
 try {
-  for (const [index, edit] of edits.entries()) {
-    const tree = path.join(
-      os.tmpdir(),
-      `demlik-partial-fault-${process.pid}-${index}`,
+  const reused = process.env.DEMLIK_PARTIAL_SUITE_WORKTREE;
+  const requested =
+    reused ?? path.join(os.tmpdir(), `demlik-partial-suite-${process.pid}`);
+  if (reused) {
+    assert.ok(
+      git(["worktree", "list", "--porcelain"]).includes(
+        `worktree ${fs.realpathSync(reused)}\n`,
+      ),
+      "reuse only a registered worktree",
     );
-    assert.ok(!fs.existsSync(tree));
-    const registration = git(["worktree", "add", "--detach", tree, checkpoint]);
-    const item = {
-      path: tree,
-      physicalPath: fs.realpathSync(tree),
+    const restored = restore(reused);
+    assert.equal(git(["-C", reused, "status", "--porcelain"]), "");
+    git(["-C", reused, "checkout", "--detach", checkpoint]);
+    suite = {
+      path: requested,
+      physicalPath: fs.realpathSync(requested),
       checkpoint,
-      registration,
-      worktreeRegistry: git(["worktree", "list", "--porcelain"]),
-      dependencyLinks: links(tree),
+      reused: true,
+      initialRestoreHashes: restored,
+      registration: git(["worktree", "list", "--porcelain"]),
       status: "registered",
     };
-    trees.push(item);
-    record({ activeWorktree: tree });
-    try {
-      if (before === undefined) {
-        const ids = [...new Set(edits.map((row) => row.witness))];
-        before = compare(tree, baseline, "baseline", ids);
-        assert.equal(before.status, 0, JSON.stringify(before.report.failures));
-        assert.equal(before.report.passed, ids.length);
-        assert.equal(before.report.rejectedInvalidInputs, 7);
-        record({ activeWorktree: tree });
-      }
-      const file = path.join(tree, "crates/code-graph/src/collapse", edit.file);
-      let text = originals.get(edit.file);
-      for (const [old, replacement] of edit.replacements ?? [
-        [edit.before, edit.after],
-      ])
-        text = text.replace(old, replacement);
-      fs.writeFileSync(file, text);
-      const diff = spawnSync(
-        "git",
-        ["diff", "--", "crates/code-graph/src/collapse"],
-        { cwd: tree, encoding: "utf8" },
-      );
-      assert.equal(diff.status, 0);
-      const patchFile = path.join(evidence, `${edit.name}.diff`);
-      fs.writeFileSync(patchFile, diff.stdout);
-      item.sourceSha256 = hash(text);
-      item.status = "building";
-      record({ activeWorktree: tree });
-      const args = [
-        "build",
-        "--offline",
-        "-p",
-        "demlik-code-graph",
-        "--example",
-        "collapse_partial_driver",
-        "--message-format=json",
-      ];
-      const build = spawnSync(process.env.CARGO ?? "cargo", args, {
-        cwd: tree,
-        env: environment,
-        encoding: "utf8",
-        maxBuffer: 16 * 1024 * 1024,
-      });
-      const cargoJson = path.join(evidence, `${edit.name}.build.jsonl`),
-        cargoLog = path.join(evidence, `${edit.name}.build.log`);
-      fs.writeFileSync(cargoJson, build.stdout);
-      fs.writeFileSync(cargoLog, build.stderr);
-      item.status = "built";
-      record({ activeWorktree: tree });
+  } else {
+    assert.ok(!fs.existsSync(requested));
+    const registration = git([
+      "worktree",
+      "add",
+      "--detach",
+      requested,
+      checkpoint,
+    ]);
+    suite = {
+      path: requested,
+      physicalPath: fs.realpathSync(requested),
+      checkpoint,
+      reused: false,
+      registration,
+      status: "registered",
+    };
+  }
+  for (const name of [
+    "node_modules",
+    "packages/code-graph/node_modules",
+    "verification/parity/node_modules",
+  ]) {
+    const link = path.join(suite.path, name),
+      target = path.join(root, name);
+    if (!fs.existsSync(link)) fs.symlinkSync(target, link, "dir");
+    assert.equal(fs.realpathSync(link), fs.realpathSync(target));
+  }
+  record({ activeWorktree: suite.path });
+  const ids = [...new Set(edits.map((row) => row.witness))];
+  before = compare(suite.path, baseline, "baseline", ids);
+  assert.equal(before.status, 0, JSON.stringify(before.report.failures));
+  assert.equal(before.report.passed, ids.length);
+  assert.equal(before.report.rejectedInvalidInputs, 7);
+  const lint = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "node_modules/@biomejs/biome/bin/biome"),
+      "check",
+      "verification/parity/collapse-partial-mutations.mjs",
+    ],
+    { cwd: suite.path, env: environment, encoding: "utf8" },
+  );
+  fs.writeFileSync(
+    path.join(evidence, "runner-biome.log"),
+    lint.stdout + lint.stderr,
+  );
+  assert.equal(lint.status, 0, lint.stdout + lint.stderr);
+  for (const edit of edits) {
+    const restored = restore(suite.path);
+    let text = originals.get(edit.file);
+    for (const [old, replacement] of edit.replacements ?? [
+      [edit.before, edit.after],
+    ])
+      text = text.replace(old, replacement);
+    fs.writeFileSync(
+      path.join(suite.path, "crates/code-graph/src/collapse", edit.file),
+      text,
+    );
+    const diff = git([
+      "-C",
+      suite.path,
+      "diff",
+      "--",
+      "crates/code-graph/src/collapse",
+    ]);
+    const patchFile = path.join(evidence, `${edit.name}.diff`);
+    fs.writeFileSync(patchFile, diff);
+    suite.status = "building";
+    record({ activeWorktree: suite.path, activeControl: edit.name });
+    const args = [
+      "build",
+      "--offline",
+      "-p",
+      "demlik-code-graph",
+      "--example",
+      "collapse_partial_driver",
+      "--message-format=json",
+    ];
+    const build = spawnSync(process.env.CARGO ?? "cargo", args, {
+      cwd: suite.path,
+      env: environment,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const cargoJson = path.join(evidence, `${edit.name}.build.jsonl`),
+      cargoLog = path.join(evidence, `${edit.name}.build.log`);
+    fs.writeFileSync(cargoJson, build.stdout);
+    fs.writeFileSync(cargoLog, build.stderr);
+    assert.equal(
+      build.status,
+      0,
+      `${edit.name}: compile errors are not semantic detections\n${build.stderr}`,
+    );
+    const rows = build.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.ok(
+      rows.some(
+        (row) => row.reason === "build-finished" && row.success === true,
+      ),
+    );
+    const artifact = rows.find(
+      (row) =>
+        row.reason === "compiler-artifact" &&
+        row.target.name === "collapse_partial_driver" &&
+        row.executable,
+    );
+    const library = rows.find(
+      (row) =>
+        row.reason === "compiler-artifact" &&
+        row.target.name === "demlik_code_graph" &&
+        row.target.kind.includes("lib"),
+    );
+    assert.ok(artifact && library);
+    assert.equal(artifact.fresh, false);
+    assert.equal(library.fresh, false);
+    assert.ok(
+      artifact.executable.startsWith(
+        path.join(suite.physicalPath, "target") + path.sep,
+      ),
+    );
+    const libraryPath = library.filenames.find((file) =>
+      file.endsWith(".rlib"),
+    );
+    assert.ok(libraryPath);
+    const effective = path.join(evidence, `${edit.name}.driver`);
+    fs.copyFileSync(
+      artifact.executable,
+      effective,
+      fs.constants.COPYFILE_FICLONE,
+    );
+    const executableHash = hash(fs.readFileSync(effective));
+    assert.equal(executableHash, hash(fs.readFileSync(artifact.executable)));
+    const result = compare(suite.path, effective, edit.name, [edit.witness]);
+    assert.notEqual(result.status, 0, edit.name);
+    assert.equal(result.report.attempted, 1);
+    assert.equal(result.report.rejectedInvalidInputs, 7);
+    assert.ok(result.report.failures.length > 0);
+    assert.ok(
+      result.report.failures.every((row) => row.kind === "semantic"),
+      "protocol/harness failures cannot count",
+    );
+    assert.ok(result.report.failures.some((row) => row.id === edit.witness));
+    controls.push({
+      ...edit,
+      detected: true,
+      restoredSourceHashes: restored,
+      sourceSha256: hash(text),
+      patchFile,
+      build: {
+        command: [process.env.CARGO ?? "cargo", ...args],
+        cwd: suite.path,
+        status: build.status,
+        cargoJson,
+        cargoLog,
+        artifact,
+        libraryArtifact: library,
+        observedLibrarySha256: hash(fs.readFileSync(libraryPath)),
+      },
+      effectiveExecutable: {
+        path: effective,
+        sha256: executableHash,
+        bytes: fs.statSync(effective).size,
+      },
+      comparison: result,
+    });
+    assert.equal(hash(fs.readFileSync(baseline)), baselineHash);
+    for (const [file, original] of originals)
       assert.equal(
-        build.status,
-        0,
-        `${edit.name}: compile errors are not semantic detections\n${build.stderr}`,
-      );
-      const artifacts = build.stdout
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line))
-        .filter(
-          (row) =>
-            row.reason === "compiler-artifact" &&
-            row.target.name === "collapse_partial_driver" &&
-            row.executable,
-        );
-      assert.equal(artifacts.length, 1);
-      const artifact = artifacts[0];
-      assert.ok(
-        artifact.executable.startsWith(
-          path.join(item.physicalPath, "target") + path.sep,
+        fs.readFileSync(
+          path.join(root, "crates/code-graph/src/collapse", file),
+          "utf8",
         ),
+        original,
       );
-      assert.equal(artifact.fresh, false);
-      const binaryBytes = fs.readFileSync(artifact.executable);
-      const result = compare(tree, artifact.executable, edit.name, [
-        edit.witness,
-      ]);
-      assert.notEqual(result.status, 0, edit.name);
-      assert.equal(result.report.attempted, 1);
-      assert.equal(result.report.rejectedInvalidInputs, 7);
-      assert.ok(result.report.failures.length > 0);
-      assert.ok(
-        result.report.failures.every((row) => row.kind === "semantic"),
-        "protocol/harness failures cannot count",
-      );
-      assert.ok(result.report.failures.some((row) => row.id === edit.witness));
-      controls.push({
-        ...edit,
-        detected: true,
-        sourceSha256: hash(text),
-        patchFile,
-        build: {
-          command: [process.env.CARGO ?? "cargo", ...args],
-          cwd: tree,
-          status: build.status,
-          cargoJson,
-          cargoLog,
-          artifact,
-        },
-        observedExecutable: {
-          path: artifact.executable,
-          sha256: hash(binaryBytes),
-          bytes: binaryBytes.length,
-          retained: false,
-        },
-        comparison: result,
-      });
-      assert.equal(hash(fs.readFileSync(baseline)), baselineHash);
-      for (const [file, original] of originals)
-        assert.equal(
-          fs.readFileSync(
-            path.join(root, "crates/code-graph/src/collapse", file),
-            "utf8",
-          ),
-          original,
-        );
-    } finally {
-      git(["worktree", "remove", "--force", tree]);
-      item.status = "removed";
-      item.defaultTargetRemoved = !fs.existsSync(path.join(tree, "target"));
-      record();
-    }
+    suite.status = "between-controls";
+    record({ activeWorktree: suite.path });
     process.stdout.write(
-      `${JSON.stringify({ detected: edit.name, completed: controls.length, total: edits.length, worktreeRemoved: true })}\n`,
+      `${JSON.stringify({ detected: edit.name, completed: controls.length, total: edits.length })}\n`,
     );
   }
-  record({ complete: true });
-  console.log(
-    JSON.stringify({
-      detected: controls.length,
-      escaped: 0,
-      allWorktreesRemoved: trees.every((t) => t.status === "removed"),
-    }),
-  );
 } catch (error) {
-  record({ incomplete: true, failure: String(error) });
-  throw error;
+  operationError = String(error);
+} finally {
+  if (suite) {
+    try {
+      suite.finalRestoreHashes = restore(suite.path);
+      assert.equal(git(["-C", suite.path, "status", "--porcelain"]), "");
+      git(["worktree", "remove", "--force", suite.path]);
+      suite.status = "removed";
+      suite.defaultTargetRemoved = !fs.existsSync(
+        path.join(suite.path, "target"),
+      );
+    } catch (error) {
+      cleanupError = String(error);
+    }
+  }
+  record({
+    complete: operationError === undefined && cleanupError === undefined,
+    incomplete: operationError !== undefined || cleanupError !== undefined,
+    operationError,
+    cleanupError,
+  });
 }
+if (operationError !== undefined || cleanupError !== undefined)
+  throw new Error(JSON.stringify({ operationError, cleanupError }));
+console.log(
+  JSON.stringify({
+    detected: controls.length,
+    escaped: 0,
+    worktreeRemoved: suite.status === "removed",
+  }),
+);
