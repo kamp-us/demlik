@@ -6,7 +6,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  assertCheckPath,
   cargoCheckEnvironment,
+  compiledCheckLibrary,
   createCheckWorktree,
 } from "./check-worktree.mjs";
 
@@ -125,8 +127,9 @@ function pairs(binary, name, ids) {
   });
   fs.writeFileSync(
     path.join(directory, `${name}.log`),
-    run.stdout + run.stderr,
+    (run.stdout ?? "") + (run.stderr ?? ""),
   );
+  if (run.error) throw run.error;
   assert.ok(
     fs.existsSync(report),
     `missing comparer report: ${run.stdout}${run.stderr}`,
@@ -140,6 +143,7 @@ function pairs(binary, name, ids) {
 }
 const controls = [];
 let before;
+let attempt;
 try {
   const witnesses = [...new Set(mutations.map((row) => row.witness))];
   before = pairs(baseline, "baseline", witnesses);
@@ -150,15 +154,22 @@ try {
   const workspace = check.root;
   const target = check.target;
   for (const mutation of mutations) {
+    attempt = { name: mutation.name, phase: "prepare" };
     for (const [file, original] of originals)
       fs.writeFileSync(
         path.join(workspace, "crates/code-graph/src", file),
         original,
       );
-    fs.writeFileSync(
-      path.join(workspace, "crates/code-graph/src", mutation.file),
-      originals.get(mutation.file).replace(mutation.before, mutation.after),
+    const mutated = originals
+      .get(mutation.file)
+      .replace(mutation.before, mutation.after);
+    const sourceFile = path.join(
+      workspace,
+      "crates/code-graph/src",
+      mutation.file,
     );
+    fs.writeFileSync(sourceFile, mutated);
+    attempt.sourceSha256 = hash(mutated);
     const command = [
       "build",
       "--offline",
@@ -168,6 +179,7 @@ try {
       "text_assembly_driver",
       "--message-format=json",
     ];
+    attempt.phase = "compile";
     const build = spawnSync(process.env.CARGO ?? "cargo", command, {
       cwd: workspace,
       env: environment,
@@ -176,8 +188,15 @@ try {
     });
     const cargoJson = path.join(directory, `${mutation.name}.build.jsonl`),
       cargoLog = path.join(directory, `${mutation.name}.build.log`);
-    fs.writeFileSync(cargoJson, build.stdout);
-    fs.writeFileSync(cargoLog, build.stderr);
+    fs.writeFileSync(cargoJson, build.stdout ?? "");
+    fs.writeFileSync(cargoLog, build.stderr ?? "");
+    attempt.build = {
+      status: build.status,
+      signal: build.signal,
+      cargoJson,
+      cargoLog,
+    };
+    if (build.error) throw build.error;
     assert.equal(
       build.status,
       0,
@@ -192,6 +211,14 @@ try {
         (row) => row.reason === "build-finished" && row.success === true,
       ),
     );
+    const library = compiledCheckLibrary(
+      rows,
+      "demlik_code_graph",
+      workspace,
+      target,
+    );
+    library.sha256 = hash(fs.readFileSync(library.path));
+    assert.equal(hash(fs.readFileSync(sourceFile)), hash(mutated));
     const artifacts = rows.filter(
       (row) =>
         row.reason === "compiler-artifact" &&
@@ -200,6 +227,8 @@ try {
     );
     assert.equal(artifacts.length, 1);
     const artifact = artifacts[0];
+    assert.equal(artifact.fresh, false);
+    assertCheckPath(artifact.executable, target);
     assert.notEqual(path.resolve(artifact.executable), path.resolve(baseline));
     const effective = path.join(directory, `${mutation.name}.driver`);
     fs.copyFileSync(
@@ -209,7 +238,12 @@ try {
     );
     const binaryHash = hash(fs.readFileSync(effective));
     assert.equal(binaryHash, hash(fs.readFileSync(artifact.executable)));
+    attempt.phase = "compare";
+    attempt.build.artifact = artifact;
+    attempt.build.library = library;
+    attempt.effectiveExecutable = { path: effective, sha256: binaryHash };
     const result = pairs(effective, mutation.name, [mutation.witness]);
+    attempt.comparison = result;
     assert.notEqual(result.status, 0, mutation.name);
     assert.equal(result.report.attempted, 1);
     assert.equal(result.report.rejectedInvalidInputs, 6);
@@ -224,6 +258,7 @@ try {
     );
     controls.push({
       ...mutation,
+      sourceSha256: hash(mutated),
       detected: true,
       build: {
         command: [process.env.CARGO ?? "cargo", ...command],
@@ -232,6 +267,7 @@ try {
         cargoJson,
         cargoLog,
         artifact,
+        library,
       },
       effectiveExecutable: {
         path: effective,
@@ -258,7 +294,7 @@ try {
 } catch (error) {
   fs.writeFileSync(
     reportFile,
-    `${JSON.stringify({ incomplete: true, planned: mutations.length, detected: controls.length, failure: String(error), baseline: before, controls }, null, 2)}\n`,
+    `${JSON.stringify({ incomplete: true, planned: mutations.length, detected: controls.length, failure: { name: error.name, message: error.message, code: error.code, errno: error.errno, syscall: error.syscall, path: error.path, stack: error.stack }, baseline: before, attempt, controls }, null, 2)}\n`,
   );
   throw error;
 } finally {

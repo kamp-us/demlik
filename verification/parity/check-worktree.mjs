@@ -11,6 +11,42 @@ export function cargoCheckEnvironment(extra = {}) {
   return env;
 }
 
+export function assertCheckPath(file, owner) {
+  const canonical = fs.realpathSync(file);
+  const relative = path.relative(fs.realpathSync(owner), canonical);
+  assert.ok(
+    relative &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative),
+    `check artifact must belong to ${owner}: ${file}`,
+  );
+  return canonical;
+}
+
+export function compiledCheckLibrary(rows, name, root, target) {
+  const libraries = rows.filter(
+    (row) =>
+      row.reason === "compiler-artifact" &&
+      row.target.name === name &&
+      row.target.kind.includes("lib") &&
+      row.filenames.some((file) => file.endsWith(".rlib")),
+  );
+  assert.equal(libraries.length, 1, `one check-owned ${name} library`);
+  const artifact = libraries[0];
+  assert.equal(artifact.fresh, false, `${name} must be rebuilt for this fault`);
+  const sourcePath = assertCheckPath(artifact.target.src_path, root);
+  const manifestPath = assertCheckPath(artifact.manifest_path, root);
+  const files = artifact.filenames.filter((file) => file.endsWith(".rlib"));
+  assert.equal(files.length, 1);
+  return {
+    artifact,
+    sourcePath,
+    manifestPath,
+    path: assertCheckPath(files[0], target),
+  };
+}
+
 export function checkEvidenceDirectory(sourceRoot, name) {
   assert.match(name, /^[a-z0-9-]+$/);
   const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {

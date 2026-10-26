@@ -6,8 +6,10 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
+  assertCheckPath,
   cargoCheckEnvironment,
   checkEvidenceDirectory,
+  compiledCheckLibrary,
   createCheckWorktree,
 } from "./check-worktree.mjs";
 
@@ -58,8 +60,17 @@ function classifiedCommandControlIn(cargo, directory, mutantRoot, target) {
     "--no-run",
     "--message-format=json",
   ];
+  const attempt = {
+    phase: "prepare",
+    checkWorktree: mutantRoot,
+    defaultTarget: target,
+    command: [cargo, ...command],
+    mutationSource,
+    mutationSourceSha256: hash(mutated),
+  };
   try {
     fs.writeFileSync(file, mutated);
+    attempt.phase = "compile";
     const built = spawnSync(cargo, command, {
       cwd: mutantRoot,
       encoding: "utf8",
@@ -72,36 +83,69 @@ function classifiedCommandControlIn(cargo, directory, mutantRoot, target) {
       }),
       maxBuffer: 16 * 1024 * 1024,
     });
-    if (built.error) throw built.error;
     const cargoJson = path.join(directory, "guard-bypass.cargo.jsonl");
-    fs.writeFileSync(cargoJson, built.stdout);
-    fs.writeFileSync(`${cargoJson}.stderr`, built.stderr);
+    fs.writeFileSync(cargoJson, built.stdout ?? "");
+    fs.writeFileSync(`${cargoJson}.stderr`, built.stderr ?? "");
+    attempt.compile = {
+      exit: built.status,
+      signal: built.signal,
+      cargoJson,
+    };
+    if (built.error) throw built.error;
     assert.equal(built.status, 0, built.stdout + built.stderr);
-    const artifact = built.stdout
+    const rows = built.stdout
       .split("\n")
       .filter(Boolean)
-      .map((line) => JSON.parse(line))
-      .find(
-        (row) =>
-          row.reason === "compiler-artifact" &&
-          row.target.name === "command_classified" &&
-          row.executable,
-      );
-    assert.ok(artifact, "test binary must come from actual Cargo JSON");
+      .map((line) => JSON.parse(line));
+    const library = compiledCheckLibrary(
+      rows,
+      "demlik_tea",
+      mutantRoot,
+      target,
+    );
+    library.sha256 = hash(fs.readFileSync(library.path));
+    const artifacts = rows.filter(
+      (row) =>
+        row.reason === "compiler-artifact" &&
+        row.target.name === "command_classified" &&
+        row.executable,
+    );
+    assert.equal(artifacts.length, 1);
+    const artifact = artifacts[0];
     assert.equal(artifact.fresh, false);
+    assertCheckPath(artifact.executable, target);
+    assert.equal(hash(fs.readFileSync(file)), hash(mutated));
+    const effectiveBinary = path.join(directory, "guard-bypass.bin");
+    fs.copyFileSync(artifact.executable, effectiveBinary);
+    const binarySha256 = hash(fs.readFileSync(effectiveBinary));
+    assert.equal(binarySha256, hash(fs.readFileSync(artifact.executable)));
+    attempt.phase = "execute";
+    attempt.artifact = artifact;
+    attempt.library = library;
+    attempt.effectiveBinary = effectiveBinary;
+    attempt.binarySha256 = binarySha256;
     const ran = spawnSync(
-      artifact.executable,
+      effectiveBinary,
       [witness, "--exact", "--nocapture"],
       { cwd: mutantRoot, encoding: "utf8" },
     );
+    attempt.execution = { exit: ran.status, signal: ran.signal };
+    fs.writeFileSync(
+      path.join(directory, "guard-bypass.stdout"),
+      ran.stdout ?? "",
+    );
+    fs.writeFileSync(
+      path.join(directory, "guard-bypass.stderr"),
+      ran.stderr ?? "",
+    );
+    fs.writeFileSync(
+      path.join(directory, "guard-bypass.process.json"),
+      `${JSON.stringify({ artifact, library, effectiveBinary, binarySha256, sourceSha256: hash(mutated), status: ran.status, signal: ran.signal }, null, 2)}\n`,
+    );
     if (ran.error) throw ran.error;
-    fs.writeFileSync(path.join(directory, "guard-bypass.stdout"), ran.stdout);
-    fs.writeFileSync(path.join(directory, "guard-bypass.stderr"), ran.stderr);
     assert.equal(ran.status, 101, ran.stdout + ran.stderr);
     assert.match(ran.stdout, new RegExp(`${witness}.*FAILED`));
     assert.match(ran.stderr, /undeclared classifier view reached the model/);
-    const effectiveBinary = path.join(directory, "guard-bypass.bin");
-    fs.copyFileSync(artifact.executable, effectiveBinary);
     const report = {
       name: "classified-command-tag-guard-bypass",
       baselineSourceSha256: hash(baseline),
@@ -111,7 +155,8 @@ function classifiedCommandControlIn(cargo, directory, mutantRoot, target) {
       cargoJson,
       compileExit: built.status,
       artifact,
-      binarySha256: hash(fs.readFileSync(artifact.executable)),
+      library,
+      binarySha256,
       effectiveBinary,
       witness,
       executionExit: ran.status,
@@ -125,6 +170,12 @@ function classifiedCommandControlIn(cargo, directory, mutantRoot, target) {
       `${JSON.stringify(report, null, 2)}\n`,
     );
     return report;
+  } catch (error) {
+    fs.writeFileSync(
+      path.join(directory, "report.json"),
+      `${JSON.stringify({ ...attempt, incomplete: true, detectedSemanticFailure: false, failure: { name: error.name, message: error.message, code: error.code, errno: error.errno, syscall: error.syscall, path: error.path, stack: error.stack } }, null, 2)}\n`,
+    );
+    throw error;
   } finally {
     fs.writeFileSync(file, baseline);
     assert.equal(fs.readFileSync(path.join(root, relative), "utf8"), baseline);
