@@ -34,3 +34,7 @@ required-features = ["pbt"]
 [[example]]
 name = "pbt_constructors_interface"
 required-features = ["pbt"]
+
+[[example]]
+name = "pbt_constructors_driver"
+required-features = ["pbt"]
