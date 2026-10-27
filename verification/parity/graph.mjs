@@ -38,6 +38,13 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "collapse-render",
+    driver: "collapse_render_driver",
+    script: "graph-collapse-render-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "collapse-partial",
     driver: "collapse_partial_driver",
     script: "graph-collapse-partial.mjs",
@@ -110,6 +117,14 @@ const suites = [
     name: "cli-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-collapse.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
+    name: "cli-plain-collapse",
+    driver: "collapse_cli_driver",
+    script: "graph-cli-plain-collapse-run.mjs",
     format: "process",
     traceField: "nativeTrace",
     evidenceField: "observedCalls",
@@ -281,6 +296,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "collapse_render_driver",
   "collapse_report_driver",
   "collapse_cli_driver",
   "graph_root_driver",

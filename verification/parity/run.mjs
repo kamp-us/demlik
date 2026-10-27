@@ -16,6 +16,7 @@ import {
   agentStatePrerequisiteParity,
   agentStatusCheckpointParity,
 } from "./agent-state-parity.mjs";
+import { runAgentTurnConformance } from "./agent-turn-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
@@ -1100,6 +1101,16 @@ if (!mutationSuite) {
       binaryArgument: "--agent-runtime-bin",
       run: (options) =>
         runAgentRuntimeConformance({
+          binary: options.binary,
+          output: options.reportFile,
+        }),
+    },
+    {
+      name: "agentTurn",
+      operation: "tea.agent-default-turn",
+      binaryArgument: "--agent-turn-bin",
+      run: (options) =>
+        runAgentTurnConformance({
           binary: options.binary,
           output: options.reportFile,
         }),

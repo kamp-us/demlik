@@ -107,7 +107,8 @@
     "verify:typed-reducer-mutations": "node typed-reducer-checks-run.mjs",
     "verify:pbt-constructors": "node pbt-constructors-run.mjs",
     "verify:pbt-constructors-mutations": "node pbt-constructors-checks-run.mjs",
-    "verify:agent-runtime": "node agent-runtime-run.mjs"
+    "verify:agent-runtime": "node agent-runtime-run.mjs",
+    "verify:agent-turn": "node agent-turn-run.mjs"
   },
   "dependencies": {
     "zod": "catalog:"

@@ -8342,7 +8342,8 @@
       "symbols": [
         "demlik_code_graph::cli::parse",
         "demlik_code_graph::cli::frontdoor::prepare_cli",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_plain_collapse_blocking"
       ]
     },
     "cases": [
@@ -8353,14 +8354,16 @@
       "graph.cli-parser.option.collapseConfig.raw-0",
       "graph.cli-collapse.config-changes-count",
       "graph.cli-collapse.config-zero-min-loc",
-      "graph.cli-collapse.config-refused-before-policy"
+      "graph.cli-collapse.config-refused-before-policy",
+      "graph.cli-plain-collapse.custom-settings",
+      "graph.cli-plain-collapse.config-refused-before-load"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Fixed argv/configuration, early collapse CI/write and eligible plain collapse continuation, with declared later-mode and host/distribution limits.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
-      "Plain collapse, similarity/cost/rank/clustering/full report, later modes and standalone/bootstrap/distribution remain outside this checkpoint. Backend exception stacks/OS text, pending stdio notification and raw JS argv/control profiles are qualified separately, never strict native evidence."
+      "HTML/prepared late ledgers/inactive continuation are native-only, not completed Source workflows. Existing String-only graph reflection facts, noncanonical/raw settings/object profiles, backend diagnostic text and pending stdio notification remain explicitly qualified. All53 global CLI IDs stay OPEN. Standalone bootstrap/distribution, remaining modes and cross-mode workflows remain unfinished."
     ],
-    "nativeProfile": "Existing parser proofs plus only the early collapse&&(ci||writeCeilings) continuation after comments. Real compiler/count/policy/IO/error behavior; all53globalCLI known gaps remain OPEN."
+    "nativeProfile": "Parser/configuration and early collapse CI/write proofs, plus eligible plain collapse, canonical rendering and graph-priority execution. No bootstrap/distribution or higher late-owner execution claim."
   },
   "@demlik/code-graph:cli:option:--collapse": {
     "signature": "4a2ff4f1ab7b107d286271bf54d3faa7508a31ca39a1129ddbc404d768e1b94c",
@@ -8369,7 +8372,8 @@
       "symbols": [
         "demlik_code_graph::cli::parse",
         "demlik_code_graph::cli::frontdoor::prepare_cli",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_plain_collapse_blocking"
       ]
     },
     "cases": [
@@ -8386,14 +8390,25 @@
       "graph.cli-collapse.write-out",
       "graph.cli-collapse.historical-proto-record",
       "graph.cli-collapse.ignore-later-flags",
-      "graph.cli-collapse.comments-priority"
+      "graph.cli-collapse.comments-priority",
+      "graph.cli-plain-collapse.invoice-workflow",
+      "graph.cli-plain-collapse.json-compact",
+      "graph.cli-plain-collapse.json-pretty",
+      "graph.cli-plain-collapse.out-file",
+      "graph.cli-plain-collapse.out-writable-mode",
+      "graph.cli-plain-collapse.initial-exit-preserved",
+      "graph.cli-plain-collapse.by-warning",
+      "graph.cli-plain-collapse.deep-scope",
+      "graph.cli-plain-collapse.headers-graph-priority",
+      "graph.cli-plain-collapse.fresh-data-root-after-warning",
+      "graph.cli-plain-collapse.missing-tsconfig"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Fixed argv/configuration, early collapse CI/write and eligible plain collapse continuation, with declared later-mode and host/distribution limits.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
-      "Plain collapse, similarity/cost/rank/clustering/full report, later modes and standalone/bootstrap/distribution remain outside this checkpoint. Backend exception stacks/OS text, pending stdio notification and raw JS argv/control profiles are qualified separately, never strict native evidence."
+      "HTML/prepared late ledgers/inactive continuation are native-only, not completed Source workflows. Existing String-only graph reflection facts, noncanonical/raw settings/object profiles, backend diagnostic text and pending stdio notification remain explicitly qualified. All53 global CLI IDs stay OPEN. Standalone bootstrap/distribution, remaining modes and cross-mode workflows remain unfinished."
     ],
-    "nativeProfile": "Existing parser proofs plus only the early collapse&&(ci||writeCeilings) continuation after comments. Real compiler/count/policy/IO/error behavior; all53globalCLI known gaps remain OPEN."
+    "nativeProfile": "Parser/configuration and early collapse CI/write proofs, plus eligible plain collapse, canonical rendering and graph-priority execution. No bootstrap/distribution or higher late-owner execution claim."
   },
   "@demlik/code-graph:cli:option:--boundary-rules <file>": {
     "signature": "04407e7e660512542b6a5685737ef751d9b123dc7804b799b756e4c4b9519c1e",
@@ -9053,9 +9068,57 @@
     "cases": [
       "agent-guards.turn-extra-retained",
       "agent-guards.turn-tool-object-args",
-      "agent-guards.turn-usage-invalid"
+      "agent-guards.turn-usage-invalid",
+      "agent-turn.promise.normal.extras",
+      "agent-turn.promise.duplicate.extras",
+      "agent-turn.promise.stale-settlements.extras",
+      "agent-turn.promise.terminal-boot.extras",
+      "agent-turn.promise.bad-total.extras",
+      "agent-turn.promise.tool-io-error.extras",
+      "agent-turn.promise.parse-error.extras",
+      "agent-turn.promise.retry-once.extras",
+      "agent-turn.promise.restart-brain.extras",
+      "agent-turn.promise.restart-tool.extras",
+      "agent-turn.promise.restart-tool-io-error.extras",
+      "agent-turn.promise.cancel.extras",
+      "agent-turn.promise.late-tool-fail.extras",
+      "agent-turn.promise.deadline.extras",
+      "agent-turn.promise.normal.array-args",
+      "agent-turn.promise.normal.presence",
+      "agent-turn.promise.normal.usage-missing",
+      "agent-turn.promise.normal.usage-undefined",
+      "agent-turn.promise.normal.usage-totals",
+      "agent-turn.promise.normal.bare",
+      "agent-turn.promise.duplicate.array-args",
+      "agent-turn.promise.restart-tool.presence",
+      "agent-turn.promise.restart-tool.usage-missing",
+      "agent-turn.promise.cancel.usage-totals",
+      "agent-turn.effect.normal.extras",
+      "agent-turn.effect.duplicate.extras",
+      "agent-turn.effect.stale-settlements.extras",
+      "agent-turn.effect.terminal-boot.extras",
+      "agent-turn.effect.bad-total.extras",
+      "agent-turn.effect.tool-io-error.extras",
+      "agent-turn.effect.parse-error.extras",
+      "agent-turn.effect.retry-once.extras",
+      "agent-turn.effect.restart-brain.extras",
+      "agent-turn.effect.restart-tool.extras",
+      "agent-turn.effect.restart-tool-io-error.extras",
+      "agent-turn.effect.cancel.extras",
+      "agent-turn.effect.late-tool-fail.extras",
+      "agent-turn.effect.deadline.extras",
+      "agent-turn.effect.normal.array-args",
+      "agent-turn.effect.normal.presence",
+      "agent-turn.effect.normal.usage-missing",
+      "agent-turn.effect.normal.usage-undefined",
+      "agent-turn.effect.normal.usage-totals",
+      "agent-turn.effect.normal.bare",
+      "agent-turn.effect.duplicate.array-args",
+      "agent-turn.effect.restart-tool.presence",
+      "agent-turn.effect.restart-tool.usage-missing",
+      "agent-turn.effect.cancel.usage-totals"
     ],
-    "nativeProfile": "Dense own-data objects. Raw schema parse retains the original Rc<PlainData> and extra fields; it does not reconstruct a native AgentTurn DTO. Sparse/prototype/named-array/getter behavior is measured Source-only in agent-guards-manual-profile.mjs, not native proof. No factory/provider/AgentState or schema-runtime claim."
+    "nativeProfile": "Dense own-data objects. Actual raw guard retains original Rc<PlainData>, array/object args and unknown fields; it also runs inside the configured application-owned parser in the base Agent/runtime workflow. Sparse/prototype/named-array/getter and general schema-runtime/provider-SDK behavior remain outside this profile."
   },
   "@demlik/tea:./agent#CompactionPurpose": {
     "signature": "ce60a01bddc015c531a969c777b65b4571466898aa7f2e3838b466fd79cafd1f",
@@ -11001,9 +11064,63 @@
       "agent-runtime.effect.restart-tool-io-error",
       "agent-runtime.effect.cancel",
       "agent-runtime.effect.late-tool-fail",
-      "agent-runtime.effect.deadline"
+      "agent-runtime.effect.deadline",
+      "agent-turn.promise.normal.extras",
+      "agent-turn.promise.duplicate.extras",
+      "agent-turn.promise.stale-settlements.extras",
+      "agent-turn.promise.fresh-boot.extras",
+      "agent-turn.promise.terminal-boot.extras",
+      "agent-turn.promise.bad-total.extras",
+      "agent-turn.promise.tool-io-error.extras",
+      "agent-turn.promise.model-error.extras",
+      "agent-turn.promise.parse-error.extras",
+      "agent-turn.promise.retry-once.extras",
+      "agent-turn.promise.retry-exhaust.extras",
+      "agent-turn.promise.restart-brain.extras",
+      "agent-turn.promise.restart-tool.extras",
+      "agent-turn.promise.restart-tool-io-error.extras",
+      "agent-turn.promise.cancel.extras",
+      "agent-turn.promise.late-tool-fail.extras",
+      "agent-turn.promise.deadline.extras",
+      "agent-turn.promise.normal.array-args",
+      "agent-turn.promise.normal.presence",
+      "agent-turn.promise.normal.usage-missing",
+      "agent-turn.promise.normal.usage-undefined",
+      "agent-turn.promise.normal.usage-totals",
+      "agent-turn.promise.normal.bare",
+      "agent-turn.promise.duplicate.array-args",
+      "agent-turn.promise.restart-tool.presence",
+      "agent-turn.promise.restart-tool.usage-missing",
+      "agent-turn.promise.cancel.usage-totals",
+      "agent-turn.effect.normal.extras",
+      "agent-turn.effect.duplicate.extras",
+      "agent-turn.effect.stale-settlements.extras",
+      "agent-turn.effect.fresh-boot.extras",
+      "agent-turn.effect.terminal-boot.extras",
+      "agent-turn.effect.bad-total.extras",
+      "agent-turn.effect.tool-io-error.extras",
+      "agent-turn.effect.model-error.extras",
+      "agent-turn.effect.parse-error.extras",
+      "agent-turn.effect.retry-once.extras",
+      "agent-turn.effect.retry-exhaust.extras",
+      "agent-turn.effect.restart-brain.extras",
+      "agent-turn.effect.restart-tool.extras",
+      "agent-turn.effect.restart-tool-io-error.extras",
+      "agent-turn.effect.cancel.extras",
+      "agent-turn.effect.late-tool-fail.extras",
+      "agent-turn.effect.deadline.extras",
+      "agent-turn.effect.normal.array-args",
+      "agent-turn.effect.normal.presence",
+      "agent-turn.effect.normal.usage-missing",
+      "agent-turn.effect.normal.usage-undefined",
+      "agent-turn.effect.normal.usage-totals",
+      "agent-turn.effect.normal.bare",
+      "agent-turn.effect.duplicate.array-args",
+      "agent-turn.effect.restart-tool.presence",
+      "agent-turn.effect.restart-tool.usage-missing",
+      "agent-turn.effect.cancel.usage-totals"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
       "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
@@ -11011,7 +11128,7 @@
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
-      "Default guarded Rc<PlainData> turn output cannot use the current concrete AgentTurn projection without a further owner-backed view seam."
+      "Full default AgentState wire serialization/reload remains OPEN because StructuredOutputError lacks Serialize/Deserialize; these workflows prove actual record/conversation codecs and retained in-process state resume."
     ]
   },
   "@demlik/tea:./agent#AgentToMachine/member:published:f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7": {
@@ -11054,9 +11171,63 @@
       "agent-runtime.effect.restart-tool-io-error",
       "agent-runtime.effect.cancel",
       "agent-runtime.effect.late-tool-fail",
-      "agent-runtime.effect.deadline"
+      "agent-runtime.effect.deadline",
+      "agent-turn.promise.normal.extras",
+      "agent-turn.promise.duplicate.extras",
+      "agent-turn.promise.stale-settlements.extras",
+      "agent-turn.promise.fresh-boot.extras",
+      "agent-turn.promise.terminal-boot.extras",
+      "agent-turn.promise.bad-total.extras",
+      "agent-turn.promise.tool-io-error.extras",
+      "agent-turn.promise.model-error.extras",
+      "agent-turn.promise.parse-error.extras",
+      "agent-turn.promise.retry-once.extras",
+      "agent-turn.promise.retry-exhaust.extras",
+      "agent-turn.promise.restart-brain.extras",
+      "agent-turn.promise.restart-tool.extras",
+      "agent-turn.promise.restart-tool-io-error.extras",
+      "agent-turn.promise.cancel.extras",
+      "agent-turn.promise.late-tool-fail.extras",
+      "agent-turn.promise.deadline.extras",
+      "agent-turn.promise.normal.array-args",
+      "agent-turn.promise.normal.presence",
+      "agent-turn.promise.normal.usage-missing",
+      "agent-turn.promise.normal.usage-undefined",
+      "agent-turn.promise.normal.usage-totals",
+      "agent-turn.promise.normal.bare",
+      "agent-turn.promise.duplicate.array-args",
+      "agent-turn.promise.restart-tool.presence",
+      "agent-turn.promise.restart-tool.usage-missing",
+      "agent-turn.promise.cancel.usage-totals",
+      "agent-turn.effect.normal.extras",
+      "agent-turn.effect.duplicate.extras",
+      "agent-turn.effect.stale-settlements.extras",
+      "agent-turn.effect.fresh-boot.extras",
+      "agent-turn.effect.terminal-boot.extras",
+      "agent-turn.effect.bad-total.extras",
+      "agent-turn.effect.tool-io-error.extras",
+      "agent-turn.effect.model-error.extras",
+      "agent-turn.effect.parse-error.extras",
+      "agent-turn.effect.retry-once.extras",
+      "agent-turn.effect.retry-exhaust.extras",
+      "agent-turn.effect.restart-brain.extras",
+      "agent-turn.effect.restart-tool.extras",
+      "agent-turn.effect.restart-tool-io-error.extras",
+      "agent-turn.effect.cancel.extras",
+      "agent-turn.effect.late-tool-fail.extras",
+      "agent-turn.effect.deadline.extras",
+      "agent-turn.effect.normal.array-args",
+      "agent-turn.effect.normal.presence",
+      "agent-turn.effect.normal.usage-missing",
+      "agent-turn.effect.normal.usage-undefined",
+      "agent-turn.effect.normal.usage-totals",
+      "agent-turn.effect.normal.bare",
+      "agent-turn.effect.duplicate.array-args",
+      "agent-turn.effect.restart-tool.presence",
+      "agent-turn.effect.restart-tool.usage-missing",
+      "agent-turn.effect.cancel.usage-totals"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
       "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
@@ -11064,7 +11235,7 @@
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
-      "Default guarded Rc<PlainData> turn output cannot use the current concrete AgentTurn projection without a further owner-backed view seam."
+      "Full default AgentState wire serialization/reload remains OPEN because StructuredOutputError lacks Serialize/Deserialize; these workflows prove actual record/conversation codecs and retained in-process state resume."
     ]
   },
   "@demlik/tea:./agent#agentBootMsg": {
@@ -11083,7 +11254,21 @@
       "agent-runtime.effect.terminal-boot",
       "agent-runtime.effect.restart-brain",
       "agent-runtime.effect.restart-tool",
-      "agent-runtime.effect.restart-tool-io-error"
+      "agent-runtime.effect.restart-tool-io-error",
+      "agent-turn.promise.fresh-boot.extras",
+      "agent-turn.promise.terminal-boot.extras",
+      "agent-turn.promise.restart-brain.extras",
+      "agent-turn.promise.restart-tool.extras",
+      "agent-turn.promise.restart-tool-io-error.extras",
+      "agent-turn.promise.restart-tool.presence",
+      "agent-turn.promise.restart-tool.usage-missing",
+      "agent-turn.effect.fresh-boot.extras",
+      "agent-turn.effect.terminal-boot.extras",
+      "agent-turn.effect.restart-brain.extras",
+      "agent-turn.effect.restart-tool.extras",
+      "agent-turn.effect.restart-tool-io-error.extras",
+      "agent-turn.effect.restart-tool.presence",
+      "agent-turn.effect.restart-tool.usage-missing"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
     "knownGaps": [
@@ -11100,7 +11285,13 @@
       "agent-runtime.promise.cancel",
       "agent-runtime.promise.late-tool-fail",
       "agent-runtime.effect.cancel",
-      "agent-runtime.effect.late-tool-fail"
+      "agent-runtime.effect.late-tool-fail",
+      "agent-turn.promise.cancel.extras",
+      "agent-turn.promise.late-tool-fail.extras",
+      "agent-turn.promise.cancel.usage-totals",
+      "agent-turn.effect.cancel.extras",
+      "agent-turn.effect.late-tool-fail.extras",
+      "agent-turn.effect.cancel.usage-totals"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
     "knownGaps": [
