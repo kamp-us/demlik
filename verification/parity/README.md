@@ -5,7 +5,14 @@ rustfmt and clippy, and a built `@demlik/code-graph` package for full API discov
 The implementations live beside each other in `packages/` and `crates/`.
 The workspace declares Rust 1.99 and pins the tested 1.99.1 toolchain.
 
-Mutation checks use separate Cargo targets for baseline and deliberately altered builds.
+Run each check or sequential mutation suite in its own registered Git worktree and
+build in that worktree's default `target/`. Unset `CARGO_TARGET_DIR`,
+`DEMLIK_MUTATION_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`.
+Keep compact reports and selected immutable baseline artifacts outside the check
+worktree, restore the baseline source before each fault, and remove the finished
+worktree and its build files with `git worktree remove --force`, including after a
+failed check. Do not copy dependency or target caches into evidence.
+
 For large local verification runs, use these settings to reduce compiler artifact size:
 
 ```sh
@@ -95,8 +102,12 @@ CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_B
    Independent-process storage checks also run by default, with bounded child
    watchdogs. `target/parity/storage-process.json` records competing CAS writers,
    process restart, dead PID-lock recovery and deletion in both languages.
-3. Run `pnpm parity:mutations` to verify that deliberate behavioral regressions
-   fail their intended cases. This builds disposable source copies and writes
+3. Mutation checks require a compiled behavioral fault to fail its intended case;
+   compiler, protocol and harness errors do not count. Current component runners
+   use `check-worktree.mjs` to own their worktree and default target. The legacy
+   `pnpm parity:mutations` aggregate still includes runners with separate target
+   overrides and unregistered source copies. Migrate those runners before using
+   the aggregate under the disk rule above. Its historical reports include
    `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
    `runtime-hooks-mutation.json`, `runtime-deadline-mutation.json`,
    `paginate-queue-mutations.json`, `zoning-mutations.json` and
