@@ -65,6 +65,7 @@ const faults = [
       "final_modes_shrink_and_replay_original_evaluations_with_borrowed_typed_causes",
   },
 ];
+export { faults as pbtFinalFaults };
 const hash = (v) => createHash("sha256").update(v).digest("hex");
 function command(program, args, options = {}) {
   const r = spawnSync(program, args, {

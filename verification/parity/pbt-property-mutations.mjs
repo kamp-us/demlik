@@ -78,6 +78,7 @@ const faults = [
       "standard_native_shrinking_keeps_the_evaluated_handles_and_replays_its_minimum",
   },
 ];
+export { faults as pbtPropertyFaults };
 const digest = (x) => createHash("sha256").update(x).digest("hex");
 function command(program, args, options = {}) {
   const r = spawnSync(program, args, {

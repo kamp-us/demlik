@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import {
+  assertCheckPath,
+  cargoCheckEnvironment,
+  compiledCheckLibrary,
+} from "./check-worktree.mjs";
+import { pbtFinalFaults } from "./pbt-final-mutations.mjs";
+import { pbtPropertyFaults } from "./pbt-property-mutations.mjs";
 
 const owner = "crates/tea/src/pbt/proptest.rs";
 const faults = [
@@ -43,260 +41,484 @@ const faults = [
   },
 ];
 const hash = (x) => createHash("sha256").update(x).digest("hex");
-function command(program, args, options = {}) {
+const environment = () =>
+  cargoCheckEnvironment({
+    CARGO_NET_OFFLINE: "true",
+    CARGO_BUILD_JOBS: "1",
+    CARGO_INCREMENTAL: "0",
+    CARGO_PROFILE_DEV_DEBUG: "0",
+    CARGO_PROFILE_TEST_DEBUG: "0",
+  });
+const controls = [
+  ...faults.map((fault) => ({ ...fault, family: "constructors" })),
+  ...pbtPropertyFaults.map((fault) => ({ ...fault, family: "property" })),
+  ...pbtFinalFaults.map((fault) => ({ ...fault, family: "final" })),
+];
+function command(program, args, cwd) {
   const r = spawnSync(program, args, {
+    cwd,
+    env: environment(),
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    ...options,
   });
   return {
     command: [program, ...args],
+    cwd,
     exit: r.status,
-    stdout: r.stdout,
-    stderr: r.stderr,
+    signal: r.signal,
+    stdout: r.stdout ?? "",
+    stderr: r.stderr ?? "",
     error: r.error?.message,
   };
 }
-function adapter(root, binary, reportFile, caseId, native) {
+function saveRun(prefix, run) {
+  fs.mkdirSync(path.dirname(prefix), { recursive: true });
+  fs.writeFileSync(`${prefix}.stdout`, run.stdout);
+  fs.writeFileSync(`${prefix}.stderr`, run.stderr);
+  const { stdout, stderr, ...metadata } = run;
+  const record = {
+    ...metadata,
+    stdout: { path: `${prefix}.stdout`, sha256: hash(stdout) },
+    stderr: { path: `${prefix}.stderr`, sha256: hash(stderr) },
+  };
+  fs.writeFileSync(
+    `${prefix}.run.json`,
+    `${JSON.stringify(record, null, 2)}\n`,
+  );
+  return record;
+}
+function outsideCheck(check, reportFile) {
+  assert.equal(
+    path.resolve(check.target),
+    path.join(path.resolve(check.root), "target"),
+  );
+  const relative = path.relative(
+    path.resolve(check.root),
+    path.resolve(reportFile),
+  );
+  assert(
+    relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative),
+    "proof must outlive the registered check",
+  );
+}
+function adapter(check, binary, reportFile, script, args = []) {
+  outsideCheck(check, reportFile);
+  fs.mkdirSync(path.dirname(path.resolve(reportFile)), { recursive: true });
   const run = command(
     process.execPath,
     [
       "--import",
-      join(root, "verification/parity/node_modules/tsx/dist/loader.mjs"),
-      join(root, "verification/parity/pbt-constructors.mts"),
+      path.join(
+        check.root,
+        "verification/parity/node_modules/tsx/dist/loader.mjs",
+      ),
+      assertCheckPath(
+        path.join(check.root, "verification/parity", script),
+        check.root,
+      ),
       "--native-bin",
-      binary,
+      path.resolve(binary),
       "--report",
-      reportFile,
-      ...(native ? ["--native-only"] : []),
-      ...(caseId ? ["--case-id", caseId] : []),
+      path.resolve(reportFile),
+      ...args,
     ],
-    { cwd: root },
+    check.root,
   );
-  assert([0, 1].includes(run.exit), JSON.stringify(run));
-  return { run, report: JSON.parse(readFileSync(reportFile, "utf8")) };
+  const runRecord = saveRun(`${reportFile}.adapter`, run);
+  assert.equal(run.error, undefined, JSON.stringify(runRecord));
+  assert.equal(run.signal, null, JSON.stringify(runRecord));
+  assert([0, 1].includes(run.exit), JSON.stringify(runRecord));
+  assert(
+    fs.existsSync(reportFile),
+    `Adapter failed before a protocol-valid report: ${reportFile}; ${run.stderr}`,
+  );
+  return {
+    run,
+    runRecord,
+    report: JSON.parse(fs.readFileSync(reportFile, "utf8")),
+  };
+}
+export function pbtConstructorComparison({
+  check,
+  binary,
+  reportFile,
+  caseId,
+  nativeOnly = false,
+}) {
+  assert(
+    check && binary && reportFile,
+    "owning check, explicit binary and external report required",
+  );
+  return adapter(check, binary, reportFile, "pbt-constructors.mts", [
+    ...(nativeOnly ? ["--native-only"] : []),
+    ...(caseId ? ["--case-id", caseId] : []),
+  ]);
+}
+function assertProptest(rows, check) {
+  const found = rows.filter(
+    (r) =>
+      r.reason === "compiler-artifact" &&
+      r.target.name === "proptest" &&
+      r.target.kind.includes("lib") &&
+      r.filenames.some((f) => f.endsWith(".rlib")),
+  );
+  assert.equal(found.length, 1);
+  const artifact = found[0];
+  assert(artifact.package_id.endsWith("#proptest@1.11.0"));
+  assert(artifact.features.includes("std"));
+  assert(
+    !artifact.features.includes("fork") &&
+      !artifact.features.includes("timeout"),
+  );
+  const file = assertCheckPath(
+    artifact.filenames.find((f) => f.endsWith(".rlib")),
+    check.target,
+  );
+  return {
+    artifact,
+    path: file,
+    sha256: hash(fs.readFileSync(file)),
+    source: {
+      path: artifact.target.src_path,
+      sha256: hash(fs.readFileSync(artifact.target.src_path)),
+    },
+    manifest: {
+      path: artifact.manifest_path,
+      sha256: hash(fs.readFileSync(artifact.manifest_path)),
+    },
+  };
+}
+function witness(check, binary, file, control) {
+  if (control.family === "constructors") {
+    const result = pbtConstructorComparison({
+      check,
+      binary,
+      reportFile: file,
+      caseId: control.witness,
+      nativeOnly: control.native,
+    });
+    assert.equal(result.run.exit, 1, "named semantic mismatch required");
+    assert.equal(
+      result.report.nativeCommand.exit,
+      0,
+      "panic/protocol failure is not a witness",
+    );
+    assert.equal(result.report.cases.length, 1);
+    assert(result.report.failures.some((f) => f.id === control.witness));
+    const row = result.report.cases[0];
+    assert.equal(row.id, control.witness);
+    assert(
+      row.observedRustCalls.includes(
+        `demlik_tea::pbt::${control.id.startsWith("constant") ? "constant_msg" : "record_msg"}`,
+      ),
+    );
+    if (control.id === "constant-msg-rejects-valid-value") {
+      assert.equal(row.comparison.status, "refused");
+      assert.equal(row.comparison.phase, "generation");
+      assert.equal(typeof row.comparison.reason, "string");
+    } else if (control.id === "record-msg-reuses-first-outer") {
+      assert.equal(row.comparison.status, "ok");
+      assert.deepEqual(row.comparison.sameAsFirst, [true, true, true]);
+    } else {
+      assert.equal(row.comparison.status, "case");
+      assert.equal(row.comparison.minimum, 87);
+      assert.equal(row.comparison.firstFailure, 87);
+      assert.notEqual(row.comparison.minimum, 13);
+    }
+    return {
+      kind: control.native ? "native-constructor-law" : "shared-constructor",
+      declared: control.witness,
+      reportFile: file,
+      run: result.runRecord,
+    };
+  }
+  if (control.native) {
+    const run = command(
+      binary,
+      [control.witness, "--exact", "--nocapture"],
+      check.root,
+    );
+    const recorded = saveRun(`${file}.native`, run);
+    assert.equal(run.error, undefined);
+    assert.equal(run.signal, null);
+    assert.equal(run.exit, 101, "named native assertion must fail");
+    assert(run.stdout.includes(`${control.witness} ... FAILED`));
+    const assertion =
+      control.family === "property"
+        ? "backend-recreated handles would not have been evaluated"
+        : "returned messages must have been actually evaluated";
+    assert(
+      run.stderr.includes(assertion) ||
+        run.stderr.includes("assertion failed: Arc::ptr_eq"),
+    );
+    return {
+      kind: "native-owner-law",
+      declared: control.witness,
+      assertion,
+      run: recorded,
+    };
+  }
+  const script =
+    control.family === "final"
+      ? "pbt-final.mts"
+      : control.files
+        ? "pbt-property-files.mts"
+        : "pbt-property.mts";
+  const result = adapter(
+    check,
+    binary,
+    file,
+    script,
+    control.files ? [] : ["--case-id", control.witness],
+  );
+  assert.equal(result.run.exit, 1, "named behavioral mismatch required");
+  if (control.files) {
+    assert.equal(result.report.id, control.witness);
+    assert.equal(result.report.equal, false);
+    assert.equal(result.report.commands.length, 2);
+    assert(result.report.commands.every((r) => r.exit === 0));
+    assert(result.report.observedRustCalls.includes("pbt::property_invariant"));
+  } else {
+    assert.equal(result.report.cases.length, 1);
+    assert.equal(result.report.cases[0].id, control.witness);
+    assert(result.report.failures.some((f) => f.id === control.witness));
+    const expectedCall =
+      control.family === "property"
+        ? control.witness.startsWith("pbt-sequence.")
+          ? "pbt::msg_sequence"
+          : "pbt::property_invariant"
+        : control.witness.startsWith("pbt-terminates.")
+          ? "pbt::property_terminates"
+          : "pbt::property_trace";
+    assert(result.report.cases[0].observedRustCalls.includes(expectedCall));
+  }
+  assert.equal(result.report.binary.sha256, hash(fs.readFileSync(binary)));
+  return {
+    kind: control.files ? "file-side-effect" : "shared-fixed-profile",
+    declared: control.witness,
+    reportFile: file,
+    run: result.runRecord,
+  };
 }
 export function pbtConstructorMutations({
-  binary,
-  warmTarget = process.env.CARGO_TARGET_DIR,
-  reportFile = "target/parity/pbt-constructors-controls.json",
+  check,
+  baseline,
+  reportFile,
   only,
+  observeTarget = () => {},
 } = {}) {
   assert(
-    binary && warmTarget,
-    "Supply the immutable baseline binary and separate frozen warm target",
+    check && baseline && reportFile,
+    "explicit owning check and immutable proven baseline required; no build fallback",
   );
-  const root = process.cwd(),
-    source = readFileSync(owner, "utf8"),
-    controls = [];
-  binary = resolve(binary);
-  warmTarget = resolve(warmTarget);
-  reportFile = resolve(reportFile);
-  mkdirSync(dirname(reportFile), { recursive: true });
-  const baseline = adapter(
-    root,
-    binary,
-    `${reportFile}.baseline.json`,
-    undefined,
-    false,
-  );
-  assert.equal(baseline.run.exit, 0);
-  assert.equal(baseline.report.passed, 90);
-  const nativeBaseline = adapter(
-    root,
-    binary,
-    `${reportFile}.native-baseline.json`,
-    undefined,
-    true,
-  );
-  assert.equal(nativeBaseline.run.exit, 0);
-  assert.equal(nativeBaseline.report.passed, 3);
-  for (const fault of faults.filter((f) => !only || only.includes(f.id))) {
-    assert.equal(
-      source.split(fault.needle).length,
-      2,
-      `${fault.id}: exact unique owner needle`,
+  outsideCheck(check, reportFile);
+  assert.equal(baseline.reports.constructors.compared, 90);
+  assert.equal(baseline.reports.constructors.passed, 90);
+  assert.equal(baseline.reports.native.passed, 3);
+  assert.equal(baseline.reports.property.passed, 52);
+  assert.equal(baseline.reports.files.equal, true);
+  assert.equal(baseline.reports.final.passed, 108);
+  if (only)
+    assert(
+      only.every((id) => controls.some((c) => c.id === id)),
+      "unknown control ID",
     );
-    const temporary = mkdtempSync(
-        join(tmpdir(), "demlik-constructors-mutant-"),
-      ),
-      target = mkdtempSync(
-        join(tmpdir(), "demlik-constructors-mutant-target-"),
-      );
-    try {
-      for (const name of ["Cargo.toml", "Cargo.lock", "crates"])
-        cpSync(join(root, name), join(temporary, name), { recursive: true });
-      const changed = source.replace(fault.needle, fault.fault);
-      writeFileSync(join(temporary, owner), changed);
-      const clone = command("/bin/cp", ["-cR", `${warmTarget}/.`, target]);
-      assert.equal(clone.exit, 0, clone.stderr);
-      const env = {
-        ...process.env,
-        CARGO_TARGET_DIR: target,
-        CARGO_NET_OFFLINE: "true",
-        CARGO_BUILD_JOBS: "1",
-        CARGO_INCREMENTAL: "0",
-        CARGO_PROFILE_DEV_DEBUG: "0",
-        CARGO_PROFILE_TEST_DEBUG: "0",
-      };
-      const build = command(
-        process.env.CARGO ?? "cargo",
-        [
-          "build",
-          "--locked",
-          "--offline",
-          "--message-format=json",
-          "-p",
-          "demlik-tea",
-          "--features",
-          "pbt",
-          "--example",
-          "pbt_constructors_driver",
-        ],
-        { cwd: temporary, env },
-      );
+  const selected = controls.filter((c) => !only || only.includes(c.id));
+  assert(selected.length);
+  assert.equal(new Set(controls.map((c) => c.id)).size, 19);
+  const sourceFile = assertCheckPath(path.join(check.root, owner), check.root);
+  const source = fs.readFileSync(sourceFile, "utf8");
+  for (const c of selected)
+    assert.equal(
+      source.split(c.needle).length,
+      2,
+      `${c.id}: unique current owner needle`,
+    );
+  const immutable = [
+    ...Object.values(baseline.binaries),
+    ...Object.values(baseline.libraries),
+    ...Object.values(baseline.nativeTests),
+  ];
+  const intact = () =>
+    immutable.every((a) => hash(fs.readFileSync(a.path)) === a.sha256);
+  assert(intact());
+  const evidence = path.dirname(path.resolve(reportFile));
+  const report = {
+    complete: false,
+    planned: selected.length,
+    detected: 0,
+    controls: [],
+    source: { path: owner, sha256: hash(source) },
+    semanticPairs: 0,
+  };
+  let operationError, restorationError;
+  try {
+    for (const c of selected) {
+      fs.writeFileSync(sourceFile, source);
+      assert.equal(hash(fs.readFileSync(sourceFile)), hash(source));
+      const changed = source.replace(c.needle, c.fault);
+      fs.writeFileSync(sourceFile, changed);
+      const directory = path.join(evidence, c.id);
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, "mutated.rs"), changed);
+      const nativeTest = c.native && c.family !== "constructors";
+      const target = nativeTest
+        ? c.family === "property"
+          ? "pbt_proptest"
+          : "pbt_final"
+        : c.family === "constructors"
+          ? "pbt_constructors_driver"
+          : "pbt_property_driver";
+      const args = [
+        nativeTest ? "test" : "build",
+        ...(nativeTest ? ["--no-run"] : []),
+        "--locked",
+        "--offline",
+        "--message-format=json",
+        "-p",
+        "demlik-tea",
+        "--features",
+        "pbt",
+        nativeTest ? "--test" : "--example",
+        target,
+      ];
+      const build = command(process.env.CARGO ?? "cargo", args, check.root);
+      const recordedBuild = saveRun(path.join(directory, "cargo"), build);
+      observeTarget();
+      assert.equal(build.error, undefined);
+      assert.equal(build.signal, null);
       assert.equal(
         build.exit,
         0,
-        `${fault.id}: compile/setup failure is not a detection\n${build.stderr}`,
+        `${c.id}: compilation/setup failure earns no semantic credit\n${build.stdout}\n${build.stderr}`,
       );
-      const artifacts = build.stdout
+      const rows = build.stdout
         .split("\n")
         .filter(Boolean)
-        .map((l) => JSON.parse(l));
-      const library = artifacts.find(
-        (a) =>
-          a.reason === "compiler-artifact" &&
-          a.target.name === "demlik_tea" &&
-          a.filenames.some((f) => f.endsWith(".rlib")),
+        .map((line) => JSON.parse(line));
+      const library = compiledCheckLibrary(
+        rows,
+        "demlik_tea",
+        check.root,
+        check.target,
       );
-      const executable = artifacts.find(
-        (a) =>
-          a.reason === "compiler-artifact" &&
-          a.target.name === "pbt_constructors_driver" &&
-          a.executable,
-      );
-      assert(library && executable);
+      assert(library.artifact.features.includes("pbt"));
+      const proptest = assertProptest(rows, check);
+      assert.equal(proptest.sha256, baseline.libraries.proptest.sha256);
       assert.equal(
-        library.fresh,
+        proptest.source.sha256,
+        baseline.libraries.proptest.source.sha256,
+      );
+      const exes = rows.filter(
+        (r) =>
+          r.reason === "compiler-artifact" &&
+          r.target.name === target &&
+          r.executable,
+      );
+      assert.equal(exes.length, 1);
+      assert.equal(
+        exes[0].fresh,
         false,
-        "Mutated tea source must actually compile, not reuse the baseline library",
+        "effective consumer must rebuild for this fault",
       );
-      const result = adapter(
-        root,
-        executable.executable,
-        join(temporary, "result.json"),
-        fault.witness,
-        fault.native,
+      assertCheckPath(exes[0].target.src_path, check.root);
+      assertCheckPath(exes[0].manifest_path, check.root);
+      const actual = assertCheckPath(exes[0].executable, check.target);
+      const executable = path.join(
+        directory,
+        `${hash(fs.readFileSync(actual))}.bin`,
       );
+      fs.copyFileSync(actual, executable);
       assert.equal(
-        result.run.exit,
-        1,
-        `${fault.id}: a protocol-valid named semantic mismatch is required`,
+        hash(fs.readFileSync(actual)),
+        hash(fs.readFileSync(executable)),
       );
-      assert(result.report.failures.some((f) => f.id === fault.witness));
-      assert.equal(result.report.cases.length, 1);
-      const row = result.report.cases[0];
-      assert(
-        row.observedRustCalls.includes(
-          `demlik_tea::pbt::${fault.id.startsWith("constant") ? "constant_msg" : "record_msg"}`,
-        ),
+      const librarySha256 = hash(fs.readFileSync(library.path));
+      const result = witness(
+        check,
+        executable,
+        path.join(directory, "pairs.json"),
+        c,
       );
-      const nativeCommand = result.report.nativeCommand;
-      assert.equal(
-        nativeCommand.exit,
-        0,
-        "Native process must succeed; a panic/protocol failure is not the witness",
-      );
-      const raw = row;
-      if (fault.id === "constant-msg-rejects-valid-value") {
-        assert.equal(raw.comparison.status, "refused");
-        assert.equal(raw.comparison.phase, "generation");
-        assert.equal(typeof raw.comparison.reason, "string");
-      } else if (fault.id === "record-msg-reuses-first-outer") {
-        assert.equal(raw.comparison.status, "ok");
-        assert.deepEqual(raw.comparison.sameAsFirst, [true, true, true]);
-      } else {
-        assert.equal(raw.comparison.status, "case");
-        assert.equal(raw.comparison.minimum, 87);
-        assert.equal(raw.comparison.firstFailure, 87);
-        assert.notEqual(raw.comparison.minimum, 13);
-      }
-      const saved = resolve(
-        "target/parity/control-binaries/pbt-constructors",
-        fault.id,
-      );
-      mkdirSync(dirname(saved), { recursive: true });
-      cpSync(executable.executable, saved);
-      controls.push({
-        id: fault.id,
-        witness: fault.witness,
-        detectedIds: result.report.failures.map((f) => f.id),
+      assert(intact(), "immutable baseline changed");
+      report.controls.push({
+        ...c,
+        compiled: true,
+        detected: true,
+        build: recordedBuild,
         source: {
           path: owner,
           originalSha256: hash(source),
           mutatedSha256: hash(changed),
-          needle: fault.needle,
-          fault: fault.fault,
+          copy: path.join(directory, "mutated.rs"),
         },
-        clone,
-        build,
-        result,
-        nativeCommand,
-        binary: { path: saved, sha256: hash(readFileSync(saved)) },
-        actualLibraryFresh: library.fresh,
+        library: {
+          actualPath: library.path,
+          sha256: librarySha256,
+          retained: false,
+          artifact: library.artifact,
+          sourcePath: library.sourcePath,
+          manifestPath: library.manifestPath,
+        },
+        proptest,
+        binary: {
+          path: executable,
+          sha256: hash(fs.readFileSync(executable)),
+          actualPath: actual,
+          artifact: exes[0],
+        },
+        witnessResult: result,
       });
-      writeFileSync(
+      report.detected = report.controls.length;
+      fs.writeFileSync(
         `${reportFile}.progress.json`,
-        `${JSON.stringify({ baseline: baseline.report.binary, controls }, null, 2)}\n`,
+        `${JSON.stringify(report, null, 2)}\n`,
       );
-    } finally {
-      assert.equal(readFileSync(owner, "utf8"), source);
-      rmSync(temporary, { recursive: true, force: true });
-      rmSync(target, { recursive: true, force: true });
     }
+    report.complete = true;
+  } catch (error) {
+    operationError = error;
+    report.operationFailure = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  } finally {
+    try {
+      fs.writeFileSync(sourceFile, source);
+      assert.equal(hash(fs.readFileSync(sourceFile)), hash(source));
+    } catch (error) {
+      restorationError = error;
+      report.restorationFailure = {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+    report.activeSourceUnchanged =
+      fs.readFileSync(sourceFile, "utf8") === source;
+    report.baselineArtifactsUnchanged = intact();
+    report.complete &&=
+      !restorationError &&
+      report.activeSourceUnchanged &&
+      report.baselineArtifactsUnchanged;
+    fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   }
-  const report = {
-    baseline: {
-      compared: baseline.report.compared,
-      passed: baseline.report.passed,
-      binary: baseline.report.binary,
-    },
-    nativeBaseline: {
-      cases: nativeBaseline.report.nativeCases,
-      passed: nativeBaseline.report.passed,
-    },
-    controls,
-    activeSourceUnchanged: readFileSync(owner, "utf8") === source,
-    semanticPairs: 0,
-  };
-  writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+  if (operationError || restorationError)
+    throw new AggregateError(
+      [operationError, restorationError].filter(Boolean),
+      `PBT constructor controls failed; evidence: ${reportFile}`,
+    );
+  assert.equal(report.complete, true);
   return report;
 }
 if (
   process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  const { values } = parseArgs({
-    options: {
-      "native-bin": { type: "string" },
-      "warm-target": { type: "string" },
-      report: { type: "string" },
-      only: { type: "string", multiple: true },
-    },
-    strict: true,
-  });
-  const report = pbtConstructorMutations({
-    binary: values["native-bin"],
-    warmTarget: values["warm-target"],
-    reportFile: values.report,
-    only: values.only,
-  });
-  console.log(
-    JSON.stringify({
-      controls: report.controls.length,
-      detected: report.controls.length,
-      activeSourceUnchanged: report.activeSourceUnchanged,
-    }),
+  throw new Error(
+    "Run pbt-constructors-checks-run.mjs: an owning check and immutable proven baseline are required; no standalone build fallback",
   );
 }

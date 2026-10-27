@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import { assertCheckPath, cargoCheckEnvironment } from "./check-worktree.mjs";
 
 const sourcePath = "crates/tea/examples/pbt_constructors_interface.rs";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -49,32 +42,53 @@ function probes(source) {
   ];
 }
 export function pbtConstructorsInterfaceProbes({
+  check,
   teaLibrary,
   proptestLibrary,
   dependencies,
-  reportFile = "target/parity/pbt-constructors-interface-probes.json",
+  reportFile,
 } = {}) {
   assert(
-    teaLibrary && proptestLibrary && dependencies,
-    "Supply immutable tea/proptest libraries selected from actual Cargo JSON, and their dependency directory",
+    check && teaLibrary && proptestLibrary && dependencies && reportFile,
+    "owning check and immutable actual Cargo Tea/Proptest libraries are required",
   );
-  const source = readFileSync(sourcePath, "utf8"),
-    temporary = mkdtempSync(join(tmpdir(), "demlik-pbt-constructors-types-")),
-    results = [];
+  assertCheckPath(dependencies, check.target);
+  const evidence = path.dirname(path.resolve(reportFile));
+  const relative = path.relative(path.resolve(check.root), evidence);
+  assert(
+    relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative),
+  );
+  fs.mkdirSync(evidence, { recursive: true });
+  fs.mkdirSync(check.target, { recursive: true });
+  const source = fs.readFileSync(
+    assertCheckPath(path.join(check.root, sourcePath), check.root),
+    "utf8",
+  );
+  const temporary = fs.mkdtempSync(
+    path.join(check.target, "pbt-constructor-types-"),
+  );
   const compiler =
     process.env.RUSTC ??
-    (process.env.CARGO ? join(dirname(process.env.CARGO), "rustc") : "rustc");
+    (process.env.CARGO
+      ? path.join(path.dirname(process.env.CARGO), "rustc")
+      : "rustc");
+  const results = [];
   try {
     for (const probe of probes(source)) {
-      const file = join(temporary, `${probe.id}.rs`),
-        executable = join(temporary, probe.id);
-      writeFileSync(file, probe.source);
+      const file = path.join(temporary, `${probe.id}.rs`);
+      const executable = path.join(temporary, probe.id);
+      fs.writeFileSync(file, probe.source);
+      const savedSource = path.join(evidence, `${probe.id}.rs`);
+      fs.writeFileSync(savedSource, probe.source);
       const args = [
         "--edition",
         "2024",
         "--crate-name",
         "pbt_constructors_interface_probe",
         file,
+        "--error-format=json",
         "-C",
         "debuginfo=0",
         "-L",
@@ -87,34 +101,78 @@ export function pbtConstructorsInterfaceProbes({
         executable,
       ];
       const compiled = spawnSync(compiler, args, {
+        cwd: check.root,
+        env: cargoCheckEnvironment(),
         encoding: "utf8",
         maxBuffer: 32 * 1024 * 1024,
       });
+      const stderr = compiled.stderr ?? "";
+      const diagnostics = stderr.split("\n").flatMap((line) => {
+        try {
+          const row = JSON.parse(line);
+          return row.level === "error" && row.code ? [row.code.code] : [];
+        } catch {
+          return [];
+        }
+      });
+      fs.writeFileSync(path.join(evidence, `${probe.id}.stderr`), stderr);
+      fs.writeFileSync(
+        path.join(evidence, `${probe.id}.stdout`),
+        compiled.stdout ?? "",
+      );
       let run;
       if (probe.ok && compiled.status === 0) {
-        const r = spawnSync(executable, [], { encoding: "utf8" });
-        run = { exit: r.status, stdout: r.stdout, stderr: r.stderr };
+        const r = spawnSync(executable, [], {
+          cwd: check.root,
+          env: cargoCheckEnvironment(),
+          encoding: "utf8",
+        });
+        const saved = path.join(evidence, `${probe.id}.bin`);
+        fs.copyFileSync(assertCheckPath(executable, check.target), saved);
+        run = {
+          exit: r.status,
+          signal: r.signal,
+          error: r.error?.message,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          binary: { path: saved, sha256: hash(fs.readFileSync(saved)) },
+        };
       }
       results.push({
         ...probe,
+        sourceCopy: savedSource,
+        sourceSha256: hash(probe.source),
         command: [compiler, ...args],
+        cwd: check.root,
         exit: compiled.status,
+        signal: compiled.signal,
+        error: compiled.error?.message,
         stdout: compiled.stdout,
-        stderr: compiled.stderr,
+        stderr,
+        diagnostics,
         run,
       });
     }
   } finally {
-    rmSync(temporary, { recursive: true, force: true });
+    fs.rmSync(temporary, { recursive: true, force: true });
   }
-  const failures = results.flatMap((result) => {
-    if (result.ok)
-      return result.exit === 0 && result.run?.exit === 0 ? [] : [result.id];
-    return result.exit === 1 &&
-      result.needles.every((n) => result.stderr.includes(n)) &&
-      result.codes.some((code) => result.stderr.includes(code))
+  const failures = results.flatMap((r) => {
+    if (r.ok)
+      return r.exit === 0 &&
+        !r.error &&
+        !r.signal &&
+        r.run?.exit === 0 &&
+        !r.run.error &&
+        !r.run.signal
+        ? []
+        : [r.id];
+    return r.exit === 1 &&
+      !r.error &&
+      !r.signal &&
+      r.needles.every((n) => r.stderr.includes(n)) &&
+      r.codes.some((c) => r.diagnostics.includes(c))
       ? []
-      : [result.id];
+      : [r.id];
   });
   const report = {
     scope:
@@ -122,14 +180,14 @@ export function pbtConstructorsInterfaceProbes({
     source: { path: sourcePath, sha256: hash(source) },
     libraries: {
       tea: {
-        path: resolve(teaLibrary),
-        sha256: hash(readFileSync(teaLibrary)),
+        path: path.resolve(teaLibrary),
+        sha256: hash(fs.readFileSync(teaLibrary)),
       },
       proptest: {
-        path: resolve(proptestLibrary),
-        sha256: hash(readFileSync(proptestLibrary)),
+        path: path.resolve(proptestLibrary),
+        sha256: hash(fs.readFileSync(proptestLibrary)),
       },
-      dependencies: resolve(dependencies),
+      dependencies: path.resolve(dependencies),
     },
     results,
     failures,
@@ -140,34 +198,14 @@ export function pbtConstructorsInterfaceProbes({
       "Proptest seed/shrink/current/diagnostic behavior remains its backend profile; this positive uses fixed fields and actual evaluated owners.",
     ],
   };
-  mkdirSync(dirname(resolve(reportFile)), { recursive: true });
-  writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+  fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   return report;
 }
 if (
   process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  const { values } = parseArgs({
-    options: {
-      "tea-rlib": { type: "string" },
-      "proptest-rlib": { type: "string" },
-      dependencies: { type: "string" },
-      report: { type: "string" },
-    },
-    strict: true,
-  });
-  const report = pbtConstructorsInterfaceProbes({
-    teaLibrary: values["tea-rlib"],
-    proptestLibrary: values["proptest-rlib"],
-    dependencies: values.dependencies,
-    reportFile: values.report,
-  });
-  console.log(
-    JSON.stringify({
-      probes: report.results.length,
-      failures: report.failures,
-    }),
+  throw new Error(
+    "Run pbt-constructors-checks-run.mjs: an explicit registered check owns the type inputs/outputs; no standalone fallback",
   );
-  if (report.failures.length) process.exitCode = 1;
 }
