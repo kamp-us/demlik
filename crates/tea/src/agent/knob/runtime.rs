@@ -306,8 +306,16 @@ where
     C: CommandFamily<Msg = AgentToolMsg<R>>,
 {
     /// Owns the host ports beside a pure base-agent machine. Loaded init emits no
-    /// commands: dispatch Boot explicitly after ready to resume. Runtime launch,
-    /// rather than the pure agent, requires owned 'static services/state.
+    /// commands: dispatch Boot explicitly after ready to resume. Model/loader/
+    /// schema services and state-only data may borrow locally. The owned timer
+    /// callback already requires the message family and host-error channel to
+    /// be 'static; actor launch additionally requires the whole machine/state
+    /// and handlers to be 'static. The pure agent verbs retain their wider
+    /// borrowed payload/cause interface.
+    #[expect(
+        clippy::type_complexity,
+        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+    )]
     pub fn to_machine<F, L, TI, M, H, TM>(
         self: Rc<Self>,
         model: F,
