@@ -1,0 +1,96 @@
+{
+  "component": "ICU77 Group A smell ledger/prepared runner/required CLI continuation",
+  "sourceCommit": "755b83aa6b3ffad669be3b4f0a4f95d771e00717",
+  "verifierRecoveryCommit": "9c7a452f6e4df505a045fd8dd101af613e482f24",
+  "base": "3667315b051adb45a9085b04108b2e95d690cc74",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-smell-ledger-production",
+  "scope": "Three production owners; eight transitive Result operations with canonical checked Collation operands; one private prepared owner after unreachable\u2192smell admission. No Graph/context/registry/extra generic bounds.",
+  "construction": {
+    "cargoCompilerSelections": 5,
+    "maxApproved": 8,
+    "nativePreparations": 1,
+    "nativeTests": 251,
+    "nativeGroups": 69,
+    "codeGraphOnly": true,
+    "wholeWorkspace": false,
+    "archiveRebuild": false
+  },
+  "publicTypes": {
+    "sameUnchangedConsumer": "sole baseline E0308\u2192green compile/run; original first Arc retained past Collation drop",
+    "baselineLibraryBytesRetained": true,
+    "greenLibraryBytesRetained": true,
+    "borrowedOpaqueRcCaller": "existing public fixture compiled and executed; no Clone/Debug/Send/serde/static requirement added",
+    "lifetimeRefusals": [
+      "sole E0597 findings escape",
+      "sole E0597 gated escape"
+    ]
+  },
+  "comparisons": {
+    "focused": 17,
+    "focusedStrict": 17,
+    "focusedQualified": 0,
+    "protocolReplays": 4,
+    "protocolCredit": "overlap existing4; not new4",
+    "affectedLibrary": 139,
+    "affectedLibraryStrict": 135,
+    "affectedLibraryQualified": 4,
+    "affectedCli": 47,
+    "affectedCliStrict": 39,
+    "affectedCliQualified": 8,
+    "affectedCliSourceExecutions": 55,
+    "affectedCliNativeOnlyExcluded": 3,
+    "affectedObservationsNewCredit": 0
+  },
+  "controls": {
+    "named": 4,
+    "compiledExit0": 4,
+    "sharedSemantic": 3,
+    "nativeOnly": 1,
+    "nativeOnlyStrictCredit": 0,
+    "cargoSelectionsTotal": 4,
+    "firstControlTreeInitialAttemptCredit": 0,
+    "exactRetainedFirstMutantReplayedWithoutRebuild": true,
+    "remainingThreeCargoSelections": 3,
+    "sequentialControlTrees": 2,
+    "nativePreparePerControlTree": 1,
+    "bothControlTreesRemoved": true,
+    "allFourOriginalAndModifiedRequiredLibConsumerBytesRetained": true
+  },
+  "static": {
+    "codeGraphAllTargetClippy": 0,
+    "rustfmt": 0,
+    "biome": 0,
+    "verifierTypeScript": 0,
+    "workspaceOrTeaFeatureClaimed": false
+  },
+  "qualifications": [
+    "Only the source-valid canonical Graph and raw JsString ledger profile is claimed; Graph String/reflection/getter/prototype/manual raw shapes remain explicit.",
+    "The12 existing affected qualifications (backend diagnostics, controlled roots/raw argv and pending stdio behavior) remain attached to their exact rows; none is promoted to strict.",
+    "Native infrastructure initialization/input-length errors are typed native causes, not Source JavaScript exception parity. Huge length guard is source-inspected only.",
+    "Pinned static ICU77.1 build/data and rust_icu5.8 family are reused unchanged. Supported build host is the measured aarch64-apple-darwin profile; other hosts/release packages/live version-data guards are not claimed.",
+    "Source emit is an explicit native caller boundary after the data-returning runner. Original borrowed/Rc callback causes remain unconstrained.",
+    "Temporary terminus:158 legacy helper calls+2direct FILE_COLLATOR sorts remain; groupsB\u2013J remain proposals, no permanent dual-backend/fallback claim.",
+    "All53 CLI gaps remain OPEN; no fabricated Source IDs/signatures, central/contracts/registry/dependency/TS product changes."
+  ],
+  "recoveries": [
+    "First derived comparison output collided with process metadata; raw17 retained, same pinned executable replayed to distinct output with0extra credit.",
+    "Wrong old CLI protocol consumer and wrong tsgo launcher path are retained setup failures with0behavior credit; original Cargo-selected correct driver and actual installed launcher pass.",
+    "First lossy mutant compiled0 and detected true mismatches but an outer literal stopped the cohort; initial attempt0credit. Verifier-only9c7 places write-order anchors inside row observations and keeps repeat no-write behavior; same mutant replay completes17+4 with10semantic mismatches. Remaining3 controls compile in a new registered tree. No product or input change."
+  ],
+  "reports": {
+    "reports/source-manifest-final.json": "f500997846df5df9bca9be9a8886876c6703e62afe049da55dcbf5b69359dd5e",
+    "reports/frozen-code-graph-source.json": "c4e195a3b1ddad73b5b5cd647d4f67acc51d0460a87ab10115f782553f30be62",
+    "reports/focused-final-comparison.json": "85b537331f07c25ed618546aca6148fa1b371e91edea739a982840edf37e028e",
+    "reports/library-comparison.json": "29c5332c2ed7dedfa74cc61ffaced0a91f51877960c603029010a247e577f682",
+    "reports/cli-comparison.json": "f0db53d9575eb32feca05d5ae2cbba43ae4cba3b703e5046f983a9550d49a5db",
+    "reports/public-type-consumers.json": "f5f419adf392dbd1adc88a8152c5e94f8c2f6b13ec6bb0f737789caa319f40e5",
+    "reports/control-summary.json": "6dddac422103dc1e9be4918897fdd9890e40e97977045c4e20467ae6362b92fb",
+    "reports/control-artifact-bindings.json": "c6d389e0ac4435f3c8788a29a1f601e1cda075988a2c048aa4e1fcee28342c91",
+    "controls-final/controls.json": "26b158dad89c2d089296f788fa8b7d5cc3f10a2b2908e2fc0eeb0af0b13e91b5",
+    "reports/native-selected-artifacts.json": "a0035f96ea4388c8eea9a61663de3345f01ecbb90280b178f6d9bdebf7757004",
+    "reports/merge-proposal.json": "8f809383bd83a794f01ea4d4f7bc266a1f6ebdc251f05c9786f2a3d594b17730",
+    "reports/recoveries.json": "301dddb7fd35e329b2ccf99464baed8536631ee956576a1a4622e220aa8cc5e8"
+  },
+  "retirement": "Construction tree is removed after this receipt commit; actual external retirement.json/handoff records completion, not this pre-removal statement."
+}
