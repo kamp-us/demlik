@@ -1,5 +1,6 @@
 //! Base agent wiring. Pure declarations and host handlers remain separate.
 use super::{Agent, AgentCommand, AgentError, CommandOf, SharedStateOf};
+use crate::agent::turn_view::{CallSource, NativeCalls};
 use crate::{
     Machine, PlainData, Step, Tagged, TryUpdate,
     agent::model::{BrainPorts, MessageLoader, ModelFactory, brain_handler},
@@ -197,9 +198,9 @@ pub struct AgentWired<M, I, S> {
 
 type HostMsg<P, I, S, R> =
     AgentMachineMsg<P, I, <S as Schema>::Output, <S as Schema>::Error, AgentToolMsg<R>>;
-type WiredMachine<'a, Stage, P, I, S, R, A, T, C> = Machine<
+type WiredMachine<'a, Stage, P, I, S, R, A, T, C, V = NativeCalls> = Machine<
     'a,
-    SharedStateOf<Stage, P, I, S, R, PlainData, A, T>,
+    SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V>,
     HostMsg<P, I, S, R>,
     CommandOf<P, I, S, C>,
     DeadlinesSub,
@@ -300,8 +301,8 @@ impl<T: Timer + 'static, H: 'static, M: Tagged + 'static> Subscriptions<Deadline
     }
 }
 
-impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>>, R, A, T, Provider, C>
-    Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C>
+impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>>, R, A, T, Provider, C, V: CallSource<A>>
+    Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V>
 where
     C: CommandFamily<Msg = AgentToolMsg<R>>,
 {
@@ -323,7 +324,7 @@ where
         tools: TI,
         timer: Rc<TM>,
     ) -> AgentWired<
-        WiredMachine<'a, Stage, P, I, S, R, A, T, C>,
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V>,
         impl Interpreter<CommandOf<P, I, S, C>, Error = AgentWorkError<H>> + 'a,
         impl Subscriptions<DeadlinesSub, HostMsg<P, I, S, R>, Error = AgentWorkError<H>>,
     >
@@ -344,6 +345,7 @@ where
         T: 'a,
         Provider: 'a,
         C: 'a,
+        V: 'a,
     {
         let init = Rc::clone(&self);
         let reduce = Rc::clone(&self);
@@ -383,7 +385,7 @@ where
             }),
             subscriptions: Box::new(SubscriptionEntries::new(vec![SubEntry::try_new(
                 "deadline",
-                move |state: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T>| {
+                move |state: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V>| {
                     project
                         .subs(state)
                         .map(|list| (!list.is_empty()).then_some(list))

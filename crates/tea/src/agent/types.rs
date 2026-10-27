@@ -1,6 +1,7 @@
 //! Shared agent data and its load-bearing guards. The factory, providers and
 //! lifecycle projection are separate consumers.
 
+use super::turn_view::{CallOf, CallSource, NativeCalls};
 pub use crate::data::NumberOrNull as AgentNumber;
 pub use crate::work_queue::QueueField as AgentField;
 use crate::{
@@ -118,10 +119,10 @@ pub enum ToolOutcome<R, E = PlainData> {
 }
 #[derive(Deserialize)]
 #[serde(bound(
-    deserialize = "R: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,A: serde::de::DeserializeOwned"
+    deserialize = "R: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,CallOf<A,V>: serde::de::DeserializeOwned"
 ))]
-pub struct ToolRecord<R, E = PlainData, A = PlainData> {
-    pub call: Rc<ToolCall<A>>,
+pub struct ToolRecordOf<R, E, A, V: CallSource<A>> {
+    pub call: Rc<CallOf<A, V>>,
     pub outcome: Rc<ToolOutcome<R, E>>,
     pub turn: AgentNumber,
 }
@@ -131,16 +132,28 @@ pub enum Awaiting {
     Tools { batch_turn: AgentNumber },
     Compacting { folding: AgentNumber },
 }
+/// The native record spelling retains its original field and literal inference.
+pub type ToolRecord<R, E = PlainData, A = PlainData> = ToolRecordOf<R, E, A, NativeCalls>;
+pub type ToolRecords<R, E = PlainData, A = PlainData, V = NativeCalls> =
+    Rc<Vec<Rc<ToolRecordOf<R, E, A, V>>>>;
+pub type SharedConversation<R, T = AgentTurn, E = PlainData, A = PlainData, V = NativeCalls> =
+    Rc<Conversation<R, T, E, A, V>>;
 #[derive(Deserialize)]
 #[serde(
     bound(
-        deserialize = "R: serde::de::DeserializeOwned,T: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,A: serde::de::DeserializeOwned"
+        deserialize = "R: serde::de::DeserializeOwned,T: serde::de::DeserializeOwned,E: serde::de::DeserializeOwned,CallOf<A,V>: serde::de::DeserializeOwned"
     ),
     rename_all = "camelCase"
 )]
-pub struct Conversation<R, T = AgentTurn, E = PlainData, A = PlainData> {
+pub struct Conversation<
+    R,
+    T = AgentTurn,
+    E = PlainData,
+    A = PlainData,
+    V: CallSource<A> = NativeCalls,
+> {
     pub turns: Rc<Vec<Rc<T>>>,
-    pub tool_records: Rc<Vec<Rc<ToolRecord<R, E, A>>>>,
+    pub tool_records: ToolRecords<R, E, A, V>,
     pub turn_count: AgentNumber,
     pub awaiting: Awaiting,
     /// Preserves a missing legacy field separately from an explicit null.
@@ -150,7 +163,7 @@ pub struct Conversation<R, T = AgentTurn, E = PlainData, A = PlainData> {
     #[serde(default, rename = "usage")]
     pub legacy_usage: AgentField<Option<Rc<TurnUsage>>>,
 }
-impl<R, T, E, A> Clone for Conversation<R, T, E, A> {
+impl<R, T, E, A, V: CallSource<A>> Clone for Conversation<R, T, E, A, V> {
     fn clone(&self) -> Self {
         Self {
             turns: Rc::clone(&self.turns),
@@ -316,7 +329,10 @@ impl<R: Serialize, E: Serialize> Serialize for ToolOutcome<R, E> {
         }
     }
 }
-impl<R: Serialize, E: Serialize, A: Serialize> Serialize for ToolRecord<R, E, A> {
+impl<R: Serialize, E: Serialize, A, V: CallSource<A>> Serialize for ToolRecordOf<R, E, A, V>
+where
+    CallOf<A, V>: Serialize,
+{
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         JsonData(&object([
             ("call", field::<S, _>(&self.call)?),
@@ -342,8 +358,10 @@ impl Serialize for Awaiting {
         JsonData(&fields).serialize(serializer)
     }
 }
-impl<R: Serialize, T: Serialize, E: Serialize, A: Serialize> Serialize
-    for Conversation<R, T, E, A>
+impl<R: Serialize, T: Serialize, E: Serialize, A, V: CallSource<A>> Serialize
+    for Conversation<R, T, E, A, V>
+where
+    CallOf<A, V>: Serialize,
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut fields = vec![
@@ -408,7 +426,7 @@ pub enum AgentFailure<E = PlainData> {
         at: AgentNumber,
     },
 }
-pub enum AgentLifecycleNote<A = PlainData, E = PlainData> {
+pub enum AgentLifecycleNote<A = PlainData, E = PlainData, V: CallSource<A> = NativeCalls> {
     BrainStarted {
         turn: AgentNumber,
         purpose: JsText,
@@ -416,11 +434,11 @@ pub enum AgentLifecycleNote<A = PlainData, E = PlainData> {
         at: AgentNumber,
     },
     ToolStarted {
-        call: Rc<ToolCall<A>>,
+        call: Rc<CallOf<A, V>>,
         at: AgentNumber,
     },
     ToolFailed {
-        call: Rc<ToolCall<A>>,
+        call: Rc<CallOf<A, V>>,
         failure: Rc<E>,
         at: AgentNumber,
     },
@@ -444,17 +462,18 @@ impl Awaiting {
     }
 }
 
-type LifecycleNotes<A, E> = Rc<Vec<Rc<AgentLifecycleNote<A, E>>>>;
-type ToolLadders<A, E> =
-    Rc<crate::js_record::JsRecord<crate::resilience::resilient_call::State<ToolCall<A>, (), E>>>;
-type ToolLedger<R, E, A> = Rc<crate::flow::fan_out::FanOutState<ToolCall<A>, ToolOutcome<R, E>, E>>;
+type LifecycleNotes<A, E, V> = Rc<Vec<Rc<AgentLifecycleNote<A, E, V>>>>;
+type ToolLadders<A, E, V> =
+    Rc<crate::js_record::JsRecord<crate::resilience::resilient_call::State<CallOf<A, V>, (), E>>>;
+type ToolLedger<R, E, A, V> =
+    Rc<crate::flow::fan_out::FanOutState<CallOf<A, V>, ToolOutcome<R, E>, E>>;
 /// Existing composed owners and retained agent facts. Legacy presence is data;
 /// constructing or copying this model does not initialize any composed knob.
 #[derive(Deserialize)]
 #[serde(
     rename_all = "camelCase",
     bound(
-        deserialize = "Stage:serde::de::DeserializeOwned,P:serde::de::DeserializeOwned,O:serde::de::DeserializeOwned,R:serde::de::DeserializeOwned,I:serde::de::DeserializeOwned,LE:serde::de::DeserializeOwned,TE:serde::de::DeserializeOwned,SE:serde::de::DeserializeOwned,A:serde::de::DeserializeOwned,T:serde::de::DeserializeOwned,CI:serde::de::DeserializeOwned,CO:serde::de::DeserializeOwned,CE:serde::de::DeserializeOwned,FE:serde::de::DeserializeOwned"
+        deserialize = "Stage:serde::de::DeserializeOwned,P:serde::de::DeserializeOwned,O:serde::de::DeserializeOwned,R:serde::de::DeserializeOwned,I:serde::de::DeserializeOwned,LE:serde::de::DeserializeOwned,TE:serde::de::DeserializeOwned,SE:serde::de::DeserializeOwned,CallOf<A,V>:serde::de::DeserializeOwned,T:serde::de::DeserializeOwned,CI:serde::de::DeserializeOwned,CO:serde::de::DeserializeOwned,CE:serde::de::DeserializeOwned,FE:serde::de::DeserializeOwned"
     )
 )]
 pub struct AgentState<
@@ -472,23 +491,24 @@ pub struct AgentState<
     CO = super::compaction::CompactionSummary,
     CE = PlainData,
     FE = PlainData,
+    V: CallSource<A> = NativeCalls,
 > {
     pub run: Rc<crate::flow::monitored_run::MonitoredRunState<Stage, SE>>,
     pub resilience: crate::llm_call::State<P, I, O, LE>,
-    pub tools: ToolLedger<R, TE, A>,
+    pub tools: ToolLedger<R, TE, A, V>,
     #[serde(deserialize_with = "super::wire::required_nullable")]
-    pub conversation: Option<Rc<Conversation<R, T, TE, A>>>,
+    pub conversation: Option<SharedConversation<R, T, TE, A, V>>,
     #[serde(default)]
     pub usage: AgentField<Option<Rc<TurnUsage>>>,
     #[serde(default)]
     pub compaction:
         AgentField<crate::llm_call::State<super::compaction::CompactionPurpose, CI, CO, CE>>,
     #[serde(default)]
-    pub tool_resilience: AgentField<ToolLadders<A, TE>>,
+    pub tool_resilience: AgentField<ToolLadders<A, TE, V>>,
     #[serde(default)]
     pub refused_calls: AgentField<Rc<Vec<JsText>>>,
     #[serde(default)]
-    pub lifecycle: AgentField<LifecycleNotes<A, TE>>,
+    pub lifecycle: AgentField<LifecycleNotes<A, TE, V>>,
     #[serde(default)]
     pub failure: AgentField<Option<Rc<AgentFailure<FE>>>>,
     #[serde(default)]
@@ -496,8 +516,8 @@ pub struct AgentState<
     #[serde(default)]
     pub instructions: AgentField<Option<JsText>>,
 }
-impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE> Clone
-    for AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
+impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V: CallSource<A>> Clone
+    for AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V>
 {
     fn clone(&self) -> Self {
         Self {
@@ -534,13 +554,22 @@ impl<Stage: Serialize, SE: Serialize, FE: Serialize> Serialize
 }
 /// A live view borrows the exact running collection, including its empty owner.
 /// Moving the Ended value out retains terminal facts independently of the state.
-pub enum AgentStatus<'s, T = AgentTurn, F = PlainData, A = PlainData> {
+pub enum AgentStatus<
+    's,
+    T = AgentTurn,
+    F = PlainData,
+    A = PlainData,
+    V: CallSource<A> = NativeCalls,
+> {
     Idle,
     Running,
-    Suspended { pending: &'s Vec<Rc<ToolCall<A>>> },
+    Suspended { pending: &'s Vec<Rc<CallOf<A, V>>> },
     Ended(AgentEndedStatus<T, F>),
 }
-impl<T: Serialize, F: Serialize, A: Serialize> Serialize for AgentStatus<'_, T, F, A> {
+impl<T: Serialize, F: Serialize, A, V: CallSource<A>> Serialize for AgentStatus<'_, T, F, A, V>
+where
+    CallOf<A, V>: Serialize,
+{
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::Ended(value) => value.serialize(serializer),

@@ -2,6 +2,7 @@
 //! Native sequences are dense and ordered. Sparse/prototype/custom-iterator JS
 //! arrays are outside this interface; no JavaScript array runtime is installed.
 
+use super::turn_view::{CallSource, NativeCalls};
 use super::types::{
     AgentEndedStatus, AgentEvent, AgentTurn, Conversation, ToolOutcome, field, object,
 };
@@ -50,8 +51,15 @@ pub struct TranscriptSnapshot<R, T = AgentTurn, F = PlainData> {
     pub tools: Vec<Rc<TranscriptToolResult<R>>>,
     pub outcome: TranscriptOutcome<T, F>,
 }
-pub struct TranscriptSeed<'a, R, T = AgentTurn, E = PlainData, A = PlainData> {
-    pub conversation: Option<&'a Conversation<R, T, E, A>>,
+pub struct TranscriptSeed<
+    'a,
+    R,
+    T = AgentTurn,
+    E = PlainData,
+    A = PlainData,
+    V: CallSource<A> = NativeCalls,
+> {
+    pub conversation: Option<&'a Conversation<R, T, E, A, V>>,
 }
 struct Buffer<R, T, F> {
     turns: Vec<Rc<T>>,
@@ -100,7 +108,7 @@ impl<R, T, F> Transcript<R, T, F> {
             })),
         }
     }
-    pub fn from_seed<E, A>(seed: TranscriptSeed<'_, R, T, E, A>) -> Self {
+    pub fn from_seed<E, A, V: CallSource<A>>(seed: TranscriptSeed<'_, R, T, E, A, V>) -> Self {
         let this = Self::new();
         if let Some(conversation) = seed.conversation {
             let tools = seed_tools(
@@ -110,7 +118,7 @@ impl<R, T, F> Transcript<R, T, F> {
                     let ToolOutcome::Ok(result) = record.outcome.as_ref() else {
                         unreachable!("only an OK record is read")
                     };
-                    Ok((record.call.call_id.clone(), Rc::clone(result)))
+                    Ok((V::call_id(&record.call).clone(), Rc::clone(result)))
                 },
             )
             .unwrap_or_else(|never| match never {});

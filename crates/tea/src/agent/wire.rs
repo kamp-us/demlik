@@ -81,6 +81,7 @@ pub(crate) fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize
 ) -> Result<Option<T>, D::Error> {
     Option::deserialize(deserializer)
 }
+use super::turn_view::{CallOf, CallSource};
 use super::types::{AgentFailure, AgentField, AgentLifecycleNote, AgentState, field, object};
 use crate::{
     PlainData,
@@ -155,7 +156,10 @@ impl<'de, E: DeserializeOwned> Deserialize<'de> for AgentFailure<E> {
         }
     }
 }
-impl<A: Serialize, E: Serialize> Serialize for AgentLifecycleNote<A, E> {
+impl<A, E: Serialize, V: CallSource<A>> Serialize for AgentLifecycleNote<A, E, V>
+where
+    CallOf<A, V>: Serialize,
+{
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let fields = match self {
             Self::BrainStarted {
@@ -189,7 +193,10 @@ impl<A: Serialize, E: Serialize> Serialize for AgentLifecycleNote<A, E> {
         JsonData(&fields).serialize(s)
     }
 }
-impl<'de, A: DeserializeOwned, E: DeserializeOwned> Deserialize<'de> for AgentLifecycleNote<A, E> {
+impl<'de, A, E: DeserializeOwned, V: CallSource<A>> Deserialize<'de> for AgentLifecycleNote<A, E, V>
+where
+    CallOf<A, V>: DeserializeOwned,
+{
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = Box::<RawValue>::deserialize(deserializer)?;
         #[derive(Deserialize)]
@@ -262,8 +269,8 @@ impl<'de, A: DeserializeOwned, E: DeserializeOwned> Deserialize<'de> for AgentLi
         }
     }
 }
-impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE> Serialize
-    for AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
+impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V: CallSource<A>> Serialize
+    for AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V>
 where
     S: Serialize,
     P: Serialize,
@@ -273,7 +280,7 @@ where
     LE: Serialize,
     TE: Serialize,
     SE: Serialize,
-    A: Serialize,
+    CallOf<A, V>: Serialize,
     T: Serialize,
     CI: Serialize,
     CO: Serialize,

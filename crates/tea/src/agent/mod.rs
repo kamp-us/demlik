@@ -8,6 +8,11 @@ pub mod types;
 
 pub use schema::{GuardedSchema, StructuredOutputError};
 
+pub mod turn_view;
+pub use turn_view::{
+    CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReadError, TurnReadLocation,
+};
+
 mod wire;
 
 mod state;

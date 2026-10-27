@@ -2,6 +2,7 @@
 //! handles without Clone, serde, Send or lifetime bounds on their values.
 //! Undeclared JavaScript record properties are not part of Conversation.
 
+use super::turn_view::CallSource;
 use super::types::{
     AgentField, AgentNumber, Awaiting, Conversation, ToolCall, ToolRecord, TurnUsage,
 };
@@ -24,7 +25,7 @@ pub fn shared_no_usage() -> Rc<TurnUsage> {
 pub fn fresh_conversation<R>() -> Conversation<R> {
     Conversation::fresh()
 }
-impl<R, T, E, A> Conversation<R, T, E, A> {
+impl<R, T, E, A, V: CallSource<A>> Conversation<R, T, E, A, V> {
     pub fn fresh() -> Self {
         Self {
             turns: Rc::new(Vec::new()),
@@ -62,10 +63,13 @@ pub fn add_usage(total: &TurnUsage, turn: &TurnUsage) -> TurnUsage {
 
 /// First occurrence wins; order and the original call handles are retained.
 pub fn dedupe_by_call_id<A>(calls: &[Rc<ToolCall<A>>]) -> Vec<Rc<ToolCall<A>>> {
+    dedupe_calls(calls, |call| &call.call_id)
+}
+pub(crate) fn dedupe_calls<C>(calls: &[Rc<C>], id: fn(&C) -> &crate::data::JsText) -> Vec<Rc<C>> {
     let mut seen = HashSet::new();
     calls
         .iter()
-        .filter(|call| seen.insert(&call.call_id))
+        .filter(|call| seen.insert(id(call)))
         .map(Rc::clone)
         .collect()
 }

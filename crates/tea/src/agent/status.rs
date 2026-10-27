@@ -1,4 +1,5 @@
 //! Pure lifecycle projection over the canonical state. It never migrates state.
+use super::turn_view::{CallSource, NativeCalls};
 use super::{
     conversation::shared_no_usage,
     types::{
@@ -8,8 +9,8 @@ use super::{
 use crate::flow::monitored_run::RunPhase;
 use std::rc::Rc;
 
-pub type ProjectedStatus<'s, Stage, T, A, SE, FE> =
-    AgentStatus<'s, T, AgentTerminalFailure<Stage, SE, FE>, A>;
+pub type ProjectedStatus<'s, Stage, T, A, SE, FE, V = NativeCalls> =
+    AgentStatus<'s, T, AgentTerminalFailure<Stage, SE, FE>, A, V>;
 
 /// Read status without effects, initialization or opaque-value bounds.
 /// Suspended borrows the original Vec owner; keep the state snapshot alive while
@@ -18,9 +19,9 @@ pub type ProjectedStatus<'s, Stage, T, A, SE, FE> =
     clippy::type_complexity,
     reason = "Canonical state slots stay unconstrained; callers infer them without a projection trait."
 )]
-pub fn status<Stage, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>(
-    state: &AgentState<Stage, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>,
-) -> ProjectedStatus<'_, Stage, T, A, SE, FE> {
+pub fn status<Stage, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V: CallSource<A>>(
+    state: &AgentState<Stage, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V>,
+) -> ProjectedStatus<'_, Stage, T, A, SE, FE, V> {
     let annotation = match &state.failure {
         AgentField::Absent | AgentField::Undefined => Some(AgentField::Undefined),
         AgentField::Value(Some(failure)) => Some(AgentField::Value(Rc::new(

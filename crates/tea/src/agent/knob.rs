@@ -5,6 +5,10 @@ use crate::{
     agent::{
         compaction::{CompactionPurpose, CompactionSummary},
         conversation::shared_no_usage,
+        turn_view::{
+            CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReader, read_native,
+            read_plain,
+        },
         types::{AgentField, AgentState, AgentTurn, Conversation, ToolCall, ToolOutcome},
     },
     command::CmdDef,
@@ -29,15 +33,16 @@ pub use runtime::{
     agent_boot_msg, agent_cancel_msg,
 };
 pub type CommandOf<P, I, S, C> = AgentCommand<P, I, <S as Schema>::Output, <S as Schema>::Error, C>;
-pub type StepOf<Stage, P, I, S, R, TE, A, T, C> =
-    crate::Step<SharedStateOf<Stage, P, I, S, R, TE, A, T>, CommandOf<P, I, S, C>>;
-type MaybeStepOf<Stage, P, I, S, R, TE, A, T, C> = Option<StepOf<Stage, P, I, S, R, TE, A, T, C>>;
-type ResultOf<Stage, P, I, S, R, TE, A, T, C> =
-    Result<StepOf<Stage, P, I, S, R, TE, A, T, C>, AgentError>;
-type StopWhen<'a, Stage, P, I, S, R, TE, A, T> =
-    Option<Box<dyn Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T>) -> bool + 'a>>;
+pub type StepOf<Stage, P, I, S, R, TE, A, T, C, V = NativeCalls> =
+    crate::Step<SharedStateOf<Stage, P, I, S, R, TE, A, T, V>, CommandOf<P, I, S, C>>;
+type MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V> =
+    Option<StepOf<Stage, P, I, S, R, TE, A, T, C, V>>;
+type ResultOf<Stage, P, I, S, R, TE, A, T, C, V> =
+    Result<StepOf<Stage, P, I, S, R, TE, A, T, C, V>, AgentError>;
+type StopWhen<'a, Stage, P, I, S, R, TE, A, T, V> =
+    Option<Box<dyn Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T, V>) -> bool + 'a>>;
 
-pub type StateOf<Stage, P, I, S, R, TE, A, T> = AgentState<
+pub type StateOf<Stage, P, I, S, R, TE, A, T, V = NativeCalls> = AgentState<
     Stage,
     P,
     <S as Schema>::Output,
@@ -52,18 +57,20 @@ pub type StateOf<Stage, P, I, S, R, TE, A, T> = AgentState<
     CompactionSummary,
     PlainData,
     LlmErr<P, <S as Schema>::Error>,
+    V,
 >;
 /// Retained state returned by the pure agent verbs.
-pub type SharedStateOf<Stage, P, I, S, R, TE, A, T> = Rc<StateOf<Stage, P, I, S, R, TE, A, T>>;
+pub type SharedStateOf<Stage, P, I, S, R, TE, A, T, V = NativeCalls> =
+    Rc<StateOf<Stage, P, I, S, R, TE, A, T, V>>;
 pub type BrainCommandOf<P, I, S> =
     llm_call::RunCmd<P, I, <S as Schema>::Output, <S as Schema>::Error>;
 pub type BrainMessageOf<P, I, S> =
     llm_call::LlmMsg<P, I, <S as Schema>::Output, <S as Schema>::Error>;
 type StageOf<'s, S> = Option<&'s Rc<S>>;
 type TurnOf<'a, S, P> = Box<dyn Fn(StageOf<'_, S>) -> P + 'a>;
-type PayloadOf<'a, Stage, R, T, TE, A, I> =
-    Box<dyn Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A>>, Option<&JsText>) -> I + 'a>;
-type ToolOf<'a, A, C> = Rc<dyn Fn(&Rc<ToolCall<A>>) -> C + 'a>;
+type PayloadOf<'a, Stage, R, T, TE, A, I, V> =
+    Box<dyn Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A, V>>, Option<&JsText>) -> I + 'a>;
+type ToolOf<'a, A, C, V> = Rc<dyn Fn(&Rc<CallOf<A, V>>) -> C + 'a>;
 pub type TurnView<T, A, Provider> = for<'t> fn(&'t T) -> &'t AgentTurn<A, Provider>;
 
 pub struct AgentConfig<
@@ -78,23 +85,24 @@ pub struct AgentConfig<
     T,
     Provider,
     C,
+    V: CallSource<A> = NativeCalls,
 > {
     llm: Rc<LlmCall<'a, P, I, S>>,
     stages: Vec<Rc<Stage>>,
     turn_of: TurnOf<'a, Stage, P>,
-    payload_of: PayloadOf<'a, Stage, R, T, TE, A, I>,
-    tool_of: ToolOf<'a, A, C>,
-    turn_view: TurnView<T, A, Provider>,
+    payload_of: PayloadOf<'a, Stage, R, T, TE, A, I, V>,
+    tool_of: ToolOf<'a, A, C, V>,
+    turn_view: TurnReader<T, A, Provider, V>,
     instructions: Option<JsText>,
     model_id: Option<JsText>,
     deadline_ms: Option<f64>,
     tool_concurrency: f64,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
-    stop_when: StopWhen<'a, Stage, P, I, S, R, TE, A, T>,
+    stop_when: StopWhen<'a, Stage, P, I, S, R, TE, A, T, V>,
 }
 impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, Provider, C: Tagged>
-    AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C>
+    AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, NativeCalls>
 {
     pub fn new(
         llm: Rc<LlmCall<'a, P, I, S>>,
@@ -104,6 +112,72 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         payload_of: impl Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A>>, Option<&JsText>) -> I
         + 'a,
         turn_view: TurnView<T, A, Provider>,
+    ) -> Self {
+        Self::from_reader(
+            llm,
+            stages,
+            turn_of,
+            tool_of,
+            payload_of,
+            TurnReader {
+                native: Some(turn_view),
+                read: read_native,
+            },
+        )
+    }
+}
+impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<PlainData>> + ?Sized, R, TE, C: Tagged>
+    AgentConfig<'a, Stage, P, I, S, R, TE, PlainData, PlainData, PlainData, C, PlainCalls>
+{
+    /// Read the actual guarded plain turn; no DTO or schema conversion occurs.
+    pub fn from_plain_turns(
+        llm: Rc<LlmCall<'a, P, I, S>>,
+        stages: Vec<Rc<Stage>>,
+        turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
+        tool_of: impl Fn(&Rc<PlainToolCall>) -> C + 'a,
+        payload_of: impl Fn(
+            StageOf<'_, Stage>,
+            &Rc<Conversation<R, PlainData, TE, PlainData, PlainCalls>>,
+            Option<&JsText>,
+        ) -> I
+        + 'a,
+    ) -> Self {
+        Self::from_reader(
+            llm,
+            stages,
+            turn_of,
+            tool_of,
+            payload_of,
+            TurnReader {
+                native: None,
+                read: |value, _| read_plain(value),
+            },
+        )
+    }
+}
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
+{
+    fn from_reader(
+        llm: Rc<LlmCall<'a, P, I, S>>,
+        stages: Vec<Rc<Stage>>,
+        turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
+        tool_of: impl Fn(&Rc<CallOf<A, V>>) -> C + 'a,
+        payload_of: impl Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A, V>>, Option<&JsText>) -> I
+        + 'a,
+        turn_view: TurnReader<T, A, Provider, V>,
     ) -> Self {
         Self {
             llm,
@@ -143,7 +217,7 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn stop_when(
         mut self,
-        predicate: impl Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T>) -> bool + 'a,
+        predicate: impl Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T, V>) -> bool + 'a,
     ) -> Self {
         self.stop_when = Some(Box::new(predicate));
         self
@@ -154,10 +228,23 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
 }
 
-pub struct Agent<'a, Stage, P, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, Provider, C> {
-    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C>,
+pub struct Agent<
+    'a,
+    Stage,
+    P,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C,
+    V: CallSource<A> = NativeCalls,
+> {
+    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>,
     run: MonitoredRun<Stage, ()>,
-    fan: FanOut<'a, ToolCall<A>, ToolOutcome<R, TE>, C, TE>,
+    fan: FanOut<'a, CallOf<A, V>, ToolOutcome<R, TE>, C, TE>,
 }
 pub fn create_agent<
     'a,
@@ -171,9 +258,13 @@ pub fn create_agent<
     T,
     Provider,
     C: Tagged + 'a,
+    V: CallSource<A>,
 >(
-    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C>,
-) -> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C> {
+    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>,
+) -> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
+where
+    CallOf<A, V>: 'a,
+{
     let tool = Rc::clone(&config.tool_of);
     let run = MonitoredRun::new(MonitoredRunConfig {
         stages: config.stages.clone(),
@@ -182,15 +273,27 @@ pub fn create_agent<
     });
     let fan = FanOut::new(FanOutConfig::new(
         config.tool_concurrency,
-        |call: &ToolCall<A>| call.call_id.clone(),
+        |call: &CallOf<A, V>| V::call_id(call).clone(),
         move |call| tool(call),
     ));
     Agent { config, run, fan }
 }
-impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, Provider, C: Tagged>
-    Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C>
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
 {
-    pub fn init(&self) -> SharedStateOf<Stage, P, I, S, R, TE, A, T> {
+    pub fn init(&self) -> SharedStateOf<Stage, P, I, S, R, TE, A, T, V> {
         let compact: ResilientCall<
             '_,
             Request<CompactionPurpose, PlainData>,
@@ -217,7 +320,7 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn brain_call(
         &self,
-        state: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        state: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
     ) -> Rc<Request<P, I>> {
         let stage = state.current_stage();
         let conversation = state
@@ -238,9 +341,9 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
 use crate::{
     Step,
     agent::{
-        conversation::{add_usage, dedupe_by_call_id},
+        conversation::{add_usage, dedupe_calls},
         types::{
-            AgentFailure, AgentLifecycleNote, AgentNumber, Awaiting, AwaitingKind, ToolRecord,
+            AgentFailure, AgentLifecycleNote, AgentNumber, Awaiting, AwaitingKind, ToolRecordOf,
         },
     },
     command::Settlement,
@@ -253,9 +356,22 @@ use crate::{
 use std::collections::HashSet;
 
 type CompactState = llm_call::State<CompactionPurpose, PlainData, CompactionSummary, PlainData>;
-type ToolState<A, E> = Rc<JsRecord<crate::resilience::resilient_call::State<ToolCall<A>, (), E>>>;
-impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, Provider, C: Tagged>
-    Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C>
+type ToolState<A, E, V> =
+    Rc<JsRecord<crate::resilience::resilient_call::State<CallOf<A, V>, (), E>>>;
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
 {
     fn empty_compaction(&self) -> CompactState {
         let compact: ResilientCall<
@@ -266,7 +382,7 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         > = ResilientCall::new(Default::default());
         compact.init()
     }
-    fn supported(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T>) -> Result<(), AgentError> {
+    fn supported(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V>) -> Result<(), AgentError> {
         if matches!(
             s.conversation.as_ref().map(|c| &c.awaiting),
             Some(Awaiting::Compacting { .. })
@@ -306,12 +422,12 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn transition(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: AgentNumber,
         verb: impl FnOnce(
-            &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
-        ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C>,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+            &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
+        ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V>,
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.supported(s)?;
         let current = s.with_usage_defaults();
         let entered = if current
@@ -334,9 +450,9 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn noted(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
-        notes: Vec<AgentLifecycleNote<A, TE>>,
-    ) -> SharedStateOf<Stage, P, I, S, R, TE, A, T> {
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
+        notes: Vec<AgentLifecycleNote<A, TE, V>>,
+    ) -> SharedStateOf<Stage, P, I, S, R, TE, A, T, V> {
         if notes.is_empty() {
             return Rc::clone(s);
         }
@@ -349,7 +465,11 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         next.lifecycle = AgentField::Value(Rc::new(all));
         Rc::new(next)
     }
-    fn tool_started(&self, calls: &[Rc<ToolCall<A>>], at: f64) -> Vec<AgentLifecycleNote<A, TE>> {
+    fn tool_started(
+        &self,
+        calls: &[Rc<CallOf<A, V>>],
+        at: f64,
+    ) -> Vec<AgentLifecycleNote<A, TE, V>> {
         calls
             .iter()
             .map(|call| AgentLifecycleNote::ToolStarted {
@@ -372,9 +492,9 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn fire_brain(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let call = self.brain_call(s);
         let step = self
             .config
@@ -402,10 +522,10 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn start(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         run_id: impl Into<JsText>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| {
             let mut next = s.as_ref().clone();
             next.run = self.run_state(self.run.start(&s.run, run_id, at))?;
@@ -421,29 +541,33 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn turn(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         result: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| self.turn_body(s, result, at))
     }
     fn turn_body(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         result: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let Some(conv) = s.require_awaiting(AwaitingKind::Llm) else {
             return Ok(Step::new(Rc::clone(s), vec![]));
         };
-        let fields = (self.config.turn_view)(&result);
+        let fields = self
+            .config
+            .turn_view
+            .read(&result)
+            .map_err(AgentError::TurnRead)?;
         let mut measured = conv.as_ref().clone();
         let usage = match &fields.usage {
-            AgentField::Absent | AgentField::Undefined => {
+            None => {
                 measured.context_tokens = AgentField::Value(AgentNumber(None));
                 s.usage.clone()
             }
-            AgentField::Value(usage) => {
+            Some(usage) => {
                 let Some(total) = s.usage.value().and_then(Option::as_ref) else {
                     return Err(AgentError::NullUsage);
                 };
@@ -459,11 +583,11 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         measured.turns = Rc::new(turns);
         let mut counted = s.as_ref().clone();
         counted.usage = usage;
-        if fields.tool_calls.is_empty() {
+        if fields.calls.is_empty() {
             counted.conversation = Some(Rc::new(measured));
             return self.advance_stage(&Rc::new(counted), result, at);
         }
-        let batch = dedupe_by_call_id(&fields.tool_calls);
+        let batch = dedupe_calls(&fields.calls, V::call_id);
         let scattered = self.fan.scatter(&self.fan.init(), batch);
         // FanOut invokes toolOf for its data commands; Source discards these,
         // then invokes the same callback again for every authorized launch.
@@ -486,10 +610,10 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn advance_stage(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         terminating: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let run = self.run_state(self.run.advance(&s.run, Rc::new(()), StageResult::Ok, at))?;
         let mut next = s.as_ref().clone();
         let done = matches!(run.phase, RunPhase::Done { .. });
@@ -503,29 +627,29 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         next.tools = self.fan.init();
         self.fire_brain(&Rc::new(next), at)
     }
-    fn tool_slice(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T>) -> ToolState<A, TE> {
+    fn tool_slice(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V>) -> ToolState<A, TE, V> {
         s.tool_resilience
             .value()
             .map_or_else(|| Rc::new(JsRecord::default()), Rc::clone)
     }
     fn in_flight(
         &self,
-        s: &StateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &StateOf<Stage, P, I, S, R, TE, A, T, V>,
         id: &JsText,
-    ) -> Option<Rc<ToolCall<A>>> {
+    ) -> Option<Rc<CallOf<A, V>>> {
         s.tools
             .running
             .iter()
-            .find(|c| c.call_id == *id)
+            .find(|c| V::call_id(c) == id)
             .map(Rc::clone)
     }
     pub fn tool_ok(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         id: impl Into<JsText>,
         result: Rc<R>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
             let before = if self.in_flight(s, &id).is_some() {
@@ -540,11 +664,11 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn tool_err(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         id: impl Into<JsText>,
         failure: Rc<TE>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
             let before = if self.in_flight(s, &id).is_some() {
@@ -559,11 +683,11 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn settle_tool(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         id: &JsText,
         outcome: Rc<ToolOutcome<R, TE>>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let Some(conv) = s.require_awaiting(AwaitingKind::Tools) else {
             return Ok(Step::new(Rc::clone(s), vec![]));
         };
@@ -579,13 +703,13 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
             .tools
             .running
             .iter()
-            .map(|c| c.call_id.clone())
+            .map(|c| V::call_id(c).clone())
             .collect::<HashSet<_>>();
         let launched = settled
             .state
             .running
             .iter()
-            .filter(|call| !known.contains(&call.call_id))
+            .filter(|call| !known.contains(V::call_id(call)))
             .map(Rc::clone)
             .collect::<Vec<_>>();
         let launch_commands = launched
@@ -612,7 +736,7 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         let noted = self.noted(&Rc::new(next), notes);
         let mut conversation = conv.as_ref().clone();
         let mut records = conv.tool_records.as_ref().clone();
-        records.push(Rc::new(ToolRecord {
+        records.push(Rc::new(ToolRecordOf {
             call,
             outcome,
             turn: conv.turn_count,
@@ -643,9 +767,9 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     fn stop_conditions(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: f64,
-    ) -> MaybeStepOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let count = s
             .conversation
             .as_ref()
@@ -673,10 +797,10 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn succeed(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         msg: &BrainMessageOf<P, I, S>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| {
             let retry = self.config.llm.succeed(&s.resilience, msg)?;
             let Settlement::Ok(CallValue::Shared(value)) = msg.outcome() else {
@@ -697,10 +821,10 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn fail(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         msg: &BrainMessageOf<P, I, S>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| {
             let retry = self.config.llm.fail(&s.resilience, msg)?;
             let mut next = s.as_ref().clone();
@@ -728,25 +852,25 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     /// Hand-driving convenience for the same fold as the Source wired cancel Msg.
     pub fn cancel(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| Ok(self.cancel_body(s, at)))
     }
     fn cancel_body(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: f64,
-    ) -> StepOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> StepOf<Stage, P, I, S, R, TE, A, T, C, V> {
         let mut next = s.as_ref().clone();
         next.run = self.run.cancel(&s.run, at).state;
         Step::new(Rc::new(next), vec![])
     }
     pub fn boot(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, at.into(), |s| {
             let mut resumed = s.as_ref().clone();
             resumed.run = self.run.boot(&s.run, at).state;
@@ -774,9 +898,9 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn on_timer(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V>,
         msg: &DeadlineExceeded,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V> {
         self.transition(s, msg.at_ms, |s| {
             let has = |prefix: &str| {
                 msg.id
@@ -815,7 +939,7 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
     }
     pub fn subs(
         &self,
-        s: &StateOf<Stage, P, I, S, R, TE, A, T>,
+        s: &StateOf<Stage, P, I, S, R, TE, A, T, V>,
     ) -> Result<Vec<Deadline>, AgentError> {
         self.supported(s)?;
         if !matches!(s.compaction, AgentField::Value(_)) {
@@ -828,23 +952,34 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
         list.extend(self.run.deadlines(&s.run));
         Ok(list)
     }
-    pub fn current_stage(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T>) -> Option<Rc<Stage>> {
+    pub fn current_stage(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V>) -> Option<Rc<Stage>> {
         s.current_stage()
     }
-    pub fn is_settled(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T>) -> bool {
+    pub fn is_settled(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V>) -> bool {
         s.is_settled()
     }
 }
-impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, A, T, Provider, C: Tagged>
-    Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C>
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V>
 {
     pub fn tool_err_reason(
         &self,
-        s: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T>,
+        s: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V>,
         id: impl Into<JsText>,
         reason: impl Into<JsText>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, PlainData, A, T, C> {
+    ) -> ResultOf<Stage, P, I, S, R, PlainData, A, T, C, V> {
         let fields = [
             ("kind".into(), PlainData::String("error".into())),
             ("reason".into(), PlainData::String(reason.into())),

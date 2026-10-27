@@ -1,12 +1,13 @@
 //! Closure-free pure operations on the canonical composed agent state.
+use super::turn_view::CallSource;
 use super::{
     conversation::shared_no_usage,
-    types::{AgentField, AgentNumber, AgentState, AwaitingKind, Conversation},
+    types::{AgentField, AgentNumber, AgentState, AwaitingKind, SharedConversation},
 };
 use crate::{flow::monitored_run::RunPhase, work_queue::QueueItemStatus};
 use std::rc::Rc;
-impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
-    AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
+impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V: CallSource<A>>
+    AgentState<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE, V>
 {
     /// First running input, even if the enclosing run has since been cancelled.
     pub fn current_stage(&self) -> Option<Rc<S>> {
@@ -25,7 +26,10 @@ impl<S, P, O, R, I, LE, TE, SE, A, T, CI, CO, CE, FE>
             RunPhase::Done { .. } | RunPhase::Failed { .. } | RunPhase::Cancelled { .. }
         ) || !matches!(self.failure, AgentField::Value(None))
     }
-    pub fn require_awaiting(&self, kind: AwaitingKind) -> Option<&Rc<Conversation<R, T, TE, A>>> {
+    pub fn require_awaiting(
+        &self,
+        kind: AwaitingKind,
+    ) -> Option<&SharedConversation<R, T, TE, A, V>> {
         if self.is_settled() {
             return None;
         }
