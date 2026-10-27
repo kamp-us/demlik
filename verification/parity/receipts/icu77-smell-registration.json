@@ -1,0 +1,63 @@
+{
+  "component": "Group A ICU77 smell thin process registration",
+  "base": "3ab7f5e99a7c1d5eae3b0f19a9b18d031df9b116",
+  "productionChanges": false,
+  "rustBuilds": 0,
+  "nativePreparations": 0,
+  "targetCreated": false,
+  "suite": {
+    "name": "icu77-smell",
+    "driver": "smell_ledger_driver",
+    "script": "icu77-smell-run.mjs",
+    "format": "process",
+    "traceField": "nativeTrace"
+  },
+  "counts": {
+    "newAggregateOutcomes": 17,
+    "strict": 17,
+    "qualified": 0,
+    "totalReportRows": 21,
+    "protocolReplays": 4,
+    "newProtocolComparisonCredit": 0,
+    "existing139LibraryRowsUnchanged": true
+  },
+  "evidence": "Raw call arrays, nativeTrace.observedCalls, no evidenceField; qualifiedNativeEvidence:{} is required even at0qualified.",
+  "exactAdmissionProof": {
+    "graphSourceSha256": "65e7eb3a8f47a0bad8c62b2e4250eecb8e555e072f4591b7f504045623eacc1c",
+    "blockSha256": "d354f791dff096b38dca36baf7cdc22abf6d4a0f556502d94a41ddc2a892a46f",
+    "realSealedReportRed": "Missing empty qualified-evidence map rejected by exact unchanged graph.mjs admission;0credit",
+    "actualWrapperGreen": "SHA-bound retained component driver replayed by the real wrapper; exact admission accepts17prefixed strict IDs and excludes4protocol rows",
+    "wrongEvidenceFieldRefused": true,
+    "traceDisagreementRefused": true,
+    "newParityCreditFromMetadataReplay": 0
+  },
+  "consumerProvenance": "Original component Cargo-selected smell_ledger_driver bytes/hash retained externally, no cache/target copy and no new Cargo event.",
+  "bindingProposal": {
+    "file": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-smell-registration/binding-proposal.json",
+    "sha256": "394f18bbcb798f697d98fc6b00772861e321faecf34b40537a3e9a1db01418fe",
+    "existingIDs": 3,
+    "newIDs": 0,
+    "signaturesUnchanged": true,
+    "knownGapsPreserved": true,
+    "actualEvidenceGapsCheck": "New append-only symbol/case suggestions pass existing per-symbol/per-case function against real17strict traces; not all symbols are claimed in every row.",
+    "contractsEdited": false
+  },
+  "opaqueCallbackScope": "Application-only Rc callback is not a generic library emit-error proof. Actual library ownership witnesses are borrowed Write/CliIo and Arc laws.",
+  "scope": "Only suite list and one required empty evidence-map field; no Source/native/model/Cargo/registry/contract changes, no global CLI closure. All53CLI and other owner/profile gaps remain open.",
+  "checks": {
+    "exactProcessAdmission": 0,
+    "bindingProposalEvidenceGaps": 0,
+    "biome": 0,
+    "nodeSyntax": 0,
+    "gitDiffCheck": 0
+  },
+  "reports": {
+    "reports/process-comparison.json": "e2ce94e35f8ae6ea50776cac7fafa4e1957a611087aa7b1169a09fb6104c400d",
+    "reports/admission-red.json": "e57f44c4c88bcdd59d0c6c28c318a85f5b4a05accbb041cedec5fef3f4c2458c",
+    "reports/admission-green.json": "72875bb6c0912138032cfcde108b7252b9b6ea845da2d105411ea82f07183213",
+    "reports/retained-consumer-binding.json": "516221af237a026dcbc5fdf71a5bfbb31176b3a2ca76716c3f4a0804b4484711",
+    "reports/metadata-integrity.json": "24770adbe3c859713e6c7836796d2a7aa1f3a2e35040cd2ff2f488ac4bb82abc",
+    "binding-proposal.json": "394f18bbcb798f697d98fc6b00772861e321faecf34b40537a3e9a1db01418fe"
+  },
+  "retirement": "Recorded externally after local metadata commit; no pre-removal claim."
+}

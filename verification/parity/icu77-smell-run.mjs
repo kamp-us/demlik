@@ -34,6 +34,7 @@ report.unqualifiedPairs = 17;
 report.qualifiedPairs = 0;
 report.rejectedInvalidInputs = 4;
 report.nativeEvidence = {};
+report.qualifiedNativeEvidence = {};
 for (const row of report.cases) {
   if (row.protocol) continue;
   assert.equal(row.passed, true);

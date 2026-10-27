@@ -23,6 +23,14 @@ const suites = [
     traceField: "nativeTrace",
   },
   {
+    name: "icu77-smell",
+    driver: "smell_ledger_driver",
+    script: "icu77-smell-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "unreachable-ledger",
     driver: "unreachable_driver",
     script: "graph-unreachable-ledger-run.mjs",
