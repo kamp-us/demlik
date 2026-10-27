@@ -315,16 +315,19 @@ try {
     const modifiedPath = path.normalize(
       path.join(check.root, "crates/code-graph/src/collapse", m.file),
     );
+    const depInfoCopy = path.join(evidence, `${m.name}.d`);
+    fs.writeFileSync(depInfoCopy, depInfo);
     assert.ok(
       depInfo
         .toString("utf8")
         .includes(
-          path.relative(check.root, assertCheckPath(modifiedPath, check.root)),
+          path.relative(
+            fs.realpathSync(check.root),
+            assertCheckPath(modifiedPath, check.root),
+          ),
         ),
       `${m.name}: modified owner in actual library dep-info`,
     );
-    const depInfoCopy = path.join(evidence, `${m.name}.d`);
-    fs.writeFileSync(depInfoCopy, depInfo);
     const savedLib = preserve(lib.path, `${m.name}-library`),
       savedExe = preserve(executable, `${m.name}-executable`);
     const pairFile = path.join(evidence, `${m.name}.pairs.json`),
