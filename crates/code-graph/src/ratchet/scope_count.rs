@@ -32,6 +32,18 @@ pub enum CeilingValue {
     ObjectPrototype,
 }
 impl CeilingValue {
+    pub(crate) fn text(&self) -> JsString {
+        match self {
+            Self::Number(value) => crate::render::text::number(*value).into(),
+            Self::ObjectPrototype => "[object Object]".into(),
+            Self::InheritedFunction(name) => {
+                let mut text = JsString::from("function ");
+                text.extend(name);
+                text.push_str("() { [native code] }");
+                text
+            }
+        }
+    }
     pub(crate) fn number_for_comparison(&self) -> f64 {
         match self {
             Self::Number(number) => *number,
@@ -374,15 +386,7 @@ pub fn ratchet_table_lines(verdict: &ScopeCountVerdict, title: &JsString) -> Vec
         .into(),
     ];
     for violation in &verdict.violations {
-        let ceiling = match &violation.ceiling {
-            CeilingValue::Number(value) => number(*value).into(),
-            CeilingValue::ObjectPrototype => JsString::from("[object Object]"),
-            CeilingValue::InheritedFunction(name) => interpolate(&[
-                "function ".into(),
-                name.clone(),
-                "() { [native code] }".into(),
-            ]),
-        };
+        let ceiling = violation.ceiling.text();
         let mut ceiling_column =
             JsString::from(" ".repeat(9usize.saturating_sub(ceiling.units().len())));
         ceiling_column.extend(&ceiling);

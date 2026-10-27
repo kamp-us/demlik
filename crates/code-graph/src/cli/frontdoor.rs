@@ -14,7 +14,10 @@ use crate::{
         BoundaryFlags, BoundaryGateError, BoundaryGateResult, BoundaryGateTextArgs,
         run_boundary_gate_text,
     },
-    collapse::settings::CollapseSettings,
+    collapse::{
+        gate::{CollapseGateArgs, CollapseGateError, CollapseGateResult, run_collapse_gate},
+        settings::CollapseSettings,
+    },
     comments::gate::{
         CommentGateError, CommentGateResult, CommentGateTextArgs, run_comment_gate_text,
     },
@@ -151,6 +154,11 @@ pub enum CommentDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum CollapseDispatch {
+    Complete(CollapseGateResult),
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum EnvKeyDispatch {
     Complete(EnvKeyReport),
     Continue(Box<PreparedGatesCli>),
@@ -174,6 +182,8 @@ pub enum FrontdoorError {
     BoundaryEmit(ApiError),
     Comments(CommentGateError),
     CommentEmit(ApiError),
+    Collapse(CollapseGateError),
+    CollapseEmit(ApiError),
     EnvKeys(EnvKeyError),
     EnvKeyEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
@@ -198,6 +208,8 @@ impl FrontdoorError {
             Self::BoundaryEmit(error) => error.name(),
             Self::Comments(error) => error.name(),
             Self::CommentEmit(error) => error.name(),
+            Self::Collapse(error) => error.name(),
+            Self::CollapseEmit(error) => error.name(),
             Self::EnvKeys(error) => error.name(),
             Self::EnvKeyEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
@@ -222,6 +234,8 @@ impl FrontdoorError {
             Self::BoundaryEmit(error) => error.message(),
             Self::Comments(error) => error.message(),
             Self::CommentEmit(error) => error.message(),
+            Self::Collapse(error) => error.message(),
+            Self::CollapseEmit(error) => error.message(),
             Self::EnvKeys(error) => error.message(),
             Self::EnvKeyEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
@@ -249,6 +263,8 @@ impl Error for FrontdoorError {
             Self::BoundaryEmit(error) => error,
             Self::Comments(error) => error,
             Self::CommentEmit(error) => error,
+            Self::Collapse(error) => error,
+            Self::CollapseEmit(error) => error,
             Self::EnvKeys(error) => error,
             Self::EnvKeyEmit(error) => error,
             Self::RuleNameConversion(error) => error,
@@ -529,6 +545,47 @@ impl PreparedCli {
 }
 
 impl PreparedGatesCli {
+    /// Run the early CI/record branch after comments; plain collapse retains this carrier.
+    /// Compiler work is blocking. The host owns immediate warning and pending IO behavior.
+    pub fn dispatch_collapse_gate(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+    ) -> Result<CollapseDispatch, FrontdoorError> {
+        let options = &self.prepared.options;
+        if options.collapse() != Some(true)
+            || !(options.ci() == Some(true) || options.write_ceilings() == Some(true))
+        {
+            return Ok(CollapseDispatch::Continue(self));
+        }
+        let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let result = run_collapse_gate(
+            CollapseGateArgs {
+                root_absolute: &self.prepared.root_absolute,
+                repo_root: &repo_root,
+                write_ceilings: options.write_ceilings() == Some(true),
+                thresholds: &self.prepared.thresholds,
+                kind_rules: &self.prepared.kind_rules,
+                settings: &self.prepared.collapse_settings,
+                json: options.json() == Some(true),
+                pretty: options.pretty() == Some(true),
+            },
+            binary,
+            &mut |line| host.write_stderr(line),
+        )
+        .map_err(FrontdoorError::Collapse)?;
+        for message in &result.reports {
+            clean_exit(host, message);
+        }
+        for payload in &result.emitted {
+            output_to(options.out())
+                .emit(host, payload)
+                .map_err(FrontdoorError::CollapseEmit)?;
+        }
+        exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
+        Ok(CollapseDispatch::Complete(result))
+    }
+
     /// Run comments after environment keys, or retain the same continuation.
     pub fn dispatch_comments(
         self: Box<Self>,
