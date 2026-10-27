@@ -186,6 +186,13 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-persisted-gates",
+    driver: "ledger_driver",
+    script: "icu77-persisted-gates-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
