@@ -1,0 +1,253 @@
+{
+  "kind": "accepted-local-agent-ledgers-checkpoint",
+  "createdAt": "2026-10-27T23:00:25.535122+00:00",
+  "implementationCommit": "cc2c0f794e336f85e4783fd3546c52e7429aedeb",
+  "typescriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "previousAcceptedReceipt": "3743107d7be0cd9f1a2044005af771cf1e4c4c39",
+  "scope": "Reviewed native TEA/code-graph profiles; full monorepo goal remains incomplete. Both sweeps excluded, entirely local.",
+  "outcomes": {
+    "total": 15892,
+    "passed": 15892,
+    "strictNative": 15679,
+    "qualified": 213,
+    "qualifiedByArea": {
+      "graph": 183,
+      "api": 19,
+      "siblings": 11
+    },
+    "failures": 0,
+    "referenceChanges": 0,
+    "newSharedOutcomes": 193,
+    "addedStrictKeys": 179,
+    "previousStrictKeysNowQualified": []
+  },
+  "freshNativeAndStatic": {
+    "sourceCommit": "cc2c0f794e336f85e4783fd3546c52e7429aedeb",
+    "default": {
+      "testsAndDocs": 685,
+      "resultGroups": 208,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allFeatures": {
+      "testsAndDocs": 699,
+      "resultGroups": 208,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "countsOverlap": true,
+    "allTargetClippy": ["default", "all features"],
+    "publicExampleExecutions": 18,
+    "types": "Authored-state, typed subscriptions and compaction refusals in both configurations; actual snapshot interface executes in both.",
+    "static": [
+      "Rust fmt",
+      "full parity TypeScript",
+      "full parity Biome",
+      "Source code-graph build",
+      "early canonical inventory"
+    ],
+    "nativePreparation": "One own-root pinned ICU77 static preparation in this fresh check; no target overrides/cache copies."
+  },
+  "components": {
+    "preparedSmellCli": {
+      "shared": 47,
+      "strict": 39,
+      "qualified": 8,
+      "compiledControls": 14
+    },
+    "agentCompaction": {
+      "strict": 31,
+      "withinCaseBytePairs": 14,
+      "compiledControls": 4
+    },
+    "unreachableIcu77": {
+      "newStrict": 3,
+      "previousQualifiedUpgraded": 3,
+      "ledgerTotal": 81,
+      "compiledControls": 4,
+      "nativeOnlyControlCredit": 0
+    },
+    "consoleReports": {
+      "shared": 77,
+      "strict": 72,
+      "qualified": 5,
+      "excludedNativeOnly": 5,
+      "compiledControls": 26
+    },
+    "agentSnapshot": {
+      "shared": 18,
+      "strict": 14,
+      "qualifiedHostEnvelope": 4,
+      "compiledControls": 3,
+      "withinCaseWireComparisons": 44,
+      "presentByteComparisons": 36,
+      "absentValueComparisons": 8
+    },
+    "smellIcu77": {
+      "strict": 17,
+      "compiledControls": 4,
+      "nativeOnlyControlCredit": 0
+    }
+  },
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 832,
+    "gapRows": 2793,
+    "all53CliGapsOpen": true
+  },
+  "evidence": {
+    "archive": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cc2c0f79-agent-ledgers-checkpoint-proof.tar.gz",
+    "archiveSha256": "1158c468a4511ab1e0f14be5dd8544f9022c1d79f5c87434bedb200ca3edbcea",
+    "archiveBytes": 495871993,
+    "verifiedMembers": 1495,
+    "inventory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-ledgers-checkpoint-cc2c0f79/archive-inventory.json",
+    "inventorySha256": "713f9f29900aca4f6792d3cf05e789cc7381866bebd7e3c1361c37d65ca820c5",
+    "parentAudit": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-ledgers-checkpoint-cc2c0f79/parent-audit.json",
+    "parentAuditSha256": "d28720cffc45a227b27b03c76bd75d14836d54aa11ce03e5b617a777a1dcf12a",
+    "report": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-ledgers-combined-cc2c0f79/report.json",
+    "reportSha256": "3402b609ad16e995b4d3b307bb65768ac92a540110ad8c1801b69275df6bcf03",
+    "sourceFilesByteVerified": 2614,
+    "nativeArtifactBindings": 55,
+    "linkedComponentProofs": {
+      "preparedSmellCli": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-smell-ledger-f516986e/handoff.json",
+          "sha256": "e1937d51774a10b4358b5736007278239d478b7937a99544f2b707b0dac57e33",
+          "bytes": 3858
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-smell-ledger-f516986e/manifest.json",
+          "sha256": "386bdef1d6146e13b423daf693cb23f3a17b384007f549bf3d91fcb0c6eb2fa1",
+          "bytes": 29832
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-smell-ledger-f516986e/retirement.json",
+          "sha256": "81c9c897d9524daa94a5661ea29abd1ebf43f03b35a465382561c1c0326b65e2",
+          "bytes": 1095
+        }
+      ],
+      "agentCompaction": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-compaction-f3bfbf8d-proof.tar.gz",
+          "sha256": "b839e0d0a4a380539d28170cba990023a4a17f1c5d1269ca35225021a9056e0b",
+          "bytes": 66523638
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-compaction-f3bfbf8d-receipt.json",
+          "sha256": "521dfc7722f7e20dd43ede77dd7a22a80e1830f3620b1db1a80ccff164019f52",
+          "bytes": 9015
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-compaction-f3bfbf8d-inventory.json",
+          "sha256": "5ba567cd2edbbd082c3b1f5e18741562e67576991d89181727647124fa7449e1",
+          "bytes": 802644
+        }
+      ],
+      "icuUnreachable": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-unreachable-production/handoff.json",
+          "sha256": "63cb3691f42f5e81fd327b6998320f4f5a286c7fc0e4fe869c07f753702b7128",
+          "bytes": 19533
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-unreachable-production/manifest.json",
+          "sha256": "9154d0ea1584e6241b2f1d37e446a197aa6bb453e8ccfe0bb32bce30de0e677d",
+          "bytes": 72523
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-unreachable-production/seal.json",
+          "sha256": "ebd8ecd984126de6152652268cf01ebc2b8dfbe61abdf8604aed50413dffd64d",
+          "bytes": 585
+        }
+      ],
+      "consoleReports": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-reports-077fdad3/handoff.json",
+          "sha256": "9145be72b894b34f1c67624656c25bc8f62c7fe689775228e1b1ea5b25336c68",
+          "bytes": 2873
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-reports-077fdad3/inventory.json",
+          "sha256": "619ac7b64323d9b55603194229bd5557184bd978be140a087aba9fe8405f4af7",
+          "bytes": 48548
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-reports-077fdad3/retention.json",
+          "sha256": "e0149c598644f97f1a91ca0584d2106d374e479e46b235369bf3bb4fab45fab7",
+          "bytes": 20720
+        }
+      ],
+      "agentSnapshot": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-snapshot-grid-09b981bb-proof.tar.gz",
+          "sha256": "f146d615b6f9502bb8b0ba2cd6833d79409ca17a705da53a06818c47729ec8b8",
+          "bytes": 58055189
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-snapshot-grid-09b981bb.inventory.json",
+          "sha256": "681775f9adaf66e9731cc7f1d28aef00cdc28556ca337fbc381622f82c14e3ea",
+          "bytes": 398799
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-snapshot-grid-09b981bb-receipt.json",
+          "sha256": "e01340b47078eaff49112b490ec249b22b080c139459350ccc211bd0818e507e",
+          "bytes": 7035
+        }
+      ],
+      "icuSmell": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-smell-ledger-production/handoff.json",
+          "sha256": "024299c8142d55cd44258cb8b5b5316e3389c1723de5e739800e4f9d035dd011",
+          "bytes": 3171
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-smell-ledger-production/manifest.json",
+          "sha256": "7d252b92f5c2a930b8c16dbd1f48c86505fc9d4315a96524ebfd660c401f9cde",
+          "bytes": 57107
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-smell-ledger-production/seal.json",
+          "sha256": "02abf9b1e67accb4f8d14f8f3cc64923bad57f0fcab805273480f495887f5f91",
+          "bytes": 411
+        }
+      ],
+      "backendOffsetDiagnosis": [
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/text-offset-diagnosis/handoff.json",
+          "sha256": "63dfc1cd5b9987cf29c5541bfcf7177a30aceeb53a6bbe10c4f5d4e3dcfe174c",
+          "bytes": 2616
+        },
+        {
+          "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/text-offset-diagnosis/diagnosis.json",
+          "sha256": "e3766da5ae2c202d0f6b1bbe4b85fc19797ab798c0ffc4a695f66d12beea2f00",
+          "bytes": 9356
+        }
+      ]
+    },
+    "coldArchiveRebuild": false
+  },
+  "independentReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/demlik-agent-ledgers-cc2c0f79-final-peer-review-01a16c9d.json",
+    "sha256": "e613e02cdf7bb81a50779b5369e0a8a33e70aedcb58032e67d1e7ac3fa0254f7",
+    "verdict": "Scoped independent current-source/artifact/count/qualification/cleanup/archive review passed; no findings."
+  },
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-agent-ledgers-combined-check-cc2c0f79-01a16c9d"
+    ],
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "stderr": ""
+  },
+  "blindSpots": [
+    "Full monorepo goal incomplete; advanced agents/providers/hosts/remainingCLI/packaging/raw profiles and all53CLI gaps remain open.",
+    "Snapshot current18 includes14strict and4host-envelope-qualified; returned-message additive runtime/type discrepancy is separate unfinished work.",
+    "ICU production covers unreachable and smell ledgers;158legacy helper calls and2directsorts remain. Darwinarm64 proof only.",
+    "Selected actual artifacts are retained; historical component retention limitations are preserved in linked receipts.",
+    "Legacy unsafe aggregate mutation runner was not used; remaining workers/packaging/targets still need migration.",
+    "No cold archive rebuild, release, publication, deployment or whole-runtime equivalence claim."
+  ]
+}
