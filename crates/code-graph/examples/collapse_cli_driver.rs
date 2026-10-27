@@ -4,7 +4,7 @@ use demlik_code_graph::{
         frontdoor::{
             ApiDispatch, BoundaryDispatch, CliStop, CollapseDispatch, CommentDispatch,
             EnvKeyDispatch, FrontdoorError, GatePreflightDispatch, HexagonDispatch, LayerDispatch,
-            PlainCollapseDispatch, Preparation,
+            PlainCollapseDispatch, Preparation, UnreachableDispatch,
         },
         io::{CliIo, StdioStream},
     },
@@ -34,6 +34,8 @@ struct Request {
     compiler: PathBuf,
     #[serde(default)]
     plain: bool,
+    #[serde(default)]
+    late_unreachable: bool,
     #[serde(default, deserialize_with = "some")]
     warning_marker: Option<JsString>,
     #[serde(default, deserialize_with = "some")]
@@ -111,6 +113,47 @@ fn failure(error: &FrontdoorError) -> JsValue {
                 JsValue::String(file.to_string_lossy().as_ref().into()),
             ),
             ("cause", io_error(source)),
+        ]),
+        FrontdoorError::Unreachable(
+            demlik_code_graph::unreachable::gate::UnreachableRunError::Write(
+                demlik_code_graph::unreachable::ledger::UnreachableWriteError::Io { file, source },
+            ),
+        ) => object([
+            ("path", JsValue::String(file.clone())),
+            ("cause", io_error(source)),
+        ]),
+        FrontdoorError::Unreachable(
+            demlik_code_graph::unreachable::gate::UnreachableRunError::Emit(ApiError::Io {
+                path,
+                source,
+            })
+            | demlik_code_graph::unreachable::gate::UnreachableRunError::Report(ApiError::Io {
+                path,
+                source,
+            }),
+        ) => object([
+            ("path", JsValue::String(path.clone())),
+            ("cause", io_error(source)),
+        ]),
+        FrontdoorError::Unreachable(
+            demlik_code_graph::unreachable::gate::UnreachableRunError::Emit(ApiError::Argument(
+                error,
+            ))
+            | demlik_code_graph::unreachable::gate::UnreachableRunError::Report(ApiError::Argument(
+                error,
+            )),
+        ) => object([
+            ("argument", JsValue::String(error.argument().clone())),
+            ("location", JsValue::String(error.location().label().into())),
+            ("code", JsValue::String(error.code().into())),
+            (
+                "cause",
+                error
+                    .source()
+                    .and_then(|e| e.downcast_ref::<io::Error>())
+                    .map(io_error)
+                    .unwrap_or(JsValue::Null),
+            ),
         ]),
         FrontdoorError::Boundaries(demlik_code_graph::boundaries::gate::BoundaryGateError::Io(
             error,
@@ -231,7 +274,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdout = ObservedFile {
         inner: File::from(io::stdout().as_fd().try_clone_to_owned()?),
         stream: "stdout",
-        enabled: request.plain,
+        enabled: request.plain || request.late_unreachable,
         events: Rc::clone(&writes),
         warning_marker: None,
         marked: false,
@@ -239,7 +282,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stderr = ObservedFile {
         inner: File::from(io::stderr().as_fd().try_clone_to_owned()?),
         stream: "stderr",
-        enabled: request.plain,
+        enabled: request.plain || request.late_unreachable,
         events: Rc::clone(&writes),
         warning_marker: request.warning_marker.as_ref(),
         marked: false,
@@ -369,6 +412,42 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ("kind", JsValue::String("collapse".into())),
                 ("result", serialized(&result)),
             ])),
+            Ok(CollapseDispatch::Continue(value)) if request.late_unreachable => {
+                let value = match observe!(
+                    &mut calls,
+                    demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking,
+                    value,
+                    &mut host,
+                    &TsgoBinary::pinned(&request.compiler)
+                ) {
+                    Ok(UnreachableDispatch::Complete) => return Ok(object([("kind", JsValue::String("unreachable".into()))])),
+                    Ok(UnreachableDispatch::Refused { cause }) => return Ok(object([
+                        ("kind", JsValue::String("unreachable-load-refused".into())),
+                        ("cause", JsValue::String(cause.message())),
+                    ])),
+                    Ok(UnreachableDispatch::Continue(value)) => value,
+                    Err(error) => return Ok(object([("kind", JsValue::String("thrown".into())), ("error", failure(&error))])),
+                };
+                match observe!(
+                    &mut calls,
+                    demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_plain_collapse_blocking,
+                    value,
+                    &mut host,
+                    &TsgoBinary::pinned(&request.compiler)
+                ) {
+                    Ok(PlainCollapseDispatch::Complete) => Ok(object([("kind", JsValue::String("plain-collapse".into()))])),
+                    Ok(PlainCollapseDispatch::Refused { cause }) => Ok(object([
+                        ("kind", JsValue::String("plain-load-refused".into())),
+                        ("cause", JsValue::String(cause.message())),
+                    ])),
+                    Ok(PlainCollapseDispatch::Continue(value)) => Ok(object([
+                        ("kind", JsValue::String("continue".into())),
+                        ("sameCarrier", JsValue::Bool(std::ptr::eq(before, value.as_ref()))),
+                        ("samePrepared", JsValue::Bool(std::ptr::eq(original, value.prepared.as_ref()))),
+                    ])),
+                    Err(error) => Ok(object([("kind", JsValue::String("thrown".into())), ("error", failure(&error))])),
+                }
+            }
             Ok(CollapseDispatch::Continue(value)) if request.plain => {
                 match observe!(
                     &mut calls,
@@ -442,7 +521,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("exitCode", JsValue::Number(f64::from(code))),
         ("observedCalls", serialized(&calls)),
     ]);
-    if request.plain
+    if (request.plain || request.late_unreachable)
         && let JsValue::Object(fields) = &mut trace
     {
         fields.insert("writeObservations".into(), serialized(&*writes.borrow()));

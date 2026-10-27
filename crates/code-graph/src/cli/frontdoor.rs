@@ -42,14 +42,17 @@ use crate::{
         EdgeScope, ProjectLoadError, find_repo_root_text, load_edge_project_text,
         resolve_path_text_from,
     },
-    render::json::stable_stringify,
-    schema::Thresholds,
+    render::{analysis::render_unreachable, json::stable_stringify},
+    schema::{Graph, Thresholds},
     smells::{
         gate::{SmellGateOpts, SmellPreparation, SmellPreparationError, prepare_smell_gate},
         ledger::RuleNameConversionError,
     },
     text::JsString,
-    unreachable::gate::{UnreachableOpts, UnreachablePreparation, prepare_unreachable_gate},
+    unreachable::gate::{
+        UnreachableOpts, UnreachableOutput, UnreachablePreparation, UnreachableRunError,
+        prepare_unreachable_gate, run_unreachable_gate,
+    },
 };
 use std::{cell::RefCell, error::Error, fs, io, path::Path};
 
@@ -177,6 +180,16 @@ pub enum PlainCollapseDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum UnreachableDispatch {
+    Complete,
+    Refused { cause: ProjectLoadError },
+    Continue(Box<PreparedGatesCli>),
+}
+enum ClassifiedGraphFailure {
+    LoadRefused(ProjectLoadError),
+    Assembly(AssemblyError),
+}
+#[derive(Debug)]
 pub enum EnvKeyDispatch {
     Complete(EnvKeyReport),
     Continue(Box<PreparedGatesCli>),
@@ -204,6 +217,7 @@ pub enum FrontdoorError {
     CollapseEmit(ApiError),
     Assembly(AssemblyError),
     CollapseRender(serde_json::Error),
+    Unreachable(UnreachableRunError<ApiError>),
     EnvKeys(EnvKeyError),
     EnvKeyEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
@@ -231,6 +245,9 @@ impl FrontdoorError {
             Self::Collapse(error) => error.name(),
             Self::CollapseEmit(error) => error.name(),
             Self::Assembly(error) => error.name(),
+            Self::Unreachable(
+                UnreachableRunError::Emit(error) | UnreachableRunError::Report(error),
+            ) => error.name(),
             Self::EnvKeys(error) => error.name(),
             Self::EnvKeyEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
@@ -259,6 +276,13 @@ impl FrontdoorError {
             Self::CollapseEmit(error) => error.message(),
             Self::Assembly(error) => error.message(),
             Self::CollapseRender(error) => error.to_string().into(),
+            Self::Unreachable(error) => match error {
+                UnreachableRunError::Write(error) => error.to_string().into(),
+                UnreachableRunError::Render(error) => error.to_string().into(),
+                UnreachableRunError::Emit(error) | UnreachableRunError::Report(error) => {
+                    error.message()
+                }
+            },
             Self::EnvKeys(error) => error.message(),
             Self::EnvKeyEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
@@ -290,6 +314,11 @@ impl Error for FrontdoorError {
             Self::CollapseEmit(error) => error,
             Self::Assembly(error) => error,
             Self::CollapseRender(error) => error,
+            Self::Unreachable(error) => match error {
+                UnreachableRunError::Write(error) => error,
+                UnreachableRunError::Render(error) => error,
+                UnreachableRunError::Emit(error) | UnreachableRunError::Report(error) => error,
+            },
             Self::EnvKeys(error) => error,
             Self::EnvKeyEmit(error) => error,
             Self::RuleNameConversion(error) => error,
@@ -611,23 +640,12 @@ impl PreparedGatesCli {
         Ok(CollapseDispatch::Complete(result))
     }
 
-    /// Run after the early collapse gate. Higher late owners retain the original continuation.
-    /// Compiler, Git and filesystem work blocks this caller; the host owns warning/stdio delivery.
-    pub fn dispatch_plain_collapse_blocking(
-        self: Box<Self>,
+    fn assemble_classified_graph(
+        &self,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
-    ) -> Result<PlainCollapseDispatch, FrontdoorError> {
+    ) -> Result<Graph, ClassifiedGraphFailure> {
         let options = &self.prepared.options;
-        if options.collapse() != Some(true)
-            || options.ci() == Some(true)
-            || options.write_ceilings() == Some(true)
-            || options.html() == Some(true)
-            || matches!(self.unreachable, UnreachablePreparation::Prepared { .. })
-            || matches!(self.smells, SmellPreparation::Prepared { .. })
-        {
-            return Ok(PlainCollapseDispatch::Continue(self));
-        }
         if options.plan() != Some(true)
             && let Some(by) = options.by().filter(|by| *by != "rot")
         {
@@ -656,10 +674,10 @@ impl PreparedGatesCli {
                 message.extend(root);
                 message.push_str("; edges unavailable");
                 clean_exit(host, &message);
-                return Ok(PlainCollapseDispatch::Refused { cause });
+                return Err(ClassifiedGraphFailure::LoadRefused(cause));
             }
         };
-        let graph = assemble_graph_with_analysis_text_and_warning(
+        assemble_graph_with_analysis_text_and_warning(
             &loaded,
             self.prepared.thresholds.clone(),
             binary,
@@ -681,7 +699,107 @@ impl PreparedGatesCli {
                 warning: &mut |line| host.write_stderr(line),
             },
         )
-        .map_err(FrontdoorError::Assembly)?;
+        .map_err(ClassifiedGraphFailure::Assembly)
+    }
+
+    /// Run after all early modes; retain ordinary collapse and unfinished higher owners.
+    pub fn dispatch_unreachable_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+    ) -> Result<UnreachableDispatch, FrontdoorError> {
+        let options = &self.prepared.options;
+        let prepared_gate = match &self.unreachable {
+            UnreachablePreparation::Prepared { gate } => Some(gate),
+            _ => None,
+        };
+        if prepared_gate.is_none()
+            && (options.unreachable() != Some(true)
+                || options.html() == Some(true)
+                || options.collapse() == Some(true)
+                || options.ci() == Some(true)
+                || matches!(self.smells, SmellPreparation::Prepared { .. }))
+        {
+            return Ok(UnreachableDispatch::Continue(self));
+        }
+        let graph = match self.assemble_classified_graph(host, binary) {
+            Ok(graph) => graph,
+            Err(ClassifiedGraphFailure::LoadRefused(cause)) => {
+                return Ok(UnreachableDispatch::Refused { cause });
+            }
+            Err(ClassifiedGraphFailure::Assembly(cause)) => {
+                return Err(FrontdoorError::Assembly(cause));
+            }
+        };
+        if let Some(gate) = prepared_gate {
+            let code = {
+                let bridge = RefCell::new(&mut *host);
+                let mut emit = |payload: &JsString| {
+                    output_to(options.out()).emit(&mut bridge.borrow_mut(), payload)
+                };
+                let mut report = |message: &JsString| {
+                    clean_exit(&mut bridge.borrow_mut(), message);
+                    Ok(())
+                };
+                run_unreachable_gate(
+                    gate,
+                    &graph,
+                    UnreachableOutput {
+                        emit: &mut emit,
+                        report: &mut report,
+                        json: options.json() == Some(true),
+                        pretty: options.pretty() == Some(true),
+                    },
+                )
+                .map_err(FrontdoorError::Unreachable)?
+            };
+            exit_with(host, f64::from(code)).map_err(FrontdoorError::ExitCode)?;
+            return Ok(UnreachableDispatch::Complete);
+        }
+        let mut rendered = if options.graph() == Some(true) {
+            stable_stringify(&graph, options.pretty() == Some(true)).map(Into::into)
+        } else {
+            render_unreachable(
+                &graph,
+                options.json() == Some(true),
+                options.pretty() == Some(true),
+            )
+        }
+        .map_err(|error| FrontdoorError::Unreachable(UnreachableRunError::Render(error)))?;
+        rendered.push_str("\n");
+        output_to(options.out())
+            .emit(host, &rendered)
+            .map_err(|error| FrontdoorError::Unreachable(UnreachableRunError::Emit(error)))?;
+        Ok(UnreachableDispatch::Complete)
+    }
+
+    /// Run after the early collapse gate. Higher late owners retain the original continuation.
+    /// Compiler, Git and filesystem work blocks this caller; the host owns warning/stdio delivery.
+    pub fn dispatch_plain_collapse_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+    ) -> Result<PlainCollapseDispatch, FrontdoorError> {
+        let options = &self.prepared.options;
+        if options.collapse() != Some(true)
+            || options.ci() == Some(true)
+            || options.write_ceilings() == Some(true)
+            || options.html() == Some(true)
+            || matches!(self.unreachable, UnreachablePreparation::Prepared { .. })
+            || matches!(self.smells, SmellPreparation::Prepared { .. })
+        {
+            return Ok(PlainCollapseDispatch::Continue(self));
+        }
+        let graph = match self.assemble_classified_graph(host, binary) {
+            Ok(graph) => graph,
+            Err(ClassifiedGraphFailure::LoadRefused(cause)) => {
+                return Ok(PlainCollapseDispatch::Refused { cause });
+            }
+            Err(ClassifiedGraphFailure::Assembly(cause)) => {
+                return Err(FrontdoorError::Assembly(cause));
+            }
+        };
+        let root = &self.prepared.root_absolute;
         let mut payload = if options.graph() == Some(true) {
             stable_stringify(&graph, options.pretty() == Some(true)).map(Into::into)
         } else {

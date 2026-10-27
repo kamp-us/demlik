@@ -80,6 +80,94 @@ impl Entry {
     }
 }
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct RenderInput {
+    root: String,
+    report: Option<RenderFacts>,
+    json: bool,
+    pretty: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct RenderFacts {
+    entry_count: usize,
+    exported_count: usize,
+    reachable_count: usize,
+    unreachable: Vec<RenderSymbol>,
+    withheld: Vec<RenderWithheld>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct RenderSymbol {
+    id: String,
+    file: String,
+    start_line: usize,
+    category: Kind,
+    test_references: Vec<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RenderWithheld {
+    id: String,
+    reason: Reason,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum Reason {
+    ReferencedInNonTestFile,
+    PublicEntrySurface,
+    TestSupportSurface,
+}
+impl From<Reason> for demlik_code_graph::schema::WithheldReason {
+    fn from(reason: Reason) -> Self {
+        match reason {
+            Reason::ReferencedInNonTestFile => Self::ReferencedInNonTestFile,
+            Reason::PublicEntrySurface => Self::PublicEntrySurface,
+            Reason::TestSupportSurface => Self::TestSupportSurface,
+        }
+    }
+}
+fn ordinary_render(
+    input: RenderInput,
+    calls: &mut Vec<&'static str>,
+) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let loaded = load_cheap_project(Path::new(&input.root), None)?;
+    let mut graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default())?;
+    graph.reachability = input.report.map(|r| ReachabilityReport {
+        entry_count: r.entry_count,
+        exported_count: r.exported_count,
+        reachable_count: r.reachable_count,
+        unreachable: r
+            .unreachable
+            .into_iter()
+            .map(|s| UnreachableSymbol {
+                id: s.id,
+                file: s.file,
+                start_line: s.start_line,
+                category: s.category.into(),
+                test_references: s.test_references,
+            })
+            .collect(),
+        withheld: r
+            .withheld
+            .into_iter()
+            .map(|s| demlik_code_graph::schema::WithheldSymbol {
+                id: s.id,
+                reason: s.reason.into(),
+            })
+            .collect(),
+        unguarded: vec![],
+    });
+    let text = observe!(
+        calls,
+        demlik_code_graph::render::analysis::render_unreachable,
+        &graph,
+        input.json,
+        input.pretty
+    )?;
+    Ok(to_raw_value(&text)?)
+}
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
     id: JsString,
@@ -493,6 +581,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut calls = vec![];
         let result = match request.operation.as_str() {
             "pure" => pure(serde_json::from_str(request.input.get())?, &mut calls)?,
+            "ordinary-render" => {
+                ordinary_render(serde_json::from_str(request.input.get())?, &mut calls)?
+            }
             "run" => run(
                 serde_json::from_str(request.input.get())?,
                 &binary,
