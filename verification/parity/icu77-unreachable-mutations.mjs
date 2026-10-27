@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -11,9 +12,15 @@ import {
   createCheckWorktree,
 } from "./check-worktree.mjs";
 
-const [baseline, baselineReport, sourceArchive, output] = process.argv.slice(2);
+const [baseline, baselineReport, sourceArchive, output, recoveredLossy] =
+  process.argv.slice(2);
 assert.ok(baseline && baselineReport && sourceArchive && output);
 assert.equal(process.version, "v22.21.1");
+assert.equal(
+  fs.realpathSync(os.tmpdir()),
+  "/private/tmp",
+  "call this suite with scoped TMPDIR=/private/tmp, outside ancestor Git ignores",
+);
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const evidence = path.resolve(output);
 fs.mkdirSync(evidence, { recursive: true });
@@ -73,11 +80,35 @@ assert.equal(trusted.passed, 81);
 assert.equal(trusted.unqualifiedPairs, 78);
 assert.equal(trusted.qualifiedPairs, 3);
 assert.equal(trusted.binary.sha256, baselineHash);
+const recovered = recoveredLossy
+  ? JSON.parse(fs.readFileSync(recoveredLossy, "utf8"))
+  : undefined;
+if (recovered) {
+  assert.equal(recovered.id, "lossy-utf16");
+  assert.equal(recovered.compileExit, 0);
+  const replay = JSON.parse(
+    fs.readFileSync(recovered.observation.comparison, "utf8"),
+  );
+  assert.equal(replay.binary.sha256, recovered.executed.sha256);
+  assert.equal(replay.rejectedInvalidInputs, 4);
+  assert.deepEqual(replay.sourceHashes, trusted.sourceHashes);
+  assert.deepEqual(
+    replay.cases.map((row) => row.id).sort(),
+    trusted.cases.map((row) => row.id).sort(),
+  );
+  assert.deepEqual(replay.failures.map((row) => row.id).sort(), [
+    "pure.locale.json",
+    "pure.locale.pretty",
+    "pure.locale.text",
+  ]);
+}
 const report = {
   planned: 4,
-  cargoSelections: 0,
+  cargoSelections: recovered ? 1 : 0,
+  newCargoSelections: 0,
+  priorFailedTreeAndNativePreparation: Boolean(recovered),
   nativePreparations: 0,
-  controls: [],
+  controls: recovered ? [recovered] : [],
   baseline: { path: baseline, sha256: baselineHash, report: baselineReport },
   complete: false,
 };
@@ -150,7 +181,7 @@ try {
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
     TZ: "UTC",
-    TMPDIR: path.join(check.target, "tmp"),
+    TMPDIR: runtime,
     RUSTUP_HOME: process.env.RUSTUP_HOME,
     CARGO_HOME: process.env.CARGO_HOME,
     RUSTUP_TOOLCHAIN: "stable",
@@ -178,7 +209,7 @@ try {
       path.resolve(sourceArchive),
     ],
     check.root,
-    environment,
+    { ...environment, TMPDIR: path.join(check.target, "tmp") },
   );
   report.nativePreparations++;
   save();
@@ -187,7 +218,9 @@ try {
     path.join(check.target, "icu77/prepared.json"),
     path.join(evidence, "native-prepared.json"),
   );
-  for (const fault of faults) {
+  for (const fault of faults.filter(
+    (fault) => !recovered || fault.id !== "lossy-utf16",
+  )) {
     for (const [owner, text] of Object.entries(original))
       fs.writeFileSync(path.join(check.root, owner), text);
     assert.ok(
@@ -217,6 +250,7 @@ try {
       environment,
     );
     report.cargoSelections++;
+    report.newCargoSelections++;
     save();
     assert.equal(build.exit, 0, "compilation failure earns no control credit");
     const events = build.text
