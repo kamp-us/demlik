@@ -15,6 +15,13 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "logical-root",
+    driver: "graph_root_driver",
+    script: "graph-logical-root.mjs",
+    format: "process",
+    traceField: "native",
+  },
+  {
     name: "assembly-warning",
     driver: "demlik_code_graph",
     unitTest: true,
@@ -258,6 +265,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "graph_root_driver",
   "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",
