@@ -15,6 +15,13 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "collapse-partial",
+    driver: "collapse_partial_driver",
+    script: "graph-collapse-partial.mjs",
+    format: "process",
+    traceField: "native",
+  },
+  {
     name: "text-interface",
     driver: "text_assembly_driver",
     script: "graph-text-interface.mjs",
@@ -243,6 +250,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",
   "hexagon_driver",
