@@ -1,0 +1,97 @@
+{
+  "component": "Prepared smell-ledger native library gate",
+  "sourceCommit": "786a095400e851faa553762b37897098519113a5",
+  "base": "e6c70b014bb9065570bb26d01779b7dff0a78d11",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-smell-ledger-proof-01a16c9d",
+  "current": {
+    "observations": 139,
+    "strict": 135,
+    "qualified": 4,
+    "pureRenderingObservations": 63,
+    "pureInputGroups": 21,
+    "numericPairs": 49,
+    "targets": 4,
+    "kernel": 14,
+    "realGoWorkflowActions": 9,
+    "protocolRefusalsSeparate": 4,
+    "newNativeTestsIncluded": 7,
+    "allCodeGraphNativeTests": 236,
+    "nativeTestExecutables": 120,
+    "publicTypeSources": 3,
+    "semanticControls": 13,
+    "constructionCargoAttempts": 6,
+    "constructionCargoSuccessfulExits": 4,
+    "mutationCargoSelections": 13,
+    "cargoAttemptBudget": 7,
+    "sameSourceInterfaceRed": "sole E0432",
+    "sameSourceGreen": true,
+    "lifetimeRefusals": ["sole E0597", "sole E0597"]
+  },
+  "affected": {
+    "oldPreflight": {
+      "observations": 441,
+      "strict": 433,
+      "qualified": 8,
+      "protocolRefusals": 7
+    },
+    "oldJson": {
+      "observations": 300,
+      "protocolRefusals": 5
+    },
+    "totalOldObservations": 741,
+    "notAddedToNewCounts": true
+  },
+  "static": {
+    "codeGraphAllTargetClippy": 0,
+    "scopedGraphVerifierTypeScript": 0,
+    "scopedBiome": 0,
+    "scopedRustfmt": 0,
+    "workspaceOrTeaFeatureGateClaimed": false
+  },
+  "qualifications": [
+    "run.missing-parent-write, run.directory-write, run.nul-write, run.output-refused-after-write retain original backend diagnostics while comparing exact remaining fields, effects, bytes and modes; no strict credit.",
+    "The existing ICU4X lone-surrogate collation mismatch remains OPEN; this suite raw-text rows prove single-unit retention without claiming the separately failing mixed-lone ordering vectors.",
+    "Canonical Graph IDs/files/directories remain String facts; arbitrary raw Graph fields, getters/prototypes/extra-field/manual JS object behavior remain outside this profile.",
+    "Source emit callback is an explicit native caller boundary after the data-returning runner; original Rc callback cause is preserved there. CliIo pending stdio errors remain its native contract, without arbitrary Source write-event timing equivalence.",
+    "All53 CLI gaps remain OPEN. Three existing option IDs have supporting library evidence only; no fabricated aliases, registry edit, global CLI or distribution claim."
+  ],
+  "recoveryNotes": [
+    "Cargo1 could not locate rustc before producing any artifact; task-local PATH was fixed. This is setup failure, zero type/semantic credit.",
+    "Cargo3 compiled the production library but its example imported AnalysisOptions from a private reimport. The example import was corrected; Cargo4/5/6 pass. Overall Cargo3 is not reported green; its selected successfully compiled library is the retained same-source consumer producer.",
+    "The first standalone TypeScript attempt omitted the explicit installed @types root and found a verifier tuple annotation error. Corrected only verifier setup/type annotation; final scoped TypeScript passes. Source product TS unchanged.",
+    "The first paired command could not resolve tsx from the root package, so zero observations ran. Explicit existing verification loader path fixed the command; first executed139 and final same-binary139 are retained.",
+    "Biome template-only verifier formatting was applied before control freeze; final same pinned executable reran all139. No Rust/Cargo/product bytes changed for that follow-up.",
+    "drop-accepted-reason and skip-ratchet-write also reach later workflow assertion failures after earlier mutant-corrupted persistent state. Those harness termini are retained and earn zero credit; both controls are scored solely by their earlier named, unqualified, protocol-valid status0 semantic witness."
+  ],
+  "reports": {
+    "logs/pairs-sealed.json": "c0d0d05d6afad4a722effa3abfdc03c4b17229f636b88d0369216999a4ca157a",
+    "logs/affected-preflight.json": "38c7450b55d07b6ca58f870b81d6ab8b446a34d848c32cc0182dad15b6080fcb",
+    "logs/affected-json.json": "358518ff7467dbe233efa4fb0b32b4e0ef488b178ac763197bebdb5eeee4d012",
+    "controls/controls.json": "05fda164ae4f8f7e37caa8351ce741e63e905355a78a897cfa4e6b100b39956e",
+    "public-types.json": "ea4ef1db20688f9cf291d6793ef95aeeebaabedf22e8a23e60c49578305103b5",
+    "same-source-green.json": "e78207cff9a76f99dadf872cc7943154d38f35ce9e9c0a5a7bd12af3706799c7",
+    "missing-interface-red.json": "7136439e3cff62702175ea5b4b33937cdcb84ba72eaec3ac50063ade8c00a2d6",
+    "static-sealed.json": "2d888e46a51354e1d6dc9c7f117c72fe8a3766238e847e920be252c9179dcd44",
+    "source-manifest.json": "b6030ecf84f36832e7a966d35a5810b4f1a6f7c517ab812a3f066c08a4c087bd",
+    "frozen-package-source-pins.json": "b102f94517b6b2bf1b2fde6a7ee2bea766a6ad47ebaad6192f86acfbf7cbb577",
+    "capability-proposal.json": "587a82e84c3c301a9ebf31dd6dce791bf9a8387769b870075cacbed2a54ed529"
+  },
+  "sourceArchive": {
+    "commit": "786a095400e851faa553762b37897098519113a5",
+    "base": "e6c70b014bb9065570bb26d01779b7dff0a78d11",
+    "archive": "/private/tmp/demlik-smell-ledger-proof-01a16c9d/sources/source.tar.gz",
+    "sha256": "76fc2c71a392c23d55ad09e3eb50ac81c5abf1717d5a6ea4ee860b44a809d689",
+    "note": "Full immutable source archive, no target or dependency cache; component source was frozen before13controls.",
+    "totalMembers": 2907,
+    "fileMembers": 2491,
+    "directoryMembers": 416
+  },
+  "sourceManifestSha256": "b6030ecf84f36832e7a966d35a5810b4f1a6f7c517ab812a3f066c08a4c087bd",
+  "constructionSummarySha256": "5c129b43a84b84c543e6e75eef2d4bd97b2cb3834be77ea61c218e3c3280a005",
+  "primaryRetirement": "Recorded only after actual removal in external retirement.json/final-summary.json; this commit is made before removal and does not claim it happened yet.",
+  "all53CliGapsRemainOpen": true,
+  "registryChanges": false,
+  "newDependencies": false,
+  "scope": "Smell ledger pure reconciliation/acceptance/serialization, pure rendering and prepared data-returning runner only. Existing output/exit owners exercised by actual compiled caller. No global CLI/frontdoor/shared assembly attachment."
+}
