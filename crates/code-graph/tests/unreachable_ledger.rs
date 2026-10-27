@@ -110,7 +110,7 @@ fn reconciliation_borrows_duplicate_foreign_findings_and_only_prunes_exact_scope
         finding("foreign", Kind::Dead, "new"),
         finding("app", Kind::OnlyCalledFromTests, "ignored"),
     ];
-    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated);
+    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated, &collation()).unwrap();
     assert_eq!(result.unrecorded.len(), 2);
     assert!(std::ptr::eq(result.unrecorded[0], &findings[0]));
     assert!(std::ptr::eq(result.unrecorded[1], &findings[1]));
@@ -127,12 +127,18 @@ fn accepted_merge_keeps_the_original_reason_owner_and_stable_serialized_lf() {
         entries: vec![Arc::clone(&old)],
     };
     let found = [finding("a", Kind::Dead, "x"), finding("a", Kind::Dead, "y")];
-    let next = with_accepted_findings(&ledger, &found.iter().collect::<Vec<_>>(), &"second".into());
+    let next = with_accepted_findings(
+        &ledger,
+        &found.iter().collect::<Vec<_>>(),
+        &"second".into(),
+        &collation(),
+    )
+    .unwrap();
     assert!(Arc::ptr_eq(&next.entries[0], &old));
     assert_eq!(next.entries[0].reason, "first");
     assert_eq!(next.entries[1].reason, "second");
     assert_eq!(
-        serialize_unreachable_ledger(&next).unwrap(),
+        serialize_unreachable_ledger(&next, &collation()).unwrap(),
         "{\n  \"entries\": [\n    {\n      \"id\": \"x\",\n      \"kind\": \"dead\",\n      \"reason\": \"first\",\n      \"scope\": \"a\"\n    },\n    {\n      \"id\": \"y\",\n      \"kind\": \"dead\",\n      \"reason\": \"second\",\n      \"scope\": \"a\"\n    }\n  ]\n}\n"
     );
 }
@@ -146,7 +152,7 @@ fn human_output_keeps_lone_units_before_host_encoding() {
         id: JsString::from_units(vec![0xdfff]),
     }];
     let ledger = UnreachableLedger::default();
-    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated);
+    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated, &collation()).unwrap();
     let rendered = render_unreachable_gate(&result, false, false).unwrap();
     assert!(rendered.stdout.units().contains(&0xd800));
     assert!(rendered.stdout.units().contains(&0xdfff));
@@ -192,6 +198,7 @@ fn missing_reachability_preserves_borrowed_report_error_and_never_writes_or_emit
             json: false,
             pretty: false,
         },
+        &collation(),
     );
     let Err(UnreachableRunError::Report(error)) = result else {
         panic!("report error must escape")
@@ -211,10 +218,14 @@ fn pruning_writes_before_original_emit_failure_and_keeps_other_scope() {
         mode: UnreachableMode::Gate {
             gated: vec![Kind::Dead],
         },
-        ledger: unreachable_ledger_of(&[
-            entry("a", Kind::Dead, "gone", "gone"),
-            entry("b", Kind::Dead, "other", "kept"),
-        ]),
+        ledger: unreachable_ledger_of(
+            &[
+                entry("a", Kind::Dead, "gone", "gone"),
+                entry("b", Kind::Dead, "other", "kept"),
+            ],
+            &collation(),
+        )
+        .unwrap(),
     };
     let original = Rc::new(Cell::new(23));
     let expected = Rc::clone(&original);
@@ -236,6 +247,7 @@ fn pruning_writes_before_original_emit_failure_and_keeps_other_scope() {
             json: true,
             pretty: true,
         },
+        &collation(),
     );
     let Err(UnreachableRunError::Emit(error)) = result else {
         panic!("emit error must escape")
@@ -251,8 +263,8 @@ fn repeated_accept_succeeds_on_readonly_ledger_without_rewriting() {
     let graph = f.graph(Some(vec![symbol(Kind::OnlyCalledFromTests, "tested")]));
     let file = f.0.join("ledger.json");
     let old = entry("a", Kind::OnlyCalledFromTests, "tested", "old");
-    let ledger = unreachable_ledger_of(&[old]);
-    let before = serialize_unreachable_ledger(&ledger).unwrap();
+    let ledger = unreachable_ledger_of(&[old], &collation()).unwrap();
+    let before = serialize_unreachable_ledger(&ledger, &collation()).unwrap();
     fs::write(&file, &before).unwrap();
     fs::set_permissions(&file, fs::Permissions::from_mode(0o444)).unwrap();
     let gate = PreparedUnreachableGate {
@@ -274,7 +286,8 @@ fn repeated_accept_succeeds_on_readonly_ledger_without_rewriting() {
                 report: &mut report,
                 json: false,
                 pretty: false
-            }
+            },
+            &collation()
         )
         .unwrap(),
         0
@@ -314,6 +327,7 @@ fn actual_write_error_prevents_emit_and_retains_file_and_io_cause() {
             json: false,
             pretty: false,
         },
+        &collation(),
     )
     else {
         panic!("actual IO cause must escape")
@@ -322,4 +336,8 @@ fn actual_write_error_prevents_emit_and_retains_file_and_io_cause() {
     assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
     assert_eq!(emits.get(), 0);
     assert!(!file.exists());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

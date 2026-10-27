@@ -15,7 +15,11 @@ fn main() {
     let held;
     {
         let local = [Kind::Dead];
-        held = reconcile_unreachable(&ledger, &scope, &findings, &local);
+        held = reconcile_unreachable(&ledger, &scope, &findings, &local, &collation()).unwrap();
     }
     println!("{} {}", held.gated.len(), gated.len());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

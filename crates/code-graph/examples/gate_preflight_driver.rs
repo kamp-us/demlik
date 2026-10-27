@@ -506,14 +506,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 observe!(
                     calls,
                     demlik_code_graph::unreachable::ledger::parse_unreachable_ledger,
-                    string(&input, "text")?
-                )
+                    string(&input, "text")?,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
+                )?
             } else {
                 observe!(
                     calls,
                     demlik_code_graph::unreachable::ledger::read_unreachable_ledger,
-                    string(&input, "file")?
-                )
+                    string(&input, "file")?,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
+                )?
             };
             if let UnreachableLedgerRead::Invalid { source, .. } = &read {
                 details = io_detail(source.as_ref());
@@ -585,8 +587,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let ledger = observe!(
                 calls,
                 demlik_code_graph::unreachable::ledger::unreachable_ledger_of,
-                &entries
-            );
+                &entries,
+                &demlik_code_graph::project::Collation::try_node22_en_us()?
+            )?;
             let origin = ledger
                 .entries
                 .iter()
@@ -695,7 +698,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     demlik_code_graph::unreachable::gate::prepare_unreachable_gate,
                     u_opts(opts)?,
                     root,
-                    repo
+                    repo,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
                 )?;
                 let (out, meta) = prepare_u_output(result);
                 details = meta;

@@ -1,0 +1,30 @@
+{
+  "sourceRelease": "ICU4C77.1",
+  "sourceUrl": "https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-src.tgz",
+  "sourceSha512": "a47d6d9c327d037a05ea43d1d1a06b2fd757cc02a94f7c1a238f35cfc3dfd4ab78d0612790f3a3cca0292c77412a9c2c15c8f24b718f79a857e007e66f07e7cd",
+  "dataMember": "icu/source/data/in/icudt77l.dat",
+  "dataBytes": 31895376,
+  "dataSha256": "310d9b2cb42947fad7f388b09d2ae574e2adeb60ca76abf280438908f20b2d7b",
+  "bindings": {
+    "rust_icu_common": "336ec4aad4d33540be93f536d1fcc9ac8296eca21095c02dfaa7e5a6b6ff9d90",
+    "rust_icu_release": "adff2447072626b05450f000578265104ba9df89e67e781ee54add74abed97e8",
+    "rust_icu_sys": "7bf2afe1327bd09e8d50bcf8abcea97410a10b2f10b932e994abad414038a711",
+    "rust_icu_ucol": "7c59dfa51be94645fa0bcd9d618475ddf95131967c3ad51fe4a4e0e29bbb9338",
+    "rust_icu_uenum": "922df640912e383005ecf59ed6e7f7357a3e2bf125b35bc608f9eaae60eff926",
+    "rust_icu_ustring": "78e6ff3c2659716ab72ca66fcbddc9e7982a7de7ec6b691e761b5aa34f53c690"
+  },
+  "configureFlags": [
+    "--enable-static",
+    "--disable-shared",
+    "--with-data-packaging=static",
+    "--disable-tests",
+    "--disable-samples",
+    "--disable-extras",
+    "--disable-icuio"
+  ],
+  "licenses": {
+    "ICU77-LICENSE": "451167c55c0fa447cc2d5632714f5e3c567fe4f1e1badefab2c1333852198aca",
+    "ICU77-license.html": "c62d7697c03979f5056d28b338fafc7a1152820f7b379adf4a9d88cd37160f96",
+    "rust-icu-LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}

@@ -12,7 +12,9 @@ use crate::syntax::SyntaxFile;
 use crate::text::JsString;
 use icu_collator::{Collator, CollatorBorrowed};
 
+mod collation;
 mod text_paths;
+pub use collation::{Collation, CollationError, CollationInput};
 pub(crate) use text_paths::{
     basename_path_text, dirname_path_text, join_path_text, normalize_path_text, relative_path_text,
     relative_path_text_from, resolve_path_text, resolve_path_text_from,

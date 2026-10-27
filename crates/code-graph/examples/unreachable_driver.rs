@@ -202,22 +202,27 @@ struct PureResult<'a> {
     accepted_all: UnreachableLedger,
     gate: demlik_code_graph::unreachable::render::UnreachableRender,
     accepted_text: JsString,
-    unrecorded_identity: Vec<usize>,
-    pruned_identity: Vec<usize>,
-    kept_identity: Vec<usize>,
+    unrecorded_identity: Vec<i64>,
+    pruned_identity: Vec<i64>,
+    kept_identity: Vec<i64>,
 }
 fn pure(
     input: Pure,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let collation = observe!(
+        calls,
+        demlik_code_graph::project::Collation::try_node22_en_us
+    )?;
     let entries: Vec<_> = input.entries.into_iter().map(Entry::owned).collect();
     let findings: Vec<_> = input.findings.into_iter().map(Finding::owned).collect();
     let gated: Vec<_> = input.gated.into_iter().map(Into::into).collect();
     let ledger = observe!(
         calls,
         demlik_code_graph::unreachable::ledger::unreachable_ledger_of,
-        &entries
-    );
+        &entries,
+        &collation
+    )?;
     let keys = findings
         .iter()
         .map(|f| {
@@ -234,26 +239,30 @@ fn pure(
         &ledger,
         &input.scope,
         &findings,
-        &gated
-    );
+        &gated,
+        &collation
+    )?;
     let accepted = observe!(
         calls,
         demlik_code_graph::unreachable::ledger::with_accepted_findings,
         &result.kept,
         &result.unrecorded,
-        &input.reason
-    );
+        &input.reason,
+        &collation
+    )?;
     let accepted_all = observe!(
         calls,
         demlik_code_graph::unreachable::ledger::with_accepted_findings,
         &ledger,
         &findings.iter().collect::<Vec<_>>(),
-        &input.reason
-    );
+        &input.reason,
+        &collation
+    )?;
     let serialized = observe!(
         calls,
         demlik_code_graph::unreachable::ledger::serialize_unreachable_ledger,
-        &ledger
+        &ledger,
+        &collation
     )?;
     let gate = observe!(
         calls,
@@ -273,18 +282,33 @@ fn pure(
     let unrecorded_identity = result
         .unrecorded
         .iter()
-        .map(|f| findings.iter().position(|v| std::ptr::eq(*f, v)).unwrap())
+        .map(|f| {
+            findings
+                .iter()
+                .position(|v| std::ptr::eq(*f, v))
+                .map_or(-1, |index| index as i64)
+        })
         .collect();
     let pruned_identity = result
         .pruned
         .iter()
-        .map(|f| entries.iter().position(|v| Arc::ptr_eq(v, f)).unwrap())
+        .map(|f| {
+            entries
+                .iter()
+                .position(|v| Arc::ptr_eq(v, f))
+                .map_or(-1, |index| index as i64)
+        })
         .collect();
     let kept_identity = result
         .kept
         .entries
         .iter()
-        .map(|f| entries.iter().position(|v| Arc::ptr_eq(v, f)).unwrap())
+        .map(|f| {
+            entries
+                .iter()
+                .position(|v| Arc::ptr_eq(v, f))
+                .map_or(-1, |index| index as i64)
+        })
         .collect();
     Ok(to_raw_value(&PureResult {
         keys,
@@ -366,6 +390,10 @@ fn run(
     binary: &TsgoBinary,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let collation = observe!(
+        calls,
+        demlik_code_graph::project::Collation::try_node22_en_us
+    )?;
     let mut output = RunResult {
         exit: None,
         thrown: None,
@@ -389,7 +417,8 @@ fn run(
                 reason: input.reason.as_ref()
             },
             &input.root,
-            &input.repo_root
+            &input.repo_root,
+            &collation
         )?;
         match prep {
             UnreachablePreparation::Prepared { gate } => gate,
@@ -520,11 +549,20 @@ fn run(
             report: &mut report,
             json: input.json,
             pretty: input.pretty
-        }
+        },
+        &collation
     ) {
         Ok(code) => output.exit = Some(code),
         Err(error) => {
             output.thrown = Some(match error {
+                UnreachableRunError::Collation(cause)
+                | UnreachableRunError::Write(UnreachableWriteError::Collation(cause)) => Failure {
+                    stage: "collation",
+                    name: "Error",
+                    message: cause.to_string().into(),
+                    io_kind: None,
+                    callback_identity: false,
+                },
                 UnreachableRunError::Emit(cause) => Failure {
                     stage: "emit",
                     name: "Error",

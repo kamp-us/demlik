@@ -13,7 +13,9 @@ fn unreachable_ledger_parsing_and_first_wins_keep_raw_identity_and_reason() {
     let UnreachableLedgerRead::Read { ledger } = parse_unreachable_ledger(
         &r#"{"entries":[{"scope":"app","kind":"dead","id":"src/a.ts:\ud800","reason":"kept"}]}"#
             .into(),
-    ) else {
+        &collation(),
+    )
+    .unwrap() else {
         panic!("source-valid ledger refused")
     };
     assert_eq!(ledger.entries[0].finding.id.units().last(), Some(&0xd800));
@@ -30,11 +32,12 @@ fn unreachable_ledger_parsing_and_first_wins_keep_raw_identity_and_reason() {
         },
         reason: "replacement".into(),
     });
-    let merged = unreachable_ledger_of(&[Arc::clone(&first), second]);
+    let merged = unreachable_ledger_of(&[Arc::clone(&first), second], &collation()).unwrap();
     assert_eq!(merged.entries.len(), 1);
     assert!(Arc::ptr_eq(&first, &merged.entries[0]));
     assert_eq!(merged.entries[0].reason, JsString::from("kept"));
-    let UnreachableLedgerRead::Invalid { message, .. } = parse_unreachable_ledger(&"{}".into())
+    let UnreachableLedgerRead::Invalid { message, .. } =
+        parse_unreachable_ledger(&"{}".into(), &collation()).unwrap()
     else {
         panic!("missing required entries accepted")
     };
@@ -72,6 +75,7 @@ fn unreachable_flag_refusal_precedes_any_ledger_path_access() {
         },
         &"/unused".into(),
         &JsString::from_units(vec![0]),
+        &collation(),
     )
     .unwrap();
     let UnreachablePreparation::Refused { message, source } = preparation else {
@@ -188,4 +192,8 @@ fn the_post_hexagon_stage_refuses_the_first_invalid_ledger_before_layer_work() {
     let stderr = String::from_utf8(stderr).unwrap();
     assert!(stderr.starts_with("code-graph: invalid unreachable ledger \""));
     assert!(stderr.ends_with(": not valid JSON; nothing was written.\n"));
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

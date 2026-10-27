@@ -19,7 +19,11 @@ fn main() {
             kind: Kind::Dead,
             id: "x".into(),
         }];
-        held = reconcile_unreachable(&ledger, &scope, &local, &gated);
+        held = reconcile_unreachable(&ledger, &scope, &local, &gated, &collation()).unwrap();
     }
     println!("{} {}", held.unrecorded.len(), findings.len());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

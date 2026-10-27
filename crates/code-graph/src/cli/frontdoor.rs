@@ -39,8 +39,8 @@ use crate::{
     kinds::rules::{NodeKindRules, RuleInputError},
     layers::gate::{LayerGateError, LayerGateResult, LayerGateTextArgs, run_layer_gate_text},
     project::{
-        EdgeScope, ProjectLoadError, find_repo_root_text, load_cheap_project,
-        load_edge_project_text, resolve_path_text_from,
+        Collation, CollationError, EdgeScope, ProjectLoadError, find_repo_root_text,
+        load_cheap_project, load_edge_project_text, resolve_path_text_from,
     },
     render::{analysis::render_unreachable, json::stable_stringify},
     schema::{Graph, Thresholds},
@@ -53,8 +53,8 @@ use crate::{
     },
     text::JsString,
     unreachable::gate::{
-        UnreachableOpts, UnreachableOutput, UnreachablePreparation, UnreachableRunError,
-        prepare_unreachable_gate, run_unreachable_gate,
+        UnreachableOpts, UnreachableOutput, UnreachablePreparation, UnreachablePreparationError,
+        UnreachableRunError, prepare_unreachable_gate_local, run_unreachable_gate,
     },
 };
 use std::{cell::RefCell, error::Error, fs, io, path::Path};
@@ -150,6 +150,7 @@ pub struct PreparedGatesCli {
     pub repo_root: JsString,
     pub unreachable: UnreachablePreparation,
     pub smells: SmellPreparation,
+    unreachable_collation: Option<Collation>,
 }
 #[derive(Debug)]
 pub enum GatePreflightDispatch {
@@ -206,6 +207,7 @@ pub enum EnvKeyDispatch {
 }
 #[derive(Debug)]
 pub enum FrontdoorError {
+    Collation(CollationError),
     Resolve {
         target: JsString,
         source: io::Error,
@@ -272,6 +274,7 @@ impl FrontdoorError {
     }
     pub fn message(&self) -> JsString {
         match self {
+            Self::Collation(error) => error.to_string().into(),
             Self::Resolve { source, .. }
             | Self::Realpath { source, .. }
             | Self::GateScope { source, .. } => source.to_string().into(),
@@ -295,6 +298,7 @@ impl FrontdoorError {
             Self::SmellEmit(error) => error.message(),
             Self::CollapseRender(error) => error.to_string().into(),
             Self::Unreachable(error) => match error {
+                UnreachableRunError::Collation(error) => error.to_string().into(),
                 UnreachableRunError::Write(error) => error.to_string().into(),
                 UnreachableRunError::Render(error) => error.to_string().into(),
                 UnreachableRunError::Emit(error) | UnreachableRunError::Report(error) => {
@@ -316,6 +320,7 @@ impl std::fmt::Display for FrontdoorError {
 impl Error for FrontdoorError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Resolve { source, .. }
             | Self::Realpath { source, .. }
             | Self::GateScope { source, .. } => source,
@@ -336,6 +341,7 @@ impl Error for FrontdoorError {
             Self::SmellEmit(error) => error,
             Self::CollapseRender(error) => error,
             Self::Unreachable(error) => match error {
+                UnreachableRunError::Collation(error) => error,
                 UnreachableRunError::Write(error) => error,
                 UnreachableRunError::Render(error) => error,
                 UnreachableRunError::Emit(error) | UnreachableRunError::Report(error) => error,
@@ -467,7 +473,7 @@ impl PreparedCli {
     ) -> Result<GatePreflightDispatch, FrontdoorError> {
         let repo_root = find_repo_root_text(&self.root_absolute);
         let opts = &self.options;
-        let unreachable = prepare_unreachable_gate(
+        let (unreachable, unreachable_collation) = prepare_unreachable_gate_local(
             UnreachableOpts {
                 unreachable: opts.unreachable() == Some(true),
                 ci: opts.ci() == Some(true),
@@ -478,12 +484,16 @@ impl PreparedCli {
             },
             &self.root_absolute,
             &repo_root,
+            Collation::try_node22_en_us,
         )
-        .map_err(|source| FrontdoorError::GateScope {
-            stage: GatePreparationKind::Unreachable,
-            root: self.root_absolute.clone(),
-            repo_root: repo_root.clone(),
-            source,
+        .map_err(|error| match error {
+            UnreachablePreparationError::Collation(error) => FrontdoorError::Collation(error),
+            UnreachablePreparationError::Scope(source) => FrontdoorError::GateScope {
+                stage: GatePreparationKind::Unreachable,
+                root: self.root_absolute.clone(),
+                repo_root: repo_root.clone(),
+                source,
+            },
         })?;
         if let UnreachablePreparation::Refused { message, source } = unreachable {
             clean_exit(host, &message);
@@ -530,6 +540,7 @@ impl PreparedCli {
                 repo_root,
                 unreachable,
                 smells,
+                unreachable_collation,
             },
         )))
     }
@@ -755,7 +766,7 @@ impl PreparedGatesCli {
 
     /// Run after all early modes; retain ordinary collapse and unfinished higher owners.
     pub fn dispatch_unreachable_blocking(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<UnreachableDispatch, FrontdoorError> {
@@ -786,6 +797,14 @@ impl PreparedGatesCli {
             }
         };
         if let Some(gate) = prepared_gate {
+            // Public prepared facts may be replaced by a native caller. Reuse the
+            // admitted handle, or prepare a local handle for such a supplied gate.
+            let collation = self
+                .unreachable_collation
+                .take()
+                .map(Ok)
+                .unwrap_or_else(Collation::try_node22_en_us)
+                .map_err(FrontdoorError::Collation)?;
             let code = {
                 let bridge = RefCell::new(&mut *host);
                 let mut emit = |payload: &JsString| {
@@ -804,6 +823,7 @@ impl PreparedGatesCli {
                         json: options.json() == Some(true),
                         pretty: options.pretty() == Some(true),
                     },
+                    &collation,
                 )
                 .map_err(FrontdoorError::Unreachable)?
             };

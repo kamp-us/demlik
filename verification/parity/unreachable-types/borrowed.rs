@@ -45,7 +45,7 @@ fn main() {
     let ledger = UnreachableLedger {
         entries: vec![Arc::clone(&old)],
     };
-    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated);
+    let result = reconcile_unreachable(&ledger, &scope, &findings, &gated, &collation()).unwrap();
     assert!(std::ptr::eq(result.unrecorded[0], &findings[0]));
     assert!(Arc::ptr_eq(&old, &result.pruned[0]));
     assert!(std::ptr::eq(result.scope, &scope));
@@ -92,7 +92,7 @@ fn main() {
             json: false,
             pretty: false,
         },
-    ) {
+     &collation()) {
         Err(UnreachableRunError::Emit(actual)) => {
             assert!(Rc::ptr_eq(&actual, &same));
             assert_eq!(actual.name, name);
@@ -105,4 +105,8 @@ fn main() {
     println!(
         "unreachable: inferred borrowed findings/gated/scope, retained Arc and original opaque callback cause passed"
     );
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

@@ -19,9 +19,9 @@ execFileSync(
   { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
 );
 const report = JSON.parse(fs.readFileSync(rawFile, "utf8"));
-assert.equal(report.passed, 78);
-assert.equal(report.unqualifiedPairs, 72);
-assert.equal(report.qualifiedPairs, 6);
+assert.equal(report.passed, 81);
+assert.equal(report.unqualifiedPairs, 78);
+assert.equal(report.qualifiedPairs, 3);
 assert.equal(report.rejectedInvalidInputs, 4);
 assert.deepEqual(report.failures, []);
 report.attempted = 0;
@@ -42,5 +42,5 @@ for (const row of report.cases) {
   evidence[row.id] = row.calls;
   report.attempted++;
 }
-assert.equal(report.attempted, 78);
+assert.equal(report.attempted, 81);
 fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);

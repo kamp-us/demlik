@@ -108,9 +108,9 @@ const pureResult = z
     acceptedAll: z.object({ entries: z.array(entry) }).strict(),
     gate: z.object({ stdout: z.string(), exitCode: z.number().int() }).strict(),
     acceptedText: z.string(),
-    unrecordedIdentity: z.array(z.number().int().nonnegative()),
-    prunedIdentity: z.array(z.number().int().nonnegative()),
-    keptIdentity: z.array(z.number().int().nonnegative()),
+    unrecordedIdentity: z.array(z.number().int().min(-1)),
+    prunedIdentity: z.array(z.number().int().min(-1)),
+    keptIdentity: z.array(z.number().int().min(-1)),
   })
   .strict();
 const failure = z
@@ -378,31 +378,7 @@ function stamp(file: string) {
     return null;
   }
 }
-function mixedLoneProjection(value: unknown) {
-  const result = pureResult.parse(structuredClone(value));
-  const order = (a: z.infer<typeof entry>, b: z.infer<typeof entry>) => {
-    const x = JSON.stringify(a),
-      y = JSON.stringify(b);
-    return x < y ? -1 : x > y ? 1 : 0;
-  };
-  for (const ledger of [
-    result.ledger,
-    result.accepted,
-    result.acceptedAll,
-    result.result.kept,
-  ])
-    ledger.entries.sort(order);
-  const serialized = z
-    .object({ entries: z.array(entry) })
-    .strict()
-    .parse(JSON.parse(result.serialized));
-  serialized.entries.sort(order);
-  result.serialized = JSON.stringify(serialized);
-  result.keptIdentity.sort((a, b) => a - b);
-  return result;
-}
 function compare(request: Input, fixture?: string, ioQualified = false) {
-  const localeQualified = request.id.startsWith("pure.locale.");
   const before = fixture ? files(fixture) : null;
   const sourceStamp =
     request.operation === "run" ? stamp(request.input.file) : null;
@@ -448,8 +424,6 @@ function compare(request: Input, fixture?: string, ioQualified = false) {
         av.thrown.ioKind = ev.thrown.ioKind = null;
       }
       assert.deepEqual(av, ev);
-    } else if (localeQualified) {
-      assert.deepEqual(mixedLoneProjection(a), mixedLoneProjection(e));
     } else assert.deepEqual(a, e);
     if (fixture) assert.deepEqual(files(fixture), after);
     if (request.operation === "run")
@@ -466,12 +440,10 @@ function compare(request: Input, fixture?: string, ioQualified = false) {
     id: request.id,
     operation: request.operation,
     passed,
-    qualified: ioQualified || localeQualified,
+    qualified: ioQualified,
     qualification: ioQualified
       ? "Original Source/OS diagnostic and NUL argument class retained; operation/effects compared"
-      : localeQualified
-        ? "OPEN existing locale_compare_units lone-surrogate vs U+E000 order; original rows retained, known ledger-order fields compared as permutations, all other fields exact"
-        : null,
+      : null,
     input: request.input,
     expected,
     actual,
@@ -576,6 +548,7 @@ try {
     ],
   });
   p("multiple-prunes", { entries: [e("app", "z"), e("app", "a")] });
+  p("numeric", { entries: [e("app", "2"), e("app", "10")] });
   p("locale", {
     scope: "é",
     entries: [
