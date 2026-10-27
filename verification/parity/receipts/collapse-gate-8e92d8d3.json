@@ -1,0 +1,447 @@
+{
+  "status": "Bounded early collapse CI/write component verified and frozen for independent review; not combined acceptance",
+  "sourceBase": "6f3c9b0eceb83e195cfb4f338b08e9997580ee20",
+  "sourceCommits": [
+    "78e72e22e432295172ddb6a3496600b11b59bbf8",
+    "3d933392f8bd53802bb7c3d81f0053a9fdf092ac",
+    "8e92d8d39c9001f3e660171183593cdc45a43dda"
+  ],
+  "sourceCommit": "8e92d8d39c9001f3e660171183593cdc45a43dda",
+  "branch": "can/rust-collapse-gate-01a16c9d",
+  "scope": "Complete early collapse&&(ci||writeCeilings) continuation after comments, canonical renderer/count/parser/loader/assembly/CLI IO owners. No plain collapse, cost, rank, similarity or standalone bootstrap.",
+  "proposal": {
+    "path": "/private/tmp/demlik-collapse-gate-proposal-01a16c9d/proposal.md",
+    "sha256": "a4ab6ff4d39640f9cc2596d7140bac2069350bf90f7fdf7d6d4aebea8cd19055"
+  },
+  "productionOwners": [
+    "crates/code-graph/src/collapse/ceilings.rs",
+    "crates/code-graph/src/collapse/gate.rs",
+    "crates/code-graph/src/collapse.rs",
+    "crates/code-graph/src/cli/frontdoor.rs",
+    "crates/code-graph/src/ratchet/scope_count.rs"
+  ],
+  "sourceManifest": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/source-manifest-final.json",
+    "sha256": "dd2aa71ba5a2eb201ca519c6b8c08b016741d08de5f9deacd8e91f8c088f297a",
+    "bytes": 3467
+  },
+  "sourceArchive": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/source-8e92d8d3.tar.gz",
+    "sha256": "40e9461986796d751bb883a206033b0e1b9bc3dfa6812d6e291da3a5112b798b",
+    "members": 2118,
+    "coldArchiveBuild": false
+  },
+  "evidenceManifest": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence-manifest-final.json",
+    "sha256": "56c057381386d2bc8cd528598bb56128dac40442e3afd4f10ab9aecc6cadeb61",
+    "bytes": 136190
+  },
+  "selectedArtifactManifest": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/selected-artifacts.json",
+    "sha256": "1f968f6e613a630a4fc87da55e5d9ac46417076e0c6d797303fdac3a9f4ca523",
+    "bytes": 138114
+  },
+  "selectedArtifacts": 68,
+  "reference": {
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "sourceHashes": {
+      "index.ts": "a57a3ed8c585cafaf0c5667dad942eafd20269ca56f5ed2f305fb6bd593692b1",
+      "cli.ts": "128a353027f720b3729b0d1c4c5685088cff042ddaf1a11f923cf0b80d55c2cf",
+      "config.ts": "d17dfac957d9002dac1304ed1cb06f9bdd4e139dcd988b3ceafbcec2b398a836",
+      "collapse/gate.ts": "1e8c1c76c8f67053bcd985fa6aeb7024fd5f7542441b37ccf151e2aacc45fd0a",
+      "collapse/ceilings.ts": "2ee3382f7871940357e68babb7dcad30b5cda10e09b8a42ae4b71aa19a19d42a",
+      "collapse/candidates.ts": "9d49d537549ffcdf37dc919ada2671e79cfed10c4a1cce0c65983863a3f9ed70",
+      "collapse/partial.ts": "8dcee09a17353b49cb14ff885e3ca67cb31571ffc345807e10f7b5f7ca302f07",
+      "collapse/settings.ts": "a5d4c1b1df06f9f6469fcb3200361c163e89f7ea200bd18d7f2bda5edb5679bd",
+      "ratchet/scope-count.ts": "8c2b256c1ad7b0eddd34bd11efcfe495cca0a7d157661c0e5d9f5ab8860773ac",
+      "extract/assemble.ts": "b30d35677ccd714af2bb00c9b94374a0d7d621f2be5957f0e08a54cad829b644",
+      "extract/project.ts": "08aa30497ce1dde9d1d8587fc5f17bfd77c47de7206222d12285db5bad5cf69a"
+    },
+    "compilerSha256": "63d89ecb27497f264b4c3ecb0e4f6d2cf09896803a81fff027ecfb336f8974e2"
+  },
+  "all1043TrackedPackageFilesUnchanged": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/frozen-packages-integrity.json",
+    "sha256": "30c479d9a6316d4c422e9586ab477fd5eab706df34e2716abbbcd4234075387a",
+    "bytes": 192204
+  },
+  "frozenTsRef": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "frozenTsDiffEmpty": true,
+  "shared": {
+    "report": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/terminal-baseline.json",
+      "sha256": "2be3e835c117607b6c8ba2d08c1f3bda25c86daa80e2aa5c21fc5a41339fe947",
+      "bytes": 1922605
+    },
+    "passed": 69,
+    "strict": 48,
+    "qualified": 21,
+    "pairedExecutions": 75,
+    "protocolRefusals": 5,
+    "responseGuards": 4,
+    "uniqueCaseIds": 69,
+    "protocolRows": 5,
+    "reportRows": 74
+  },
+  "realGitWorkflow": {
+    "report": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/real-git-workflow.json",
+      "sha256": "067a16ab6608b68ba7c6135c5349ee684e3e49f8e3818c48028305d3126e40b6",
+      "bytes": 690527
+    },
+    "additionalStrictIntegrationExecutions": 7,
+    "notAddedToShared68OrMappings": true,
+    "originalGitMetadataPreserved": true
+  },
+  "native": {
+    "passed": 220,
+    "testDocGroups": 63,
+    "newPublicTests": 5,
+    "cargoJson": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/native-full.cargo.jsonl",
+      "sha256": "7afa4b6705185ac1860bf8c667b961fd40e3c719d44bb805e42f6ef37214f150",
+      "bytes": 296730
+    },
+    "stderr": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/native-full.cargo.stderr",
+      "sha256": "78f8a434f3b6016945943f43ee40dcac99397acb46e4231b6e36e497aa7653ed",
+      "bytes": 5343
+    },
+    "borrowedRcPositive": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/public-final.json",
+      "sha256": "136840d81c87dc55b774d206c83ac8fac27d8810b2ad292fba24cdd6929c4d87",
+      "bytes": 2108
+    }
+  },
+  "static": {
+    "allGraphTargetsClippyWarningsDenied": true,
+    "clippyCargoJson": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/clippy.cargo.jsonl",
+      "sha256": "53714432d0625aaaa8b8614d1a33983625f26cbd79afd587ea0fb8addf1fc58b",
+      "bytes": 250393
+    },
+    "clippyStderr": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/clippy.cargo.stderr",
+      "sha256": "5ed326d225d5d14b0d8243fce46daffc15912d0498ebe1493ffa55d9e82ee64b",
+      "bytes": 4680
+    },
+    "fmtCheckExit": 0,
+    "biomeCheckExit": 0,
+    "scopedSourceTscExit": 0,
+    "productionRustBytesUnchangedAfterNativeChecks": true,
+    "noBroadTeaTscClaim": true,
+    "finalVerifierBiomeExit": 0
+  },
+  "affectedLegacyShared": {
+    "old-scope-count": {
+      "passed": 330,
+      "attempted": 330,
+      "rejectedInvalidInputs": 11
+    },
+    "old-partial": {
+      "passed": 71,
+      "attempted": 71,
+      "unqualifiedPairs": 71,
+      "qualifiedPairs": 0,
+      "rejectedInvalidInputs": 7,
+      "responseGuards": 3
+    },
+    "old-text": {
+      "passed": 47,
+      "attempted": 47,
+      "unqualifiedPairs": 45,
+      "qualifiedPairs": 2,
+      "rejectedInvalidInputs": 6,
+      "responseGuards": 3
+    },
+    "old-comments": {
+      "passed": 52,
+      "attempted": 52,
+      "unqualifiedPairs": 35,
+      "qualifiedPairs": 17,
+      "rejectedInvalidInputs": 7,
+      "responseGuards": 3
+    }
+  },
+  "faults": {
+    "report": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/terminal-faults.json",
+      "sha256": "6382f58abc01bfdf27fb83e9ff69d16f9468a05b9b92755f1f9054fc7f30cf0e",
+      "bytes": 149658
+    },
+    "newCompiledSemantic": 21,
+    "affectedLegacyCompiledSemantic": 2,
+    "total": 23,
+    "allBuildExit0": true,
+    "actualLibrariesAndDriversFreshFalse": true,
+    "namedWitnessMismatchRequired": true,
+    "protocolBuildHarnessFailuresReceiveNoCredit": true,
+    "faultWorktreeRemoved": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/terminal-faults/collapse-gate-faults-worktree.json",
+      "sha256": "3d2ce6616b44fe797c3c2f001efcd68324d25b2a56cc3ba5a1a425b4377e5ffe",
+      "bytes": 425
+    }
+  },
+  "typeInterfaceRed": {
+    "original": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/public-red.json",
+      "sha256": "20b51b8ef1f17ecaa04bd39a49132c9a212f6c2477fadef7f256e39f667b788f",
+      "bytes": 1763
+    },
+    "originalConsumedRlibBytesUnavailable": true,
+    "newExactBaseReproduction": {
+      "base": "6f3c9b0eceb83e195cfb4f338b08e9997580ee20",
+      "inputFiles": 187,
+      "inputArchive": {
+        "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/terminal-faults/interface-replay-inputs.tar.gz",
+        "sha256": "087800b841a4e0ae3ec9681ca69eccfb6bb034c758ccefc7e9d0d6ff8bced442",
+        "format": "Git archive of complete exact-base CG src and Cargo inputs"
+      },
+      "depInfo": {
+        "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/terminal-faults/interface-replay.d",
+        "sha256": "e81b24254fd7fbf0661857243defe946082aa84ba8fbc031559f620a029ebbe4",
+        "selectedFromArtifact": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/debug/libdemlik_code_graph.rlib"
+      },
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/crates/code-graph#demlik-code-graph@0.1.0",
+        "manifest_path": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/crates/code-graph/Cargo.toml",
+        "target": {
+          "kind": ["lib"],
+          "crate_types": ["lib"],
+          "name": "demlik_code_graph",
+          "src_path": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/crates/code-graph/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [],
+        "filenames": [
+          "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/debug/libdemlik_code_graph.rlib",
+          "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rmeta"
+        ],
+        "executable": null,
+        "fresh": false
+      },
+      "retainedLibrary": {
+        "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/terminal-faults/interface-replay-library.gz",
+        "sha256": "6b649d0f1fc0a1072fbd95050ee955c969e3f04c1581ee38c37a17a9f71acaf3",
+        "bytes": 45626856,
+        "gzipSha256": "7757a3183b82f0fbd75d611cfe1fbb1e82e0e2f52f2a46a6878f284faa54978b",
+        "gzipBytes": 7829354
+      },
+      "producer": {
+        "cwd": "/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo",
+        "cargo": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+        "rustc": "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/rustc",
+        "rustupToolchain": "stable",
+        "defaultTarget": "/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target"
+      },
+      "command": [
+        "--edition=2024",
+        "-Cdebuginfo=0",
+        "--error-format=json",
+        "/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/verification/parity/fixtures/collapse-gate-borrowed.rs",
+        "--extern",
+        "demlik_code_graph=/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/debug/libdemlik_code_graph.rlib",
+        "-L",
+        "dependency=/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/debug/deps",
+        "-o",
+        "/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-collapse-gate-faults-1YwG0u/repo/target/interface-red"
+      ],
+      "errorCodes": ["E0599"],
+      "isRecoveryOfOriginalBytes": false,
+      "semanticFaultCredit": 0
+    }
+  },
+  "retainedFailedFaultAttempt": {
+    "directory": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/mutations",
+    "reason": "Proof collector dropped lib from root Cargo dep-info filename after successful compile0/soleE0599. No semantic controls ran; tree removed.",
+    "diagnostic": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/mutations.stderr",
+      "sha256": "a67bffec60d15d15109be2a022b59e45e592c25481155db5d5691f93f6e0ab16",
+      "bytes": 1028
+    },
+    "removal": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/mutations/collapse-gate-faults-worktree.json",
+      "sha256": "24ada995fb53528efdc83d56fdda708e9dafd4ff47853d07793682e13626db2b",
+      "bytes": 425
+    },
+    "semanticCredit": 0
+  },
+  "recoveryNotes": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/recovery-notes-final.json",
+    "sha256": "56275621776e152830ffc1b21c69d1d73856c299d9add4b6ee6c82c861a9b860",
+    "bytes": 9204
+  },
+  "mappingProposal": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/mapping-proposal-final.json",
+    "sha256": "8b57eafaf657a2b65af7a00a2edb93c524e5067bbf320883a895d5b249231b63",
+    "bytes": 4947
+  },
+  "exactOwnedSourceIds": [
+    "@demlik/code-graph:cli:option:--collapse",
+    "@demlik/code-graph:cli:option:--collapse-config <file>"
+  ],
+  "all53CliGapsRemainOpen": true,
+  "qualificationCases": [
+    {
+      "id": "ci-record-constructor-null",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "write-out-missing",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "write-out-directory",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "write-out-nul",
+      "qualifications": [
+        "native-backend-exception-output",
+        "javascript-argv-UTF16"
+      ]
+    },
+    {
+      "id": "write-out-readonly",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "write-policy-readonly",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "ci-out-missing-initial",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "missing-tsconfig",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "ci-first-sorted-load-failure",
+      "qualifications": ["native-backend-exception-output"]
+    },
+    {
+      "id": "raw-policy-refusal",
+      "qualifications": ["javascript-argv-UTF16"]
+    },
+    {
+      "id": "raw-loader-error",
+      "qualifications": [
+        "native-backend-exception-output",
+        "javascript-argv-UTF16"
+      ]
+    },
+    {
+      "id": "raw-record",
+      "qualifications": [
+        "native-backend-exception-output",
+        "javascript-argv-UTF16"
+      ]
+    },
+    {
+      "id": "second-root-record",
+      "qualifications": ["controlled-second-root-lookup"]
+    },
+    {
+      "id": "warning-before-later-failure",
+      "qualifications": [
+        "native-backend-exception-output",
+        "controlled-loaded-source-drift"
+      ]
+    },
+    {
+      "id": "write-stdout-bad",
+      "qualifications": ["pending-stdio-runtime-notification"]
+    },
+    {
+      "id": "write-banner-bad",
+      "qualifications": ["pending-stdio-runtime-notification"]
+    },
+    {
+      "id": "ci-stderr-bad",
+      "qualifications": ["pending-stdio-runtime-notification"]
+    },
+    {
+      "id": "warning-then-stdout-bad",
+      "qualifications": ["pending-stdio-runtime-notification"]
+    },
+    {
+      "id": "warning-and-banner-stderr-bad",
+      "qualifications": ["pending-stdio-runtime-notification"]
+    },
+    {
+      "id": "bare-collapse-continues",
+      "qualifications": ["prepared-continuation-before-unported-later-mode"]
+    },
+    {
+      "id": "ci-without-collapse-continues",
+      "qualifications": ["prepared-continuation-before-unported-later-mode"]
+    }
+  ],
+  "qualifications": [
+    "Native prepared continuation is the owned API; standalone argv/bootstrap and later plain collapse execution remain outside this component.",
+    "Backend stacks/OS diagnostic text, runtime stdio failure notification, JS argv UTF16 and controlled drift/root lookup retain actual Source/native data and stay outside strict nativeEvidence.",
+    "raw-record reaches an actual Go rejection in this corpus; it does not prove a successful raw-UTF16 record acknowledgement.",
+    "Inherited empty Graph.root UTF16 owner repair is separate; gate returns count/terminal facts, not a Graph.",
+    "Historical __proto__ record behavior is intentionally retained: no own scope; [object Object] acknowledgement.",
+    "Earlier initial red rlib bytes are unavailable; the final retained exact-base type proof is a new producer context."
+  ],
+  "sourceOrMainOrCentralFilesChanged": {
+    "frozenSource": false,
+    "Main": false,
+    "globalRunner": false,
+    "contracts": false,
+    "dependencies": false
+  },
+  "buildPolicy": {
+    "registeredWorktrees": true,
+    "defaultTargetsOnly": true,
+    "targetAliasesUnset": [
+      "CARGO_TARGET_DIR",
+      "CARGO_BUILD_TARGET_DIR",
+      "CARGO_BUILD_BUILD_DIR",
+      "DEMLIK_MUTATION_TARGET_DIR"
+    ],
+    "targetOrCacheCopies": false,
+    "offline": true,
+    "debug": 0,
+    "incremental": false,
+    "jobs": 1,
+    "platform": "Darwin arm64",
+    "baselineColdBuildThenRetainedChecks": true,
+    "noRedundantArchiveBuild": true
+  },
+  "proofDirectory": "/private/tmp/demlik-collapse-gate-proof-01a16c9d",
+  "selfAudit": {
+    "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/self-audit-final.json",
+    "sha256": "95a8d64ea481a997c5de92cc4379459249340f2d0110439d84641e81328df11e",
+    "bytes": 543
+  },
+  "createdAt": "2026-10-27T10:37:34.068300+00:00",
+  "priorSuccessfulProof": {
+    "shared68": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence/baseline.json",
+      "sha256": "4163aec3bbce77ff8be7e7d9c02c4c988dd47008c0ef61a1074523291873817e",
+      "bytes": 1904143
+    },
+    "compiled22": {
+      "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/faults.json",
+      "sha256": "fa90fc28c22d62902d48e23fae2ce10372ed640717c93ab2371a76b7f098415d",
+      "bytes": 143880
+    },
+    "sourceCommit": "3d933392f8bd53802bb7c3d81f0053a9fdf092ac",
+    "status": "Historical; final proof uses69and23 with explicit terminal outcome guard."
+  }
+}
