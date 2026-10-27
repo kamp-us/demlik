@@ -27,6 +27,12 @@ report.qualifiedNativeEvidence = {};
 for (const row of report.cases) {
   row.qualifications = row.qualification ? [row.qualification] : [];
   assert.ok(typeof row.nativeCall === "string" && row.nativeCall.length);
+  if (row.native.thrown?.stage === "load")
+    assert.equal(
+      row.nativeCall,
+      "demlik_code_graph::project::load_edge_project_text",
+      "load refusal must not claim an assembly call",
+    );
   row.nativeTrace = { observedCalls: [row.nativeCall] };
   const evidence = row.qualifications.length
     ? report.qualifiedNativeEvidence

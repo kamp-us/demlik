@@ -317,7 +317,7 @@ fn observe(request: Request) -> Result<Observation, String> {
         thrown: None,
         warnings: Vec::new(),
         order: Vec::new(),
-        call,
+        call: "demlik_code_graph::project::load_edge_project_text",
     };
     let loaded = match load_edge_project_text(&request.root, EdgeScope::Package, &repo, None) {
         Ok(loaded) => loaded,
@@ -345,6 +345,7 @@ fn observe(request: Request) -> Result<Observation, String> {
         kind_rules: &rules,
         repo_root: &repo,
     };
+    out.call = call;
     let graph = match request.mode {
         Mode::Callback => {
             let mut warning = |line: &JsString| {
