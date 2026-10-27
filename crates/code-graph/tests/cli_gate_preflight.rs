@@ -52,13 +52,18 @@ fn smell_schema_keeps_negative_zero_and_escaping_error_input_conversion() {
     use demlik_code_graph::smells::ledger::{SmellLedgerRead, parse_smell_ledger};
     let SmellLedgerRead::Read { ledger } = parse_smell_ledger(
         &r#"{"entries":[{"rule":"big-file","target":"a","value":-0,"reason":"kept"}]}"#.into(),
+        &collation(),
     )
     .unwrap() else {
         panic!("source-valid negative zero refused")
     };
     assert!(ledger.entries[0].finding.value.is_sign_negative());
     assert!(ledger.gated.is_empty());
-    let error = parse_smell_ledger(&r#"{"gated":["bad",{"toString":null}]}"#.into()).unwrap_err();
+    let error = parse_smell_ledger(
+        &r#"{"gated":["bad",{"toString":null}]}"#.into(),
+        &collation(),
+    )
+    .unwrap_err();
     assert_eq!(error.name(), "TypeError");
     assert_eq!(error.message(), "Cannot convert object to primitive value");
 }
@@ -103,6 +108,7 @@ fn smell_mode_conflict_is_reported_before_ledger_access() {
         },
         &"/unused".into(),
         &JsString::from_units(vec![0]),
+        &collation(),
     )
     .unwrap();
     let SmellPreparation::Refused { message, source } = result else {

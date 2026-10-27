@@ -96,7 +96,14 @@ fn reconciliation_keeps_original_borrows_and_only_remints_measured_matches() {
         finding(Kind::HighComplexity, "app/x", 3.0),
         finding(Kind::HighComplexity, "foreign/new", 2.0),
     ];
-    let result = reconcile_smells(&ledger, &scope, &findings, &[Kind::HighComplexity]);
+    let result = reconcile_smells(
+        &ledger,
+        &scope,
+        &findings,
+        &[Kind::HighComplexity],
+        &collation(),
+    )
+    .unwrap();
     assert!(std::ptr::eq(result.gated, ledger.gated.as_slice()));
     assert!(std::ptr::eq(result.scope, &scope));
     assert!(std::ptr::eq(result.unrecorded[0], &findings[1]));
@@ -110,7 +117,7 @@ fn reconciliation_keeps_original_borrows_and_only_remints_measured_matches() {
     );
     assert!(result.kept.entries.iter().any(|e| Arc::ptr_eq(e, &foreign)));
     assert!(!result.kept.entries.iter().any(|e| Arc::ptr_eq(e, &same)));
-    let accepted = with_accepted_smells(&result, &"new".into());
+    let accepted = with_accepted_smells(&result, &"new".into(), &collation()).unwrap();
     assert!(accepted.entries.iter().any(|e| Arc::ptr_eq(e, &unmeasured)));
 }
 #[test]
@@ -125,7 +132,14 @@ fn last_finding_keeps_first_map_position_and_accept_retains_first_reason() {
         finding(Kind::HighComplexity, "app/a", 3.0),
         finding(Kind::HighComplexity, "app/z", 7.0),
     ];
-    let result = reconcile_smells(&ledger, &scope, &findings, &[Kind::HighComplexity]);
+    let result = reconcile_smells(
+        &ledger,
+        &scope,
+        &findings,
+        &[Kind::HighComplexity],
+        &collation(),
+    )
+    .unwrap();
     assert!(std::ptr::eq(result.unrecorded[0], &findings[2]));
     assert!(std::ptr::eq(result.unrecorded[1], &findings[1]));
     let first = entry(Kind::HighComplexity, "other/x", 2.0, "first");
@@ -136,8 +150,9 @@ fn last_finding_keeps_first_map_position_and_accept_retains_first_reason() {
             entry(Kind::HighComplexity, "other/x", 9.0, "second"),
         ],
     };
-    let result = reconcile_smells(&raw, &scope, &[], &[Kind::HighComplexity]);
-    let accepted = with_accepted_smells(&result, &"replacement".into());
+    let result =
+        reconcile_smells(&raw, &scope, &[], &[Kind::HighComplexity], &collation()).unwrap();
+    let accepted = with_accepted_smells(&result, &"replacement".into(), &collation()).unwrap();
     assert_eq!(accepted.entries.len(), 1);
     assert!(Arc::ptr_eq(&accepted.entries[0], &first));
 }
@@ -174,7 +189,14 @@ fn arithmetic_retains_nan_infinities_and_both_negative_zero_positions() {
         };
         let scope = JsString::from("app");
         let findings = [finding(Kind::HighComplexity, "app/x", measured)];
-        let result = reconcile_smells(&ledger, &scope, &findings, &[Kind::HighComplexity]);
+        let result = reconcile_smells(
+            &ledger,
+            &scope,
+            &findings,
+            &[Kind::HighComplexity],
+            &collation(),
+        )
+        .unwrap();
         assert_eq!(
             result.kept.entries[0].finding.value.to_bits(),
             expected.to_bits()
@@ -186,10 +208,17 @@ fn arithmetic_retains_nan_infinities_and_both_negative_zero_positions() {
     };
     let scope = JsString::from("app");
     let findings = [finding(Kind::HighComplexity, "app/x", 3.0)];
-    let result = reconcile_smells(&ledger, &scope, &findings, &[Kind::HighComplexity]);
+    let result = reconcile_smells(
+        &ledger,
+        &scope,
+        &findings,
+        &[Kind::HighComplexity],
+        &collation(),
+    )
+    .unwrap();
     assert!(result.kept.entries[0].finding.value.is_nan());
     assert!(
-        serialize_smell_ledger(&result.kept)
+        serialize_smell_ledger(&result.kept, &collation())
             .unwrap()
             .to_lossy()
             .contains("\"value\": null")
@@ -217,7 +246,7 @@ fn prepared_gate_writes_before_original_borrowed_output_failure() {
             )],
         },
     };
-    let rendered = run_smell_ledger_gate(&gate, &graph, false, false).unwrap();
+    let rendered = run_smell_ledger_gate(&gate, &graph, false, false, &collation()).unwrap();
     let emit = |_: &JsString| {
         assert!(
             fs::read_to_string(gate.file.to_lossy())
@@ -259,7 +288,7 @@ fn repeat_preserves_noncanonical_bytes_and_readonly_mode() {
         },
     };
     assert_eq!(
-        run_smell_ledger_gate(&gate, &graph, false, false)
+        run_smell_ledger_gate(&gate, &graph, false, false, &collation())
             .unwrap()
             .exit_code,
         0
@@ -309,7 +338,7 @@ fn complete_caller_uses_existing_output_and_exit_owners_with_borrowed_writers() 
     };
     let mut stderr = vec![];
     let mut io = CliIo::new(&mut stdout, &mut stderr, None);
-    let rendered = run_smell_ledger_gate(&gate, &graph, false, false).unwrap();
+    let rendered = run_smell_ledger_gate(&gate, &graph, false, false, &collation()).unwrap();
     output_to(None).emit(&mut io, &rendered.stdout).unwrap();
     exit_with(&mut io, f64::from(rendered.exit_code)).unwrap();
     assert_eq!(io.normal_exit_code(), 1);
@@ -318,4 +347,8 @@ fn complete_caller_uses_existing_output_and_exit_owners_with_borrowed_writers() 
     assert_eq!(stdout.bytes, rendered.stdout.to_lossy().as_bytes());
     assert!(stderr.is_empty());
     assert!(!f.0.join("ledger.json").exists());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

@@ -1,7 +1,7 @@
 use super::rules::{MeasuredBy, measured_by};
 use crate::{
     config::issue_location,
-    project::{join_path_text, locale_compare, locale_compare_units},
+    project::{Collation, CollationError, CollationInput, join_path_text},
     schema::{Graph, Provenance, Smell, SmellKind, SmellTarget},
     text::{JsObject, JsString, JsValue, object_keys},
     validation::{InputIssue, NumberCheck, PathSegment, checked_number, nonempty_string},
@@ -66,30 +66,54 @@ pub fn smell_key(finding: &SmellFinding) -> String {
     serde_json::to_string(&(finding.rule, &finding.target))
         .expect("smell identities contain encodable strings")
 }
-fn compare_findings(a: &SmellFinding, b: &SmellFinding) -> std::cmp::Ordering {
-    locale_compare(a.rule.as_str(), b.rule.as_str())
-        .then_with(|| locale_compare_units(a.target.units(), b.target.units()))
+struct FindingInput {
+    rule: CollationInput,
+    target: CollationInput,
 }
-pub fn smell_ledger_of(gated: &[SmellKind], entries: &[Arc<SmellLedgerEntry>]) -> SmellLedger {
+impl FindingInput {
+    fn new(finding: &SmellFinding) -> Result<Self, CollationError> {
+        Ok(Self {
+            rule: CollationInput::from_text(finding.rule.as_str())?,
+            target: CollationInput::from_utf16(finding.target.units())?,
+        })
+    }
+    fn compare(&self, other: &Self, collation: &Collation) -> std::cmp::Ordering {
+        collation
+            .compare(&self.rule, &other.rule)
+            .then_with(|| collation.compare(&self.target, &other.target))
+    }
+}
+pub fn smell_ledger_of(
+    gated: &[SmellKind],
+    entries: &[Arc<SmellLedgerEntry>],
+    collation: &Collation,
+) -> Result<SmellLedger, CollationError> {
     let mut unique = Vec::new();
     for kind in gated {
         if !unique.contains(kind) {
             unique.push(*kind);
         }
     }
-    unique.sort_by(|a, b| locale_compare(a.as_str(), b.as_str()));
+    let mut unique = unique
+        .into_iter()
+        .map(|kind| CollationInput::from_text(kind.as_str()).map(|input| (kind, input)))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut by_key = IndexMap::new();
     for entry in entries {
         by_key
             .entry(smell_key(&entry.finding))
             .or_insert_with(|| Arc::clone(entry));
     }
-    let mut entries: Vec<_> = by_key.into_values().collect();
-    entries.sort_by(|a, b| compare_findings(&a.finding, &b.finding));
-    SmellLedger {
-        gated: unique,
-        entries,
-    }
+    let mut entries = by_key
+        .into_values()
+        .map(|entry| FindingInput::new(&entry.finding).map(|input| (entry, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    unique.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    entries.sort_by(|a, b| a.1.compare(&b.1, collation));
+    Ok(SmellLedger {
+        gated: unique.into_iter().map(|(kind, _)| kind).collect(),
+        entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+    })
 }
 pub fn needs_edges(gated: &[SmellKind]) -> bool {
     gated
@@ -349,9 +373,11 @@ fn parse_value(
             )));
         }
     }
-    Ok(Ok(smell_ledger_of(&gated, &entries)))
+    Ok(Ok(SmellLedger { gated, entries }))
 }
-pub fn parse_smell_ledger(text: &JsString) -> Result<SmellLedgerRead, RuleNameConversionError> {
+pub(super) fn parse_smell_ledger_unordered(
+    text: &JsString,
+) -> Result<SmellLedgerRead, RuleNameConversionError> {
     let Ok(value) = JsValue::parse_js(text) else {
         return Ok(SmellLedgerRead::Invalid {
             message: "not valid JSON".into(),
@@ -371,9 +397,13 @@ pub fn parse_smell_ledger(text: &JsString) -> Result<SmellLedgerRead, RuleNameCo
         }
     })
 }
-pub fn read_smell_ledger(file: &JsString) -> Result<SmellLedgerRead, RuleNameConversionError> {
+pub(super) fn read_smell_ledger_unordered(
+    file: &JsString,
+) -> Result<SmellLedgerRead, RuleNameConversionError> {
     match fs::read(file.to_lossy()) {
-        Ok(bytes) => parse_smell_ledger(&JsString::from(String::from_utf8_lossy(&bytes).as_ref())),
+        Ok(bytes) => {
+            parse_smell_ledger_unordered(&JsString::from(String::from_utf8_lossy(&bytes).as_ref()))
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(SmellLedgerRead::Absent),
         Err(source) => Ok(SmellLedgerRead::Invalid {
             message: "unreadable".into(),
@@ -382,29 +412,100 @@ pub fn read_smell_ledger(file: &JsString) -> Result<SmellLedgerRead, RuleNameCon
     }
 }
 
-pub fn serialize_smell_ledger(ledger: &SmellLedger) -> Result<JsString, serde_json::Error> {
-    let mut text = crate::render::json::stable_stringify(
-        &smell_ledger_of(&ledger.gated, &ledger.entries),
-        true,
-    )?;
+#[derive(Debug)]
+pub enum SmellLedgerReadError {
+    RuleName(RuleNameConversionError),
+    Collation(CollationError),
+}
+impl SmellLedgerReadError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::RuleName(error) => error.name(),
+            Self::Collation(_) => "Error",
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::RuleName(error) => error.message(),
+            Self::Collation(error) => error.to_string().into(),
+        }
+    }
+}
+impl std::fmt::Display for SmellLedgerReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RuleName(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for SmellLedgerReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::RuleName(error) => error,
+            Self::Collation(error) => error,
+        })
+    }
+}
+fn ordered_read(
+    read: SmellLedgerRead,
+    collation: &Collation,
+) -> Result<SmellLedgerRead, CollationError> {
+    match read {
+        SmellLedgerRead::Read { ledger } => Ok(SmellLedgerRead::Read {
+            ledger: smell_ledger_of(&ledger.gated, &ledger.entries, collation)?,
+        }),
+        other => Ok(other),
+    }
+}
+pub fn parse_smell_ledger(
+    text: &JsString,
+    collation: &Collation,
+) -> Result<SmellLedgerRead, SmellLedgerReadError> {
+    ordered_read(
+        parse_smell_ledger_unordered(text).map_err(SmellLedgerReadError::RuleName)?,
+        collation,
+    )
+    .map_err(SmellLedgerReadError::Collation)
+}
+pub fn read_smell_ledger(
+    file: &JsString,
+    collation: &Collation,
+) -> Result<SmellLedgerRead, SmellLedgerReadError> {
+    ordered_read(
+        read_smell_ledger_unordered(file).map_err(SmellLedgerReadError::RuleName)?,
+        collation,
+    )
+    .map_err(SmellLedgerReadError::Collation)
+}
+pub fn serialize_smell_ledger(
+    ledger: &SmellLedger,
+    collation: &Collation,
+) -> Result<JsString, SmellLedgerError> {
+    let ordered = smell_ledger_of(&ledger.gated, &ledger.entries, collation)
+        .map_err(SmellLedgerError::Collation)?;
+    let mut text =
+        crate::render::json::stable_stringify(&ordered, true).map_err(SmellLedgerError::Json)?;
     text.push('\n');
     Ok(text.into())
 }
 
 #[derive(Debug)]
 pub enum SmellLedgerError {
+    Collation(CollationError),
     Json(serde_json::Error),
     Write(crate::api::map::ApiError),
 }
 impl SmellLedgerError {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Json(_) => "Error",
+            Self::Collation(_) | Self::Json(_) => "Error",
             Self::Write(error) => error.name(),
         }
     }
     pub fn message(&self) -> JsString {
         match self {
+            Self::Collation(error) => error.to_string().into(),
             Self::Json(error) => error.to_string().into(),
             Self::Write(error) => error.message(),
         }
@@ -413,6 +514,7 @@ impl SmellLedgerError {
 impl std::fmt::Display for SmellLedgerError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(formatter),
             Self::Json(error) => error.fmt(formatter),
             Self::Write(error) => error.fmt(formatter),
         }
@@ -421,14 +523,19 @@ impl std::fmt::Display for SmellLedgerError {
 impl std::error::Error for SmellLedgerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Json(error) => error,
             Self::Write(error) => error,
         })
     }
 }
-pub fn write_smell_ledger(file: &JsString, ledger: &SmellLedger) -> Result<(), SmellLedgerError> {
+pub fn write_smell_ledger(
+    file: &JsString,
+    ledger: &SmellLedger,
+    collation: &Collation,
+) -> Result<(), SmellLedgerError> {
     use crate::api::map::{ApiArgumentError, ApiError};
-    let text = serialize_smell_ledger(ledger).map_err(SmellLedgerError::Json)?;
+    let text = serialize_smell_ledger(ledger, collation)?;
     fs::write(file.to_lossy(), text.to_lossy().as_bytes()).map_err(|source| {
         SmellLedgerError::Write(match ApiArgumentError::from_null_path(file, source) {
             Ok(error) => ApiError::Argument(error),
@@ -455,17 +562,22 @@ pub fn repo_target(scope: &JsString, smell: &Smell) -> JsString {
         SmellTarget::Directory { dir } => join_path_text(scope, &dir.as_str().into()),
     }
 }
-pub fn findings_of(scope: &JsString, smells: &[Smell]) -> Vec<SmellFinding> {
-    let mut findings: Vec<_> = smells
+pub fn findings_of(
+    scope: &JsString,
+    smells: &[Smell],
+    collation: &Collation,
+) -> Result<Vec<SmellFinding>, CollationError> {
+    let mut prepared = smells
         .iter()
         .map(|smell| SmellFinding {
             rule: smell.kind,
             target: repo_target(scope, smell),
             value: smell.value as f64,
         })
-        .collect();
-    findings.sort_by(compare_findings);
-    findings
+        .map(|finding| FindingInput::new(&finding).map(|input| (finding, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    prepared.sort_by(|a, b| a.1.compare(&b.1, collation));
+    Ok(prepared.into_iter().map(|(finding, _)| finding).collect())
 }
 pub fn measured_rules(graph: &Graph) -> Vec<SmellKind> {
     let edges = matches!(graph.provenance, Provenance::Edges { .. });
@@ -515,7 +627,8 @@ pub fn reconcile_smells<'a>(
     scope: &'a JsString,
     findings: &'a [SmellFinding],
     measured: &[SmellKind],
-) -> SmellReconciliation<'a> {
+    collation: &Collation,
+) -> Result<SmellReconciliation<'a>, CollationError> {
     let in_play = |rule| ledger.gated.contains(&rule) && measured.contains(&rule);
     let mut found = IndexMap::new();
     for finding in findings.iter().filter(|finding| in_play(finding.rule)) {
@@ -566,7 +679,7 @@ pub fn reconcile_smells<'a>(
             reason: entry.reason.clone(),
         }));
     }
-    SmellReconciliation {
+    Ok(SmellReconciliation {
         scope,
         gated: &ledger.gated,
         unrecorded: found
@@ -576,10 +689,14 @@ pub fn reconcile_smells<'a>(
         worsened,
         lowered,
         pruned,
-        kept: smell_ledger_of(&ledger.gated, &kept),
-    }
+        kept: smell_ledger_of(&ledger.gated, &kept, collation)?,
+    })
 }
-pub fn with_accepted_smells(result: &SmellReconciliation<'_>, reason: &JsString) -> SmellLedger {
+pub fn with_accepted_smells(
+    result: &SmellReconciliation<'_>,
+    reason: &JsString,
+    collation: &Collation,
+) -> Result<SmellLedger, CollationError> {
     let raised: IndexMap<_, _> = result
         .worsened
         .iter()
@@ -622,5 +739,5 @@ pub fn with_accepted_smells(result: &SmellReconciliation<'_>, reason: &JsString)
             reason: reason.clone(),
         })
     }));
-    smell_ledger_of(&result.kept.gated, &entries)
+    smell_ledger_of(&result.kept.gated, &entries, collation)
 }

@@ -55,7 +55,14 @@ fn main() {
         target: "foreign/new".into(),
         value: 4.0,
     }];
-    let result = reconcile_smells(&ledger, &scope, &findings, &[Kind::HighComplexity]);
+    let result = reconcile_smells(
+        &ledger,
+        &scope,
+        &findings,
+        &[Kind::HighComplexity],
+        &collation(),
+    )
+    .unwrap();
     assert!(std::ptr::eq(result.gated, ledger.gated.as_slice()));
     assert!(std::ptr::eq(result.unrecorded[0], &findings[0]));
     assert!(Arc::ptr_eq(&result.kept.entries[0], &old));
@@ -88,7 +95,7 @@ fn main() {
             entries: vec![old],
         },
     };
-    let rendered = run_smell_ledger_gate(&gate, &graph, false, false).unwrap();
+    let rendered = run_smell_ledger_gate(&gate, &graph, false, false, &collation()).unwrap();
     assert!(root.join("ledger.json").is_file());
     let same = Rc::clone(&cause);
     let emit = |_: &JsString| Err::<(), _>(Rc::clone(&cause));
@@ -114,4 +121,8 @@ fn main() {
     assert!(writer.bytes.ends_with(&[10]));
     fs::remove_dir_all(root).unwrap();
     println!("borrowed/Rc/Arc owners, opaque cause, existing output and exit passed");
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

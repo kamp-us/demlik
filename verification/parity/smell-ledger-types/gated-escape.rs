@@ -12,7 +12,18 @@ fn main() {
             gated: vec![Kind::HighComplexity],
             entries: vec![],
         };
-        held = reconcile_smells(&local, &scope, &findings, &[Kind::HighComplexity]);
+        held = reconcile_smells(
+            &local,
+            &scope,
+            &findings,
+            &[Kind::HighComplexity],
+            &collation(),
+        )
+        .unwrap();
     }
     println!("{}", held.gated.len());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

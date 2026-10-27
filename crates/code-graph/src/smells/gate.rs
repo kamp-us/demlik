@@ -1,8 +1,12 @@
 use super::ledger::{
     RuleNameConversionError, SMELL_LEDGER_FILENAME, SmellLedger, SmellLedgerRead, needs_edges,
-    read_smell_ledger,
+    read_smell_ledger_unordered, smell_ledger_of,
 };
-use crate::{project::join_path_text, ratchet::scope_count::scope_of, text::JsString};
+use crate::{
+    project::{Collation, CollationError, join_path_text},
+    ratchet::scope_count::scope_of,
+    text::JsString,
+};
 use serde::Serialize;
 use std::io;
 
@@ -45,6 +49,7 @@ pub enum SmellPreparation {
 }
 #[derive(Debug)]
 pub enum SmellPreparationError {
+    Collation(CollationError),
     RuleName(RuleNameConversionError),
     Scope(io::Error),
 }
@@ -52,12 +57,13 @@ impl SmellPreparationError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::RuleName(error) => error.name(),
-            Self::Scope(_) => "Error",
+            Self::Collation(_) | Self::Scope(_) => "Error",
         }
     }
     pub fn message(&self) -> JsString {
         match self {
             Self::RuleName(error) => error.message(),
+            Self::Collation(error) => error.to_string().into(),
             Self::Scope(error) => error.to_string().into(),
         }
     }
@@ -71,15 +77,24 @@ impl std::error::Error for SmellPreparationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
             Self::RuleName(error) => error,
+            Self::Collation(error) => error,
             Self::Scope(error) => error,
         })
     }
 }
-pub fn prepare_smell_gate(
+enum Admission {
+    Complete(SmellPreparation),
+    Order {
+        mode: SmellGateMode,
+        file: JsString,
+        ledger: SmellLedger,
+    },
+}
+
+fn admit(
     opts: SmellGateOpts<'_>,
-    root_absolute: &JsString,
     repo_root: &JsString,
-) -> Result<SmellPreparation, SmellPreparationError> {
+) -> Result<Admission, SmellPreparationError> {
     let reason = opts.reason.map(JsString::trim_js);
     let other_gate =
         opts.unreachable || opts.boundaries || opts.comments || opts.collapse || opts.layers;
@@ -98,10 +113,10 @@ pub fn prepare_smell_gate(
         ),
     ];
     if let Some((_, message)) = checks.into_iter().find(|(refuses, _)| *refuses) {
-        return Ok(SmellPreparation::Refused {
+        return Ok(Admission::Complete(SmellPreparation::Refused {
             message: message.into(),
             source: None,
-        });
+        }));
     }
     let mode = if opts.accept_smells {
         SmellGateMode::Accept {
@@ -110,45 +125,89 @@ pub fn prepare_smell_gate(
     } else if opts.ci && !other_gate {
         SmellGateMode::Gate
     } else {
-        return Ok(SmellPreparation::None);
+        return Ok(Admission::Complete(SmellPreparation::None));
     };
     let file = join_path_text(repo_root, &SMELL_LEDGER_FILENAME.into());
-    let ledger = match read_smell_ledger(&file).map_err(SmellPreparationError::RuleName)? {
+    let ledger = match read_smell_ledger_unordered(&file)
+        .map_err(SmellPreparationError::RuleName)?
+    {
         SmellLedgerRead::Invalid { message, source } => {
             let mut context = JsString::from("invalid smell ledger \"");
             context.extend(&file);
             context.push_str("\": ");
             context.extend(&message);
             context.push_str("; nothing was written.");
-            return Ok(SmellPreparation::Refused {
+            return Ok(Admission::Complete(SmellPreparation::Refused {
                 message: context,
                 source,
-            });
+            }));
         }
         SmellLedgerRead::Read { ledger } if !ledger.gated.is_empty() => ledger,
         _ => {
             if matches!(mode, SmellGateMode::Gate) {
-                return Ok(SmellPreparation::None);
+                return Ok(Admission::Complete(SmellPreparation::None));
             }
             let mut message = JsString::from(
                 "--accept-smells: no smell rule is gated; name the rules in the \"gated\" list of \"",
             );
             message.extend(&file);
             message.push_str("\" first; nothing was written.");
-            return Ok(SmellPreparation::Refused {
+            return Ok(Admission::Complete(SmellPreparation::Refused {
                 message,
                 source: None,
-            });
+            }));
         }
     };
-    Ok(SmellPreparation::Prepared {
-        gate: PreparedSmellGate {
-            mode,
-            file,
-            scope: scope_of(repo_root, root_absolute).map_err(SmellPreparationError::Scope)?,
-            ledger,
-        },
-    })
+    Ok(Admission::Order { mode, file, ledger })
+}
+fn finish(
+    admission: Admission,
+    root_absolute: &JsString,
+    repo_root: &JsString,
+    collation: &Collation,
+) -> Result<SmellPreparation, SmellPreparationError> {
+    match admission {
+        Admission::Complete(value) => Ok(value),
+        Admission::Order { mode, file, ledger } => {
+            let ledger = smell_ledger_of(&ledger.gated, &ledger.entries, collation)
+                .map_err(SmellPreparationError::Collation)?;
+            Ok(SmellPreparation::Prepared {
+                gate: PreparedSmellGate {
+                    mode,
+                    file,
+                    scope: scope_of(repo_root, root_absolute)
+                        .map_err(SmellPreparationError::Scope)?,
+                    ledger,
+                },
+            })
+        }
+    }
+}
+pub fn prepare_smell_gate(
+    opts: SmellGateOpts<'_>,
+    root_absolute: &JsString,
+    repo_root: &JsString,
+    collation: &Collation,
+) -> Result<SmellPreparation, SmellPreparationError> {
+    finish(admit(opts, repo_root)?, root_absolute, repo_root, collation)
+}
+
+/// Build the CLI-local dependency only after flags/read/schema/no-rule admission.
+pub(crate) fn prepare_smell_gate_local(
+    opts: SmellGateOpts<'_>,
+    root_absolute: &JsString,
+    repo_root: &JsString,
+    initialize: impl FnOnce() -> Result<Collation, CollationError>,
+) -> Result<(SmellPreparation, Option<Collation>), SmellPreparationError> {
+    let admission = admit(opts, repo_root)?;
+    match admission {
+        Admission::Complete(value) => Ok((value, None)),
+        ready @ Admission::Order { .. } => {
+            let collation = initialize().map_err(SmellPreparationError::Collation)?;
+            let value = finish(ready, root_absolute, repo_root, &collation)?;
+            Ok((value, Some(collation)))
+        }
+    }
 }
 pub fn smell_gate_needs_edges(preparation: &SmellPreparation) -> bool {
     matches!(preparation,SmellPreparation::Prepared{gate}if needs_edges(&gate.ledger.gated))
@@ -161,6 +220,7 @@ pub fn run_smell_ledger_gate(
     graph: &crate::schema::Graph,
     json: bool,
     pretty: bool,
+    collation: &Collation,
 ) -> Result<super::ledger_render::SmellLedgerRender, super::ledger::SmellLedgerError> {
     use super::{
         ledger::{
@@ -169,12 +229,20 @@ pub fn run_smell_ledger_gate(
         },
         ledger_render::{SmellLedgerRender, render_accepted_smells, render_smell_ledger_gate},
     };
-    let findings = findings_of(&gate.scope, &graph.smells);
-    let result = reconcile_smells(&gate.ledger, &gate.scope, &findings, &measured_rules(graph));
+    let findings =
+        findings_of(&gate.scope, &graph.smells, collation).map_err(SmellLedgerError::Collation)?;
+    let result = reconcile_smells(
+        &gate.ledger,
+        &gate.scope,
+        &findings,
+        &measured_rules(graph),
+        collation,
+    )
+    .map_err(SmellLedgerError::Collation)?;
     let mut rendered = match &gate.mode {
         SmellGateMode::Gate => {
             if !result.pruned.is_empty() || !result.lowered.is_empty() {
-                write_smell_ledger(&gate.file, &result.kept)?;
+                write_smell_ledger(&gate.file, &result.kept, collation)?;
             }
             render_smell_ledger_gate(&result, json, pretty).map_err(SmellLedgerError::Json)?
         }
@@ -184,7 +252,9 @@ pub fn run_smell_ledger_gate(
                 + result.unrecorded.len()
                 + result.worsened.len();
             if changed > 0 {
-                write_smell_ledger(&gate.file, &with_accepted_smells(&result, reason))?;
+                let accepted = with_accepted_smells(&result, reason, collation)
+                    .map_err(SmellLedgerError::Collation)?;
+                write_smell_ledger(&gate.file, &accepted, collation)?;
             }
             SmellLedgerRender {
                 stdout: render_accepted_smells(&result, reason, json, pretty)
@@ -195,4 +265,166 @@ pub fn run_smell_ledger_gate(
     };
     rendered.stdout.push_str("\n");
     Ok(rendered)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_icu_common::Error as IcuError;
+    use rust_icu_ucol::UCollator;
+    use std::{cell::Cell, fs, rc::Rc};
+
+    #[test]
+    fn refusals_do_not_initialize_collation() {
+        let directory =
+            std::env::temp_dir().join(format!("demlik-smell-admission-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        let root = JsString::from(directory.to_string_lossy().as_ref());
+        let file = directory.join(SMELL_LEDGER_FILENAME);
+        let calls = Rc::new(Cell::new(0));
+        let initialize = || {
+            calls.set(calls.get() + 1);
+            Err(CollationError::Initialize(
+                UCollator::try_from("en\0US").unwrap_err(),
+            ))
+        };
+        let (inactive, owner) =
+            prepare_smell_gate_local(SmellGateOpts::default(), &root, &root, initialize).unwrap();
+        assert!(matches!(inactive, SmellPreparation::None));
+        assert!(owner.is_none());
+        assert_eq!(calls.get(), 0);
+        let reason = JsString::from("retained");
+        let (conflict, _) = prepare_smell_gate_local(
+            SmellGateOpts {
+                accept_smells: true,
+                layers: true,
+                reason: Some(&reason),
+                ..Default::default()
+            },
+            &root,
+            &JsString::from_units(vec![0]),
+            initialize,
+        )
+        .unwrap();
+        assert!(matches!(conflict, SmellPreparation::Refused { .. }));
+        let (absent, _) = prepare_smell_gate_local(
+            SmellGateOpts {
+                ci: true,
+                ..Default::default()
+            },
+            &root,
+            &root,
+            initialize,
+        )
+        .unwrap();
+        assert!(matches!(absent, SmellPreparation::None));
+        for text in ["{", r#"{"gated":["unknown"]}"#] {
+            fs::write(&file, text).unwrap();
+            let (refusal, owner) = prepare_smell_gate_local(
+                SmellGateOpts {
+                    ci: true,
+                    ..Default::default()
+                },
+                &root,
+                &root,
+                initialize,
+            )
+            .unwrap();
+            assert!(matches!(refusal, SmellPreparation::Refused { .. }));
+            assert!(owner.is_none());
+            assert_eq!(calls.get(), 0);
+            assert_eq!(fs::read_to_string(&file).unwrap(), text);
+        }
+        fs::write(&file, r#"{"gated":["unknown",{"toString":null}]}"#).unwrap();
+        let error = prepare_smell_gate_local(
+            SmellGateOpts {
+                ci: true,
+                ..Default::default()
+            },
+            &root,
+            &root,
+            initialize,
+        )
+        .unwrap_err();
+        let SmellPreparationError::RuleName(error) = error else {
+            panic!("the original rule conversion error must escape")
+        };
+        assert_eq!(
+            error.path,
+            [
+                crate::validation::PathSegment::Field("gated".into()),
+                crate::validation::PathSegment::Index(1)
+            ]
+        );
+        for text in [
+            "{}",
+            r#"{"gated":[],"entries":[{"rule":"big-file","target":"\ud800","value":2,"reason":"kept"}]}"#,
+        ] {
+            fs::write(&file, text).unwrap();
+            let (empty, owner) = prepare_smell_gate_local(
+                SmellGateOpts {
+                    ci: true,
+                    ..Default::default()
+                },
+                &root,
+                &root,
+                initialize,
+            )
+            .unwrap();
+            assert!(matches!(empty, SmellPreparation::None));
+            assert!(owner.is_none());
+            assert_eq!(calls.get(), 0);
+        }
+        fs::remove_file(&file).unwrap();
+        fs::create_dir(&file).unwrap();
+        let (refusal, _) = prepare_smell_gate_local(
+            SmellGateOpts {
+                ci: true,
+                ..Default::default()
+            },
+            &root,
+            &root,
+            initialize,
+        )
+        .unwrap();
+        assert!(matches!(
+            refusal,
+            SmellPreparation::Refused {
+                source: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(calls.get(), 0);
+        fs::remove_dir(&file).unwrap();
+        fs::write(&file, r#"{"gated":["big-file"]}"#).unwrap();
+        let cause = UCollator::try_from("en\0US").unwrap_err();
+        let IcuError::Wrapper(inner) = &cause else {
+            panic!("expected owned NUL cause")
+        };
+        let original =
+            inner.downcast_ref::<std::ffi::NulError>().unwrap() as *const std::ffi::NulError;
+        let actual = prepare_smell_gate_local(
+            SmellGateOpts {
+                ci: true,
+                ..Default::default()
+            },
+            &root,
+            &root,
+            || {
+                calls.set(calls.get() + 1);
+                Err(CollationError::Initialize(cause))
+            },
+        )
+        .unwrap_err();
+        let SmellPreparationError::Collation(CollationError::Initialize(IcuError::Wrapper(actual))) =
+            actual
+        else {
+            panic!("typed infrastructure error must escape")
+        };
+        let actual = actual.downcast_ref::<std::ffi::NulError>().unwrap();
+        assert!(std::ptr::eq(original, actual));
+        assert_eq!(actual.nul_position(), 2);
+        assert_eq!(calls.get(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

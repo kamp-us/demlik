@@ -538,13 +538,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 observe!(
                     calls,
                     demlik_code_graph::smells::ledger::parse_smell_ledger,
-                    string(&input, "text")?
+                    string(&input, "text")?,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
                 )
             } else {
                 observe!(
                     calls,
                     demlik_code_graph::smells::ledger::read_smell_ledger,
-                    string(&input, "file")?
+                    string(&input, "file")?,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
                 )
             };
             (
@@ -568,7 +570,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         success(serialized(&read))
                     }
                     Err(error) => {
-                        details = rule_error(&error);
+                        details = match &error {
+                            demlik_code_graph::smells::ledger::SmellLedgerReadError::RuleName(
+                                error,
+                            ) => rule_error(error),
+                            demlik_code_graph::smells::ledger::SmellLedgerReadError::Collation(
+                                ..,
+                            ) => return Err(error.into()),
+                        };
                         object([
                             ("value", JsValue::Null),
                             ("thrown", thrown(error.name(), error.message())),
@@ -632,8 +641,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 calls,
                 demlik_code_graph::smells::ledger::smell_ledger_of,
                 &gated,
-                &entries
-            );
+                &entries,
+                &demlik_code_graph::project::Collation::try_node22_en_us()?
+            )?;
             let origin = ledger
                 .entries
                 .iter()
@@ -710,7 +720,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     demlik_code_graph::smells::gate::prepare_smell_gate,
                     s_opts(opts)?,
                     root,
-                    repo
+                    repo,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()?
                 );
                 (
                     match result {
@@ -721,6 +732,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                         Err(error) => {
                             details = match &error {
+                                SmellPreparationError::Collation(..) => return Err(error.into()),
                                 SmellPreparationError::RuleName(error) => rule_error(error),
                                 SmellPreparationError::Scope(error) => io_detail(Some(error)),
                             };

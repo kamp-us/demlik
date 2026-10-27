@@ -118,6 +118,8 @@ const response = z
   .strict();
 const binary = process.argv[2],
   reportFile = process.argv[3];
+const focused = process.argv[4] === "icu77";
+assert.ok(process.argv[4] === undefined || focused);
 assert.ok(binary && reportFile);
 assert.equal(process.version, "v22.21.1");
 assert.equal(process.versions.v8, "12.4.254.21-node.33");
@@ -626,365 +628,498 @@ const functionSmell = (value: number): z.infer<typeof smell> => ({
   value,
 });
 try {
-  p("empty");
-  p(
-    "duplicate-last",
-    { findings: [f("app/z", 2), f("app/a", 3), f("app/z", 7)] },
-    (v) => {
-      const x = pureWire.parse(v);
-      assert.deepEqual(x.unrecordedIdentity, [2, 1]);
-    },
-  );
-  p("sibling-scope", {
-    entries: [e("app/gone", 3), e("application/keep", 5), e("app", 4)],
-  });
-  p("unmeasured", {
-    gated: [high, fan],
-    entries: [e("app/calls", 4, "edges", fan)],
-    measured: [high],
-  });
-  p("ungated", {
-    entries: [e("app/calls", 4, "edges", fan)],
-    findings: [f("app/ignored", 9, fan)],
-    measured: [high, fan],
-  });
-  p(
-    "worsened",
-    { entries: [e("app/x", 3)], findings: [f("app/x", 7)] },
-    (v) => {
-      const x = pureWire.parse(v);
-      assert.deepEqual(x.keptNumbers, ["3"]);
-    },
-  );
-  p("lowered", { entries: [e("app/x", 7)], findings: [f("app/x", 3)] }, (v) =>
-    assert.equal(pureWire.parse(v).gate.exitCode, 0),
-  );
-  p(
-    "fresh-equal",
-    { entries: [e("app/x", 3)], findings: [f("app/x", 3)] },
-    (v) => assert.deepEqual(pureWire.parse(v).keptIdentity, [-1]),
-  );
-  p(
-    "retained",
-    {
-      entries: [e("other/x", 3), e("app/edge", 7, "edges", fan)],
-      gated: [high, fan],
-    },
-    (v) => assert.ok(pureWire.parse(v).keptIdentity.every((n) => n >= 0)),
-  );
-  p(
-    "first-reason",
-    { entries: [e("other/x", 3, "first"), e("other/x", 7, "second")] },
-    (v) => assert.deepEqual(pureWire.parse(v).canonicalIdentity, [0]),
-  );
-  p("accepted-reason", {
-    entries: [e("app/x", 2)],
-    findings: [f("app/x", 4), f("app/new", 6)],
-    reason: "  supplied literally  ",
-  });
-  p("sections", {
-    entries: [e("app/lower", 7), e("app/gone", 4), e("app/worse", 2)],
-    findings: [f("app/lower", 3), f("app/worse", 5), f("app/new", 6)],
-  });
-  p("all-kept-count", { entries: [e("other/x", 3), e("else/y", 4)] });
-  p("foreign-unrecorded", { findings: [f("foreign/x", 3)] });
-  p("root-scope", { scope: ".", entries: [e("any/gone", 4)] });
-  p("key-collision", { findings: [f('a", "b', 3), f("a", 4)] });
-  for (const [id, raw] of [
-    ["high", "\ud800"],
-    ["low", "\udfff"],
-    ["astral", "𐀀"],
-    ["prototype", "__proto__"],
-    ["nul", "\0"],
-  ] as const)
-    p(`raw-${id}`, {
-      scope: raw,
-      entries: [e(`${raw}/old`, 3)],
-      findings: [f(`${raw}/new`, 4)],
-      reason: raw,
+  if (focused) {
+    p(
+      "icu77-locale",
+      {
+        entries: [e("other/\ue000", 2), e("other/\ud800", 3), e("other/𐀀", 4)],
+      },
+      (value) => {
+        const x = pureWire.parse(value);
+        assert.deepEqual(x.canonicalIdentity, [2, 1, 0]);
+        assert.deepEqual(x.keptIdentity, [2, 1, 0]);
+        assert.deepEqual(
+          z
+            .object({ entries: z.array(z.object({ target: z.string() })) })
+            .parse(x.canonical)
+            .entries.map((v) => v.target),
+          ["other/𐀀", "other/\ud800", "other/\ue000"],
+        );
+      },
+    );
+    p(
+      "icu77-numeric",
+      {
+        entries: [
+          e("other/item2", 2),
+          e("other/item10", 3),
+          e("other/item1", 4),
+        ],
+      },
+      (value) =>
+        assert.deepEqual(pureWire.parse(value).canonicalIdentity, [2, 1, 0]),
+    );
+    p(
+      "icu77-stable-equivalence",
+      {
+        entries: [e("other/é", 2), e("other/e\u0301", 3)],
+      },
+      (value) =>
+        assert.deepEqual(pureWire.parse(value).canonicalIdentity, [0, 1]),
+    );
+    p(
+      "icu77-first-owner",
+      {
+        entries: [
+          e("other/\ud800", 2, "original"),
+          e("other/\ud800", 7, "later"),
+          e("other/\ue000", 3),
+        ],
+      },
+      (value) => {
+        const x = pureWire.parse(value);
+        assert.deepEqual(x.canonicalIdentity, [0, 2]);
+        assert.deepEqual(x.keptIdentity, [0, 2]);
+        assert.deepEqual(
+          z
+            .object({ entries: z.array(z.object({ reason: z.string() })) })
+            .parse(x.canonical)
+            .entries.map((v) => v.reason),
+          ["original", "old"],
+        );
+      },
+    );
+    const kernel = path.join(directory, "icu77-workflow");
+    write(path.join(kernel, "tsconfig.json"), "{}");
+    const ledger = path.join(kernel, "smell-ledger.json");
+    write(
+      ledger,
+      `  ${JSON.stringify({
+        gated: [fan, high],
+        entries: [
+          e("other/\ue000", 2, "private", fan),
+          e("other/\ud800", 3, "original", fan),
+          e("other/𐀀", 4, "astral", fan),
+        ],
+      })}  \n`,
+    );
+    fs.chmodSync(ledger, 0o640);
+    const workflow = (id: string, patch: Partial<Run>) =>
+      r(`icu77.workflow.${id}`, kernel, {
+        prepare: true,
+        accept: true,
+        gated: [fan, high],
+        scope: ".",
+        reason: "accepted",
+        smells: [functionSmell(3)],
+        ...patch,
+      });
+    const checkRawOrder = () => {
+      const entries = JSON.parse(fs.readFileSync(ledger, "utf8")).entries;
+      assert.deepEqual(
+        entries
+          .filter((v: { rule: string }) => v.rule === fan)
+          .map((v: { target: string }) => v.target),
+        ["other/𐀀", "other/\ud800", "other/\ue000"],
+      );
+    };
+    workflow("parse-accept-write", {});
+    checkRawOrder();
+    fs.chmodSync(ledger, 0o444);
+    workflow("repeat-readonly", {});
+    checkRawOrder();
+    assert.equal(rows.at(-1)?.sourceLedgerUnchanged, true);
+    fs.chmodSync(ledger, 0o640);
+    workflow("lower-write", {
+      accept: false,
+      ci: true,
+      reason: null,
+      smells: [functionSmell(2)],
+      json: true,
     });
-  const numbers = ["-Infinity", -3, "-0", 0, 3, "Infinity", "NaN"] as const;
-  for (let a = 0; a < numbers.length; a++)
-    for (let b = 0; b < numbers.length; b++)
+    checkRawOrder();
+    workflow("prune-write", {
+      accept: false,
+      ci: true,
+      reason: null,
+      smells: [],
+      json: true,
+      pretty: true,
+    });
+    checkRawOrder();
+    workflow("restore-accept-new", {
+      smells: [functionSmell(5)],
+      reason: "new reason",
+      json: true,
+    });
+    checkRawOrder();
+    assert.equal(fs.statSync(ledger).mode & 0o777, 0o640);
+  } else {
+    p("empty");
+    p(
+      "duplicate-last",
+      { findings: [f("app/z", 2), f("app/a", 3), f("app/z", 7)] },
+      (v) => {
+        const x = pureWire.parse(v);
+        assert.deepEqual(x.unrecordedIdentity, [2, 1]);
+      },
+    );
+    p("sibling-scope", {
+      entries: [e("app/gone", 3), e("application/keep", 5), e("app", 4)],
+    });
+    p("unmeasured", {
+      gated: [high, fan],
+      entries: [e("app/calls", 4, "edges", fan)],
+      measured: [high],
+    });
+    p("ungated", {
+      entries: [e("app/calls", 4, "edges", fan)],
+      findings: [f("app/ignored", 9, fan)],
+      measured: [high, fan],
+    });
+    p(
+      "worsened",
+      { entries: [e("app/x", 3)], findings: [f("app/x", 7)] },
+      (v) => {
+        const x = pureWire.parse(v);
+        assert.deepEqual(x.keptNumbers, ["3"]);
+      },
+    );
+    p("lowered", { entries: [e("app/x", 7)], findings: [f("app/x", 3)] }, (v) =>
+      assert.equal(pureWire.parse(v).gate.exitCode, 0),
+    );
+    p(
+      "fresh-equal",
+      { entries: [e("app/x", 3)], findings: [f("app/x", 3)] },
+      (v) => assert.deepEqual(pureWire.parse(v).keptIdentity, [-1]),
+    );
+    p(
+      "retained",
+      {
+        entries: [e("other/x", 3), e("app/edge", 7, "edges", fan)],
+        gated: [high, fan],
+      },
+      (v) => assert.ok(pureWire.parse(v).keptIdentity.every((n) => n >= 0)),
+    );
+    p(
+      "first-reason",
+      { entries: [e("other/x", 3, "first"), e("other/x", 7, "second")] },
+      (v) => assert.deepEqual(pureWire.parse(v).canonicalIdentity, [0]),
+    );
+    p("accepted-reason", {
+      entries: [e("app/x", 2)],
+      findings: [f("app/x", 4), f("app/new", 6)],
+      reason: "  supplied literally  ",
+    });
+    p("sections", {
+      entries: [e("app/lower", 7), e("app/gone", 4), e("app/worse", 2)],
+      findings: [f("app/lower", 3), f("app/worse", 5), f("app/new", 6)],
+    });
+    p("all-kept-count", { entries: [e("other/x", 3), e("else/y", 4)] });
+    p("foreign-unrecorded", { findings: [f("foreign/x", 3)] });
+    p("root-scope", { scope: ".", entries: [e("any/gone", 4)] });
+    p("key-collision", { findings: [f('a", "b', 3), f("a", 4)] });
+    for (const [id, raw] of [
+      ["high", "\ud800"],
+      ["low", "\udfff"],
+      ["astral", "𐀀"],
+      ["prototype", "__proto__"],
+      ["nul", "\0"],
+    ] as const)
+      p(`raw-${id}`, {
+        scope: raw,
+        entries: [e(`${raw}/old`, 3)],
+        findings: [f(`${raw}/new`, 4)],
+        reason: raw,
+      });
+    const numbers = ["-Infinity", -3, "-0", 0, 3, "Infinity", "NaN"] as const;
+    for (let a = 0; a < numbers.length; a++)
+      for (let b = 0; b < numbers.length; b++)
+        compare(
+          {
+            id: `pure.numeric-${a}-${b}`,
+            operation: "pure",
+            input: pureSchema.parse({
+              scope: "app",
+              gated: [high],
+              measured: [high],
+              entries: [e("app/x", numbers[a])],
+              findings: [f("app/x", numbers[b])],
+              reason: "raw numbers",
+              json: false,
+              pretty: false,
+            }),
+          },
+          undefined,
+          false,
+          (v) =>
+            assert.deepEqual(pureWire.parse(v).keptNumbers, [
+              numberTag(Math.min(number(numbers[a]), number(numbers[b]))),
+            ]),
+        );
+    for (const [id, scope, smells, expected] of [
+      [
+        "function-id",
+        "packages/app",
+        [
+          {
+            kind: high,
+            target: {
+              type: "function",
+              file: "src/x.ts",
+              id: "src/x.ts:calculate#2",
+              startLine: 900,
+            },
+            value: 3,
+          },
+        ],
+        ["packages/app/src/x.ts:calculate#2"],
+      ],
+      [
+        "mismatched-utf16-prefix",
+        "app",
+        [
+          {
+            kind: high,
+            target: { type: "function", file: "a", id: "𐀀:x", startLine: 1 },
+            value: 2,
+          },
+        ],
+        ["app/a\udc00:x"],
+      ],
+      [
+        "long-prefix",
+        ".",
+        [
+          {
+            kind: high,
+            target: {
+              type: "function",
+              file: "long.ts",
+              id: "x",
+              startLine: 1,
+            },
+            value: 2,
+          },
+        ],
+        ["long.ts"],
+      ],
+      [
+        "paths",
+        "packages/app",
+        [
+          {
+            kind: high,
+            target: { type: "module", file: "./x/../file.ts" },
+            value: 2,
+          },
+          { kind: high, target: { type: "directory", dir: "." }, value: 4 },
+        ],
+        ["packages/app/file.ts", "packages/app"],
+      ],
+    ] as const)
       compare(
         {
-          id: `pure.numeric-${a}-${b}`,
-          operation: "pure",
-          input: pureSchema.parse({
-            scope: "app",
-            gated: [high],
-            measured: [high],
-            entries: [e("app/x", numbers[a])],
-            findings: [f("app/x", numbers[b])],
-            reason: "raw numbers",
-            json: false,
-            pretty: false,
-          }),
+          id: `targets.${id}`,
+          operation: "targets",
+          input: targetsSchema.parse({ scope, smells }),
         },
         undefined,
         false,
         (v) =>
-          assert.deepEqual(pureWire.parse(v).keptNumbers, [
-            numberTag(Math.min(number(numbers[a]), number(numbers[b]))),
-          ]),
+          assert.deepEqual(
+            z.object({ targets: z.array(z.string()) }).parse(v).targets,
+            expected,
+          ),
       );
-  for (const [id, scope, smells, expected] of [
-    [
-      "function-id",
-      "packages/app",
-      [
-        {
-          kind: high,
-          target: {
-            type: "function",
-            file: "src/x.ts",
-            id: "src/x.ts:calculate#2",
-            startLine: 900,
-          },
-          value: 3,
-        },
+    const kernel = path.join(directory, "kernel");
+    write(path.join(kernel, "tsconfig.json"), "{}");
+    r("run.inactive-before-analysis", kernel, {
+      prepare: true,
+      root: path.join(kernel, "absent"),
+    });
+    r("run.syntax-measured", kernel);
+    r("run.edges-measured", kernel, { edges: true });
+    r("run.unrecorded-fails", kernel, { smells: [functionSmell(3)] });
+    r("run.accept", kernel, { accept: true, smells: [functionSmell(3)] });
+    write(
+      path.join(kernel, "smell-ledger.json"),
+      serializeSmellLedger({
+        gated: [high],
+        entries: [
+          { rule: high, target: "app/x.ts:calculate", value: 7, reason: "old" },
+        ],
+      }),
+    );
+    r("run.lowered-before-emit-error", kernel, {
+      entries: [e("app/x.ts:calculate", 7)],
+      smells: [functionSmell(3)],
+      failEmit: true,
+    });
+    r("run.improves-while-failing", kernel, {
+      entries: [e("app/x.ts:calculate", 7)],
+      smells: [
+        functionSmell(3),
+        { kind: high, target: { type: "module", file: "new.ts" }, value: 4 },
       ],
-      ["packages/app/src/x.ts:calculate#2"],
-    ],
-    [
-      "mismatched-utf16-prefix",
-      "app",
-      [
-        {
-          kind: high,
-          target: { type: "function", file: "a", id: "𐀀:x", startLine: 1 },
-          value: 2,
-        },
-      ],
-      ["app/a\udc00:x"],
-    ],
-    [
-      "long-prefix",
-      ".",
-      [
-        {
-          kind: high,
-          target: { type: "function", file: "long.ts", id: "x", startLine: 1 },
-          value: 2,
-        },
-      ],
-      ["long.ts"],
-    ],
-    [
-      "paths",
-      "packages/app",
-      [
-        {
-          kind: high,
-          target: { type: "module", file: "./x/../file.ts" },
-          value: 2,
-        },
-        { kind: high, target: { type: "directory", dir: "." }, value: 4 },
-      ],
-      ["packages/app/file.ts", "packages/app"],
-    ],
-  ] as const)
-    compare(
+    });
+    const ledger = path.join(kernel, "smell-ledger.json");
+    write(ledger, ' {"entries":[],"gated":["high-complexity"]}  \n');
+    fs.chmodSync(ledger, 0o444);
+    r("run.repeat-no-write", kernel, {
+      accept: true,
+      entries: [e("app/x.ts:calculate", 3)],
+      smells: [functionSmell(3)],
+    });
+    fs.chmodSync(ledger, 0o644);
+    r(
+      "run.missing-parent-write",
+      kernel,
       {
-        id: `targets.${id}`,
-        operation: "targets",
-        input: targetsSchema.parse({ scope, smells }),
+        file: path.join(kernel, "missing/ledger.json"),
+        accept: true,
+        smells: [functionSmell(3)],
       },
-      undefined,
-      false,
-      (v) =>
-        assert.deepEqual(
-          z.object({ targets: z.array(z.string()) }).parse(v).targets,
-          expected,
+      true,
+    );
+    r(
+      "run.directory-write",
+      kernel,
+      { file: kernel, accept: true, smells: [functionSmell(3)] },
+      true,
+    );
+    r(
+      "run.nul-write",
+      kernel,
+      { file: `${kernel}/bad\0`, accept: true, smells: [functionSmell(3)] },
+      true,
+    );
+    r("run.output-file", kernel, {
+      smells: [functionSmell(3)],
+      outputFile: path.join(kernel, "report.txt"),
+      json: true,
+      pretty: true,
+    });
+    r(
+      "run.output-refused-after-write",
+      kernel,
+      {
+        accept: true,
+        smells: [functionSmell(3)],
+        outputFile: path.join(kernel, "absent/out.txt"),
+      },
+      true,
+    );
+    r("run.raw-host-bytes", kernel, {
+      scope: "raw\ud800",
+      reason: "why\udfff",
+      accept: true,
+      smells: [functionSmell(3)],
+      outputFile: path.join(kernel, "raw.txt"),
+    });
+    const workspace = path.join(directory, "workspace");
+    write(
+      path.join(workspace, "pnpm-workspace.yaml"),
+      "packages: [packages/*]\n",
+    );
+    const api = (branches: number) =>
+      `import {price} from './pricing';\nexport function api(amount:number){${branches === 2 ? "if(amount<0)return -1;" : ""}${branches > 0 ? "if(amount>0)return price(amount);return 0;" : "return price(amount);"}}\n`;
+    for (const name of ["a", "b"]) {
+      const root = path.join(workspace, "packages", name);
+      write(
+        path.join(root, "package.json"),
+        JSON.stringify({ name: `fixture-${name}`, private: true }),
+      );
+      write(
+        path.join(root, "tsconfig.json"),
+        '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler"},"include":["src/**/*.ts"]}',
+      );
+      write(
+        path.join(root, "src/pricing.ts"),
+        "export function price(amount:number){return amount;}\n",
+      );
+      write(path.join(root, "src/api.ts"), api(1));
+      write(
+        path.join(root, "src/worker.ts"),
+        "import {price} from './pricing';export function worker(amount:number){return price(amount);}\n",
+      );
+    }
+    write(
+      path.join(workspace, "smell-ledger.json"),
+      '{"gated":["high-fan-in","high-complexity"],"entries":[]}\n',
+    );
+    const a = path.join(workspace, "packages/a"),
+      b = path.join(workspace, "packages/b");
+    const workflow = (id: string, root: string, patch: Partial<Run> = {}) =>
+      r(`workflow.${id}`, root, {
+        repoRoot: workspace,
+        file: path.join(workspace, "smell-ledger.json"),
+        prepare: true,
+        project: true,
+        accept: true,
+        reason: "intentional fixture",
+        ...patch,
+      });
+    const recorded = runWire.parse(workflow("record-two", a));
+    assert.equal(recorded.exit, 0);
+    assert.equal(recorded.sourceFiles, 3);
+    const parsedSmells = z
+      .array(z.object({ kind, value: z.number(), target: z.unknown() }))
+      .parse(recorded.smells);
+    assert.equal(parsedSmells.find((s) => s.kind === fan)?.value, 2);
+    assert.equal(parsedSmells.find((s) => s.kind === high)?.value, 2);
+    fs.chmodSync(path.join(workspace, "smell-ledger.json"), 0o444);
+    workflow("repeat-readonly", a);
+    fs.chmodSync(path.join(workspace, "smell-ledger.json"), 0o640);
+    write(path.join(a, "src/api.ts"), api(2));
+    assert.equal(
+      runWire.parse(
+        workflow("worse-fails", a, { accept: false, ci: true, reason: null }),
+      ).exit,
+      1,
+    );
+    workflow("raise-with-reason", a, {
+      reason: "accepted extra branch",
+      json: true,
+      pretty: true,
+    });
+    write(path.join(a, "src/api.ts"), api(1));
+    workflow("shrink-tightens", a, { accept: false, ci: true, reason: null });
+    write(path.join(a, "src/api.ts"), api(0));
+    workflow("gone-prunes", a, { accept: false, ci: true, reason: null });
+    workflow("second-scope-record", b);
+    write(path.join(b, "src/api.ts"), api(0));
+    workflow("second-scope-prune", b, {
+      accept: false,
+      ci: true,
+      reason: null,
+      json: true,
+    });
+    workflow("first-scope-retained", a, {
+      accept: false,
+      ci: true,
+      reason: null,
+      json: true,
+    });
+    const final = z
+      .object({
+        entries: z.array(
+          z.object({ target: z.string(), rule: kind, value: z.number() }),
         ),
-    );
-  const kernel = path.join(directory, "kernel");
-  write(path.join(kernel, "tsconfig.json"), "{}");
-  r("run.inactive-before-analysis", kernel, {
-    prepare: true,
-    root: path.join(kernel, "absent"),
-  });
-  r("run.syntax-measured", kernel);
-  r("run.edges-measured", kernel, { edges: true });
-  r("run.unrecorded-fails", kernel, { smells: [functionSmell(3)] });
-  r("run.accept", kernel, { accept: true, smells: [functionSmell(3)] });
-  write(
-    path.join(kernel, "smell-ledger.json"),
-    serializeSmellLedger({
-      gated: [high],
-      entries: [
-        { rule: high, target: "app/x.ts:calculate", value: 7, reason: "old" },
+      })
+      .parse(
+        JSON.parse(
+          fs.readFileSync(path.join(workspace, "smell-ledger.json"), "utf8"),
+        ),
+      );
+    assert.deepEqual(
+      final.entries.map((e) => [e.rule, e.target, e.value]),
+      [
+        [fan, "packages/a/src/pricing.ts:price", 2],
+        [fan, "packages/b/src/pricing.ts:price", 2],
       ],
-    }),
-  );
-  r("run.lowered-before-emit-error", kernel, {
-    entries: [e("app/x.ts:calculate", 7)],
-    smells: [functionSmell(3)],
-    failEmit: true,
-  });
-  r("run.improves-while-failing", kernel, {
-    entries: [e("app/x.ts:calculate", 7)],
-    smells: [
-      functionSmell(3),
-      { kind: high, target: { type: "module", file: "new.ts" }, value: 4 },
-    ],
-  });
-  const ledger = path.join(kernel, "smell-ledger.json");
-  write(ledger, ' {"entries":[],"gated":["high-complexity"]}  \n');
-  fs.chmodSync(ledger, 0o444);
-  r("run.repeat-no-write", kernel, {
-    accept: true,
-    entries: [e("app/x.ts:calculate", 3)],
-    smells: [functionSmell(3)],
-  });
-  fs.chmodSync(ledger, 0o644);
-  r(
-    "run.missing-parent-write",
-    kernel,
-    {
-      file: path.join(kernel, "missing/ledger.json"),
-      accept: true,
-      smells: [functionSmell(3)],
-    },
-    true,
-  );
-  r(
-    "run.directory-write",
-    kernel,
-    { file: kernel, accept: true, smells: [functionSmell(3)] },
-    true,
-  );
-  r(
-    "run.nul-write",
-    kernel,
-    { file: `${kernel}/bad\0`, accept: true, smells: [functionSmell(3)] },
-    true,
-  );
-  r("run.output-file", kernel, {
-    smells: [functionSmell(3)],
-    outputFile: path.join(kernel, "report.txt"),
-    json: true,
-    pretty: true,
-  });
-  r(
-    "run.output-refused-after-write",
-    kernel,
-    {
-      accept: true,
-      smells: [functionSmell(3)],
-      outputFile: path.join(kernel, "absent/out.txt"),
-    },
-    true,
-  );
-  r("run.raw-host-bytes", kernel, {
-    scope: "raw\ud800",
-    reason: "why\udfff",
-    accept: true,
-    smells: [functionSmell(3)],
-    outputFile: path.join(kernel, "raw.txt"),
-  });
-  const workspace = path.join(directory, "workspace");
-  write(
-    path.join(workspace, "pnpm-workspace.yaml"),
-    "packages: [packages/*]\n",
-  );
-  const api = (branches: number) =>
-    `import {price} from './pricing';\nexport function api(amount:number){${branches === 2 ? "if(amount<0)return -1;" : ""}${branches > 0 ? "if(amount>0)return price(amount);return 0;" : "return price(amount);"}}\n`;
-  for (const name of ["a", "b"]) {
-    const root = path.join(workspace, "packages", name);
-    write(
-      path.join(root, "package.json"),
-      JSON.stringify({ name: `fixture-${name}`, private: true }),
-    );
-    write(
-      path.join(root, "tsconfig.json"),
-      '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler"},"include":["src/**/*.ts"]}',
-    );
-    write(
-      path.join(root, "src/pricing.ts"),
-      "export function price(amount:number){return amount;}\n",
-    );
-    write(path.join(root, "src/api.ts"), api(1));
-    write(
-      path.join(root, "src/worker.ts"),
-      "import {price} from './pricing';export function worker(amount:number){return price(amount);}\n",
     );
   }
-  write(
-    path.join(workspace, "smell-ledger.json"),
-    '{"gated":["high-fan-in","high-complexity"],"entries":[]}\n',
-  );
-  const a = path.join(workspace, "packages/a"),
-    b = path.join(workspace, "packages/b");
-  const workflow = (id: string, root: string, patch: Partial<Run> = {}) =>
-    r(`workflow.${id}`, root, {
-      repoRoot: workspace,
-      file: path.join(workspace, "smell-ledger.json"),
-      prepare: true,
-      project: true,
-      accept: true,
-      reason: "intentional fixture",
-      ...patch,
-    });
-  const recorded = runWire.parse(workflow("record-two", a));
-  assert.equal(recorded.exit, 0);
-  assert.equal(recorded.sourceFiles, 3);
-  const parsedSmells = z
-    .array(z.object({ kind, value: z.number(), target: z.unknown() }))
-    .parse(recorded.smells);
-  assert.equal(parsedSmells.find((s) => s.kind === fan)?.value, 2);
-  assert.equal(parsedSmells.find((s) => s.kind === high)?.value, 2);
-  fs.chmodSync(path.join(workspace, "smell-ledger.json"), 0o444);
-  workflow("repeat-readonly", a);
-  fs.chmodSync(path.join(workspace, "smell-ledger.json"), 0o640);
-  write(path.join(a, "src/api.ts"), api(2));
-  assert.equal(
-    runWire.parse(
-      workflow("worse-fails", a, { accept: false, ci: true, reason: null }),
-    ).exit,
-    1,
-  );
-  workflow("raise-with-reason", a, {
-    reason: "accepted extra branch",
-    json: true,
-    pretty: true,
-  });
-  write(path.join(a, "src/api.ts"), api(1));
-  workflow("shrink-tightens", a, { accept: false, ci: true, reason: null });
-  write(path.join(a, "src/api.ts"), api(0));
-  workflow("gone-prunes", a, { accept: false, ci: true, reason: null });
-  workflow("second-scope-record", b);
-  write(path.join(b, "src/api.ts"), api(0));
-  workflow("second-scope-prune", b, {
-    accept: false,
-    ci: true,
-    reason: null,
-    json: true,
-  });
-  workflow("first-scope-retained", a, {
-    accept: false,
-    ci: true,
-    reason: null,
-    json: true,
-  });
-  const final = z
-    .object({
-      entries: z.array(
-        z.object({ target: z.string(), rule: kind, value: z.number() }),
-      ),
-    })
-    .parse(
-      JSON.parse(
-        fs.readFileSync(path.join(workspace, "smell-ledger.json"), "utf8"),
-      ),
-    );
-  assert.deepEqual(
-    final.entries.map((e) => [e.rule, e.target, e.value]),
-    [
-      [fan, "packages/a/src/pricing.ts:price", 2],
-      [fan, "packages/b/src/pricing.ts:price", 2],
-    ],
-  );
   for (const [id, input] of [
     ["unknown-op", { id: "bad", operation: "bad", input: {} }],
     [
@@ -1043,7 +1178,7 @@ try {
     failures,
     cases: rows,
     knownGaps: [
-      "Existing ICU4X mixed-lone collation gap remains OPEN, not exercised as strict equivalence here; prior exact three-case evidence is separately pinned.",
+      "This smell-ledger path uses explicit pinned ICU4C77.1 en-US operands; remaining legacy comparator owners stay an OPEN temporary migration terminus, not a global collation closure.",
       "Graph IDs/files/dirs remain canonical String profile; raw Graph/prototype/getter/extra-field behavior not claimed.",
       "Native stdio pending failure contract and platform diagnostic messages remain qualified; no CLI attachment or closure of53CLI gaps.",
     ],

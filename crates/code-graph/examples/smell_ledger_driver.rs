@@ -7,7 +7,7 @@ use demlik_code_graph::{
         assemble::{NodeFields, assemble_graph},
     },
     kinds::rules::NodeKindRules,
-    project::{EdgeScope, load_cheap_project},
+    project::{Collation, EdgeScope, load_cheap_project},
     schema::{Graph, Provenance, Severity, Smell, SmellKind, SmellTarget, Thresholds},
     smells::{
         gate::{PreparedSmellGate, SmellGateMode, SmellGateOpts, SmellPreparation},
@@ -136,6 +136,7 @@ fn pure(
     input: Pure,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let collation = Collation::try_node22_en_us()?;
     let ledger = SmellLedger {
         gated: input.gated,
         entries: input.entries.into_iter().map(Entry::owned).collect(),
@@ -145,8 +146,9 @@ fn pure(
         calls,
         demlik_code_graph::smells::ledger::smell_ledger_of,
         &ledger.gated,
-        &ledger.entries
-    );
+        &ledger.entries,
+        &collation
+    )?;
     let keys: Vec<_> = findings
         .iter()
         .map(|f| observe!(calls, demlik_code_graph::smells::ledger::smell_key, f))
@@ -157,18 +159,21 @@ fn pure(
         &ledger,
         &input.scope,
         &findings,
-        &input.measured
-    );
+        &input.measured,
+        &collation
+    )?;
     let accepted = observe!(
         calls,
         demlik_code_graph::smells::ledger::with_accepted_smells,
         &result,
-        &input.reason
-    );
+        &input.reason,
+        &collation
+    )?;
     let serialized = observe!(
         calls,
         demlik_code_graph::smells::ledger::serialize_smell_ledger,
-        &ledger
+        &ledger,
+        &collation
     )?;
     let gate = observe!(
         calls,
@@ -318,7 +323,8 @@ struct Targets {
 fn targets(
     input: Targets,
     calls: &mut Vec<&'static str>,
-) -> Result<Box<RawValue>, serde_json::Error> {
+) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let collation = Collation::try_node22_en_us()?;
     let smells: Vec<_> = input.smells.into_iter().map(InputSmell::owned).collect();
     let targets: Vec<_> = smells
         .iter()
@@ -335,14 +341,15 @@ fn targets(
         calls,
         demlik_code_graph::smells::ledger::findings_of,
         &input.scope,
-        &smells
-    );
+        &smells,
+        &collation
+    )?;
     #[derive(Serialize)]
     struct Output {
         targets: Vec<JsString>,
         findings: Vec<SmellFinding>,
     }
-    to_raw_value(&Output { targets, findings })
+    Ok(to_raw_value(&Output { targets, findings })?)
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -409,6 +416,7 @@ fn run(
     binary: &TsgoBinary,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let collation = Collation::try_node22_en_us()?;
     let mut output = RunResult {
         exit: None,
         process_exit: None,
@@ -434,7 +442,8 @@ fn run(
                 ..Default::default()
             },
             &input.root,
-            &input.repo_root
+            &input.repo_root,
+            &collation
         )? {
             SmellPreparation::Prepared { gate } => gate,
             other => {
@@ -513,9 +522,11 @@ fn run(
         &gate,
         &graph,
         input.json,
-        input.pretty
+        input.pretty,
+        &collation
     ) {
         Err(SmellLedgerError::Write(error)) => output.thrown = Some(api_failure("write", error)),
+        Err(SmellLedgerError::Collation(error)) => return Err(error.into()),
         Err(SmellLedgerError::Json(error)) => {
             output.thrown = Some(Failure {
                 stage: "write",

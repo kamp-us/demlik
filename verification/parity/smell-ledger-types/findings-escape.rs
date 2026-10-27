@@ -16,7 +16,18 @@ fn main() {
             target: "app/x".into(),
             value: 3.0,
         }];
-        held = reconcile_smells(&ledger, &scope, &local, &[Kind::HighComplexity]);
+        held = reconcile_smells(
+            &ledger,
+            &scope,
+            &local,
+            &[Kind::HighComplexity],
+            &collation(),
+        )
+        .unwrap();
     }
     println!("{}", held.unrecorded.len());
+}
+
+fn collation() -> demlik_code_graph::project::Collation {
+    demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
 }

@@ -46,7 +46,7 @@ use crate::{
     schema::{Graph, Thresholds},
     smells::{
         gate::{
-            SmellGateOpts, SmellPreparation, SmellPreparationError, prepare_smell_gate,
+            SmellGateOpts, SmellPreparation, SmellPreparationError, prepare_smell_gate_local,
             run_smell_ledger_gate, smell_gate_needs_edges,
         },
         ledger::{RuleNameConversionError, SmellLedgerError},
@@ -150,7 +150,7 @@ pub struct PreparedGatesCli {
     pub repo_root: JsString,
     pub unreachable: UnreachablePreparation,
     pub smells: SmellPreparation,
-    unreachable_collation: Option<Collation>,
+    collation: Option<Collation>,
 }
 #[derive(Debug)]
 pub enum GatePreflightDispatch {
@@ -533,7 +533,7 @@ impl PreparedCli {
                 source,
             }));
         }
-        let smells = prepare_smell_gate(
+        let (smells, smell_collation) = prepare_smell_gate_local(
             SmellGateOpts {
                 ci: opts.ci() == Some(true),
                 accept_smells: opts.accept_smells() == Some(true),
@@ -546,8 +546,10 @@ impl PreparedCli {
             },
             &self.root_absolute,
             &repo_root,
+            Collation::try_node22_en_us,
         )
         .map_err(|error| match error {
+            SmellPreparationError::Collation(error) => FrontdoorError::Collation(error),
             SmellPreparationError::RuleName(error) => FrontdoorError::RuleNameConversion(error),
             SmellPreparationError::Scope(source) => FrontdoorError::GateScope {
                 stage: GatePreparationKind::Smell,
@@ -570,7 +572,7 @@ impl PreparedCli {
                 repo_root,
                 unreachable,
                 smells,
-                unreachable_collation,
+                collation: unreachable_collation.or(smell_collation),
             },
         )))
     }
@@ -830,7 +832,7 @@ impl PreparedGatesCli {
             // Public prepared facts may be replaced by a native caller. Reuse the
             // admitted handle, or prepare a local handle for such a supplied gate.
             let collation = self
-                .unreachable_collation
+                .collation
                 .take()
                 .map(Ok)
                 .unwrap_or_else(Collation::try_node22_en_us)
@@ -879,7 +881,7 @@ impl PreparedGatesCli {
 
     /// Run a prepared smell ledger after unreachable and before later output modes.
     pub fn dispatch_smell_ledger_blocking(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<SmellDispatch, FrontdoorError> {
@@ -900,11 +902,20 @@ impl PreparedGatesCli {
             }
         };
         let options = &self.prepared.options;
+        // A native caller may replace public prepared facts. Reuse the admitted
+        // local owner, or construct one for an explicitly supplied gate.
+        let collation = self
+            .collation
+            .take()
+            .map(Ok)
+            .unwrap_or_else(Collation::try_node22_en_us)
+            .map_err(FrontdoorError::Collation)?;
         let result = run_smell_ledger_gate(
             gate,
             &graph,
             options.json() == Some(true),
             options.pretty() == Some(true),
+            &collation,
         )
         .map_err(FrontdoorError::SmellLedger)?;
         output_to(options.out())
