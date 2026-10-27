@@ -352,7 +352,7 @@ export async function subscriptionConformance(options = {}) {
         "raw builtin AgentTurn projection",
         "malformed original-command errOf/decode",
         "missing/null settlement stamp into Agent f64",
-        "Agent runtime tags/to_machine/brain wiring not constructed",
+        "Agent to_machine/brain wiring not constructed; untagged state admission has separate native/type proof",
       ],
     },
     binary: {
