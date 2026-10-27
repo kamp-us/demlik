@@ -1,0 +1,145 @@
+{
+  "kind": "local-combined-checkpoint-acceptance",
+  "implementationSource": "e64441413fbb66c0e5709863a334bc3f5d6fd3d8",
+  "scope": "Current implemented profiles only; complete Rust port is still incomplete.",
+  "verification": {
+    "checkedOutcomes": 15039,
+    "strictNativeEvidenceCases": 14892,
+    "qualifiedObservations": 147,
+    "qualifiedAreas": {
+      "graph": 125,
+      "apiGit": 15,
+      "apiDiff": 4,
+      "subscriptions": 3
+    },
+    "failures": 0,
+    "referenceChanges": 0,
+    "sourceFilesByteVerified": 2411,
+    "nativeAndDocs": {
+      "default": 631,
+      "allFeatures": 645,
+      "overlap": true,
+      "executionSource": "a6b326e5e226c2dabeda1baa6374f865c9f73b04",
+      "qualification": "Native/type/all-target Clippy steps passed before that attempt failed its full comparison. Production Rust and Cargo unchanged in current comparison; the only changed Rust file is the cfg(test) observer, separately recompiled and tested7 with its changed library/test Clippy scope."
+    },
+    "currentStatic": ["fmt", "full parity TSC", "full parity Biome"],
+    "componentComparisonCounts": {
+      "partialTwinsStrict": 71,
+      "warningsStrict": 29,
+      "warningsQualified": 1,
+      "subscriptionsStrict": 65,
+      "subscriptionsQualified": 3
+    },
+    "componentCompiledControls": {
+      "partialTwins": 14,
+      "warnings": 17,
+      "subscriptions": 17,
+      "qualification": "Inherited independently audited component executions, not rerun in this combined check; current full native/shared integration separately passed."
+    },
+    "nativeEvidenceDelta": {
+      "added": 165,
+      "previousStrictNowQualified": [
+        "graph.api-raw-file.opaque-raw-emitted-entry",
+        "graph.api-raw-file.raw-directory-entry",
+        "graph.api-raw-file.raw-high-entry",
+        "graph.api-raw-file.raw-low-entry",
+        "graph.api-raw-file.two-raw-units-entry"
+      ],
+      "qualification": "The five established raw API cases currently differ only at the retained compiler request byte offsets; underlying offset variation is unmeasured, no behavioral case lost."
+    },
+    "coverage": {
+      "capabilities": 3445,
+      "mapped": 828,
+      "gapRows": 2776,
+      "unmapped": 2617,
+      "all53CliGapsOpen": true
+    }
+  },
+  "verificationLineage": {
+    "fullComparisonAndStaticSource": "e64441413fbb66c0e5709863a334bc3f5d6fd3d8",
+    "nativeAndTypeSource": "a6b326e5e226c2dabeda1baa6374f865c9f73b04",
+    "correctedObserverSource": "69327138",
+    "nativeSourceQualification": "Native/type/all-target Clippy steps passed before that attempt failed its full comparison. Production Rust and Cargo unchanged in current comparison; the only changed Rust file is the cfg(test) observer, separately recompiled and tested7 with its changed library/test Clippy scope.",
+    "originalFailedComparisonRetained": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-combined-a6b326e5",
+    "currentEvidence": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-combined-e6444141",
+    "correctedObserverEvidence": "/private/tmp/demlik-warning-call-credit-proof-01a16c9d",
+    "currentRawWarningCredit": "missing-config reaches only load_edge_project_text; no assembly credit",
+    "nonVacuousWarnings": {
+      "isolatedNestedGitFixture": true,
+      "warningCases": 22,
+      "independentWarningAnchors": 3
+    },
+    "newProductionFaultExecutionsInCombinedCheck": 0,
+    "inheritedControls": "Component14+17+17 are independently audited prior executions. Current integration has full comparisons, native/type gates with explicit source lineage, and a new observer-regression refusal, not a blanket rerun.",
+    "observerNegative": "Previously compiled actual old library test executable refused solely by the reached-call guard; raw30behaviorpairs stayed passing. This is verifier regression credit, zero production semantic-fault credit."
+  },
+  "components": {
+    "partialTwins": {
+      "source": "8520b1ef130d971ee1b14dee25c5643cbbcfa81a",
+      "receipt": "8603e51c11b8f72a5c832d229ef280a8dd013930",
+      "registration": "3c8457b242757a71d066d03215d98bc02efb4651"
+    },
+    "subscriptionInterface": {
+      "source": "a24b37cdb927a4a2c3d9b9fc0ec26a280dc989a6",
+      "mainPick": "6f9ff033"
+    },
+    "subscriptionConformance": {
+      "source": "ba3b065359695f66c636efea9adaaf5d0eb9d6cf",
+      "receipt": "e5205a8edebfe38b3cbf7f51e018254a95d2c171",
+      "registration": "1c46f106",
+      "effectFinalizerGap": "3 matched-qualified observations remain OPEN and excluded from strict nativeEvidence; Fiber.interrupt is void while failure Exit remains separately inspectable."
+    },
+    "immediateWarnings": {
+      "source": "0def5ea1e922bda884c9e4f97a7e41a41b789d3a",
+      "receipt": "346c1286ce7c10e0eff074ff738c3900a8b676fc",
+      "registration": "bf953a2f",
+      "observerCorrection": "69327138",
+      "fixtureIsolationAndAnchors": "e6444141"
+    },
+    "taglessAuthoredState": {
+      "source": "e3ab119ce5f390a435215d47a1c4553cb0b197a1",
+      "mainPick": "89788db3",
+      "scope": "Raw table owns its current tag accessor; authored core/runtime models need no state tag.35 mechanical raw constructor migrations. Cmdless canonicalRc admission and opaque borrowed pure checks; no full agent execution credit."
+    }
+  },
+  "preservedProof": {
+    "status": "passed",
+    "sourceCommit": "e64441413fbb66c0e5709863a334bc3f5d6fd3d8",
+    "archive": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/e6444141-runtime-graph-checkpoint-proof.tar.gz",
+    "archiveBytes": 98916160,
+    "archiveSha256": "8265520ad9a6b382c8c711fb32ce3bf004fe27445e416397aae109fc68f31132",
+    "inventory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-e6444141/archive-inventory.json",
+    "inventorySha256": "13b5084e706b1fe8a84c32b880bff432542012b69f59e5043d68a79e68468c02",
+    "members": 755,
+    "allArchiveMembersByteVerified": true,
+    "parentAudit": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-e6444141/parent-audit.json",
+    "parentAuditSha256": "339dea7abdb5b63df648411a992fdb9b4eab3b32ddac18621b47aab8a4edfa91",
+    "checkedOutcomes": 15039,
+    "strict": 14892,
+    "qualified": 147,
+    "nativeArtifactBindings": 18,
+    "coldSourceArchiveRebuild": false
+  },
+  "parentAudit": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-e6444141/parent-audit.json",
+    "sha256": "339dea7abdb5b63df648411a992fdb9b4eab3b32ddac18621b47aab8a4edfa91"
+  },
+  "independentReview": {
+    "status": "passed",
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/demlik-e644-checkpoint-peer-review-01a16c9d.json",
+    "sha256": "82946536b551d51ce6730f493c0445417ea4471b74b09f1949913cd4d6029b83",
+    "scope": "Independent archive, count, source and actual Cargo evidence audit:755members,2x2411source rows,18artifact bindings, qualified evidence separation and inherited native/type/Clippy lineage. No scoped findings; no execution/cold archive rebuild claimed."
+  },
+  "cleanup": "Every completed verification worktree and default target for these checks has been removed; selected proof is archived, no Cargo dependency/target cache copied.",
+  "blindSpots": [
+    "Full agent runtime workflows and full collapse gate/CLI currently under construction, not included here.",
+    "Three Effect Stream finalizer/native cleanup Result observations remain OPEN and outside strict evidence.",
+    "Uncoordinated ready-future schedules, raw reflection/input, optional agent/host/backend profiles remain explicit gaps.",
+    "Measured empty-graph raw UTF16 Graph.root loss remains OPEN in this source and is being repaired in a separate two-owner component.",
+    "Supported target/host integrations, remaining public APIs and final full-port review are unfinished.",
+    "No cold source-archive rebuild or deployed/released acceptance claim."
+  ],
+  "remainingGoal": "Finish actual agent workflows, collapse/remaining CLI, public API and host adapter coverage, packaging/targets and all material parity gaps; both sweeps excluded.",
+  "coldSourceArchiveRebuild": false,
+  "remoteActions": false
+}
