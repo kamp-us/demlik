@@ -15,6 +15,14 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "smell-ledger",
+    driver: "smell_ledger_driver",
+    script: "graph-smell-ledger-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "unreachable-ledger",
     driver: "unreachable_driver",
     script: "graph-unreachable-ledger-run.mjs",
@@ -304,6 +312,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "smell_ledger_driver",
   "unreachable_driver",
   "collapse_render_driver",
   "collapse_report_driver",
