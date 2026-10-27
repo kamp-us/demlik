@@ -15,6 +15,14 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "unreachable-ledger",
+    driver: "unreachable_driver",
+    script: "graph-unreachable-ledger-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "logical-root",
     driver: "graph_root_driver",
     script: "graph-logical-root.mjs",
@@ -296,6 +304,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "unreachable_driver",
   "collapse_render_driver",
   "collapse_report_driver",
   "collapse_cli_driver",
