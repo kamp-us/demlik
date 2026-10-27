@@ -1,4 +1,5 @@
 use super::census::{CommentCensus, governed_ratio};
+use crate::number::js_round;
 use crate::{
     text::{JsObject, JsRegex, JsString, JsValue, object_keys},
     validation::{InputIssue, PathSegment, RecordTypeError, record_object},
@@ -152,22 +153,6 @@ impl CommentCeilings {
             slack_points,
             scopes,
         })
-    }
-}
-pub(crate) fn js_round(value: f64) -> f64 {
-    if !value.is_finite() || value == 0.0 {
-        return value;
-    }
-    let lower = value.floor();
-    let rounded = if value - lower < 0.5 {
-        lower
-    } else {
-        lower + 1.0
-    };
-    if rounded == 0.0 {
-        0.0f64.copysign(value)
-    } else {
-        rounded
     }
 }
 pub fn to_points(ratio: f64) -> f64 {

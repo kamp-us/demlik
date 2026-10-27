@@ -358,6 +358,7 @@ dependencies = [
  "biome_unicode_table",
  "icu_collator",
  "indexmap",
+ "libm",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",

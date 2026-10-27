@@ -1,7 +1,8 @@
 use super::{
-    ceilings::{CommentCeilings, is_governed_scope, js_round, to_points},
+    ceilings::{CommentCeilings, is_governed_scope, to_points},
     census::{CommentCensus, governed_ratio},
 };
+use crate::number::js_round;
 use crate::{
     project::locale_compare_units,
     text::{JsString, has_object_prototype_property},
