@@ -1,0 +1,44 @@
+{
+  "sourceCommit": "ba3b065359695f66c636efea9adaaf5d0eb9d6cf",
+  "base": "a24b37cdb927a4a2c3d9b9fc0ec26a280dc989a6",
+  "handoff": {
+    "path": "/private/tmp/demlik-subscription-conformance-proof-01a16c9d/handoff.json",
+    "sha256": "59aa8e6a7e5041762a4c6a30d86a6ecb50f29301c6362292f352a73314fa2bdb"
+  },
+  "proofArchive": {
+    "path": "/private/tmp/demlik-subscription-conformance-proof-01a16c9d/source.tar.gz",
+    "sha256": "6e911d326daa3f6b399cba8ef2c3f23ec15ab135217f83cd10a939f778b9dee9",
+    "contents": "full committed source only; proof/artifacts/evidence are separate",
+    "coldArchiveBuild": false
+  },
+  "proofManifest": {
+    "path": "/private/tmp/demlik-subscription-conformance-proof-01a16c9d/evidence-files.json",
+    "sha256": "ab74cee2db7b95dce8afe5c85c6dc0b81cfadf4ae671368521e1f03226cc04ae",
+    "files": 487
+  },
+  "counts": {
+    "strictCases": 65,
+    "qualifiedObservations": 3,
+    "protocolRefusals": 4,
+    "newNativeOwnerTests": 8,
+    "nativeDefaultTestsAndDocs": 407,
+    "nativePbtTestsAndDocs": 421,
+    "oldSharedRegressions": 210,
+    "newCompiledSemanticControls": 13,
+    "inheritedCompiledControls": 4,
+    "typeConfigurations": 2,
+    "typeChecksPerConfiguration": 3,
+    "sourceOnlyFiberProbeSharedCredit": 0,
+    "existingCapabilityMappingExtensions": 8
+  },
+  "qualification": "3 Effect cleanup adapter observations remain OPEN and outside strict nativeEvidence; existing scheduling/raw/agent runtime gaps remain explicit; Source-only Fiber probe adds zero shared/native credit.",
+  "retirementReceipt": "/private/tmp/demlik-subscription-conformance-proof-01a16c9d/retirement.json",
+  "inheritedInterface": {
+    "sourceCommit": "a24b37cdb927a4a2c3d9b9fc0ec26a280dc989a6",
+    "handoff": "/private/tmp/demlik-subscription-interface-proof-01a16c9d/handoff.json",
+    "handoffSha256": "533bc92c9b344ca7ff1da3e81b896aa235dc1e68686cb6067dde0bd80881ea41",
+    "retirement": "/private/tmp/demlik-subscription-interface-proof-01a16c9d/retirement.json",
+    "retirementSha256": "e37569329f4cf45c5d5de7f418b5649e02f16ddb7723d1e63de372c23db37187",
+    "credit": "Separate inherited evidence, not new runtime shared parity."
+  }
+}
