@@ -59,7 +59,7 @@ fn machine<'a>(
     );
     Machine {
         init: Box::new(|_, _| panic!("retained replay must not initialize")),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(|_| {
             panic!("retained replay must not select subscriptions")
         }),

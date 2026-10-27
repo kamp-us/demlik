@@ -603,7 +603,7 @@ struct Env<S, M, C, U, X, SE, HE, I, R, E, RE> {
     barriers: RefCell<HashMap<u64, ReceiptReceiver<SE, HE, RE>>>,
 }
 impl<
-    S: Tagged + 'static,
+    S: 'static,
     M: Tagged + 'static,
     C: CommandFamily<Msg = M> + 'static,
     U: Subscription + 'static,
@@ -1243,7 +1243,7 @@ impl<
 /// Boot's synchronous prefix runs before return; ready futures still yield at
 /// restoration, save, handler completion, and public commit boundaries.
 pub fn launch<
-    S: Tagged + 'static,
+    S: 'static,
     M: Tagged + 'static,
     C: CommandFamily<Msg = M> + 'static,
     U: Subscription + 'static,
@@ -1267,7 +1267,7 @@ pub fn launch<
 /// State, services and failures are owned by the actor; no Send or cause-formatting
 /// bound is added to the pure reducer or its error.
 pub fn try_launch<
-    S: Tagged + 'static,
+    S: 'static,
     M: Tagged + 'static,
     C: CommandFamily<Msg = M> + 'static,
     U: Subscription + 'static,
@@ -1419,7 +1419,7 @@ pub fn try_launch<
 }
 /// Lazy launch seam, suitable for the Effect profile's cold program construction.
 pub async fn run<
-    S: Tagged + 'static,
+    S: 'static,
     M: Tagged + 'static,
     C: CommandFamily<Msg = M> + 'static,
     U: Subscription + 'static,
@@ -1441,7 +1441,7 @@ pub async fn run<
 
 /// Lazy typed-error launch; polling it starts the same actor as try_launch.
 pub async fn try_run<
-    S: Tagged + 'static,
+    S: 'static,
     M: Tagged + 'static,
     C: CommandFamily<Msg = M> + 'static,
     U: Subscription + 'static,

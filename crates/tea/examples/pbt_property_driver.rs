@@ -295,7 +295,7 @@ fn execute(case: Case) -> Value {
         .boxed()
     };
     let update = if script.form == Form::Reducer {
-        Update::RawReducer(row(&log, &updates, &panic, script.fail, false))
+        Update::raw_reducer(row(&log, &updates, &panic, script.fail, false))
     } else {
         let mut rows = indexmap::IndexMap::new();
         rows.insert(
@@ -306,7 +306,7 @@ fn execute(case: Case) -> Value {
             "done".into(),
             row(&log, &updates, &panic, script.fail, script.terminal_refuses),
         );
-        Update::RawTransitions(rows)
+        Update::raw_transitions(rows)
     };
     let machine: Machine<'_, Arc<State>, Msg, Cmd, Sub> = Machine {
         init: Box::new(|loaded, _| {

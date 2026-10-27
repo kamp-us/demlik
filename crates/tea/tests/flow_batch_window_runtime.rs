@@ -139,7 +139,7 @@ fn machine(absolute: bool) -> Machine<'static, Model, DeadlineExceeded, Flush, D
                 vec![],
             )
         }),
-        update: Update::RawReducer(cells),
+        update: Update::raw_reducer(cells),
         subscriptions: demlik_tea::core::subscriptions(move |state: &Model| {
             if absolute {
                 let deadlines = batch::subs_for(&config(), &state.batch, None);

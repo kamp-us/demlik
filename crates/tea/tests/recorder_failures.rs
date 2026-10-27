@@ -90,7 +90,7 @@ fn boundary_codecs_keep_typed_failure_identity_raw_data_and_physical_line() {
 fn cold_replay_keeps_typed_comparison_failures_and_refuses_a_missing_update_cell() {
     let machine: Machine<'_, State, Msg, (), Sub> = Machine {
         init: Box::new(|_, _| panic!("replay cannot init")),
-        update: Update::RawReducer(Default::default()),
+        update: Update::raw_reducer(Default::default()),
         subscriptions: demlik_tea::core::subscriptions(|_| panic!("replay cannot select subs")),
     };
     let cause = Rc::new(Cell::new(12));

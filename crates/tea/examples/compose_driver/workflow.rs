@@ -227,7 +227,7 @@ pub(super) fn run(script: &Script, calls: &Calls) -> Value {
                 },
             )
         }),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(|s: &Arc<Model<'_>>| {
             log.borrow_mut().push(json!(["subs", s.asked]));
             vec![]

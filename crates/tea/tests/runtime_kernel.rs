@@ -619,7 +619,7 @@ async fn no_cell_refuses_only_that_dispatch_and_real_reducer_panics_follow_each_
             let panics: demlik_tea::core::Cell<'static,Model,Msg,Cmd> = Box::new(|_,_| {
                 std::panic::panic_any(demlik_tea::NoCellError::new("child","nested",vec![]));
             });
-            machine.update=Update::RawReducer(indexmap::IndexMap::from([("Added".into(),accepted),("Start".into(),panics)]));
+            machine.update=Update::raw_reducer(indexmap::IndexMap::from([("Added".into(),accepted),("Start".into(),panics)]));
             let mut options:Options<Model,Msg,std::convert::Infallible,&'static str>=Options::new(Profile::Promise);
             options.supervision=match strategy {
                 0=>Supervision::Stop,

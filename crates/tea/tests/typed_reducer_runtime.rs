@@ -112,7 +112,7 @@ fn machine(
             "accepted".into(),
             Box::new(accepted) as demlik_tea::core::Cell<'static, Model, Msg, Command>,
         )]);
-        TryUpdate::RawReducer(cells)
+        TryUpdate::raw_reducer(cells)
     } else {
         TryUpdate::try_reducer(|state: &Model, msg: &Msg| match msg {
             Msg::Accepted => Ok(accepted(state, msg)),

@@ -517,8 +517,8 @@ fn world(script: Script) -> World {
                 row
             };
             let update = match s.form {
-                Form::Reducer => Update::RawReducer(row()),
-                Form::Transitions | Form::Disambiguated => Update::RawTransitions(
+                Form::Reducer => Update::raw_reducer(row()),
+                Form::Transitions | Form::Disambiguated => Update::raw_transitions(
                     [("active".into(), row()), ("done".into(), row())]
                         .into_iter()
                         .collect(),
@@ -674,7 +674,7 @@ fn world(script: Script) -> World {
                         vec![],
                     )
                 }),
-                update: Update::RawReducer(row),
+                update: Update::raw_reducer(row),
                 subscriptions: subscriptions(move |s: &Model| {
                     sub_log.borrow_mut().push(json!(["subs"]));
                     if matches!(fail, Some(Fail::Subs)) {

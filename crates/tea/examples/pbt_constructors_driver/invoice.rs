@@ -336,7 +336,7 @@ pub(super) fn execute(id: &str, input: &Script) -> Value {
                 drop(old);
                 Step::new(state, vec![Rc::clone(&command)])
             }),
-            update: Update::RawReducer(row),
+            update: Update::raw_reducer(row),
             subscriptions: demlik_tea::core::subscriptions(|s: &Arc<Model<'_>>| {
                 deadlines_sub(|actual: &Arc<Model<'_>>| {
                     let deadlines = poller.subs(&actual.poll);

@@ -76,7 +76,7 @@ fn machine()
                 vec![],
             )
         }),
-        update: Update::RawReducer(cells),
+        update: Update::raw_reducer(cells),
         subscriptions: demlik_tea::core::subscriptions(|s: &Model| {
             if s.delivered.is_some() {
                 return vec![];

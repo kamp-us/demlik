@@ -80,7 +80,7 @@ fn machine<'a>(
                 }],
             )
         }),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: subscriptions(|s: &Model<'a>| {
             log.borrow_mut().push(format!("subs:{}", s.n));
             vec![

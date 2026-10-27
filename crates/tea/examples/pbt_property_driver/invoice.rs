@@ -265,7 +265,7 @@ pub(super) fn execute(case: Case) -> Value {
                 boot.replace(Some(Arc::clone(&s)));
                 Step::new(s, vec![Rc::clone(&command)])
             }),
-            update: Update::RawReducer(row),
+            update: Update::raw_reducer(row),
             subscriptions: demlik_tea::core::subscriptions(|s: &Arc<Model>| {
                 let list = poller.subs(&s.poll);
                 log.borrow_mut()

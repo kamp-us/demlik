@@ -79,8 +79,14 @@ pub enum ApplyError<E> {
 }
 
 pub enum TryUpdate<'a, S, M, C, E> {
-    RawReducer(Row<'a, S, M, C>),
-    RawTransitions(IndexMap<String, Row<'a, S, M, C>>),
+    RawReducer {
+        row: Row<'a, S, M, C>,
+        state_tag: fn(&S) -> &str,
+    },
+    RawTransitions {
+        rows: IndexMap<String, Row<'a, S, M, C>>,
+        state_tag: fn(&S) -> &str,
+    },
     Exhaustive {
         cell: Cell<'a, S, M, C>,
         accepted_types: &'static [&'static str],
@@ -93,6 +99,24 @@ pub enum TryUpdate<'a, S, M, C, E> {
 
 /// The existing infallible interface keeps raw-table inference and NoCell results.
 pub type Update<'a, S, M, C> = TryUpdate<'a, S, M, C, Infallible>;
+
+impl<'a, S: Tagged, M, C, E> TryUpdate<'a, S, M, C, E> {
+    /// Keep the state-name accessor with the raw table, without reading it.
+    pub fn raw_reducer(row: Row<'a, S, M, C>) -> Self {
+        Self::RawReducer {
+            row,
+            state_tag: S::tag,
+        }
+    }
+
+    /// State-key lookup remains a property of the raw transitions table.
+    pub fn raw_transitions(rows: IndexMap<String, Row<'a, S, M, C>>) -> Self {
+        Self::RawTransitions {
+            rows,
+            state_tag: S::tag,
+        }
+    }
+}
 
 impl<'a, S, M: Message, C> Update<'a, S, M, C> {
     /// A pure function over enum messages uses Rust's exhaustive match checking.
@@ -130,11 +154,11 @@ impl<'a, S, M: Message, C, E> TryUpdate<'a, S, M, C, E> {
     }
 }
 
-impl<S: Tagged, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
+impl<S, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
     fn row(&self, state: &S) -> Option<&Row<'_, S, M, C>> {
         match self {
-            Self::RawReducer(row) => Some(row),
-            Self::RawTransitions(rows) => rows.get(state.tag()),
+            Self::RawReducer { row, .. } => Some(row),
+            Self::RawTransitions { rows, state_tag } => rows.get(state_tag(state)),
             Self::Exhaustive { .. } | Self::Fallible { .. } => None,
         }
     }
@@ -155,25 +179,27 @@ impl<S: Tagged, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
     }
 
     pub fn try_apply(&self, state: &S, message: &M) -> Result<Step<S, C>, ApplyError<E>> {
-        match self {
+        let state_tag = match self {
             Self::Exhaustive { cell, .. } => return Ok(cell(state, message)),
             Self::Fallible { cell, .. } => {
                 return cell(state, message).map_err(ApplyError::Reduce);
             }
-            _ => {}
-        }
+            Self::RawReducer { state_tag, .. } | Self::RawTransitions { state_tag, .. } => {
+                state_tag
+            }
+        };
         match self.row(state).and_then(|row| row.get(message.tag())) {
             Some(cell) => Ok(cell(state, message)),
             None => Err(ApplyError::NoCell(NoCellError::new(
                 message.tag(),
-                state.tag(),
+                state_tag(state),
                 self.accepted_types(Some(state)),
             ))),
         }
     }
 }
 
-impl<S: Tagged, M: Tagged, C> Update<'_, S, M, C> {
+impl<S, M: Tagged, C> Update<'_, S, M, C> {
     pub fn apply(&self, state: &S, message: &M) -> Result<Step<S, C>, NoCellError> {
         match self.try_apply(state, message) {
             Ok(step) => Ok(step),
@@ -270,7 +296,7 @@ fn fold_using<S, M, C, E>(
     Ok(Step { state, commands })
 }
 
-pub fn fold_updates<S: Tagged, M: Tagged, C>(
+pub fn fold_updates<S, M: Tagged, C>(
     update: &Update<'_, S, M, C>,
     state: S,
     messages: impl IntoIterator<Item = M>,
@@ -282,7 +308,7 @@ pub fn fold_updates<S: Tagged, M: Tagged, C>(
 
 /// Fold the original retained values without cloning the model or messages.
 /// An empty input returns the same seed Arc; commands remain uninterpreted.
-pub fn fold_updates_shared<S: Tagged, M: Tagged, C>(
+pub fn fold_updates_shared<S, M: Tagged, C>(
     update: &Update<'_, S, M, C>,
     state: Arc<S>,
     messages: impl IntoIterator<Item = Arc<M>>,
@@ -293,7 +319,7 @@ pub fn fold_updates_shared<S: Tagged, M: Tagged, C>(
     })
 }
 
-pub fn fold_msgs<S: Tagged, M: Tagged, C, U, X>(
+pub fn fold_msgs<S, M: Tagged, C, U, X>(
     machine: &Machine<'_, S, M, C, U, X>,
     state: S,
     messages: impl IntoIterator<Item = M>,
@@ -302,7 +328,7 @@ pub fn fold_msgs<S: Tagged, M: Tagged, C, U, X>(
 }
 
 /// Update-only retained replay: init, interpretation and subscriptions are not called.
-pub fn fold_msgs_shared<S: Tagged, M: Tagged, C, U, X>(
+pub fn fold_msgs_shared<S, M: Tagged, C, U, X>(
     machine: &Machine<'_, S, M, C, U, X>,
     state: Arc<S>,
     messages: impl IntoIterator<Item = Arc<M>>,
@@ -310,7 +336,7 @@ pub fn fold_msgs_shared<S: Tagged, M: Tagged, C, U, X>(
     Ok(fold_updates_shared(&machine.update, state, messages)?.state)
 }
 
-pub fn try_fold_updates<S: Tagged, M: Tagged, C, E>(
+pub fn try_fold_updates<S, M: Tagged, C, E>(
     update: &TryUpdate<'_, S, M, C, E>,
     state: S,
     messages: impl IntoIterator<Item = M>,
@@ -320,7 +346,7 @@ pub fn try_fold_updates<S: Tagged, M: Tagged, C, E>(
     })
 }
 
-pub fn try_fold_updates_shared<S: Tagged, M: Tagged, C, E>(
+pub fn try_fold_updates_shared<S, M: Tagged, C, E>(
     update: &TryUpdate<'_, S, M, C, E>,
     state: Arc<S>,
     messages: impl IntoIterator<Item = Arc<M>>,
@@ -332,7 +358,7 @@ pub fn try_fold_updates_shared<S: Tagged, M: Tagged, C, E>(
 }
 
 /// Update-only folding returns the original typed cause before further Msgs run.
-pub fn try_fold_msgs<S: Tagged, M: Tagged, C, U, X, E>(
+pub fn try_fold_msgs<S, M: Tagged, C, U, X, E>(
     machine: &Machine<'_, S, M, C, U, X, E>,
     state: S,
     messages: impl IntoIterator<Item = M>,
@@ -341,7 +367,7 @@ pub fn try_fold_msgs<S: Tagged, M: Tagged, C, U, X, E>(
 }
 
 /// Retained update-only replay does not call init, subscriptions or effects.
-pub fn try_fold_msgs_shared<S: Tagged, M: Tagged, C, U, X, E>(
+pub fn try_fold_msgs_shared<S, M: Tagged, C, U, X, E>(
     machine: &Machine<'_, S, M, C, U, X, E>,
     state: Arc<S>,
     messages: impl IntoIterator<Item = Arc<M>>,
@@ -349,7 +375,7 @@ pub fn try_fold_msgs_shared<S: Tagged, M: Tagged, C, U, X, E>(
     Ok(try_fold_updates_shared(&machine.update, state, messages)?.state)
 }
 
-pub fn replay<S: Tagged, M: Tagged, C, U: Subscription, X>(
+pub fn replay<S, M: Tagged, C, U: Subscription, X>(
     machine: &Machine<'_, S, M, C, U, X>,
     loaded: Option<S>,
     input: &X,

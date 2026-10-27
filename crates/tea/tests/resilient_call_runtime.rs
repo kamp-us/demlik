@@ -62,7 +62,7 @@ async fn resilient_timer_uses_the_actual_default_runtime_in_both_profiles() {
                 init: Box::new(move |loaded, _| Step::new(loaded.unwrap_or_else(|| Model {
                     call: initial.borrow_mut().take().unwrap(), delivered: Rc::clone(&seen),
                 }), vec![])),
-                update: Update::RawReducer(cells),
+                update: Update::raw_reducer(cells),
                 subscriptions: demlik_tea::core::subscriptions(move |state: &Model| {
                     subscriptions.timer(&state.call).map(|deps: TimerDeps<DeadlineExceeded>| {
                         assert_eq!(deps.ms, 2.5);

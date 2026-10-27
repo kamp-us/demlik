@@ -309,7 +309,7 @@ fn replaying(input: &Value, calls: &mut Vec<&'static str>) -> Value {
     );
     let machine: Machine<'_, Model, Msg, (), Sub> = Machine {
         init: Box::new(|_, _| panic!("replay cannot call init")),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(|_| {
             panic!("replay cannot select subscriptions")
         }),

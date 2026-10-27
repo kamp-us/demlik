@@ -31,7 +31,7 @@ fn a_prediction_fold_accepts_borrowed_non_clone_non_send_non_serializable_state(
             let _ = borrowed;
             panic!("a prediction fold must bypass init")
         }),
-        update: Update::RawReducer(Row::from([(
+        update: Update::raw_reducer(Row::from([(
             "added".into(),
             Box::new(|state: &State, _: &Msg| {
                 Step::new(

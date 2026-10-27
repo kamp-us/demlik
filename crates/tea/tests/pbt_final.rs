@@ -409,7 +409,7 @@ fn final_checks_keep_failure_phases_and_skip_callbacks_after_boot_or_cell_refusa
                     )
                 }),
                 update: if phase == "refusal" {
-                    Update::RawReducer(Default::default())
+                    Update::raw_reducer(Default::default())
                 } else {
                     Update::reducer(|s: &Model, _: &Msg| {
                         if phase == "update" {

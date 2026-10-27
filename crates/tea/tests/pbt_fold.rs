@@ -193,7 +193,7 @@ fn missing_cells_keep_the_existing_refusal_data() {
     });
     let machine: Machine<'_, Model, Msg, Cmd, Sub> = Machine {
         init: Box::new(|saved, _| Step::new(saved.unwrap(), vec![])),
-        update: Update::RawReducer(Default::default()),
+        update: Update::raw_reducer(Default::default()),
         subscriptions: demlik_tea::core::subscriptions(|_| vec![]),
     };
     let error = fold_events(

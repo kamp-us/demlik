@@ -149,7 +149,7 @@ fn opaque_recorded_replay_uses_only_updates_and_keeps_expected_actual_and_empty_
     );
     let machine: Machine<'_, State<'_>, Msg, Cmd, Sub> = Machine {
         init: Box::new(|_, _| panic!("init must not run")),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(|_| panic!("subs must not run")),
     };
     let seed = Arc::new(State {

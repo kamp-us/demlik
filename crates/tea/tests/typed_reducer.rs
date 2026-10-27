@@ -122,7 +122,7 @@ fn typed_update_only_folds_retain_opaque_borrowed_causes_and_seed_without_effect
     assert!(Rc::ptr_eq(&owned.original, &cause));
     assert_eq!(calls.get(), 4);
     let missing: TryUpdate<'_, Model<'_>, Msg, Command<'_>, Failure<'_>> =
-        TryUpdate::RawReducer(Default::default());
+        TryUpdate::raw_reducer(Default::default());
     let error = match try_fold_updates(
         &missing,
         Model {

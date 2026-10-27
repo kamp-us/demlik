@@ -574,7 +574,7 @@ fn machine(shared: Rc<Shared>, active: bool) -> Machine<'static, Arc<State>, Msg
             };
             Step::new(next, vec![])
         }),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(move |state: &Arc<State>| {
             subscriptions
                 .hooks

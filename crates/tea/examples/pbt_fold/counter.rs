@@ -232,8 +232,8 @@ pub fn run(script: Script, calls: &Calls) -> Value {
     let delta = script.init_delta.value();
     let count = script.subs;
     let update = match script.form {
-        Form::Reducer => Update::RawReducer(row(&log, &cause, fail, false)),
-        Form::Transitions | Form::Disambiguated => Update::RawTransitions(
+        Form::Reducer => Update::raw_reducer(row(&log, &cause, fail, false)),
+        Form::Transitions | Form::Disambiguated => Update::raw_transitions(
             [
                 ("active".into(), row(&log, &cause, fail, false)),
                 (

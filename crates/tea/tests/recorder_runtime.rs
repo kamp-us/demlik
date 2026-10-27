@@ -126,7 +126,7 @@ fn machine(counts: Rc<Counts>) -> Machine<'static, State, Msg, Cmd, Sub, Context
                 vec![Cmd::Write],
             )
         }),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(move |_| {
             subscriptions.subs.set(subscriptions.subs.get() + 1);
             vec![]

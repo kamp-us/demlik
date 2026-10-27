@@ -233,7 +233,7 @@ fn machine(
                 step.commands.into_iter().map(Cmd).collect(),
             )
         }),
-        update: Update::RawReducer(row),
+        update: Update::raw_reducer(row),
         subscriptions: demlik_tea::core::subscriptions(|_: &Model| vec![]),
     }
 }

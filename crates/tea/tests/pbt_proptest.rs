@@ -207,7 +207,7 @@ fn all_native_failure_boundaries_retain_original_causes_and_refusals_skip_predic
                 Step::new(Model(0), vec![])
             }),
             update: if phase == "refused" {
-                Update::RawReducer(Default::default())
+                Update::raw_reducer(Default::default())
             } else {
                 Update::reducer(|s: &Model, _: &Msg| {
                     if phase == "update" {

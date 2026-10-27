@@ -135,8 +135,8 @@ pub fn execute(input: Value, calls: &mut Vec<&'static str>) -> Result<Value, Str
             Step::new(state, vec![Cmd { kind, count }])
         }),
         update: match input.form {
-            Form::Reducer => Update::RawReducer(row()),
-            Form::Transitions => Update::RawTransitions(
+            Form::Reducer => Update::raw_reducer(row()),
+            Form::Transitions => Update::raw_transitions(
                 [("ready".into(), row()), ("done".into(), Row::new())].into(),
             ),
         },

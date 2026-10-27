@@ -280,7 +280,7 @@ fn machine(sync: Rc<Sync>) -> Machine<'static, Model, Msg, Command, Sub<TimerDep
                 vec![],
             )
         }),
-        update: Update::RawReducer(cells),
+        update: Update::raw_reducer(cells),
         subscriptions: demlik_tea::core::subscriptions(move |state: &Model| {
             selector
                 .timer(&state.rec)

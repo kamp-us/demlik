@@ -149,7 +149,7 @@ async fn execute(script: Script) -> Value {
                 vec![],
             )
         }),
-        update: Update::RawReducer(cells),
+        update: Update::raw_reducer(cells),
         subscriptions: demlik_tea::core::subscriptions(move |s: &Model| {
             if s.delivered.is_some() {
                 return vec![];

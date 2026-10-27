@@ -99,7 +99,7 @@ pub fn execute(verb: Verb, scenario: Scenario, calls: &Calls) -> Value {
         let log = Rc::clone(&trace);
         let mut row: Row<'static, Model, Msg, Cmd> = Row::new();
         row.insert("add".into(), Box::new(move |s, m| add(s, m, &log)));
-        TryUpdate::RawReducer(row)
+        TryUpdate::raw_reducer(row)
     } else {
         let log = Rc::clone(&trace);
         let original = Rc::clone(&cause);
