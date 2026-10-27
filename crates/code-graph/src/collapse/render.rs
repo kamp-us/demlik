@@ -4,8 +4,9 @@ use super::{
     settings::CollapseSettings,
 };
 use crate::{
-    project::discover_package_roots,
+    project::{Collation, discover_package_roots},
     render::{
+        ReportRenderError,
         json::stable_stringify,
         text::{join, number, pad_start},
     },
@@ -225,15 +226,18 @@ pub fn render_collapse(
     settings: &CollapseSettings,
     json: bool,
     pretty: bool,
-) -> Result<JsString, serde_json::Error> {
+    collation: &Collation,
+) -> Result<JsString, ReportRenderError> {
     if !matches!(graph.provenance, Provenance::Edges { .. }) {
         return Ok("collapse: needs the call graph; add --edges (--collapse implies it).".into());
     }
     let native_root = root_absolute.to_lossy();
     let roots = discover_package_roots(Path::new(&native_root), None);
-    let report = find_collapse_candidates(&graph.functions, &roots, settings);
+    let report = find_collapse_candidates(&graph.functions, &roots, settings, collation)?;
     if json {
-        stable_stringify(&report, pretty).map(Into::into)
+        stable_stringify(&report, pretty)
+            .map(Into::into)
+            .map_err(Into::into)
     } else {
         Ok(render_human(&report))
     }

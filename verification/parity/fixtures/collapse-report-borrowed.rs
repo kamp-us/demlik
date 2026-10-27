@@ -1,5 +1,6 @@
 use demlik_code_graph::{
     collapse::{candidates::find_collapse_candidates, settings::CollapseSettings},
+    project::Collation,
     render::json::stable_stringify,
     schema::{CallSite, Edges, FunctionKind, FunctionNode},
 };
@@ -37,31 +38,42 @@ fn function(id: &str, name: &str, file: &str) -> FunctionNode {
     }
 }
 fn main() {
+    struct Local<'a> {
+        label: &'a str,
+        visits: Rc<Cell<usize>>,
+    }
     let label = String::from("local membership analysis");
     let visits = Rc::new(Cell::new(0));
+    let local = Local {
+        label: &label,
+        visits: Rc::clone(&visits),
+    };
     let nodes = vec![
         function("a.ts:normalizeMembership", "normalizeMembership", "a.ts"),
         function("b.ts:canonicalMembership", "canonicalMembership", "b.ts"),
     ];
     let settings = CollapseSettings::default();
     let roots = vec![String::new()];
-    let inspect = || {
-        assert_eq!(label, "local membership analysis");
-        let report = find_collapse_candidates(&nodes, &roots, &settings);
-        visits.set(visits.get() + 1);
-        report
+    let report = {
+        let collation = Collation::try_node22_en_us().unwrap();
+        let inspect = || {
+            assert_eq!(local.label, "local membership analysis");
+            let report = find_collapse_candidates(&nodes, &roots, &settings, &collation).unwrap();
+            local.visits.set(local.visits.get() + 1);
+            report
+        };
+        inspect()
     };
-    let report = inspect();
     assert!(std::ptr::eq(report.settings, &settings));
     assert_eq!(report.considered_functions, 2);
     assert_eq!(report.pairs_scored, 1);
     assert_eq!(report.candidates.len(), 1);
     assert_eq!(report.clusters.len(), 1);
     assert!(report.partial_twins.is_empty());
-    let candidate = &report.candidates[0];
+    let candidate = Arc::clone(&report.candidates[0]);
     assert!(std::ptr::eq(candidate.a, &nodes[0]));
     assert!(std::ptr::eq(candidate.b, &nodes[1]));
-    assert!(Arc::ptr_eq(candidate, &report.clusters[0].representative));
+    assert!(Arc::ptr_eq(&candidate, &report.clusters[0].representative));
     assert_eq!(candidate.confidence, 0.625);
     assert_eq!(candidate.cost, 1.0);
     assert_eq!(candidate.rank, 0.625);

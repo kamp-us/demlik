@@ -191,7 +191,7 @@ fn report<'a>(
     settings: &CollapseSettings,
     filter: bool,
     calls: &mut Vec<&'static str>,
-) -> Report<'a> {
+) -> Result<Report<'a>, demlik_code_graph::project::CollationError> {
     let eligible = nodes
         .iter()
         .map(|node| {
@@ -213,15 +213,16 @@ fn report<'a>(
         calls,
         demlik_code_graph::collapse::partial::find_partial_twins,
         &candidates,
-        settings
-    );
-    Report {
+        settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us()?
+    )?;
+    Ok(Report {
         borrowed_owners: borrow_identity(&twins, nodes),
         eligible,
         twins,
         functions: None,
         module_files: None,
-    }
+    })
 }
 fn assembly_failure(error: AssemblyError) -> Failure {
     Failure {
@@ -248,7 +249,7 @@ fn execute(request: Request) -> Result<Response, Box<dyn std::error::Error>> {
                 &settings,
                 input.filter_candidates,
                 &mut calls,
-            ))?)
+            )?)?)
         }
         Operation::Project => {
             let input: ProjectInput = serde_json::from_str(request.input.get())?;
@@ -296,7 +297,7 @@ fn execute(request: Request) -> Result<Response, Box<dyn std::error::Error>> {
                     ) {
                         Err(error) => Err(assembly_failure(error)),
                         Ok(graph) => {
-                            let mut output = report(&graph.functions, &settings, true, &mut calls);
+                            let mut output = report(&graph.functions, &settings, true, &mut calls)?;
                             output.functions = Some(&graph.functions);
                             output.module_files =
                                 Some(graph.modules.iter().map(|m| m.file.as_str()).collect());

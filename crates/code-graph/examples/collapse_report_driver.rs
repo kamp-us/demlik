@@ -163,13 +163,15 @@ fn encode(
     project: bool,
     mut calls: Vec<&'static str>,
 ) -> Result<String, Box<dyn Error>> {
+    let collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
     let report = observe!(
         &mut calls,
         demlik_code_graph::collapse::candidates::find_collapse_candidates,
         functions,
         roots,
-        settings
-    );
+        settings,
+        &collation
+    )?;
     let compact = observe!(
         &mut calls,
         demlik_code_graph::render::json::stable_stringify,

@@ -43,7 +43,13 @@ fn main() {
             function("a", "normalizeMembership", "a.ts"),
             function("b", "canonicalMembership", "b.ts"),
         ];
-        report = find_collapse_candidates(&nodes, &[], &settings);
+        report = find_collapse_candidates(
+            &nodes,
+            &[],
+            &settings,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
     }
     println!("{}", report.considered_functions);
 }

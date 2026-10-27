@@ -1,6 +1,6 @@
 use super::settings::CollapseSettings;
 use crate::{
-    project::locale_compare,
+    project::{Collation, CollationError, CollationInput},
     schema::{CallSite, FunctionNode},
     text::JsString,
 };
@@ -88,7 +88,11 @@ fn extend_run(a: &[CallSite], b: &[CallSite], a_at: usize, b_at: usize, width: u
         length: a_end - a_start,
     }
 }
-fn shared_constants<'a>(a: &'a [CallSite], b: &[CallSite]) -> Vec<&'a str> {
+fn shared_constants<'a>(
+    a: &'a [CallSite],
+    b: &[CallSite],
+    collation: &Collation,
+) -> Result<Vec<&'a str>, CollationError> {
     let mut shared = IndexSet::new();
     for (mine, theirs) in a.iter().zip(b) {
         for name in &mine.const_args {
@@ -97,27 +101,35 @@ fn shared_constants<'a>(a: &'a [CallSite], b: &[CallSite]) -> Vec<&'a str> {
             }
         }
     }
-    let mut shared: Vec<_> = shared.into_iter().collect();
-    shared.sort_by(|left, right| locale_compare(left, right));
-    shared
+    let mut shared = shared
+        .into_iter()
+        .map(|value| Ok((value, CollationInput::from_text(value)?)))
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    shared.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+    Ok(shared.into_iter().map(|(value, _)| value).collect())
 }
 fn to_twin<'a>(
     a: &'a FunctionNode,
     b: &'a FunctionNode,
     run: Run,
     settings: &CollapseSettings,
-) -> Option<PartialTwin<'a>> {
+    collation: &Collation,
+) -> Result<Option<PartialTwin<'a>>, CollationError> {
     let (a_calls, b_calls) = (calls(a), calls(b));
     let a_next = run.a_start + run.length;
     let b_next = run.b_start + run.length;
-    let a_diverges = a_calls.get(a_next)?;
-    let b_diverges = b_calls.get(b_next)?;
+    let Some(a_diverges) = a_calls.get(a_next) else {
+        return Ok(None);
+    };
+    let Some(b_diverges) = b_calls.get(b_next) else {
+        return Ok(None);
+    };
     let a_block = &a_calls[run.a_start..a_next];
-    let constants = shared_constants(a_block, &b_calls[run.b_start..b_next]);
+    let constants = shared_constants(a_block, &b_calls[run.b_start..b_next], collation)?;
     if (constants.len() as f64) < settings.partial_min_shared_constants {
-        return None;
+        return Ok(None);
     }
-    Some(PartialTwin {
+    Ok(Some(PartialTwin {
         a,
         b,
         shared_block: a_block,
@@ -125,7 +137,7 @@ fn to_twin<'a>(
         b_diverges,
         shared_constants: constants,
         b_start: run.b_start,
-    })
+    }))
 }
 
 #[derive(Clone, Copy)]
@@ -174,7 +186,8 @@ fn keep<'a>(best: &mut IndexMap<String, PartialTwin<'a>>, twin: PartialTwin<'a>)
 pub fn find_partial_twins<'a>(
     candidates: &[&'a FunctionNode],
     settings: &CollapseSettings,
-) -> Vec<PartialTwin<'a>> {
+    collation: &Collation,
+) -> Result<Vec<PartialTwin<'a>>, CollationError> {
     let width = settings.partial_min_prefix as usize;
     let mut best = IndexMap::new();
     for bucket in shingle(candidates, width).values() {
@@ -189,20 +202,27 @@ pub fn find_partial_twins<'a>(
                 }
                 let (a, b) = (candidates[left.index], candidates[right.index]);
                 let run = extend_run(calls(a), calls(b), left.at, right.at, width);
-                if let Some(twin) = to_twin(a, b, run, settings) {
+                if let Some(twin) = to_twin(a, b, run, settings, collation)? {
                     keep(&mut best, twin);
                 }
             }
         }
     }
-    let mut twins: Vec<_> = best.into_values().collect();
-    twins.sort_by(|x, y| {
+    let mut twins = best
+        .into_values()
+        .map(|twin| {
+            let a = CollationInput::from_text(&twin.a.id)?;
+            let b = CollationInput::from_text(&twin.b.id)?;
+            Ok((twin, a, b))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    twins.sort_by(|(x, xa, xb), (y, ya, yb)| {
         y.shared_block
             .len()
             .cmp(&x.shared_block.len())
             .then_with(|| y.shared_constants.len().cmp(&x.shared_constants.len()))
-            .then_with(|| locale_compare(&x.a.id, &y.a.id))
-            .then_with(|| locale_compare(&x.b.id, &y.b.id))
+            .then_with(|| collation.compare(xa, ya))
+            .then_with(|| collation.compare(xb, yb))
     });
-    twins
+    Ok(twins.into_iter().map(|(twin, _, _)| twin).collect())
 }

@@ -1,0 +1,162 @@
+{
+  "icu.considered-canonical-ties": {
+    "pairOrder": [
+      ["A2", "\u00e9"],
+      ["a10", "a2"],
+      ["a10", "A2"],
+      ["a10", "\u00e9"],
+      ["a10", "e\u0301"],
+      ["a2", "A2"],
+      ["a2", "\u00e9"],
+      ["a2", "e\u0301"],
+      ["A2", "e\u0301"],
+      ["\u00e9", "e\u0301"]
+    ],
+    "skipped": [],
+    "clusters": [
+      ["A2", "\u00e9", "e\u0301"],
+      ["a10", "a2", "A2", "\u00e9", "e\u0301"]
+    ],
+    "partials": [],
+    "rankOrder": [
+      ["A2", "\u00e9", 0.75],
+      ["a10", "a2", 0.625],
+      ["a10", "A2", 0.625],
+      ["a10", "\u00e9", 0.625],
+      ["a10", "e\u0301", 0.625],
+      ["a2", "A2", 0.625],
+      ["a2", "\u00e9", 0.625],
+      ["a2", "e\u0301", 0.625],
+      ["A2", "e\u0301", 0.625],
+      ["\u00e9", "e\u0301", 0.625]
+    ]
+  },
+  "icu.skipped-raw-units": {
+    "pairOrder": [],
+    "skipped": [
+      [3, "callee", "external:\ud83d\ude00"],
+      [3, "callee", "external:\u00e9"],
+      [3, "callee", "external:e\u0301"],
+      [3, "callee", "external:\ud800"],
+      [3, "callee", "external:\ud801"],
+      [3, "callee", "external:\ufffd"],
+      [3, "caller", "a10"],
+      [3, "caller", "a2"],
+      [3, "caller", "\u00e9"],
+      [3, "caller", "e\u0301"],
+      [3, "name-token", "membership"],
+      [3, "name-token", "normal"]
+    ],
+    "clusters": [],
+    "partials": [],
+    "rankOrder": []
+  },
+  "icu.partial-canonical-constants": {
+    "pairOrder": [],
+    "skipped": [
+      [2, "callee", "p"],
+      [2, "callee", "q"],
+      [2, "callee", "r"],
+      [2, "name-token", "membership"],
+      [2, "name-token", "normal"]
+    ],
+    "clusters": [],
+    "partials": [
+      {
+        "a": "\u00e9",
+        "b": "e\u0301",
+        "constants": ["a10", "a2", "\u00e9", "e\u0301"]
+      }
+    ],
+    "rankOrder": []
+  },
+  "icu.rank-before-id": {
+    "pairOrder": [["b", "z"], ["a", "b"], ["a", "z"]],
+    "skipped": [],
+    "clusters": [["a", "b", "z"]],
+    "partials": [],
+    "rankOrder": [["b", "z", 0.625], ["a", "b", 0.1563], ["a", "z", 0.1563]]
+  },
+  "icu.cluster-canonical-members": {
+    "pairOrder": [
+      ["\u00e9:one", "e\u0301:one"],
+      ["\u00e9:one", "\u00e9:two"],
+      ["\u00e9:one", "e\u0301:two"],
+      ["e\u0301:one", "\u00e9:two"],
+      ["e\u0301:one", "e\u0301:two"],
+      ["\u00e9:two", "e\u0301:two"]
+    ],
+    "skipped": [],
+    "clusters": [["\u00e9:one", "e\u0301:one", "\u00e9:two", "e\u0301:two"]],
+    "partials": [],
+    "rankOrder": [
+      ["\u00e9:one", "e\u0301:one", 0.625],
+      ["\u00e9:one", "\u00e9:two", 0.625],
+      ["\u00e9:one", "e\u0301:two", 0.625],
+      ["e\u0301:one", "\u00e9:two", 0.625],
+      ["e\u0301:one", "e\u0301:two", 0.625],
+      ["\u00e9:two", "e\u0301:two", 0.625]
+    ]
+  },
+  "icu.partial-tie-identities": {
+    "pairOrder": [],
+    "skipped": [
+      [4, "callee", "p"],
+      [4, "callee", "q"],
+      [4, "callee", "r"],
+      [4, "name-token", "membership"],
+      [4, "name-token", "normal"]
+    ],
+    "clusters": [],
+    "partials": [
+      {
+        "a": "a2",
+        "b": "A2",
+        "constants": ["LIMIT"]
+      },
+      {
+        "a": "a2",
+        "b": "\u00e9",
+        "constants": ["LIMIT"]
+      },
+      {
+        "a": "a2",
+        "b": "e\u0301",
+        "constants": ["LIMIT"]
+      },
+      {
+        "a": "A2",
+        "b": "\u00e9",
+        "constants": ["LIMIT"]
+      },
+      {
+        "a": "A2",
+        "b": "e\u0301",
+        "constants": ["LIMIT"]
+      },
+      {
+        "a": "\u00e9",
+        "b": "e\u0301",
+        "constants": ["LIMIT"]
+      }
+    ],
+    "rankOrder": []
+  },
+  "icu.skipped-size-kind-key": {
+    "pairOrder": [],
+    "skipped": [
+      [3, "callee", "z"],
+      [3, "caller", "z"],
+      [3, "name-token", "group"],
+      [3, "name-token", "inspect"],
+      [2, "callee", "\u00e9"],
+      [2, "callee", "e\u0301"],
+      [2, "caller", "\u00e9"],
+      [2, "caller", "e\u0301"],
+      [2, "name-token", "memb"]
+    ],
+    "clusters": [],
+    "partials": [],
+    "rankOrder": []
+  }
+}

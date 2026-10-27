@@ -5,7 +5,7 @@ use demlik_code_graph::{
         settings::CollapseSettings,
     },
     extract::assemble::{NodeFields, assemble_graph},
-    project::load_cheap_project,
+    project::{Collation, load_cheap_project},
     schema::Thresholds,
     text::JsString,
 };
@@ -29,11 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let settings = CollapseSettings::default();
     let label = String::from("borrowed local renderer context");
     let visits = Rc::new(Cell::new(0));
+    let collation = Collation::try_node22_en_us()?;
     let text = {
         let render = || {
             assert_eq!(label, "borrowed local renderer context");
             visits.set(visits.get() + 1);
-            render_collapse(&graph, &root, &settings, false, false)
+            render_collapse(&graph, &root, &settings, false, false, &collation)
         };
         render()?
     };
@@ -41,7 +42,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         text,
         JsString::from("collapse: needs the call graph; add --edges (--collapse implies it).")
     );
-    let report = find_collapse_candidates(&graph.functions, &[], &settings);
+    let report = find_collapse_candidates(&graph.functions, &[], &settings, &collation)?;
+    drop(collation);
     assert_eq!(
         partial_twin_lines(&report),
         vec![JsString::from(

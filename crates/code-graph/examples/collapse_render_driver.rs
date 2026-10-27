@@ -106,6 +106,7 @@ fn execute(request: Request) -> Result<String, Box<dyn Error>> {
                 .map(NodeInput::into_function)
                 .collect();
             let graph = graph(&input, nodes);
+            let collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
             let text = observe!(
                 &mut calls,
                 demlik_code_graph::collapse::render::render_collapse,
@@ -113,9 +114,10 @@ fn execute(request: Request) -> Result<String, Box<dyn Error>> {
                 &input.root,
                 &settings,
                 input.json,
-                input.pretty
+                input.pretty,
+                &collation
             )?;
-            let report = find_collapse_candidates(&graph.functions, &[], &settings);
+            let report = find_collapse_candidates(&graph.functions, &[], &settings, &collation)?;
             let partial_lines = observe!(
                 &mut calls,
                 demlik_code_graph::collapse::render::partial_twin_lines,

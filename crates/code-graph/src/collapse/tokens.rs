@@ -1,4 +1,4 @@
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use indexmap::IndexSet;
 const STOPWORDS: &[&str] = &[
     "a",
@@ -77,7 +77,10 @@ fn stem(token: &str) -> &str {
     }
     token
 }
-pub(super) fn name_tokens(name: &str) -> IndexSet<String> {
+pub(super) fn name_tokens(
+    name: &str,
+    collation: &Collation,
+) -> Result<IndexSet<String>, CollationError> {
     let chars: Vec<_> = name.chars().collect();
     let mut split = String::new();
     for (i, ch) in chars.iter().copied().enumerate() {
@@ -106,7 +109,13 @@ pub(super) fn name_tokens(name: &str) -> IndexSet<String> {
             tokens.insert(word.to_owned());
         }
     }
-    let mut tokens: Vec<_> = tokens.into_iter().collect();
-    tokens.sort_by(|a, b| locale_compare(a, b));
-    tokens.into_iter().collect()
+    let mut tokens = tokens
+        .into_iter()
+        .map(|token| {
+            let key = CollationInput::from_text(&token)?;
+            Ok((token, key))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    tokens.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+    Ok(tokens.into_iter().map(|(token, _)| token).collect())
 }

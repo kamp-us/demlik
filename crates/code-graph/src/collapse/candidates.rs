@@ -24,7 +24,7 @@ use super::{
     signals::{Twin, fired_signals, round4},
 };
 use crate::{
-    project::{locale_compare, locale_compare_units},
+    project::{Collation, CollationError, CollationInput},
     text::JsString,
 };
 use indexmap::{IndexMap, IndexSet};
@@ -125,7 +125,8 @@ fn build_indexes(twins: &[Twin<'_>]) -> [Index; 3] {
 fn propose_pairs(
     twins: &[Twin<'_>],
     settings: &CollapseSettings,
-) -> (IndexSet<u64>, Vec<SkippedBlock>) {
+    collation: &Collation,
+) -> Result<(IndexSet<u64>, Vec<SkippedBlock>), CollationError> {
     let mut pairs = IndexSet::new();
     let mut skipped = Vec::new();
     let stride = twins.len() as f64;
@@ -153,23 +154,35 @@ fn propose_pairs(
             }
         }
     }
-    skipped.sort_by(|x, y| {
+    let mut skipped = skipped
+        .into_iter()
+        .map(|block| {
+            let kind = CollationInput::from_text(block.kind.as_str())?;
+            let key = CollationInput::from_utf16(block.key.units())?;
+            Ok((block, kind, key))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    skipped.sort_by(|(x, xk, xv), (y, yk, yv)| {
         y.size
             .cmp(&x.size)
-            .then_with(|| locale_compare(x.kind.as_str(), y.kind.as_str()))
-            .then_with(|| locale_compare_units(x.key.units(), y.key.units()))
+            .then_with(|| collation.compare(xk, yk))
+            .then_with(|| collation.compare(xv, yv))
     });
-    (pairs, skipped)
+    Ok((
+        pairs,
+        skipped.into_iter().map(|(block, _, _)| block).collect(),
+    ))
 }
 fn score_pair<'g>(
     a: &Twin<'g>,
     b: &Twin<'g>,
     settings: &CollapseSettings,
     context: &CostContext<'g, '_>,
-) -> Option<Arc<CollapseCandidate<'g>>> {
-    let signals = fired_signals(a, b, settings);
+    collation: &Collation,
+) -> Result<Option<Arc<CollapseCandidate<'g>>>, CollationError> {
+    let signals = fired_signals(a, b, settings, collation)?;
     if (signals.len() as f64) < settings.min_signals {
-        return None;
+        return Ok(None);
     }
     let confidence = round4(
         signals
@@ -179,7 +192,7 @@ fn score_pair<'g>(
     );
     let inputs = context.inputs(a, b);
     let cost = collapse_cost(inputs, settings);
-    Some(Arc::new(CollapseCandidate {
+    Ok(Some(Arc::new(CollapseCandidate {
         a: a.function,
         b: b.function,
         signals,
@@ -187,7 +200,7 @@ fn score_pair<'g>(
         cost,
         cost_inputs: inputs,
         rank: round4(confidence / cost),
-    }))
+    })))
 }
 fn pair_key(a: &str, b: &str) -> String {
     if a.encode_utf16().cmp(b.encode_utf16()).is_lt() {
@@ -249,7 +262,10 @@ fn place<'g>(
 fn descending(a: f64, b: f64) -> Ordering {
     b.partial_cmp(&a).unwrap_or(Ordering::Equal)
 }
-fn cluster_candidates<'g>(candidates: &[Arc<CollapseCandidate<'g>>]) -> Vec<CollapseCluster<'g>> {
+fn cluster_candidates<'g>(
+    candidates: &[Arc<CollapseCandidate<'g>>],
+    collation: &Collation,
+) -> Result<Vec<CollapseCluster<'g>>, CollationError> {
     let pairs = candidates
         .iter()
         .map(|c| pair_key(&c.a.id, &c.b.id))
@@ -267,13 +283,26 @@ fn cluster_candidates<'g>(candidates: &[Arc<CollapseCandidate<'g>>]) -> Vec<Coll
             .collect::<IndexSet<_>>()
             .into_iter()
             .collect();
-        cluster.members.sort_by(|a, b| locale_compare(a, b));
+        let mut members = cluster
+            .members
+            .iter()
+            .copied()
+            .map(|member| Ok((member, CollationInput::from_text(member)?)))
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        members.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+        cluster.members = members.into_iter().map(|(member, _)| member).collect();
     }
-    clusters.sort_by(|a, b| {
-        descending(a.rank, b.rank)
-            .then_with(|| locale_compare(&a.representative.a.id, &b.representative.a.id))
+    let mut clusters = clusters
+        .into_iter()
+        .map(|cluster| {
+            let key = CollationInput::from_text(&cluster.representative.a.id)?;
+            Ok((cluster, key))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    clusters.sort_by(|(a, ak), (b, bk)| {
+        descending(a.rank, b.rank).then_with(|| collation.compare(ak, bk))
     });
-    clusters
+    Ok(clusters.into_iter().map(|(cluster, _)| cluster).collect())
 }
 
 /// Compare canonical graph facts without IO. Returned rows borrow the original functions/settings;
@@ -282,14 +311,23 @@ pub fn find_collapse_candidates<'g, 's>(
     functions: &'g [FunctionNode],
     package_roots: &[String],
     settings: &'s CollapseSettings,
-) -> CollapseReport<'g, 's> {
-    let mut considered: Vec<_> = functions
+    collation: &Collation,
+) -> Result<CollapseReport<'g, 's>, CollationError> {
+    let considered: Vec<_> = functions
         .iter()
         .filter(|node| is_candidate_function(node, settings))
         .collect();
-    considered.sort_by(|a, b| locale_compare(&a.id, &b.id));
-    let twins: Vec<_> = considered.iter().map(|f| Twin::new(f)).collect();
-    let (pairs, skipped) = propose_pairs(&twins, settings);
+    let mut keyed = considered
+        .into_iter()
+        .map(|node| Ok((node, CollationInput::from_text(&node.id)?)))
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    keyed.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+    let considered: Vec<_> = keyed.into_iter().map(|(node, _)| node).collect();
+    let twins = considered
+        .iter()
+        .map(|f| Twin::new(f, collation))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (pairs, skipped) = propose_pairs(&twins, settings, collation)?;
     let context = CostContext::new(functions, package_roots);
     let stride = twins.len() as f64;
     let mut candidates = Vec::new();
@@ -302,23 +340,35 @@ pub fn find_collapse_candidates<'g, 's>(
         let (Some(a), Some(b)) = (twins.get(a), twins.get(b)) else {
             continue;
         };
-        if let Some(scored) = score_pair(a, b, settings, &context) {
+        if let Some(scored) = score_pair(a, b, settings, &context, collation)? {
             candidates.push(scored)
         }
     }
-    candidates.sort_by(|a, b| {
+    let mut candidates = candidates
+        .into_iter()
+        .map(|candidate| {
+            let a = CollationInput::from_text(&candidate.a.id)?;
+            let b = CollationInput::from_text(&candidate.b.id)?;
+            Ok((candidate, a, b))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    candidates.sort_by(|(a, aa, ab), (b, ba, bb)| {
         descending(a.rank, b.rank)
-            .then_with(|| locale_compare(&a.a.id, &b.a.id))
-            .then_with(|| locale_compare(&a.b.id, &b.b.id))
+            .then_with(|| collation.compare(aa, ba))
+            .then_with(|| collation.compare(ab, bb))
     });
-    let clusters = cluster_candidates(&candidates);
-    CollapseReport {
+    let candidates: Vec<_> = candidates
+        .into_iter()
+        .map(|(candidate, _, _)| candidate)
+        .collect();
+    let clusters = cluster_candidates(&candidates, collation)?;
+    Ok(CollapseReport {
         settings,
         considered_functions: twins.len(),
         pairs_scored: pairs.len(),
         skipped_blocks: skipped,
         candidates,
         clusters,
-        partial_twins: find_partial_twins(&considered, settings),
-    }
+        partial_twins: find_partial_twins(&considered, settings, collation)?,
+    })
 }

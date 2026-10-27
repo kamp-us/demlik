@@ -23,11 +23,15 @@ import {
   ThresholdsSchema,
 } from "../../packages/code-graph/src/schema.js";
 import {
-  cases,
+  cases as baselineCases,
   type Expected,
   type Node,
   type Pure,
 } from "./collapse-report-cases.mjs";
+import { icu77CollapseCases } from "./icu77-collapse-cases.mjs";
+
+const icu77Group = process.env.DEMLIK_ICU77_COLLAPSE === "1";
+const cases = icu77Group ? icu77CollapseCases : baselineCases;
 
 const [binary, reportFile] = process.argv.slice(2);
 assert.ok(binary && reportFile);
@@ -198,7 +202,9 @@ const sourceHashes = Object.fromEntries(
     hash(fs.readFileSync(path.join(repository, "packages/code-graph/src", p))),
   ]),
 );
-const chosen = process.env.DEMLIK_COLLAPSE_REPORT_CASES?.split(",");
+const chosen =
+  process.env.DEMLIK_COLLAPSE_REPORT_CASES?.split(",") ??
+  (icu77Group ? cases.map((c) => c.id) : undefined);
 const projectIds = [
   "project.baseline",
   "project.seven-callers",

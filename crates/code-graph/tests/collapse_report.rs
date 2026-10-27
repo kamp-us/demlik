@@ -44,7 +44,13 @@ fn retained_pair_outlives_report_and_borrows_original_graph() {
     ];
     let settings = CollapseSettings::default();
     let pair = {
-        let report = find_collapse_candidates(&nodes, &[String::new()], &settings);
+        let report = find_collapse_candidates(
+            &nodes,
+            &[String::new()],
+            &settings,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
         assert!(std::ptr::eq(report.settings, &settings));
         assert!(Arc::ptr_eq(
             &report.candidates[0],
@@ -76,7 +82,13 @@ fn excluded_helpers_still_contribute_caller_packages_and_effect_reach() {
     caller.file = "other/caller.ts".into();
     let nodes = [a, b, helper, caller];
     let settings = CollapseSettings::default();
-    let report = find_collapse_candidates(&nodes, &["other".into(), String::new()], &settings);
+    let report = find_collapse_candidates(
+        &nodes,
+        &["other".into(), String::new()],
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.considered_functions, 2);
     assert_eq!(report.candidates[0].cost, 4.0);
     assert_eq!(report.candidates[0].cost_inputs.caller_union, 1);
@@ -104,7 +116,13 @@ fn independent_partial_view_keeps_original_calls_when_candidate_blocks_are_skipp
         max_block_size: 0.0,
         ..CollapseSettings::default()
     };
-    let report = find_collapse_candidates(&nodes, &[], &settings);
+    let report = find_collapse_candidates(
+        &nodes,
+        &[],
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(report.candidates.is_empty());
     assert_eq!(report.partial_twins.len(), 1);
     let original = &nodes[0].edges.as_ref().unwrap().calls;
@@ -133,7 +151,13 @@ fn finite_valid_weights_can_produce_live_infinity_and_wire_null() {
         cost_caller_weight: f64::MAX,
         ..CollapseSettings::default()
     };
-    let report = find_collapse_candidates(&nodes, &[], &settings);
+    let report = find_collapse_candidates(
+        &nodes,
+        &[],
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.candidates[0].cost, f64::INFINITY);
     assert_eq!(report.candidates[0].rank, 0.0);
     assert!(

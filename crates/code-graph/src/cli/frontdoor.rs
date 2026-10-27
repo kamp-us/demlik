@@ -259,7 +259,7 @@ pub enum FrontdoorError {
     SmellEmit(ApiError),
     ReportRender(ReportRenderError),
     ReportEmit(ApiError),
-    CollapseRender(serde_json::Error),
+    CollapseRender(ReportRenderError),
     Unreachable(UnreachableRunError<ApiError>),
     EnvKeys(EnvKeyError),
     EnvKeyEmit(ApiError),
@@ -936,7 +936,7 @@ impl PreparedGatesCli {
     /// Run after the early collapse gate. Higher late owners retain the original continuation.
     /// Compiler, Git and filesystem work blocks this caller; the host owns warning/stdio delivery.
     pub fn dispatch_plain_collapse_blocking(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<PlainCollapseDispatch, FrontdoorError> {
@@ -964,14 +964,19 @@ impl PreparedGatesCli {
         };
         let root = &self.prepared.root_absolute;
         let mut payload = if options.graph() == Some(true) {
-            stable_stringify(&graph, options.pretty() == Some(true)).map(Into::into)
+            stable_stringify(&graph, options.pretty() == Some(true))
+                .map(Into::into)
+                .map_err(ReportRenderError::from)
         } else {
+            let collation =
+                prepared_collation(&mut self.collation).map_err(FrontdoorError::Collation)?;
             render_collapse(
                 &graph,
                 root,
                 &self.prepared.collapse_settings,
                 options.json() == Some(true),
                 options.pretty() == Some(true),
+                collation,
             )
         }
         .map_err(FrontdoorError::CollapseRender)?;

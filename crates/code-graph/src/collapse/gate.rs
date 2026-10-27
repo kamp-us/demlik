@@ -98,14 +98,17 @@ impl Error for CollapseGateError {
     }
 }
 
-fn measure(
+fn measure<'c>(
     scopes: &[JsString],
     args: &CollapseGateArgs<'_>,
     binary: &TsgoBinary,
     warning: &mut dyn FnMut(&JsString),
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<Vec<ScopeCount>, CollapseGateError> {
     let repo_native = args.repo_root.to_lossy();
     let repo_root = Path::new(&repo_native);
+    let mut request = Some(request);
+    let mut collation = None;
     scopes
         .iter()
         .map(|scope| {
@@ -142,9 +145,20 @@ fn measure(
                 .iter()
                 .filter(|function| is_candidate_function(function, args.settings))
                 .collect::<Vec<_>>();
+            let collation = match collation {
+                Some(collation) => collation,
+                None => {
+                    let handle = request.take().expect("one first measurement")()
+                        .map_err(CollapseGateError::Collation)?;
+                    collation = Some(handle);
+                    handle
+                }
+            };
             Ok(ScopeCount {
                 scope: scope.clone(),
-                count: find_partial_twins(&candidates, args.settings).len() as f64,
+                count: find_partial_twins(&candidates, args.settings, collation)
+                    .map_err(CollapseGateError::Collation)?
+                    .len() as f64,
             })
         })
         .collect()
@@ -171,7 +185,13 @@ pub(crate) fn run_collapse_gate<'c>(
     let scope = scope_of(args.repo_root, args.root_absolute).map_err(CollapseGateError::Scope)?;
     if args.write_ceilings {
         let recorded = record_scope_ceilings(
-            &measure(std::slice::from_ref(&scope), &args, binary, warning)?,
+            &measure(
+                std::slice::from_ref(&scope),
+                &args,
+                binary,
+                warning,
+                request,
+            )?,
             &ceilings,
         );
         let bytes = format!(
@@ -215,7 +235,7 @@ pub(crate) fn run_collapse_gate<'c>(
     let scopes = order_scopes(scopes, collation).map_err(CollapseGateError::Collation)?;
     let mut rendered = render_partial_twin_ratchet(
         &evaluate_scope_ratchet(
-            &measure(&scopes, &args, binary, warning)?,
+            &measure(&scopes, &args, binary, warning, || Ok(collation))?,
             &ceilings,
             collation,
         )
@@ -230,4 +250,54 @@ pub(crate) fn run_collapse_gate<'c>(
         emitted: vec![rendered.stdout],
         reports: Vec::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    // Write measurement newly needs collation. Its actual load refusal must win
+    // before the caller is asked to prepare native state, and leave bytes alone.
+    #[test]
+    fn write_measurement_load_refusal_precedes_collation_request() {
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let scratch = Scratch(std::env::temp_dir().join(format!(
+            "demlik-collapse-write-admission-{}",
+            std::process::id()
+        )));
+        fs::create_dir(&scratch.0).unwrap();
+        let file = scratch.0.join(CEILINGS_FILENAME);
+        let bytes = b"{\"default\":0,\"scopes\":{}}\n";
+        fs::write(&file, bytes).unwrap();
+        let root: JsString = scratch.0.to_str().unwrap().into();
+        let requested = Cell::new(0);
+        let failure = run_collapse_gate(
+            CollapseGateArgs {
+                root_absolute: &root,
+                repo_root: &root,
+                write_ceilings: true,
+                thresholds: &Thresholds::default(),
+                kind_rules: &NodeKindRules::default(),
+                settings: &CollapseSettings::default(),
+                json: false,
+                pretty: false,
+            },
+            &TsgoBinary::pinned("/nonexistent/compiler"),
+            &mut |_| {},
+            || {
+                requested.set(requested.get() + 1);
+                panic!("collation requested before real load refusal")
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(failure, CollapseGateError::Load(_)));
+        assert_eq!(requested.get(), 0);
+        assert_eq!(fs::read(file).unwrap(), bytes);
+    }
 }

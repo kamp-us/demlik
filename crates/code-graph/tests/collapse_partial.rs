@@ -52,7 +52,12 @@ fn shared_decision_borrows_the_original_functions_calls_and_constant() {
         .iter()
         .filter(|node| is_candidate_function(node, &settings))
         .collect::<Vec<_>>();
-    let twins = find_partial_twins(&considered, &settings);
+    let twins = find_partial_twins(
+        &considered,
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(twins.len(), 1);
     let twin = &twins[0];
     assert!(std::ptr::eq(twin.a, &nodes[0]));
@@ -124,7 +129,12 @@ fn literal_space_and_nul_keys_keep_the_source_collision_behavior() {
             call.callee_id = id.into();
         }
     }
-    let twins = find_partial_twins(&[&a, &b], &settings);
+    let twins = find_partial_twins(
+        &[&a, &b],
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(twins.len(), 1);
     assert_eq!(twins[0].shared_block[0].callee_id, "p q");
     let nodes = [
@@ -133,7 +143,12 @@ fn literal_space_and_nul_keys_keep_the_source_collision_behavior() {
         function("a", "second-left"),
         function("b\0c", "second-right"),
     ];
-    let twins = find_partial_twins(&nodes.iter().collect::<Vec<_>>(), &settings);
+    let twins = find_partial_twins(
+        &nodes.iter().collect::<Vec<_>>(),
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     // The all-pairs input contains six pairs, but these two concatenated keys collide.
     assert_eq!(twins.len(), 5);
     assert!(
@@ -240,7 +255,12 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
             .iter()
             .filter(|node| is_candidate_function(node, &settings))
             .collect::<Vec<_>>();
-        let twins = find_partial_twins(&considered, &settings);
+        let twins = find_partial_twins(
+            &considered,
+            &settings,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
         assert_eq!(twins.len(), expected);
         for twin in &twins {
             assert_eq!(twin.shared_constants, ["MAX_ATTEMPTS"]);
@@ -278,7 +298,13 @@ fn repeated_b_prefix_keeps_the_selected_offset_in_wire_and_human_views() {
     calls[7].callee_id = "right".into();
     let nodes = [a, b];
     let settings = CollapseSettings::default();
-    let report = find_collapse_candidates(&nodes, &[], &settings);
+    let report = find_collapse_candidates(
+        &nodes,
+        &[],
+        &settings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.partial_twins.len(), 1);
     let twin = &report.partial_twins[0];
     assert_eq!(twin.b_block_line(), 104);

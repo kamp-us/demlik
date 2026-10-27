@@ -1,6 +1,9 @@
 use super::{settings::CollapseSettings, tokens::name_tokens};
 use crate::{
-    number::js_round, project::locale_compare, render::text::number, schema::FunctionNode,
+    number::js_round,
+    project::{Collation, CollationError, CollationInput},
+    render::text::number,
+    schema::FunctionNode,
     text::JsString,
 };
 use indexmap::IndexSet;
@@ -37,8 +40,8 @@ pub(super) struct Twin<'g> {
     pub tokens: IndexSet<String>,
 }
 impl<'g> Twin<'g> {
-    pub fn new(function: &'g FunctionNode) -> Self {
-        Self {
+    pub fn new(function: &'g FunctionNode, collation: &Collation) -> Result<Self, CollationError> {
+        Ok(Self {
             function,
             callees: function
                 .edges
@@ -52,8 +55,8 @@ impl<'g> Twin<'g> {
                 .flat_map(|e| &e.called_by)
                 .map(|c| c.caller_id.as_str())
                 .collect(),
-            tokens: name_tokens(&function.name),
-        }
+            tokens: name_tokens(&function.name, collation)?,
+        })
     }
 }
 pub(super) fn round4(n: f64) -> f64 {
@@ -127,36 +130,51 @@ fn set_signal<T: Eq + std::hash::Hash>(
         .into(),
     })
 }
-fn name(a: &Twin<'_>, b: &Twin<'_>, s: &CollapseSettings) -> Option<Signal> {
+fn name(
+    a: &Twin<'_>,
+    b: &Twin<'_>,
+    s: &CollapseSettings,
+    collation: &Collation,
+) -> Result<Option<Signal>, CollationError> {
     let smaller = a.tokens.len().min(b.tokens.len());
     if smaller == 0 {
-        return None;
+        return Ok(None);
     }
-    let mut shared: Vec<_> = a
+    let shared: Vec<_> = a
         .tokens
         .iter()
         .filter(|t| b.tokens.contains(*t))
         .map(String::as_str)
         .collect();
-    shared.sort_by(|a, b| locale_compare(a, b));
+    let mut keyed = shared
+        .into_iter()
+        .map(|token| Ok((token, CollationInput::from_text(token)?)))
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    keyed.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+    let shared: Vec<_> = keyed.into_iter().map(|(token, _)| token).collect();
     if !shared
         .iter()
         .any(|t| (t.len() as f64) >= s.name_min_token_length)
     {
-        return None;
+        return Ok(None);
     }
     let score = shared.len() as f64 / smaller as f64;
     if score < s.name_overlap {
-        return None;
+        return Ok(None);
     }
-    Some(Signal {
+    Ok(Some(Signal {
         signal: SignalName::Name,
         strength: round4(score),
         detail: format!("shared {{{}}}", shared.join(",")).into(),
-    })
+    }))
 }
-pub(super) fn fired_signals(a: &Twin<'_>, b: &Twin<'_>, s: &CollapseSettings) -> Vec<Signal> {
-    [
+pub(super) fn fired_signals(
+    a: &Twin<'_>,
+    b: &Twin<'_>,
+    s: &CollapseSettings,
+    collation: &Collation,
+) -> Result<Vec<Signal>, CollationError> {
+    Ok([
         shape(a, b, s),
         set_signal(
             &a.callees,
@@ -174,9 +192,9 @@ pub(super) fn fired_signals(a: &Twin<'_>, b: &Twin<'_>, s: &CollapseSettings) ->
             SignalName::Callers,
             "callers",
         ),
-        name(a, b, s),
+        name(a, b, s, collation)?,
     ]
     .into_iter()
     .flatten()
-    .collect()
+    .collect())
 }
