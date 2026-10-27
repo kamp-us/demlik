@@ -85,7 +85,7 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
-        &options,
+        Some(&options),
         None,
         TextAssembly {
             root: &root,
@@ -154,7 +154,7 @@ fn function_warning_survives_later_analysis_failure_with_original_cause() {
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
-        &options,
+        Some(&options),
         None,
         TextAssembly {
             root: &root,
@@ -233,7 +233,7 @@ fn warning_bridge_keeps_both_callbacks_and_pending_real_stdio_failure() {
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
-        &options,
+        Some(&options),
         None,
         TextAssembly {
             root: &root,
@@ -368,7 +368,7 @@ fn observe(request: Request) -> Result<Observation, String> {
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
-                &options,
+                Some(&options),
                 None,
                 TextAssembly {
                     root: &request.root,

@@ -142,6 +142,27 @@ pub fn assemble_graph_with_data(
     )
 }
 
+pub(crate) fn assemble_graph_text(
+    loaded: &LoadedProject,
+    root: &JsString,
+    thresholds: Thresholds,
+    fields: NodeFields,
+    data: Option<DataOptions<'_>>,
+) -> Result<Graph, AssemblyError> {
+    build(
+        BuildInput {
+            loaded,
+            root_text: Some(root),
+        },
+        thresholds,
+        fields,
+        None,
+        None,
+        None,
+        data,
+    )
+}
+
 struct BuildInput<'a> {
     loaded: &'a LoadedProject,
     root_text: Option<&'a JsString>,
@@ -216,7 +237,7 @@ pub fn assemble_graph_with_analysis_text(
         thresholds,
         binary,
         fields,
-        options,
+        Some(options),
         None,
         TextAssembly {
             root: root_text,
@@ -231,7 +252,7 @@ pub(crate) fn assemble_graph_with_analysis_text_and_warning(
     thresholds: Thresholds,
     binary: &TsgoBinary,
     fields: NodeFields,
-    options: &AnalysisOptions<'_>,
+    options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
     text: TextAssembly<'_>,
 ) -> Result<Graph, AssemblyError> {
@@ -240,7 +261,7 @@ pub(crate) fn assemble_graph_with_analysis_text_and_warning(
         thresholds,
         binary,
         fields,
-        Some(options),
+        options,
         data,
         Some(text),
     )

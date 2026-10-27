@@ -115,7 +115,7 @@ fn measure(
                 args.thresholds.clone(),
                 binary,
                 NodeFields::default(),
-                &AnalysisOptions {
+                Some(&AnalysisOptions {
                     cross_runtime: true,
                     kinds: true,
                     reach: false,
@@ -123,7 +123,7 @@ fn measure(
                     interface_width: false,
                     kind_rules: args.kind_rules,
                     repo_root,
-                },
+                }),
                 None,
                 TextAssembly {
                     root: &absolute,
