@@ -1,0 +1,203 @@
+{
+  "status": "verified-local-awaiting-root-review",
+  "base": "69a3cffd055702a429355d66ae7680c0ec956a4b",
+  "productionCommit": "077fdad325d72662e4288d17b6fd5452b21f7352",
+  "supportCommit": "0d86b36b66260972fdb939a83b5e173419428d5b",
+  "branch": "can/rust-cli-reports-01a16c9d",
+  "scope": "Prepared CLI graph-console reports + ordinary CI; one existing Graph assembly owner and shared coupling facts/SCC kernels",
+  "supported": [
+    "default summary",
+    "graph JSON",
+    "ordinary CI",
+    "plan",
+    "ordinary smells",
+    "unguarded",
+    "clusters",
+    "interface width",
+    "cycles",
+    "kinds",
+    "cross-runtime",
+    "data",
+    "file view"
+  ],
+  "reused": [
+    "ordinary collapse renderer/dispatch",
+    "ordinary unreachable renderer/dispatch",
+    "OutputTo/CliIo/pending stdio/error owners",
+    "canonical path/JsString/locale/stable JSON owners"
+  ],
+  "deferred": [
+    "HTML/assets",
+    "Git hotspots",
+    "blast/find domain queries",
+    "colored tree (including its JSON shortcut)",
+    "standalone argv/bootstrap/distribution"
+  ],
+  "interfaces": {
+    "entry": "PreparedGatesCli::dispatch_reports_blocking -> ReportDispatch::{Complete,Refused{original ProjectLoadError},Continue{same Box}}",
+    "graphOwnership": "Graph returned once by existing private assembly helper; borrowed into selected renderers, no Graph clone/context carrier",
+    "errors": "ReportRenderError::{Io,Json}; FrontdoorError::{ReportRender,ReportEmit} preserve concrete original sources",
+    "caller": "Exact original external borrowed/Rc host input fails sole E0599 against actual Cargo1 library, compiles/runs0 against Cargo2; tracked public example also runs0 without tsconfig/compiler"
+  },
+  "newCorpus": {
+    "rawOutcomes": 82,
+    "shared": 77,
+    "strict": 72,
+    "qualified": 5,
+    "nativeOnly": 5,
+    "sourceExecutions": 85,
+    "nativeExecutions": 90,
+    "workflowCases": 1,
+    "workflowSteps": 9,
+    "protocolRefusals": 5,
+    "responseGuards": 3,
+    "protocolGuardCredit": 0,
+    "failures": [],
+    "qualifications": [
+      {
+        "id": "data-raw-human-encoded",
+        "qualifications": ["source-unit-versus-native-encoded-write-observer"]
+      },
+      {
+        "id": "catalog-failure-propagates",
+        "qualifications": ["backend-exception-diagnostic-qualified"]
+      },
+      {
+        "id": "output-directory-failure",
+        "qualifications": ["backend-exception-diagnostic-qualified"]
+      },
+      {
+        "id": "bad-stdout-ordinary-ci",
+        "qualifications": ["pending-stdio-notification-contract"]
+      },
+      {
+        "id": "bad-stderr-invalid-ci",
+        "qualifications": ["pending-stdio-notification-contract"]
+      }
+    ],
+    "nativeOnlyIds": [
+      "unsupported-html-same-box",
+      "unsupported-tree-same-box",
+      "unsupported-hotspots-same-box",
+      "unsupported-blast-same-box",
+      "unsupported-find-same-box"
+    ]
+  },
+  "nativeFocused": {
+    "executables": 8,
+    "testsPassed": 30,
+    "newTypedOwnershipIoTests": 3,
+    "allExit0": true,
+    "olderExecutedBinariesNotRetained": 7
+  },
+  "affected": {
+    "plainCollapseRaw": 49,
+    "plainCollapseStrictQualifiedNativeOnly": [35, 10, 4],
+    "smellCliRaw": 50,
+    "smellCliStrictQualifiedNativeOnly": [39, 8, 3],
+    "smellLedgerShared": 139,
+    "smellLedgerStrictQualified": [135, 4],
+    "unreachableCliRaw": 48,
+    "unreachableCliStrictQualifiedNativeOnly": [38, 7, 3],
+    "unreachablePureRendererShared": 10,
+    "unreachableLedgerShared": 78,
+    "unreachableLedgerUnqualifiedQualified": [72, 6],
+    "allSixExit0": true,
+    "newCredit": 0
+  },
+  "constructionCargo": {
+    "actual": 4,
+    "ceiling": 8,
+    "exits": [0, 0, 0, 0],
+    "selections": [
+      "baseline library",
+      "public example/library",
+      "selected CLI/helper drivers and eight focused test targets",
+      "all-target demlik-code-graph Clippy -Dwarnings"
+    ],
+    "fullWorkspaceAndBothProfiles": "not rerun; Root next combined batch owns this gate"
+  },
+  "controls": {
+    "actualCargoSelections": 26,
+    "new": 18,
+    "affectedOld": 8,
+    "compile0NamedDetections": 26,
+    "allFreshFalseLibraryAndConsumer": true,
+    "protocolValidNamedSlices": true,
+    "strictWitnesses": 24,
+    "qualifiedWitnesses": [
+      {
+        "id": "loader-catch-swallows-assembly",
+        "qualifications": ["backend-exception-text-native-qualified"]
+      },
+      {
+        "id": "pending-warning-erased",
+        "qualifications": ["pending-stdio-notification-contract"]
+      }
+    ],
+    "elapsedMs": 338213.965208,
+    "sourceRestored": true,
+    "originalAndBaselineUnchanged": true,
+    "treeAndDefaultTargetRemoved": true,
+    "mutantLibraries": "NOT retained: actual Cargo events, original paths and execution-time hashes retained",
+    "mutantExecutables": "5 representative gzip consumers retained;21 intentionally unretained after execution/hash verification. Exact effective paths in retention.json."
+  },
+  "collationInventory": {
+    "newLegacyOrderingSites": [
+      {
+        "file": "crates/code-graph/src/smells/coupling.rs",
+        "line": 115,
+        "purpose": "cycle members",
+        "localeCalls": 1
+      },
+      {
+        "file": "crates/code-graph/src/smells/coupling.rs",
+        "line": 119,
+        "purpose": "cycle order",
+        "localeCalls": 1
+      },
+      {
+        "file": "crates/code-graph/src/smells/coupling.rs",
+        "line": 146,
+        "purpose": "edges inside cross-boundary groups",
+        "localeCalls": 2
+      },
+      {
+        "file": "crates/code-graph/src/smells/coupling.rs",
+        "line": 150,
+        "purpose": "cross-boundary group order",
+        "localeCalls": 2
+      },
+      {
+        "file": "crates/code-graph/src/smells/coupling.rs",
+        "line": 212,
+        "purpose": "rank score tie",
+        "localeCalls": 1
+      }
+    ],
+    "existingOrderingSitesRetained": [
+      "value-edge from/to order at86",
+      "nodes order at100, moved into shared cycles_of"
+    ],
+    "profile": "new strict coupling corpus uses ASCII file names; broader ICU/mixed-lone profiles remain OPEN; Flexible informed"
+  },
+  "sourcePins": {
+    "path": "/private/tmp/demlik-cli-reports-proof-01a16c9d/source-pins.json",
+    "sha256": "860c11e61010dd614203f01bc28205b982f3e26db5c3abe95b1d3a8e34da32a9",
+    "changedGitCopySources": 20,
+    "frozenTypeScriptSources": 13
+  },
+  "setupAndHistorical": {
+    "affectedLauncher": "One ERR_MODULE_NOT_FOUND for literal --import tsx before any case/Cargo, zero credit; corrected command uses existing verification owner-resolved absolute loader. Original stdout/stderr/process kept as setup-loader-*",
+    "sourceOnlyAnchorRuns": "Seven initial Source-only cases, one read of actual reach facts, three revised nonempty report anchors; zero native credit. Fixture uses measured Math.round declaration for a real five-hop effect path.",
+    "static": "Initial duplicate identical coupling:true fixture key was removed; no runtime-value or product change. Final Biome check passes."
+  },
+  "limits": [
+    "All53 CLI known gaps remain OPEN; no new Source IDs or helper alias capability closure.",
+    "Standalone CLI bootstrap, deferred modes and broad raw/reflection/String/ICU/stdio profiles are not claimed.",
+    "Qualified raw encoded-write observer, backend diagnostic and pending-stdio rows are excluded from strict evidence.",
+    "No Source product, dependency, Main, contracts, central registration, Docker or remote edits/actions.",
+    "No cold archive rebuild claim. Historical paths in producer/control reports are descriptors; retention.json owns effective proof artifacts."
+  ],
+  "retirement": "construction worktree/default target removal follows receipt commit and compact evidence verification"
+}
