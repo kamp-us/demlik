@@ -1,0 +1,150 @@
+{
+  "kind": "accepted-local-runtime-graph-checkpoint",
+  "createdAt": "2026-10-27T12:48:03.738908+00:00",
+  "implementationCommit": "c31bc0cbcbee9e95ba15b7cf649b26f97b30a90d",
+  "typescriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Implemented documented native profiles of TEA and code-graph; full monorepo goal remains incomplete. Entirely local, sweeps excluded.",
+  "outcomes": {
+    "total": 15158,
+    "passed": 15158,
+    "strictNative": 14990,
+    "qualified": 168,
+    "qualifiedByArea": {
+      "graph": 146,
+      "apiGit": 15,
+      "apiDiff": 4,
+      "subscriptions": 3
+    },
+    "comparisonFailures": 0,
+    "referenceChanges": 0,
+    "sourceFilesByteFixed": 2438,
+    "newStrictKeys": 98,
+    "previousStrictKeysAbsent": []
+  },
+  "freshNativeAndStatic": {
+    "sourceCommit": "c31bc0cbcbee9e95ba15b7cf649b26f97b30a90d",
+    "defaultNativeAndDocs": {
+      "testsAndDocs": 641,
+      "resultGroups": 198,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allFeaturesNativeAndDocs": {
+      "testsAndDocs": 655,
+      "resultGroups": 198,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allTargetClippy": ["default", "all features"],
+    "publicConsumers": [
+      "authored state and typed subscription interface checks in both configurations",
+      "agent_runtime_interface executed in both configurations",
+      "agent_runtime_borrowed executed in both configurations"
+    ],
+    "static": [
+      "cargo fmt --all --check",
+      "full parity TSC",
+      "full parity Biome",
+      "frozen source code-graph build",
+      "early canonical inventory"
+    ],
+    "qualification": "Default and feature counts overlap. Native, static, consumer and full comparison checks were actually run at the implementation commit."
+  },
+  "components": {
+    "logicalRoot": {
+      "source": "c7b6afb9642ccb82a63ffcd5004ef7948b0f4d04",
+      "strictCases": 16,
+      "controls": 2,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/logical-root-c7b6afb9-parent-review.json",
+      "parentReviewSha256": "ff468ce1c89beb8610574026fe40e725e81b438b7aa2c4e2b212b2fd00544787"
+    },
+    "earlyCollapseGate": {
+      "source": "8e92d8d39c9001f3e660171183593cdc45a43dda",
+      "strictCases": 48,
+      "qualifiedCases": 21,
+      "controls": 23,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-gate-8e92d8d3-parent-review.json",
+      "parentReviewSha256": "7779d599c67c59ec9d9b231151a61b218046c85ab0069653324c2b3c09664bcc"
+    },
+    "baseAgentRuntime": {
+      "source": "d589705ee605717116342531d6093431dc36fd23",
+      "strictCases": 34,
+      "controls": 9,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-runtime-d589705e-parent-review.json",
+      "parentReviewSha256": "80e3737c4f425c11cef7fd0644ed518f4863d6173675270a1490dc75a89decf2"
+    },
+    "composeDiskMigration": {
+      "source": "103a19139e3cb6370ce9aef303b98bd7d3530856",
+      "repeatedCases": 119,
+      "controls": 8,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/compose-layout-103a1913-parent-review.json",
+      "parentReviewSha256": "35ee0a615381cc3f940c708c2ee9ef48dc6df626574fb532af7be5a063efce90"
+    }
+  },
+  "componentFaultQualification": "Inherited independently audited executions; counts overlap prior controls and are not a full aggregate run.",
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 832,
+    "gapRows": 2790,
+    "unmapped": 2613,
+    "all53CliGapsOpen": true
+  },
+  "proof": {
+    "status": "passed",
+    "sourceCommit": "c31bc0cbcbee9e95ba15b7cf649b26f97b30a90d",
+    "archive": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/c31bc0cb-runtime-graph-checkpoint-proof.tar.gz",
+    "archiveBytes": 111362375,
+    "archiveSha256": "87f88f63e1980273ad6a43d89c0522d9fd0afb4902a4abb47d2daf6d9ff75cb0",
+    "inventory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-c31bc0cb/archive-inventory.json",
+    "inventorySha256": "736609a4cbe9f19514d3b7267053f2d879976a3c0f97d332f6a969557867dc8a",
+    "members": 511,
+    "allArchiveMembersByteVerified": true,
+    "parentAudit": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-c31bc0cb/parent-audit.json",
+    "parentAuditSha256": "c959db603b2447fe96312d14fb8a627d714b7f6731d95ed0bb5312b293a96e26",
+    "checkedOutcomes": 15158,
+    "strict": 14990,
+    "qualified": 168,
+    "nativeArtifactBindings": 25,
+    "coldSourceArchiveRebuild": false
+  },
+  "peerReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/demlik-c31bc0cb-flexible-peer-review-01a16c9d.json",
+    "sha256": "b0d88377ca9d70b1c25833db46079336830b53aa02b94424e09bd5d977e92e9c",
+    "verdict": "No scoped findings",
+    "independentChecks": [
+      "511 archive members",
+      "2438 current and1336 frozen-reference Git snapshots/modes",
+      "25 actual Cargo artifact bindings",
+      "two derived selector origins/final artifact hashes",
+      "34 runtime cases and four Source mappings",
+      "168 unique qualifications excluded from strict native evidence",
+      "worktree/default target and registration removed"
+    ]
+  },
+  "artifactSelectionQualification": "These files are derived selectors, not logs of new graph-suite Cargo invocations. Full original current native-default stdout is retained and each exact line/hash is bound.",
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-runtime-graph-combined-check-c31bc0cb-01a16c9d"
+    ],
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "stderr": ""
+  },
+  "completionExit": {
+    "actual": 1,
+    "reason": "Coverage gaps, with zero comparison or frozen-reference failures"
+  },
+  "blindSpots": [
+    "Full monorepo port is incomplete; remaining capabilities, CLI modes, optional agent profiles, providers, hosts and packaging remain open.",
+    "Guarded default JSON turn projection is not yet supported by the concrete AgentTurn view seam.",
+    "Missing/null restored stamps, native panic/JS error reflection, controlled scheduling, backend/path representation and inherited aliases remain explicit gaps.",
+    "All 53 CLI gaps stay open; plain collapse finder/render/dispatch and bootstrap are not included in this source.",
+    "Effect cleanup qualifications remain outside strict native evidence.",
+    "Legacy aggregate mutation runners remain unsafe pending migration; only the Compose migration is complete.",
+    "Component compiled controls are inherited from their sealed source-bound executions, not rerun globally; default/current feature native gates are fresh.",
+    "No cold archive rebuild, release, remote publication or deployment claim."
+  ]
+}
