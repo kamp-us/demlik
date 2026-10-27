@@ -11085,7 +11085,10 @@
     "signature": "8c063a0699f44de1e29f3234461dc9dc0367797687300c03c3a3ddf651853347",
     "rust": {
       "file": "crates/tea/src/agent/knob/runtime.rs",
-      "symbols": ["demlik_tea::agent::Agent::to_machine"]
+      "symbols": [
+        "demlik_tea::agent::Agent::to_machine",
+        "demlik_tea::agent::Agent::to_machine_with_compaction"
+      ]
     },
     "cases": [
       "agent-runtime.promise.normal",
@@ -11189,14 +11192,26 @@
       "agent-state-json.effect.model-error",
       "agent-state-json.effect.guard-error",
       "agent-error-cold.promise.guard-error",
-      "agent-error-cold.effect.guard-error"
+      "agent-error-cold.effect.guard-error",
+      "agent-compaction.promise.normal",
+      "agent-compaction.promise.retry",
+      "agent-compaction.promise.exhaust",
+      "agent-compaction.promise.cancel-late-ok",
+      "agent-compaction.promise.cancel-late-error",
+      "agent-compaction.effect.normal",
+      "agent-compaction.effect.retry",
+      "agent-compaction.effect.exhaust",
+      "agent-compaction.effect.cancel-late-ok",
+      "agent-compaction.effect.cancel-late-error",
+      "agent-compaction.promise.cold",
+      "agent-compaction.effect.cold"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
-      "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
+      "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
       "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."
@@ -11206,7 +11221,10 @@
     "signature": "f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7",
     "rust": {
       "file": "crates/tea/src/agent/knob/runtime.rs",
-      "symbols": ["demlik_tea::agent::Agent::to_machine"]
+      "symbols": [
+        "demlik_tea::agent::Agent::to_machine",
+        "demlik_tea::agent::Agent::to_machine_with_compaction"
+      ]
     },
     "cases": [
       "agent-runtime.promise.normal",
@@ -11310,14 +11328,26 @@
       "agent-state-json.effect.model-error",
       "agent-state-json.effect.guard-error",
       "agent-error-cold.promise.guard-error",
-      "agent-error-cold.effect.guard-error"
+      "agent-error-cold.effect.guard-error",
+      "agent-compaction.promise.normal",
+      "agent-compaction.promise.retry",
+      "agent-compaction.promise.exhaust",
+      "agent-compaction.promise.cancel-late-ok",
+      "agent-compaction.promise.cancel-late-error",
+      "agent-compaction.effect.normal",
+      "agent-compaction.effect.retry",
+      "agent-compaction.effect.exhaust",
+      "agent-compaction.effect.cancel-late-ok",
+      "agent-compaction.effect.cancel-late-error",
+      "agent-compaction.promise.cold",
+      "agent-compaction.effect.cold"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
-      "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
+      "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
       "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."
