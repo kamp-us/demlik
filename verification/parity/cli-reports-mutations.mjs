@@ -16,12 +16,13 @@ import {
 } from "./check-worktree.mjs";
 import { cliReportsFaults } from "./cli-reports-faults.mjs";
 import { cliSmellFaults } from "./cli-smell-faults.mjs";
+import { treeBlastFindFaults } from "./cli-tree-blast-find-faults.mjs";
 import { collapseRenderCliFaults } from "./collapse-render-cli-faults.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   require = createRequire(import.meta.url),
   hash = (b) => createHash("sha256").update(b).digest("hex");
-const faults = [
+const consoleFaults = [
   ...cliReportsFaults.map((f) => ({ ...f, suite: "reports" })),
   ...collapseRenderCliFaults
     .filter((f) => f.kind === "cli")
@@ -32,12 +33,14 @@ const faults = [
   },
 ];
 assert.equal(cliReportsFaults.length, 18);
-assert.equal(faults.length, 26);
+assert.equal(consoleFaults.length, 26);
 assert.equal(
   new Set(
-    faults.map((f) => JSON.stringify([f.file, f.scope, f.edits, f.witness])),
+    consoleFaults.map((f) =>
+      JSON.stringify([f.file, f.scope, f.edits, f.witness]),
+    ),
   ).size,
-  faults.length,
+  consoleFaults.length,
 );
 function changedOwner(original, fault) {
   let start = 0,
@@ -83,6 +86,7 @@ export function reportsMutations({
   cliReport,
   oldCliReport,
   oldSmellReport,
+  tailReport,
   evidence,
   sourceArchive,
   python = process.env.DEMLIK_ICU77_PYTHON,
@@ -120,17 +124,50 @@ export function reportsMutations({
     }),
     "",
   );
+  const faults = tailReport
+    ? [
+        ...treeBlastFindFaults.map((fault) => ({ ...fault, suite: "tail" })),
+        {
+          ...cliReportsFaults.find(
+            (fault) =>
+              fault.name === "ordinary-ci-validates-output-destination",
+          ),
+          suite: "reports",
+        },
+      ]
+    : consoleFaults;
   const baselines = {
     reports: JSON.parse(fs.readFileSync(cliReport, "utf8")),
-    plain: JSON.parse(fs.readFileSync(oldCliReport, "utf8")),
-    smell: JSON.parse(fs.readFileSync(oldSmellReport, "utf8")),
+    ...(tailReport
+      ? { tail: JSON.parse(fs.readFileSync(tailReport, "utf8")) }
+      : {
+          plain: JSON.parse(fs.readFileSync(oldCliReport, "utf8")),
+          smell: JSON.parse(fs.readFileSync(oldSmellReport, "utf8")),
+        }),
   };
-  assert.equal(baselines.reports.passed, 82);
+  assert.equal(baselines.reports.passed, 79);
   assert.equal(baselines.reports.strictPairs, 72);
   assert.equal(baselines.reports.qualifiedPairs, 5);
-  assert.equal(baselines.reports.nativeOnlyCases, 5);
-  assert.equal(baselines.plain.passed, 49);
-  assert.equal(baselines.smell.passed, 50);
+  assert.equal(baselines.reports.nativeOnlyCases, 2);
+  if (tailReport) {
+    assert.equal(treeBlastFindFaults.length, 8);
+    assert.equal(faults.length, 9);
+    assert.equal(baselines.tail.passed, 32);
+    assert.equal(baselines.tail.strictPairs, 28);
+    assert.equal(baselines.tail.qualifiedPairs, 4);
+    assert.equal(baselines.tail.nativeOnlyCases, 0);
+  } else {
+    assert.equal(baselines.plain.passed, 49);
+    assert.equal(baselines.smell.passed, 50);
+  }
+  assert.equal(
+    new Set(
+      faults.map((fault) =>
+        JSON.stringify([fault.file, fault.scope, fault.edits, fault.witness]),
+      ),
+    ).size,
+    faults.length,
+  );
   const baseline = {
     path: fs.realpathSync(cliBinary),
     sha256: hash(fs.readFileSync(cliBinary)),
@@ -170,9 +207,9 @@ export function reportsMutations({
     RUST_ICU_MAJOR_VERSION_NUMBER: "77",
   });
   const report = {
-    planned: 26,
-    newPlanned: 18,
-    affectedOldPlanned: 8,
+    planned: faults.length,
+    newPlanned: tailReport ? 8 : 18,
+    affectedOldPlanned: tailReport ? 1 : 8,
     sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf8",
@@ -353,6 +390,7 @@ export function reportsMutations({
         save();
         const spec = {
           reports: ["graph-cli-reports.mjs", "DEMLIK_REPORT_CLI_CASES"],
+          tail: ["graph-cli-reports.mjs", "DEMLIK_REPORT_CLI_CASES"],
           plain: [
             "graph-cli-plain-collapse.mjs",
             "DEMLIK_PLAIN_COLLAPSE_CASES",
@@ -366,7 +404,14 @@ export function reportsMutations({
           paired = path.join(folder, "pairs.json");
         const compared = run(
           process.execPath,
-          ["--import", require.resolve("tsx"), script, executable, paired],
+          [
+            "--import",
+            require.resolve("tsx"),
+            script,
+            executable,
+            paired,
+            ...(fault.suite === "tail" ? ["tree-blast-find"] : []),
+          ],
           check.root,
           { ...env, [spec[1]]: fault.witness },
         );
@@ -428,7 +473,7 @@ export function reportsMutations({
         );
       }
     }
-    report.complete = report.controls.length === 26;
+    report.complete = report.controls.length === faults.length;
   } catch (error) {
     operationError = error;
     report.operationFailure = {

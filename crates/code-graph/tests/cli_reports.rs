@@ -59,13 +59,7 @@ fn prepared(root: &Path, flags: &[&str], host: &mut CliIo<'_>) -> Box<PreparedGa
 #[test]
 fn unsupported_higher_output_keeps_both_original_boxes_without_graph_or_io() {
     let fixture = Fixture::new();
-    for flags in [
-        vec!["--html", "--graph"],
-        vec!["--tree"],
-        vec!["--hotspots"],
-        vec!["--blast", ""],
-        vec!["--find", ""],
-    ] {
+    for flags in [vec!["--html", "--graph"], vec!["--hotspots"]] {
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let mut host = CliIo::new(&mut out, &mut err, None);
         let p = prepared(&fixture.0, &flags, &mut host);

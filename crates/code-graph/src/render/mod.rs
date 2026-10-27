@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod blast;
 pub mod ci;
 pub mod file;
 pub mod graph;
@@ -7,11 +8,18 @@ pub mod plan;
 pub mod smells;
 pub mod summary;
 pub(crate) mod text;
+pub mod tree;
 
 #[derive(Debug)]
 pub enum ReportRenderError {
     Io(std::io::Error),
     Json(serde_json::Error),
+    Collation(crate::project::CollationError),
+}
+impl From<crate::project::CollationError> for ReportRenderError {
+    fn from(error: crate::project::CollationError) -> Self {
+        Self::Collation(error)
+    }
 }
 impl From<std::io::Error> for ReportRenderError {
     fn from(error: std::io::Error) -> Self {
@@ -28,6 +36,7 @@ impl std::fmt::Display for ReportRenderError {
         match self {
             Self::Io(error) => error.fmt(f),
             Self::Json(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
         }
     }
 }
@@ -36,6 +45,7 @@ impl std::error::Error for ReportRenderError {
         Some(match self {
             Self::Io(error) => error,
             Self::Json(error) => error,
+            Self::Collation(error) => error,
         })
     }
 }

@@ -7,13 +7,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
-  reportCases,
-  reportSteps,
-  reportsFixture,
+  reportCases as consoleCases,
+  reportsFixture as consoleFixture,
+  reportSteps as consoleSteps,
 } from "./cli-reports-cases.mjs";
+import {
+  tailCases,
+  tailFixture,
+  tailLiteral,
+  tailSteps,
+} from "./cli-tree-blast-find-cases.mjs";
 
 const [binaryArg, reportArg] = process.argv.slice(2);
 assert.ok(binaryArg && reportArg);
+const tail = process.argv[4] === "tree-blast-find";
+assert.ok(process.argv.length === 4 || (tail && process.argv.length === 5));
+const reportCases = tail ? tailCases : consoleCases;
+const reportSteps = tail ? tailSteps : consoleSteps;
+const reportsFixture = tail ? tailFixture : consoleFixture;
 assert.equal(process.version, "v22.21.1");
 assert.equal(process.versions.v8, "12.4.254.21-node.33");
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -124,7 +135,14 @@ function trusted(raw, id) {
   assert.ok(
     row.observedCalls.length > 0 && row.observedCalls.length <= calls.length,
   );
-  assert.deepEqual(row.observedCalls, calls.slice(0, row.observedCalls.length));
+  const expected = calls.slice(0, row.observedCalls.length);
+  if (
+    tail &&
+    row.observedCalls.at(-1) ===
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_with_style_blocking"
+  )
+    expected[expected.length - 1] = row.observedCalls.at(-1);
+  assert.deepEqual(row.observedCalls, expected);
   return row;
 }
 function snapshot(folder) {
@@ -151,13 +169,18 @@ const jsonLines = (file) =>
 function processRun(command, args, cwd, input, o, env = {}) {
   const fd = fs.openSync(path.join(cwd, "readonly.txt"), "r");
   try {
+    const environment = { ...process.env, TSX_DISABLE_CACHE: "1", ...env };
+    if (tail) {
+      delete environment.NO_COLOR;
+      environment.FORCE_COLOR = o.ansi ? "1" : "0";
+    }
     const result = spawnSync(command, args, {
       cwd,
       input,
       encoding: "utf8",
       timeout: 30000,
       maxBuffer: 32 << 20,
-      env: { ...process.env, TSX_DISABLE_CACHE: "1", ...env },
+      env: environment,
       stdio: ["pipe", o.badStdout ? fd : "pipe", o.badStderr ? fd : "pipe"],
     });
     assert.ifError(result.error);
@@ -202,6 +225,7 @@ function execute(f, o, step, location, id, native) {
           : compiler,
         plain: true,
         lateReports: true,
+        ...(tail ? { ansi: o.ansi === true } : {}),
         ...(o.initial === undefined ? {} : { initial: o.initial }),
       }),
       o,
@@ -216,6 +240,7 @@ function execute(f, o, step, location, id, native) {
       JSON.stringify({
         trace,
         ioTrace,
+        ...(tail && o.rawArgv ? { rawArgv: true } : {}),
         fixture: f.root,
         input: {
           action: "frontdoor",
@@ -385,6 +410,7 @@ function literal(run, o, step) {
   if (expected.contains) assert.ok(text.includes(expected.contains));
   if (expected.outMode)
     assert.equal(run.files[expected.out].mode, expected.outMode);
+  if (tail) tailLiteral(run, o, step, text);
 }
 const sourceFiles = [
   "index.ts",
@@ -400,6 +426,9 @@ const sourceFiles = [
   "smells/coupling.ts",
   "extract/assemble.ts",
   "extract/project.ts",
+  ...(tail
+    ? ["render/tree.ts", "render/blast.ts", "declarations/find.ts"]
+    : []),
 ];
 const sourceHashes = Object.fromEntries(
   sourceFiles.map((file) => [
@@ -551,6 +580,8 @@ try {
           assert.equal(n.output.stdout, s.output.stdout);
           assert.equal(n.output.stderr, s.output.stderr);
           assert.deepEqual(observed.io.pending, []);
+          if (tail && o.rawArgv)
+            row.qualifications.push("caller-supplied-UTF16-argv-profile");
           if (o.rawPayload)
             row.qualifications.push(
               "source-unit-versus-native-encoded-write-observer",

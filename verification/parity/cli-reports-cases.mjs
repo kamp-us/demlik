@@ -658,10 +658,7 @@ export const reportCases = [
   ],
   ...[
     ["html", ["--html", "--graph"]],
-    ["tree", ["--tree"]],
     ["hotspots", ["--hotspots"]],
-    ["blast", ["--blast", "invoice"]],
-    ["find", ["--find", "invoice"]],
   ].map(([name, flags]) => [
     `unsupported-${name}-same-box`,
     { cheap: true, withoutCompiler: true, flags, nativeOnly: true },

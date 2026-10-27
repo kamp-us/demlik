@@ -218,9 +218,12 @@ enum ConsoleOutput {
     Kinds,
     CrossRuntime,
     Data,
+    Blast,
+    Find,
     File,
     Plan,
     Smells,
+    Tree,
     Summary,
 }
 #[derive(Debug)]
@@ -1102,6 +1105,20 @@ impl PreparedGatesCli {
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<ReportDispatch, FrontdoorError> {
+        self.dispatch_reports_with_style_blocking(
+            host,
+            binary,
+            crate::render::tree::TreeStyle::Plain,
+        )
+    }
+
+    /// The host supplies terminal styling; every view uses the same graph/output pipeline.
+    pub fn dispatch_reports_with_style_blocking(
+        mut self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+        tree_style: crate::render::tree::TreeStyle,
+    ) -> Result<ReportDispatch, FrontdoorError> {
         use crate::render::{analysis, ci, file, graph as graph_view, plan, smells, summary};
         use crate::smells::plan::PlanAxis;
         let options = &self.prepared.options;
@@ -1136,11 +1153,12 @@ impl PreparedGatesCli {
             ConsoleOutput::CrossRuntime
         } else if options.data() == Some(true) {
             ConsoleOutput::Data
-        } else if options.hotspots() == Some(true)
-            || options.blast().is_some()
-            || options.find().is_some()
-        {
+        } else if options.hotspots() == Some(true) {
             return Ok(ReportDispatch::Continue(self));
+        } else if options.blast().is_some() {
+            ConsoleOutput::Blast
+        } else if options.find().is_some() {
+            ConsoleOutput::Find
         } else if options.file().is_some() {
             ConsoleOutput::File
         } else if options.plan() == Some(true) {
@@ -1148,7 +1166,7 @@ impl PreparedGatesCli {
         } else if options.smells() == Some(true) {
             ConsoleOutput::Smells
         } else if options.tree() == Some(true) {
-            return Ok(ReportDispatch::Continue(self));
+            ConsoleOutput::Tree
         } else {
             ConsoleOutput::Summary
         };
@@ -1190,6 +1208,52 @@ impl PreparedGatesCli {
             exit_with(host, f64::from(code)).map_err(FrontdoorError::ExitCode)?;
             return Ok(ReportDispatch::Complete);
         }
+        if matches!(output, ConsoleOutput::Blast | ConsoleOutput::Find) {
+            let collation = self
+                .collation
+                .take()
+                .map(Ok)
+                .unwrap_or_else(Collation::try_node22_en_us)
+                .map_err(FrontdoorError::Collation)?;
+            let (stdout, warning, code) = match output {
+                ConsoleOutput::Blast => {
+                    let result = crate::render::blast::render_blast(
+                        &graph,
+                        options.blast().expect("selected blast output"),
+                        json,
+                        pretty,
+                        &collation,
+                    )
+                    .map_err(FrontdoorError::ReportRender)?;
+                    (result.stdout, result.warning, result.exit_code)
+                }
+                ConsoleOutput::Find => {
+                    let result = crate::declarations::find::render_find(
+                        &graph,
+                        options.find().expect("selected find output"),
+                        pretty,
+                        &collation,
+                    )
+                    .map_err(FrontdoorError::ReportRender)?;
+                    (result.stdout, result.warning, result.exit_code)
+                }
+                _ => unreachable!("selected query"),
+            };
+            if let Some(mut warning) = warning {
+                warning.push_str("\n");
+                host.write_stderr(&warning);
+            }
+            if let Some(mut stdout) = stdout {
+                stdout.push_str("\n");
+                output_to(options.out())
+                    .emit(host, &stdout)
+                    .map_err(FrontdoorError::ReportEmit)?;
+            }
+            if code != 0 {
+                exit_with(host, f64::from(code)).map_err(FrontdoorError::ExitCode)?;
+            }
+            return Ok(ReportDispatch::Complete);
+        }
         let mut payload = match output {
             ConsoleOutput::Graph => {
                 graph_view::render_graph(&graph, pretty).map_err(ReportRenderError::from)
@@ -1214,6 +1278,20 @@ impl PreparedGatesCli {
             ConsoleOutput::Data => crate::data::render::render_data(&graph, json, pretty)
                 .map_err(ReportRenderError::from),
             ConsoleOutput::Smells => smells::render_smells(&graph, json, pretty),
+            ConsoleOutput::Tree => {
+                if json {
+                    graph_view::render_graph(&graph, pretty).map_err(ReportRenderError::from)
+                } else {
+                    let collation = self
+                        .collation
+                        .take()
+                        .map(Ok)
+                        .unwrap_or_else(Collation::try_node22_en_us)
+                        .map_err(FrontdoorError::Collation)?;
+                    crate::render::tree::render_tree(&graph, tree_style, &collation)
+                        .map_err(ReportRenderError::from)
+                }
+            }
             ConsoleOutput::File => {
                 let result = file::render_file(
                     &graph,
@@ -1259,7 +1337,11 @@ impl PreparedGatesCli {
                 }
                 plan::render_plan(&graph, axis, json, pretty).map_err(ReportRenderError::from)
             }
-            ConsoleOutput::Ci | ConsoleOutput::Collapse | ConsoleOutput::Unreachable => {
+            ConsoleOutput::Ci
+            | ConsoleOutput::Collapse
+            | ConsoleOutput::Unreachable
+            | ConsoleOutput::Blast
+            | ConsoleOutput::Find => {
                 unreachable!("delegated output")
             }
         }

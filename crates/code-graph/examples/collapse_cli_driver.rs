@@ -40,6 +40,8 @@ struct Request {
     late_smell: bool,
     #[serde(default)]
     late_reports: bool,
+    #[serde(default)]
+    ansi: bool,
     #[serde(default, deserialize_with = "some")]
     warning_marker: Option<JsString>,
     #[serde(default, deserialize_with = "some")]
@@ -463,13 +465,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 } else { value };
                 if request.late_reports {
-                    return match observe!(
+                    let result = if request.ansi {
+                        observe!(
+                            &mut calls,
+                            demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_with_style_blocking,
+                            value,
+                            &mut host,
+                            &TsgoBinary::pinned(&request.compiler),
+                            demlik_code_graph::render::tree::TreeStyle::Ansi
+                        )
+                    } else {
+                        observe!(
                         &mut calls,
                         demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking,
                         value,
                         &mut host,
                         &TsgoBinary::pinned(&request.compiler)
-                    ) {
+                        )
+                    };
+                    return match result {
                         Ok(ReportDispatch::Complete)=>Ok(object([("kind",JsValue::String("reports".into()))])),
                         Ok(ReportDispatch::Refused{cause})=>Ok(object([("kind",JsValue::String("reports-load-refused".into())),("cause",JsValue::String(cause.message()))])),
                         Ok(ReportDispatch::Continue(value))=>Ok(object([
