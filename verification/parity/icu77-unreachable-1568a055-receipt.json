@@ -1,0 +1,83 @@
+{
+  "status": "verified-local-component-pending-combined-integration",
+  "sourceCommit": "1568a055d9643812ad8259ddc3613e8c37476c91",
+  "verifierRecovery": "2da09b70a7a2b15556b09050ac943556536e4bfc",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": [
+    "Canonical public local Collation, immutable length-checked raw UTF16 operands and infallible Ordering comparison of checked operands",
+    "Exactly3 former unreachable locale helper calls, all8 transitive ledger/read/write operations plus prepared runner and required private CLI admission adapter",
+    "Repeatable root-default-target static native source/data/binding/license preparation and mandatory build guard; real borrowed/Rc public caller and original typed causes"
+  ],
+  "api": {
+    "owner": "project::{Collation,CollationInput,CollationError}",
+    "construct": "Collation::try_node22_en_us()->Result<Collation,CollationError>",
+    "operands": [
+      "CollationInput::from_utf16(&[u16])->Result<CollationInput,CollationError>",
+      "CollationInput::from_text(&str)->Result<CollationInput,CollationError>"
+    ],
+    "compare": "Collation::compare(&self,&CollationInput,&CollationInput)->Ordering",
+    "migratedLedgerFunctions": [
+      "unreachable_ledger_of",
+      "parse_unreachable_ledger",
+      "read_unreachable_ledger",
+      "serialize_unreachable_ledger",
+      "write_unreachable_ledger",
+      "findings_of",
+      "reconcile_unreachable",
+      "with_accepted_findings"
+    ],
+    "transitiveChange": "Trailing &Collation and precise Results at sorting/read/write boundaries; prepare/run similarly take handle. Original IO/JSON/ICU causes remain owned data. Callback E gains no bound.",
+    "ownership": "Collation and PreparedGatesCli retaining it are !Send/!Sync. Reports retain original borrowed/Arc data independently of handle lifetime; all checked operands are collected before sorting.",
+    "cliPhase": "Flags/inactive/read/JSON/schema refusals precede local native initialization; active valid ledger orders before scope and subsequent smell/graph work. Native infrastructure initialization refusal is not claimed as a Source JS exception profile."
+  },
+  "checks": {
+    "nativeTests": 247,
+    "nativeGroups": 68,
+    "typeChecks": 5,
+    "ledgerOutcomes": 81,
+    "strict": 78,
+    "qualified": 3,
+    "restoredStrictIds": [
+      "pure.locale.text",
+      "pure.locale.json",
+      "pure.locale.pretty"
+    ],
+    "newIds": ["pure.numeric.text", "pure.numeric.json", "pure.numeric.pretty"],
+    "controls": {
+      "compiled": 4,
+      "strictSemantic": 3,
+      "nativeOnlyAssertion": 1,
+      "nativeOnlySharedCredit": 0
+    },
+    "constructionCargo": 5,
+    "controlCargo": 4,
+    "controlTreesAndNativePreparations": 2
+  },
+  "proof": {
+    "handoffSha256": "63cb3691f42f5e81fd327b6998320f4f5a286c7fc0e4fe869c07f753702b7128",
+    "manifestSha256": "9154d0ea1584e6241b2f1d37e446a197aa6bb453e8ccfe0bb32bce30de0e677d",
+    "payloads": 423,
+    "payloadBytes": 320551717,
+    "parentReviewSha256": "9df9afb82b2165bffa6b1607442c3eb20022abbcca776a80b38a487b3ff79bb5",
+    "independentSourceReviewSha256": "2e35015fefd16622c80314f06458f6d7cfee5ce14542b6aaabcabc9ce068b629",
+    "allFourMutantLibrariesAndConsumersRetained": true,
+    "otherNativeExecutablesNotRetained": 64
+  },
+  "retirement": {
+    "construction": "reports/retirement.json",
+    "firstControl": "controls/icu77-unreachable-controls-worktree.json",
+    "secondControl": "controls-recovered/icu77-unreachable-controls-worktree.json",
+    "allWorktreesAndTargetsRemoved": true,
+    "branchRefsRetained": true,
+    "noActiveOwnedBuilds": true
+  },
+  "blindSpots": [
+    "Only supported local Darwin arm64 static build profile. Cross-platform/CI/release packaging and deployment are unproved.",
+    "No safe live ICU/CLDR/tz getter or whole Node-data identity. Earlier partial icuinfo query remains qualified.",
+    "Giant i32 operand limit branch is source-inspected only; no fabricated giant allocation or universal allocation guarantee.",
+    "154 legacy helper calls/55files plus2direct project sorts remain unconverted; no full-goal collation closure or fallback for migrated operations.",
+    "Existing canonical String/raw Graph/reflection/settings/OS/stdio limits remain. All53 CLI gaps stay OPEN; no standalone/bootstrap/distribution claim.",
+    "Whole workspace/default+feature combined acceptance is deferred to Root; this is one component checkpoint."
+  ],
+  "qualification": "This component proof does not claim merged-source acceptance. Native-only/protocol/native type checks add no shared-case credit."
+}
