@@ -71,8 +71,8 @@ export function createCheckWorktree(sourceRoot, name, evidenceDirectory) {
     cwd: sourceRoot,
     encoding: "utf8",
   }).trim();
-  const parent = fs.mkdtempSync(
-    path.join(os.tmpdir(), `demlik-check-${name}-`),
+  const parent = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), `demlik-check-${name}-`)),
   );
   const root = path.join(parent, "repo");
   const relative = path.relative(root, evidence);

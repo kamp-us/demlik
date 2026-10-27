@@ -391,7 +391,10 @@ export async function pbtConstructorChecks({ directory } = {}) {
         [
           "--import",
           tsx,
-          path.join(check.root, "verification/parity", script),
+          assertCheckPath(
+            path.join(check.root, "verification/parity", script),
+            check.root,
+          ),
           "--native-bin",
           baseline.binaries.property.path,
           "--report",
