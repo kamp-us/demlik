@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { agentRuntimeCases } from "./agent-runtime-cases.mjs";
-import { assertCheckPath } from "./check-worktree.mjs";
+import { assertCheckPath, cargoCheckEnvironment } from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   require = createRequire(import.meta.url),
@@ -58,10 +58,12 @@ export function runAgentRuntimeConformance(options = {}) {
   let binary = options.binary,
     producer = null;
   if (!binary) {
-    const env = { ...process.env };
+    const env = cargoCheckEnvironment();
     for (const key of [
       "CARGO_TARGET_DIR",
       "CARGO_BUILD_TARGET",
+      "CARGO_BUILD_TARGET_DIR",
+      "CARGO_BUILD_BUILD_DIR",
       "CARGO_TARGET_TMPDIR",
       "RUSTC_WRAPPER",
       "RUSTC_WORKSPACE_WRAPPER",

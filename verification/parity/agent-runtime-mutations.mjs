@@ -126,6 +126,8 @@ const env = cargoCheckEnvironment({
 });
 for (const key of [
   "CARGO_BUILD_TARGET",
+  "CARGO_BUILD_TARGET_DIR",
+  "CARGO_BUILD_BUILD_DIR",
   "CARGO_TARGET_TMPDIR",
   "RUSTC_WRAPPER",
   "RUSTC_WORKSPACE_WRAPPER",
