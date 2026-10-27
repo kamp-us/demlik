@@ -30,6 +30,14 @@ const suites = [
     traceField: "nativeTrace",
   },
   {
+    name: "collapse-report",
+    driver: "collapse_report_driver",
+    script: "graph-collapse-report.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "collapse-partial",
     driver: "collapse_partial_driver",
     script: "graph-collapse-partial.mjs",
@@ -273,6 +281,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "collapse_report_driver",
   "collapse_cli_driver",
   "graph_root_driver",
   "collapse_partial_driver",
