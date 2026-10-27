@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { agentContentParity } from "./agent-content-run.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
+import { runAgentRuntimeConformance } from "./agent-runtime-run.mjs";
 import {
   agentBaseCheckpointParity,
   agentStateFanoutParity,
@@ -1092,6 +1093,16 @@ if (!mutationSuite) {
       operation: "tea.agent-base-knob",
       binaryArgument: "--agent-base-bin",
       run: (options) => agentBaseCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentRuntime",
+      operation: "tea.agent-runtime",
+      binaryArgument: "--agent-runtime-bin",
+      run: (options) =>
+        runAgentRuntimeConformance({
+          binary: options.binary,
+          output: options.reportFile,
+        }),
     },
     {
       name: "agentStatus",

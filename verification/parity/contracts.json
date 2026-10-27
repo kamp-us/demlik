@@ -10960,5 +10960,151 @@
       "Previous27Source-only reflection/backend observations, native statistics, controls and old regression reruns are not new shared comparisons. Weighted tables/MsgArbitraryTable/guided/proxy/key families are outside this task.",
       "All builds used protected APFS-cloned warm task-owned targets. Source/archive/hash proof is exact, but no fresh/cold/archive-target build is claimed. Temporary mutant workspaces/targets are removed after saved source substitutions, binary and full command/output evidence."
     ]
+  },
+  "@demlik/tea:./agent#AgentToMachine": {
+    "signature": "8c063a0699f44de1e29f3234461dc9dc0367797687300c03c3a3ddf651853347",
+    "rust": {
+      "file": "crates/tea/src/agent/knob/runtime.rs",
+      "symbols": ["demlik_tea::agent::Agent::to_machine"]
+    },
+    "cases": [
+      "agent-runtime.promise.normal",
+      "agent-runtime.promise.duplicate",
+      "agent-runtime.promise.stale-settlements",
+      "agent-runtime.promise.fresh-boot",
+      "agent-runtime.promise.terminal-boot",
+      "agent-runtime.promise.bad-total",
+      "agent-runtime.promise.tool-io-error",
+      "agent-runtime.promise.model-error",
+      "agent-runtime.promise.parse-error",
+      "agent-runtime.promise.retry-once",
+      "agent-runtime.promise.retry-exhaust",
+      "agent-runtime.promise.restart-brain",
+      "agent-runtime.promise.restart-tool",
+      "agent-runtime.promise.restart-tool-io-error",
+      "agent-runtime.promise.cancel",
+      "agent-runtime.promise.late-tool-fail",
+      "agent-runtime.promise.deadline",
+      "agent-runtime.effect.normal",
+      "agent-runtime.effect.duplicate",
+      "agent-runtime.effect.stale-settlements",
+      "agent-runtime.effect.fresh-boot",
+      "agent-runtime.effect.terminal-boot",
+      "agent-runtime.effect.bad-total",
+      "agent-runtime.effect.tool-io-error",
+      "agent-runtime.effect.model-error",
+      "agent-runtime.effect.parse-error",
+      "agent-runtime.effect.retry-once",
+      "agent-runtime.effect.retry-exhaust",
+      "agent-runtime.effect.restart-brain",
+      "agent-runtime.effect.restart-tool",
+      "agent-runtime.effect.restart-tool-io-error",
+      "agent-runtime.effect.cancel",
+      "agent-runtime.effect.late-tool-fail",
+      "agent-runtime.effect.deadline"
+    ],
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "knownGaps": [
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
+      "reserved raw tag collisions/reflection",
+      "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
+      "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
+      "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
+      "Default guarded Rc<PlainData> turn output cannot use the current concrete AgentTurn projection without a further owner-backed view seam."
+    ]
+  },
+  "@demlik/tea:./agent#AgentToMachine/member:published:f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7": {
+    "signature": "f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7",
+    "rust": {
+      "file": "crates/tea/src/agent/knob/runtime.rs",
+      "symbols": ["demlik_tea::agent::Agent::to_machine"]
+    },
+    "cases": [
+      "agent-runtime.promise.normal",
+      "agent-runtime.promise.duplicate",
+      "agent-runtime.promise.stale-settlements",
+      "agent-runtime.promise.fresh-boot",
+      "agent-runtime.promise.terminal-boot",
+      "agent-runtime.promise.bad-total",
+      "agent-runtime.promise.tool-io-error",
+      "agent-runtime.promise.model-error",
+      "agent-runtime.promise.parse-error",
+      "agent-runtime.promise.retry-once",
+      "agent-runtime.promise.retry-exhaust",
+      "agent-runtime.promise.restart-brain",
+      "agent-runtime.promise.restart-tool",
+      "agent-runtime.promise.restart-tool-io-error",
+      "agent-runtime.promise.cancel",
+      "agent-runtime.promise.late-tool-fail",
+      "agent-runtime.promise.deadline",
+      "agent-runtime.effect.normal",
+      "agent-runtime.effect.duplicate",
+      "agent-runtime.effect.stale-settlements",
+      "agent-runtime.effect.fresh-boot",
+      "agent-runtime.effect.terminal-boot",
+      "agent-runtime.effect.bad-total",
+      "agent-runtime.effect.tool-io-error",
+      "agent-runtime.effect.model-error",
+      "agent-runtime.effect.parse-error",
+      "agent-runtime.effect.retry-once",
+      "agent-runtime.effect.retry-exhaust",
+      "agent-runtime.effect.restart-brain",
+      "agent-runtime.effect.restart-tool",
+      "agent-runtime.effect.restart-tool-io-error",
+      "agent-runtime.effect.cancel",
+      "agent-runtime.effect.late-tool-fail",
+      "agent-runtime.effect.deadline"
+    ],
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "knownGaps": [
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
+      "reserved raw tag collisions/reflection",
+      "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
+      "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
+      "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
+      "Default guarded Rc<PlainData> turn output cannot use the current concrete AgentTurn projection without a further owner-backed view seam."
+    ]
+  },
+  "@demlik/tea:./agent#agentBootMsg": {
+    "signature": "2fbb09838952f9a124492c8fed30b9c23c1d1668aa01ad3d6923ee854237bbc0",
+    "rust": {
+      "file": "crates/tea/src/agent/knob/runtime.rs",
+      "symbols": ["demlik_tea::agent::agent_boot_msg"]
+    },
+    "cases": [
+      "agent-runtime.promise.fresh-boot",
+      "agent-runtime.promise.terminal-boot",
+      "agent-runtime.promise.restart-brain",
+      "agent-runtime.promise.restart-tool",
+      "agent-runtime.promise.restart-tool-io-error",
+      "agent-runtime.effect.fresh-boot",
+      "agent-runtime.effect.terminal-boot",
+      "agent-runtime.effect.restart-brain",
+      "agent-runtime.effect.restart-tool",
+      "agent-runtime.effect.restart-tool-io-error"
+    ],
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "knownGaps": [
+      "Default wall-clock helper invocation and arbitrary raw JS arguments remain unverified; current shared cases supply explicit finite timestamps."
+    ]
+  },
+  "@demlik/tea:./agent#agentCancelMsg": {
+    "signature": "3bb5a45ba07615502778240b28b2a18a94bda03ce1950c20c9f653e4b0c078bd",
+    "rust": {
+      "file": "crates/tea/src/agent/knob/runtime.rs",
+      "symbols": ["demlik_tea::agent::agent_cancel_msg"]
+    },
+    "cases": [
+      "agent-runtime.promise.cancel",
+      "agent-runtime.promise.late-tool-fail",
+      "agent-runtime.effect.cancel",
+      "agent-runtime.effect.late-tool-fail"
+    ],
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
+    "knownGaps": [
+      "Default wall-clock helper invocation and arbitrary raw JS arguments remain unverified; current shared cases supply explicit finite timestamps."
+    ]
   }
 }

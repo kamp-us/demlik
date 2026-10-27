@@ -1,0 +1,130 @@
+{
+  "kind": "base-agent-runtime-checkpoint-proof",
+  "createdAt": "2026-10-27T11:51:42.806846+00:00",
+  "sourceReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "base": "693271381166cabcca9405e726b72ba9f37fd5fb",
+  "commits": [
+    "3dbce0a77c1f1e43b174fe565c1e89440b682d28",
+    "cc5e24ba2b5e558ea473f4ffec417ede7a93ea42",
+    "d589705ee605717116342531d6093431dc36fd23"
+  ],
+  "productionCommit": "cc5e24ba2b5e558ea473f4ffec417ede7a93ea42",
+  "verifierOnlyFollowup": {
+    "commit": "d589705ee605717116342531d6093431dc36fd23",
+    "wholeTeaPlusCargoEquivalence": "verifier-followup-source-equivalence.json",
+    "builds": 0,
+    "binaryReused": {
+      "path": "/private/tmp/demlik-agent-runtime-base-proof-01a16c9d/shared-34-cc5e24ba.json.native-5716d5affb17dc56ff4e6ae108226b5f0005e5fc07655fb558a2a24ead063426.bin",
+      "sha256": "5716d5affb17dc56ff4e6ae108226b5f0005e5fc07655fb558a2a24ead063426"
+    }
+  },
+  "scope": "Base Agent::to_machine, finite Brain/Tool command family, existing classified settlement, bare tools and all deadlines. No provider/router/child/advanced host.",
+  "strictShared": {
+    "cases": 34,
+    "passed": 34,
+    "failed": 0,
+    "report": "shared-34-cc5e24ba.json",
+    "reportSha256": "9e71a8b70167896359f4a62c9ac72336372b7b9ad41bd8dbc90039344ddacc50",
+    "verifierFollowupReport": "shared-34-d589705e-pinned.json",
+    "verifierFollowupSha256": "d5b4eb5f4771400ab71a05fb1de43c4c4fb9fc21cc12e4e2e6d1a204a8dea4a5",
+    "uniqueCases": 34,
+    "rerunsCountedAgain": false,
+    "nativeBinarySha256": "5716d5affb17dc56ff4e6ae108226b5f0005e5fc07655fb558a2a24ead063426",
+    "nativeCallEvidence": "Every row echoes actual id and contains compiled observe!/observe_async! calls, including Agent::to_machine.",
+    "comparison": "Exact declared finite/timer/identity/category/commit view; original Source diagnostics retained outside view."
+  },
+  "nativeEvidence": {
+    "focusedTests": 19,
+    "newTests": 4,
+    "profiles": ["Promise", "Effect"],
+    "focusedRaw": "focused-native-final.stdout",
+    "publicConsumers": ["agent_runtime_interface", "agent_runtime_borrowed"],
+    "actualCargoLibraries": "final-libraries.json",
+    "actualCargoExecutables": "final-executables.json",
+    "typeProof": "type-probes/results-final.json",
+    "typePositive": 1,
+    "typeRefusals": {
+      "borrowed_actor": ["E0597"],
+      "borrowed_message_purpose": ["E0597"],
+      "borrowed_cause": ["E0597"],
+      "wrong_tool_error_channel": ["E0271"]
+    },
+    "typeNote": "E0271 appears twice for the same intended host error-channel mismatch. Earlier E0463 path setup failures are unscored.",
+    "nativeOnlyRefusedProfiles": "open-profiles.json",
+    "nativeOnlyCredit": 0
+  },
+  "controls": {
+    "count": 9,
+    "compiled": 9,
+    "detected": 9,
+    "report": "controls-cc5e24ba/report.json",
+    "sha256": "51eb4cc6be5734bfe481b9659361d0597c5152b9fc375c409216cae09dda69c4",
+    "protocolDifferences": 6,
+    "exactNativeAssertionExit101": 3,
+    "libraryAndBinaryFreshFalse": 9,
+    "removedWorktrees": 9,
+    "libraryRetention": "Mutant libraries were hash-pinned at check time; compiler/dependency cache is intentionally not retained. Actual executed immutable binaries, full producer JSON, modified sources, requests, stdout/stderr and lifecycle receipts are retained."
+  },
+  "gates": [
+    "19 focused native tests",
+    "inferred opaque public consumer Promise+Effect",
+    "borrowed public construction/fold/model-loader consumer",
+    "Tea all-targets/all-features Clippy -D warnings",
+    "cargo fmt --all --check",
+    "parity TypeScript",
+    "focused Biome",
+    "5 actual selected-library final type probes",
+    "9 independent compiled semantic controls"
+  ],
+  "sourceEquivalenceQualifications": [
+    "19 tests and public consumers passed before only documentation and a scoped signature type-complexity expectation were added. Final cc5e driver was actually rebuilt and34cases passed; final feature Clippy/static passed on the scoped-lint source.",
+    "d589 changes only two verifier MJS files. WHOLE tracked Tea and Cargo manifests/lock have an empty hash diff against cc5e; no product or fault rebuild claimed for that verifier-only change.",
+    "No cold archive rebuild or combined Main workspace/native/full-suite proof is claimed. Parent will integrate and run its own combined gates."
+  ],
+  "failedActionsRetained": [
+    {
+      "path": "interface-reds.json",
+      "claim": "Baseline public missing-method E0599 and Interpreter generic E0107; host probe unchanged green. Missing-name probe and complete final opaque caller are distinct source files."
+    },
+    {
+      "path": "type-probes/results-first.json",
+      "claim": "E0463 from incorrectly named copied library; setup failure unscored; fixed names then final actual-library positive/refusals pass."
+    },
+    {
+      "path": "barrier-before-cancel-profile.json",
+      "claim": "Four native-only15s controller timeouts; no Source execution then. Explicit handler cancel-before-background order repaired fixture only. No held-call preemption claim; old exact source was not hashed before edit, retained binary/raw actions are authoritative."
+    },
+    {
+      "path": "shared-24-first.json",
+      "claim": "12/24 (all Promise match); Effect Source runner acquisition was deferred by Stream.callback helper. Same immutable native binary passed24after Source adapter mirrored actual make-before-fork boundary; no runtime yield/scheduler change."
+    },
+    {
+      "path": "invoice-native-profiles-1.jsonl",
+      "claim": "Two fixture expectations corrected (ready projection location; JSON number literal comparison); original reports preserved."
+    },
+    {
+      "path": "clippy-feature-final.stdout",
+      "claim": "Scoped inferred return signature type-complexity lint; existing project expect convention applied, no abstraction introduced."
+    }
+  ],
+  "qualifications": [
+    "Strict equality is the declared view; original source diagnostics are retained. No universal Error/stack/platform diagnostics equivalence.",
+    "Source toMachine Promise brain handler is adapted into actual Effect declared channels; no new retry/settlement implementation.",
+    "Controlled deadline host uses Source subscribeWith and native canonical Timer; not a new default-Date.now timing claim.",
+    "Cancellation is explicitly dispatched by the bare tool before background registration. No held-call preemption or arbitrary-executor ordering claim.",
+    "Restart retains actual in-process state references at a persisted-before-effect failure window; no process-kill/durable codec claim."
+  ],
+  "openGaps": [
+    "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
+    "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
+    "reserved raw tag collisions/reflection",
+    "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
+    "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
+    "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
+    "Parent additionally retains measured default guarded-turn projection gap; no raw unknown-tag parity is added by this leaf."
+  ],
+  "mappingProposal": "mapping-proposal-v2.json",
+  "bindingsProposed": 4,
+  "lifecycle": "All nine control worktrees removed. Construction tree will be removed only after archive stream-hash verification; final handoff records removal.",
+  "filePins": "frozen-d589705e.json"
+}
