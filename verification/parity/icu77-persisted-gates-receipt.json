@@ -1,0 +1,88 @@
+{
+  "component": "Group B persisted gates ICU77 migration",
+  "base": "cc2c0f794e336f85e4783fd3546c52e7429aedeb",
+  "source": "0e65bfec89e1d3a227a3d383fcb8e41de9e27206",
+  "status": "scoped conformance complete, independent component review/integration pending",
+  "branch": "can/rust-icu77-persisted-gates-01a16c9d",
+  "scope": {
+    "legacyHelperSitesMigrated": 18,
+    "sortOwners": 9,
+    "productionFiles": 17,
+    "sourceFiles": 44,
+    "remainingLegacyHelperCalls": 140,
+    "remainingDirectProjectSorts": 2
+  },
+  "proofRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-persisted-gates-production",
+  "sourceArchive": {
+    "path": "source/source-0e65bfec.tar.gz",
+    "sha256": "54e29684277e33513704049a67ebc306bfc6fb9a97ce72a2d3a4868e850c3508",
+    "bytes": 82695,
+    "fileMembers": 44,
+    "totalMembers": 58
+  },
+  "counts": {
+    "newStrictFocusedObservations": 31,
+    "qualifiedFocused": 0,
+    "overlappingProtocolCredit": 0,
+    "affectedPrimarySuites": 15,
+    "affectedHistoricalOutcomes": 3587,
+    "affectedNewCredit": 0,
+    "nativePassed": 254,
+    "nativeGroups": 70,
+    "compiledSemanticControls": 4,
+    "strictProcessControls": 2,
+    "nativeOnlyControls": 2,
+    "controlSourceComparisonCredit": 0,
+    "constructionCargoSelections": 8,
+    "constructionNativePreparations": 1,
+    "controlCargoSelections": 4,
+    "controlNativePreparations": 1,
+    "controlWorktrees": 1
+  },
+  "publicInterface": {
+    "sameBorrowedConsumerRed": "reports/public-interface-red.json",
+    "red": "sole E0308 against actual selected baseline library",
+    "green": "reports/public-interface-frozen-binding.json",
+    "privateSlot": "reports/private-slot-consumed-fnonce.json",
+    "privateSlotQualification": "Opaque borrowed Rc admission cause is application instrumentation, not generic library emit-error proof."
+  },
+  "reports": {
+    "focused": "reports/focused-frozen-pairs.json",
+    "affected": "reports/affected-primary.json",
+    "native": "reports/native-execution.json",
+    "controls": "controls/controls.json",
+    "source": "reports/source-freeze.json",
+    "recoveries": "reports/recoveries.json",
+    "unretained": "reports/unretained-artifacts.json",
+    "clippy": "reports/clippy-all-native-recovered.json",
+    "types": "reports/scoped-types-final.json",
+    "biome": "reports/scoped-biome-final.json"
+  },
+  "orderingAndOwnership": [
+    "Prepare checked immutable operands before stable sorting; retain the pre-existing V8 scope-sort schedule.",
+    "Boundary canonicalization retains chosen Arc handles; every rekey remints every entry, and every valid rekey-file read writes even0 changed keys.",
+    "Original borrowed layer/report/ledger results outlive the local Collation handle.",
+    "One existing PreparedGatesCli slot requested lazily with a borrowed FnOnce; early admission/config/regex/no-scope paths retain precedence. Source-owned later boundary-ledger reads remain later.",
+    "Original IO/JSON/regex/config causes stay typed and owned; new collation infrastructure failures are explicit native phases."
+  ],
+  "qualifications": [
+    "Only the existing aarch64-apple-darwin pinned static ICU77.1/data+rust_icu5.8 build profile is exercised; other-host release packaging and live runtime/data version guards are unproved.",
+    "Huge native operand limit is inspected, not allocated; early-init fault forces a typed constructor refusal without a giant slice.",
+    "Existing raw Graph/String/regex/OS/stdio profiles and all53CLI gaps remain OPEN; no blanket raw JS/prototype/locale or whole-goal closure.",
+    "There is a temporary legacy terminus of140 helpers+2direct sorts, not a permanent dual backend or fallback.",
+    "3587 older outcomes retain original per-case projections/qualifiers, plus protocol refusals and native-only rows with their existing exclusions; they are not added focused credit.",
+    "Cargo4 built example test harnesses; those protocol failures receive0comparison/control credit. Normal driver binaries are actual Cargo5 selected artifacts.",
+    "The final boundary-render wrapper lint was repaired equivalently, then Cargo8 rebuilt that driver and479 affected cases passed again,0additional credit.",
+    "The final TypeScript annotations were verifier-only; original invalid literal/loader/protocol and compilation/lint failures are retained in recoveries."
+  ],
+  "changesNotMade": [
+    "Main",
+    "global runner",
+    "contracts/inventory/source IDs",
+    "dependencies",
+    "TS product",
+    "other migration groups",
+    "Git remotes"
+  ],
+  "retirement": "Control tree/defaulttarget removed; construction tree removal is recorded externally after this receipt commit."
+}
