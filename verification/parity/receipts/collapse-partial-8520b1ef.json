@@ -1,0 +1,53 @@
+{
+  "sourceCommit": "8520b1ef130d971ee1b14dee25c5643cbbcfa81a",
+  "sourceBase": "90352aa45c3caf796420e4e04a92ffa92657f43a",
+  "sourceCommits": [
+    "6f58cc3af227158f65287cc884d00e219852ef67",
+    "de6b5f54c331c51cb9333c097f498f74165b60a8",
+    "81b0fa7738a486408988da480ea5d826e90f0edc",
+    "304e31ea0d3e1d21893e00b2be594dc02292c5e5",
+    "7addee085f3410e14821632d26604e7a47843a94",
+    "807689a91991cb37ac4da0347ba888437dfde927",
+    "8520b1ef130d971ee1b14dee25c5643cbbcfa81a"
+  ],
+  "scope": "Pure candidate predicate and borrowed partial-twin kernel only",
+  "handoff": "/private/tmp/demlik-collapse-partial-handoff-01a16c9d.json",
+  "archive": {
+    "bundle": "/private/tmp/demlik-collapse-partial-8520b1ef-01a16c9d.tar.gz",
+    "bundleSha256": "94caea1dc6a38b446344a74a7e701b8b4091af599ea4cd00abaf7d2fbd0b56e9",
+    "bundleBytes": 90459931,
+    "manifestFiles": 184,
+    "manifestSha256": "62ac2e7e059afd2b4cc44da0e3c32c651a18b3ec40f3be0cfcfb1c84ea45ce47",
+    "tarFilesIncludingManifest": 185
+  },
+  "verification": {
+    "strictSharedObservations": 71,
+    "pure": 61,
+    "project": 10,
+    "protocolRefusals": 7,
+    "responseGuards": 3,
+    "nativeTests": 18,
+    "newNative": 4,
+    "affectedNative": 14,
+    "finalCompiledSemanticControls": 14,
+    "historicalPartialRunsExcluded": true,
+    "sourceOnlyRawProfileQualifications": 6,
+    "modifiedLibraryAndDriverFreshFalse": true,
+    "realWorkflowCounts": [
+      1,
+      1,
+      3,
+      0
+    ],
+    "externalBorrowedOwnerConsumer": true,
+    "clippyAllTargetsFmtScopedTscBiome": true
+  },
+  "diskRule": "Registered disposable check/suite worktrees, default target only, no CARGO_TARGET_DIR override; owner restored between faults; all completed check targets removed. No rlib/dependency caches copied. Selected executed mutants consolidated into verified archive entries after execution.",
+  "artifactDirectoryQualification": "Goal folder is compacted. The184-file manifest describes the archive snapshot, not a complete expanded directory;14 selected mutant executable aliases were retired after all185 tar file bytes were verified. Baseline/consumer remain directly executable.",
+  "limits": [
+    "Six Source-valid raw/fractional function facts exceed existing native graph owner representations; not native pairs or protocol-parity claims.",
+    "No full similarity/ranking/cost/clique/ceilings/gate/render/CLI/warning callback work; all53 CLI knownGaps remain open.",
+    "Whole Tea/parity TSC not claimed; scoped CodeGraph verifier typecheck passed."
+  ],
+  "stop": "Root review required before any next construction."
+}
