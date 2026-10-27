@@ -116,6 +116,7 @@ export function cliUnreachableMutations({
   let check, operationError, cleanupError;
   try {
     check = createCheckWorktree(root, "cli-unreachable-controls", evidence);
+    fs.mkdirSync(path.join(check.target, "parity"), { recursive: true });
     for (const d of [
       "node_modules",
       "packages/code-graph/node_modules",
