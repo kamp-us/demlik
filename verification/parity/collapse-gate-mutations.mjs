@@ -365,6 +365,24 @@ try {
     check.root,
     check.target,
   );
+  interfaceReplay = {
+    base,
+    restoredHashes,
+    inputArchive: {
+      path: archivePath,
+      sha256: hash(archived),
+      format: "Git archive of complete exact-base CG src and Cargo inputs",
+    },
+    library: preserve(redLib.path, "interface-replay-library"),
+    artifact: redLib.artifact,
+    producer: {
+      cwd: check.root,
+      cargo: process.env.CARGO ?? "cargo",
+      rustc: process.env.RUSTC ?? "rustc",
+      rustupToolchain: process.env.RUSTUP_TOOLCHAIN,
+      defaultTarget: check.target,
+    },
+  };
   const redCommand = [
     "--edition=2024",
     "-Cdebuginfo=0",
@@ -395,32 +413,32 @@ try {
     diagnostics.map((d) => d.code.code),
     ["E0599"],
   );
-  const depInfo = path.join(
-    path.dirname(redLib.path),
-    path
-      .basename(redLib.path)
-      .replace(/^lib/, "")
-      .replace(/\.rlib$/, ".d"),
-  );
+  const depInfoCandidates = [
+    redLib.path.replace(/\.rlib$/, ".d"),
+    path.join(
+      path.dirname(redLib.path),
+      path
+        .basename(redLib.path)
+        .replace(/^lib/, "")
+        .replace(/\.rlib$/, ".d"),
+    ),
+  ];
+  const depInfo = depInfoCandidates.find((p) => fs.existsSync(p));
+  assert.ok(depInfo, "Cargo library dep-info");
   const depInfoCopy = path.join(evidence, "interface-replay.d");
   fs.copyFileSync(depInfo, depInfoCopy);
-  interfaceReplay = {
-    base: "6f3c9b0eceb83e195cfb4f338b08e9997580ee20",
-    restoredHashes,
-    inputArchive: {
-      path: archivePath,
-      sha256: hash(archived),
-      format: "Git archive of complete exact-base CG src and Cargo inputs",
+  Object.assign(interfaceReplay, {
+    depInfo: {
+      path: depInfoCopy,
+      sha256: hash(fs.readFileSync(depInfoCopy)),
+      selectedFromArtifact: redLib.path,
     },
-    depInfo: { path: depInfoCopy, sha256: hash(fs.readFileSync(depInfoCopy)) },
     command: redCommand,
     compileExit: red.status,
     errorCodes: diagnostics.map((d) => d.code.code),
-    library: preserve(redLib.path, "interface-replay-library"),
-    artifact: redLib.artifact,
     qualification:
-      "Original first baseline red retained hash/diagnostics but its rlib was overwritten by green; this separate exact-base module replay retains the actual selected rlib. Complete CG src plus workspace/CG Cargo manifests and lock were restored from the exact base archive; current CG src is copied back only after this red.",
-  };
+      "This is a new exact-base reproduction, not recovery of original rlib bytes. The first baseline red retained Cargo/hash/diagnostics but its consumed rlib bytes are unavailable. Complete exact-base CG src and Cargo inputs were restored and retained; current CG src is restored only after this type proof. Zero semantic-control credit.",
+  });
   fs.rmSync(path.join(check.root, "crates/code-graph/src"), {
     recursive: true,
     force: true,
@@ -578,6 +596,12 @@ try {
     },
   };
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+} catch (error) {
+  fs.writeFileSync(
+    reportFile,
+    `${JSON.stringify({ incomplete: true, detected: controls.length, planned: mutations.length, failure: String(error), interfaceReplay, controls, noBuildOrProtocolFailureCredit: true }, null, 2)}\n`,
+  );
+  throw error;
 } finally {
   if (check) check.remove();
 }
