@@ -122,3 +122,71 @@ pub fn prepare_unreachable_gate(
         },
     })
 }
+
+pub struct UnreachableOutput<'a, E> {
+    pub emit: &'a mut dyn FnMut(&JsString) -> Result<(), E>,
+    pub report: &'a mut dyn FnMut(&JsString) -> Result<(), E>,
+    pub json: bool,
+    pub pretty: bool,
+}
+#[derive(Debug)]
+pub enum UnreachableRunError<E> {
+    Write(super::ledger::UnreachableWriteError),
+    Render(serde_json::Error),
+    Emit(E),
+    Report(E),
+}
+pub fn run_unreachable_gate<E>(
+    gate: &PreparedUnreachableGate,
+    graph: &crate::schema::Graph,
+    out: UnreachableOutput<'_, E>,
+) -> Result<i32, UnreachableRunError<E>> {
+    use super::{
+        ledger::{
+            findings_of, reconcile_unreachable, with_accepted_findings, write_unreachable_ledger,
+        },
+        render::{render_accepted_dead, render_unreachable_gate},
+    };
+    let Some(reachability) = &graph.reachability else {
+        (out.report)(&JsString::from(
+            "the reachability pass did not run; the unreachable gate has nothing to read.",
+        ))
+        .map_err(UnreachableRunError::Report)?;
+        return Ok(2);
+    };
+    let findings = findings_of(&gate.scope, &reachability.unreachable);
+    match &gate.mode {
+        UnreachableMode::Gate { gated } => {
+            let result = reconcile_unreachable(&gate.ledger, &gate.scope, &findings, gated);
+            if !result.pruned.is_empty() {
+                write_unreachable_ledger(&gate.file, &result.kept)
+                    .map_err(UnreachableRunError::Write)?;
+            }
+            let rendered = render_unreachable_gate(&result, out.json, out.pretty)
+                .map_err(UnreachableRunError::Render)?;
+            let mut payload = rendered.stdout;
+            payload.push_str("\n");
+            (out.emit)(&payload).map_err(UnreachableRunError::Emit)?;
+            Ok(rendered.exit_code)
+        }
+        UnreachableMode::Accept { reason } => {
+            let all = [
+                UnreachableCategory::Dead,
+                UnreachableCategory::OnlyCalledFromTests,
+            ];
+            let result = reconcile_unreachable(&gate.ledger, &gate.scope, &findings, &all);
+            if !result.pruned.is_empty() || !result.unrecorded.is_empty() {
+                write_unreachable_ledger(
+                    &gate.file,
+                    &with_accepted_findings(&result.kept, &result.unrecorded, reason),
+                )
+                .map_err(UnreachableRunError::Write)?;
+            }
+            let mut payload = render_accepted_dead(&result, reason, out.json, out.pretty)
+                .map_err(UnreachableRunError::Render)?;
+            payload.push_str("\n");
+            (out.emit)(&payload).map_err(UnreachableRunError::Emit)?;
+            Ok(0)
+        }
+    }
+}

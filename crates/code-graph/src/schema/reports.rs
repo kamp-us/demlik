@@ -3,7 +3,7 @@ use super::EntryReach;
 use crate::text::JsString;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UnreachableCategory {
     Dead,

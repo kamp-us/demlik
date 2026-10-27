@@ -1,13 +1,13 @@
 use crate::{
     config::issue_location,
     project::locale_compare_units,
-    schema::UnreachableCategory,
+    schema::{UnreachableCategory, UnreachableSymbol},
     text::{JsObject, JsString, JsValue, object_keys},
     validation::{InputIssue, PathSegment, nonempty_string},
 };
 use indexmap::{IndexMap, IndexSet};
 use serde::Serialize;
-use std::{fs, io, sync::Arc};
+use std::{cmp::Ordering, fs, io, sync::Arc};
 
 pub const UNREACHABLE_LEDGER_FILENAME: &str = "unreachable-ledger.json";
 #[derive(Debug, Serialize)]
@@ -43,6 +43,11 @@ pub fn finding_key(finding: &UnreachableFinding) -> String {
     serde_json::to_string(&(&finding.scope, &finding.kind, &finding.id))
         .expect("finding identities contain encodable strings")
 }
+fn compare_findings(a: &UnreachableFinding, b: &UnreachableFinding) -> Ordering {
+    locale_compare_units(a.scope.units(), b.scope.units())
+        .then_with(|| crate::project::locale_compare(a.kind.as_str(), b.kind.as_str()))
+        .then_with(|| locale_compare_units(a.id.units(), b.id.units()))
+}
 pub fn unreachable_ledger_of(entries: &[Arc<UnreachableLedgerEntry>]) -> UnreachableLedger {
     let mut by_key = IndexMap::new();
     for entry in entries {
@@ -51,12 +56,7 @@ pub fn unreachable_ledger_of(entries: &[Arc<UnreachableLedgerEntry>]) -> Unreach
             .or_insert_with(|| Arc::clone(entry));
     }
     let mut entries: Vec<_> = by_key.into_values().collect();
-    entries.sort_by(|a, b| {
-        let (a, b) = (&a.finding, &b.finding);
-        locale_compare_units(a.scope.units(), b.scope.units())
-            .then_with(|| crate::project::locale_compare(a.kind.as_str(), b.kind.as_str()))
-            .then_with(|| locale_compare_units(a.id.units(), b.id.units()))
-    });
+    entries.sort_by(|a, b| compare_findings(&a.finding, &b.finding));
     UnreachableLedger { entries }
 }
 fn field(path: &[PathSegment], name: &str) -> Vec<PathSegment> {
@@ -189,4 +189,135 @@ pub fn read_unreachable_ledger(file: &JsString) -> UnreachableLedgerRead {
             source: Some(source),
         },
     }
+}
+
+pub fn serialize_unreachable_ledger(
+    ledger: &UnreachableLedger,
+) -> Result<String, serde_json::Error> {
+    let mut text =
+        crate::render::json::stable_stringify(&unreachable_ledger_of(&ledger.entries), true)?;
+    text.push('\n');
+    Ok(text)
+}
+#[derive(Debug)]
+pub enum UnreachableWriteError {
+    Json(serde_json::Error),
+    Io { file: JsString, source: io::Error },
+}
+impl std::fmt::Display for UnreachableWriteError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Json(error) => error.fmt(formatter),
+            Self::Io { file, source } => {
+                write!(formatter, "cannot write \"{}\": {source}", file.to_lossy())
+            }
+        }
+    }
+}
+impl std::error::Error for UnreachableWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Json(error) => error,
+            Self::Io { source, .. } => source,
+        })
+    }
+}
+pub fn write_unreachable_ledger(
+    file: &JsString,
+    ledger: &UnreachableLedger,
+) -> Result<(), UnreachableWriteError> {
+    let text = serialize_unreachable_ledger(ledger).map_err(UnreachableWriteError::Json)?;
+    fs::write(file.to_lossy(), text).map_err(|source| UnreachableWriteError::Io {
+        file: file.clone(),
+        source,
+    })
+}
+pub fn findings_of(scope: &JsString, unreachable: &[UnreachableSymbol]) -> Vec<UnreachableFinding> {
+    let mut findings: Vec<_> = unreachable
+        .iter()
+        .map(|symbol| UnreachableFinding {
+            scope: scope.clone(),
+            kind: symbol.category,
+            id: symbol.id.as_str().into(),
+        })
+        .collect();
+    findings.sort_by(compare_findings);
+    findings
+}
+#[derive(Debug, Serialize)]
+pub struct UnreachableReconciliation<'a> {
+    pub scope: &'a JsString,
+    pub gated: &'a [UnreachableCategory],
+    pub unrecorded: Vec<&'a UnreachableFinding>,
+    pub pruned: Vec<Arc<UnreachableLedgerEntry>>,
+    pub kept: UnreachableLedger,
+}
+pub fn reconcile_unreachable<'a>(
+    ledger: &UnreachableLedger,
+    scope: &'a JsString,
+    findings: &'a [UnreachableFinding],
+    gated: &'a [UnreachableCategory],
+) -> UnreachableReconciliation<'a> {
+    let measured: Vec<_> = findings
+        .iter()
+        .filter(|f| gated.contains(&f.kind))
+        .collect();
+    let measured_keys: IndexSet<_> = measured
+        .iter()
+        .map(|finding| finding_key(finding))
+        .collect();
+    let recorded_keys: IndexSet<_> = ledger
+        .entries
+        .iter()
+        .map(|entry| finding_key(&entry.finding))
+        .collect();
+    let gone = |entry: &UnreachableLedgerEntry| {
+        entry.finding.scope == *scope
+            && gated.contains(&entry.finding.kind)
+            && !measured_keys.contains(&finding_key(&entry.finding))
+    };
+    UnreachableReconciliation {
+        scope,
+        gated,
+        unrecorded: measured
+            .into_iter()
+            .filter(|finding| !recorded_keys.contains(&finding_key(finding)))
+            .collect(),
+        pruned: ledger
+            .entries
+            .iter()
+            .filter(|entry| gone(entry))
+            .cloned()
+            .collect(),
+        kept: unreachable_ledger_of(
+            &ledger
+                .entries
+                .iter()
+                .filter(|entry| !gone(entry))
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
+    }
+}
+pub fn with_accepted_findings(
+    ledger: &UnreachableLedger,
+    accepted: &[&UnreachableFinding],
+    reason: &JsString,
+) -> UnreachableLedger {
+    let entries: Vec<_> = ledger
+        .entries
+        .iter()
+        .cloned()
+        .chain(accepted.iter().map(|finding| {
+            Arc::new(UnreachableLedgerEntry {
+                finding: UnreachableFinding {
+                    scope: finding.scope.clone(),
+                    kind: finding.kind,
+                    id: finding.id.clone(),
+                },
+                reason: reason.clone(),
+            })
+        }))
+        .collect();
+    unreachable_ledger_of(&entries)
 }
