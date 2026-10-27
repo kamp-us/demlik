@@ -1,0 +1,200 @@
+{
+  "status": "verified-local-awaiting-independent-review",
+  "createdAt": "2026-10-27T19:28:55.117960+00:00",
+  "sourceCommit": "f3bfbf8d39a4bf25745ac206dffbc2710e06b4fa",
+  "branch": "can/rust-agent-compaction-01a16c9d",
+  "base": "5cb551641c2c8993d7067133d83b6c7a5e2ce839",
+  "referenceSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "low-level createAgent compaction policy/verbs/plain-handler machine wiring, independent retry slice, existing conversation fold/deadlines and explicit Boot",
+  "api": {
+    "off": "existing AgentConfig constructors and Agent::to_machine four arguments preserved, including old UFCS/turbofish consumers",
+    "on": "with_compaction(policy) -> Result; Agent::to_machine_with_compaction(model,loader,tools,compact,timer)",
+    "selectionRefusal": "prior stop_when refuses and retains boxed original config+policy; configure state-dependent predicate after profile selection; this is a Rust builder boundary, not Source object property order",
+    "legacyFold": "fold_summary keeps its four explicit type arguments and delegates to fold_summary_with_calls",
+    "messageConstructors": "AgentMachineMsg::boot/cancel own shapes; legacy free helpers retain five type arguments and delegate"
+  },
+  "summary": {
+    "commit": "f3bfbf8d39a4bf25745ac206dffbc2710e06b4fa",
+    "cases": 31,
+    "passed": 31,
+    "literalFailures": 0,
+    "checkpointBytePairs": 14,
+    "guardTracked": [
+      {
+        "id": "agent-compaction.promise.retry",
+        "status": "tracked",
+        "errors": 1,
+        "checks": 1
+      },
+      {
+        "id": "agent-compaction.promise.exhaust",
+        "status": "tracked",
+        "errors": 1,
+        "checks": 1
+      },
+      {
+        "id": "agent-compaction.effect.retry",
+        "status": "tracked",
+        "errors": 1,
+        "checks": 1
+      },
+      {
+        "id": "agent-compaction.effect.exhaust",
+        "status": "tracked",
+        "errors": 1,
+        "checks": 1
+      }
+    ],
+    "loadedTracked": [
+      {
+        "id": "agent-compaction.promise.cold",
+        "status": "tracked",
+        "checks": 1
+      },
+      {
+        "id": "agent-compaction.effect.cold",
+        "status": "tracked",
+        "checks": 1
+      }
+    ],
+    "nativeExecutables": 22,
+    "nativeTestsPassed": 75,
+    "regressions": {
+      "runtime": 34,
+      "turn": 54,
+      "cold": 12,
+      "defaultError": 23
+    },
+    "controls": {
+      "count": 4,
+      "detected": 4,
+      "compileExits": [0, 0, 0, 0],
+      "libraryFresh": [false, false, false, false],
+      "driverFresh": [false, false, false, false],
+      "removed": true
+    }
+  },
+  "constructionCargo": {
+    "budget": 8,
+    "actual": 8,
+    "exits": [101, 101, 0, 101, 101, 0, 0, 0],
+    "disclosedExtra7": "fixture RawValue/from_str decode only",
+    "disclosedExtra8": "fixture fail-closed guard identity counters/domains only",
+    "productLibraryFresh6": false,
+    "productLibraryFresh7": true,
+    "productLibraryFresh8": true,
+    "libraryUnchanged6To8": true
+  },
+  "baseline": {
+    "library": {
+      "path": "/private/tmp/demlik-agent-compaction-proof-01a16c9d/baseline-artifacts/libdemlik_tea-313b48d060fb1efe.rlib",
+      "sha256": "4294ebcbef84857bfe324f2c81438a91539d8fc9034401b01a67d4a52c154176",
+      "producer": "conformance-build6.cargo.jsonl"
+    },
+    "driver": {
+      "path": "/private/tmp/demlik-agent-compaction-proof-01a16c9d/baseline-artifacts/agent_compaction_driver-05d972f2576e87a98b52639e960418b13e39b1c09925daa280dbdf549b098e57.bin",
+      "sha256": "05d972f2576e87a98b52639e960418b13e39b1c09925daa280dbdf549b098e57",
+      "producer": "observer-fixture-build8.cargo.jsonl"
+    }
+  },
+  "sharedCases": {
+    "newUnique": 31,
+    "pure": 19,
+    "runtime": 10,
+    "coldWriterReaderWorkflows": 2,
+    "passed": 31,
+    "failed": 0,
+    "strictControlledProfile": 31,
+    "perCaseQualified": 0,
+    "actualSourceProcesses": 33,
+    "actualNativeProcesses": 33,
+    "checkpointBytePairs": 14,
+    "oldRegressions": 123,
+    "oldCasesAreNotNewCredit": true
+  },
+  "identity": {
+    "trackedGuardErrorsAndChecks": 4,
+    "trackedDecodedLoadedStateChecks": 2,
+    "untracked": "explicit not-applicable statuses; no manual-late error identity claim",
+    "zeroCheckValidatorNegatives": 2,
+    "negativeCredit": 0,
+    "opaqueNativeOwners": "new agent_compaction test executable proves borrowed non-Clone/non-serde payload/output/cause with original Rc owners"
+  },
+  "static": {
+    "targetedParityTsc": 0,
+    "biome": 0,
+    "nodeSyntax": 0,
+    "diffCheck": 0,
+    "rustfmt": 0,
+    "wholeParityTsc": "not claimed: initial broad invocation lacked unrelated code-graph dependency links; scoped fixture check is green",
+    "clippyAndCurrentDefaultFullWorkspace": "not rerun locally; Root owns shared accepted-batch gates"
+  },
+  "native": {
+    "feature": "pbt",
+    "executables": 22,
+    "testsPassed": 75,
+    "newOwnershipTests": 3,
+    "existingExecutedTestBinaryRetention": "21 older test binaries are NOT retained; actual Cargo6 records, execution logs and hashes are retained. The new test binary, final public interface, baseline library/drivers and all four mutant libraries/executed drivers ARE retained."
+  },
+  "typeProof": {
+    "positive": "actual Cargo6 public ON/OFF interface executed0",
+    "refusals": {
+      "offExtraHandler": "E0061",
+      "wrongCompactHandler": "E0277",
+      "borrowedActor": "E0597"
+    },
+    "unscoredSetup": "actor Options SE inference E0283 retained before explicit Infallible annotation"
+  },
+  "controls": {
+    "actualCargoBuilds": 4,
+    "compiled0": 4,
+    "namedDetected": 4,
+    "allModifiedLibrariesAndDriversFreshFalse": true,
+    "protocols": "all named Source/native processes returned0 and one structured row; compile/protocol/setup errors never counted",
+    "worktreeRemoved": true
+  },
+  "historicalFailures": {
+    "interface3": "receiver syntax positive only, not old-UFCS compatibility; E0034 in4 led to explicit enabled method name",
+    "firstPair": "native tagged/Value decoder protocol failure before an action, 0 pair credit; retained",
+    "paired7": "19/31, remaining12 bookkeeping-law mismatches only; retained full raw states/traces/14 byte pairs",
+    "observerPeerFinding": "SEV3 guard tracker skip/vacuity repaired in fixture8, independent review58de906ceedddd3e95067f421594065821d6dd81586e851f201d9a9ce2588cb0",
+    "historicalSourceBytes": "all final f3bf source bytes retained; earlier uncommitted attempt source hashes/diagnostics retained, not represented as the final source build"
+  },
+  "qualifications": [
+    "Dense own-data guard profile; arbitrary JS prototype/getter/function/thenable/reflection and mutable/cyclic heaps remain OPEN.",
+    "Missing/null restored message at and native panic versus JS throw/callback decoration remain OPEN; plan folding f64/nonfinite and its JSON-null restore are actually covered.",
+    "Fixed injected clock/RNG; no identical default RNG streams or arbitrary Ready/join/custom-executor scheduling claim.",
+    "Cold writer exits with accepted compact handler pending after real file save; no graceful-stop or awaited cleanup claim for this crash. Reader checks actual decoded State identity, not pre-JSON live identity.",
+    "No automatic compaction model/provider/loader: caller plain compact handler owns IO/schema. Source low-level compaction.loadMessages is declared but unused.",
+    "No defineAgent, provider/SDK, router/children, snapshot/tool-policy, broad factory aliases or universal error/codec closure.",
+    "Pure compact payload/output/cause have no blanket Clone/serde/Send; existing owned runtime static boundary remains."
+  ],
+  "noMainContractsManifestsDependenciesOrRemoteChanges": true,
+  "retirement": {
+    "worktree": "/private/tmp/demlik-rust-agent-compaction-01a16c9d",
+    "target": "/private/tmp/demlik-rust-agent-compaction-01a16c9d/target",
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-rust-agent-compaction-01a16c9d"
+    ],
+    "exit": 0,
+    "removed": true,
+    "targetRemoved": true,
+    "branchRef": "can/rust-agent-compaction-01a16c9d",
+    "sourceCommit": "f3bfbf8d39a4bf25745ac206dffbc2710e06b4fa",
+    "removedAt": "2026-10-27T19:30:25.304778+00:00",
+    "controlsWorktree": {
+      "sourceCommit": "f3bfbf8d39a4bf25745ac206dffbc2710e06b4fa",
+      "worktree": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-agent-compaction-controls-VQoat1/repo",
+      "target": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-agent-compaction-controls-VQoat1/repo/target",
+      "defaultTarget": true,
+      "createdAt": "2026-10-27T19:20:43.893Z",
+      "removed": true,
+      "finishedAt": "2026-10-27T19:21:33.541Z"
+    },
+    "evidenceVerifiedBeforeRemoval": "retained-before-removal.json"
+  }
+}
