@@ -1521,7 +1521,9 @@
       "agent-state-json.effect.tool-error",
       "agent-state-json.effect.done",
       "agent-state-json.effect.model-error",
-      "agent-state-json.effect.guard-error"
+      "agent-state-json.effect.guard-error",
+      "agent-error-cold.promise.guard-error",
+      "agent-error-cold.effect.guard-error"
     ]
   },
   "@demlik/tea:./node#fileStore/member:published:af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895": {
@@ -8121,53 +8123,83 @@
   "@demlik/code-graph:cli:option:--dead-only": {
     "signature": "e7ff9f418cf26a41d0bb9b1f24d8cac94a8e4dcf72bf757ae7063506464e311b",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.deadOnly.before",
       "graph.cli-parser.option.deadOnly.after",
       "graph.cli-parser.option.deadOnly.equal-is-unknown",
-      "graph.cli-parser.option.deadOnly.negated-is-unknown"
+      "graph.cli-parser.option.deadOnly.negated-is-unknown",
+      "graph.cli-unreachable.two-package-workflow",
+      "graph.cli-unreachable.dead-only-refused-before-load"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
+      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+    ],
+    "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
   "@demlik/code-graph:cli:option:--accept-dead": {
     "signature": "a9137b194154a44f0b355ef1c3f0addbedda94b68ffe60e3a2d3e9c693ebd6ce",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.acceptDead.before",
       "graph.cli-parser.option.acceptDead.after",
       "graph.cli-parser.option.acceptDead.equal-is-unknown",
-      "graph.cli-parser.option.acceptDead.negated-is-unknown"
+      "graph.cli-parser.option.acceptDead.negated-is-unknown",
+      "graph.cli-unreachable.accept-before-collapse",
+      "graph.cli-unreachable.accept-json",
+      "graph.cli-unreachable.accept-zero-initial",
+      "graph.cli-unreachable.two-package-workflow"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
+      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+    ],
+    "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
   "@demlik/code-graph:cli:option:--unreachable": {
     "signature": "9a72ab28dd8415ebf4bf2e817d5d177513f11acc8a3cdc874478c067b86cf881",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.unreachable.before",
       "graph.cli-parser.option.unreachable.after",
       "graph.cli-parser.option.unreachable.equal-is-unknown",
-      "graph.cli-parser.option.unreachable.negated-is-unknown"
+      "graph.cli-parser.option.unreachable.negated-is-unknown",
+      "graph.cli-unreachable.report-text",
+      "graph.cli-unreachable.report-json",
+      "graph.cli-unreachable.report-pretty",
+      "graph.cli-unreachable.report-out",
+      "graph.cli-unreachable.gate-json",
+      "graph.cli-unreachable.two-package-workflow"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
+      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+    ],
+    "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
   "@demlik/code-graph:cli:option:--kinds": {
     "signature": "c7e63fcbae9b1c0ce783ba6c256ffeae067ca89af258639ea98fd904aec7a83a",
@@ -11142,7 +11174,9 @@
       "agent-state-json.effect.tool-error",
       "agent-state-json.effect.done",
       "agent-state-json.effect.model-error",
-      "agent-state-json.effect.guard-error"
+      "agent-state-json.effect.guard-error",
+      "agent-error-cold.promise.guard-error",
+      "agent-error-cold.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
@@ -11152,7 +11186,7 @@
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
-      "Full default AgentState wire serialization/reload remains OPEN because StructuredOutputError lacks Serialize/Deserialize; these workflows prove actual record/conversation codecs and retained in-process state resume."
+      "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."
     ]
   },
   "@demlik/tea:./agent#AgentToMachine/member:published:f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7": {
@@ -11261,7 +11295,9 @@
       "agent-state-json.effect.tool-error",
       "agent-state-json.effect.done",
       "agent-state-json.effect.model-error",
-      "agent-state-json.effect.guard-error"
+      "agent-state-json.effect.guard-error",
+      "agent-error-cold.promise.guard-error",
+      "agent-error-cold.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
@@ -11271,7 +11307,7 @@
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
-      "Full default AgentState wire serialization/reload remains OPEN because StructuredOutputError lacks Serialize/Deserialize; these workflows prove actual record/conversation codecs and retained in-process state resume."
+      "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."
     ]
   },
   "@demlik/tea:./agent#agentBootMsg": {
@@ -11316,7 +11352,9 @@
       "agent-state-json.effect.tool-error",
       "agent-state-json.effect.done",
       "agent-state-json.effect.model-error",
-      "agent-state-json.effect.guard-error"
+      "agent-state-json.effect.guard-error",
+      "agent-error-cold.promise.guard-error",
+      "agent-error-cold.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
     "knownGaps": [
