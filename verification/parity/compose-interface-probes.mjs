@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import { assertCheckPath, cargoCheckEnvironment } from "./check-worktree.mjs";
 
 const sourcePath = "crates/tea/examples/compose_interface.rs";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -72,17 +72,30 @@ function probes(source) {
   ];
 }
 export function composeInterfaceProbes({
+  check,
   rlib,
   dependencies,
-  reportFile = "target/parity/compose-interface-probes.json",
+  reportFile,
 } = {}) {
   assert(
-    rlib && dependencies,
-    "Supply an immutable library copied from the actual Cargo JSON artifact and its dependency directory",
+    check && rlib && dependencies && reportFile,
+    "Supply the owning check, immutable actual Cargo library and its dependency directory",
   );
-  const source = readFileSync(sourcePath, "utf8"),
-    temporary = mkdtempSync(join(tmpdir(), "demlik-compose-interface-types-")),
+  const sourceFile = assertCheckPath(join(check.root, sourcePath), check.root);
+  assertCheckPath(dependencies, check.target);
+  mkdirSync(check.target, { recursive: true });
+  const source = readFileSync(sourceFile, "utf8"),
+    temporary = mkdtempSync(join(check.target, "compose-interface-types-")),
     results = [];
+  const evidence = dirname(resolve(reportFile));
+  const proofPath = relative(check.root, evidence);
+  assert(
+    proofPath === ".." ||
+      proofPath.startsWith(`..${sep}`) ||
+      isAbsolute(proofPath),
+    "proof must outlive the check",
+  );
+  mkdirSync(evidence, { recursive: true });
   const compiler =
     process.env.RUSTC ??
     (process.env.CARGO ? join(dirname(process.env.CARGO), "rustc") : "rustc");
@@ -107,18 +120,35 @@ export function composeInterfaceProbes({
         executable,
       ];
       const compiled = spawnSync(compiler, args, {
+        cwd: check.root,
+        env: cargoCheckEnvironment(),
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
       });
       let run;
       if (p.ok && compiled.status === 0) {
-        const r = spawnSync(executable, [], { encoding: "utf8" });
-        run = { exit: r.status, stdout: r.stdout, stderr: r.stderr };
+        const r = spawnSync(executable, [], {
+          cwd: check.root,
+          env: cargoCheckEnvironment(),
+          encoding: "utf8",
+        });
+        const saved = join(evidence, `${p.id}.bin`);
+        copyFileSync(assertCheckPath(executable, check.target), saved);
+        run = {
+          exit: r.status,
+          signal: r.signal,
+          error: r.error?.message,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          binary: { path: saved, sha256: hash(readFileSync(saved)) },
+        };
       }
       results.push({
         ...p,
         command: [compiler, ...args],
         exit: compiled.status,
+        signal: compiled.signal,
+        error: compiled.error?.message,
         stdout: compiled.stdout,
         stderr: compiled.stderr,
         run,
@@ -128,8 +158,18 @@ export function composeInterfaceProbes({
     rmSync(temporary, { recursive: true, force: true });
   }
   const failures = results.flatMap((r) => {
-    if (r.ok) return r.exit === 0 && r.run?.exit === 0 ? [] : [r.id];
+    if (r.ok)
+      return r.exit === 0 &&
+        !r.signal &&
+        !r.error &&
+        r.run?.exit === 0 &&
+        !r.run.signal &&
+        !r.run.error
+        ? []
+        : [r.id];
     return r.exit === 1 &&
+      !r.signal &&
+      !r.error &&
       r.needles.every((n) => r.stderr.includes(n)) &&
       (!r.codes || r.codes.some((c) => r.stderr.includes(c)))
       ? []
@@ -138,7 +178,12 @@ export function composeInterfaceProbes({
   const report = {
     scope:
       "Interface proof only; no Source/native semantic comparison or mutation controls",
-    source: { path: sourcePath, sha256: hash(source) },
+    source: {
+      path: sourceFile,
+      relativePath: sourcePath,
+      sha256: hash(source),
+    },
+    outputDirectory: temporary,
     library: {
       path: resolve(rlib),
       sha256: hash(readFileSync(rlib)),
@@ -156,24 +201,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const { values } = parseArgs({
-    options: {
-      rlib: { type: "string" },
-      dependencies: { type: "string" },
-      report: { type: "string" },
-    },
-    strict: true,
-  });
-  const report = composeInterfaceProbes({
-    rlib: values.rlib,
-    dependencies: values.dependencies,
-    reportFile: values.report,
-  });
-  console.log(
-    JSON.stringify({
-      probes: report.results.length,
-      failures: report.failures,
-    }),
+  throw new Error(
+    "Compose type probes require an owning check; run compose-checks-run.mjs",
   );
-  if (report.failures.length) process.exitCode = 1;
 }

@@ -8,6 +8,8 @@ export function cargoCheckEnvironment(extra = {}) {
   const env = { ...process.env, ...extra };
   delete env.CARGO_TARGET_DIR;
   delete env.DEMLIK_MUTATION_TARGET_DIR;
+  delete env.CARGO_BUILD_TARGET_DIR;
+  delete env.CARGO_BUILD_BUILD_DIR;
   return env;
 }
 
