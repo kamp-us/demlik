@@ -96,14 +96,19 @@ const controls = [
     })),
 ];
 assert.equal(controls.length, 6);
-let baselineFile, evidence;
+let baselineFile, evidence, only;
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--baseline") baselineFile = path.resolve(args[++i]);
   else if (args[i] === "--evidence") evidence = path.resolve(args[++i]);
+  else if (args[i] === "--only") only = args[++i];
   else throw new Error(`unknown ${args[i]}`);
 }
 assert.ok(baselineFile && evidence);
+const selected = only
+  ? controls.filter((control) => control.name === only)
+  : controls;
+assert.ok(selected.length > 0, "known control selection required");
 fs.mkdirSync(evidence, { recursive: true });
 const baselineBytes = fs.readFileSync(baselineFile),
   baseline = JSON.parse(baselineBytes);
@@ -141,7 +146,7 @@ let failure;
 function save(extra = {}) {
   fs.writeFileSync(
     reportFile,
-    `${JSON.stringify({ sourceCommit, baselineFile, baselineSha256: sha(baselineBytes), baselineBinarySha256: baseline.binary.sha256, originalSourceSha256: sha(original), controls: results, ...(failure ? { failure } : {}), ...extra }, null, 2)}\n`,
+    `${JSON.stringify({ sourceCommit, baselineFile, baselineSha256: sha(baselineBytes), baselineBinarySha256: baseline.binary.sha256, originalSourceSha256: sha(original), controls: results, selectedControlNames: selected.map((control) => control.name), ...(failure ? { failure } : {}), ...extra }, null, 2)}\n`,
   );
 }
 save({ complete: false });
@@ -160,7 +165,7 @@ try {
       fs.symlinkSync(fs.realpathSync(src), dest);
     }
   }
-  for (const fault of controls) {
+  for (const fault of selected) {
     const directory = path.join(evidence, fault.name);
     fs.mkdirSync(directory);
     const record = {
@@ -257,6 +262,7 @@ try {
       report = await agentGuardsParity({
         binary: executed,
         quiet: true,
+        allowFailures: true,
         caseIds: [fault.id],
         reportFile: path.join(directory, "paired.json"),
       });
@@ -302,7 +308,8 @@ try {
     check.remove();
     save({
       complete:
-        results.length === 6 && results.every((r) => r.complete && r.detected),
+        results.length === selected.length &&
+        results.every((r) => r.complete && r.detected),
       removed: true,
       passed: results.filter((r) => r.detected).length,
     });
