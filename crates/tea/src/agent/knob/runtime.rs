@@ -515,6 +515,10 @@ where
     /// Loaded init is commandless. Dispatch Boot after ready. Borrowed host
     /// services/state may be constructed locally; owned timer messages/errors
     /// and eventual actor launch retain their existing static boundaries.
+    #[expect(
+        clippy::type_complexity,
+        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+    )]
     pub fn to_machine<F, L, TI, M, H, TM>(
         self: Rc<Self>,
         model: F,
@@ -575,6 +579,10 @@ where
 {
     /// The enabled profile requires the caller-owned plain compact handler.
     /// Tea owns retry/fold orchestration, not summarize IO or its message time.
+    #[expect(
+        clippy::type_complexity,
+        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+    )]
     pub fn to_machine_with_compaction<F, L, TI, CT, M, H, TM>(
         self: Rc<Self>,
         model: F,

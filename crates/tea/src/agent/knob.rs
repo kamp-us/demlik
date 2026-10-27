@@ -48,6 +48,9 @@ type MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
     Option<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K>>;
 type ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
     Result<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K>, AgentError>;
+type MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
+    Result<MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K>, AgentError>;
+type CommandListOf<P, I, S, C, K> = Vec<CommandOf<P, I, S, C, K>>;
 type StopWhen<'a, Stage, P, I, S, R, TE, A, T, V, K> =
     Option<Box<dyn Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> bool + 'a>>;
 
@@ -389,6 +392,11 @@ type CompactState<K> = llm_call::State<
 >;
 type CompactCall<'a, K> = ResilientCall<
     'a,
+    Request<CompactionPurpose, <K as CompactionProfile>::Input>,
+    LlmOk<CompactionPurpose, <K as CompactionProfile>::Output>,
+    LlmErr<CompactionPurpose, <K as CompactionProfile>::Error>,
+>;
+type CompactCommand<K> = crate::resilience::resilient_call::RunCommand<
     Request<CompactionPurpose, <K as CompactionProfile>::Input>,
     LlmOk<CompactionPurpose, <K as CompactionProfile>::Output>,
     LlmErr<CompactionPurpose, <K as CompactionProfile>::Error>,
@@ -1086,15 +1094,16 @@ impl<
 {
     /// Select compaction before a state-dependent stop predicate. A refusal
     /// retains both original owners instead of reprojecting a different state.
+    #[expect(
+        clippy::type_complexity,
+        reason = "Selecting compaction retains the precise enabled configuration or the original configuration and policy."
+    )]
     pub fn with_compaction<CI, CO, CE>(
         self,
-        policy: CompactionPolicy<'a, Conversation<R, T, TE, A, V>, T, CI, CO, CE>,
+        policy: PolicyOf<'a, R, T, TE, A, V, WithCompaction<CI, CO, CE>>,
     ) -> Result<
         AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, WithCompaction<CI, CO, CE>>,
-        CompactionConfigError<
-            Self,
-            CompactionPolicy<'a, Conversation<R, T, TE, A, V>, T, CI, CO, CE>,
-        >,
+        CompactionConfigError<Self, PolicyOf<'a, R, T, TE, A, V, WithCompaction<CI, CO, CE>>>,
     > {
         if self.stop_when.is_some() {
             return Err(CompactionConfigError {
@@ -1160,7 +1169,7 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> Result<MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K>, AgentError> {
+    ) -> MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
         let Some(policy) = self.config.compaction.as_ref() else {
             return Ok(None);
         };
@@ -1206,14 +1215,8 @@ impl<
     }
     fn compact_commands(
         &self,
-        commands: Vec<
-            crate::resilience::resilient_call::RunCommand<
-                Request<CompactionPurpose, K::Input>,
-                LlmOk<CompactionPurpose, K::Output>,
-                LlmErr<CompactionPurpose, K::Error>,
-            >,
-        >,
-    ) -> Result<Vec<CommandOf<P, I, S, C, K>>, AgentError> {
+        commands: Vec<CompactCommand<K>>,
+    ) -> Result<CommandListOf<P, I, S, C, K>, AgentError> {
         commands
             .into_iter()
             .map(|command| {

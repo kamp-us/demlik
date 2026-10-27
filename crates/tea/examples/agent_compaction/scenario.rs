@@ -392,15 +392,15 @@ pub fn agent(config: Config, ctx: Rc<Shared>) -> Rc<Knob> {
                 .borrow()
                 .as_ref()
                 .and_then(Weak::upgrade);
-            if let Some(prior) = prior {
-                if !matches!(
+            if let Some(prior) = prior
+                && !matches!(
                     conversation.awaiting,
                     demlik_tea::agent::types::Awaiting::Compacting { .. }
-                ) {
-                    payload_ctx
-                        .payload_same
-                        .set(payload_ctx.payload_same.get() && Rc::ptr_eq(&prior, conversation));
-                }
+                )
+            {
+                payload_ctx
+                    .payload_same
+                    .set(payload_ctx.payload_same.get() && Rc::ptr_eq(&prior, conversation));
             }
             payload_ctx.log.borrow_mut().push(json!([
                 "payload",

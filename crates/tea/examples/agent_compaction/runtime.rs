@@ -94,7 +94,7 @@ impl MessageLoader<JsText, BrainPayload, Message, StructuredOutputError> for Loa
         self.0.note(json!([
             "load",
             history.turns.len(),
-            history.turns.first().map(|v| wire(v))
+            history.turns.first().map(wire)
         ]));
         Ok(vec![Message(Rc::clone(request))].into())
     }

@@ -189,7 +189,11 @@ mod private {
     pub trait Sealed {}
 }
 pub struct NoCompaction;
-pub struct WithCompaction<I, O, E>(PhantomData<fn() -> (I, O, E)>);
+pub struct WithCompaction<I, O, E> {
+    input: PhantomData<fn() -> I>,
+    output: PhantomData<fn() -> O>,
+    error: PhantomData<fn() -> E>,
+}
 pub enum NoCompactCommand {}
 pub enum NoCompactMessage {}
 impl crate::Tagged for NoCompactCommand {
