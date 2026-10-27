@@ -704,16 +704,26 @@ try {
       })}  \n`,
     );
     fs.chmodSync(ledger, 0o640);
-    const workflow = (id: string, patch: Partial<Run>) =>
-      r(`icu77.workflow.${id}`, kernel, {
-        prepare: true,
-        accept: true,
-        gated: [fan, high],
-        scope: ".",
-        reason: "accepted",
-        smells: [functionSmell(3)],
-        ...patch,
-      });
+    const workflow = (
+      id: string,
+      patch: Partial<Run>,
+      literal?: (value: unknown) => void,
+    ) =>
+      r(
+        `icu77.workflow.${id}`,
+        kernel,
+        {
+          prepare: true,
+          accept: true,
+          gated: [fan, high],
+          scope: ".",
+          reason: "accepted",
+          smells: [functionSmell(3)],
+          ...patch,
+        },
+        false,
+        literal,
+      );
     const checkRawOrder = () => {
       const entries = JSON.parse(fs.readFileSync(ledger, "utf8")).entries;
       assert.deepEqual(
@@ -723,36 +733,43 @@ try {
         ["other/𐀀", "other/\ud800", "other/\ue000"],
       );
     };
-    workflow("parse-accept-write", {});
-    checkRawOrder();
+    workflow("parse-accept-write", {}, checkRawOrder);
     fs.chmodSync(ledger, 0o444);
     workflow("repeat-readonly", {});
-    checkRawOrder();
     assert.equal(rows.at(-1)?.sourceLedgerUnchanged, true);
     fs.chmodSync(ledger, 0o640);
-    workflow("lower-write", {
-      accept: false,
-      ci: true,
-      reason: null,
-      smells: [functionSmell(2)],
-      json: true,
-    });
-    checkRawOrder();
-    workflow("prune-write", {
-      accept: false,
-      ci: true,
-      reason: null,
-      smells: [],
-      json: true,
-      pretty: true,
-    });
-    checkRawOrder();
-    workflow("restore-accept-new", {
-      smells: [functionSmell(5)],
-      reason: "new reason",
-      json: true,
-    });
-    checkRawOrder();
+    workflow(
+      "lower-write",
+      {
+        accept: false,
+        ci: true,
+        reason: null,
+        smells: [functionSmell(2)],
+        json: true,
+      },
+      checkRawOrder,
+    );
+    workflow(
+      "prune-write",
+      {
+        accept: false,
+        ci: true,
+        reason: null,
+        smells: [],
+        json: true,
+        pretty: true,
+      },
+      checkRawOrder,
+    );
+    workflow(
+      "restore-accept-new",
+      {
+        smells: [functionSmell(5)],
+        reason: "new reason",
+        json: true,
+      },
+      checkRawOrder,
+    );
     assert.equal(fs.statSync(ledger).mode & 0o777, 0o640);
   } else {
     p("empty");

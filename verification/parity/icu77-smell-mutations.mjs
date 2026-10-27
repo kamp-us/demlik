@@ -12,7 +12,8 @@ import {
   createCheckWorktree,
 } from "./check-worktree.mjs";
 
-const [baseline, baselineReport, sourceArchive, output] = process.argv.slice(2);
+const [baseline, baselineReport, sourceArchive, output, recoveredLossy] =
+  process.argv.slice(2);
 assert.ok(baseline && baselineReport && sourceArchive && output);
 assert.equal(process.version, "v22.21.1");
 assert.equal(
@@ -79,12 +80,41 @@ assert.equal(trusted.passed, 17);
 assert.equal(trusted.unqualifiedPairs, 17);
 assert.equal(trusted.qualifiedPairs, 0);
 assert.equal(trusted.binary.sha256, baselineHash);
+const recovered = recoveredLossy
+  ? JSON.parse(fs.readFileSync(recoveredLossy, "utf8"))
+  : undefined;
+if (recovered) {
+  assert.equal(recovered.id, "lossy-utf16");
+  assert.equal(recovered.compileExit, 0);
+  assert.equal(recovered.library.event.fresh, false);
+  assert.equal(recovered.consumer.fresh, false);
+  const replay = JSON.parse(
+    fs.readFileSync(recovered.observation.comparison, "utf8"),
+  );
+  assert.equal(replay.binary.sha256, recovered.executed.sha256);
+  assert.equal(replay.protocolRefusals, 4);
+  assert.deepEqual(replay.sourceHashes, trusted.sourceHashes);
+  assert.deepEqual(
+    replay.cases.map((row) => row.id).sort(),
+    trusted.cases.map((row) => row.id).sort(),
+  );
+  assert.ok(!replay.failures.some((row) => row.id === "harness"));
+  const witness = replay.cases.find((row) => row.id === recovered.witness);
+  const expected = trusted.cases.find((row) => row.id === recovered.witness);
+  assert.equal(witness.process.status, 0);
+  assert.equal(witness.passed, false);
+  assert.equal(witness.qualified, false);
+  assert.ok(witness.actual && witness.calls.length);
+  assert.deepEqual(witness.input, expected.input);
+  assert.deepEqual(witness.expected, expected.expected);
+}
 const report = {
   planned: 4,
-  cargoSelections: 0,
+  cargoSelections: recovered ? 1 : 0,
   newCargoSelections: 0,
+  priorFailedTreeAndNativePreparation: Boolean(recovered),
   nativePreparations: 0,
-  controls: [],
+  controls: recovered ? [recovered] : [],
   baseline: { path: baseline, sha256: baselineHash, report: baselineReport },
   complete: false,
 };
@@ -194,7 +224,9 @@ try {
     path.join(check.target, "icu77/prepared.json"),
     path.join(evidence, "native-prepared.json"),
   );
-  for (const fault of faults) {
+  for (const fault of faults.filter(
+    (fault) => !recovered || fault.id !== "lossy-utf16",
+  )) {
     for (const [owner, text] of Object.entries(original))
       fs.writeFileSync(path.join(check.root, owner), text);
     assert.ok(
