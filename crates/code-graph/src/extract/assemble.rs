@@ -17,7 +17,7 @@ use crate::engine::tsgo::{TsgoBinary, TsgoError};
 use crate::extract::wrangler_config::CatalogError;
 use crate::project::{
     EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots, locale_compare,
-    to_relative,
+    relative_path_text, resolve_path_text, to_relative,
 };
 use crate::schema::{
     Edges, FunctionNode, Graph, ModuleNode, Provenance, Severity, Stats, Summary, ThresholdError,
@@ -108,7 +108,18 @@ pub fn assemble_graph(
     thresholds: Thresholds,
     fields: NodeFields,
 ) -> Result<Graph, AssemblyError> {
-    build(loaded, thresholds, fields, None, None, None, None)
+    build(
+        BuildInput {
+            loaded,
+            root_text: None,
+        },
+        thresholds,
+        fields,
+        None,
+        None,
+        None,
+        None,
+    )
 }
 
 pub fn assemble_graph_with_data(
@@ -117,7 +128,23 @@ pub fn assemble_graph_with_data(
     fields: NodeFields,
     data: DataOptions<'_>,
 ) -> Result<Graph, AssemblyError> {
-    build(loaded, thresholds, fields, None, None, None, Some(data))
+    build(
+        BuildInput {
+            loaded,
+            root_text: None,
+        },
+        thresholds,
+        fields,
+        None,
+        None,
+        None,
+        Some(data),
+    )
+}
+
+struct BuildInput<'a> {
+    loaded: &'a LoadedProject,
+    root_text: Option<&'a JsString>,
 }
 
 struct EdgeBundle {
@@ -323,7 +350,10 @@ fn assemble_graph_with_reports_in(
         .map_err(AssemblyError::Compiler)?
         .map_err(AssemblyError::from)?;
     build(
-        &loaded.project,
+        BuildInput {
+            loaded: &loaded.project,
+            root_text,
+        },
         thresholds,
         fields,
         Some(EdgeBundle {
@@ -344,7 +374,7 @@ fn assemble_graph_with_reports_in(
 }
 
 fn build(
-    loaded: &LoadedProject,
+    input: BuildInput<'_>,
     thresholds: Thresholds,
     fields: NodeFields,
     mut edges: Option<EdgeBundle>,
@@ -352,11 +382,17 @@ fn build(
     analysis: Option<AnalysisBundle>,
     data: Option<DataOptions<'_>>,
 ) -> Result<Graph, AssemblyError> {
+    let BuildInput { loaded, root_text } = input;
     thresholds.validate().map_err(AssemblyError::Threshold)?;
-    let root = to_relative(
-        &std::env::current_dir().map_err(AssemblyError::WorkingDirectory)?,
-        &loaded.root_absolute,
-    );
+    let cwd = std::env::current_dir().map_err(AssemblyError::WorkingDirectory)?;
+    let root = match root_text {
+        Some(root) => {
+            let absolute =
+                resolve_path_text(&cwd, root).map_err(AssemblyError::WorkingDirectory)?;
+            relative_path_text(&cwd, &absolute).map_err(AssemblyError::WorkingDirectory)?
+        }
+        None => to_relative(&cwd, &loaded.root_absolute).into(),
+    };
     let discovered =
         discovered.unwrap_or_else(|| discover_functions(&loaded.source_files).functions);
     let functions: Vec<_> = discovered

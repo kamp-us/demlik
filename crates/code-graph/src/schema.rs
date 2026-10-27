@@ -6,6 +6,7 @@ pub use crate::extract::functions::FunctionKind;
 use crate::project::EdgeScope;
 pub use crate::syntax::headers::{FunctionHeader, OverloadSignature};
 pub use crate::syntax::imports::{ImportEdge, ImportKind as ImportEdgeKind};
+use crate::text::JsString;
 
 pub mod reports;
 pub use reports::*;
@@ -423,7 +424,7 @@ pub struct Stats {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Graph {
-    pub root: String,
+    pub root: JsString,
     pub provenance: Provenance,
     pub thresholds: Thresholds,
     pub summary: Summary,
