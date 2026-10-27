@@ -2,6 +2,7 @@ pub mod candidates;
 pub mod ceilings;
 pub mod gate;
 pub mod partial;
+pub mod render;
 pub mod settings;
 
 mod cost;

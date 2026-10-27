@@ -22,6 +22,12 @@ pub struct PartialTwin<'a> {
     b_start: usize,
 }
 
+impl PartialTwin<'_> {
+    pub fn b_block_line(&self) -> usize {
+        calls(self.b)[self.b_start].line
+    }
+}
+
 struct Callees<'a>(&'a [CallSite]);
 impl Serialize for Callees<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -44,7 +50,7 @@ impl Serialize for PartialTwin<'_> {
         row.serialize_field("bId", &self.b.id)?;
         row.serialize_field("bFile", &self.b.file)?;
         row.serialize_field("bStartLine", &self.b.start_line)?;
-        row.serialize_field("bBlockLine", &calls(self.b)[self.b_start].line)?;
+        row.serialize_field("bBlockLine", &self.b_block_line())?;
         row.serialize_field("bDiverges", &self.b_diverges.callee_id)?;
         row.serialize_field("bDivergesLine", &self.b_diverges.line)?;
         row.serialize_field("sharedBlock", &Callees(self.shared_block))?;

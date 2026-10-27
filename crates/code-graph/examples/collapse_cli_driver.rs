@@ -4,7 +4,7 @@ use demlik_code_graph::{
         frontdoor::{
             ApiDispatch, BoundaryDispatch, CliStop, CollapseDispatch, CommentDispatch,
             EnvKeyDispatch, FrontdoorError, GatePreflightDispatch, HexagonDispatch, LayerDispatch,
-            Preparation,
+            PlainCollapseDispatch, Preparation,
         },
         io::{CliIo, StdioStream},
     },
@@ -13,11 +13,13 @@ use demlik_code_graph::{
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
+    cell::RefCell,
     error::Error,
     fs::{self, File},
-    io::{self, Read},
+    io::{self, Read, Write},
     os::fd::AsFd,
     path::PathBuf,
+    rc::Rc,
 };
 macro_rules! observe{($calls:expr,$function:path $(,$arg:expr)* $(,)?)=>{{let result=$function($($arg),*);$calls.push(stringify!($function));result}};}
 fn some<'de, D: Deserializer<'de>, T: Deserialize<'de>>(input: D) -> Result<Option<T>, D::Error> {
@@ -30,6 +32,10 @@ struct Request {
     trace: PathBuf,
     argv: Vec<JsString>,
     compiler: PathBuf,
+    #[serde(default)]
+    plain: bool,
+    #[serde(default, deserialize_with = "some")]
+    warning_marker: Option<JsString>,
     #[serde(default, deserialize_with = "some")]
     initial: Option<i32>,
     #[serde(default, deserialize_with = "some")]
@@ -170,12 +176,74 @@ fn io_state(host: &CliIo<'_>) -> JsValue {
         ),
     ])
 }
+struct ObservedFile<'a> {
+    inner: File,
+    stream: &'static str,
+    enabled: bool,
+    events: Rc<RefCell<Vec<JsValue>>>,
+    warning_marker: Option<&'a JsString>,
+    marked: bool,
+}
+impl Write for ObservedFile<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.enabled {
+            let text = String::from_utf8_lossy(bytes);
+            let mut event = object([
+                ("stream", JsValue::String(self.stream.into())),
+                ("payload", JsValue::String(text.as_ref().into())),
+            ]);
+            if self.stream == "stderr"
+                && let Some(rest) = text.strip_prefix("code-graph: wrote ")
+                && let Some((_, path)) = rest.split_once(" bytes to ")
+            {
+                let path = path.strip_suffix('\n').unwrap_or(path);
+                let captured = fs::read(path).ok();
+                if let JsValue::Object(fields) = &mut event {
+                    fields.insert(
+                        "fileAtAck".into(),
+                        captured.map(|b| serialized(&b)).unwrap_or(JsValue::Null),
+                    );
+                }
+            }
+            self.events.borrow_mut().push(event);
+        }
+        let result = self.inner.write(bytes);
+        if self.enabled
+            && !self.marked
+            && self.stream == "stderr"
+            && bytes.starts_with(b"warning: --by ")
+            && let Some(marker) = self.warning_marker
+        {
+            fs::write(marker.to_lossy(), "packages: []\n")?;
+            self.marked = true;
+        }
+        result
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
 fn main() -> Result<(), Box<dyn Error>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
     let request: Request = serde_json::from_str(&input)?;
-    let mut stdout = File::from(io::stdout().as_fd().try_clone_to_owned()?);
-    let mut stderr = File::from(io::stderr().as_fd().try_clone_to_owned()?);
+    let writes = Rc::new(RefCell::new(Vec::new()));
+    let mut stdout = ObservedFile {
+        inner: File::from(io::stdout().as_fd().try_clone_to_owned()?),
+        stream: "stdout",
+        enabled: request.plain,
+        events: Rc::clone(&writes),
+        warning_marker: None,
+        marked: false,
+    };
+    let mut stderr = ObservedFile {
+        inner: File::from(io::stderr().as_fd().try_clone_to_owned()?),
+        stream: "stderr",
+        enabled: request.plain,
+        events: Rc::clone(&writes),
+        warning_marker: request.warning_marker.as_ref(),
+        marked: false,
+    };
     let mut host = CliIo::new(&mut stdout, &mut stderr, request.initial);
     let mut calls = Vec::new();
     let mut immediate = None;
@@ -301,6 +369,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ("kind", JsValue::String("collapse".into())),
                 ("result", serialized(&result)),
             ])),
+            Ok(CollapseDispatch::Continue(value)) if request.plain => {
+                match observe!(
+                    &mut calls,
+                    demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_plain_collapse_blocking,
+                    value,
+                    &mut host,
+                    &TsgoBinary::pinned(&request.compiler)
+                ) {
+                    Ok(PlainCollapseDispatch::Complete) => Ok(object([("kind", JsValue::String("plain-collapse".into()))])),
+                    Ok(PlainCollapseDispatch::Refused { cause }) => Ok(object([
+                        ("kind", JsValue::String("plain-load-refused".into())),
+                        ("cause", JsValue::String(cause.message())),
+                    ])),
+                    Ok(PlainCollapseDispatch::Continue(value)) => Ok(object([
+                        ("kind", JsValue::String("continue".into())),
+                        ("sameCarrier", JsValue::Bool(std::ptr::eq(before, value.as_ref()))),
+                        ("samePrepared", JsValue::Bool(std::ptr::eq(original, value.prepared.as_ref()))),
+                    ])),
+                    Err(error) => Ok(object([("kind", JsValue::String("thrown".into())),("error", failure(&error))])),
+                }
+            }
             Ok(CollapseDispatch::Continue(value)) => Ok(object([
                 ("kind", JsValue::String("continue".into())),
                 (
@@ -346,13 +435,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         immediate.unwrap_or_else(|| host.normal_exit_code())
     };
-    let trace = object([
+    let mut trace = object([
         ("id", JsValue::String(request.id.into())),
         ("outcome", outcome),
         ("io", io_state(&host)),
         ("exitCode", JsValue::Number(f64::from(code))),
         ("observedCalls", serialized(&calls)),
     ]);
+    if request.plain
+        && let JsValue::Object(fields) = &mut trace
+    {
+        fields.insert("writeObservations".into(), serialized(&*writes.borrow()));
+    }
     fs::write(request.trace, serde_json::to_vec(&trace)?)?;
     std::process::exit(code)
 }

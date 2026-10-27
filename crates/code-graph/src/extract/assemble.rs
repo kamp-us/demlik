@@ -153,9 +153,9 @@ struct EdgeBundle {
     scope: EdgeScope,
     ts_config: String,
 }
-struct TextAssembly<'a> {
-    root: &'a JsString,
-    warning: &'a mut dyn FnMut(&JsString),
+pub(crate) struct TextAssembly<'a> {
+    pub root: &'a JsString,
+    pub warning: &'a mut dyn FnMut(&JsString),
 }
 fn stderr_warning(line: &JsString) {
     eprint!("{}", line.to_lossy());
@@ -213,24 +213,27 @@ pub fn assemble_graph_with_analysis_text(
 ) -> Result<Graph, AssemblyError> {
     assemble_graph_with_analysis_text_and_warning(
         loaded,
-        root_text,
         thresholds,
         binary,
         fields,
         options,
-        &mut stderr_warning,
+        None,
+        TextAssembly {
+            root: root_text,
+            warning: &mut stderr_warning,
+        },
     )
 }
 
 /// Deliver complete warning lines immediately; the local CLI sink records pending IO failures.
 pub(crate) fn assemble_graph_with_analysis_text_and_warning(
     loaded: &LoadedEdgeProject,
-    root_text: &JsString,
     thresholds: Thresholds,
     binary: &TsgoBinary,
     fields: NodeFields,
     options: &AnalysisOptions<'_>,
-    warning: &mut dyn FnMut(&JsString),
+    data: Option<DataOptions<'_>>,
+    text: TextAssembly<'_>,
 ) -> Result<Graph, AssemblyError> {
     assemble_graph_with_reports_in(
         loaded,
@@ -238,11 +241,8 @@ pub(crate) fn assemble_graph_with_analysis_text_and_warning(
         binary,
         fields,
         Some(options),
-        None,
-        Some(TextAssembly {
-            root: root_text,
-            warning,
-        }),
+        data,
+        Some(text),
     )
 }
 

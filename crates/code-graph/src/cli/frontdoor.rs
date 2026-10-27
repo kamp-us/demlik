@@ -16,6 +16,7 @@ use crate::{
     },
     collapse::{
         gate::{CollapseGateArgs, CollapseGateError, CollapseGateResult, run_collapse_gate},
+        render::render_collapse,
         settings::CollapseSettings,
     },
     comments::gate::{
@@ -27,10 +28,21 @@ use crate::{
     },
     engine::tsgo::TsgoBinary,
     env_keys::{EnvKeyError, EnvKeyReport, load_env_key_report, render_env_keys},
+    extract::{
+        analysis::AnalysisOptions,
+        assemble::{
+            AssemblyError, DataOptions, NodeFields, TextAssembly,
+            assemble_graph_with_analysis_text_and_warning,
+        },
+    },
     hexagon::cli::{HexagonOutput, HexagonRunError, HexagonRunOutcome, run_hexagon},
     kinds::rules::{NodeKindRules, RuleInputError},
     layers::gate::{LayerGateError, LayerGateResult, LayerGateTextArgs, run_layer_gate_text},
-    project::{find_repo_root_text, resolve_path_text_from},
+    project::{
+        EdgeScope, ProjectLoadError, find_repo_root_text, load_edge_project_text,
+        resolve_path_text_from,
+    },
+    render::json::stable_stringify,
     schema::Thresholds,
     smells::{
         gate::{SmellGateOpts, SmellPreparation, SmellPreparationError, prepare_smell_gate},
@@ -39,7 +51,7 @@ use crate::{
     text::JsString,
     unreachable::gate::{UnreachableOpts, UnreachablePreparation, prepare_unreachable_gate},
 };
-use std::{cell::RefCell, error::Error, fs, io};
+use std::{cell::RefCell, error::Error, fs, io, path::Path};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigStage {
@@ -159,6 +171,12 @@ pub enum CollapseDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum PlainCollapseDispatch {
+    Complete,
+    Refused { cause: ProjectLoadError },
+    Continue(Box<PreparedGatesCli>),
+}
+#[derive(Debug)]
 pub enum EnvKeyDispatch {
     Complete(EnvKeyReport),
     Continue(Box<PreparedGatesCli>),
@@ -184,6 +202,8 @@ pub enum FrontdoorError {
     CommentEmit(ApiError),
     Collapse(CollapseGateError),
     CollapseEmit(ApiError),
+    Assembly(AssemblyError),
+    CollapseRender(serde_json::Error),
     EnvKeys(EnvKeyError),
     EnvKeyEmit(ApiError),
     RuleNameConversion(RuleNameConversionError),
@@ -210,6 +230,7 @@ impl FrontdoorError {
             Self::CommentEmit(error) => error.name(),
             Self::Collapse(error) => error.name(),
             Self::CollapseEmit(error) => error.name(),
+            Self::Assembly(error) => error.name(),
             Self::EnvKeys(error) => error.name(),
             Self::EnvKeyEmit(error) => error.name(),
             Self::RuleNameConversion(error) => error.name(),
@@ -236,6 +257,8 @@ impl FrontdoorError {
             Self::CommentEmit(error) => error.message(),
             Self::Collapse(error) => error.message(),
             Self::CollapseEmit(error) => error.message(),
+            Self::Assembly(error) => error.message(),
+            Self::CollapseRender(error) => error.to_string().into(),
             Self::EnvKeys(error) => error.message(),
             Self::EnvKeyEmit(error) => error.message(),
             Self::RuleNameConversion(error) => error.message(),
@@ -265,6 +288,8 @@ impl Error for FrontdoorError {
             Self::CommentEmit(error) => error,
             Self::Collapse(error) => error,
             Self::CollapseEmit(error) => error,
+            Self::Assembly(error) => error,
+            Self::CollapseRender(error) => error,
             Self::EnvKeys(error) => error,
             Self::EnvKeyEmit(error) => error,
             Self::RuleNameConversion(error) => error,
@@ -584,6 +609,96 @@ impl PreparedGatesCli {
         }
         exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
         Ok(CollapseDispatch::Complete(result))
+    }
+
+    /// Run after the early collapse gate. Higher late owners retain the original continuation.
+    /// Compiler, Git and filesystem work blocks this caller; the host owns warning/stdio delivery.
+    pub fn dispatch_plain_collapse_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+    ) -> Result<PlainCollapseDispatch, FrontdoorError> {
+        let options = &self.prepared.options;
+        if options.collapse() != Some(true)
+            || options.ci() == Some(true)
+            || options.write_ceilings() == Some(true)
+            || options.html() == Some(true)
+            || matches!(self.unreachable, UnreachablePreparation::Prepared { .. })
+            || matches!(self.smells, SmellPreparation::Prepared { .. })
+        {
+            return Ok(PlainCollapseDispatch::Continue(self));
+        }
+        if options.plan() != Some(true)
+            && let Some(by) = options.by().filter(|by| *by != "rot")
+        {
+            let mut warning = JsString::from("warning: --by ");
+            warning.extend(by);
+            warning.push_str(" has no effect without --plan.\n");
+            host.write_stderr(&warning);
+        }
+        let root = &self.prepared.root_absolute;
+        let data_root = (options.data() == Some(true)).then(|| find_repo_root_text(root));
+        let data_native = data_root.as_ref().map(JsString::to_lossy);
+        let data = data_native.as_ref().map(|root| DataOptions {
+            repo_root: Path::new(root),
+        });
+        let repo_native = self.repo_root.to_lossy();
+        let repo_root = Path::new(&repo_native);
+        let scope = if options.deep() == Some(true) {
+            EdgeScope::Deep
+        } else {
+            EdgeScope::Package
+        };
+        let loaded = match load_edge_project_text(root, scope, repo_root, None) {
+            Ok(loaded) => loaded,
+            Err(cause) => {
+                let mut message = JsString::from("no tsconfig found for edge pass at ");
+                message.extend(root);
+                message.push_str("; edges unavailable");
+                clean_exit(host, &message);
+                return Ok(PlainCollapseDispatch::Refused { cause });
+            }
+        };
+        let graph = assemble_graph_with_analysis_text_and_warning(
+            &loaded,
+            self.prepared.thresholds.clone(),
+            binary,
+            NodeFields {
+                headers: options.headers() == Some(true),
+            },
+            &AnalysisOptions {
+                cross_runtime: true,
+                kinds: true,
+                reach: options.unreachable() == Some(true) || options.unguarded() == Some(true),
+                clusters: options.clusters() == Some(true),
+                interface_width: options.interface_width() == Some(true),
+                kind_rules: &self.prepared.kind_rules,
+                repo_root,
+            },
+            data,
+            TextAssembly {
+                root,
+                warning: &mut |line| host.write_stderr(line),
+            },
+        )
+        .map_err(FrontdoorError::Assembly)?;
+        let mut payload = if options.graph() == Some(true) {
+            stable_stringify(&graph, options.pretty() == Some(true)).map(Into::into)
+        } else {
+            render_collapse(
+                &graph,
+                root,
+                &self.prepared.collapse_settings,
+                options.json() == Some(true),
+                options.pretty() == Some(true),
+            )
+        }
+        .map_err(FrontdoorError::CollapseRender)?;
+        payload.push_str("\n");
+        output_to(options.out())
+            .emit(host, &payload)
+            .map_err(FrontdoorError::CollapseEmit)?;
+        Ok(PlainCollapseDispatch::Complete)
     }
 
     /// Run comments after environment keys, or retain the same continuation.

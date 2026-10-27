@@ -9,7 +9,9 @@ use crate::{
     engine::tsgo::TsgoBinary,
     extract::{
         analysis::AnalysisOptions,
-        assemble::{AssemblyError, NodeFields, assemble_graph_with_analysis_text_and_warning},
+        assemble::{
+            AssemblyError, NodeFields, TextAssembly, assemble_graph_with_analysis_text_and_warning,
+        },
     },
     kinds::rules::NodeKindRules,
     project::{EdgeScope, ProjectLoadError, join_path_text, load_edge_project_text},
@@ -110,7 +112,6 @@ fn measure(
                 .map_err(CollapseGateError::Load)?;
             let graph = assemble_graph_with_analysis_text_and_warning(
                 &loaded,
-                &absolute,
                 args.thresholds.clone(),
                 binary,
                 NodeFields::default(),
@@ -123,7 +124,11 @@ fn measure(
                     kind_rules: args.kind_rules,
                     repo_root,
                 },
-                warning,
+                None,
+                TextAssembly {
+                    root: &absolute,
+                    warning,
+                },
             )
             .map_err(CollapseGateError::Assembly)?;
             let candidates = graph

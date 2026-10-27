@@ -13,6 +13,16 @@ pub enum SignalName {
     Callers,
     Name,
 }
+impl SignalName {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Shape => "shape",
+            Self::Callees => "callees",
+            Self::Callers => "callers",
+            Self::Name => "name",
+        }
+    }
+}
 #[derive(Debug, Serialize)]
 pub struct Signal {
     pub signal: SignalName,

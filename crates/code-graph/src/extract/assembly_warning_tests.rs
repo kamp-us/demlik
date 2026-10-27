@@ -1,4 +1,6 @@
-use super::{AssemblyError, NodeFields, assemble_graph_with_analysis_text_and_warning};
+use super::{
+    AssemblyError, NodeFields, TextAssembly, assemble_graph_with_analysis_text_and_warning,
+};
 use crate::{
     engine::tsgo::TsgoBinary,
     extract::analysis::AnalysisOptions,
@@ -80,12 +82,15 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
     };
     let graph = assemble_graph_with_analysis_text_and_warning(
         &loaded,
-        &root,
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
         &options,
-        &mut warning,
+        None,
+        TextAssembly {
+            root: &root,
+            warning: &mut warning,
+        },
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -146,12 +151,15 @@ fn function_warning_survives_later_analysis_failure_with_original_cause() {
     };
     let error = assemble_graph_with_analysis_text_and_warning(
         &loaded,
-        &root,
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
         &options,
-        &mut warning,
+        None,
+        TextAssembly {
+            root: &root,
+            warning: &mut warning,
+        },
     )
     .unwrap_err();
     assert_eq!(
@@ -222,12 +230,15 @@ fn warning_bridge_keeps_both_callbacks_and_pending_real_stdio_failure() {
     };
     let graph = assemble_graph_with_analysis_text_and_warning(
         &loaded,
-        &root,
         Thresholds::default(),
         &binary(),
         NodeFields::default(),
         &options,
-        &mut warning,
+        None,
+        TextAssembly {
+            root: &root,
+            warning: &mut warning,
+        },
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -354,12 +365,15 @@ fn observe(request: Request) -> Result<Observation, String> {
             };
             assemble_graph_with_analysis_text_and_warning(
                 &loaded,
-                &request.root,
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
                 &options,
-                &mut warning,
+                None,
+                TextAssembly {
+                    root: &request.root,
+                    warning: &mut warning,
+                },
             )
         }
         Mode::DefaultText => super::assemble_graph_with_analysis_text(

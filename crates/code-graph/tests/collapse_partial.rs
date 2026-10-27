@@ -262,3 +262,34 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
     .unwrap();
     measure(0);
 }
+
+#[test]
+fn repeated_b_prefix_keeps_the_selected_offset_in_wire_and_human_views() {
+    use demlik_code_graph::collapse::{
+        candidates::find_collapse_candidates, render::partial_twin_lines,
+    };
+    let a = function("aNormalizeInvoice", "left");
+    let mut b = function("bCanonicalInvoice", "left");
+    let calls = &mut b.edges.as_mut().unwrap().calls;
+    calls.extend(function("another", "left").edges.unwrap().calls);
+    for (index, call) in calls.iter_mut().enumerate() {
+        call.line = 100 + index;
+    }
+    calls[7].callee_id = "right".into();
+    let nodes = [a, b];
+    let settings = CollapseSettings::default();
+    let report = find_collapse_candidates(&nodes, &[], &settings);
+    assert_eq!(report.partial_twins.len(), 1);
+    let twin = &report.partial_twins[0];
+    assert_eq!(twin.b_block_line(), 104);
+    let b_calls = &nodes[1].edges.as_ref().unwrap().calls;
+    assert!(std::ptr::eq(twin.b_diverges, &b_calls[7]));
+    assert_eq!(serde_json::to_value(twin).unwrap()["bBlockLine"], 104);
+    let lines = partial_twin_lines(&report);
+    assert!(
+        lines[2]
+            .to_lossy()
+            .contains("B bCanonicalInvoice  retry.ts:104")
+    );
+    assert!(!lines[2].to_lossy().contains("retry.ts:100"));
+}
