@@ -97,6 +97,23 @@ impl From<io::Error> for Problem {
         }
     }
 }
+impl From<demlik_code_graph::project::CollationError> for Problem {
+    fn from(_: demlik_code_graph::project::CollationError) -> Self {
+        Self {
+            kind: "collation_error",
+            code: None,
+        }
+    }
+}
+impl From<BoundaryLedgerError> for Problem {
+    fn from(error: BoundaryLedgerError) -> Self {
+        match error {
+            BoundaryLedgerError::Io(error) => error.into(),
+            BoundaryLedgerError::Json(error) => error.into(),
+            BoundaryLedgerError::Collation(error) => error.into(),
+        }
+    }
+}
 fn encode(value: &impl Serialize) -> Result<Box<RawValue>, Problem> {
     Ok(RawValue::from_string(serde_json::to_string(value)?)?)
 }
@@ -104,11 +121,16 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
     match request.operation.as_str() {
         "code_graph.ledger.parse" => {
             let input: ParseInput = serde_json::from_str(request.input.get())?;
-            encode(&observe!(
-                calls,
-                demlik_code_graph::boundaries::ledger::parse_boundary_ledger,
-                &input.text
-            ))
+            encode(
+                &observe!(
+                    calls,
+                    demlik_code_graph::boundaries::ledger::parse_boundary_ledger,
+                    &input.text,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()
+                        .map_err(Problem::from)?
+                )
+                .map_err(Problem::from)?,
+            )
         }
         "code_graph.ledger.pure" => {
             let input: PureInput = serde_json::from_str(request.input.get())?;
@@ -136,8 +158,11 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             let ledger = observe!(
                 calls,
                 demlik_code_graph::boundaries::ledger::boundary_ledger_of,
-                &entries
-            );
+                &entries,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
+            )
+            .map_err(Problem::from)?;
             let picked = ledger
                 .entries
                 .iter()
@@ -152,13 +177,19 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 calls,
                 demlik_code_graph::boundaries::ledger::rekey_boundary_ledger,
                 &ledger,
-                &input.moves
-            );
+                &input.moves,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
+            )
+            .map_err(Problem::from)?;
             let json = observe!(
                 calls,
                 demlik_code_graph::boundaries::ledger::serialize_boundary_ledger,
-                &ledger
-            );
+                &ledger,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
+            )
+            .map_err(Problem::from)?;
             encode(&PureOutput {
                 kinds: observe_value!(calls, demlik_code_graph::boundaries::ledger::BOUNDARY_KINDS),
                 filename: observe_value!(
@@ -195,24 +226,32 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                     calls,
                     demlik_code_graph::boundaries::ledger::write_boundary_ledger,
                     file,
-                    &ledger
+                    &ledger,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()
+                        .map_err(Problem::from)?
                 )?;
             }
             let before = observe!(
                 calls,
                 demlik_code_graph::boundaries::ledger::read_boundary_ledger,
-                file
+                file,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
             )?;
             let rekey = observe!(
                 calls,
                 demlik_code_graph::boundaries::ledger::rekey_boundary_ledger_file,
                 file,
-                &input.moves
+                &input.moves,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
             )?;
             let after = observe!(
                 calls,
                 demlik_code_graph::boundaries::ledger::read_boundary_ledger,
-                file
+                file,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(Problem::from)?
             )?;
             let text = if file.exists() {
                 Some(String::from_utf8_lossy(&fs::read(file)?).into_owned())

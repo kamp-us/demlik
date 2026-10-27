@@ -1,9 +1,13 @@
 use super::{
-    analyze::{LayerAnalysisError, analyze_layers, analyze_layers_text},
+    analyze::{LayerAnalysisError, analyze, analyze_layers_text},
     config::{LayerConfigResolution, resolve_layer_rules},
-    render::render_layers,
+    render::{LayerRenderError, render_layers},
 };
-use crate::{engine::oxc::ParseFailure, project::load_cheap_project, text::JsString};
+use crate::{
+    engine::oxc::ParseFailure,
+    project::{Collation, CollationError, load_cheap_project},
+    text::JsString,
+};
 use serde::Serialize;
 use std::path::Path;
 #[derive(Debug, Clone, Copy)]
@@ -23,6 +27,7 @@ pub struct LayerGateResult {
 }
 #[derive(Debug)]
 pub enum LayerGateError {
+    Collation(CollationError),
     Project(ParseFailure),
     Analysis(LayerAnalysisError),
     Render(serde_json::Error),
@@ -30,6 +35,7 @@ pub enum LayerGateError {
 impl std::fmt::Display for LayerGateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(f),
             Self::Project(error) => error.fmt(f),
             Self::Analysis(error) => error.fmt(f),
             Self::Render(error) => error.fmt(f),
@@ -39,6 +45,7 @@ impl std::fmt::Display for LayerGateError {
 impl std::error::Error for LayerGateError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Project(error) => error,
             Self::Analysis(error) => error,
             Self::Render(error) => error,
@@ -53,11 +60,15 @@ pub(crate) struct LayerGateTextArgs<'a> {
     pub json: bool,
     pub pretty: bool,
 }
-pub fn run_layer_gate(args: LayerGateArgs<'_>) -> Result<LayerGateResult, LayerGateError> {
-    run(args, None)
+pub fn run_layer_gate(
+    args: LayerGateArgs<'_>,
+    collation: &Collation,
+) -> Result<LayerGateResult, LayerGateError> {
+    run(args, None, || Ok(collation))
 }
-pub(crate) fn run_layer_gate_text(
+pub(crate) fn run_layer_gate_text<'c>(
     args: LayerGateTextArgs<'_>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<LayerGateResult, LayerGateError> {
     let root_native = args.root_absolute.to_lossy();
     let repo_native = args.repo_root.to_lossy();
@@ -70,11 +81,13 @@ pub(crate) fn run_layer_gate_text(
             pretty: args.pretty,
         },
         Some((args.root_absolute, args.repo_root)),
+        request,
     )
 }
-fn run(
+fn run<'c>(
     args: LayerGateArgs<'_>,
     text: Option<(&JsString, &JsString)>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<LayerGateResult, LayerGateError> {
     let rules = match resolve_layer_rules(args.layer_rules_file) {
         LayerConfigResolution::Resolved(rules) => rules,
@@ -88,10 +101,10 @@ fn run(
     };
     let loaded = load_cheap_project(args.root_absolute, None).map_err(LayerGateError::Project)?;
     let measured = match text {
-        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules),
-        None => analyze_layers(&loaded, args.repo_root, &rules),
+        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules, request),
+        None => analyze(&loaded, args.repo_root, &rules, None, request),
     };
-    let analysis = match measured {
+    let (analysis, collation) = match measured {
         Ok(report) => report,
         Err(LayerAnalysisError::Tie(error)) => {
             return Ok(LayerGateResult {
@@ -100,10 +113,14 @@ fn run(
                 ..Default::default()
             });
         }
+        Err(LayerAnalysisError::Collation(error)) => return Err(LayerGateError::Collation(error)),
         Err(error) => return Err(LayerGateError::Analysis(error)),
     };
-    let render = render_layers(&analysis, &rules.allowed, args.json, args.pretty)
-        .map_err(LayerGateError::Render)?;
+    let render = render_layers(&analysis, &rules.allowed, args.json, args.pretty, collation)
+        .map_err(|error| match error {
+            LayerRenderError::Json(error) => LayerGateError::Render(error),
+            LayerRenderError::Collation(error) => LayerGateError::Collation(error),
+        })?;
     let mut payload = render.stdout;
     payload.push_str("\n");
     Ok(LayerGateResult {

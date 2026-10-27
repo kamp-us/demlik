@@ -52,7 +52,12 @@ impl Repo {
         self.0.join("rules.json").to_str().unwrap().into()
     }
     fn ledger(&self) -> BoundaryLedger {
-        match read_boundary_ledger(&self.0.join(LEDGER_FILENAME)).unwrap() {
+        match read_boundary_ledger(
+            &self.0.join(LEDGER_FILENAME),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap()
+        {
             LedgerRead::Read { ledger } => ledger,
             result => panic!("expected the gate to write a valid ledger: {result:?}"),
         }
@@ -80,7 +85,11 @@ fn real_files_report_accept_gate_and_prune_only_the_measured_scope() {
         json: true,
         pretty: false,
     };
-    let report = run_boundary_gate(args).unwrap();
+    let report = run_boundary_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.exit_code, 0);
     assert!(report.reports.is_empty());
     let snapshot: serde_json::Value =
@@ -94,9 +103,12 @@ fn real_files_report_accept_gate_and_prune_only_the_measured_scope() {
         ..Default::default()
     };
     assert_eq!(
-        run_boundary_gate(BoundaryGateArgs { flags: ci, ..args })
-            .unwrap()
-            .exit_code,
+        run_boundary_gate(
+            BoundaryGateArgs { flags: ci, ..args },
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .exit_code,
         1
     );
     let reason = JsString::from_units(vec![
@@ -108,10 +120,13 @@ fn real_files_report_accept_gate_and_prune_only_the_measured_scope() {
         ..Default::default()
     };
     assert_eq!(
-        run_boundary_gate(BoundaryGateArgs {
-            flags: accept,
-            ..args
-        })
+        run_boundary_gate(
+            BoundaryGateArgs {
+                flags: accept,
+                ..args
+            },
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
         .unwrap()
         .exit_code,
         0
@@ -127,9 +142,12 @@ fn real_files_report_accept_gate_and_prune_only_the_measured_scope() {
     let seeded = fs::read(repo.0.join(LEDGER_FILENAME)).unwrap();
     for _ in 0..2 {
         assert_eq!(
-            run_boundary_gate(BoundaryGateArgs { flags: ci, ..args })
-                .unwrap()
-                .exit_code,
+            run_boundary_gate(
+                BoundaryGateArgs { flags: ci, ..args },
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+            )
+            .unwrap()
+            .exit_code,
             0
         );
         assert_eq!(fs::read(repo.0.join(LEDGER_FILENAME)).unwrap(), seeded);
@@ -139,11 +157,14 @@ fn real_files_report_accept_gate_and_prune_only_the_measured_scope() {
         "export const run = () => 1;",
     );
     let root = repo.0.join("services/api");
-    let pruned = run_boundary_gate(BoundaryGateArgs {
-        root_absolute: &root,
-        flags: ci,
-        ..args
-    })
+    let pruned = run_boundary_gate(
+        BoundaryGateArgs {
+            root_absolute: &root,
+            flags: ci,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(pruned.exit_code, 0);
     assert_eq!(repo.ledger().entries.len(), 2);
@@ -181,7 +202,11 @@ fn migration_checks_every_declared_scope_before_replacing_the_legacy_file() {
     };
     let legacy = r#"{"default":0,"scopes":{"services/api":10}}"#;
     repo.put(LEGACY_CEILINGS_FILENAME, legacy);
-    let refused = run_boundary_gate(args).unwrap();
+    let refused = run_boundary_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(refused.exit_code, 2);
     assert!(refused.emitted.is_empty());
     assert!(
@@ -196,7 +221,11 @@ fn migration_checks_every_declared_scope_before_replacing_the_legacy_file() {
     );
     assert!(!repo.0.join(LEDGER_FILENAME).exists());
     repo.put(LEGACY_CEILINGS_FILENAME, r#"{"default":1}"#);
-    let migrated = run_boundary_gate(args).unwrap();
+    let migrated = run_boundary_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(migrated.exit_code, 0);
     assert_eq!(repo.ledger().entries.len(), 4);
     assert!(!repo.0.join(LEGACY_CEILINGS_FILENAME).exists());
@@ -206,7 +235,11 @@ fn migration_checks_every_declared_scope_before_replacing_the_legacy_file() {
             .unwrap()
             .contains("\"scopes\": 2")
     );
-    let repeated = run_boundary_gate(args).unwrap();
+    let repeated = run_boundary_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(repeated.exit_code, 2);
     assert_eq!(
         repeated.reports,
@@ -233,7 +266,11 @@ fn flag_refusals_precede_any_config_or_project_read() {
         json: false,
         pretty: false,
     };
-    let result = run_boundary_gate(args).unwrap();
+    let result = run_boundary_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(result.exit_code, 2);
     assert!(result.emitted.is_empty());
     assert_eq!(result.reports.len(), 1);

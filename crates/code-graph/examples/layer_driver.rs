@@ -170,8 +170,14 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
         }
         "code_graph.layer_classify" => {
             let input: ClassifyInput = input(&request.input)?;
-            let matchers = observe!(calls, classify::compile_matchers, &input.layers)
-                .map_err(DriverError::backend)?;
+            let matchers = observe!(
+                calls,
+                classify::compile_matchers,
+                &input.layers,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
+            )
+            .map_err(DriverError::backend)?;
             let mut values = Vec::new();
             for file in &input.files {
                 values.push(match observe!(calls, classify::layer_of, file, &matchers) {
@@ -201,7 +207,9 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
                 analyze::analyze_layers,
                 &loaded,
                 Path::new(&input.repo_root),
-                &rules
+                &rules,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
             ) {
                 Ok(report) => json(&report),
                 Err(LayerAnalysisError::Tie(error)) => tie(error),
@@ -210,12 +218,17 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
         }
         "code_graph.layer_reconcile" => {
             let input: ReconcileInput = input(&request.input)?;
-            json(&observe!(
-                calls,
-                reconcile::reconcile,
-                &input.report,
-                &input.allowed
-            ))
+            json(
+                &observe!(
+                    calls,
+                    reconcile::reconcile,
+                    &input.report,
+                    &input.allowed,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()
+                        .map_err(DriverError::backend)?
+                )
+                .map_err(DriverError::backend)?,
+            )
         }
         "code_graph.layer_edge_key" => {
             let input: PairInput = input(&request.input)?;

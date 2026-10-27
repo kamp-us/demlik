@@ -4,7 +4,10 @@ use super::{
     ledger::{BoundaryLedger, BoundaryLedgerEntry, boundary_ledger_of, ledger_key},
     violation::{BoundaryViolation, ScopeBoundaryReport, WriteSite},
 };
-use crate::text::JsString;
+use crate::{
+    project::{Collation, CollationError},
+    text::JsString,
+};
 use indexmap::IndexMap;
 use serde::Serialize;
 use std::{collections::HashSet, sync::Arc};
@@ -22,8 +25,11 @@ pub struct Reconciliation {
 pub fn entry_of(scope: impl Into<JsString>, violation: &BoundaryViolation) -> BoundaryLedgerEntry {
     violation.ledger_entry(scope)
 }
-pub fn measured_entries(reports: &[ScopeBoundaryReport]) -> Vec<Arc<BoundaryLedgerEntry>> {
-    boundary_ledger_of(
+pub fn measured_entries(
+    reports: &[ScopeBoundaryReport],
+    collation: &Collation,
+) -> Result<Vec<Arc<BoundaryLedgerEntry>>, CollationError> {
+    Ok(boundary_ledger_of(
         &reports
             .iter()
             .flat_map(|report| {
@@ -33,8 +39,9 @@ pub fn measured_entries(reports: &[ScopeBoundaryReport]) -> Vec<Arc<BoundaryLedg
                     .map(|violation| Arc::new(entry_of(report.scope.clone(), violation)))
             })
             .collect::<Vec<_>>(),
-    )
-    .entries
+        collation,
+    )?
+    .entries)
 }
 fn in_reach(scope: &JsString, under: &JsString) -> bool {
     if under == "." || scope == under {
@@ -48,8 +55,9 @@ pub fn reconcile(
     ledger: &BoundaryLedger,
     reports: &[ScopeBoundaryReport],
     under: &JsString,
-) -> Reconciliation {
-    let measured = measured_entries(reports);
+    collation: &Collation,
+) -> Result<Reconciliation, CollationError> {
+    let measured = measured_entries(reports, collation)?;
     let measured_keys = measured
         .iter()
         .map(|entry| ledger_key(entry))
@@ -73,7 +81,7 @@ pub fn reconcile(
             }
         }
     }
-    Reconciliation {
+    Ok(Reconciliation {
         scopes_checked: reports.len() as f64,
         unrecorded: measured
             .into_iter()
@@ -92,15 +100,17 @@ pub fn reconcile(
                 .filter(|entry| !gone(entry))
                 .cloned()
                 .collect::<Vec<_>>(),
-        ),
+            collation,
+        )?,
         writes,
-    }
+    })
 }
 pub fn with_accepted(
     ledger: &BoundaryLedger,
     accepted: &[Arc<BoundaryLedgerEntry>],
     reason: &JsString,
-) -> BoundaryLedger {
+    collation: &Collation,
+) -> Result<BoundaryLedger, CollationError> {
     let entries = ledger
         .entries
         .iter()
@@ -112,5 +122,5 @@ pub fn with_accepted(
             })
         }))
         .collect::<Vec<_>>();
-    boundary_ledger_of(&entries)
+    boundary_ledger_of(&entries, collation)
 }

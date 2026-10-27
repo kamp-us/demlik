@@ -10,7 +10,8 @@ use super::{
     },
     impure_uses::{ImpureUse, detect_impure_uses},
     ledger::{
-        BoundaryLedger, LEDGER_FILENAME, LedgerRead, read_boundary_ledger, write_boundary_ledger,
+        BoundaryLedger, BoundaryLedgerError, LEDGER_FILENAME, LedgerRead, read_boundary_ledger,
+        write_boundary_ledger,
     },
     libraries::{
         Libraries, LibrariesRead,
@@ -35,7 +36,10 @@ use super::{
 use crate::{
     extract::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog},
     kinds::glob::GlobError,
-    project::{EdgeScope, RepoListing, join_path_text, list_repo, load_edge_project_text},
+    project::{
+        Collation, CollationError, EdgeScope, RepoListing, join_path_text, list_repo,
+        load_edge_project_text,
+    },
     ratchet::scope_count::{ScopeCeilingsResolution, read_scope_ceilings, scope_of, scopes_under},
     syntax::imports::{ImportedNames, resolve_imports, resolve_imports_text, runtime_specifiers},
     text::{JsString, object_keys},
@@ -88,6 +92,7 @@ pub struct BoundaryGateResult {
 }
 #[derive(Debug)]
 pub enum BoundaryGateError {
+    Collation(CollationError),
     Config(BoundaryConfigError),
     Pattern(GlobError),
     Catalog(CatalogError),
@@ -104,7 +109,7 @@ impl BoundaryGateError {
             Self::Pattern(GlobError::Pattern(_)) => "SyntaxError",
             Self::Catalog(error) => error.name(),
             Self::Ceiling(error) => error.name(),
-            Self::Io(_) | Self::Render(_) => "Error",
+            Self::Collation(_) | Self::Io(_) | Self::Render(_) => "Error",
         }
     }
     pub fn message(&self) -> JsString {
@@ -115,6 +120,7 @@ impl BoundaryGateError {
             Self::Pattern(GlobError::Pattern(error)) => error.to_string().into(),
             Self::Catalog(error) => error.message(),
             Self::Ceiling(error) => error.message().clone(),
+            Self::Collation(error) => error.to_string().into(),
             Self::Io(error) => error.to_string().into(),
             Self::Render(error) => error.to_string().into(),
         }
@@ -126,6 +132,7 @@ impl std::fmt::Display for BoundaryGateError {
             Self::Config(error) => error.fmt(f),
             Self::Pattern(error) => error.fmt(f),
             Self::Catalog(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::Ceiling(error) => error.fmt(f),
             Self::Render(error) => error.fmt(f),
@@ -138,10 +145,25 @@ impl std::error::Error for BoundaryGateError {
             Self::Config(error) => error,
             Self::Pattern(error) => error,
             Self::Catalog(error) => error,
+            Self::Collation(error) => error,
             Self::Io(error) => error,
             Self::Ceiling(error) => error,
             Self::Render(error) => error,
         })
+    }
+}
+impl From<CollationError> for BoundaryGateError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+impl From<BoundaryLedgerError> for BoundaryGateError {
+    fn from(error: BoundaryLedgerError) -> Self {
+        match error {
+            BoundaryLedgerError::Collation(error) => Self::Collation(error),
+            BoundaryLedgerError::Io(error) => Self::Io(error),
+            BoundaryLedgerError::Json(error) => Self::Render(error),
+        }
     }
 }
 type Result<T> = std::result::Result<T, BoundaryGateError>;
@@ -435,36 +457,52 @@ fn current_ledger(
     ledger: &Path,
     legacy: &Path,
     ledger_text: &JsString,
+    collation: &Collation,
 ) -> Result<std::result::Result<BoundaryLedger, JsString>> {
-    Ok(match read_boundary_ledger(ledger).map_err(BoundaryGateError::Io)? {
+    Ok(match read_boundary_ledger(ledger,collation)? {
         LedgerRead::Read { ledger } => Ok(ledger),
         LedgerRead::Invalid { message } => Err(interpolate(&["invalid boundary ledger \"".into(), ledger_text.clone(), "\": ".into(), message])),
         LedgerRead::Absent if legacy.exists() => Err(format!("{LEGACY_CEILINGS_FILENAME} holds per-scope counts and there is no {LEDGER_FILENAME}: run `code-graph . --boundaries --migrate-ceilings` once to seed the ledger.").into()),
         LedgerRead::Absent => Ok(BoundaryLedger::default()),
     })
 }
-pub fn run_boundary_gate(args: BoundaryGateArgs<'_>) -> Result<BoundaryGateResult> {
-    run(GateInput {
-        native: args,
-        text_roots: None,
-    })
+pub fn run_boundary_gate(
+    args: BoundaryGateArgs<'_>,
+    collation: &Collation,
+) -> Result<BoundaryGateResult> {
+    run(
+        GateInput {
+            native: args,
+            text_roots: None,
+        },
+        || Ok(collation),
+    )
 }
-pub(crate) fn run_boundary_gate_text(args: BoundaryGateTextArgs<'_>) -> Result<BoundaryGateResult> {
+pub(crate) fn run_boundary_gate_text<'c>(
+    args: BoundaryGateTextArgs<'_>,
+    request: impl FnOnce() -> std::result::Result<&'c Collation, CollationError>,
+) -> Result<BoundaryGateResult> {
     let root_native = args.root_absolute.to_lossy();
     let repo_native = args.repo_root.to_lossy();
-    run(GateInput {
-        native: BoundaryGateArgs {
-            root_absolute: Path::new(&root_native),
-            repo_root: Path::new(&repo_native),
-            boundary_rules_file: args.boundary_rules_file,
-            flags: args.flags,
-            json: args.json,
-            pretty: args.pretty,
+    run(
+        GateInput {
+            native: BoundaryGateArgs {
+                root_absolute: Path::new(&root_native),
+                repo_root: Path::new(&repo_native),
+                boundary_rules_file: args.boundary_rules_file,
+                flags: args.flags,
+                json: args.json,
+                pretty: args.pretty,
+            },
+            text_roots: Some((args.root_absolute, args.repo_root)),
         },
-        text_roots: Some((args.root_absolute, args.repo_root)),
-    })
+        request,
+    )
 }
-fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
+fn run<'c>(
+    input: GateInput<'_>,
+    request: impl FnOnce() -> std::result::Result<&'c Collation, CollationError>,
+) -> Result<BoundaryGateResult> {
     let args = input.native;
     let mode = match mode_of(args.flags) {
         Ok(mode) => mode,
@@ -530,8 +568,9 @@ fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
                 ScopeCeilingsResolution::Resolved(ceilings) => ceilings,
                 ScopeCeilingsResolution::Refused { message } => return Ok(refused(message)),
             };
+        let collation = request()?;
         let reports = match analyze_all(
-            &scopes_under(&declared, &".".into()),
+            &scopes_under(&declared, &".".into(), collation)?,
             &rules,
             &reads,
             listing.as_ref(),
@@ -541,13 +580,13 @@ fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
             Ok(analysis) => analysis.reports,
             Err(message) => return Ok(refused(message)),
         };
-        let ledger = match migrated_ledger(&reports, &ceilings) {
+        let ledger = match migrated_ledger(&reports, &ceilings, collation)? {
             Migration::Migrated { ledger } => ledger,
             Migration::Refused { breaches } => {
                 return Ok(refused(render_migration_refused(&breaches)));
             }
         };
-        write_boundary_ledger(&ledger_file, &ledger).map_err(BoundaryGateError::Io)?;
+        write_boundary_ledger(&ledger_file, &ledger, collation)?;
         fs::remove_file(&legacy_file).map_err(BoundaryGateError::Io)?;
         return Ok(emitted(
             render_migrated(&ledger, reports.len() as f64, args.json, args.pretty)
@@ -563,8 +602,9 @@ fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
         ),
     }
     .map_err(BoundaryGateError::Io)?;
+    let collation = request()?;
     let analysis = match analyze_all(
-        &scopes_under(&declared, &under),
+        &scopes_under(&declared, &under, collation)?,
         &rules,
         &reads,
         listing.as_ref(),
@@ -615,16 +655,16 @@ fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
             ))
         }
         Mode::Gate | Mode::Accept { .. } => {
-            let ledger = match current_ledger(&ledger_file, &legacy_file, &ledger_text)? {
+            let ledger = match current_ledger(&ledger_file, &legacy_file, &ledger_text, collation)?
+            {
                 Ok(ledger) => ledger,
                 Err(message) => return Ok(refused(message)),
             };
-            let result = reconcile(&ledger, &analysis.reports, &under);
+            let result = reconcile(&ledger, &analysis.reports, &under, collation)?;
             match mode {
                 Mode::Gate => {
                     if !result.pruned.is_empty() {
-                        write_boundary_ledger(&ledger_file, &result.kept)
-                            .map_err(BoundaryGateError::Io)?;
+                        write_boundary_ledger(&ledger_file, &result.kept, collation)?;
                     }
                     let render = render_ledger_gate(&result, args.json, args.pretty)
                         .map_err(BoundaryGateError::Render)?;
@@ -634,9 +674,9 @@ fn run(input: GateInput<'_>) -> Result<BoundaryGateResult> {
                     if !result.pruned.is_empty() || !result.unrecorded.is_empty() {
                         write_boundary_ledger(
                             &ledger_file,
-                            &with_accepted(&result.kept, &result.unrecorded, &reason),
-                        )
-                        .map_err(BoundaryGateError::Io)?;
+                            &with_accepted(&result.kept, &result.unrecorded, &reason, collation)?,
+                            collation,
+                        )?;
                     }
                     Ok(emitted(
                         render_accepted(&result, &reason, args.json, args.pretty)

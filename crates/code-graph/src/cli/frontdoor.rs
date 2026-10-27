@@ -669,7 +669,7 @@ impl PreparedGatesCli {
     /// Run the early CI/record branch after comments; plain collapse retains this carrier.
     /// Compiler work is blocking. The host owns immediate warning and pending IO behavior.
     pub fn dispatch_collapse_gate(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<CollapseDispatch, FrontdoorError> {
@@ -680,6 +680,7 @@ impl PreparedGatesCli {
             return Ok(CollapseDispatch::Continue(self));
         }
         let repo_root = find_repo_root_text(&self.prepared.root_absolute);
+        let slot = &mut self.collation;
         let result = run_collapse_gate(
             CollapseGateArgs {
                 root_absolute: &self.prepared.root_absolute,
@@ -693,6 +694,10 @@ impl PreparedGatesCli {
             },
             binary,
             &mut |line| host.write_stderr(line),
+            move || {
+                let slot = slot;
+                prepared_collation(slot)
+            },
         )
         .map_err(FrontdoorError::Collapse)?;
         for message in &result.reports {
@@ -979,7 +984,7 @@ impl PreparedGatesCli {
 
     /// Run comments after environment keys, or retain the same continuation.
     pub fn dispatch_comments(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
     ) -> Result<CommentDispatch, FrontdoorError> {
         if self.prepared.options.comments() != Some(true) {
@@ -987,14 +992,21 @@ impl PreparedGatesCli {
         }
         let repo_root = find_repo_root_text(&self.prepared.root_absolute);
         let options = &self.prepared.options;
-        let result = run_comment_gate_text(CommentGateTextArgs {
-            root_absolute: &self.prepared.root_absolute,
-            repo_root: &repo_root,
-            ci: options.ci() == Some(true),
-            write_ceilings: options.write_ceilings() == Some(true),
-            json: options.json() == Some(true),
-            pretty: options.pretty() == Some(true),
-        })
+        let slot = &mut self.collation;
+        let result = run_comment_gate_text(
+            CommentGateTextArgs {
+                root_absolute: &self.prepared.root_absolute,
+                repo_root: &repo_root,
+                ci: options.ci() == Some(true),
+                write_ceilings: options.write_ceilings() == Some(true),
+                json: options.json() == Some(true),
+                pretty: options.pretty() == Some(true),
+            },
+            move || {
+                let slot = slot;
+                prepared_collation(slot)
+            },
+        )
         .map_err(FrontdoorError::Comments)?;
         for message in &result.reports {
             clean_exit(host, message);
@@ -1034,7 +1046,7 @@ impl PreparedGatesCli {
 
     /// Run boundaries after layers, or retain the same continuation for later modes.
     pub fn dispatch_boundaries(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
     ) -> Result<BoundaryDispatch, FrontdoorError> {
         if self.prepared.options.boundaries() != Some(true) {
@@ -1042,20 +1054,27 @@ impl PreparedGatesCli {
         }
         let repo_root = find_repo_root_text(&self.prepared.root_absolute);
         let options = &self.prepared.options;
-        let result = run_boundary_gate_text(BoundaryGateTextArgs {
-            root_absolute: &self.prepared.root_absolute,
-            repo_root: &repo_root,
-            boundary_rules_file: options.boundary_rules(),
-            flags: BoundaryFlags {
-                ci: options.ci() == Some(true),
-                write_ceilings: options.write_ceilings() == Some(true),
-                accept_crossings: options.accept_crossings() == Some(true),
-                reason: options.reason(),
-                migrate_ceilings: options.migrate_ceilings() == Some(true),
+        let slot = &mut self.collation;
+        let result = run_boundary_gate_text(
+            BoundaryGateTextArgs {
+                root_absolute: &self.prepared.root_absolute,
+                repo_root: &repo_root,
+                boundary_rules_file: options.boundary_rules(),
+                flags: BoundaryFlags {
+                    ci: options.ci() == Some(true),
+                    write_ceilings: options.write_ceilings() == Some(true),
+                    accept_crossings: options.accept_crossings() == Some(true),
+                    reason: options.reason(),
+                    migrate_ceilings: options.migrate_ceilings() == Some(true),
+                },
+                json: options.json() == Some(true),
+                pretty: options.pretty() == Some(true),
             },
-            json: options.json() == Some(true),
-            pretty: options.pretty() == Some(true),
-        })
+            move || {
+                let slot = slot;
+                prepared_collation(slot)
+            },
+        )
         .map_err(FrontdoorError::Boundaries)?;
         for message in &result.reports {
             clean_exit(host, message);
@@ -1071,20 +1090,27 @@ impl PreparedGatesCli {
 
     /// Run layers after both preparations, or retain the same continuation for later modes.
     pub fn dispatch_layers(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
     ) -> Result<LayerDispatch, FrontdoorError> {
         if self.prepared.options.layers() != Some(true) {
             return Ok(LayerDispatch::Continue(self));
         }
         let repo_root = find_repo_root_text(&self.prepared.root_absolute);
-        let result = run_layer_gate_text(LayerGateTextArgs {
-            root_absolute: &self.prepared.root_absolute,
-            repo_root: &repo_root,
-            layer_rules_file: self.prepared.options.layer_rules(),
-            json: self.prepared.options.json() == Some(true),
-            pretty: self.prepared.options.pretty() == Some(true),
-        })
+        let slot = &mut self.collation;
+        let result = run_layer_gate_text(
+            LayerGateTextArgs {
+                root_absolute: &self.prepared.root_absolute,
+                repo_root: &repo_root,
+                layer_rules_file: self.prepared.options.layer_rules(),
+                json: self.prepared.options.json() == Some(true),
+                pretty: self.prepared.options.pretty() == Some(true),
+            },
+            move || {
+                let slot = slot;
+                prepared_collation(slot)
+            },
+        )
         .map_err(FrontdoorError::Layers)?;
         for message in &result.reports {
             clean_exit(host, message);
@@ -1351,5 +1377,12 @@ impl PreparedGatesCli {
             .emit(host, &payload)
             .map_err(FrontdoorError::ReportEmit)?;
         Ok(ReportDispatch::Complete)
+    }
+}
+
+fn prepared_collation(slot: &mut Option<Collation>) -> Result<&Collation, CollationError> {
+    match slot {
+        Some(value) => Ok(value),
+        none @ None => Ok(none.insert(Collation::try_node22_en_us()?)),
     }
 }

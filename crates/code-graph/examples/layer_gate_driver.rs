@@ -139,7 +139,9 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
                     &input.report,
                     &input.allowed,
                     input.json,
-                    input.pretty
+                    input.pretty,
+                    &demlik_code_graph::project::Collation::try_node22_en_us()
+                        .map_err(DriverError::backend)?
                 )
                 .map_err(DriverError::backend)?,
             )
@@ -156,7 +158,9 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
                         layer_rules_file: input.layer_rules_file.as_ref(),
                         json: input.json,
                         pretty: input.pretty
-                    }
+                    },
+                    &demlik_code_graph::project::Collation::try_node22_en_us()
+                        .map_err(DriverError::backend)?
                 )
                 .map_err(DriverError::from)?,
             )

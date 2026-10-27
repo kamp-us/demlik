@@ -4,7 +4,7 @@ use super::{
 };
 use crate::number::js_round;
 use crate::{
-    project::locale_compare_units,
+    project::{Collation, CollationError, CollationInput},
     text::{JsString, has_object_prototype_property},
 };
 use serde::Serialize;
@@ -39,7 +39,11 @@ pub struct RatchetVerdict {
     pub slack_points: f64,
     pub violations: Vec<CeilingViolation>,
 }
-pub fn evaluate_ratchet(census: &CommentCensus, ceilings: &CommentCeilings) -> RatchetVerdict {
+pub fn evaluate_ratchet(
+    census: &CommentCensus,
+    ceilings: &CommentCeilings,
+    collation: &Collation,
+) -> Result<RatchetVerdict, CollationError> {
     let mut violations = Vec::new();
     let mut inherited_scopes = 0;
     let mut scopes_checked = 0;
@@ -76,22 +80,27 @@ pub fn evaluate_ratchet(census: &CommentCensus, ceilings: &CommentCeilings) -> R
             });
         }
     }
-    violations.sort_by(|left, right| {
-        right
-            .delta
+    let mut prepared = violations
+        .into_iter()
+        .map(|row: CeilingViolation| {
+            CollationInput::from_utf16(row.scope.units()).map(|input| (row, input))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    prepared.sort_by(|a, b| {
+        b.0.delta
             .abs()
-            .partial_cmp(&left.delta.abs())
+            .partial_cmp(&a.0.delta.abs())
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| locale_compare_units(left.scope.units(), right.scope.units()))
+            .then_with(|| collation.compare(&a.1, &b.1))
     });
-    RatchetVerdict {
-        passed: violations.is_empty(),
+    Ok(RatchetVerdict {
+        passed: prepared.is_empty(),
         scopes_checked,
         inherited_scopes,
         default_ceiling: ceilings.default,
         slack_points: ceilings.slack_points,
-        violations,
-    }
+        violations: prepared.into_iter().map(|(row, _)| row).collect(),
+    })
 }
 
 #[derive(Debug, Serialize)]

@@ -38,7 +38,11 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
         json: false,
         pretty: false,
     };
-    let recorded = run_comment_gate(args).unwrap();
+    let recorded = run_comment_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(recorded.exit_code, 0);
     assert!(recorded.reports.is_empty());
     let file = root.join("comment-ceilings.json");
@@ -47,11 +51,14 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
         first,
         "{\n  \"default\": 40,\n  \"scopes\": {\n    \"packages/a\": 50,\n    \"packages/b\": 100\n  },\n  \"slackPoints\": 2\n}\n"
     );
-    let pass = run_comment_gate(CommentGateArgs {
-        ci: true,
-        write_ceilings: false,
-        ..args
-    })
+    let pass = run_comment_gate(
+        CommentGateArgs {
+            ci: true,
+            write_ceilings: false,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(pass.exit_code, 0);
     assert_eq!(
@@ -59,11 +66,14 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
         "comment ratchet: PASS — 2 scope(s) within ceiling (0 on the 40.0% default, slack 2 pts).\n"
     );
     assert_eq!(
-        run_comment_gate(CommentGateArgs {
-            ci: true,
-            json: true,
-            ..args
-        })
+        run_comment_gate(
+            CommentGateArgs {
+                ci: true,
+                json: true,
+                ..args
+            },
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
         .unwrap()
         .exit_code,
         0
@@ -74,12 +84,15 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
         "// prose\n// more prose\nexport const x=1;\nexport const y=2;\n",
     )
     .unwrap();
-    let fail = run_comment_gate(CommentGateArgs {
-        ci: true,
-        write_ceilings: false,
-        json: true,
-        ..args
-    })
+    let fail = run_comment_gate(
+        CommentGateArgs {
+            ci: true,
+            write_ceilings: false,
+            json: true,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(fail.exit_code, 1);
     assert!(fail.reports.is_empty());
@@ -90,11 +103,14 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
             .contains("\"direction\":\"EXCEEDED\"")
     );
     fs::write(&file, "{").unwrap();
-    let refused = run_comment_gate(CommentGateArgs {
-        ci: true,
-        write_ceilings: false,
-        ..args
-    })
+    let refused = run_comment_gate(
+        CommentGateArgs {
+            ci: true,
+            write_ceilings: false,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(refused.exit_code, 2);
     assert!(refused.emitted.is_empty());
@@ -102,10 +118,13 @@ fn records_real_ceilings_then_reports_ci_pass_fail_and_config_refusal() {
         refused.reports[0],
         format!("config file \"{}\" is not valid JSON.", file.display())
     );
-    let census = run_comment_gate(CommentGateArgs {
-        write_ceilings: false,
-        ..args
-    })
+    let census = run_comment_gate(
+        CommentGateArgs {
+            write_ceilings: false,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(census.exit_code, 0);
     assert!(census.reports.is_empty());

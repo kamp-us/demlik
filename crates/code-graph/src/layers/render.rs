@@ -4,6 +4,7 @@ use super::{
     rules::AllowedEdge,
 };
 use crate::{
+    project::{Collation, CollationError},
     render::{json::stable_stringify, text::join},
     text::JsString,
 };
@@ -143,13 +144,35 @@ fn verdict_lines(result: &Reconciliation<'_>) -> Vec<JsString> {
     }
     lines
 }
+#[derive(Debug)]
+pub enum LayerRenderError {
+    Collation(CollationError),
+    Json(serde_json::Error),
+}
+impl std::fmt::Display for LayerRenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Collation(error) => error.fmt(f),
+            Self::Json(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for LayerRenderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Collation(error) => error,
+            Self::Json(error) => error,
+        })
+    }
+}
 pub fn render_layers(
     report: &LayerReport,
     allowed: &[AllowedEdge],
     json: bool,
     pretty: bool,
-) -> Result<LayerRender, serde_json::Error> {
-    let result = reconcile(report, allowed);
+    collation: &Collation,
+) -> Result<LayerRender, LayerRenderError> {
+    let result = reconcile(report, allowed, collation).map_err(LayerRenderError::Collation)?;
     let exit_code = if result.passed { 0 } else { 1 };
     if json {
         #[derive(Serialize)]
@@ -177,7 +200,9 @@ pub fn render_layers(
             miscounted: &result.miscounted,
         };
         return Ok(LayerRender {
-            stdout: stable_stringify(&output, pretty)?.into(),
+            stdout: stable_stringify(&output, pretty)
+                .map_err(LayerRenderError::Json)?
+                .into(),
             exit_code,
         });
     }

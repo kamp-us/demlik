@@ -217,14 +217,17 @@ fn a_raw_self_root_keeps_sources_import_comparisons_without_changing_path_caller
     assert!(stderr.is_empty());
 
     let rules = JsString::from(project.root.join("rules.json").to_string_lossy().as_ref());
-    let legacy = run_boundary_gate(BoundaryGateArgs {
-        root_absolute: &app_native,
-        repo_root: &app_native,
-        boundary_rules_file: Some(&rules),
-        flags: BoundaryFlags::default(),
-        json: true,
-        pretty: false,
-    })
+    let legacy = run_boundary_gate(
+        BoundaryGateArgs {
+            root_absolute: &app_native,
+            repo_root: &app_native,
+            boundary_rules_file: Some(&rules),
+            flags: BoundaryFlags::default(),
+            json: true,
+            pretty: false,
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     let payload = JsValue::parse_js(&legacy.emitted[0]).unwrap();
     assert_eq!(

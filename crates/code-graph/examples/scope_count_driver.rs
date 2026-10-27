@@ -365,8 +365,11 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
                 calls,
                 scope_count::evaluate_scope_ratchet,
                 &measurements,
-                &ceilings
-            );
+                &ceilings,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(|error| error.to_string())?
+            )
+            .map_err(|error| error.to_string())?;
             let recorded = observe!(
                 calls,
                 scope_count::record_scope_ceilings,
@@ -399,7 +402,15 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
         } => {
             let scope = observe!(calls, scope_count::scope_of, &repo_root, &absolute)
                 .map_err(|error| error.to_string())?;
-            let mut selected = observe!(calls, scope_count::scopes_under, &scopes, &under);
+            let mut selected = observe!(
+                calls,
+                scope_count::scopes_under,
+                &scopes,
+                &under,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(|error| error.to_string())?
+            )
+            .map_err(|error| error.to_string())?;
             let before = scopes.clone();
             let result = selected.clone();
             selected.clear();

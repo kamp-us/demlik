@@ -40,7 +40,13 @@ fn checking_one_scope_preserves_original_owners_outside_it_and_last_write_diagno
     let ledger = BoundaryLedger {
         entries: vec![Arc::clone(&held)],
     };
-    let result = reconcile(&ledger, &[report], &"apps/api".into());
+    let result = reconcile(
+        &ledger,
+        &[report],
+        &"apps/api".into(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(Arc::ptr_eq(&result.kept.entries[0], &held));
     assert!(Arc::ptr_eq(result.writes.values().next().unwrap(), &write));
     assert_eq!(result.unrecorded.len(), 1);

@@ -243,7 +243,9 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
                     write_ceilings: input.write_ceilings,
                     json: input.json,
                     pretty: input.pretty
-                }
+                },
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
             )?;
             to_raw_value(&GateOutput {
                 exit_code: result.exit_code,
@@ -257,7 +259,9 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
             let census = observe!(
                 calls,
                 demlik_code_graph::comments::census::load_comment_census,
-                &input.root
+                &input.root,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
             )
             .map_err(DriverError::backend)?;
             let ceilings = observe!(
@@ -269,14 +273,19 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
                 calls,
                 demlik_code_graph::comments::ratchet::evaluate_ratchet,
                 &census,
-                &ceilings
-            );
+                &ceilings,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
+            )
+            .map_err(DriverError::backend)?;
             let census = observe!(
                 calls,
                 demlik_code_graph::comments::render::render_comments,
                 &census,
                 input.json,
-                input.pretty
+                input.pretty,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
             )
             .map_err(DriverError::backend)?;
             let ratchet = observe!(

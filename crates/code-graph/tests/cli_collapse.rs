@@ -161,7 +161,12 @@ fn loader_refusal_keeps_the_original_typed_cause_and_owned_message() {
 }
 #[test]
 fn renderer_preserves_exact_pass_text_json_and_caller_newline_ownership() {
-    let verdict = evaluate_scope_ratchet(&[], &ScopeCountCeilings::default());
+    let verdict = evaluate_scope_ratchet(
+        &[],
+        &ScopeCountCeilings::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let text = render_partial_twin_ratchet(&verdict, false, false).unwrap();
     assert_eq!(text.exit_code, 0);
     assert_eq!(
@@ -192,7 +197,9 @@ fn renderer_keeps_exceeded_advice_before_slack_and_uses_canonical_scope_order() 
             },
         ],
         &ceilings,
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let rendered = render_partial_twin_ratchet(&verdict, false, false).unwrap();
     let text = rendered.stdout.to_lossy();
     assert_eq!(rendered.exit_code, 1);

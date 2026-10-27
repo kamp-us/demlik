@@ -396,13 +396,16 @@ fn the_existing_path_gate_keeps_its_supplied_filesystem_spelling() {
         .to_string_lossy()
         .as_ref()
         .into();
-    let result = run_layer_gate(LayerGateArgs {
-        root_absolute: &app,
-        repo_root: &project.root,
-        layer_rules_file: Some(&file),
-        json: true,
-        pretty: false,
-    })
+    let result = run_layer_gate(
+        LayerGateArgs {
+            root_absolute: &app,
+            repo_root: &project.root,
+            layer_rules_file: Some(&file),
+            json: true,
+            pretty: false,
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(result.exit_code, 0);
     let report =

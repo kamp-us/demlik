@@ -1,12 +1,15 @@
 use super::{
-    classify::{EdgeDirection, LayerTieError, compile_matchers, direction_of, layer_of},
+    classify::{
+        EdgeDirection, LayerTieError, compile_matchers_unordered, direction_of, layer_of,
+        order_matchers,
+    },
     resolve_target::{ResolvedTarget, create_target_resolver, create_target_resolver_text},
     rules::LayerRules,
 };
 use crate::{
     project::{
-        LoadedProject, join_path_text, locale_compare_units, relative_path_text,
-        relative_path_text_from,
+        Collation, CollationError, CollationInput, LoadedProject, join_path_text,
+        relative_path_text, relative_path_text_from,
     },
     syntax::imports::import_literals,
     text::JsString,
@@ -57,6 +60,7 @@ pub struct LayerReport {
 }
 #[derive(Debug)]
 pub enum LayerAnalysisError {
+    Collation(CollationError),
     Pattern(regress::Error),
     Tie(LayerTieError),
     Io(io::Error),
@@ -64,13 +68,23 @@ pub enum LayerAnalysisError {
 impl std::fmt::Display for LayerAnalysisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(f),
             Self::Pattern(error) => error.fmt(f),
             Self::Tie(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
         }
     }
 }
-impl std::error::Error for LayerAnalysisError {}
+impl std::error::Error for LayerAnalysisError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Collation(error) => error,
+            Self::Pattern(error) => error,
+            Self::Tie(error) => error,
+            Self::Io(error) => error,
+        })
+    }
+}
 impl From<io::Error> for LayerAnalysisError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
@@ -85,30 +99,37 @@ pub fn analyze_layers(
     loaded: &LoadedProject,
     repo_root: &Path,
     rules: &LayerRules,
+    collation: &Collation,
 ) -> Result<LayerReport, LayerAnalysisError> {
-    analyze(loaded, repo_root, rules, None)
+    analyze(loaded, repo_root, rules, None, || Ok(collation)).map(|(report, _)| report)
 }
-pub(super) fn analyze_layers_text(
+pub(super) fn analyze_layers_text<'c>(
     loaded: &LoadedProject,
     root_absolute: &JsString,
     repo_root: &JsString,
     rules: &LayerRules,
-) -> Result<LayerReport, LayerAnalysisError> {
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<(LayerReport, &'c Collation), LayerAnalysisError> {
     let repo_native = repo_root.to_lossy();
     analyze(
         loaded,
         Path::new(&repo_native),
         rules,
         Some((root_absolute, repo_root)),
+        request,
     )
 }
-fn analyze(
+pub(super) fn analyze<'c>(
     loaded: &LoadedProject,
     repo_root: &Path,
     rules: &LayerRules,
     text: Option<(&JsString, &JsString)>,
-) -> Result<LayerReport, LayerAnalysisError> {
-    let matchers = compile_matchers(&rules.layers).map_err(LayerAnalysisError::Pattern)?;
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<(LayerReport, &'c Collation), LayerAnalysisError> {
+    let matchers =
+        compile_matchers_unordered(&rules.layers).map_err(LayerAnalysisError::Pattern)?;
+    let collation = request().map_err(LayerAnalysisError::Collation)?;
+    let matchers = order_matchers(matchers, collation).map_err(LayerAnalysisError::Collation)?;
     let mut resolver = match text {
         Some((_, repo)) => create_target_resolver_text(repo)?,
         None => create_target_resolver(repo_root)?,
@@ -165,21 +186,39 @@ fn analyze(
             }
         }
     }
-    violations.sort_by(|left, right| {
-        locale_compare_units(left.from.units(), right.from.units())
-            .then_with(|| left.from_line.cmp(&right.from_line))
-            .then_with(|| locale_compare_units(left.to.units(), right.to.units()))
+    let mut violations = violations
+        .into_iter()
+        .map(|edge| {
+            let from = CollationInput::from_utf16(edge.from.units())?;
+            let to = CollationInput::from_utf16(edge.to.units())?;
+            Ok((edge, from, to))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()
+        .map_err(LayerAnalysisError::Collation)?;
+    let mut unresolved = unresolved
+        .into_iter()
+        .map(|value| CollationInput::from_utf16(value.units()).map(|input| (value, input)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(LayerAnalysisError::Collation)?;
+    violations.sort_by(|a, b| {
+        collation
+            .compare(&a.1, &b.1)
+            .then_with(|| a.0.from_line.cmp(&b.0.from_line))
+            .then_with(|| collation.compare(&a.2, &b.2))
     });
-    unresolved.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-    Ok(LayerReport {
-        layers: rules
-            .layers
-            .iter()
-            .map(|layer| layer.name.clone())
-            .collect(),
-        files_scanned: loaded.source_files.len(),
-        census,
-        violations,
-        unresolved,
-    })
+    unresolved.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok((
+        LayerReport {
+            layers: rules
+                .layers
+                .iter()
+                .map(|layer| layer.name.clone())
+                .collect(),
+            files_scanned: loaded.source_files.len(),
+            census,
+            violations: violations.into_iter().map(|(edge, _, _)| edge).collect(),
+            unresolved: unresolved.into_iter().map(|(value, _)| value).collect(),
+        },
+        collation,
+    ))
 }

@@ -148,15 +148,18 @@ fn policy(
     let census = observe!(
         calls,
         demlik_code_graph::comments::census::load_comment_census,
-        root
+        root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?
     )
     .map_err(DriverError::backend)?;
     let verdict = observe!(
         calls,
         demlik_code_graph::comments::ratchet::evaluate_ratchet,
         &census,
-        &ceilings
-    );
+        &ceilings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?
+    )
+    .map_err(DriverError::backend)?;
     let recorded = observe!(
         calls,
         demlik_code_graph::comments::ceilings::ceilings_from_census,
@@ -167,8 +170,10 @@ fn policy(
         calls,
         demlik_code_graph::comments::ratchet::evaluate_ratchet,
         &census,
-        &recorded
-    );
+        &recorded,
+        &demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?
+    )
+    .map_err(DriverError::backend)?;
     to_raw_value(&PolicyOutput {
         census,
         ceilings,

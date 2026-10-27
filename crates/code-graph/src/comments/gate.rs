@@ -1,13 +1,16 @@
 use super::{
     ceilings::{CEILINGS_FILENAME, ceilings_from_census},
-    census::load_comment_census,
+    census::{load_comment_census_unordered, order_census},
     config::{CommentConfigResolution, resolve_comment_ceilings, resolve_comment_ceilings_text},
     ratchet::{evaluate_ratchet, render_ratchet},
-    render::render_comments,
+    render::{CommentRenderError, render_comments},
 };
 use crate::{
-    engine::oxc::ParseFailure, project::join_path_text, render::json::stable_stringify,
-    text::JsString, validation::RecordTypeError,
+    engine::oxc::ParseFailure,
+    project::{Collation, CollationError, join_path_text},
+    render::json::stable_stringify,
+    text::JsString,
+    validation::RecordTypeError,
 };
 use std::{
     fs, io,
@@ -41,6 +44,7 @@ pub struct CommentGateResult {
 }
 #[derive(Debug)]
 pub enum CommentGateError {
+    Collation(CollationError),
     Census(ParseFailure),
     Json(serde_json::Error),
     Record(RecordTypeError),
@@ -50,19 +54,22 @@ impl CommentGateError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Record(error) => error.name(),
-            Self::Census(_) | Self::Json(_) | Self::Write { .. } => "Error",
+            Self::Collation(_) | Self::Census(_) | Self::Json(_) | Self::Write { .. } => "Error",
         }
     }
     pub fn message(&self) -> JsString {
         match self {
             Self::Record(error) => error.message().clone(),
-            Self::Census(_) | Self::Json(_) | Self::Write { .. } => self.to_string().into(),
+            Self::Collation(_) | Self::Census(_) | Self::Json(_) | Self::Write { .. } => {
+                self.to_string().into()
+            }
         }
     }
 }
 impl std::fmt::Display for CommentGateError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(formatter),
             Self::Census(error) => error.fmt(formatter),
             Self::Json(error) => error.fmt(formatter),
             Self::Record(error) => error.fmt(formatter),
@@ -75,6 +82,7 @@ impl std::fmt::Display for CommentGateError {
 impl std::error::Error for CommentGateError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Census(error) => error,
             Self::Json(error) => error,
             Self::Record(error) => error,
@@ -97,11 +105,15 @@ impl From<RecordTypeError> for CommentGateError {
         Self::Record(error)
     }
 }
-pub fn run_comment_gate(args: CommentGateArgs<'_>) -> Result<CommentGateResult, CommentGateError> {
-    run(args, None)
+pub fn run_comment_gate(
+    args: CommentGateArgs<'_>,
+    collation: &Collation,
+) -> Result<CommentGateResult, CommentGateError> {
+    run(args, None, || Ok(collation))
 }
-pub(crate) fn run_comment_gate_text(
+pub(crate) fn run_comment_gate_text<'c>(
     args: CommentGateTextArgs<'_>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<CommentGateResult, CommentGateError> {
     let root_native = args.root_absolute.to_lossy();
     let repo_native = args.repo_root.to_lossy();
@@ -115,17 +127,31 @@ pub(crate) fn run_comment_gate_text(
             pretty: args.pretty,
         },
         Some(args.repo_root),
+        request,
     )
 }
-fn run(
+fn run<'c>(
     args: CommentGateArgs<'_>,
     logical_repo: Option<&JsString>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<CommentGateResult, CommentGateError> {
     if !args.ci && !args.write_ceilings {
-        let census = load_comment_census(args.root_absolute)?;
+        let census = load_comment_census_unordered(args.root_absolute)?;
+        let collation = request().map_err(CommentGateError::Collation)?;
+        let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
         return Ok(CommentGateResult {
             emitted: vec![
-                format!("{}\n", render_comments(&census, args.json, args.pretty)?).into(),
+                format!(
+                    "{}\n",
+                    render_comments(&census, args.json, args.pretty, collation).map_err(
+                        |error| match error {
+                            CommentRenderError::Collation(error) =>
+                                CommentGateError::Collation(error),
+                            CommentRenderError::Json(error) => CommentGateError::Json(error),
+                        }
+                    )?
+                )
+                .into(),
             ],
             ..CommentGateResult::default()
         });
@@ -151,7 +177,9 @@ fn run(
             });
         }
     };
-    let census = load_comment_census(args.root_absolute)?;
+    let census = load_comment_census_unordered(args.root_absolute)?;
+    let collation = request().map_err(CommentGateError::Collation)?;
+    let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
     if args.write_ceilings {
         let recorded = ceilings_from_census(&census, &ceilings);
         let bytes = format!("{}\n", stable_stringify(&recorded, true)?);
@@ -171,7 +199,7 @@ fn run(
         });
     }
     let mut result = render_ratchet(
-        &evaluate_ratchet(&census, &ceilings),
+        &evaluate_ratchet(&census, &ceilings, collation).map_err(CommentGateError::Collation)?,
         args.json,
         args.pretty,
     )?;

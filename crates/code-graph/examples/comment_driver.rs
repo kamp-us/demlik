@@ -150,7 +150,9 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
             let census = observe!(
                 calls,
                 demlik_code_graph::comments::census::load_comment_census,
-                &input.root
+                &input.root,
+                &demlik_code_graph::project::Collation::try_node22_en_us()
+                    .map_err(DriverError::backend)?
             )
             .map_err(DriverError::backend)?;
             let governed_ratios = census

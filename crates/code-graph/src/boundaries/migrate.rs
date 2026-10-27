@@ -3,7 +3,10 @@ use super::{
     reconcile::measured_entries,
     violation::ScopeBoundaryReport,
 };
-use crate::text::JsString;
+use crate::{
+    project::{Collation, CollationError},
+    text::JsString,
+};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -48,7 +51,8 @@ fn counted(kind: BoundaryKind) -> bool {
 pub fn migrated_ledger(
     reports: &[ScopeBoundaryReport],
     ceilings: &ScopeCountCeilings,
-) -> Migration {
+    collation: &Collation,
+) -> Result<Migration, CollationError> {
     let breaches = reports
         .iter()
         .filter_map(|report| {
@@ -68,9 +72,9 @@ pub fn migrated_ledger(
         })
         .collect::<Vec<_>>();
     if !breaches.is_empty() {
-        return Migration::Refused { breaches };
+        return Ok(Migration::Refused { breaches });
     }
-    let entries = measured_entries(reports)
+    let entries = measured_entries(reports, collation)?
         .into_iter()
         .map(|entry| {
             Arc::new(BoundaryLedgerEntry {
@@ -79,7 +83,7 @@ pub fn migrated_ledger(
             })
         })
         .collect::<Vec<_>>();
-    Migration::Migrated {
-        ledger: boundary_ledger_of(&entries),
-    }
+    Ok(Migration::Migrated {
+        ledger: boundary_ledger_of(&entries, collation)?,
+    })
 }

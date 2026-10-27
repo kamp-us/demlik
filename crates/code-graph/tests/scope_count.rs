@@ -45,7 +45,12 @@ fn count_ratchet_requires_exact_ceilings_in_both_directions() {
         default: 1.0,
         scopes: [(JsString::from("z"), 2.0)].into_iter().collect(),
     };
-    let verdict = evaluate_scope_ratchet(&measurements, &ceilings);
+    let verdict = evaluate_scope_ratchet(
+        &measurements,
+        &ceilings,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(!verdict.passed);
     assert_eq!(verdict.scopes_checked, 3.0);
     assert_eq!(
@@ -63,7 +68,12 @@ fn inherited_ceiling_facts_retain_function_omission_object_json_and_table_text()
         scope: scope.into(),
         count: 1.0,
     });
-    let verdict = evaluate_scope_ratchet(&measurements, &ScopeCountCeilings::default());
+    let verdict = evaluate_scope_ratchet(
+        &measurements,
+        &ScopeCountCeilings::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(has_direction(&verdict, CeilingDirection::Slack));
     assert!(!has_direction(&verdict, CeilingDirection::Exceeded));
     let json = serde_json::to_value(&verdict).unwrap();
@@ -141,7 +151,12 @@ fn real_ceilings_files_default_refuse_and_parse_without_losing_scope_ownership()
     assert_eq!(ceilings.scopes[&JsString::from("services/a")], 1.0);
     assert_eq!(recorded.scopes[&JsString::from("old")], 2.0);
     let scopes = ceilings.scopes.keys().cloned().collect::<Vec<_>>();
-    let mut selected = scopes_under(&scopes, &"services".into());
+    let mut selected = scopes_under(
+        &scopes,
+        &"services".into(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         selected,
         vec![JsString::from("services/a"), JsString::from("services/z")]

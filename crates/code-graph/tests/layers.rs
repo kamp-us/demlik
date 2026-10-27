@@ -76,7 +76,12 @@ fn allowlist_matches_exact_sites_and_keeps_the_last_duplicate_declaration_as_own
         unresolved: Vec::new(),
     };
     let wrong = vec![allow("a", "target", 1), allow("closed", "target", 1)];
-    let failed = reconcile(&report, &wrong);
+    let failed = reconcile(
+        &report,
+        &wrong,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(!failed.passed);
     assert_eq!(failed.allowed_sites, 0);
     assert_eq!(failed.undeclared.len(), 1);
@@ -87,7 +92,12 @@ fn allowlist_matches_exact_sites_and_keeps_the_last_duplicate_declaration_as_own
         allow("a", "target", 2),
         allow("b", "other", 1),
     ];
-    let pass = reconcile(&report, &exact);
+    let pass = reconcile(
+        &report,
+        &exact,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(pass.passed);
     assert_eq!(pass.allowed_sites, 3);
     assert_eq!(
@@ -195,7 +205,13 @@ fn real_aliased_imports_keep_their_lines_type_only_status_and_missing_local_site
         allowed: Vec::new(),
     };
     let loaded = load_cheap_project(&project.0, None).unwrap();
-    let report = analyze_layers(&loaded, &project.0, &rules).unwrap();
+    let report = analyze_layers(
+        &loaded,
+        &project.0,
+        &rules,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.files_scanned, 4);
     assert_eq!(
         (

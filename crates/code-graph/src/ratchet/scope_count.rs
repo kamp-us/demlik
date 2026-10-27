@@ -1,4 +1,5 @@
 use crate::{
+    project::{Collation, CollationError, CollationInput},
     text::{JsObject, JsString, JsValue, object_keys, object_prototype_function_name},
     validation::{InputIssue, PathSegment, RecordTypeError, record_object},
 };
@@ -262,7 +263,8 @@ pub struct ScopeCountVerdict {
 pub fn evaluate_scope_ratchet(
     measurements: &[ScopeCount],
     ceilings: &ScopeCountCeilings,
-) -> ScopeCountVerdict {
+    collation: &Collation,
+) -> Result<ScopeCountVerdict, CollationError> {
     let mut violations = Vec::new();
     for measurement in measurements {
         let ceiling = ceilings.ceiling_of(&measurement.scope);
@@ -282,12 +284,12 @@ pub fn evaluate_scope_ratchet(
             delta,
         });
     }
-    ordering::sort(&mut violations);
-    ScopeCountVerdict {
+    ordering::sort(&mut violations, collation)?;
+    Ok(ScopeCountVerdict {
         passed: violations.is_empty(),
         scopes_checked: measurements.len() as f64,
         violations,
-    }
+    })
 }
 pub fn scope_of(repo_root: &JsString, absolute: &JsString) -> Result<JsString, std::io::Error> {
     let relative = crate::project::relative_path_text_from(repo_root, absolute)?;
@@ -297,18 +299,34 @@ pub fn scope_of(repo_root: &JsString, absolute: &JsString) -> Result<JsString, s
         relative
     })
 }
-pub fn scopes_under(scopes: &[JsString], under: &JsString) -> Vec<JsString> {
+pub(crate) fn scopes_under_unordered(scopes: &[JsString], under: &JsString) -> Vec<JsString> {
     let mut prefix = under.clone();
     prefix.push_str("/");
-    let mut out = scopes
+    scopes
         .iter()
         .filter(|scope| {
             under == "." || *scope == under || scope.units().starts_with(prefix.units())
         })
         .cloned()
-        .collect::<Vec<_>>();
-    out.sort_by(|left, right| crate::project::locale_compare_units(left.units(), right.units()));
-    out
+        .collect()
+}
+pub(crate) fn order_scopes(
+    scopes: Vec<JsString>,
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
+    let mut prepared = scopes
+        .into_iter()
+        .map(|scope| CollationInput::from_utf16(scope.units()).map(|input| (scope, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    prepared.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(prepared.into_iter().map(|(scope, _)| scope).collect())
+}
+pub fn scopes_under(
+    scopes: &[JsString],
+    under: &JsString,
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
+    order_scopes(scopes_under_unordered(scopes, under), collation)
 }
 pub fn record_scope_ceilings(
     measurements: &[ScopeCount],

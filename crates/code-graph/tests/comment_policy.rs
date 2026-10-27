@@ -46,12 +46,21 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
         "// @vitest-environment happy-dom\n",
     )
     .unwrap();
-    let census = load_comment_census(&root).unwrap();
+    let census = load_comment_census(
+        &root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let base = CommentCeilings::parse(
         &JsValue::parse(r#"{"scopes":{"packages/exceeded":40,"packages/slack":60}}"#).unwrap(),
     )
     .unwrap();
-    let verdict = evaluate_ratchet(&census, &base);
+    let verdict = evaluate_ratchet(
+        &census,
+        &base,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(!verdict.passed);
     assert_eq!((verdict.scopes_checked, verdict.inherited_scopes), (6, 2));
     assert_eq!(
@@ -102,7 +111,15 @@ fn checks_real_scope_ceilings_without_charging_pragmas_or_inherited_object_prope
             .contains_key(&JsString::from("fixtures/example"))
     );
     assert_eq!(recorded.scopes[&JsString::from("packages/defaultLow")], 0.0);
-    assert!(evaluate_ratchet(&census, &recorded).passed);
+    assert!(
+        evaluate_ratchet(
+            &census,
+            &recorded,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .passed
+    );
     assert!(to_points(f64::NAN).is_nan());
     assert!(ceiling_points(f64::NAN).is_nan());
     assert_eq!(to_points(-0.00015).to_bits(), (-0.0f64).to_bits());

@@ -250,7 +250,13 @@ fn real_reconciliation_and_migration_facts_render_new_accepted_pruned_and_refuse
         reason: Some("old".into()),
     });
     let ledger = BoundaryLedger { entries: vec![old] };
-    let found = reconcile(&ledger, &reports, &".".into());
+    let found = reconcile(
+        &ledger,
+        &reports,
+        &".".into(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let gate = render_ledger_gate(&found, false, false).unwrap();
     assert_eq!(gate.exit_code, 1);
     let stdout = gate.stdout.to_utf8().unwrap();
@@ -270,8 +276,20 @@ fn real_reconciliation_and_migration_facts_render_new_accepted_pruned_and_refuse
             "accepted 3 crossing(s) into boundary-ledger.json, reason \"reviewed\":\n"
         )
     );
-    let seeded = with_accepted(&found.kept, &found.unrecorded, &reason);
-    let repeated = reconcile(&seeded, &reports, &".".into());
+    let seeded = with_accepted(
+        &found.kept,
+        &found.unrecorded,
+        &reason,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
+    let repeated = reconcile(
+        &seeded,
+        &reports,
+        &".".into(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let pass = render_ledger_gate(&repeated, false, true).unwrap();
     assert_eq!(pass.exit_code, 0);
     assert_eq!(
@@ -284,8 +302,12 @@ fn real_reconciliation_and_migration_facts_render_new_accepted_pruned_and_refuse
         .unwrap();
     assert!(human.contains("workers — worker call graph\n  0 worker(s) — 0 violation(s)"));
     assert!(human.contains("[type-only]  [write: DB"));
-    let Migration::Refused { breaches } = migrated_ledger(&reports, &ScopeCountCeilings::default())
-    else {
+    let Migration::Refused { breaches } = migrated_ledger(
+        &reports,
+        &ScopeCountCeilings::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("ceiling did not refuse")
     };
     let refusal = render_migration_refused(&breaches).to_utf8().unwrap();
@@ -296,7 +318,9 @@ fn real_reconciliation_and_migration_facts_render_new_accepted_pruned_and_refuse
             default: 1.0,
             scopes: Default::default(),
         },
-    ) else {
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("within ceiling refused")
     };
     assert_eq!(

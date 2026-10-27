@@ -62,7 +62,11 @@ fn a_real_gate_reports_upward_sites_then_passes_the_exact_allowance_and_refuses_
         json: false,
         pretty: false,
     };
-    let fail = run_layer_gate(args).unwrap();
+    let fail = run_layer_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(fail.exit_code, 1);
     assert!(fail.reports.is_empty());
     assert_eq!(fail.emitted.len(), 1);
@@ -74,11 +78,14 @@ fn a_real_gate_reports_upward_sites_then_passes_the_exact_allowance_and_refuses_
     );
     assert!(fail.emitted[0].to_utf8().unwrap().ends_with('\n'));
     fs::write(&file,format!(r#"{{{stack},"allowed":[{{"from":"src/domain/rule.ts","to":"src/service.ts","sites":1,"reason":"pass it in"}}]}}"#)).unwrap();
-    let pass = run_layer_gate(LayerGateArgs {
-        json: true,
-        pretty: true,
-        ..args
-    })
+    let pass = run_layer_gate(
+        LayerGateArgs {
+            json: true,
+            pretty: true,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(pass.exit_code, 0);
     assert!(
@@ -94,17 +101,24 @@ fn a_real_gate_reports_upward_sites_then_passes_the_exact_allowance_and_refuses_
             .contains("\"typeOnly\": true")
     );
     fs::write(&file, "{").unwrap();
-    let refused = run_layer_gate(args).unwrap();
+    let refused = run_layer_gate(
+        args,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(refused.exit_code, 2);
     assert!(refused.emitted.is_empty());
     assert_eq!(
         refused.reports[0],
         format!("config file \"{}\" is not valid JSON.", file.display())
     );
-    let missing_stack = run_layer_gate(LayerGateArgs {
-        layer_rules_file: None,
-        ..args
-    })
+    let missing_stack = run_layer_gate(
+        LayerGateArgs {
+            layer_rules_file: None,
+            ..args
+        },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
     .unwrap();
     assert_eq!(missing_stack.exit_code, 2);
     assert_eq!(

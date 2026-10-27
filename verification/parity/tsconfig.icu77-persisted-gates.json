@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["icu77-persisted-gates.mts"]
+}

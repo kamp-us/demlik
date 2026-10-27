@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned, ser::SerializeStruct};
 use serde_json::value::RawValue;
 
 use crate::{
-    project::{locale_compare, locale_compare_units},
+    project::{Collation, CollationError, CollationInput},
     text::JsString,
 };
 
@@ -104,7 +104,36 @@ pub fn ledger_key(entry: &BoundaryLedgerEntry) -> String {
     ))
     .expect("ledger identity consists of encodable strings")
 }
-pub fn boundary_ledger_of(entries: &[Arc<BoundaryLedgerEntry>]) -> BoundaryLedger {
+struct EntryInput {
+    scope: CollationInput,
+    kind: CollationInput,
+    from: CollationInput,
+    target: CollationInput,
+    specifier: CollationInput,
+}
+impl EntryInput {
+    fn new(entry: &BoundaryLedgerEntry) -> Result<Self, CollationError> {
+        Ok(Self {
+            scope: CollationInput::from_utf16(entry.scope.units())?,
+            kind: CollationInput::from_text(entry.kind.as_str())?,
+            from: CollationInput::from_utf16(entry.from.units())?,
+            target: CollationInput::from_utf16(ledger_target_of(entry).units())?,
+            specifier: CollationInput::from_utf16(entry.specifier.units())?,
+        })
+    }
+    fn compare(&self, other: &Self, collation: &Collation) -> std::cmp::Ordering {
+        collation
+            .compare(&self.scope, &other.scope)
+            .then_with(|| collation.compare(&self.kind, &other.kind))
+            .then_with(|| collation.compare(&self.from, &other.from))
+            .then_with(|| collation.compare(&self.target, &other.target))
+            .then_with(|| collation.compare(&self.specifier, &other.specifier))
+    }
+}
+pub fn boundary_ledger_of(
+    entries: &[Arc<BoundaryLedgerEntry>],
+    collation: &Collation,
+) -> Result<BoundaryLedger, CollationError> {
     let mut by_key: IndexMap<String, Arc<BoundaryLedgerEntry>> = IndexMap::new();
     for entry in entries {
         let key = ledger_key(entry);
@@ -115,19 +144,20 @@ pub fn boundary_ledger_of(entries: &[Arc<BoundaryLedgerEntry>]) -> BoundaryLedge
             by_key.insert(key, Arc::clone(entry));
         }
     }
-    let mut entries = by_key.into_values().collect::<Vec<_>>();
-    entries.sort_by(|a, b| {
-        locale_compare_units(a.scope.units(), b.scope.units())
-            .then_with(|| locale_compare(a.kind.as_str(), b.kind.as_str()))
-            .then_with(|| locale_compare_units(a.from.units(), b.from.units()))
-            .then_with(|| {
-                locale_compare_units(ledger_target_of(a).units(), ledger_target_of(b).units())
-            })
-            .then_with(|| locale_compare_units(a.specifier.units(), b.specifier.units()))
-    });
-    BoundaryLedger { entries }
+    let mut entries = by_key
+        .into_values()
+        .map(|entry| EntryInput::new(&entry).map(|input| (entry, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by(|a, b| a.1.compare(&b.1, collation));
+    Ok(BoundaryLedger {
+        entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+    })
 }
-pub fn rekey_boundary_ledger(ledger: &BoundaryLedger, moves: &[FileMove]) -> BoundaryLedger {
+pub fn rekey_boundary_ledger(
+    ledger: &BoundaryLedger,
+    moves: &[FileMove],
+    collation: &Collation,
+) -> Result<BoundaryLedger, CollationError> {
     let moved = moves
         .iter()
         .map(|item| (&item.from, &item.to))
@@ -150,6 +180,7 @@ pub fn rekey_boundary_ledger(ledger: &BoundaryLedger, moves: &[FileMove]) -> Bou
                 })
             })
             .collect::<Vec<_>>(),
+        collation,
     )
 }
 
@@ -327,22 +358,63 @@ fn parse(text: &str) -> Result<BoundaryLedger, JsString> {
             ));
         }
     }
-    Ok(boundary_ledger_of(&entries))
+    Ok(BoundaryLedger { entries })
 }
-pub fn parse_boundary_ledger(text: &str) -> LedgerRead {
+pub fn parse_boundary_ledger(
+    text: &str,
+    collation: &Collation,
+) -> Result<LedgerRead, CollationError> {
     match parse(text) {
-        Ok(ledger) => LedgerRead::Read { ledger },
-        Err(message) => LedgerRead::Invalid { message },
+        Ok(ledger) => Ok(LedgerRead::Read {
+            ledger: boundary_ledger_of(&ledger.entries, collation)?,
+        }),
+        Err(message) => Ok(LedgerRead::Invalid { message }),
     }
 }
-pub fn read_boundary_ledger(file: &Path) -> io::Result<LedgerRead> {
+#[derive(Debug)]
+pub enum BoundaryLedgerError {
+    Collation(CollationError),
+    Json(serde_json::Error),
+    Io(io::Error),
+}
+impl From<CollationError> for BoundaryLedgerError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+impl std::fmt::Display for BoundaryLedgerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Collation(error) => error.fmt(f),
+            Self::Json(error) => error.fmt(f),
+            Self::Io(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for BoundaryLedgerError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Collation(error) => error,
+            Self::Json(error) => error,
+            Self::Io(error) => error,
+        })
+    }
+}
+pub fn read_boundary_ledger(
+    file: &Path,
+    collation: &Collation,
+) -> Result<LedgerRead, BoundaryLedgerError> {
     if !file.exists() {
         return Ok(LedgerRead::Absent);
     }
-    let bytes = fs::read(file)?;
-    Ok(parse_boundary_ledger(&String::from_utf8_lossy(&bytes)))
+    let bytes = fs::read(file).map_err(BoundaryLedgerError::Io)?;
+    parse_boundary_ledger(&String::from_utf8_lossy(&bytes), collation)
+        .map_err(BoundaryLedgerError::Collation)
 }
-pub fn serialize_boundary_ledger(ledger: &BoundaryLedger) -> String {
+pub fn serialize_boundary_ledger(
+    ledger: &BoundaryLedger,
+    collation: &Collation,
+) -> Result<String, BoundaryLedgerError> {
     #[derive(Serialize)]
     struct SortedEntry<'a> {
         from: &'a JsString,
@@ -357,7 +429,7 @@ pub fn serialize_boundary_ledger(ledger: &BoundaryLedger) -> String {
     struct SortedLedger<'a> {
         entries: Vec<SortedEntry<'a>>,
     }
-    let ledger = boundary_ledger_of(&ledger.entries);
+    let ledger = boundary_ledger_of(&ledger.entries, collation)?;
     let entries = ledger
         .entries
         .iter()
@@ -370,17 +442,25 @@ pub fn serialize_boundary_ledger(ledger: &BoundaryLedger) -> String {
             to: &entry.to,
         })
         .collect();
-    format!(
+    Ok(format!(
         "{}\n",
         serde_json::to_string_pretty(&SortedLedger { entries })
-            .expect("typed ledger fields are JSON data")
-    )
+            .map_err(BoundaryLedgerError::Json)?
+    ))
 }
-pub fn write_boundary_ledger(file: &Path, ledger: &BoundaryLedger) -> io::Result<()> {
-    fs::write(file, serialize_boundary_ledger(ledger))
+pub fn write_boundary_ledger(
+    file: &Path,
+    ledger: &BoundaryLedger,
+    collation: &Collation,
+) -> Result<(), BoundaryLedgerError> {
+    fs::write(file, serialize_boundary_ledger(ledger, collation)?).map_err(BoundaryLedgerError::Io)
 }
-pub fn rekey_boundary_ledger_file(file: &Path, moves: &[FileMove]) -> io::Result<LedgerFileRekey> {
-    let ledger = match read_boundary_ledger(file)? {
+pub fn rekey_boundary_ledger_file(
+    file: &Path,
+    moves: &[FileMove],
+    collation: &Collation,
+) -> Result<LedgerFileRekey, BoundaryLedgerError> {
+    let ledger = match read_boundary_ledger(file, collation)? {
         LedgerRead::Absent => return Ok(LedgerFileRekey::Absent),
         LedgerRead::Invalid { message } => return Ok(LedgerFileRekey::Invalid { message }),
         LedgerRead::Read { ledger } => ledger,
@@ -390,12 +470,12 @@ pub fn rekey_boundary_ledger_file(file: &Path, moves: &[FileMove]) -> io::Result
         .iter()
         .map(|entry| ledger_key(entry))
         .collect::<HashSet<_>>();
-    let rekeyed = rekey_boundary_ledger(&ledger, moves);
+    let rekeyed = rekey_boundary_ledger(&ledger, moves, collation)?;
     let entries = rekeyed
         .entries
         .iter()
         .filter(|entry| !before.contains(&ledger_key(entry)))
         .count();
-    write_boundary_ledger(file, &rekeyed)?;
+    write_boundary_ledger(file, &rekeyed, collation)?;
     Ok(LedgerFileRekey::Rekeyed { entries })
 }

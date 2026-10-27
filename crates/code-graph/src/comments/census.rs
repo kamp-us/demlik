@@ -10,7 +10,9 @@ use crate::{
             module_loc,
         },
     },
-    project::{discover_package_roots, load_cheap_project, locale_compare},
+    project::{
+        Collation, CollationError, CollationInput, discover_package_roots, load_cheap_project,
+    },
     syntax::{file::SyntaxFile, trivia::CommentRange},
 };
 use indexmap::{IndexMap, IndexSet};
@@ -169,7 +171,9 @@ fn scope_of<'a>(roots: &'a [String], file: &str) -> &'a str {
         .max_by_key(|root| root.len())
         .map_or(".", String::as_str)
 }
-pub fn load_comment_census(root_absolute: &Path) -> Result<CommentCensus, ParseFailure> {
+pub(super) fn load_comment_census_unordered(
+    root_absolute: &Path,
+) -> Result<CommentCensus, ParseFailure> {
     let loaded = load_cheap_project(root_absolute, None)?;
     let package_roots = discover_package_roots(root_absolute, None);
     let rows = loaded
@@ -215,23 +219,74 @@ pub fn load_comment_census(root_absolute: &Path) -> Result<CommentCensus, ParseF
     for scope in &mut scopes {
         scope.ratio = ratio_of(scope.comment_lines, scope.code_lines);
     }
-    scopes.sort_by(|left, right| {
-        right
-            .comment_lines
-            .cmp(&left.comment_lines)
-            .then_with(|| locale_compare(&left.scope, &right.scope))
-    });
-    let mut files = rows.into_iter().map(|(row, _)| row).collect::<Vec<_>>();
-    files.sort_by(|left, right| {
-        right
-            .comment_lines
-            .cmp(&left.comment_lines)
-            .then_with(|| locale_compare(&left.file, &right.file))
-    });
+    let files = rows.into_iter().map(|(row, _)| row).collect::<Vec<_>>();
     Ok(CommentCensus {
         totals,
         buckets,
         scopes,
         files,
     })
+}
+
+#[derive(Debug)]
+pub enum CommentCensusError {
+    Parse(ParseFailure),
+    Collation(CollationError),
+}
+impl std::fmt::Display for CommentCensusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for CommentCensusError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Parse(error) => error,
+            Self::Collation(error) => error,
+        })
+    }
+}
+pub(super) fn order_census(
+    census: CommentCensus,
+    collation: &Collation,
+) -> Result<CommentCensus, CollationError> {
+    let mut scopes = census
+        .scopes
+        .into_iter()
+        .map(|row| CollationInput::from_text(&row.scope).map(|input| (row, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut files = census
+        .files
+        .into_iter()
+        .map(|row| CollationInput::from_text(&row.file).map(|input| (row, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    scopes.sort_by(|a, b| {
+        b.0.comment_lines
+            .cmp(&a.0.comment_lines)
+            .then_with(|| collation.compare(&a.1, &b.1))
+    });
+    files.sort_by(|a, b| {
+        b.0.comment_lines
+            .cmp(&a.0.comment_lines)
+            .then_with(|| collation.compare(&a.1, &b.1))
+    });
+    Ok(CommentCensus {
+        totals: census.totals,
+        buckets: census.buckets,
+        scopes: scopes.into_iter().map(|(row, _)| row).collect(),
+        files: files.into_iter().map(|(row, _)| row).collect(),
+    })
+}
+pub fn load_comment_census(
+    root_absolute: &Path,
+    collation: &Collation,
+) -> Result<CommentCensus, CommentCensusError> {
+    order_census(
+        load_comment_census_unordered(root_absolute).map_err(CommentCensusError::Parse)?,
+        collation,
+    )
+    .map_err(CommentCensusError::Collation)
 }

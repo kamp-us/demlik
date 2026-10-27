@@ -8,15 +8,25 @@
 // schedule is retained because NaN deltas make the source comparator nontransitive.
 // Rows move once by permutation; there is no public generic sorting interface.
 use super::ScopeCountViolation;
+use crate::project::{Collation, CollationError, CollationInput};
 use std::cmp::Ordering;
 
-pub(super) fn sort(rows: &mut [ScopeCountViolation]) {
+pub(super) fn sort(
+    rows: &mut [ScopeCountViolation],
+    collation: &Collation,
+) -> Result<(), CollationError> {
+    let inputs = rows
+        .iter()
+        .map(|row| CollationInput::from_utf16(row.scope.units()))
+        .collect::<Result<Vec<_>, _>>()?;
     if rows.len() < 2 {
-        return;
+        return Ok(());
     }
     let order = {
         let mut state = State {
             rows,
+            inputs: &inputs,
+            collation,
             work: (0..rows.len()).collect(),
             temp: Vec::new(),
             runs: Vec::new(),
@@ -36,6 +46,7 @@ pub(super) fn sort(rows: &mut [ScopeCountViolation]) {
             destinations.swap(index, destination);
         }
     }
+    Ok(())
 }
 #[derive(Clone, Copy)]
 struct Run {
@@ -49,6 +60,8 @@ enum Gallop {
 }
 struct State<'a> {
     rows: &'a [ScopeCountViolation],
+    inputs: &'a [CollationInput],
+    collation: &'a Collation,
     work: Vec<usize>,
     temp: Vec<usize>,
     runs: Vec<Run>,
@@ -56,15 +69,17 @@ struct State<'a> {
 }
 impl State<'_> {
     fn compare(&self, left: usize, right: usize) -> Ordering {
+        let scope_order = || {
+            self.collation
+                .compare(&self.inputs[left], &self.inputs[right])
+        };
         let (left, right) = (&self.rows[left], &self.rows[right]);
         right
             .delta
             .abs()
             .partial_cmp(&left.delta.abs())
             .unwrap_or(Ordering::Equal)
-            .then_with(|| {
-                crate::project::locale_compare_units(left.scope.units(), right.scope.units())
-            })
+            .then_with(scope_order)
     }
     fn sort(&mut self) {
         let mut n = self.work.len();

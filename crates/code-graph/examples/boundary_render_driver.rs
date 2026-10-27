@@ -254,7 +254,15 @@ fn reconciliation(value: &JsValue, calls: &mut Vec<&'static str>) -> Result<Reco
         let ledger = ledger(field(value, "ledger")?)?;
         let reports = reports(field(value, "reports")?)?;
         let under: JsString = decode(field(value, "under")?)?;
-        return Ok(observe!(calls, reconcile, &ledger, &reports, &under));
+        return observe!(
+            calls,
+            reconcile,
+            &ledger,
+            &reports,
+            &under,
+            &demlik_code_graph::project::Collation::try_node22_en_us().map_err(Error::input)?
+        )
+        .map_err(Error::input);
     }
     if kind != "opaque" {
         return Err(Error::input("unknown reconciliation kind"));

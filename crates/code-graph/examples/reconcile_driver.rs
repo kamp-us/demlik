@@ -92,28 +92,40 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
     let measured = observe!(
         calls,
         demlik_code_graph::boundaries::reconcile::measured_entries,
-        &input.reports
-    );
+        &input.reports,
+        &demlik_code_graph::project::Collation::try_node22_en_us()
+            .map_err(|error| error.to_string())?
+    )
+    .map_err(|error| error.to_string())?;
     let reconciliation = observe!(
         calls,
         demlik_code_graph::boundaries::reconcile::reconcile,
         &ledger,
         &input.reports,
-        &input.under
-    );
+        &input.under,
+        &demlik_code_graph::project::Collation::try_node22_en_us()
+            .map_err(|error| error.to_string())?
+    )
+    .map_err(|error| error.to_string())?;
     let accepted = observe!(
         calls,
         demlik_code_graph::boundaries::reconcile::with_accepted,
         &ledger,
         &input.accepted.into_iter().map(Arc::new).collect::<Vec<_>>(),
-        &input.reason
-    );
+        &input.reason,
+        &demlik_code_graph::project::Collation::try_node22_en_us()
+            .map_err(|error| error.to_string())?
+    )
+    .map_err(|error| error.to_string())?;
     let migration = observe!(
         calls,
         demlik_code_graph::boundaries::migrate::migrated_ledger,
         &input.reports,
-        &input.ceilings
-    );
+        &input.ceilings,
+        &demlik_code_graph::project::Collation::try_node22_en_us()
+            .map_err(|error| error.to_string())?
+    )
+    .map_err(|error| error.to_string())?;
     let owner = |entry: &Arc<BoundaryLedgerEntry>| {
         ledger
             .entries

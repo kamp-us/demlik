@@ -3,7 +3,7 @@ use super::{
     classify::{CommentBucket, CommentClass, buckets_in},
 };
 use crate::{
-    project::locale_compare,
+    project::{Collation, CollationError, CollationInput},
     render::{
         json::stable_stringify,
         text::{fixed, grouped, pad_end, pad_start},
@@ -25,23 +25,30 @@ fn bucket_line(census: &CommentCensus, bucket: CommentBucket) -> String {
         pad_start(&grouped(tally.files), 8)
     )
 }
-fn bucket_group(census: &CommentCensus, class: CommentClass, heading: &str) -> Vec<String> {
-    let mut buckets = buckets_in(class).collect::<Vec<_>>();
-    buckets.sort_by(|left, right| {
-        census.buckets[*right]
+fn bucket_group(
+    census: &CommentCensus,
+    class: CommentClass,
+    heading: &str,
+    collation: &Collation,
+) -> Result<Vec<String>, CollationError> {
+    let mut buckets = buckets_in(class)
+        .map(|bucket| CollationInput::from_text(bucket.as_str()).map(|input| (bucket, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    buckets.sort_by(|a, b| {
+        census.buckets[b.0]
             .lines
-            .cmp(&census.buckets[*left].lines)
-            .then_with(|| locale_compare(left.as_str(), right.as_str()))
+            .cmp(&census.buckets[a.0].lines)
+            .then_with(|| collation.compare(&a.1, &b.1))
     });
-    std::iter::once(heading.into())
+    Ok(std::iter::once(heading.into())
         .chain(
             buckets
                 .into_iter()
-                .map(|bucket| bucket_line(census, bucket)),
+                .map(|(bucket, _)| bucket_line(census, bucket)),
         )
-        .collect()
+        .collect())
 }
-fn bucket_table(census: &CommentCensus) -> String {
+fn bucket_table(census: &CommentCensus, collation: &Collation) -> Result<String, CollationError> {
     let mut lines = vec![format!(
         "  {}{}{}{}",
         pad_end("bucket", 20),
@@ -53,18 +60,21 @@ fn bucket_table(census: &CommentCensus) -> String {
         census,
         CommentClass::Mechanical,
         "  ---- mechanical (no judgment needed) ----",
-    ));
+        collation,
+    )?);
     lines.extend(bucket_group(
         census,
         CommentClass::Prose,
         "  ---- prose (judgment required) ----",
-    ));
+        collation,
+    )?);
     lines.extend(bucket_group(
         census,
         CommentClass::Protected,
         "  ---- protected (never touch) ----",
-    ));
-    lines.join("\n")
+        collation,
+    )?);
+    Ok(lines.join("\n"))
 }
 fn scope_line(scope: &CommentScopeRow) -> String {
     format!(
@@ -135,13 +145,35 @@ fn file_table(census: &CommentCensus) -> String {
     lines.extend(shown.into_iter().map(file_line));
     lines.join("\n")
 }
+#[derive(Debug)]
+pub enum CommentRenderError {
+    Collation(CollationError),
+    Json(serde_json::Error),
+}
+impl std::fmt::Display for CommentRenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Collation(error) => error.fmt(f),
+            Self::Json(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for CommentRenderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Collation(error) => error,
+            Self::Json(error) => error,
+        })
+    }
+}
 pub fn render_comments(
     census: &CommentCensus,
     json: bool,
     pretty: bool,
-) -> Result<String, serde_json::Error> {
+    collation: &Collation,
+) -> Result<String, CommentRenderError> {
     if json {
-        return stable_stringify(census, pretty);
+        return stable_stringify(census, pretty).map_err(CommentRenderError::Json);
     }
     let totals = &census.totals;
     Ok([
@@ -159,7 +191,7 @@ pub fn render_comments(
             grouped(totals.prose_lines)
         ),
         String::new(),
-        bucket_table(census),
+        bucket_table(census, collation).map_err(CommentRenderError::Collation)?,
         String::new(),
         scope_table(census),
         String::new(),

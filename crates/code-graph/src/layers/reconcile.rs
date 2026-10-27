@@ -2,7 +2,10 @@ use super::{
     analyze::{LayerEdge, LayerReport},
     rules::AllowedEdge,
 };
-use crate::{project::locale_compare_units, text::JsString};
+use crate::{
+    project::{Collation, CollationError, CollationInput},
+    text::JsString,
+};
 use indexmap::IndexMap;
 use serde::Serialize;
 
@@ -26,7 +29,11 @@ pub struct Reconciliation<'a> {
     pub miscounted: Vec<MiscountedEdge<'a>>,
     pub allowed_sites: usize,
 }
-pub fn reconcile<'a>(report: &'a LayerReport, allowed: &'a [AllowedEdge]) -> Reconciliation<'a> {
+pub fn reconcile<'a>(
+    report: &'a LayerReport,
+    allowed: &'a [AllowedEdge],
+    collation: &Collation,
+) -> Result<Reconciliation<'a>, CollationError> {
     let mut measured: IndexMap<JsString, Vec<&LayerEdge>> = IndexMap::new();
     for edge in &report.violations {
         measured
@@ -55,31 +62,40 @@ pub fn reconcile<'a>(report: &'a LayerReport, allowed: &'a [AllowedEdge]) -> Rec
             allowed_sites += edges.len();
         }
     }
-    let mut stale: Vec<_> = allowed
+    let stale: Vec<_> = allowed
         .iter()
         .filter(|entry| !measured.contains_key(&edge_key(&entry.from, &entry.to)))
         .collect();
-    undeclared.sort_by(|left, right| {
-        locale_compare_units(left.from.units(), right.from.units())
-            .then_with(|| left.from_line.cmp(&right.from_line))
+    let mut undeclared = undeclared
+        .into_iter()
+        .map(|edge| CollationInput::from_utf16(edge.from.units()).map(|input| (edge, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut miscounted = miscounted
+        .into_iter()
+        .map(|edge| {
+            CollationInput::from_utf16(edge_key(&edge.declared.from, &edge.declared.to).units())
+                .map(|input| (edge, input))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut stale = stale
+        .into_iter()
+        .map(|edge| {
+            CollationInput::from_utf16(edge_key(&edge.from, &edge.to).units())
+                .map(|input| (edge, input))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    undeclared.sort_by(|a, b| {
+        collation
+            .compare(&a.1, &b.1)
+            .then_with(|| a.0.from_line.cmp(&b.0.from_line))
     });
-    miscounted.sort_by(|left, right| {
-        locale_compare_units(
-            edge_key(&left.declared.from, &left.declared.to).units(),
-            edge_key(&right.declared.from, &right.declared.to).units(),
-        )
-    });
-    stale.sort_by(|left, right| {
-        locale_compare_units(
-            edge_key(&left.from, &left.to).units(),
-            edge_key(&right.from, &right.to).units(),
-        )
-    });
-    Reconciliation {
+    miscounted.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    stale.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(Reconciliation {
         passed: undeclared.is_empty() && stale.is_empty() && miscounted.is_empty(),
-        undeclared,
-        stale,
-        miscounted,
+        undeclared: undeclared.into_iter().map(|(edge, _)| edge).collect(),
+        stale: stale.into_iter().map(|(edge, _)| edge).collect(),
+        miscounted: miscounted.into_iter().map(|(edge, _)| edge).collect(),
         allowed_sites,
-    }
+    })
 }

@@ -1,6 +1,6 @@
 use super::rules::Layer;
 use crate::{
-    project::locale_compare_units,
+    project::{Collation, CollationError, CollationInput},
     text::{JsRegex, JsString},
 };
 use serde::{Deserialize, Serialize};
@@ -94,7 +94,7 @@ fn compare_specificity(left: &Specificity, right: &Specificity) -> std::cmp::Ord
         .then_with(|| right.literal_segments.cmp(&left.literal_segments))
         .then_with(|| right.literal_chars.cmp(&left.literal_chars))
 }
-pub fn compile_matchers(layers: &[Layer]) -> Result<Vec<Matcher>, regress::Error> {
+pub(super) fn compile_matchers_unordered(layers: &[Layer]) -> Result<Vec<Matcher>, regress::Error> {
     let mut out = Vec::new();
     for (rank, layer) in layers.iter().enumerate() {
         for pattern in &layer.paths {
@@ -123,11 +123,54 @@ pub fn compile_matchers(layers: &[Layer]) -> Result<Vec<Matcher>, regress::Error
             });
         }
     }
-    out.sort_by(|left, right| {
-        compare_specificity(&left.specificity, &right.specificity)
-            .then_with(|| locale_compare_units(left.pattern.units(), right.pattern.units()))
-    });
     Ok(out)
+}
+#[derive(Debug)]
+pub enum MatcherCompileError {
+    Pattern(regress::Error),
+    Collation(CollationError),
+}
+impl std::fmt::Display for MatcherCompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pattern(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
+        }
+    }
+}
+impl std::error::Error for MatcherCompileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Pattern(error) => error,
+            Self::Collation(error) => error,
+        })
+    }
+}
+pub(super) fn order_matchers(
+    out: Vec<Matcher>,
+    collation: &Collation,
+) -> Result<Vec<Matcher>, CollationError> {
+    let mut prepared = out
+        .into_iter()
+        .map(|matcher| {
+            CollationInput::from_utf16(matcher.pattern.units()).map(|input| (matcher, input))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    prepared.sort_by(|a, b| {
+        compare_specificity(&a.0.specificity, &b.0.specificity)
+            .then_with(|| collation.compare(&a.1, &b.1))
+    });
+    Ok(prepared.into_iter().map(|(matcher, _)| matcher).collect())
+}
+pub fn compile_matchers(
+    layers: &[Layer],
+    collation: &Collation,
+) -> Result<Vec<Matcher>, MatcherCompileError> {
+    order_matchers(
+        compile_matchers_unordered(layers).map_err(MatcherCompileError::Pattern)?,
+        collation,
+    )
+    .map_err(MatcherCompileError::Collation)
 }
 pub fn layer_of<'a>(
     file: &JsString,

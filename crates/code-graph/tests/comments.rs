@@ -41,7 +41,11 @@ fn counts_real_comment_lines_once_and_groups_them_under_the_nearest_package() {
         fs::create_dir_all(absolute.parent().unwrap()).unwrap();
         fs::write(absolute, text).unwrap();
     }
-    let census = load_comment_census(&root).unwrap();
+    let census = load_comment_census(
+        &root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let value = serde_json::to_value(census).unwrap();
     assert_eq!(
         value["totals"],

@@ -14,10 +14,13 @@ use crate::{
         },
     },
     kinds::rules::NodeKindRules,
-    project::{EdgeScope, ProjectLoadError, join_path_text, load_edge_project_text},
+    project::{
+        Collation, CollationError, EdgeScope, ProjectLoadError, join_path_text,
+        load_edge_project_text,
+    },
     ratchet::scope_count::{
         ScopeCeilingsResolution, ScopeCount, ScopeCountCeilings, evaluate_scope_ratchet,
-        read_scope_ceilings, record_scope_ceilings, scope_of, scopes_under,
+        order_scopes, read_scope_ceilings, record_scope_ceilings, scope_of, scopes_under_unordered,
     },
     render::json::stable_stringify,
     schema::Thresholds,
@@ -47,6 +50,7 @@ pub struct CollapseGateResult {
 
 #[derive(Debug)]
 pub enum CollapseGateError {
+    Collation(CollationError),
     Scope(io::Error),
     Load(ProjectLoadError),
     Assembly(AssemblyError),
@@ -69,6 +73,7 @@ impl CollapseGateError {
             Self::Assembly(error) => error.message(),
             Self::Record(error) => error.message().clone(),
             Self::Write(error) => error.message(),
+            Self::Collation(error) => error.to_string().into(),
             Self::Scope(error) => error.to_string().into(),
             Self::Json(error) => error.to_string().into(),
         }
@@ -82,6 +87,7 @@ impl std::fmt::Display for CollapseGateError {
 impl Error for CollapseGateError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Scope(error) => error,
             Self::Load(error) => error,
             Self::Assembly(error) => error,
@@ -144,10 +150,11 @@ fn measure(
         .collect()
 }
 
-pub(crate) fn run_collapse_gate(
+pub(crate) fn run_collapse_gate<'c>(
     args: CollapseGateArgs<'_>,
     binary: &TsgoBinary,
     warning: &mut dyn FnMut(&JsString),
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<CollapseGateResult, CollapseGateError> {
     let file = join_path_text(args.repo_root, &CEILINGS_FILENAME.into());
     let ceilings: ScopeCountCeilings =
@@ -192,7 +199,8 @@ pub(crate) fn run_collapse_gate(
             ..CollapseGateResult::default()
         });
     }
-    let scopes = scopes_under(&ceilings.scopes.keys().cloned().collect::<Vec<_>>(), &scope);
+    let scopes =
+        scopes_under_unordered(&ceilings.scopes.keys().cloned().collect::<Vec<_>>(), &scope);
     if scopes.is_empty() {
         let mut message = JsString::from("no scope at or under \"");
         message.extend(&scope);
@@ -203,8 +211,15 @@ pub(crate) fn run_collapse_gate(
             emitted: Vec::new(),
         });
     }
+    let collation = request().map_err(CollapseGateError::Collation)?;
+    let scopes = order_scopes(scopes, collation).map_err(CollapseGateError::Collation)?;
     let mut rendered = render_partial_twin_ratchet(
-        &evaluate_scope_ratchet(&measure(&scopes, &args, binary, warning)?, &ceilings),
+        &evaluate_scope_ratchet(
+            &measure(&scopes, &args, binary, warning)?,
+            &ceilings,
+            collation,
+        )
+        .map_err(CollapseGateError::Collation)?,
         args.json,
         args.pretty,
     )
