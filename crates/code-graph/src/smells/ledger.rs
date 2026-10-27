@@ -1,8 +1,8 @@
 use super::rules::{MeasuredBy, measured_by};
 use crate::{
     config::issue_location,
-    project::{locale_compare, locale_compare_units},
-    schema::SmellKind,
+    project::{join_path_text, locale_compare, locale_compare_units},
+    schema::{Graph, Provenance, Smell, SmellKind, SmellTarget},
     text::{JsObject, JsString, JsValue, object_keys},
     validation::{InputIssue, NumberCheck, PathSegment, checked_number, nonempty_string},
 };
@@ -66,6 +66,10 @@ pub fn smell_key(finding: &SmellFinding) -> String {
     serde_json::to_string(&(finding.rule, &finding.target))
         .expect("smell identities contain encodable strings")
 }
+fn compare_findings(a: &SmellFinding, b: &SmellFinding) -> std::cmp::Ordering {
+    locale_compare(a.rule.as_str(), b.rule.as_str())
+        .then_with(|| locale_compare_units(a.target.units(), b.target.units()))
+}
 pub fn smell_ledger_of(gated: &[SmellKind], entries: &[Arc<SmellLedgerEntry>]) -> SmellLedger {
     let mut unique = Vec::new();
     for kind in gated {
@@ -81,10 +85,7 @@ pub fn smell_ledger_of(gated: &[SmellKind], entries: &[Arc<SmellLedgerEntry>]) -
             .or_insert_with(|| Arc::clone(entry));
     }
     let mut entries: Vec<_> = by_key.into_values().collect();
-    entries.sort_by(|a, b| {
-        locale_compare(a.finding.rule.as_str(), b.finding.rule.as_str())
-            .then_with(|| locale_compare_units(a.finding.target.units(), b.finding.target.units()))
-    });
+    entries.sort_by(|a, b| compare_findings(&a.finding, &b.finding));
     SmellLedger {
         gated: unique,
         entries,
@@ -379,4 +380,247 @@ pub fn read_smell_ledger(file: &JsString) -> Result<SmellLedgerRead, RuleNameCon
             source: Some(source),
         }),
     }
+}
+
+pub fn serialize_smell_ledger(ledger: &SmellLedger) -> Result<JsString, serde_json::Error> {
+    let mut text = crate::render::json::stable_stringify(
+        &smell_ledger_of(&ledger.gated, &ledger.entries),
+        true,
+    )?;
+    text.push('\n');
+    Ok(text.into())
+}
+
+#[derive(Debug)]
+pub enum SmellLedgerError {
+    Json(serde_json::Error),
+    Write(crate::api::map::ApiError),
+}
+impl SmellLedgerError {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Json(_) => "Error",
+            Self::Write(error) => error.name(),
+        }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::Json(error) => error.to_string().into(),
+            Self::Write(error) => error.message(),
+        }
+    }
+}
+impl std::fmt::Display for SmellLedgerError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Json(error) => error.fmt(formatter),
+            Self::Write(error) => error.fmt(formatter),
+        }
+    }
+}
+impl std::error::Error for SmellLedgerError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Json(error) => error,
+            Self::Write(error) => error,
+        })
+    }
+}
+pub fn write_smell_ledger(file: &JsString, ledger: &SmellLedger) -> Result<(), SmellLedgerError> {
+    use crate::api::map::{ApiArgumentError, ApiError};
+    let text = serialize_smell_ledger(ledger).map_err(SmellLedgerError::Json)?;
+    fs::write(file.to_lossy(), text.to_lossy().as_bytes()).map_err(|source| {
+        SmellLedgerError::Write(match ApiArgumentError::from_null_path(file, source) {
+            Ok(error) => ApiError::Argument(error),
+            Err(source) => ApiError::Io {
+                path: file.clone(),
+                source,
+            },
+        })
+    })
+}
+
+pub fn repo_target(scope: &JsString, smell: &Smell) -> JsString {
+    match &smell.target {
+        SmellTarget::Function { id, file, .. } => {
+            let file = JsString::from(file.as_str());
+            let id = JsString::from(id.as_str());
+            let mut target = join_path_text(scope, &file);
+            target.extend(&JsString::from_units(
+                id.units()[file.units().len().min(id.units().len())..].to_vec(),
+            ));
+            target
+        }
+        SmellTarget::Module { file } => join_path_text(scope, &file.as_str().into()),
+        SmellTarget::Directory { dir } => join_path_text(scope, &dir.as_str().into()),
+    }
+}
+pub fn findings_of(scope: &JsString, smells: &[Smell]) -> Vec<SmellFinding> {
+    let mut findings: Vec<_> = smells
+        .iter()
+        .map(|smell| SmellFinding {
+            rule: smell.kind,
+            target: repo_target(scope, smell),
+            value: smell.value as f64,
+        })
+        .collect();
+    findings.sort_by(compare_findings);
+    findings
+}
+pub fn measured_rules(graph: &Graph) -> Vec<SmellKind> {
+    let edges = matches!(graph.provenance, Provenance::Edges { .. });
+    SmellKind::ALL
+        .into_iter()
+        .filter(|kind| edges || measured_by(*kind) == MeasuredBy::Syntax)
+        .collect()
+}
+
+#[derive(Debug, Serialize)]
+pub struct SmellChange {
+    pub rule: SmellKind,
+    pub target: JsString,
+    #[serde(serialize_with = "crate::text::serialize_number")]
+    pub recorded: f64,
+    #[serde(serialize_with = "crate::text::serialize_number")]
+    pub measured: f64,
+}
+#[derive(Debug, Serialize)]
+pub struct SmellReconciliation<'a> {
+    pub scope: &'a JsString,
+    pub gated: &'a [SmellKind],
+    pub unrecorded: Vec<&'a SmellFinding>,
+    pub worsened: Vec<SmellChange>,
+    pub lowered: Vec<SmellChange>,
+    pub pruned: Vec<Arc<SmellLedgerEntry>>,
+    pub kept: SmellLedger,
+}
+// Math.min propagates NaN and selects negative zero independently of argument order.
+fn minimum(left: f64, right: f64) -> f64 {
+    if left.is_nan() || right.is_nan() {
+        f64::NAN
+    } else if left == 0.0 && right == 0.0 {
+        if left.is_sign_negative() || right.is_sign_negative() {
+            -0.0
+        } else {
+            0.0
+        }
+    } else if left < right {
+        left
+    } else {
+        right
+    }
+}
+pub fn reconcile_smells<'a>(
+    ledger: &'a SmellLedger,
+    scope: &'a JsString,
+    findings: &'a [SmellFinding],
+    measured: &[SmellKind],
+) -> SmellReconciliation<'a> {
+    let in_play = |rule| ledger.gated.contains(&rule) && measured.contains(&rule);
+    let mut found = IndexMap::new();
+    for finding in findings.iter().filter(|finding| in_play(finding.rule)) {
+        found.insert(smell_key(finding), finding);
+    }
+    let recorded: IndexSet<_> = ledger
+        .entries
+        .iter()
+        .map(|entry| smell_key(&entry.finding))
+        .collect();
+    let mut worsened = Vec::new();
+    let mut lowered = Vec::new();
+    let mut pruned = Vec::new();
+    let mut kept = Vec::new();
+    for entry in &ledger.entries {
+        let finding = &entry.finding;
+        let in_reach = *scope == "." || finding.target == *scope || {
+            let mut prefix = scope.clone();
+            prefix.push_str("/");
+            finding.target.units().starts_with(prefix.units())
+        };
+        if !in_play(finding.rule) || !in_reach {
+            kept.push(Arc::clone(entry));
+            continue;
+        }
+        let Some(measured) = found.get(&smell_key(finding)) else {
+            pruned.push(Arc::clone(entry));
+            continue;
+        };
+        let change = || SmellChange {
+            rule: finding.rule,
+            target: finding.target.clone(),
+            recorded: finding.value,
+            measured: measured.value,
+        };
+        if measured.value > finding.value {
+            worsened.push(change());
+        }
+        if measured.value < finding.value {
+            lowered.push(change());
+        }
+        kept.push(Arc::new(SmellLedgerEntry {
+            finding: SmellFinding {
+                rule: finding.rule,
+                target: finding.target.clone(),
+                value: minimum(finding.value, measured.value),
+            },
+            reason: entry.reason.clone(),
+        }));
+    }
+    SmellReconciliation {
+        scope,
+        gated: &ledger.gated,
+        unrecorded: found
+            .into_values()
+            .filter(|finding| !recorded.contains(&smell_key(finding)))
+            .collect(),
+        worsened,
+        lowered,
+        pruned,
+        kept: smell_ledger_of(&ledger.gated, &kept),
+    }
+}
+pub fn with_accepted_smells(result: &SmellReconciliation<'_>, reason: &JsString) -> SmellLedger {
+    let raised: IndexMap<_, _> = result
+        .worsened
+        .iter()
+        .map(|change| {
+            let finding = SmellFinding {
+                rule: change.rule,
+                target: change.target.clone(),
+                value: change.measured,
+            };
+            (smell_key(&finding), change.measured)
+        })
+        .collect();
+    let mut entries: Vec<_> = result
+        .kept
+        .entries
+        .iter()
+        .map(|entry| {
+            raised.get(&smell_key(&entry.finding)).map_or_else(
+                || Arc::clone(entry),
+                |value| {
+                    Arc::new(SmellLedgerEntry {
+                        finding: SmellFinding {
+                            rule: entry.finding.rule,
+                            target: entry.finding.target.clone(),
+                            value: *value,
+                        },
+                        reason: reason.clone(),
+                    })
+                },
+            )
+        })
+        .collect();
+    entries.extend(result.unrecorded.iter().map(|finding| {
+        Arc::new(SmellLedgerEntry {
+            finding: SmellFinding {
+                rule: finding.rule,
+                target: finding.target.clone(),
+                value: finding.value,
+            },
+            reason: reason.clone(),
+        })
+    }));
+    smell_ledger_of(&result.kept.gated, &entries)
 }

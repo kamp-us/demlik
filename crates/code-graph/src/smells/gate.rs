@@ -153,3 +153,46 @@ pub fn prepare_smell_gate(
 pub fn smell_gate_needs_edges(preparation: &SmellPreparation) -> bool {
     matches!(preparation,SmellPreparation::Prepared{gate}if needs_edges(&gate.ledger.gated))
 }
+
+/// Runs persistence and prepares one emission, including its final LF.
+/// Call the existing output owner next, and assign exit only if that call succeeds.
+pub fn run_smell_ledger_gate(
+    gate: &PreparedSmellGate,
+    graph: &crate::schema::Graph,
+    json: bool,
+    pretty: bool,
+) -> Result<super::ledger_render::SmellLedgerRender, super::ledger::SmellLedgerError> {
+    use super::{
+        ledger::{
+            SmellLedgerError, findings_of, measured_rules, reconcile_smells, with_accepted_smells,
+            write_smell_ledger,
+        },
+        ledger_render::{SmellLedgerRender, render_accepted_smells, render_smell_ledger_gate},
+    };
+    let findings = findings_of(&gate.scope, &graph.smells);
+    let result = reconcile_smells(&gate.ledger, &gate.scope, &findings, &measured_rules(graph));
+    let mut rendered = match &gate.mode {
+        SmellGateMode::Gate => {
+            if !result.pruned.is_empty() || !result.lowered.is_empty() {
+                write_smell_ledger(&gate.file, &result.kept)?;
+            }
+            render_smell_ledger_gate(&result, json, pretty).map_err(SmellLedgerError::Json)?
+        }
+        SmellGateMode::Accept { reason } => {
+            let changed = result.pruned.len()
+                + result.lowered.len()
+                + result.unrecorded.len()
+                + result.worsened.len();
+            if changed > 0 {
+                write_smell_ledger(&gate.file, &with_accepted_smells(&result, reason))?;
+            }
+            SmellLedgerRender {
+                stdout: render_accepted_smells(&result, reason, json, pretty)
+                    .map_err(SmellLedgerError::Json)?,
+                exit_code: 0,
+            }
+        }
+    };
+    rendered.stdout.push_str("\n");
+    Ok(rendered)
+}
