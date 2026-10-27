@@ -302,6 +302,7 @@ const controls = [];
 let check;
 try {
   check = createCheckWorktree(root, "collapse-render-cli-faults", evidence);
+  fs.mkdirSync(path.join(check.target, "parity"), { recursive: true });
   for (const relative of [
     "node_modules",
     "packages/code-graph/node_modules",
