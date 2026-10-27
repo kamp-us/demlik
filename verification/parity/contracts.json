@@ -8338,37 +8338,62 @@
   "@demlik/code-graph:cli:option:--collapse-config <file>": {
     "signature": "cda62d3fac0c7bf1c5427a13ead7ba6eaf9844210b08c9473b642c7a197d676f",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::prepare_cli",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.collapseConfig.space",
       "graph.cli-parser.option.collapseConfig.equal",
       "graph.cli-parser.option.collapseConfig.empty",
       "graph.cli-parser.option.collapseConfig.missing",
-      "graph.cli-parser.option.collapseConfig.raw-0"
+      "graph.cli-parser.option.collapseConfig.raw-0",
+      "graph.cli-collapse.config-changes-count",
+      "graph.cli-collapse.config-zero-min-loc",
+      "graph.cli-collapse.config-refused-before-policy"
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
+      "Plain collapse, similarity/cost/rank/clustering/full report, later modes and standalone/bootstrap/distribution remain outside this checkpoint. Backend exception stacks/OS text, pending stdio notification and raw JS argv/control profiles are qualified separately, never strict native evidence."
+    ],
+    "nativeProfile": "Existing parser proofs plus only the early collapse&&(ci||writeCeilings) continuation after comments. Real compiler/count/policy/IO/error behavior; all53globalCLI known gaps remain OPEN."
   },
   "@demlik/code-graph:cli:option:--collapse": {
     "signature": "4a2ff4f1ab7b107d286271bf54d3faa7508a31ca39a1129ddbc404d768e1b94c",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::prepare_cli",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.collapse.before",
       "graph.cli-parser.option.collapse.after",
       "graph.cli-parser.option.collapse.equal-is-unknown",
-      "graph.cli-parser.option.collapse.negated-is-unknown"
+      "graph.cli-parser.option.collapse.negated-is-unknown",
+      "graph.cli-collapse.retry-workflow",
+      "graph.cli-collapse.ci-pass-text",
+      "graph.cli-collapse.ci-pass-json",
+      "graph.cli-collapse.ci-pass-pretty",
+      "graph.cli-collapse.ci-missing-policy",
+      "graph.cli-collapse.write-wins-ci-existing",
+      "graph.cli-collapse.write-out",
+      "graph.cli-collapse.historical-proto-record",
+      "graph.cli-collapse.ignore-later-flags",
+      "graph.cli-collapse.comments-priority"
     ],
     "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
     "knownGaps": [
-      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+      "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
+      "Plain collapse, similarity/cost/rank/clustering/full report, later modes and standalone/bootstrap/distribution remain outside this checkpoint. Backend exception stacks/OS text, pending stdio notification and raw JS argv/control profiles are qualified separately, never strict native evidence."
+    ],
+    "nativeProfile": "Existing parser proofs plus only the early collapse&&(ci||writeCeilings) continuation after comments. Real compiler/count/policy/IO/error behavior; all53globalCLI known gaps remain OPEN."
   },
   "@demlik/code-graph:cli:option:--boundary-rules <file>": {
     "signature": "04407e7e660512542b6a5685737ef751d9b123dc7804b799b756e4c4b9519c1e",

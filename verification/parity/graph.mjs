@@ -99,6 +99,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-collapse",
+    driver: "collapse_cli_driver",
+    script: "graph-cli-collapse.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-parser",
     driver: "cli_parser_driver",
     script: "graph-cli-parser.mts",
@@ -265,6 +273,7 @@ const suites = [
   },
 ];
 const checkedUtf8 = new Set([
+  "collapse_cli_driver",
   "graph_root_driver",
   "collapse_partial_driver",
   "layer_cli_driver",

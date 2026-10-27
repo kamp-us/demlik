@@ -28,8 +28,10 @@
   "sourceArchive": {
     "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/source-8e92d8d3.tar.gz",
     "sha256": "40e9461986796d751bb883a206033b0e1b9bc3dfa6812d6e291da3a5112b798b",
-    "members": 2118,
-    "coldArchiveBuild": false
+    "members": 2492,
+    "coldArchiveBuild": false,
+    "fileMembers": 2118,
+    "directoryMembers": 374
   },
   "evidenceManifest": {
     "path": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/evidence-manifest-final.json",
@@ -443,5 +445,10 @@
     },
     "sourceCommit": "3d933392f8bd53802bb7c3d81f0053a9fdf092ac",
     "status": "Historical; final proof uses69and23 with explicit terminal outcome guard."
+  },
+  "archiveCountClarification": {
+    "originalSealedReceiptSha256": "e8d2eeb564e2af4d4a3c2ff553142cf562017418a84e03e4cea319883f406acc",
+    "originalSealedReceipt": "/private/tmp/demlik-collapse-gate-proof-01a16c9d/receipt-final.json",
+    "meaning": "Original members2118 counted file members. Parent inspected2492total=2118files+374directories; archive bytes/hash and original sealed proof remain unchanged."
   }
 }
