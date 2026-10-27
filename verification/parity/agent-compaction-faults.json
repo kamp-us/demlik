@@ -1,0 +1,34 @@
+[
+  {
+    "name": "compact-handler-bypassed",
+    "file": "crates/tea/src/agent/knob/runtime.rs",
+    "before": "            AgentCommand::Compact(cmd) => {\n                let work = self.compact.interpret(cmd, context)?;\n                Some(CommandWork {\n                    future: work\n                        .future\n                        .map(|r| r.map(AgentCompletion::Compact))\n                        .boxed_local(),\n                    cleanup: work.cleanup,\n                    detached: work.detached,\n                    uninterruptible: work.uninterruptible,\n                })\n            }",
+    "after": "            AgentCommand::Compact(_) => None,",
+    "witness": "agent-compaction.promise.normal",
+    "contract": "the required caller compact handler must execute and settle before the brain resumes"
+  },
+  {
+    "name": "compaction-increments-turn-count",
+    "file": "crates/tea/src/agent/conversation.rs",
+    "before": "        turn_count: conversation.turn_count,",
+    "after": "        turn_count: (conversation.turn_count.number_or_zero() + 1.0).into(),",
+    "witness": "agent-compaction.pure.success-all",
+    "contract": "compaction preserves reasoning turnCount while shrinking transcript"
+  },
+  {
+    "name": "compact-retry-uses-different-rng",
+    "file": "crates/tea/src/resilience/resilient_call/mod.rs",
+    "before": "        sibling.rng = Rc::clone(&self.rng);",
+    "after": "        sibling.rng = Rc::new(|| 0.0);",
+    "witness": "agent-compaction.pure.shared-rng-independent-slices",
+    "contract": "the independent retry slice shares the already-authored RNG stream"
+  },
+  {
+    "name": "loaded-compaction-runs-in-init",
+    "file": "crates/tea/src/agent/knob/runtime.rs",
+    "before": "                Step::new(loaded.unwrap_or_else(|| init.init()), vec![])",
+    "after": "                match loaded { Some(state) => init.boot(&state, 0.0).expect(\"counterfeit eager resume\"), None => Step::new(init.init(), vec![]) }",
+    "witness": "agent-compaction.promise.cold",
+    "contract": "loaded init stays commandless; only explicit Boot resumes pending compaction"
+  }
+]

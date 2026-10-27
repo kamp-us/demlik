@@ -446,3 +446,9 @@ pub fn lift_llm_call<S, P, I, O, E, C>(
 ) -> crate::Step<S, C> {
     rc::lift_resilience(state, result, replace)
 }
+
+impl<'a, P, I, S: Schema + ?Sized> LlmCall<'a, P, I, S> {
+    pub(crate) fn retry_sibling<J, U, E>(&self) -> rc::ResilientCall<'a, J, U, E> {
+        self.rc.retry_sibling()
+    }
+}

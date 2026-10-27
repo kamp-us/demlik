@@ -18,6 +18,8 @@ impl OptionalProfile {
 }
 #[derive(Debug)]
 pub enum AgentError {
+    Compaction(crate::js_record::JsAccessError),
+    MissingCompactionInput,
     TurnRead(super::super::turn_view::TurnReadError),
     Llm(LlmCallError),
     UnsupportedRestoredProfile {
@@ -35,6 +37,8 @@ impl From<LlmCallError> for AgentError {
 impl AgentError {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Compaction(e) => e.name,
+            Self::MissingCompactionInput => "TypeError",
             Self::Llm(_) => "AgentLlmError",
             Self::TurnRead(_) => "AgentTurnReadError",
             Self::UnsupportedRestoredProfile { .. } => "UnsupportedRestoredAgentProfile",
@@ -45,6 +49,8 @@ impl AgentError {
 impl std::fmt::Display for AgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Compaction(e) => e.fmt(f),
+            Self::MissingCompactionInput => f.write_str("compaction command has no request"),
             Self::Llm(e) => write!(f, "{e:?}"),
             Self::TurnRead(e) => e.fmt(f),
             Self::UnsupportedRestoredProfile { profile, keys } => write!(

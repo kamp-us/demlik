@@ -602,3 +602,14 @@ pub fn lift_resilience<S, I, R, E, C>(
 ) -> Step<S, C> {
     crate::compose::lift_slice(state, result, replace)
 }
+
+impl<'a, I, R, E, H> ResilientCall<'a, I, R, E, CountBound, H> {
+    pub(crate) fn retry_sibling<J, U, F>(&self) -> ResilientCall<'a, J, U, F> {
+        let mut sibling = ResilientCall::new(Config {
+            retry: self.config.retry,
+            ..Default::default()
+        });
+        sibling.rng = Rc::clone(&self.rng);
+        sibling
+    }
+}

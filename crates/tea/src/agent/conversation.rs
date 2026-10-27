@@ -4,7 +4,7 @@
 
 use super::turn_view::CallSource;
 use super::types::{
-    AgentField, AgentNumber, Awaiting, Conversation, ToolCall, ToolRecord, TurnUsage,
+    AgentField, AgentNumber, Awaiting, Conversation, ToolCall, ToolRecordOf, TurnUsage,
 };
 use crate::flow::fan_out::slice_start;
 use std::{collections::HashSet, rc::Rc};
@@ -82,6 +82,15 @@ pub fn fold_summary<R, T, E, A>(
     folding: f64,
     summary_turn: Rc<T>,
 ) -> Conversation<R, T, E, A> {
+    fold_summary_with_calls(conversation, folding, summary_turn)
+}
+
+/// The same fold for the selected native or plain call representation.
+pub fn fold_summary_with_calls<R, T, E, A, V: CallSource<A>>(
+    conversation: &Conversation<R, T, E, A, V>,
+    folding: f64,
+    summary_turn: Rc<T>,
+) -> Conversation<R, T, E, A, V> {
     let shift = folding - 1.0;
     let mut turns = Vec::with_capacity(conversation.turns.len() + 1);
     turns.push(summary_turn);
@@ -91,7 +100,7 @@ pub fn fold_summary<R, T, E, A>(
         .iter()
         .filter(|record| record.turn.number_or_zero() >= folding)
         .map(|record| {
-            Rc::new(ToolRecord {
+            Rc::new(ToolRecordOf {
                 call: Rc::clone(&record.call),
                 outcome: Rc::clone(&record.outcome),
                 turn: (record.turn.number_or_zero() - shift).into(),
