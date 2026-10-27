@@ -1,0 +1,144 @@
+{
+  "scope": "Receipt only: owned PBT constructor verifier migration; no product/oracle/dependency/central/capability changes.",
+  "sourceBase": "a79473a0426fda190bcf1c140ff16441b270e5b1",
+  "sourceCommits": [
+    "c820514375196f7724f2a6c35cc83b8a0171872a",
+    "0d4e7fc353a9d930b1fc4945d90e7a40198af2b9",
+    "a023da26f08a14709b0d463b5da4f7224804d407"
+  ],
+  "sourceCommit": "a023da26f08a14709b0d463b5da4f7224804d407",
+  "branch": "can/rust-pbt-constructors-check-worktree-01a16c9d",
+  "handoff": "/private/tmp/demlik-pbt-constructors-layout-handoff-01a16c9d.json",
+  "proof": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d",
+  "archive": {
+    "path": "/private/tmp/demlik-pbt-constructors-layout-a023da26-01a16c9d.tar.gz",
+    "sha256": "5c6c3355c1292179926a39b774778dcdfe63445a2a514dd6bc5f289d27bde8b5",
+    "bytes": 41655700,
+    "members": 455,
+    "files": 455,
+    "directories": 0,
+    "manifestFiles": 454,
+    "verifiedAllMembers": true
+  },
+  "componentReceipt": {
+    "path": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d/component-receipt.json",
+    "sha256": "7e14a4be7a5b4f41de3f6a7b9d2f382f8cc1b7c41f432c83c86fc0f97ba581f3"
+  },
+  "sealedPackage": {
+    "path": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d/sealed-package.json",
+    "sha256": "ff0cf3e08e4c18064e187bb5c1a6daf7e7962e8913c9a977987ca1083ba191eb"
+  },
+  "evidenceManifest": {
+    "path": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d/evidence-manifest.json",
+    "sha256": "6161506d379a72c83e43c021f50e626bc4765e6e1cc55d3ea64dd6f8d281b46f"
+  },
+  "sourceArchive": {
+    "path": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d/source-a023da26.tar.gz",
+    "sha256": "084197085f7c34947241ceb2d57bd9837c02582e620acb669dfa7b128ae9163a",
+    "bytes": 102454,
+    "files": 41,
+    "directories": 0,
+    "scope": "Bounded changed/frozen verification and domain inputs; Git commits retain the complete checkout. Not a whole-workspace/cold-build archive.",
+    "coldArchiveBuild": false
+  },
+  "results": {
+    "ordinaryPackageCommand": "pnpm --filter @demlik/parity verify:pbt-constructors-mutations",
+    "constructorComparisons": 90,
+    "nativeConstructorLaws": 3,
+    "typeProbes": 5,
+    "typePositive": 1,
+    "typeRefusals": 4,
+    "existingNativeTests": 19,
+    "affectedComparisons": 161,
+    "affectedBreakdown": {
+      "property": 52,
+      "fileSideEffect": 1,
+      "final": 108
+    },
+    "semanticControls": 19,
+    "controlsBreakdown": {
+      "newConstructors": 3,
+      "affectedProperty": 9,
+      "affectedFinal": 7
+    },
+    "modifiedLibrariesAndEffectiveConsumersFreshFalse": 19,
+    "newSemanticPairsOrCapabilityCredit": 0
+  },
+  "budget": {
+    "buildingSuites": 4,
+    "cargoSelections": 26,
+    "partition": [
+      {
+        "source": "c8205143",
+        "classification": "incomplete normal: retained rlib basename mistake",
+        "cargo": 2,
+        "credit": "No controls/type-refusal credit. Historical90/3 preserved, not added to final counts."
+      },
+      {
+        "source": "0d4e7fc3",
+        "classification": "incomplete normal: /var script main guard skipped affected CLI",
+        "cargo": 2,
+        "credit": "Historical90/3/5types/19native preserved, not added again."
+      },
+      {
+        "source": "a023da26",
+        "classification": "complete ordinary normal",
+        "cargo": 21
+      },
+      {
+        "source": "a023da26",
+        "classification": "expected actual compiler failure/cleanup",
+        "cargo": 1,
+        "semanticCredit": 0
+      }
+    ],
+    "nonbuildingProtocolChecks": 1,
+    "separateNonbuildingHelperLifecycleUnit": {
+      "registeredTrees": 2,
+      "oldRed": true,
+      "newGreen": true,
+      "targetsNeverCreated": true,
+      "newSemanticCredit": 0
+    },
+    "allSevenRegisteredCheckTreesRemoved": true,
+    "cacheCopies": false,
+    "targetOverrides": false,
+    "sourceOrTestsEditedDuringActiveChecks": false
+  },
+  "resources": {
+    "normalElapsedMs": 92504.66687500001,
+    "normalSampledPeakLogicalTargetBytes": 223538551,
+    "qualification": "Post-build samples, not continuous peak or savings claim.",
+    "firstIncompleteElapsedMs": 23888.478541,
+    "secondIncompleteElapsedMs": 24349.594584,
+    "compileFailureElapsedMs": 18620.04225,
+    "compileFailureSampledTargetBytes": 169611226
+  },
+  "artifacts": {
+    "retainedBindings": 45,
+    "cargoSelectedBindings": 43,
+    "rustcBindings": 2,
+    "uniqueCompressedBlobs": 30,
+    "uniqueRawBytes": 149431256,
+    "uniqueCompressedBytes": 40710383,
+    "unretainedMutantLibraries": 19,
+    "policy": "Baseline Tea/Proptest libraries and selected baseline/native/type/control executables are retained as deduplicated byte-verified gzip blobs. All19 mutant library bytes are NOT retained; only build-time hashes/events survive. Historical aliases have exact path-map entries; no independently archived mutant-rlib claim. Initial native test binaries are labeled built-unexecuted; helper-only reuse is labeled separately."
+  },
+  "artifactRetirement": {
+    "originalRawAliases": 45,
+    "remainingUniqueGzipBlobs": 30,
+    "pathMap": {
+      "path": "/private/tmp/demlik-pbt-constructors-layout-proof-01a16c9d/path-map.json",
+      "sha256": "bdb8e52fb42eb7d052c75d2b29b78fd2bf77f64e0182c790d93373d0921ab52a"
+    },
+    "mutantLibraryBytesNotRetained": 19
+  },
+  "limitations": [
+    "Native Proptest1.11.0/std vs fast-check3.23.2 seed/generation/current/shrink/order/minimum/error decoration profiles remain qualified; no fabricated RNG equality.",
+    "Existing arbitrary JS record/reflection/raw UTF16tag/DEV diagnostics gaps remain open; fixed payload cases/profiles unchanged.",
+    "Old independent property/final workers are imported only for unchanged fault data; their standalone unsafe lifecycles and remaining legacy groups are not migrated here.",
+    "No aggregate verify:mutations, whole-workspace/all-feature, cold/archive rebuild or new runtime/agent/CLI capability claim.",
+    "The two incomplete normal runs, compiler failure, malformed-response refusal and helper old/new proof are not additional semantic controls or duplicated final observations."
+  ],
+  "constructionRetirement": "Recorded in external retirement.json/handoff after this receipt commit. Source inputs/artifacts are frozen."
+}
