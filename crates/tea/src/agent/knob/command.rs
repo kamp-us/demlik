@@ -15,6 +15,19 @@ pub enum AgentCommand<
     Compact(CC),
     Snapshot(SC),
 }
+impl<P, I, O, E, C, CC, SC> AgentCommand<P, I, O, E, C, CC, SC> {
+    pub(crate) fn map_snapshot<D>(
+        self,
+        map: impl FnOnce(SC) -> D,
+    ) -> AgentCommand<P, I, O, E, C, CC, D> {
+        match self {
+            Self::Brain(command) => AgentCommand::Brain(command),
+            Self::Tool(command) => AgentCommand::Tool(command),
+            Self::Compact(command) => AgentCommand::Compact(command),
+            Self::Snapshot(command) => AgentCommand::Snapshot(map(command)),
+        }
+    }
+}
 impl<P, I, O, E, C: Tagged, CC: Tagged, SC: Tagged> Tagged for AgentCommand<P, I, O, E, C, CC, SC> {
     fn tag(&self) -> &str {
         match self {

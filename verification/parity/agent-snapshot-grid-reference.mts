@@ -11,6 +11,7 @@ import {
   type AgentState,
   type AgentTurn,
   agentBootMsg,
+  agentCancelMsg,
   agentTurnSchema,
   compactionSummarySchema,
   createAgent,
@@ -25,6 +26,11 @@ import {
 } from "../../packages/tea/src/internal/resilience/deadline/index.ts";
 import { fileStore } from "../../packages/tea/src/node/index.ts";
 import { run as runPromise } from "../../packages/tea/src/promise/index.ts";
+import {
+  DispatchDiscardedError,
+  DrainTimeoutNotice,
+  RuntimeDiscardedError,
+} from "../../packages/tea/src/runtime-types.ts";
 
 const inputSchema = z.strictObject({
   id: z.string(),
@@ -33,9 +39,10 @@ const inputSchema = z.strictObject({
   snapshot: z.boolean(),
   compaction: z.boolean(),
   every: z.union([z.number(), z.enum(["NaN", "Infinity"])]).default(2),
-  scenario: z.enum(["normal", "held", "writer-fail", "save-fail"]),
+  scenario: z.enum(["normal", "held", "held-stop", "writer-fail", "save-fail"]),
   path: z.string(),
   anchors: z.boolean().default(false),
+  messageMode: z.enum(["single", "ordered"]).optional(),
 });
 type Input = z.infer<typeof inputSchema>;
 type Outputs = { invoice: AgentTurn };
@@ -150,9 +157,46 @@ async function runtime(input: Input) {
     loaded: State | null | undefined,
     failNext = false,
     injectedAt: string | null = null;
+  const messageValue = {
+    label: "original",
+    unknown: { values: [1, null, "kept"] },
+  };
+  const messages: unknown[] = [];
+  let ownerChecks = 0,
+    ownerSame = true;
+  let dispatchOnce!: (msg: Msg) => Promise<unknown>;
+  const messageView = () =>
+    input.messageMode
+      ? {
+          messages,
+          messageOwners: {
+            status: ownerChecks > 0 ? "tracked" : "not-applicable",
+            checks: ownerChecks,
+            same: ownerChecks > 0 ? ownerSame : null,
+          },
+        }
+      : {};
   const counts = () => [models, tools, compacts, snapshots];
   const onError = (error: unknown, context: { phase: string }) => {
-    reports.push({ phase: context.phase, cause: error, same: error === cause });
+    const same = error === cause;
+    const notice =
+      error instanceof RuntimeDiscardedError
+        ? { name: error.name, pendingCmds: error.pendingCmds }
+        : error instanceof DrainTimeoutNotice
+          ? {
+              name: error.name,
+              cmdTypes: error.cmdTypes,
+              pendingCmds: error.pendingCmds,
+              timeoutMs: error.timeoutMs,
+            }
+          : error instanceof DispatchDiscardedError
+            ? { name: error.name, msgType: error.msgType }
+            : { name: error instanceof Error ? error.name : "unknown" };
+    reports.push(
+      input.messageMode && !same
+        ? { phase: context.phase, cause: null, same, notice }
+        : { phase: context.phase, cause: error, same },
+    );
     rawReports.push({ context, error, display: String(error) });
   };
   const bytes = async (name: string) => {
@@ -207,12 +251,17 @@ async function runtime(input: Input) {
       },
     ];
   };
-  const snapshot = async (cmd: {
-    key: string;
-    seq: number;
-    at: number;
-    payload: unknown;
-  }) => {
+  const snapshot = async (
+    cmd: {
+      key: string;
+      seq: number;
+      at: number;
+      payload: unknown;
+    },
+    _ctx?: unknown,
+    _fromHandler?: (msg: Msg) => void,
+    signal?: AbortSignal,
+  ) => {
     snapshots++;
     const saved = await bytes("state.json");
     assert.ok(saved !== null, "actual Store save before checkpoint IO");
@@ -230,10 +279,60 @@ async function runtime(input: Input) {
       throw cause;
     }
     await writeFile(path.join(directory, "named.json"), saved);
-    if (input.mode === "writer" || input.scenario === "held") {
+    if (
+      input.mode === "writer" ||
+      input.scenario === "held" ||
+      input.scenario === "held-stop"
+    ) {
       entered.resolve();
       if (input.mode === "writer") await new Promise(() => {});
+      else if (signal && input.scenario === "held-stop")
+        await new Promise<void>((resolve, reject) => {
+          const aborted = () => reject(signal.reason);
+          signal.addEventListener("abort", aborted, { once: true });
+          release.promise.then(() => {
+            signal.removeEventListener("abort", aborted);
+            resolve();
+          });
+        });
       else await release.promise;
+    }
+    return undefined;
+  };
+  const snapshotMessages = async (
+    cmd: Parameters<typeof snapshot>[0],
+    ctx?: unknown,
+    dispatch?: (msg: Msg) => void,
+    signal?: AbortSignal,
+  ) => {
+    await snapshot(cmd, ctx, dispatch, signal);
+    if (input.messageMode) {
+      const returned: Msg[] = [];
+      if (snapshots === 1) {
+        if (input.messageMode === "ordered") {
+          const make = (callId: string, at: number): Msg => ({
+            type: "agent_tool_ok",
+            callId,
+            result: messageValue,
+            at,
+          });
+          const direct = make("follow-context", now + 1);
+          trace.push(["context-dispatch", normalized(direct)]);
+          if (dispatch) dispatch(direct);
+          else
+            void dispatchOnce(direct).catch((error) =>
+              onError(error, { phase: "fixture-dispatch" }),
+            );
+          returned.push(
+            make("follow-first", now + 1.25),
+            make("follow-second", now + 1.5),
+          );
+        }
+        returned.push(agentCancelMsg(now + 2.25));
+        calls.push("agentCancelMsg");
+      }
+      trace.push(["returned", normalized(returned)]);
+      return input.messageMode === "single" ? returned[0] : returned;
     }
     return undefined;
   };
@@ -355,6 +454,34 @@ async function runtime(input: Input) {
   calls.push("createAgent.toMachine");
   // The four concrete obligations above are checked before this fixture-only
   // covariant command widening; actual machine/handler objects are retained.
+  if (input.messageMode) {
+    assert.equal(
+      Reflect.get(grid.wired.interpret, "snapshot_write"),
+      snapshot,
+      "actual typed IO handler instance",
+    );
+    assert.equal(
+      Reflect.set(grid.wired.interpret, "snapshot_write", snapshotMessages),
+      true,
+    );
+    assert.equal(
+      Reflect.get(grid.wired.interpret, "snapshot_write"),
+      snapshotMessages,
+    );
+  }
+  const snapshotCell = Reflect.get(grid.wired.interpret, "snapshot_write");
+  const invokeSnapshot = async (
+    cmd: Parameters<typeof snapshot>[0],
+    signal: AbortSignal,
+  ) => {
+    assert.equal(typeof snapshotCell, "function");
+    return Reflect.apply(snapshotCell, undefined, [
+      cmd,
+      undefined,
+      undefined,
+      signal,
+    ]);
+  };
   const machine: Machine<
     State,
     Msg,
@@ -367,6 +494,7 @@ async function runtime(input: Input) {
     done!: () => Promise<State>,
     result!: () => State | undefined,
     stop!: () => Promise<void>,
+    idle!: () => Promise<void>,
     observeCommit!: (cb: (msg: Msg, state: State) => void) => void;
   const runner = subscribeWith(() => {
     throw new Error("no deadline arms configured");
@@ -381,6 +509,7 @@ async function runtime(input: Input) {
           clock: () => now,
           terminal: grid.knob.isSettled,
           onError,
+          ...(input.scenario === "held-stop" ? { disposeTimeoutMs: 5 } : {}),
           interpret: {
             resilient_run: (
               cmd: Parameters<typeof grid.wired.interpret.resilient_run>[0],
@@ -408,9 +537,22 @@ async function runtime(input: Input) {
               ? {
                   snapshot_write: (cmd: Parameters<typeof snapshot>[0]) =>
                     Effect.tryPromise({
-                      try: () => snapshot(cmd),
+                      try: (signal) =>
+                        input.messageMode
+                          ? invokeSnapshot(cmd, signal)
+                          : snapshot(cmd, undefined, undefined, signal),
                       catch: (e) => e,
-                    }),
+                    }).pipe(
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          if (
+                            input.messageMode &&
+                            input.scenario === "held-stop"
+                          )
+                            trace.push(["writer-cleanup"]);
+                        }),
+                      ),
+                    ),
                 }
               : {}),
             ...(input.compaction
@@ -443,6 +585,8 @@ async function runtime(input: Input) {
       liveRun.observe(cb);
     };
     dispatch = (m) => settle(liveRun.dispatch(m));
+    dispatchOnce = (m) => settle(liveRun.dispatchOnce(m));
+    idle = () => settle(liveRun.idle());
     done = () => settle(liveRun.done());
     result = liveRun.result;
     stop = () => Effect.runPromise(Scope.close(scope, Exit.void));
@@ -454,6 +598,7 @@ async function runtime(input: Input) {
       clock: () => now,
       terminal: grid.knob.isSettled,
       onError,
+      ...(input.scenario === "held-stop" ? { disposeTimeoutMs: 5 } : {}),
       interpret: grid.wired.interpret as never,
       subscribe: { deadline: runner },
     }).ready;
@@ -462,6 +607,8 @@ async function runtime(input: Input) {
       live.observe(cb);
     };
     dispatch = live.dispatch;
+    dispatchOnce = live.dispatchOnce;
+    idle = () => live.idle();
     done = () => live.done();
     result = live.result;
     stop = () => live.stop();
@@ -471,13 +618,25 @@ async function runtime(input: Input) {
     readyCounts = counts(),
     tracked = loaded != null,
     readySame = !tracked || getState() === loaded;
-  const committer = (msg: Msg, state: State) =>
+  const committer = (msg: Msg, state: State) => {
     trace.push([
       "commit",
       msg.type,
       state.run.phase,
       normalized(state.run.snapshot),
     ]);
+    if (input.messageMode) {
+      if (msg.type === "agent_cancel") messages.push(normalized(msg));
+      else if (
+        msg.type === "agent_tool_ok" &&
+        msg.callId.startsWith("follow-")
+      ) {
+        messages.push(normalized(msg));
+        ownerChecks++;
+        ownerSame = ownerSame && msg.result === messageValue;
+      }
+    }
+  };
   observeCommit(committer);
   let earlyDoneResolved = false;
   const early =
@@ -493,7 +652,11 @@ async function runtime(input: Input) {
       : { type: "agent_start", runId: "invoice-run", at: now },
   );
   let held: unknown = null;
-  if (input.mode === "writer" || input.scenario === "held") {
+  if (
+    input.mode === "writer" ||
+    input.scenario === "held" ||
+    input.scenario === "held-stop"
+  ) {
     await Promise.race([
       entered.promise,
       pending.then(() => {
@@ -517,12 +680,65 @@ async function runtime(input: Input) {
           held: null,
           failure: null,
           reports,
+          ...messageView(),
         }),
         storeBytes: await bytes("state.json"),
         namedBytes: await bytes("named.json"),
         observedCalls: calls,
         rawReports,
       };
+    if (input.scenario === "held-stop") {
+      const before = getState();
+      const beforeStop = {
+        storeBytes: await bytes("state.json"),
+        namedBytes: await bytes("named.json"),
+      };
+      await stop();
+      const after = getState();
+      const afterStop = {
+        storeBytes: await bytes("state.json"),
+        namedBytes: await bytes("named.json"),
+      };
+      release.resolve();
+      await idle();
+      let rejected = false;
+      try {
+        await pending;
+      } catch {
+        rejected = true;
+      }
+      const final = getState();
+      return {
+        id: input.id,
+        view: normalized({
+          ready,
+          readyCounts,
+          loaded: {
+            status: tracked ? "tracked" : "not-applicable",
+            checks: tracked ? 1 : 0,
+            same: readySame,
+          },
+          state: final,
+          counts: counts(),
+          trace,
+          held: {
+            stateSameAfterStop: before === after,
+            stateSameAfterLate: after === final,
+            afterStop,
+            initialDispatchRejected: rejected,
+          },
+          failure: null,
+          doneSame: false,
+          reports,
+          beforeStop,
+          ...messageView(),
+        }),
+        storeBytes: await bytes("state.json"),
+        namedBytes: await bytes("named.json"),
+        observedCalls: calls,
+        rawReports,
+      };
+    }
     const state = getState(),
       late = await done();
     held = normalized({
@@ -574,6 +790,7 @@ async function runtime(input: Input) {
     doneSame,
     reports,
     beforeStop,
+    ...messageView(),
     ...(input.anchors ? { anchors: anchors(calls) } : {}),
   });
   return {

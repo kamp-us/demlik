@@ -33,6 +33,54 @@ impl Serialize for AgentSnapshotWrite {
         self.command.serialize(serializer)
     }
 }
+/// A plain checkpoint command whose handler returns caller-owned messages.
+/// The original write remains in its existing owner; M is never serialized.
+///
+/// This is an additive runtime capability: Source's published snapshot handler
+/// type requires an outcome or void, while its actual unregistered command edge
+/// accepts plain message returns. The runtime-only comparison keeps that type
+/// contradiction explicit; raw JavaScript values and live arrays remain separate.
+pub struct AgentSnapshotMessages<M> {
+    write: AgentSnapshotWrite,
+    marker: std::marker::PhantomData<fn() -> M>,
+}
+impl<M> AgentSnapshotMessages<M> {
+    pub fn command(&self) -> &SnapshotWriteCmd<PlainData> {
+        self.write.command()
+    }
+    pub fn into_command(self) -> SnapshotWriteCmd<PlainData> {
+        self.write.into_command()
+    }
+}
+impl<M> From<AgentSnapshotWrite> for AgentSnapshotMessages<M> {
+    fn from(write: AgentSnapshotWrite) -> Self {
+        Self {
+            write,
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+impl<M> Tagged for AgentSnapshotMessages<M> {
+    fn tag(&self) -> &str {
+        self.write.tag()
+    }
+}
+impl<M> Serialize for AgentSnapshotMessages<M> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.write.serialize(serializer)
+    }
+}
+impl<M> CommandFamily for AgentSnapshotMessages<M> {
+    type Msg = M;
+    type Completion = Vec<M>;
+    fn settle(self, messages: Vec<M>, _: f64) -> Result<Vec<M>, CommandContractError> {
+        Ok(messages)
+    }
+    fn settle_in(self, messages: Vec<M>, _: &CommandEdge) -> Result<Vec<M>, CommandContractError> {
+        Ok(messages)
+    }
+}
+
 /// The initial plain-writer profile returns no messages. Arbitrary returned
 /// Source messages remain OPEN; the unchanged host context can dispatch.
 pub enum NoSnapshotMessage {}

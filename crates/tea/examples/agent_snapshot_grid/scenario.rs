@@ -10,13 +10,14 @@ use demlik_tea::{
         },
         create_agent,
         model::{MessageLoader, Messages, ModelFactory, plain_model},
-        snapshot::AgentSnapshotWrite,
+        snapshot::{AgentSnapshotMessages, AgentSnapshotWrite},
         types::{AGENT_TURN_SCHEMA, Conversation},
     },
     command::{CommandContractError, CommandFamily},
     data::{JsText, JsonData, plain_data},
     file_store::{FileStoreError, file_store},
     llm_call::{self, LlmCall, LlmOk, Request, Schema},
+    persistence::snapshot::SnapshotWriteCmd,
     resilience::{deadline::DeadlinesSub, resilient_call::CallValue},
     runtime::{
         self, CommandContext, CommandWork, Interpreter, Options, Profile, RuntimeError,
@@ -57,6 +58,12 @@ impl Number {
 fn every() -> Number {
     Number::Number(2.0)
 }
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum ReturnMode {
+    Single,
+    Ordered,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Input {
@@ -71,6 +78,8 @@ pub struct Input {
     path: PathBuf,
     #[serde(default)]
     anchors: bool,
+    #[serde(default)]
+    message_mode: Option<ReturnMode>,
 }
 type Conv = Conversation<PlainData, PlainData, PlainData, PlainData, PlainCalls>;
 #[derive(Serialize, Deserialize)]
@@ -150,6 +159,11 @@ struct Context {
     directory: PathBuf,
     mode: String,
     scenario: String,
+    message_mode: Option<ReturnMode>,
+    message_value: Rc<PlainData>,
+    messages: RefCell<Vec<Value>>,
+    owner_checks: Cell<usize>,
+    owner_same: Cell<bool>,
     now: f64,
     calls: RefCell<Vec<String>>,
     trace: RefCell<Vec<Value>>,
@@ -165,6 +179,7 @@ struct Context {
     entered: Notify,
     entered_flag: Cell<bool>,
     release: Notify,
+    effect_profile: bool,
 }
 impl Context {
     fn note(&self, v: Value) {
@@ -343,30 +358,121 @@ impl<M> Interpreter<AgentSnapshotWrite, M> for Writer {
         _: CommandContext<M, Self::Error>,
     ) -> Option<CommandWork<'a, (), Self::Error>> {
         Some(CommandWork::new(async move {
-            self.0.snapshots.set(self.0.snapshots.get() + 1);
-            let bytes = self
-                .0
-                .bytes("state.json")
-                .await
-                .expect("actual Store save before checkpoint IO");
-            self.0.note(json!(["snapshot",wire(c),{"ownPayload":true,"payloadKind":if matches!(c.command().input().payload.as_ref(),PlainData::Undefined){"undefined"}else{"other"}},serde_json::from_str::<Value>(&bytes).unwrap()]));
-            if self.0.scenario == "writer-fail" {
-                return Err(AgentWorkError::Tool(Rc::clone(&self.0.cause)));
-            }
-            tokio::fs::write(self.0.directory.join("named.json"), bytes)
-                .await
-                .unwrap();
-            if self.0.mode == "writer" || self.0.scenario == "held" {
-                self.0.entered_flag.set(true);
-                self.0.entered.notify_waiters();
-                if self.0.mode == "writer" {
-                    std::future::pending::<()>().await;
-                } else {
-                    self.0.release.notified().await;
-                }
-            }
+            write_checkpoint(&self.0, c.command()).await?;
             Ok(())
         }))
+    }
+}
+async fn write_checkpoint(
+    ctx: &Context,
+    c: &SnapshotWriteCmd<PlainData>,
+) -> Result<(), AgentWorkError<Rc<PlainData>>> {
+    ctx.snapshots.set(ctx.snapshots.get() + 1);
+    let bytes = ctx
+        .bytes("state.json")
+        .await
+        .expect("actual Store save before checkpoint IO");
+    ctx.note(json!(["snapshot",wire(c),{"ownPayload":true,"payloadKind":if matches!(c.input().payload.as_ref(),PlainData::Undefined){"undefined"}else{"other"}},serde_json::from_str::<Value>(&bytes).unwrap()]));
+    if ctx.scenario == "writer-fail" {
+        return Err(AgentWorkError::Tool(Rc::clone(&ctx.cause)));
+    }
+    tokio::fs::write(ctx.directory.join("named.json"), bytes)
+        .await
+        .unwrap();
+    if ctx.mode == "writer" || matches!(ctx.scenario.as_str(), "held" | "held-stop") {
+        ctx.entered_flag.set(true);
+        ctx.entered.notify_waiters();
+        if ctx.mode == "writer" {
+            std::future::pending::<()>().await;
+        } else {
+            ctx.release.notified().await;
+        }
+    }
+    Ok(())
+}
+type Host<CM> = AgentMachineMsg<
+    JsText,
+    Payload,
+    Rc<PlainData>,
+    StructuredOutputError,
+    AgentToolMsg<PlainData>,
+    CM,
+>;
+fn returned_wire<CM: Tagged>(message: &Host<CM>) -> Value {
+    match message {
+        AgentMachineMsg::Cancel { at } => json!({"type":message.tag(),"at":at}),
+        AgentMachineMsg::Tool(AgentToolMsg::Ok {
+            call_id,
+            result,
+            at,
+        }) => json!({"type":message.tag(),"callId":call_id,"result":wire(result),"at":at}),
+        _ => panic!("unsupported returned-message fixture variant"),
+    }
+}
+struct ReturningWriter(Rc<Context>);
+impl<CM: Tagged> Interpreter<AgentSnapshotMessages<Host<CM>>, Host<CM>> for ReturningWriter {
+    type Error = AgentWorkError<Rc<PlainData>>;
+    fn interpret<'a>(
+        &'a self,
+        c: &'a AgentSnapshotMessages<Host<CM>>,
+        context: CommandContext<Host<CM>, Self::Error>,
+    ) -> Option<CommandWork<'a, Vec<Host<CM>>, Self::Error>> {
+        let work = CommandWork::new(async move {
+            write_checkpoint(&self.0, c.command()).await?;
+            let mut messages: Vec<Host<CM>> = vec![];
+            if self.0.snapshots.get() == 1 {
+                if matches!(self.0.message_mode, Some(ReturnMode::Ordered)) {
+                    let make = |id: &str, at: f64| {
+                        AgentMachineMsg::Tool(AgentToolMsg::Ok {
+                            call_id: id.into(),
+                            result: Rc::clone(&self.0.message_value),
+                            at,
+                        })
+                    };
+                    let direct = make("follow-context", self.0.now + 1.0);
+                    self.0
+                        .note(json!(["context-dispatch", returned_wire(&direct)]));
+                    context.dispatch(direct).unwrap();
+                    messages.push(make("follow-first", self.0.now + 1.25));
+                    messages.push(make("follow-second", self.0.now + 1.5));
+                }
+                messages.push(observe!(
+                    self.0.calls,
+                    demlik_tea::agent::AgentMachineMsg::cancel,
+                    self.0.now + 2.25
+                ));
+            }
+            self.0.note(json!([
+                "returned",
+                messages.iter().map(returned_wire).collect::<Vec<_>>()
+            ]));
+            Ok(messages)
+        });
+        if self.0.scenario == "held-stop" && self.0.message_mode.is_some() {
+            let ctx = Rc::clone(&self.0);
+            Some(work.with_cleanup(move || async move {
+                if ctx.effect_profile {
+                    ctx.note(json!(["writer-cleanup"]));
+                }
+                Ok(())
+            }))
+        } else {
+            Some(work)
+        }
+    }
+}
+fn inspect_message<CM: Tagged>(
+    message: &Host<CM>,
+    original: &Rc<PlainData>,
+) -> Option<(Value, Option<bool>)> {
+    match message {
+        AgentMachineMsg::Cancel { .. } => Some((returned_wire(message), None)),
+        AgentMachineMsg::Tool(AgentToolMsg::Ok {
+            call_id, result, ..
+        }) if call_id.as_utf8().is_some_and(|s| s.starts_with("follow-")) => {
+            Some((returned_wire(message), Some(Rc::ptr_eq(result, original))))
+        }
+        _ => None,
     }
 }
 struct ManualTimer;
@@ -422,13 +528,14 @@ impl<S: Serialize, I: Store<Rc<S>, Raw = PlainData, Error = FileStoreError>> Sto
     }
 }
 type TestMachine<S, M, C> = Machine<'static, Rc<S>, M, C, DeadlinesSub, (), AgentMachineError>;
+type InspectMessage<M> = fn(&M, &Rc<PlainData>) -> Option<(Value, Option<bool>)>;
 async fn drive<S, M, C, I, U>(
     wired: AgentWired<TestMachine<S, M, C>, I, U>,
     ctx: Rc<Context>,
     input: &Input,
-    start: impl FnOnce(f64) -> M,
-    boot: impl FnOnce(f64) -> M,
+    message: M,
     terminal: fn(&S) -> bool,
+    inspect: InspectMessage<M>,
 ) -> Value
 where
     S: Serialize + DeserializeOwned + 'static,
@@ -470,6 +577,9 @@ where
     } else {
         Profile::Promise
     });
+    if input.scenario == "held-stop" {
+        opts.dispose_timeout = std::time::Duration::from_millis(5);
+    }
     opts.store = Some(runtime::Persistence::new(CheckedStore {
         inner: store,
         ctx: Rc::clone(&ctx),
@@ -492,10 +602,26 @@ where
                 }
                 _ => (Value::Null, false),
             };
-            errors
-                .reports
-                .borrow_mut()
-                .push(json!({"phase":phase,"cause":cause,"same":same}));
+            let mut report = json!({"phase":phase,"cause":cause,"same":same});
+            if errors.message_mode.is_some() && !same {
+                report["notice"] = match error {
+                    RuntimeError::RuntimeDiscarded { pending } => {
+                        json!({"name":error.name(),"pendingCmds":pending})
+                    }
+                    RuntimeError::DrainTimeout {
+                        cmd_types,
+                        pending,
+                        timeout,
+                    } => {
+                        json!({"name":error.name(),"cmdTypes":cmd_types,"pendingCmds":pending,"timeoutMs":timeout.as_millis()})
+                    }
+                    RuntimeError::Discarded { msg_type } => {
+                        json!({"name":error.name(),"msgType":msg_type})
+                    }
+                    _ => json!({"name":error.name()}),
+                };
+            }
+            errors.reports.borrow_mut().push(report);
             errors
                 .raw_reports
                 .borrow_mut()
@@ -511,6 +637,13 @@ where
         wired.subscribe,
         opts
     );
+    let effect_scope = if input.scenario == "held-stop" && input.profile == "effect" {
+        let scope = runtime::EffectScope::new();
+        scope.attach(&run).await.unwrap();
+        Some(scope)
+    } else {
+        None
+    };
     observe!(ctx.calls, runtime::Runtime::ready, &run)
         .await
         .unwrap();
@@ -531,26 +664,47 @@ where
             v["run"]["phase"],
             v["run"]["snapshot"]
         ]));
+        if seen.message_mode.is_some()
+            && let Some((message, same)) = inspect(msg, &seen.message_value)
+        {
+            seen.messages.borrow_mut().push(message);
+            if let Some(same) = same {
+                seen.owner_checks.set(seen.owner_checks.get() + 1);
+                seen.owner_same.set(seen.owner_same.get() && same);
+            }
+        }
     });
     let mut early_done = Box::pin(run.done());
     if input.scenario == "held" {
         assert!(futures::poll!(early_done.as_mut()).is_pending());
     }
-    let message = if input.mode == "reader" {
-        boot(ctx.now)
-    } else {
-        start(ctx.now)
-    };
     let dispatch = run.dispatch(message);
     tokio::pin!(dispatch);
     let mut held = Value::Null;
-    if input.mode == "writer" || input.scenario == "held" {
+    if input.mode == "writer" || matches!(input.scenario.as_str(), "held" | "held-stop") {
         while !ctx.entered_flag.get() {
             let notified = ctx.entered.notified();
             tokio::select! {r=&mut dispatch=>panic!("checkpoint hold not reached: {r:?}"),_=notified=>{}}
         }
         if input.mode == "writer" {
             return json!({"view":{"ready":ready_view,"readyCounts":ready_counts,"loaded":{"status":if tracked{"tracked"}else{"not-applicable"},"checks":usize::from(tracked),"same":ready_same},"state":wire(run.get_state().unwrap().as_ref()),"counts":ctx.counts(),"trace":ctx.trace.borrow().clone(),"held":null,"failure":null,"reports":ctx.reports.borrow().clone()},"storeBytes":ctx.bytes("state.json").await,"namedBytes":ctx.bytes("named.json").await});
+        }
+        if input.scenario == "held-stop" {
+            let before = run.get_state().unwrap();
+            let before_stop = json!({"storeBytes":ctx.bytes("state.json").await,"namedBytes":ctx.bytes("named.json").await});
+            if let Some(scope) = effect_scope.as_ref() {
+                scope.close().await;
+            } else {
+                run.stop().await;
+            }
+            let after = run.get_state().unwrap();
+            let after_stop = json!({"storeBytes":ctx.bytes("state.json").await,"namedBytes":ctx.bytes("named.json").await});
+            ctx.release.notify_waiters();
+            run.idle().await.unwrap();
+            let rejected = dispatch.await.is_err();
+            let final_state = run.get_state().unwrap();
+            let held = json!({"stateSameAfterStop":std::sync::Arc::ptr_eq(&before,&after),"stateSameAfterLate":std::sync::Arc::ptr_eq(&after,&final_state),"afterStop":after_stop,"initialDispatchRejected":rejected});
+            return json!({"view":{"ready":ready_view,"readyCounts":ready_counts,"loaded":{"status":if tracked{"tracked"}else{"not-applicable"},"checks":usize::from(tracked),"same":ready_same},"state":wire(final_state.as_ref()),"counts":ctx.counts(),"trace":ctx.trace.borrow().clone(),"held":held,"failure":null,"doneSame":false,"reports":ctx.reports.borrow().clone(),"beforeStop":before_stop},"storeBytes":ctx.bytes("state.json").await,"namedBytes":ctx.bytes("named.json").await});
         }
         let state = run.get_state().unwrap();
         let late = run.done().await.unwrap();
@@ -630,6 +784,13 @@ pub async fn execute(input: Input) -> Value {
         directory: input.path.clone(),
         mode: input.mode.clone(),
         scenario: input.scenario.clone(),
+        message_mode: input.message_mode,
+        message_value: Rc::new(plain(
+            json!({"label":"original","unknown":{"values":[1,null,"kept"]}}),
+        )),
+        messages: RefCell::new(vec![]),
+        owner_checks: Cell::new(0),
+        owner_same: Cell::new(true),
         now: if input.mode == "reader" { 57.25 } else { 17.25 },
         calls: RefCell::new(vec![]),
         trace: RefCell::new(vec![]),
@@ -645,33 +806,61 @@ pub async fn execute(input: Input) -> Value {
         entered: Notify::new(),
         entered_flag: Cell::new(false),
         release: Notify::new(),
+        effect_profile: input.profile == "effect",
     });
-    macro_rules! run {($config:expr,$method:path,$state:ty $(,$extra:expr)*)=>{{let knob=Rc::new(create_agent($config));let wired=observe!(ctx.calls,$method,Rc::clone(&knob),model(Rc::clone(&ctx)),Loader(Rc::clone(&ctx)),Tools(Rc::clone(&ctx)) $(,$extra)*,Rc::new(ManualTimer));drive(wired,Rc::clone(&ctx),&input,|at|AgentMachineMsg::Start{run_id:"invoice-run".into(),at},AgentMachineMsg::boot,|s:&$state|s.is_settled()).await}};}
-    let mut value = match (input.snapshot, input.compaction) {
-        (false, false) => run!(config(), demlik_tea::agent::Agent::to_machine, OffState),
-        (false, true) => run!(
-            config().with_compaction(policy()).unwrap(),
-            demlik_tea::agent::Agent::to_machine_with_compaction,
-            OnState,
-            Compact(Rc::clone(&ctx))
-        ),
-        (true, false) => run!(
-            config().with_snapshots(input.every.value()),
-            demlik_tea::agent::Agent::to_machine_with_snapshot,
-            OffState,
-            Writer(Rc::clone(&ctx))
-        ),
-        (true, true) => run!(
-            config()
-                .with_snapshots(input.every.value())
-                .with_compaction(policy())
-                .unwrap(),
-            demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction,
-            OnState,
-            Writer(Rc::clone(&ctx)),
-            Compact(Rc::clone(&ctx))
-        ),
+    macro_rules! run {($config:expr,$method:path,$state:ty $(,$extra:expr)*)=>{{let knob=Rc::new(create_agent($config));let wired=observe!(ctx.calls,$method,Rc::clone(&knob),model(Rc::clone(&ctx)),Loader(Rc::clone(&ctx)),Tools(Rc::clone(&ctx)) $(,$extra)*,Rc::new(ManualTimer));drive(wired,Rc::clone(&ctx),&input,if input.mode=="reader"{AgentMachineMsg::boot(ctx.now)}else{AgentMachineMsg::Start{run_id:"invoice-run".into(),at:ctx.now}},|s:&$state|s.is_settled(),inspect_message).await}};}
+    let mut value = if input.message_mode.is_some() {
+        assert!(input.snapshot);
+        if input.compaction {
+            run!(
+                config()
+                    .with_snapshots(input.every.value())
+                    .with_compaction(policy())
+                    .unwrap(),
+                demlik_tea::agent::Agent::to_machine_with_snapshot_messages_and_compaction,
+                OnState,
+                ReturningWriter(Rc::clone(&ctx)),
+                Compact(Rc::clone(&ctx))
+            )
+        } else {
+            run!(
+                config().with_snapshots(input.every.value()),
+                demlik_tea::agent::Agent::to_machine_with_snapshot_messages,
+                OffState,
+                ReturningWriter(Rc::clone(&ctx))
+            )
+        }
+    } else {
+        match (input.snapshot, input.compaction) {
+            (false, false) => run!(config(), demlik_tea::agent::Agent::to_machine, OffState),
+            (false, true) => run!(
+                config().with_compaction(policy()).unwrap(),
+                demlik_tea::agent::Agent::to_machine_with_compaction,
+                OnState,
+                Compact(Rc::clone(&ctx))
+            ),
+            (true, false) => run!(
+                config().with_snapshots(input.every.value()),
+                demlik_tea::agent::Agent::to_machine_with_snapshot,
+                OffState,
+                Writer(Rc::clone(&ctx))
+            ),
+            (true, true) => run!(
+                config()
+                    .with_snapshots(input.every.value())
+                    .with_compaction(policy())
+                    .unwrap(),
+                demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction,
+                OnState,
+                Writer(Rc::clone(&ctx)),
+                Compact(Rc::clone(&ctx))
+            ),
+        }
     };
+    if input.message_mode.is_some() {
+        value["view"]["messages"] = json!(ctx.messages.borrow().clone());
+        value["view"]["messageOwners"] = json!({"status":if ctx.owner_checks.get()>0{"tracked"}else{"not-applicable"},"checks":ctx.owner_checks.get(),"same":if ctx.owner_checks.get()>0{Some(ctx.owner_same.get())}else{None}});
+    }
     value["id"] = json!(input.id);
     value["rawReports"] = json!(ctx.raw_reports.borrow().clone());
     value["observedCalls"] = json!(ctx.calls.borrow().clone());

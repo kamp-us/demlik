@@ -10,6 +10,12 @@ import {
   snapshotAnchorExpectations,
   snapshotAuthoringGate,
 } from "./agent-snapshot-grid-cases.mjs";
+import {
+  agentSnapshotMessagesCases,
+  snapshotMessagesAuthoringGate,
+  snapshotMessagesOpenId,
+  snapshotMessagesQualification,
+} from "./agent-snapshot-messages-cases.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   require = createRequire(import.meta.url),
@@ -41,6 +47,9 @@ function hashes() {
       "verification/parity/agent-snapshot-grid-cases.mjs",
       "verification/parity/agent-snapshot-grid-reference.mts",
       "verification/parity/agent-snapshot-grid-run.mjs",
+      "verification/parity/agent-snapshot-messages-cases.mjs",
+      "verification/parity/agent-snapshot-messages-run.mjs",
+      "crates/tea/examples/agent_snapshot_messages_driver.rs",
       "packages/tea/src",
     ],
     { cwd: root, encoding: "utf8" },
@@ -101,6 +110,92 @@ function literal(row, expected, cold = false) {
     }
   }
 }
+function messagesLiteral(row, c, kind) {
+  const checkMessages = (v, expectedCount, now) => {
+    assert.equal(v.messages.length, expectedCount);
+    if (!expectedCount) {
+      assert.deepEqual(v.messageOwners, {
+        status: "not-applicable",
+        checks: 0,
+        same: null,
+      });
+      return;
+    }
+    assert.equal(v.messages.at(-1).type, "agent_cancel");
+    assert.equal(v.messages.at(-1).at, now + 2.25);
+    if (expectedCount === 4) {
+      assert.deepEqual(
+        v.messages.slice(0, 3).map((m) => m.callId),
+        ["follow-context", "follow-first", "follow-second"],
+      );
+      assert.deepEqual(
+        v.messages.slice(0, 3).map((m) => m.at),
+        [now + 1, now + 1.25, now + 1.5],
+      );
+      assert.deepEqual(v.messageOwners, {
+        status: "tracked",
+        checks: 3,
+        same: true,
+      });
+      for (const message of v.messages.slice(0, 3))
+        assert.deepEqual(message.result, {
+          label: "original",
+          unknown: { values: [1, null, "kept"] },
+        });
+    } else
+      assert.deepEqual(v.messageOwners, {
+        status: "not-applicable",
+        checks: 0,
+        same: null,
+      });
+  };
+  if (c.cold) {
+    literal(row, c.expected, true);
+    checkMessages(row.view.writer, 0, 17.25);
+    checkMessages(row.view.reader, 4, 57.25);
+    return;
+  }
+  const v = row.view,
+    e = c.expected;
+  assert.deepEqual(
+    v.counts,
+    kind === "source" ? (e.sourceCounts ?? e.counts) : e.counts,
+  );
+  assert.equal(v.state.run.phase, e.phase);
+  assert.equal(v.failure, null);
+  assert.equal(v.state.run.snapshot.lastSavedSeq, null);
+  assert.equal(v.state.run.snapshot.lastSavedAt, null);
+  assert.equal(v.reports.length, e.reports ?? 0);
+  checkMessages(v, e.messages, 17.25);
+  if (c.input.scenario === "writer-fail") {
+    assert.equal(v.reports[0].phase, "follow-up");
+    assert.equal(v.reports[0].same, true);
+    assert.deepEqual(v.reports[0].cause, {
+      source: "snapshot-fixture",
+      token: 17,
+    });
+  }
+  if (c.input.scenario === "held-stop") {
+    assert.equal(v.held.stateSameAfterStop, true);
+    assert.equal(v.held.stateSameAfterLate, true);
+    assert.equal(v.held.initialDispatchRejected, false);
+    assert.equal(row.storeBytes, v.held.afterStop.storeBytes);
+    assert.equal(row.namedBytes, v.held.afterStop.namedBytes);
+  }
+  if (e.messages) {
+    const returned = v.trace.findIndex((event) => event[0] === "returned"),
+      nextModel = v.trace.findIndex(
+        (event, i) => i > returned && event[0] === "model",
+      ),
+      cancel = v.trace.findIndex(
+        (event) => event[0] === "commit" && event[1] === "agent_cancel",
+      );
+    assert.ok(
+      returned >= 0 && nextModel > returned && cancel > nextModel,
+      "returned Cancel is queued; the current transition starts its next handler first",
+    );
+  }
+}
 export function agentSnapshotGridParity(options = {}) {
   assert.equal(process.version, engine.node);
   assert.equal(process.versions.v8, engine.v8);
@@ -115,9 +210,12 @@ export function agentSnapshotGridParity(options = {}) {
     binary || options.sourceOnly,
     "actual Cargo-selected binary required",
   );
-  const selected = options.only
-    ? agentSnapshotGridCases.filter((c) => c.id === options.only)
+  const cases = options.messages
+    ? agentSnapshotMessagesCases
     : agentSnapshotGridCases;
+  const selected = options.only
+    ? cases.filter((c) => c.id === options.only)
+    : cases;
   assert.ok(selected.length);
   assert.equal(new Set(selected.map((c) => c.id)).size, selected.length);
   const rows = [],
@@ -190,7 +288,9 @@ export function agentSnapshotGridParity(options = {}) {
         : ["source", "native"]) {
         const directory = path.join(
           root,
-          "target/parity/agent-snapshot-grid-io",
+          options.messages
+            ? "target/parity/agent-snapshot-messages-io"
+            : "target/parity/agent-snapshot-grid-io",
           c.id,
           kind,
         );
@@ -223,7 +323,8 @@ export function agentSnapshotGridParity(options = {}) {
       const literals = {};
       for (const [kind, row] of Object.entries(outputs)) {
         try {
-          literal(row, c.expected, c.cold);
+          if (options.messages) messagesLiteral(row, c, kind);
+          else literal(row, c.expected, c.cold);
           literals[kind] = { passed: true };
         } catch (error) {
           literals[kind] = {
@@ -261,9 +362,15 @@ export function agentSnapshotGridParity(options = {}) {
         literals,
         equal,
         difference,
-        qualification: hostEnvelopeQualified.has(c.id)
-          ? hostEnvelopeQualification
-          : null,
+        qualification: options.messages
+          ? [
+              snapshotMessagesQualification,
+              ...(c.hostEnvelope ? [hostEnvelopeQualification] : []),
+            ].join(" ")
+          : hostEnvelopeQualified.has(c.id)
+            ? hostEnvelopeQualification
+            : null,
+        ...(options.messages ? { open: c.open } : {}),
         wireChecks,
         source: outputs.source,
         native: outputs.native ?? null,
@@ -283,7 +390,9 @@ export function agentSnapshotGridParity(options = {}) {
           .map(([kind, v]) => ({ id: r.id, kind, ...v })),
       );
     const report = {
-      suite: "agent-snapshot-grid",
+      suite: options.messages
+        ? "agent-snapshot-messages"
+        : "agent-snapshot-grid",
       cases: rows.length,
       passed: rows.filter((r) => r.equal === true).length,
       failures,
@@ -296,32 +405,69 @@ export function agentSnapshotGridParity(options = {}) {
       observations: rows,
       nativeEvidence: Object.fromEntries(
         rows
-          .filter((r) => r.equal === true && !hostEnvelopeQualified.has(r.id))
+          .filter(
+            (r) =>
+              r.equal === true &&
+              !options.messages &&
+              !hostEnvelopeQualified.has(r.id),
+          )
           .map((r) => [r.id, r.native.observedCalls]),
       ),
       qualifiedNativeEvidence: Object.fromEntries(
         rows
-          .filter((r) => r.equal === true && hostEnvelopeQualified.has(r.id))
+          .filter(
+            (r) =>
+              r.equal === true &&
+              (options.messages || hostEnvelopeQualified.has(r.id)),
+          )
           .map((r) => [r.id, r.native.observedCalls]),
       ),
-      authoringGate: snapshotAuthoringGate,
+      authoringGate: options.messages
+        ? snapshotMessagesAuthoringGate
+        : snapshotAuthoringGate,
       qualifications: [
+        ...(options.messages ? [snapshotMessagesQualification] : []),
         hostEnvelopeQualification,
         "Fixed injected clocks and authored dense data/profile only; no arbitrary executor, JS heap/prototype/panic or raw-at closure.",
-        "Plain snapshot writers return no messages. Returned-message behavior remains OPEN and unmeasured; existing host context dispatch is preserved.",
+        options.messages
+          ? "All matched rows are runtime-only qualified, not published typed handler parity. Original payload handles and finite message order are checked; arbitrary raw inputs/live returned arrays remain OPEN."
+          : "Plain snapshot writers return no messages. Returned-message behavior remains OPEN and unmeasured; existing host context dispatch is preserved.",
         "Named IO copies bytes already written by the actual runtime FileStore; Source undefined payload is never replaced with full State.",
         "Cold writer exits during accepted checkpoint IO after real named bytes; no graceful-stop/awaited cleanup claim, and loaded identity is the actual decoded reader owner.",
       ],
       openGaps: [
-        "Arbitrary returned snapshot messages; no equivalence claim or qualified credit.",
+        ...(options.messages
+          ? [
+              {
+                id: snapshotMessagesOpenId,
+                reason:
+                  "Original Effect held-stop Source invokes one extra load/model prefix after writer cleanup; native does not. State, exact wires and late-message rejection match, but whole counts/trace differ. OPEN with zero comparison credit; eager Promise versus lazy future is a hypothesis, not an engine repair.",
+              },
+              "Published TypeScript snapshot handler refuses Msg/list returns (TS2322); raw JavaScript inputs/live returned arrays and general host cancellation ordering remain OPEN.",
+            ]
+          : [
+              "Arbitrary returned snapshot messages; no equivalence claim or qualified credit.",
+            ]),
         "Existing native host error wrapper versus raw JS throw/Effect diagnostics and arbitrary opaque/cyclic codecs remain OPEN.",
       ],
       comparisonProfile:
         "Complete authored view, original application cause/identity and exact Store/named bytes; no universal host-envelope equality.",
+      ...(options.messages
+        ? {
+            strictTypedParityCredit: 0,
+            openCases: rows.filter((r) => r.open && r.equal === false).length,
+            qualifiedPassed: rows.filter((r) => r.equal === true).length,
+          }
+        : {}),
     };
     fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
     if (!options.allowFailures) {
-      assert.equal(failures.length, 0);
+      assert.equal(
+        failures.filter(
+          (r) => !options.messages || r.id !== snapshotMessagesOpenId,
+        ).length,
+        0,
+      );
       assert.equal(literalFailures.length, 0);
     }
     return report;
