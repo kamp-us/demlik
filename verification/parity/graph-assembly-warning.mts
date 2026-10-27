@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -134,6 +134,8 @@ if (process.argv[2] === "--reference") {
   const directory = fs.mkdtempSync(
     path.join(path.dirname(reportFile), "assembly-warning-corpus-"),
   );
+  // Keep the parent's ignored target/ from hiding the fixture source files.
+  execFileSync("git", ["init", "--quiet", "--template=", directory]);
   const manifest = createRequire(
     path.join(repository, "packages/code-graph/package.json"),
   ).resolve("@typescript/native-preview/package.json");
@@ -427,6 +429,23 @@ if (process.argv[2] === "--reference") {
     const nativeAfter = snapshot(test.input.repoRoot);
     let failure: string | undefined, qualification: string | undefined;
     try {
+      const expectedWarnings: Record<string, string[]> = {
+        "both.callback": [
+          "function(s) have no node in tsgo's tree",
+          "declaration(s) have no node in tsgo's tree",
+        ],
+        "function-before-error.callback": [
+          "function(s) have no node in tsgo's tree",
+        ],
+        "raw-warning-newline-tab-file": [
+          "declaration(s) have no node in tsgo's tree",
+        ],
+      };
+      for (const expected of expectedWarnings[test.id] ?? [])
+        assert.ok(
+          sourceWarnings.includes(expected),
+          `${test.id}: fixture must exercise ${expected}`,
+        );
       assert.deepEqual(
         nativeAfter,
         sourceAfter,
