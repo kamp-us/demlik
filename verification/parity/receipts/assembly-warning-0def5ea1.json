@@ -1,0 +1,503 @@
+{
+  "status": "warning prerequisite verified; frozen for Root review; no gate construction",
+  "sourceCommit": "0def5ea1e922bda884c9e4f97a7e41a41b789d3a",
+  "sourceBase": "8603e51c11b8f72a5c832d229ef280a8dd013930",
+  "branch": "can/rust-assembly-warning-01a16c9d",
+  "createdAt": "2026-10-27T08:47:35.727360+00:00",
+  "sourceFiles": [
+    {
+      "file": "crates/code-graph/src/extract/assemble.rs",
+      "archiveEntry": "source/crates/code-graph/src/extract/assemble.rs",
+      "sha256": "42c7b43f5870dbd3f91bca345bdd09fbf7a103bf9a22d891929e2bc8f29726c3",
+      "bytes": 19472
+    },
+    {
+      "file": "crates/code-graph/src/extract/assembly_warning_tests.rs",
+      "archiveEntry": "source/crates/code-graph/src/extract/assembly_warning_tests.rs",
+      "sha256": "bf73cfacee3b959062ca4970baa67c503119b181c82b16a36cad81468894cd73",
+      "bytes": 14700
+    },
+    {
+      "file": "verification/parity/assembly-warning-mutations.mjs",
+      "archiveEntry": "source/verification/parity/assembly-warning-mutations.mjs",
+      "sha256": "a113a718486d40c9a051d00125f960cdade481b988a286ddb18b6d3e93cdc80d",
+      "bytes": 13705
+    },
+    {
+      "file": "verification/parity/graph-assembly-warning.mts",
+      "archiveEntry": "source/verification/parity/graph-assembly-warning.mts",
+      "sha256": "52aafe1840bae19fe4666d7c366f10283caa87fa3b9f4c1ca9b2ee8a46d66817",
+      "bytes": 19479
+    }
+  ],
+  "productionOwners": [
+    "crates/code-graph/src/extract/assemble.rs"
+  ],
+  "unchangedPrerequisiteSnapshots": [
+    {
+      "file": "crates/code-graph/src/checker/context.rs",
+      "archiveEntry": "prerequisites/crates/code-graph/src/checker/context.rs",
+      "sha256": "367cb916edf6b0147a84872eddb4191e4a7b251ddb237d008c6719c4259c2604",
+      "unchangedFromBase": true
+    },
+    {
+      "file": "crates/code-graph/src/extract/analysis.rs",
+      "archiveEntry": "prerequisites/crates/code-graph/src/extract/analysis.rs",
+      "sha256": "cf7eb71d3dc3fc0c2a94327607d0a9e275a9f2df40cc1a5c21a624edabbec613",
+      "unchangedFromBase": true
+    },
+    {
+      "file": "crates/code-graph/src/cli/io.rs",
+      "archiveEntry": "prerequisites/crates/code-graph/src/cli/io.rs",
+      "sha256": "963806c5374c71f6d141f5a9eaf3a3b5dd9f64583e0203182fc7e5daae9780dc",
+      "unchangedFromBase": true
+    }
+  ],
+  "frozenSource": [
+    {
+      "file": "packages/code-graph/src/extract/assemble.ts",
+      "archiveEntry": "reference/packages/code-graph/src/extract/assemble.ts",
+      "sha256": "b30d35677ccd714af2bb00c9b94374a0d7d621f2be5957f0e08a54cad829b644"
+    },
+    {
+      "file": "packages/code-graph/src/checker/context.ts",
+      "archiveEntry": "reference/packages/code-graph/src/checker/context.ts",
+      "sha256": "3f401004554c1ae84cf8d60b404876e6ee63f7a9a41a238ec66c0d03c12b8e86"
+    },
+    {
+      "file": "packages/code-graph/src/declarations/uses.ts",
+      "archiveEntry": "reference/packages/code-graph/src/declarations/uses.ts",
+      "sha256": "6f1382b54f42823e4faf908a870bb0482da23d47875a3fd4395bef1e147f3b2e"
+    },
+    {
+      "file": "packages/code-graph/src/declarations/discover.ts",
+      "archiveEntry": "reference/packages/code-graph/src/declarations/discover.ts",
+      "sha256": "c14c95f8c3dbc465b9dc1b647f1fd4a96f96b617af81d4c8cf79d83636969ce7"
+    },
+    {
+      "file": "packages/code-graph/src/extract/analysis.ts",
+      "archiveEntry": "reference/packages/code-graph/src/extract/analysis.ts",
+      "sha256": "2a77d9f1fd54a25378a7ba68b965f8538501ddac5bc8ce456a546688ac387bb5"
+    },
+    {
+      "file": "packages/code-graph/src/extract/project.ts",
+      "archiveEntry": "reference/packages/code-graph/src/extract/project.ts",
+      "sha256": "08aa30497ce1dde9d1d8587fc5f17bfd77c47de7206222d12285db5bad5cf69a"
+    },
+    {
+      "file": "packages/code-graph/src/kinds/classify.ts",
+      "archiveEntry": "reference/packages/code-graph/src/kinds/classify.ts",
+      "sha256": "6f205310759b3f77dac42a6dba3ae0b62c4d318b621e9828ffaceb969cdc0ebb"
+    }
+  ],
+  "frozenSourcePin": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "sourcePackageTree": "80a13ee9c4560c1c3d3cfad6a01407dd3bb9f27e",
+  "scope": "Immediate crate-private warning delivery through one canonical text-aware assembly pipeline; public defaults/Path/OsStr, logical root/config and original error ownership preserved",
+  "api": {
+    "entry": "crate::extract::assemble::assemble_graph_with_analysis_text_and_warning",
+    "visibility": "pub(crate), used by existing public text assembly",
+    "warning": "&mut dyn FnMut(&JsString), complete prefixed line including newline, immediate, returns()",
+    "newBounds": [],
+    "newDependencies": [],
+    "newPublicExports": []
+  },
+  "verification": {
+    "warningPairs": 30,
+    "warningExact": 29,
+    "warningQualified": 1,
+    "warningProtocolRefusals": 5,
+    "warningResponseGuards": 4,
+    "affectedTextPairs": 47,
+    "affectedTextExact": 45,
+    "affectedTextQualified": 2,
+    "affectedTextProtocolRefusals": 6,
+    "affectedTextResponseGuards": 3,
+    "nativeTests": 33,
+    "newNativeConsumers": 4,
+    "postControlRepeatTests": 13,
+    "postRedRepeatTests": 4,
+    "externalConsumer": 1,
+    "compiledControls": 17,
+    "newCompiledControls": 9,
+    "affectedLegacyCompiledControls": 8,
+    "allControlsCompileZeroProtocolValidNamedMismatch": true,
+    "scopedTsc": true,
+    "allTargetClippy": true,
+    "fmt": true,
+    "biome": true,
+    "broadParityTsc": "retained unrelated TEA failure, not green"
+  },
+  "profile": {
+    "reference": {
+      "node": "v22.21.1",
+      "v8": "12.4.254.21-node.33",
+      "compiler": {
+        "path": "/private/tmp/demlik-rust-driver-01a16c9d/node_modules/.pnpm/@typescript+native-preview-darwin-arm64@7.0.0-dev.20260707.2/node_modules/@typescript/native-preview-darwin-arm64/lib/tsgo",
+        "version": "7.0.0-dev.20260707.2",
+        "sha256": "63d89ecb27497f264b4c3ecb0e4f6d2cf09896803a81fff027ecfb336f8974e2"
+      }
+    },
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+    "platform": "local Darwin/Unix; Windows unverified",
+    "newCorpusProfiles": "Ordinary/declaration warnings, loaded-source/disk-drift function warnings, failure/disabled analyses, truncation/order/raw text, actual Go raw-root refusal/replacement, public default Path/text controls",
+    "newPairQualifications": [
+      {
+        "id": "declaration-before-kind-error",
+        "qualification": "established native/JS regex backend diagnostic wording; warning bytes/order exact"
+      }
+    ]
+  },
+  "artifactLineage": {
+    "baseline": [
+      {
+        "name": "assembly-warning-tests",
+        "path": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/assembly-warning-tests",
+        "sha256": "eacdbf8af464520f95591c4fabb4a63b56a0524e218d23d962d9f443e0e7dc5d",
+        "producer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "lib"
+            ],
+            "crate_types": [
+              "lib"
+            ],
+            "name": "demlik_code_graph",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
+            "edition": "2024",
+            "doc": true,
+            "doctest": true,
+            "test": true
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": true
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886"
+          ],
+          "executable": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886",
+          "fresh": false
+        },
+        "producerLog": "corpus-consumer-cargo.jsonl"
+      },
+      {
+        "name": "text-assembly-driver",
+        "path": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/text-assembly-driver",
+        "sha256": "4854af2192dc6f1c8e1fdd2c619c84ac9c0bb4cd3604a9d8ea62ba3092e8d365",
+        "producer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "example"
+            ],
+            "crate_types": [
+              "bin"
+            ],
+            "name": "text_assembly_driver",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/examples/text_assembly_driver.rs",
+            "edition": "2024",
+            "doc": false,
+            "doctest": false,
+            "test": false
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": false
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/examples/text_assembly_driver"
+          ],
+          "executable": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/examples/text_assembly_driver",
+          "fresh": false
+        },
+        "producerLog": "text-driver-cargo.jsonl"
+      },
+      {
+        "name": "public-library",
+        "path": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/libdemlik_code_graph-9a10f9c606c88586.rlib",
+        "sha256": "e6c461cdb30c5b3e33d6b99a6949f9be9b7a33bb5f09f36bfc17c6f4ae3c5a7c",
+        "producer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "lib"
+            ],
+            "crate_types": [
+              "lib"
+            ],
+            "name": "demlik_code_graph",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
+            "edition": "2024",
+            "doc": true,
+            "doctest": true,
+            "test": true
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": false
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rlib",
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rmeta"
+          ],
+          "executable": null,
+          "fresh": false
+        },
+        "producerLog": "affected-native-cargo.jsonl"
+      }
+    ],
+    "postControl": [
+      {
+        "name": "assembly-warning-tests",
+        "currentProducer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "lib"
+            ],
+            "crate_types": [
+              "lib"
+            ],
+            "name": "demlik_code_graph",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
+            "edition": "2024",
+            "doc": true,
+            "doctest": true,
+            "test": true
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": true
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886"
+          ],
+          "executable": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886",
+          "fresh": false
+        },
+        "producerLog": "post-control-native-cargo.jsonl",
+        "sha256": "eacdbf8af464520f95591c4fabb4a63b56a0524e218d23d962d9f443e0e7dc5d",
+        "immutablePath": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/assembly-warning-tests",
+        "identicalToPinnedBeforeControls": true
+      },
+      {
+        "name": "text-assembly-driver",
+        "currentProducer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "example"
+            ],
+            "crate_types": [
+              "bin"
+            ],
+            "name": "text_assembly_driver",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/examples/text_assembly_driver.rs",
+            "edition": "2024",
+            "doc": false,
+            "doctest": false,
+            "test": false
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": false
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/examples/text_assembly_driver"
+          ],
+          "executable": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/examples/text_assembly_driver",
+          "fresh": false
+        },
+        "producerLog": "post-control-text-cargo.jsonl",
+        "sha256": "4854af2192dc6f1c8e1fdd2c619c84ac9c0bb4cd3604a9d8ea62ba3092e8d365",
+        "immutablePath": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/text-assembly-driver",
+        "identicalToPinnedBeforeControls": true
+      },
+      {
+        "name": "public-library",
+        "currentProducer": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+          "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+          "target": {
+            "kind": [
+              "lib"
+            ],
+            "crate_types": [
+              "lib"
+            ],
+            "name": "demlik_code_graph",
+            "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
+            "edition": "2024",
+            "doc": true,
+            "doctest": true,
+            "test": true
+          },
+          "profile": {
+            "opt_level": "0",
+            "debuginfo": 0,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": false
+          },
+          "features": [],
+          "filenames": [
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rlib",
+            "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/libdemlik_code_graph-9a10f9c606c88586.rmeta"
+          ],
+          "executable": null,
+          "fresh": false
+        },
+        "producerLog": "post-control-native-cargo.jsonl",
+        "sha256": "e6c461cdb30c5b3e33d6b99a6949f9be9b7a33bb5f09f36bfc17c6f4ae3c5a7c",
+        "immutablePath": "/private/tmp/demlik-assembly-warning-work-01a16c9d/proof/libdemlik_code_graph-9a10f9c606c88586.rlib",
+        "identicalToPinnedBeforeControls": true
+      }
+    ],
+    "postRed": {
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
+        "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "demlik_code_graph",
+          "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [],
+        "filenames": [
+          "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886"
+        ],
+        "executable": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target/debug/deps/demlik_code_graph-8be21c3d44c3b886",
+        "fresh": false
+      },
+      "sha256": "eacdbf8af464520f95591c4fabb4a63b56a0524e218d23d962d9f443e0e7dc5d",
+      "sameAsPinnedBaseline": true,
+      "sourceRestored": true
+    },
+    "controlKinds": "new9 use actual modified library test target; legacy8 use actual ordinary library+public example; every selected target fresh:false",
+    "originalsRestored": true,
+    "immutableBaselinesUnchanged": true,
+    "afterRemoval": "Cargo target/compiled default manifest paths are retired historical producer aliases; archive bindings are effective proof, no live-target claim"
+  },
+  "diskRule": {
+    "registeredWorktree": "/private/tmp/demlik-rust-assembly-warning-01a16c9d",
+    "defaultTarget": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/target",
+    "targetOverrides": false,
+    "copiedBuildCaches": false,
+    "selectedProofOnly": true,
+    "worktreeRemoval": "after sealing source and receipt; removal receipt in outer handoff"
+  },
+  "preservation": {
+    "initialPriorEvidence": [
+      {
+        "path": "/private/tmp/demlik-collapse-partial-handoff-01a16c9d.json",
+        "bytes": 25439,
+        "sha256": "b4352709c4b0f94c973bcf57b53640c35a96fa914bac18145c24a0753c8e723e"
+      },
+      {
+        "path": "/private/tmp/demlik-collapse-partial-8520b1ef-01a16c9d.tar.gz",
+        "bytes": 90459931,
+        "sha256": "94caea1dc6a38b446344a74a7e701b8b4091af599ea4cd00abaf7d2fbd0b56e9"
+      },
+      {
+        "path": "/private/tmp/demlik-collapse-gate-proposal-01a16c9d/proposal.md",
+        "bytes": 8743,
+        "sha256": "a4ab6ff4d39640f9cc2596d7140bac2069350bf90f7fdf7d6d4aebea8cd19055"
+      },
+      {
+        "path": "/private/tmp/demlik-collapse-gate-proposal-01a16c9d/receipt.json",
+        "bytes": 16365,
+        "sha256": "c062d6730bae94844821aa93ec7c9fdbf5835d1016a8d72d41c5250233d30ac5"
+      }
+    ],
+    "allListedPriorHashesUnchanged": true,
+    "sourcePackageUnchanged": true
+  },
+  "mappingProposal": {
+    "newInventoryIds": [],
+    "newMappings": 0,
+    "all53CliKnownGapsRemainOpen": true,
+    "supportingPrerequisiteOnly": true
+  },
+  "historicalNotFinalCounts": [
+    "corpus-first29 superseded by final30 after adding the3-module caller/response guards",
+    "earlier consumer-only runs and13/4 rechecks do not add unique test counts",
+    "44 exploratory Source context calls, including repeated ordinary forms, are not pairs",
+    "initial red missing-seam and supplementary red reproductions are compilation evidence, never semantic controls"
+  ],
+  "recoveries": [
+    "Broad parity TSC unrelated retained TEA errors; scoped changed-adapter TSC green",
+    "External scoped tsconfig initially lacked explicit node typeRoots; corrected config retained",
+    "Post-control proof first asserted fresh:false at a legitimate dependency reuse; actual previous fresh:false producer retained, hashes unchanged",
+    "Initial missing-seam compiler red lacked full original consumer snapshot; complete minimal consumer reproduction captured; first full-consumer attempt had follow-on inference diagnostics and is not accepted as focused red"
+  ],
+  "blindSpots": [
+    "No collapse ceiling/gate/CLI continuation; no flag closure",
+    "Local Darwin/Unix only; existing qualified regex/backend profiles preserved",
+    "Default compiled manifest aliases retire with the disposable worktree; explicit-manifest observer/public caller proof remains archived",
+    "No full retained parity TSC pass claimed"
+  ],
+  "archive": {
+    "path": "/private/tmp/demlik-assembly-warning-0def5ea1-01a16c9d.tar.gz",
+    "bytes": 122238183,
+    "sha256": "343c9d28c22410ff868bd2eaf47957d55d25e9d7f6f4579b3325a443c48d26dc",
+    "manifestSha256": "22482081c53a57acdef590fc52b867e16c4ecaa970fa9087fe739998e2c5be31",
+    "files": 806,
+    "members": 807,
+    "everyMemberByteVerified": true
+  },
+  "evidenceRoot": "/private/tmp/demlik-assembly-warning-work-01a16c9d",
+  "reviewFile": {
+    "path": "/private/tmp/demlik-assembly-warning-work-01a16c9d/review.md",
+    "sha256": "b3018868b651d02c8d53a702514443e7d7408e3b4be994205cd1a9dcbfec52ff"
+  },
+  "stop": "Source and warning proof frozen; Root review before any collapse gate/CLI work."
+}
