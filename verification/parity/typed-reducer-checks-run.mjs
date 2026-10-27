@@ -1,111 +1,230 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import fs from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  assertCheckPath,
+  cargoCheckEnvironment,
+  checkEvidenceDirectory,
+  compiledCheckLibrary,
+  createCheckWorktree,
+} from "./check-worktree.mjs";
 import { buildTeaExample, buildTeaTest } from "./tea-example.mjs";
 import { typedReducerControls } from "./typed-reducer-controls.mjs";
+import { typedReducerInterfaceProbes } from "./typed-reducer-interface-probes.mjs";
 import { typedReducerParity } from "./typed-reducer-run.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-export async function typedReducerChecks(options = {}) {
-  assert.ok(
-    options.binary && options.ownerBinary,
-    "actual Cargo-selected baseline binaries are required",
+const owners = [
+  ...new Set([
+    ...typedReducerControls.map((control) => control.file),
+    "crates/tea/tests/typed_reducer.rs",
+    "crates/tea/tests/typed_reducer_runtime.rs",
+    "crates/tea/tests/typed_reducer_lifecycle.rs",
+    "crates/tea/examples/typed_reducer_driver.rs",
+    "crates/tea/examples/typed_reducer/actor.rs",
+    "crates/tea/examples/typed_reducer/pure.rs",
+  ]),
+];
+const inputs = [
+  ...owners,
+  "verification/parity/check-worktree.mjs",
+  "verification/parity/tea-example.mjs",
+  "verification/parity/typed-reducer-checks-run.mjs",
+  "verification/parity/typed-reducer-controls.mjs",
+  "verification/parity/typed-reducer-interface-probes.mjs",
+  "verification/parity/typed-reducer-interface-types/wrong_error.rs",
+  "verification/parity/typed-reducer-interface-types/borrowed_actor_error.rs",
+  "verification/parity/typed-reducer-cases.mjs",
+  "verification/parity/typed-reducer-run.mjs",
+  "verification/parity/typed-reducer-reference.mts",
+  "verification/parity/typed-reducer-actor-reference.mts",
+  "packages/tea/src/pure/core.ts",
+  "packages/tea/src/internal/engine/loop.ts",
+  "packages/tea/src/promise/run.ts",
+  "packages/tea/src/effect/run.ts",
+];
+const nativeTargets = [
+  { name: "typed_reducer", count: 2 },
+  { name: "typed_reducer_runtime", count: 2 },
+  { name: "typed_reducer_lifecycle", count: 6 },
+];
+function environment() {
+  return cargoCheckEnvironment({
+    CARGO_NET_OFFLINE: "true",
+    CARGO_PROFILE_DEV_DEBUG: "0",
+    CARGO_PROFILE_TEST_DEBUG: "0",
+    CARGO_INCREMENTAL: "0",
+    CARGO_BUILD_JOBS: "1",
+  });
+}
+function failure(error) {
+  return {
+    name: error.name,
+    message: error.message,
+    code: error.code,
+    stack: error.stack,
+    stdout: error.stdout?.toString(),
+    stderr: error.stderr?.toString(),
+  };
+}
+function externalProof(check, directory) {
+  assert.equal(fs.realpathSync(check.root), fs.realpathSync(root));
+  assert.equal(
+    path.resolve(check.target),
+    path.join(path.resolve(check.root), "target"),
   );
-  const baseline = path.resolve(
-    process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
+  const relative = path.relative(check.root, path.resolve(directory));
+  assert(
+    relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative),
+    "proof must outlive the check",
   );
-  const target = path.resolve(
-    process.env.DEMLIK_MUTATION_TARGET_DIR ??
-      path.join(root, "target/agent-state-mutation-build"),
+  fs.mkdirSync(directory, { recursive: true });
+}
+function ownerTest(check, binary, count, output) {
+  const run = spawnSync(binary, [], {
+    cwd: check.root,
+    env: environment(),
+    encoding: "utf8",
+    timeout: 20_000,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  const result = {
+    command: [binary],
+    exit: run.status,
+    signal: run.signal,
+    error: run.error?.message,
+    stdout: run.stdout,
+    stderr: run.stderr,
+  };
+  fs.writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`);
+  assert.equal(run.error, undefined);
+  assert.equal(run.signal, null);
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(
+    run.stdout,
+    new RegExp(`test result: ok\\. ${count} passed; 0 failed`),
   );
-  assert.notEqual(
-    baseline,
-    target,
-    "mutation and baseline artifacts must be isolated",
+  return {
+    count,
+    output,
+    binary: { path: binary, sha256: hash(fs.readFileSync(binary)) },
+  };
+}
+function logicalBytes(directory) {
+  if (!fs.existsSync(directory)) return 0;
+  return fs
+    .readdirSync(directory, { withFileTypes: true })
+    .reduce((sum, entry) => {
+      const file = path.join(directory, entry.name);
+      return (
+        sum +
+        (entry.isDirectory()
+          ? logicalBytes(file)
+          : entry.isFile()
+            ? fs.statSync(file).size
+            : 0)
+      );
+    }, 0);
+}
+export async function typedReducerMutations({
+  check,
+  binary,
+  ownerBinary,
+  directory,
+  only,
+}) {
+  externalProof(check, directory);
+  assert(
+    binary && ownerBinary,
+    "immutable driver and lifecycle baselines required",
   );
-  const directory =
-    options.directory ??
-    path.join(root, "target/typed-reducer-conformance/controls");
-  await mkdir(directory, { recursive: true });
-  const owners = [
-    ...new Set([
-      ...typedReducerControls.map((c) => c.file),
-      "crates/tea/tests/typed_reducer_lifecycle.rs",
-      "crates/tea/examples/typed_reducer_driver.rs",
-      "crates/tea/examples/typed_reducer/actor.rs",
-      "crates/tea/examples/typed_reducer/pure.rs",
-    ]),
-  ];
   const originals = Object.fromEntries(
-    await Promise.all(
-      owners.map(async (file) => [
-        file,
-        await readFile(path.join(root, file), "utf8"),
-      ]),
-    ),
+    owners.map((file) => [
+      file,
+      fs.readFileSync(path.join(check.root, file), "utf8"),
+    ]),
   );
   const originalHashes = Object.fromEntries(
     Object.entries(originals).map(([file, text]) => [file, hash(text)]),
   );
   const binaryHashes = {
-    driver: hash(await readFile(options.binary)),
-    owner: hash(await readFile(options.ownerBinary)),
+    driver: hash(fs.readFileSync(binary)),
+    owner: hash(fs.readFileSync(ownerBinary)),
   };
-  const baselineReport = await typedReducerParity({
-    binary: options.binary,
-    reportFile: path.join(directory, "full94-baseline.json"),
-    quiet: true,
-  });
-  assert.equal(baselineReport.cases, 94, "mandatory complete shared baseline");
-  assert.equal(baselineReport.passed, 94);
-  assert.deepEqual(baselineReport.failures, []);
-  const ownerBaseline = spawnSync(options.ownerBinary, [], {
-    cwd: root,
-    encoding: "utf8",
-    timeout: 20_000,
-  });
-  await writeFile(
-    path.join(directory, "owner-baseline.log"),
-    `${ownerBaseline.stdout}\n${ownerBaseline.stderr}`,
+  const controls = typedReducerControls.filter(
+    (control) => !only || only.includes(control.id),
   );
-  assert.equal(ownerBaseline.status, 0);
-  assert.match(ownerBaseline.stdout, /test result: ok\. 6 passed; 0 failed/);
-  const temp = await mkdtemp(
-      path.join(tmpdir(), "demlik-typed-reducer-controls-"),
-    ),
-    results = [];
+  assert(controls.length);
+  if (only) assert.equal(controls.length, new Set(only).size);
+  for (const control of controls) {
+    let text = originals[control.file];
+    for (const [before, after] of control.patches) {
+      assert.equal(
+        text.split(before).length,
+        2,
+        `${control.id}: unique mutation needle`,
+      );
+      text = text.replace(before, after);
+    }
+  }
+  const results = [];
+  const reportFile = path.join(directory, "report.json");
+  const state = {
+    complete: false,
+    semanticPairs: 0,
+    controls: results,
+    planned: controls.length,
+    sourceHashes: originalHashes,
+    check: { root: check.root, target: check.target, cargoDefaultTarget: true },
+    resourceSamples: [],
+  };
+  const save = (extra = {}) => {
+    Object.assign(state, extra);
+    fs.writeFileSync(reportFile, `${JSON.stringify(state, null, 2)}\n`);
+  };
+  let attempt = { phase: "baseline" };
   try {
-    for (const file of [
-      "Cargo.toml",
-      "Cargo.lock",
-      "rust-toolchain.toml",
-      "crates",
-    ])
-      await cp(path.join(root, file), path.join(temp, file), {
-        recursive: true,
-      });
-    for (const c of typedReducerControls) {
+    const baseline = await typedReducerParity({
+      binary,
+      reportFile: path.join(directory, "full94-baseline.json"),
+      quiet: true,
+    });
+    assert.equal(baseline.cases, 94);
+    assert.equal(baseline.passed, 94);
+    assert.equal(baseline.protocolRefusals, 4);
+    assert.deepEqual(baseline.failures, []);
+    const native = ownerTest(
+      check,
+      ownerBinary,
+      6,
+      path.join(directory, "owner-baseline.json"),
+    );
+    save({
+      baseline: { cases: 94, protocolRefusals: 4, native, binaryHashes },
+    });
+    for (const control of controls) {
       for (const [file, text] of Object.entries(originals))
-        await writeFile(path.join(temp, file), text);
-      let mutated = originals[c.file];
-      for (const [before, after] of c.patches) {
+        fs.writeFileSync(path.join(check.root, file), text);
+      for (const [file, digest] of Object.entries(originalHashes))
         assert.equal(
-          mutated.split(before).length,
-          2,
-          `${c.id}: unique mutation needle`,
+          hash(fs.readFileSync(path.join(check.root, file))),
+          digest,
         );
+      let mutated = originals[control.file];
+      for (const [before, after] of control.patches)
         mutated = mutated.replace(before, after);
-      }
-      await writeFile(path.join(temp, c.file), mutated);
-      const controlDir = path.join(directory, c.id);
-      await mkdir(controlDir, { recursive: true });
-      await writeFile(path.join(controlDir, "mutated.rs"), mutated);
-      const args = c.test
+      fs.writeFileSync(path.join(check.root, control.file), mutated);
+      const controlDir = path.join(directory, control.id);
+      fs.mkdirSync(controlDir, { recursive: true });
+      fs.writeFileSync(path.join(controlDir, "mutated.rs"), mutated);
+      const args = control.test
         ? ["test", "--no-run", "--test", "typed_reducer_lifecycle"]
         : ["build", "--example", "typed_reducer_driver"];
       const command = [
@@ -116,171 +235,492 @@ export async function typedReducerChecks(options = {}) {
         "-p",
         "demlik-tea",
       ];
+      attempt = {
+        id: control.id,
+        phase: "compile",
+        owner: control.file,
+        originalSha256: originalHashes[control.file],
+        mutantSha256: hash(mutated),
+        command,
+      };
       const build = spawnSync(process.env.CARGO ?? "cargo", command, {
-        cwd: temp,
+        cwd: check.root,
+        env: environment(),
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
         timeout: 240_000,
-        env: {
-          ...process.env,
-          CARGO_TARGET_DIR: target,
-          CARGO_NET_OFFLINE: "true",
-          CARGO_PROFILE_DEV_DEBUG: "0",
-          CARGO_PROFILE_TEST_DEBUG: "0",
-          CARGO_INCREMENTAL: "0",
-          CARGO_BUILD_JOBS: "1",
-        },
       });
-      await writeFile(path.join(controlDir, "cargo.jsonl"), build.stdout ?? "");
-      await writeFile(path.join(controlDir, "compile.log"), build.stderr ?? "");
+      fs.writeFileSync(
+        path.join(controlDir, "cargo.jsonl"),
+        build.stdout ?? "",
+      );
+      fs.writeFileSync(
+        path.join(controlDir, "compile.log"),
+        build.stderr ?? "",
+      );
+      attempt.build = {
+        exit: build.status,
+        signal: build.signal,
+        error: build.error?.message,
+        cargoJson: path.join(controlDir, "cargo.jsonl"),
+        stderr: path.join(controlDir, "compile.log"),
+      };
+      state.resourceSamples.push({
+        id: control.id,
+        logicalTargetBytes: logicalBytes(check.target),
+      });
+      save({ attempt });
+      assert.equal(build.error, undefined);
+      assert.equal(build.signal, null);
       assert.equal(
         build.status,
         0,
-        `${c.id}: mutant must compile, not merely fail\n${build.stderr}`,
+        `${control.id}: compilation refusal is not detection; inspect ${attempt.build.cargoJson}`,
       );
-      const artifacts = build.stdout.split("\n").flatMap((line) => {
-        try {
-          const d = JSON.parse(line);
-          return d.reason === "compiler-artifact" ? [d] : [];
-        } catch {
-          return [];
-        }
-      });
-      const name = c.test ? "typed_reducer_lifecycle" : "typed_reducer_driver";
-      const selected = artifacts.filter(
-        (d) => d.target.name === name && d.executable,
+      const rows = build.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      const library = compiledCheckLibrary(
+        rows,
+        "demlik_tea",
+        check.root,
+        check.target,
       );
-      assert.equal(selected.length, 1, `${c.id}: actual Cargo executable`);
-      const actual = selected[0].executable,
-        bytes = await readFile(actual),
-        sha256 = hash(bytes),
-        binary = path.join(controlDir, `${sha256}.bin`);
-      await cp(actual, binary);
+      const name = control.test
+        ? "typed_reducer_lifecycle"
+        : "typed_reducer_driver";
+      const selected = rows.filter(
+        (row) =>
+          row.reason === "compiler-artifact" &&
+          row.target.name === name &&
+          row.executable,
+      );
+      assert.equal(selected.length, 1);
+      const artifact = selected[0];
+      assert.equal(artifact.fresh, false);
+      assertCheckPath(artifact.target.src_path, check.root);
+      assertCheckPath(artifact.manifest_path, check.root);
+      const actual = assertCheckPath(artifact.executable, check.target);
+      const sha256 = hash(fs.readFileSync(actual));
+      const executed = path.join(controlDir, `${sha256}.bin`);
+      fs.copyFileSync(actual, executed);
+      attempt.phase = "execute";
+      save({ attempt });
       let witness;
-      if (c.test) {
-        const run = spawnSync(binary, [c.test, "--exact", "--nocapture"], {
-          cwd: temp,
+      if (control.test) {
+        const args = [control.test, "--exact", "--nocapture"];
+        const run = spawnSync(executed, args, {
+          cwd: check.root,
+          env: environment(),
           encoding: "utf8",
           timeout: 15_000,
           maxBuffer: 8 * 1024 * 1024,
         });
+        const processResult = {
+          command: [executed, ...args],
+          exit: run.status,
+          signal: run.signal,
+          error: run.error?.message,
+          stdout: run.stdout,
+          stderr: run.stderr,
+        };
+        fs.writeFileSync(
+          path.join(controlDir, "native.json"),
+          `${JSON.stringify(processResult, null, 2)}\n`,
+        );
         const text = `${run.stdout}\n${run.stderr}`;
-        await writeFile(path.join(controlDir, "native.log"), text);
+        assert.equal(run.error, undefined);
+        assert.equal(run.signal, null);
         assert.equal(
           run.status,
           101,
-          `${c.id}: require intended native behavioral refusal\n${text}`,
+          `${control.id}: intended native assertion required`,
         );
-        assert.ok(
-          run.stdout.includes(`test ${c.test} ... FAILED`),
-          `${c.id}: intended test failed`,
-        );
-        assert.ok(
-          text.includes(c.assertion),
-          `${c.id}: intended semantic assertion`,
-        );
+        assert(run.stdout.includes(`test ${control.test} ... FAILED`));
+        assert(text.includes(control.assertion));
         witness = {
           kind: "native-owner-law",
-          test: c.test,
-          assertion: c.assertion,
-          exit: run.status,
+          test: control.test,
+          assertion: control.assertion,
+          process: processResult,
         };
       } else {
         const paired = await typedReducerParity({
-          binary,
-          caseIds: c.cases,
+          binary: executed,
+          caseIds: control.cases,
           reportFile: path.join(controlDir, "pairs.json"),
           quiet: true,
         });
-        assert.ok(
+        assert(
           paired.failures.length > 0,
-          `${c.id}: compiled regression escaped`,
+          `${control.id}: compiled regression escaped`,
         );
-        assert.ok(
-          paired.failures.some((f) => c.cases.includes(f.id)),
-          `${c.id}: a declared witness must differ`,
+        assert(
+          paired.failures.some((failure) => control.cases.includes(failure.id)),
         );
-        for (const f of paired.failures) {
-          assert.ok(c.cases.includes(f.id));
-          assert.equal(f.source.ok, true);
-          assert.equal(f.native.ok, true);
-          assert.equal(paired.nativeEvidence[f.id], undefined);
+        for (const failure of paired.failures) {
+          assert(control.cases.includes(failure.id));
+          assert.equal(failure.source.ok, true);
+          assert.equal(failure.native.ok, true);
+          assert.equal(paired.nativeEvidence[failure.id], undefined);
         }
         witness = {
           kind: "source-native-semantic",
-          declared: c.cases,
-          detected: paired.failures.map((f) => f.id),
+          declared: control.cases,
+          detected: paired.failures.map((failure) => failure.id),
+          report: paired.reportFile,
         };
       }
+      assert.equal(hash(fs.readFileSync(executed)), sha256);
       results.push({
-        ...c,
+        ...control,
         compiled: true,
         detected: true,
         command,
-        sourceSha256: originalHashes[c.file],
+        build: attempt.build,
+        sourceSha256: originalHashes[control.file],
         mutantSha256: hash(mutated),
-        binary,
+        binary: executed,
         sha256,
         actualArtifact: actual,
+        executableArtifact: artifact,
+        library: {
+          path: library.path,
+          observedSha256: hash(fs.readFileSync(library.path)),
+          artifact: library.artifact,
+          retained: false,
+        },
         witness,
       });
-      await writeFile(
-        path.join(directory, "progress.json"),
-        `${JSON.stringify(results, null, 2)}\n`,
-      );
-      console.log(
-        JSON.stringify({ control: c.id, compiled: true, detected: true }),
-      );
+      save({ attempt: { phase: "between-controls" } });
     }
+  } catch (error) {
+    save({
+      complete: false,
+      incomplete: true,
+      attempt,
+      processingFailure: failure(error),
+    });
+    throw error;
   } finally {
-    await rm(temp, { recursive: true, force: true });
-  }
-  for (const [file, sha256] of Object.entries(originalHashes))
-    assert.equal(
-      hash(await readFile(path.join(root, file))),
-      sha256,
-      `${file}: active source integrity`,
+    for (const [file, text] of Object.entries(originals))
+      fs.writeFileSync(path.join(check.root, file), text);
+    const sourceUnchanged = Object.entries(originalHashes).every(
+      ([file, digest]) =>
+        hash(fs.readFileSync(path.join(check.root, file))) === digest,
     );
-  assert.equal(hash(await readFile(options.binary)), binaryHashes.driver);
-  assert.equal(hash(await readFile(options.ownerBinary)), binaryHashes.owner);
-  const report = {
+    const baselineArtifactsUnchanged =
+      hash(fs.readFileSync(binary)) === binaryHashes.driver &&
+      hash(fs.readFileSync(ownerBinary)) === binaryHashes.owner;
+    save({
+      activeSourceUnchanged: sourceUnchanged,
+      baselineArtifactsUnchanged,
+      ownersRestored: true,
+    });
+    assert(sourceUnchanged && baselineArtifactsUnchanged);
+  }
+  save({
+    complete: true,
+    incomplete: false,
     detected: results.length,
     escaped: 0,
-    sourceNativeControls: results.filter((r) => !r.test).length,
-    nativeOwnerControls: results.filter((r) => r.test).length,
-    baseline: { cases: 94, native: 6, binaryHashes },
-    baselineTarget: baseline,
-    mutationTarget: target,
-    sourceHashes: originalHashes,
-    controls: results,
-    activeSourceUnchanged: true,
-    baselineArtifactsUnchanged: true,
+    sourceNativeControls: results.filter((result) => !result.test).length,
+    nativeOwnerControls: results.filter((result) => result.test).length,
+  });
+  return { ...state, reportFile };
+}
+export async function typedReducerSuiteInCheck({
+  check,
+  directory,
+  binary,
+  ownerBinary,
+}) {
+  externalProof(check, directory);
+  const built = buildTeaExample(
+    process.env.CARGO ?? "cargo",
+    "typed_reducer_driver",
+    path.join(directory, "baseline-driver"),
+  );
+  const events = fs
+    .readFileSync(built.cargoJson, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const library = compiledCheckLibrary(
+    events,
+    "demlik_tea",
+    check.root,
+    check.target,
+  );
+  assertCheckPath(built.actualArtifact, check.target);
+  const driver = events.filter(
+    (row) =>
+      row.reason === "compiler-artifact" &&
+      row.target.name === "typed_reducer_driver" &&
+      row.executable,
+  );
+  assert.equal(driver.length, 1);
+  assert.equal(driver[0].fresh, false);
+  assertCheckPath(driver[0].target.src_path, check.root);
+  assertCheckPath(driver[0].manifest_path, check.root);
+  const savedLibrary = path.join(
+    directory,
+    `libdemlik_tea-${hash(fs.readFileSync(library.path))}.rlib`,
+  );
+  fs.copyFileSync(library.path, savedLibrary);
+  const natives = [];
+  for (const target of nativeTargets) {
+    const produced = buildTeaTest(
+      process.env.CARGO ?? "cargo",
+      target.name,
+      path.join(directory, target.name),
+    );
+    const rows = fs
+      .readFileSync(produced.cargoJson, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const selected = rows.filter(
+      (row) =>
+        row.reason === "compiler-artifact" &&
+        row.target.name === target.name &&
+        row.executable,
+    );
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].fresh, false);
+    assertCheckPath(selected[0].target.src_path, check.root);
+    assertCheckPath(selected[0].manifest_path, check.root);
+    assertCheckPath(produced.actualArtifact, check.target);
+    natives.push({ ...target, produced, artifact: selected[0] });
+  }
+  const external = {};
+  for (const [key, supplied] of [
+    ["driver", binary],
+    ["owner", ownerBinary],
+  ]) {
+    if (!supplied) continue;
+    const sha256 = hash(fs.readFileSync(supplied));
+    const saved = path.join(directory, `external-${key}-${sha256}.bin`);
+    fs.copyFileSync(supplied, saved);
+    external[key] = {
+      originalPath: supplied,
+      path: saved,
+      sha256,
+      qualification:
+        "Externally supplied baseline; no new Cargo-producer claim.",
+    };
+  }
+  const owner = natives.find(
+    (target) => target.name === "typed_reducer_lifecycle",
+  );
+  const baseline = {
+    driver: external.driver?.path ?? built.binary,
+    owner: external.owner?.path ?? owner.produced.binary,
   };
-  const reportFile = path.join(directory, "report.json");
-  await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
-  return { ...report, reportFile };
+  const nativeResults = natives
+    .filter((target) => target.name !== "typed_reducer_lifecycle")
+    .map((target) =>
+      ownerTest(
+        check,
+        target.produced.binary,
+        target.count,
+        path.join(directory, `${target.name}.execution.json`),
+      ),
+    );
+  const typeProof = typedReducerInterfaceProbes({
+    check,
+    library: savedLibrary,
+    dependencies: path.dirname(library.path),
+    directory: path.join(directory, "types"),
+  });
+  const baselineBuild = {
+    driver: built,
+    natives,
+    external,
+    library: {
+      path: savedLibrary,
+      sha256: hash(fs.readFileSync(savedLibrary)),
+      actualArtifact: library.path,
+      artifact: library.artifact,
+    },
+    selected: baseline,
+    nativeResults,
+    typeProof,
+  };
+  fs.writeFileSync(
+    path.join(directory, "baseline-build.json"),
+    `${JSON.stringify(baselineBuild, null, 2)}\n`,
+  );
+  const controls = await typedReducerMutations({
+    check,
+    binary: baseline.driver,
+    ownerBinary: baseline.owner,
+    directory: path.join(directory, "controls"),
+  });
+  assert.equal(controls.detected, 16);
+  assert.equal(controls.sourceNativeControls, 12);
+  assert.equal(controls.nativeOwnerControls, 4);
+  assert.equal(
+    hash(fs.readFileSync(savedLibrary)),
+    baselineBuild.library.sha256,
+  );
+  const report = {
+    complete: true,
+    baselineBuild: path.join(directory, "baseline-build.json"),
+    sharedCases: 94,
+    protocolRefusals: 4,
+    nativeTestFunctions: 10,
+    typeRefusals: 2,
+    controls: 16,
+    controlsReport: controls.reportFile,
+    sampledLogicalTargetBytes: logicalBytes(check.target),
+    semanticPairsAdded: 0,
+  };
+  fs.writeFileSync(
+    path.join(directory, "suite.json"),
+    `${JSON.stringify(report, null, 2)}\n`,
+  );
+  return report;
+}
+export async function typedReducerChecks(options = {}) {
+  const scope = JSON.parse(
+    fs.readFileSync(new URL("./scope.json", import.meta.url), "utf8"),
+  );
+  assert.equal(process.version, scope.referenceEngine.node);
+  assert.equal(process.versions.v8, scope.referenceEngine.v8);
+  const base =
+    options.directory ?? checkEvidenceDirectory(root, "typed-reducer");
+  fs.mkdirSync(base, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(path.resolve(base), "suite-"));
+  const before = Object.fromEntries(
+    inputs.map((file) => [file, hash(fs.readFileSync(path.join(root, file)))]),
+  );
+  const report = {
+    sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+    sourceHashes: before,
+    directory,
+    complete: false,
+    semanticPairsAdded: 0,
+    runtime: { node: process.version, v8: process.versions.v8 },
+    profile: { defaultTarget: true, cacheCopies: false },
+  };
+  const started = performance.now();
+  let check;
+  let operationError;
+  let cleanupError;
+  try {
+    check = createCheckWorktree(root, "typed-reducer", directory);
+    report.check = { root: check.root, target: check.target };
+    for (const [file, digest] of Object.entries(before))
+      assert.equal(
+        hash(fs.readFileSync(path.join(check.root, file))),
+        digest,
+        `${file}: committed check input`,
+      );
+    for (const name of [
+      "node_modules",
+      "packages/tea/node_modules",
+      "verification/parity/node_modules",
+    ])
+      fs.symlinkSync(
+        fs.realpathSync(path.join(root, name)),
+        path.join(check.root, name),
+        "dir",
+      );
+    fs.mkdirSync(check.target, { recursive: true });
+    const input = {
+      check: { root: check.root, target: check.target },
+      directory,
+      binary: options.binary && path.resolve(options.binary),
+      ownerBinary: options.ownerBinary && path.resolve(options.ownerBinary),
+    };
+    const bootstrap = `import { typedReducerSuiteInCheck } from ${JSON.stringify(pathToFileURL(path.join(check.root, "verification/parity/typed-reducer-checks-run.mjs")).href)};\nawait typedReducerSuiteInCheck(${JSON.stringify(input)});\n`;
+    const bootstrapFile = path.join(check.target, "typed-reducer-suite.mjs");
+    fs.writeFileSync(bootstrapFile, bootstrap);
+    fs.writeFileSync(path.join(directory, "bootstrap.mjs"), bootstrap);
+    const child = spawnSync(process.execPath, [bootstrapFile], {
+      cwd: check.root,
+      env: environment(),
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    report.process = {
+      command: [process.execPath, bootstrapFile],
+      exit: child.status,
+      signal: child.signal,
+      error: child.error?.message,
+      stdout: child.stdout,
+      stderr: child.stderr,
+    };
+    fs.writeFileSync(
+      path.join(directory, "process.json"),
+      `${JSON.stringify(report.process, null, 2)}\n`,
+    );
+    report.sampledLogicalTargetBytes = logicalBytes(check.target);
+    assert.equal(child.error, undefined);
+    assert.equal(child.signal, null);
+    assert.equal(child.status, 0, `${child.stdout}\n${child.stderr}`);
+    report.suite = JSON.parse(
+      fs.readFileSync(path.join(directory, "suite.json"), "utf8"),
+    );
+    report.complete = true;
+  } catch (error) {
+    operationError = error;
+    report.processingFailure = failure(error);
+  } finally {
+    try {
+      check?.remove();
+    } catch (error) {
+      cleanupError = error;
+      report.cleanupFailure = failure(error);
+    }
+    report.elapsedMs = performance.now() - started;
+    report.sourceUnchanged = Object.entries(before).every(
+      ([file, digest]) =>
+        hash(fs.readFileSync(path.join(root, file))) === digest,
+    );
+    report.worktreeRemoved = check ? !fs.existsSync(check.root) : true;
+    report.defaultTargetRemoved = check ? !fs.existsSync(check.target) : true;
+    report.complete &&=
+      !cleanupError &&
+      report.sourceUnchanged &&
+      report.worktreeRemoved &&
+      report.defaultTargetRemoved;
+    fs.writeFileSync(
+      path.join(directory, "report.json"),
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
+  }
+  if (operationError || cleanupError)
+    throw new AggregateError(
+      [operationError, cleanupError].filter(Boolean),
+      `Typed-reducer suite failed: ${directory}`,
+    );
+  assert.equal(report.complete, true);
+  return { ...report, reportFile: path.join(directory, "report.json") };
 }
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  const option = (name) => {
-    const at = process.argv.indexOf(name);
-    return at < 0 ? undefined : process.argv[at + 1];
-  };
-  const cargo = process.env.CARGO ?? "cargo";
-  const prefix = path.join(root, "target/parity/typed-reducer-baselines");
-  const binary =
-    option("--binary") ??
-    buildTeaExample(cargo, "typed_reducer_driver", `${prefix}/driver`).binary;
-  const ownerBinary =
-    option("--owner-binary") ??
-    buildTeaTest(cargo, "typed_reducer_lifecycle", `${prefix}/owner`).binary;
-  const report = await typedReducerChecks({ binary, ownerBinary });
+  const { parseArgs } = await import("node:util");
+  const { values } = parseArgs({
+    options: { binary: { type: "string" }, "owner-binary": { type: "string" } },
+    strict: true,
+  });
+  const report = await typedReducerChecks({
+    binary: values.binary,
+    ownerBinary: values["owner-binary"],
+  });
   console.log(
     JSON.stringify({
-      detected: report.detected,
       reportFile: report.reportFile,
+      ...report.suite,
+      worktreeRemoved: report.worktreeRemoved,
     }),
   );
 }

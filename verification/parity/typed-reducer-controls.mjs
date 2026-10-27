@@ -54,7 +54,7 @@ export const typedReducerControls = [
     patches: [
       [
         "return cell(state, message).map_err(ApplyError::Reduce);",
-        "return cell(state, message).map_err(|_| ApplyError::NoCell(NoCellError::new(message.tag(), state.tag(), self.accepted_types(Some(state)))));",
+        'return cell(state, message).map_err(|_| ApplyError::NoCell(NoCellError::new(message.tag(), "<typed-reducer-control>", self.accepted_types(Some(state)))));',
       ],
     ],
     cases: [...actor("stop"), ...actor("restart", "nested-no-cell")],
