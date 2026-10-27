@@ -11,6 +11,7 @@ import { agentErrorCheckpointParity } from "./agent-error-parity.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
 import { runAgentRuntimeConformance } from "./agent-runtime-run.mjs";
+import { agentSnapshotMessagesCheckpointParity } from "./agent-snapshot-messages-parity.mjs";
 import { agentSnapshotCheckpointParity } from "./agent-snapshot-parity.mjs";
 import { agentStateJsonParity } from "./agent-state-json-parity.mjs";
 import {
@@ -1151,6 +1152,12 @@ if (!mutationSuite) {
       operation: "tea.agent-snapshot",
       binaryArgument: "--agent-snapshot-bin",
       run: (options) => agentSnapshotCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentSnapshotMessages",
+      operation: "tea.agent-snapshot-messages",
+      binaryArgument: "--agent-snapshot-messages-bin",
+      run: (options) => agentSnapshotMessagesCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",
