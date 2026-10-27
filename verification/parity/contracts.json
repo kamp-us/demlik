@@ -1509,7 +1509,19 @@
     },
     "cases": [
       "storage.file-write-reload-delete",
-      "storage.file-fenced-cas-no-overwrite"
+      "storage.file-fenced-cas-no-overwrite",
+      "agent-state-json.promise.brain",
+      "agent-state-json.promise.tools",
+      "agent-state-json.promise.tool-error",
+      "agent-state-json.promise.done",
+      "agent-state-json.promise.model-error",
+      "agent-state-json.promise.guard-error",
+      "agent-state-json.effect.brain",
+      "agent-state-json.effect.tools",
+      "agent-state-json.effect.tool-error",
+      "agent-state-json.effect.done",
+      "agent-state-json.effect.model-error",
+      "agent-state-json.effect.guard-error"
     ]
   },
   "@demlik/tea:./node#fileStore/member:published:af40468a820a76f33dc09855b2f4735421132e9af42231d06890d58732d13895": {
@@ -11118,11 +11130,23 @@
       "agent-turn.effect.duplicate.array-args",
       "agent-turn.effect.restart-tool.presence",
       "agent-turn.effect.restart-tool.usage-missing",
-      "agent-turn.effect.cancel.usage-totals"
+      "agent-turn.effect.cancel.usage-totals",
+      "agent-state-json.promise.brain",
+      "agent-state-json.promise.tools",
+      "agent-state-json.promise.tool-error",
+      "agent-state-json.promise.done",
+      "agent-state-json.promise.model-error",
+      "agent-state-json.promise.guard-error",
+      "agent-state-json.effect.brain",
+      "agent-state-json.effect.tools",
+      "agent-state-json.effect.tool-error",
+      "agent-state-json.effect.done",
+      "agent-state-json.effect.model-error",
+      "agent-state-json.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
@@ -11225,11 +11249,23 @@
       "agent-turn.effect.duplicate.array-args",
       "agent-turn.effect.restart-tool.presence",
       "agent-turn.effect.restart-tool.usage-missing",
-      "agent-turn.effect.cancel.usage-totals"
+      "agent-turn.effect.cancel.usage-totals",
+      "agent-state-json.promise.brain",
+      "agent-state-json.promise.tools",
+      "agent-state-json.promise.tool-error",
+      "agent-state-json.promise.done",
+      "agent-state-json.promise.model-error",
+      "agent-state-json.promise.guard-error",
+      "agent-state-json.effect.brain",
+      "agent-state-json.effect.tools",
+      "agent-state-json.effect.tool-error",
+      "agent-state-json.effect.done",
+      "agent-state-json.effect.model-error",
+      "agent-state-json.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/compaction/snapshot/tool-policy profiles and inherited callable/type aliases; no broad alias closure.",
@@ -11268,7 +11304,19 @@
       "agent-turn.effect.restart-tool.extras",
       "agent-turn.effect.restart-tool-io-error.extras",
       "agent-turn.effect.restart-tool.presence",
-      "agent-turn.effect.restart-tool.usage-missing"
+      "agent-turn.effect.restart-tool.usage-missing",
+      "agent-state-json.promise.brain",
+      "agent-state-json.promise.tools",
+      "agent-state-json.promise.tool-error",
+      "agent-state-json.promise.done",
+      "agent-state-json.promise.model-error",
+      "agent-state-json.promise.guard-error",
+      "agent-state-json.effect.brain",
+      "agent-state-json.effect.tools",
+      "agent-state-json.effect.tool-error",
+      "agent-state-json.effect.done",
+      "agent-state-json.effect.model-error",
+      "agent-state-json.effect.guard-error"
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases.",
     "knownGaps": [

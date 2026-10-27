@@ -9,6 +9,7 @@ import { agentContentParity } from "./agent-content-run.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
 import { runAgentRuntimeConformance } from "./agent-runtime-run.mjs";
+import { agentStateJsonParity } from "./agent-state-json-parity.mjs";
 import {
   agentBaseCheckpointParity,
   agentStateFanoutParity,
@@ -1114,6 +1115,12 @@ if (!mutationSuite) {
           binary: options.binary,
           output: options.reportFile,
         }),
+    },
+    {
+      name: "agentStateJson",
+      operation: "tea.agent-cold-json-resume",
+      binaryArgument: "--agent-state-json-bin",
+      run: (options) => agentStateJsonParity(cargo, options),
     },
     {
       name: "agentStatus",
