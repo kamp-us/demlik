@@ -7833,38 +7833,67 @@
   "@demlik/code-graph:cli:option:--find <name>": {
     "signature": "e116015b8eaedb697fa4ebd73e3c3c0f20813b448e712cc603e4694437e57279",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.find.space",
       "graph.cli-parser.option.find.equal",
       "graph.cli-parser.option.find.empty",
       "graph.cli-parser.option.find.missing",
-      "graph.cli-parser.option.find.raw-0"
+      "graph.cli-parser.option.find.raw-0",
+      "graph.cli-tree-blast-find.losing-query-still-needs-config",
+      "graph.cli-tree-blast-find.blast-wins-find-and-tree",
+      "graph.cli-tree-blast-find.find-shared-function-and-type",
+      "graph.cli-tree-blast-find.find-pretty-uses-and-losing-tree",
+      "graph.cli-tree-blast-find.find-deep-all-matches",
+      "graph.cli-tree-blast-find.find-no-match-empty-data-keeps-exit",
+      "graph.cli-tree-blast-find.find-no-config-refuses",
+      "graph.cli-tree-blast-find.find-warning-before-file-and-banner",
+      "graph.cli-tree-blast-find.two-package-tail-workflow"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing argv parser witnesses plus the listed strict prepared tree/blast/find process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared library CLI continuation with one canonical Graph assembly. Explicit Plain/ANSI host profile, real cheap and official Go edge queries, original graph borrows, exact domain warnings/output/exit and disposable file writes. This corpus does not close standalone argv/bootstrap/color discovery, HTML/hotspots, raw Graph/string/numeric or platform gaps."
   },
   "@demlik/code-graph:cli:option:--blast <id>": {
     "signature": "d11092b521f2b4cb82869153c2034a5a6fb7b250c290cc0a7de008b258b1e0aa",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.blast.space",
       "graph.cli-parser.option.blast.equal",
       "graph.cli-parser.option.blast.empty",
       "graph.cli-parser.option.blast.missing",
-      "graph.cli-parser.option.blast.raw-0"
+      "graph.cli-parser.option.blast.raw-0",
+      "graph.cli-tree-blast-find.graph-wins-query-but-keeps-edge-load",
+      "graph.cli-tree-blast-find.ordinary-ci-wins-query",
+      "graph.cli-tree-blast-find.blast-diamond-recursion-package-json",
+      "graph.cli-tree-blast-find.blast-deep-pretty-keeps-initial-exit",
+      "graph.cli-tree-blast-find.blast-human-recursion",
+      "graph.cli-tree-blast-find.blast-bare-name",
+      "graph.cli-tree-blast-find.blast-ambiguous-no-output-write",
+      "graph.cli-tree-blast-find.blast-missing-parse-failure-hint",
+      "graph.cli-tree-blast-find.blast-empty-query-is-present",
+      "graph.cli-tree-blast-find.blast-no-config-refuses-before-query",
+      "graph.cli-tree-blast-find.blast-wins-find-and-tree",
+      "graph.cli-tree-blast-find.two-package-tail-workflow"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing argv parser witnesses plus the listed strict prepared tree/blast/find process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared library CLI continuation with one canonical Graph assembly. Explicit Plain/ANSI host profile, real cheap and official Go edge queries, original graph borrows, exact domain warnings/output/exit and disposable file writes. This corpus does not close standalone argv/bootstrap/color discovery, HTML/hotspots, raw Graph/string/numeric or platform gaps."
   },
   "@demlik/code-graph:cli:option:--deep": {
     "signature": "6bd0e415a4d31a7cf2eea6ad1fd68a29b610493315344aa954998448e12f07f4",
@@ -7978,19 +8007,35 @@
   "@demlik/code-graph:cli:option:--tree": {
     "signature": "31d228b06c755b403fe0e1d5163c3be0a6db6bdeaaff3d5b8de81e71c0db6e3e",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_with_style_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.tree.before",
       "graph.cli-parser.option.tree.after",
       "graph.cli-parser.option.tree.equal-is-unknown",
-      "graph.cli-parser.option.tree.negated-is-unknown"
+      "graph.cli-parser.option.tree.negated-is-unknown",
+      "graph.cli-tree-blast-find.tree-cheap-no-compiler",
+      "graph.cli-tree-blast-find.tree-ansi-unicode-lines",
+      "graph.cli-tree-blast-find.tree-plain-preserves-raw-codes",
+      "graph.cli-tree-blast-find.tree-json-pretty-headers",
+      "graph.cli-tree-blast-find.tree-empty-modules",
+      "graph.cli-tree-blast-find.tree-file-mode-and-initial-exit",
+      "graph.cli-tree-blast-find.file-wins-tree",
+      "graph.cli-tree-blast-find.smells-wins-tree",
+      "graph.cli-tree-blast-find.graph-wins-query-but-keeps-edge-load",
+      "graph.cli-tree-blast-find.find-pretty-uses-and-losing-tree",
+      "graph.cli-tree-blast-find.two-package-tail-workflow"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing argv parser witnesses plus the listed strict prepared tree/blast/find process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared library CLI continuation with one canonical Graph assembly. Explicit Plain/ANSI host profile, real cheap and official Go edge queries, original graph borrows, exact domain warnings/output/exit and disposable file writes. This corpus does not close standalone argv/bootstrap/color discovery, HTML/hotspots, raw Graph/string/numeric or platform gaps."
   },
   "@demlik/code-graph:cli:option:--smells": {
     "signature": "217f135306957dd194a277c3fa99023a280dbce75415a9f566672dc6a91e9d71",
@@ -11402,7 +11447,7 @@
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/advanced-snapshot/tool-policy profiles, including arbitrary returned snapshot messages, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction and no-return snapshot corpus does not close those profiles.",
@@ -11554,7 +11599,7 @@
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/advanced-snapshot/tool-policy profiles, including arbitrary returned snapshot messages, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction and no-return snapshot corpus does not close those profiles.",
