@@ -215,6 +215,12 @@ export async function runSnapshotGridControls(options = {}) {
           true,
           "named Source contract must remain valid",
         );
+        active.evidenceClass = Object.hasOwn(
+          report.qualifiedNativeEvidence,
+          fault.witness,
+        )
+          ? "host-envelope-qualified"
+          : "strict";
         const observed = report.observations[0];
         const intended =
           fault.name === "snapshot-stage-writes-dropped"

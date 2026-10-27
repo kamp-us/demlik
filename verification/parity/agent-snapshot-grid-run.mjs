@@ -17,6 +17,14 @@ const root = fileURLToPath(new URL("../..", import.meta.url)),
 const engine = JSON.parse(
   fs.readFileSync(new URL("./scope.json", import.meta.url)),
 ).referenceEngine;
+const hostEnvelopeQualified = new Set([
+  "agent-snapshot.promise.writer-fail",
+  "agent-snapshot.promise.save-fail",
+  "agent-snapshot.effect.writer-fail",
+  "agent-snapshot.effect.save-fail",
+]);
+const hostEnvelopeQualification =
+  "Original application cause, identity, follow-up phase/cardinality, initial dispatch receipt, state and wires match. Raw Source reporter error/context/display versus typed native Handler/Save Debug envelope remains different and retained outside the comparison view.";
 function hashes() {
   const files = execFileSync(
     "git",
@@ -253,6 +261,9 @@ export function agentSnapshotGridParity(options = {}) {
         literals,
         equal,
         difference,
+        qualification: hostEnvelopeQualified.has(c.id)
+          ? hostEnvelopeQualification
+          : null,
         wireChecks,
         source: outputs.source,
         native: outputs.native ?? null,
@@ -285,12 +296,17 @@ export function agentSnapshotGridParity(options = {}) {
       observations: rows,
       nativeEvidence: Object.fromEntries(
         rows
-          .filter((r) => r.equal === true)
+          .filter((r) => r.equal === true && !hostEnvelopeQualified.has(r.id))
           .map((r) => [r.id, r.native.observedCalls]),
       ),
-      qualifiedNativeEvidence: {},
+      qualifiedNativeEvidence: Object.fromEntries(
+        rows
+          .filter((r) => r.equal === true && hostEnvelopeQualified.has(r.id))
+          .map((r) => [r.id, r.native.observedCalls]),
+      ),
       authoringGate: snapshotAuthoringGate,
       qualifications: [
+        hostEnvelopeQualification,
         "Fixed injected clocks and authored dense data/profile only; no arbitrary executor, JS heap/prototype/panic or raw-at closure.",
         "Plain snapshot writers return no messages. Returned-message behavior remains OPEN and unmeasured; existing host context dispatch is preserved.",
         "Named IO copies bytes already written by the actual runtime FileStore; Source undefined payload is never replaced with full State.",
