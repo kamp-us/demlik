@@ -94,6 +94,34 @@ function trusted(raw, id) {
   assert.deepEqual(row.observedCalls, calls.slice(0, row.observedCalls.length));
   return row;
 }
+function requireOutcome(row, kind) {
+  assert.equal(row.outcome.kind, kind, "Source early-return mode");
+  const length = {
+    stopped: 1,
+    api: 2,
+    hexagon: 3,
+    refused: 4,
+    layers: 5,
+    boundaries: 6,
+    "env-keys": 7,
+    comments: 8,
+    collapse: 9,
+    continue: 9,
+    thrown: 9,
+  }[kind];
+  assert.deepEqual(row.observedCalls, calls.slice(0, length));
+}
+const earlierModes = {
+  "config-refused-before-policy": "stopped",
+  "thresholds-first": "stopped",
+  "unreachable-before-collapse": "refused",
+  "smell-accept-refusal-before-collapse": "refused",
+  "api-priority": "api",
+  "layers-priority": "layers",
+  "boundaries-priority": "boundaries",
+  "env-keys-priority": "env-keys",
+  "comments-priority": "comments",
+};
 function snapshot(root) {
   const out = {};
   function visit(dir) {
@@ -368,6 +396,13 @@ try {
           observed = trusted(n.trace, id),
           error = s.events.find((e) => e.event === "uncaught");
         failureKind = "semantic";
+        const expectedKind =
+          o.inactive || o.flags?.length === 0
+            ? "continue"
+            : error && error.stream === undefined
+              ? "thrown"
+              : (earlierModes[id] ?? "collapse");
+        requireOutcome(observed, expectedKind);
         assert.deepEqual(n.files, s.files, "exact bytes and modes");
         if (o.inactive || o.flags?.length === 0) {
           row.qualifications.push(
@@ -615,6 +650,18 @@ try {
       assert.throws(() => trusted(broken, witness.trace.id));
       responseGuards++;
     }
+  if (witness) {
+    const broken = structuredClone(witness.trace);
+    broken.outcome.kind =
+      broken.outcome.kind === "collapse" ? "continue" : "collapse";
+    assert.throws(() =>
+      requireOutcome(
+        trusted(broken, witness.trace.id),
+        witness.trace.outcome.kind,
+      ),
+    );
+    responseGuards++;
+  }
   for (const [_i, value] of [
     {},
     { id: "missing", argv: [], compiler: "x" },

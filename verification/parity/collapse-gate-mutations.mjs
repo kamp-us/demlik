@@ -29,9 +29,9 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const baselineHash = hash(fs.readFileSync(baseline));
 const checked = JSON.parse(fs.readFileSync(baselineReport, "utf8"));
 assert.deepEqual(checked.failures, []);
-assert.equal(checked.passed, 68);
+assert.equal(checked.passed, 69);
 assert.equal(checked.rejectedInvalidInputs, 5);
-assert.equal(checked.responseGuards, 3);
+assert.equal(checked.responseGuards, 4);
 assert.equal(checked.driverSha256, baselineHash);
 const evidence = path.resolve(evidenceDirectory);
 fs.mkdirSync(evidence, { recursive: true });
@@ -202,6 +202,14 @@ const mutations = [
     after:
       "let _ = host.take_stdio_failures(); Ok(CollapseDispatch::Complete(result))",
     witness: "write-banner-bad",
+  },
+  {
+    name: "active-gate-returns-continuation-after-emission",
+    file: "cli/frontdoor.rs",
+    region: true,
+    before: "Ok(CollapseDispatch::Complete(result))",
+    after: "let _=result; Ok(CollapseDispatch::Continue(self))",
+    witness: "write-new",
   },
   {
     name: "legacy.slack-count-is-accepted",
@@ -574,7 +582,7 @@ try {
   }
   const report = {
     detected: controls.length,
-    newControls: 20,
+    newControls: 21,
     affectedLegacyControls: 2,
     escaped: 0,
     baselineDriverSha256: baselineHash,

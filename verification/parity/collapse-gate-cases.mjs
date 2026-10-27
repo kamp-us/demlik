@@ -250,8 +250,15 @@ export const collapseCases = [
     },
   ],
   [
-    "smell-before-collapse",
+    "collapse-ignores-smell-ledger",
     { flags: ["--ci", "--smells"], badSmell: true, withoutCompiler: true },
+  ],
+  [
+    "smell-accept-refusal-before-collapse",
+    {
+      flags: ["--ci", "--accept-smells", "--reason", "intentional"],
+      withoutCompiler: true,
+    },
   ],
   [
     "api-priority",
