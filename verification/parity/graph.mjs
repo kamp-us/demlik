@@ -154,6 +154,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-reports",
+    driver: "collapse_cli_driver",
+    script: "graph-cli-reports-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-smell",
     driver: "collapse_cli_driver",
     script: "graph-cli-smell-run.mjs",
