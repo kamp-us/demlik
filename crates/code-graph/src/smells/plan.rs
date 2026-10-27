@@ -11,6 +11,25 @@ pub enum PlanAxis {
     Complexity,
     Size,
 }
+impl PlanAxis {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "rot" => Some(Self::Rot),
+            "impact" => Some(Self::Impact),
+            "complexity" => Some(Self::Complexity),
+            "size" => Some(Self::Size),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rot => "rot",
+            Self::Impact => "impact",
+            Self::Complexity => "complexity",
+            Self::Size => "size",
+        }
+    }
+}
 pub const PLAN_AXES: [PlanAxis; 4] = [
     PlanAxis::Rot,
     PlanAxis::Impact,
@@ -18,7 +37,7 @@ pub const PLAN_AXES: [PlanAxis; 4] = [
     PlanAxis::Size,
 ];
 pub fn is_plan_axis(value: &str) -> bool {
-    matches!(value, "rot" | "impact" | "complexity" | "size")
+    PlanAxis::parse(value).is_some()
 }
 fn primary(row: &PlanRow, axis: PlanAxis) -> [usize; 3] {
     let c = &row.components;

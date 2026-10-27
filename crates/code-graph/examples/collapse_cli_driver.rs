@@ -4,7 +4,7 @@ use demlik_code_graph::{
         frontdoor::{
             ApiDispatch, BoundaryDispatch, CliStop, CollapseDispatch, CommentDispatch,
             EnvKeyDispatch, FrontdoorError, GatePreflightDispatch, HexagonDispatch, LayerDispatch,
-            PlainCollapseDispatch, Preparation, SmellDispatch, UnreachableDispatch,
+            PlainCollapseDispatch, Preparation, ReportDispatch, SmellDispatch, UnreachableDispatch,
         },
         io::{CliIo, StdioStream},
     },
@@ -38,6 +38,8 @@ struct Request {
     late_unreachable: bool,
     #[serde(default)]
     late_smell: bool,
+    #[serde(default)]
+    late_reports: bool,
     #[serde(default, deserialize_with = "some")]
     warning_marker: Option<JsString>,
     #[serde(default, deserialize_with = "some")]
@@ -84,6 +86,7 @@ fn failure(error: &FrontdoorError) -> JsValue {
         | FrontdoorError::EnvKeyEmit(ApiError::Io { path, source })
         | FrontdoorError::CommentEmit(ApiError::Io { path, source })
         | FrontdoorError::SmellEmit(ApiError::Io { path, source })
+        | FrontdoorError::ReportEmit(ApiError::Io { path, source })
         | FrontdoorError::SmellLedger(
             demlik_code_graph::smells::ledger::SmellLedgerError::Write(ApiError::Io {
                 path,
@@ -102,6 +105,7 @@ fn failure(error: &FrontdoorError) -> JsValue {
         | FrontdoorError::EnvKeyEmit(ApiError::Argument(error))
         | FrontdoorError::CommentEmit(ApiError::Argument(error))
         | FrontdoorError::SmellEmit(ApiError::Argument(error))
+        | FrontdoorError::ReportEmit(ApiError::Argument(error))
         | FrontdoorError::SmellLedger(
             demlik_code_graph::smells::ledger::SmellLedgerError::Write(ApiError::Argument(error)),
         ) => object([
@@ -287,7 +291,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdout = ObservedFile {
         inner: File::from(io::stdout().as_fd().try_clone_to_owned()?),
         stream: "stdout",
-        enabled: request.plain || request.late_unreachable,
+        enabled: request.plain || request.late_unreachable || request.late_reports,
         events: Rc::clone(&writes),
         warning_marker: None,
         marked: false,
@@ -295,7 +299,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stderr = ObservedFile {
         inner: File::from(io::stderr().as_fd().try_clone_to_owned()?),
         stream: "stderr",
-        enabled: request.plain || request.late_unreachable,
+        enabled: request.plain || request.late_unreachable || request.late_reports,
         events: Rc::clone(&writes),
         warning_marker: request.warning_marker.as_ref(),
         marked: false,
@@ -425,7 +429,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ("kind", JsValue::String("collapse".into())),
                 ("result", serialized(&result)),
             ])),
-            Ok(CollapseDispatch::Continue(value)) if request.late_unreachable || request.late_smell => {
+            Ok(CollapseDispatch::Continue(value)) if request.late_unreachable || request.late_smell || request.late_reports => {
                 let value = match observe!(
                     &mut calls,
                     demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking,
@@ -441,7 +445,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Ok(UnreachableDispatch::Continue(value)) => value,
                     Err(error) => return Ok(object([("kind", JsValue::String("thrown".into())), ("error", failure(&error))])),
                 };
-                let value = if request.late_smell {
+                let value = if request.late_smell || request.late_reports {
                     match observe!(
                         &mut calls,
                         demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking,
@@ -458,6 +462,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                         Err(error) => return Ok(object([("kind", JsValue::String("thrown".into())), ("error", failure(&error))])),
                     }
                 } else { value };
+                if request.late_reports {
+                    return match observe!(
+                        &mut calls,
+                        demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking,
+                        value,
+                        &mut host,
+                        &TsgoBinary::pinned(&request.compiler)
+                    ) {
+                        Ok(ReportDispatch::Complete)=>Ok(object([("kind",JsValue::String("reports".into()))])),
+                        Ok(ReportDispatch::Refused{cause})=>Ok(object([("kind",JsValue::String("reports-load-refused".into())),("cause",JsValue::String(cause.message()))])),
+                        Ok(ReportDispatch::Continue(value))=>Ok(object([
+                            ("kind",JsValue::String("continue".into())),
+                            ("sameCarrier",JsValue::Bool(std::ptr::eq(before,value.as_ref()))),
+                            ("samePrepared",JsValue::Bool(std::ptr::eq(original,value.prepared.as_ref()))),
+                        ])),
+                        Err(error)=>Ok(object([("kind",JsValue::String("thrown".into())),("error",failure(&error))])),
+                    };
+                }
                 match observe!(
                     &mut calls,
                     demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_plain_collapse_blocking,
@@ -551,7 +573,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("exitCode", JsValue::Number(f64::from(code))),
         ("observedCalls", serialized(&calls)),
     ]);
-    if (request.plain || request.late_unreachable || request.late_smell)
+    if (request.plain || request.late_unreachable || request.late_smell || request.late_reports)
         && let JsValue::Object(fields) = &mut trace
     {
         fields.insert("writeObservations".into(), serialized(&*writes.borrow()));

@@ -42,7 +42,7 @@ use crate::{
         Collation, CollationError, EdgeScope, ProjectLoadError, find_repo_root_text,
         load_cheap_project, load_edge_project_text, resolve_path_text_from,
     },
-    render::{analysis::render_unreachable, json::stable_stringify},
+    render::{ReportRenderError, analysis::render_unreachable, json::stable_stringify},
     schema::{Graph, Thresholds},
     smells::{
         gate::{
@@ -201,6 +201,29 @@ pub enum SmellDispatch {
     Continue(Box<PreparedGatesCli>),
 }
 #[derive(Debug)]
+pub enum ReportDispatch {
+    Complete,
+    Refused { cause: ProjectLoadError },
+    Continue(Box<PreparedGatesCli>),
+}
+enum ConsoleOutput {
+    Ci,
+    Graph,
+    Collapse,
+    Unreachable,
+    Unguarded,
+    Clusters,
+    InterfaceWidth,
+    Cycles,
+    Kinds,
+    CrossRuntime,
+    Data,
+    File,
+    Plan,
+    Smells,
+    Summary,
+}
+#[derive(Debug)]
 pub enum EnvKeyDispatch {
     Complete(EnvKeyReport),
     Continue(Box<PreparedGatesCli>),
@@ -231,6 +254,8 @@ pub enum FrontdoorError {
     CheapParse(ParseFailure),
     SmellLedger(SmellLedgerError),
     SmellEmit(ApiError),
+    ReportRender(ReportRenderError),
+    ReportEmit(ApiError),
     CollapseRender(serde_json::Error),
     Unreachable(UnreachableRunError<ApiError>),
     EnvKeys(EnvKeyError),
@@ -262,6 +287,7 @@ impl FrontdoorError {
             Self::Assembly(error) => error.name(),
             Self::SmellLedger(error) => error.name(),
             Self::SmellEmit(error) => error.name(),
+            Self::ReportEmit(error) => error.name(),
             Self::Unreachable(
                 UnreachableRunError::Emit(error) | UnreachableRunError::Report(error),
             ) => error.name(),
@@ -296,6 +322,8 @@ impl FrontdoorError {
             Self::CheapParse(error) => error.to_string().into(),
             Self::SmellLedger(error) => error.message(),
             Self::SmellEmit(error) => error.message(),
+            Self::ReportEmit(error) => error.message(),
+            Self::ReportRender(error) => error.to_string().into(),
             Self::CollapseRender(error) => error.to_string().into(),
             Self::Unreachable(error) => match error {
                 UnreachableRunError::Collation(error) => error.to_string().into(),
@@ -339,6 +367,8 @@ impl Error for FrontdoorError {
             Self::CheapParse(error) => error,
             Self::SmellLedger(error) => error,
             Self::SmellEmit(error) => error,
+            Self::ReportEmit(error) => error,
+            Self::ReportRender(error) => error,
             Self::CollapseRender(error) => error,
             Self::Unreachable(error) => match error {
                 UnreachableRunError::Collation(error) => error,
@@ -1052,5 +1082,181 @@ impl PreparedGatesCli {
         }
         exit_with(host, f64::from(result.exit_code)).map_err(FrontdoorError::ExitCode)?;
         Ok(LayerDispatch::Complete(result))
+    }
+
+    /// Run the supported late outputs after early modes and both prepared ledger gates.
+    /// Unsupported higher-priority outputs retain this same allocation before graph or IO work.
+    pub fn dispatch_reports_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+    ) -> Result<ReportDispatch, FrontdoorError> {
+        use crate::render::{analysis, ci, file, graph as graph_view, plan, smells, summary};
+        use crate::smells::plan::PlanAxis;
+        let options = &self.prepared.options;
+        if matches!(self.unreachable, UnreachablePreparation::Prepared { .. })
+            || matches!(self.smells, SmellPreparation::Prepared { .. })
+            || (options.collapse() == Some(true)
+                && (options.ci() == Some(true) || options.write_ceilings() == Some(true)))
+        {
+            return Ok(ReportDispatch::Continue(self));
+        }
+        let output = if options.ci() == Some(true) {
+            ConsoleOutput::Ci
+        } else if options.html() == Some(true) {
+            return Ok(ReportDispatch::Continue(self));
+        } else if options.graph() == Some(true) {
+            ConsoleOutput::Graph
+        } else if options.collapse() == Some(true) {
+            ConsoleOutput::Collapse
+        } else if options.unreachable() == Some(true) {
+            ConsoleOutput::Unreachable
+        } else if options.unguarded() == Some(true) {
+            ConsoleOutput::Unguarded
+        } else if options.clusters() == Some(true) {
+            ConsoleOutput::Clusters
+        } else if options.interface_width() == Some(true) {
+            ConsoleOutput::InterfaceWidth
+        } else if options.cycles() == Some(true) {
+            ConsoleOutput::Cycles
+        } else if options.kinds() == Some(true) {
+            ConsoleOutput::Kinds
+        } else if options.cross_runtime() == Some(true) {
+            ConsoleOutput::CrossRuntime
+        } else if options.data() == Some(true) {
+            ConsoleOutput::Data
+        } else if options.hotspots() == Some(true)
+            || options.blast().is_some()
+            || options.find().is_some()
+        {
+            return Ok(ReportDispatch::Continue(self));
+        } else if options.file().is_some() {
+            ConsoleOutput::File
+        } else if options.plan() == Some(true) {
+            ConsoleOutput::Plan
+        } else if options.smells() == Some(true) {
+            ConsoleOutput::Smells
+        } else if options.tree() == Some(true) {
+            return Ok(ReportDispatch::Continue(self));
+        } else {
+            ConsoleOutput::Summary
+        };
+        if matches!(output, ConsoleOutput::Collapse) {
+            return self.dispatch_plain_collapse_blocking(host, binary).map(
+                |result| match result {
+                    PlainCollapseDispatch::Complete => ReportDispatch::Complete,
+                    PlainCollapseDispatch::Refused { cause } => ReportDispatch::Refused { cause },
+                    PlainCollapseDispatch::Continue(value) => ReportDispatch::Continue(value),
+                },
+            );
+        }
+        if matches!(output, ConsoleOutput::Unreachable) {
+            return self
+                .dispatch_unreachable_blocking(host, binary)
+                .map(|result| match result {
+                    UnreachableDispatch::Complete => ReportDispatch::Complete,
+                    UnreachableDispatch::Refused { cause } => ReportDispatch::Refused { cause },
+                    UnreachableDispatch::Continue(value) => ReportDispatch::Continue(value),
+                });
+        }
+        let graph = match self.assemble_classified_graph(host, binary) {
+            Ok(graph) => graph,
+            Err(ClassifiedGraphFailure::LoadRefused(cause)) => {
+                return Ok(ReportDispatch::Refused { cause });
+            }
+            Err(ClassifiedGraphFailure::Assembly(cause)) => {
+                return Err(FrontdoorError::Assembly(cause));
+            }
+            Err(ClassifiedGraphFailure::CheapParse(cause)) => {
+                return Err(FrontdoorError::CheapParse(cause));
+            }
+        };
+        let options = &self.prepared.options;
+        let json = options.json() == Some(true);
+        let pretty = options.pretty() == Some(true);
+        if matches!(output, ConsoleOutput::Ci) {
+            let code = ci::run_smell_gate(&graph, options.fail_on(), options.max(), host);
+            exit_with(host, f64::from(code)).map_err(FrontdoorError::ExitCode)?;
+            return Ok(ReportDispatch::Complete);
+        }
+        let mut payload = match output {
+            ConsoleOutput::Graph => {
+                graph_view::render_graph(&graph, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::Summary => {
+                summary::render_summary(&graph, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::Unguarded => {
+                analysis::render_unguarded(&graph, json, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::Clusters => {
+                analysis::render_clusters(&graph, json, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::InterfaceWidth => analysis::render_interface_width(&graph, json, pretty)
+                .map_err(ReportRenderError::from),
+            ConsoleOutput::Cycles => analysis::render_cycles(&graph, json, pretty),
+            ConsoleOutput::Kinds => {
+                analysis::render_kinds(&graph, json, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::CrossRuntime => analysis::render_cross_runtime(&graph, json, pretty)
+                .map_err(ReportRenderError::from),
+            ConsoleOutput::Data => crate::data::render::render_data(&graph, json, pretty)
+                .map_err(ReportRenderError::from),
+            ConsoleOutput::Smells => smells::render_smells(&graph, json, pretty),
+            ConsoleOutput::File => {
+                let result = file::render_file(
+                    &graph,
+                    &self.prepared.root_absolute,
+                    options.file().expect("selected file output"),
+                    pretty,
+                )
+                .map_err(FrontdoorError::ReportRender)?;
+                if let Some(mut warning) = result.warning {
+                    warning.push_str("\n");
+                    host.write_stderr(&warning);
+                }
+                let Some(stdout) = result.stdout else {
+                    return Ok(ReportDispatch::Complete);
+                };
+                Ok(stdout)
+            }
+            ConsoleOutput::Plan => {
+                let requested = options
+                    .by()
+                    .map(JsString::to_lossy)
+                    .unwrap_or_else(|| "rot".into());
+                let axis = match PlanAxis::parse(&requested) {
+                    Some(axis) => axis,
+                    None => {
+                        let mut warning = JsString::from("warning: unknown --by axis \"");
+                        if let Some(value) = options.by() {
+                            warning.extend(value);
+                        }
+                        warning.push_str("\"; falling back to \"rot\".\n");
+                        host.write_stderr(&warning);
+                        PlanAxis::Rot
+                    }
+                };
+                if matches!(axis, PlanAxis::Impact)
+                    && !matches!(graph.provenance, crate::schema::Provenance::Edges { .. })
+                {
+                    clean_exit(
+                        host,
+                        &"--by impact needs the call graph; add --edges".into(),
+                    );
+                    return Ok(ReportDispatch::Complete);
+                }
+                plan::render_plan(&graph, axis, json, pretty).map_err(ReportRenderError::from)
+            }
+            ConsoleOutput::Ci | ConsoleOutput::Collapse | ConsoleOutput::Unreachable => {
+                unreachable!("delegated output")
+            }
+        }
+        .map_err(FrontdoorError::ReportRender)?;
+        payload.push_str("\n");
+        output_to(options.out())
+            .emit(host, &payload)
+            .map_err(FrontdoorError::ReportEmit)?;
+        Ok(ReportDispatch::Complete)
     }
 }
