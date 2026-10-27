@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -69,8 +69,9 @@ export function resolveContract(capability, mappings, capabilities) {
   };
 }
 
-export async function checkCoverage(evidence) {
+export async function discoverCoverageInventory() {
   const file = path.join(root, "target/parity/inventory.json");
+  await mkdir(path.dirname(file), { recursive: true });
   execFileSync(
     process.execPath,
     [
@@ -84,7 +85,10 @@ export async function checkCoverage(evidence) {
       stdio: "inherit",
     },
   );
-  const inventory = JSON.parse(await readFile(file, "utf8"));
+  return JSON.parse(await readFile(file, "utf8"));
+}
+
+export async function checkCoverage(evidence, inventory) {
   const mappings = JSON.parse(
     await readFile(path.join(here, "contracts.json"), "utf8"),
   );

@@ -21,7 +21,7 @@ import { apiGitParity } from "./api-git-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { commandInputParity } from "./command-input-run.mjs";
 import { composeCheckpointParity } from "./compose-run.mjs";
-import { checkCoverage } from "./coverage.mjs";
+import { checkCoverage, discoverCoverageInventory } from "./coverage.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
@@ -143,6 +143,9 @@ const referenceChanges = execFileSync(
   .trim()
   .split("\n")
   .filter(Boolean);
+const coverageInventory = args.includes("--complete")
+  ? await discoverCoverageInventory()
+  : undefined;
 if (binaryArgument === -1) {
   execFileSync(cargo, ["build", "--locked", "--package", "demlik-parity"], {
     cwd: root,
@@ -1443,6 +1446,7 @@ if (args.includes("--complete")) {
         new Set(calls),
       ]),
     ),
+    coverageInventory,
   );
   if (report.coverage.gaps.length || referenceChanges.length)
     process.exitCode = 1;
