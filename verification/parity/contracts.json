@@ -11265,7 +11265,9 @@
       "file": "crates/tea/src/agent/knob/runtime.rs",
       "symbols": [
         "demlik_tea::agent::Agent::to_machine",
-        "demlik_tea::agent::Agent::to_machine_with_compaction"
+        "demlik_tea::agent::Agent::to_machine_with_compaction",
+        "demlik_tea::agent::Agent::to_machine_with_snapshot",
+        "demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction"
       ]
     },
     "cases": [
@@ -11382,14 +11384,28 @@
       "agent-compaction.effect.cancel-late-ok",
       "agent-compaction.effect.cancel-late-error",
       "agent-compaction.promise.cold",
-      "agent-compaction.effect.cold"
+      "agent-compaction.effect.cold",
+      "agent-snapshot.promise.nominal.off-off",
+      "agent-snapshot.promise.nominal.off-on",
+      "agent-snapshot.promise.nominal.on-off",
+      "agent-snapshot.promise.nominal.on-on",
+      "agent-snapshot.promise.held",
+      "agent-snapshot.promise.cold.off",
+      "agent-snapshot.promise.cold.on",
+      "agent-snapshot.effect.nominal.off-off",
+      "agent-snapshot.effect.nominal.off-on",
+      "agent-snapshot.effect.nominal.on-off",
+      "agent-snapshot.effect.nominal.on-on",
+      "agent-snapshot.effect.held",
+      "agent-snapshot.effect.cold.off",
+      "agent-snapshot.effect.cold.on"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open.",
     "knownGaps": [
       "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
-      "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
+      "OPEN advanced router/concurrency/children/provider/advanced-snapshot/tool-policy profiles, including arbitrary returned snapshot messages, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction and no-return snapshot corpus does not close those profiles.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
       "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."
@@ -11401,7 +11417,9 @@
       "file": "crates/tea/src/agent/knob/runtime.rs",
       "symbols": [
         "demlik_tea::agent::Agent::to_machine",
-        "demlik_tea::agent::Agent::to_machine_with_compaction"
+        "demlik_tea::agent::Agent::to_machine_with_compaction",
+        "demlik_tea::agent::Agent::to_machine_with_snapshot",
+        "demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction"
       ]
     },
     "cases": [
@@ -11518,14 +11536,28 @@
       "agent-compaction.effect.cancel-late-ok",
       "agent-compaction.effect.cancel-late-error",
       "agent-compaction.promise.cold",
-      "agent-compaction.effect.cold"
+      "agent-compaction.effect.cold",
+      "agent-snapshot.promise.nominal.off-off",
+      "agent-snapshot.promise.nominal.off-on",
+      "agent-snapshot.promise.nominal.on-off",
+      "agent-snapshot.promise.nominal.on-on",
+      "agent-snapshot.promise.held",
+      "agent-snapshot.promise.cold.off",
+      "agent-snapshot.promise.cold.on",
+      "agent-snapshot.effect.nominal.off-off",
+      "agent-snapshot.effect.nominal.off-on",
+      "agent-snapshot.effect.nominal.on-off",
+      "agent-snapshot.effect.nominal.on-on",
+      "agent-snapshot.effect.held",
+      "agent-snapshot.effect.cold.off",
+      "agent-snapshot.effect.cold.on"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open.",
     "knownGaps": [
       "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
-      "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
+      "OPEN advanced router/concurrency/children/provider/advanced-snapshot/tool-policy profiles, including arbitrary returned snapshot messages, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction and no-return snapshot corpus does not close those profiles.",
       "OPEN malformed restored subscription profile: Source missing-compaction throws TypeError, native retains typed UnsupportedRestoredProfile and fails ready.",
       "Owned deadline callback requires static message/cause and host-error family; borrowed services/state-only Stage construction is proved locally, actor launch requires owned static lifetime.",
       "OPEN codecs for opaque/custom fields and arbitrary restored JS/Error/heap shapes. The built-in StructuredOutputError codec and conditional default guarded State cold-JSON profile are verified; JSON does not revive Error identity or live name/message/rejected-root facts."

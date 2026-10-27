@@ -648,16 +648,16 @@ pub async fn execute(input: Input) -> Value {
     });
     macro_rules! run {($config:expr,$method:path,$state:ty $(,$extra:expr)*)=>{{let knob=Rc::new(create_agent($config));let wired=observe!(ctx.calls,$method,Rc::clone(&knob),model(Rc::clone(&ctx)),Loader(Rc::clone(&ctx)),Tools(Rc::clone(&ctx)) $(,$extra)*,Rc::new(ManualTimer));drive(wired,Rc::clone(&ctx),&input,|at|AgentMachineMsg::Start{run_id:"invoice-run".into(),at},AgentMachineMsg::boot,|s:&$state|s.is_settled()).await}};}
     let mut value = match (input.snapshot, input.compaction) {
-        (false, false) => run!(config(), Agent::to_machine, OffState),
+        (false, false) => run!(config(), demlik_tea::agent::Agent::to_machine, OffState),
         (false, true) => run!(
             config().with_compaction(policy()).unwrap(),
-            Agent::to_machine_with_compaction,
+            demlik_tea::agent::Agent::to_machine_with_compaction,
             OnState,
             Compact(Rc::clone(&ctx))
         ),
         (true, false) => run!(
             config().with_snapshots(input.every.value()),
-            Agent::to_machine_with_snapshot,
+            demlik_tea::agent::Agent::to_machine_with_snapshot,
             OffState,
             Writer(Rc::clone(&ctx))
         ),
@@ -666,7 +666,7 @@ pub async fn execute(input: Input) -> Value {
                 .with_snapshots(input.every.value())
                 .with_compaction(policy())
                 .unwrap(),
-            Agent::to_machine_with_snapshot_and_compaction,
+            demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction,
             OnState,
             Writer(Rc::clone(&ctx)),
             Compact(Rc::clone(&ctx))

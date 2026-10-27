@@ -272,7 +272,7 @@ pub async fn run(input: Input) -> Value {
     });
     let wired = observe!(
         shared.calls,
-        Knob::to_machine_with_compaction,
+        demlik_tea::agent::Agent::to_machine_with_compaction,
         Rc::clone(&knob),
         model,
         Loader(Rc::clone(&ctx)),
