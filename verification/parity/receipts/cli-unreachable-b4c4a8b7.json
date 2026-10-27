@@ -1,0 +1,173 @@
+{
+  "sourceCommit": "b4c4a8b77ee076923ee561f18e0b43861da2cec0",
+  "productionCommit": "4e772f7c7c8b45ab6e1da381143bad30bd7f9d6b",
+  "supportRepairCommit": "b4c4a8b77ee076923ee561f18e0b43861da2cec0",
+  "base": "0a7b51ebf52d42a923ebd555827470dd8ac54cd6",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-cli-unreachable-proof-01a16c9d",
+  "scope": "Unreachable ordinary renderer and prepared CLI gate/report continuation only, reusing one Graph-returning private warning/data-root/load/assembly kernel with ordinary collapse.",
+  "current": {
+    "logicalObservations": 58,
+    "sourceComparisonRows": 55,
+    "strictSourceComparisonRows": 48,
+    "qualifiedSourceComparisonRows": 7,
+    "nativeOnlyContinuationProfiles": 3,
+    "cliLogicalCases": 48,
+    "cliStrict": 38,
+    "cliQualified": 7,
+    "cliNativeOnly": 3,
+    "actualSourceCliExecutions": 53,
+    "pureRendererComparisons": 10,
+    "realWorkflowLogicalCases": 1,
+    "realWorkflowActionsIncluded": 9,
+    "responseGuardsSeparate": 3,
+    "protocolRefusalsSeparate": 5,
+    "nativeTests": 239,
+    "nativeTestExecutables": 67,
+    "newNativeTestsIncluded": 3,
+    "publicExecutedCallers": 2,
+    "sameSourceSoleE0599RedToGreen": true,
+    "newSemanticControls": 8,
+    "affectedOldSemanticControls": 7,
+    "controlWitnessesUnqualified": 14,
+    "controlWitnessesQualifiedInheritedStdio": 1
+  },
+  "affected": {
+    "library78": {
+      "strict": 72,
+      "qualified": 6,
+      "protocolRefusals": 4
+    },
+    "oldPlain49": {
+      "strict": 35,
+      "qualified": 10,
+      "nativeOnly": 4
+    },
+    "oldObservations": 127,
+    "notAddedToNewCounts": true
+  },
+  "cargo": {
+    "constructionSelections": 4,
+    "constructionAllExit0": true,
+    "constructionBudget": 8,
+    "historicalSetupOnlyMutationSelections": 1,
+    "correctedFullSuiteMutationSelections": 15,
+    "mutationTotal": 16,
+    "totalActual": 20,
+    "approvedMutationBudget": 16,
+    "setupSemanticCredit": 0,
+    "perFaultRestored": true,
+    "noTargetOverridesOrCacheCopies": true
+  },
+  "static": {
+    "codeGraphAllTargetClippy": true,
+    "scopedVerificationTypescript": true,
+    "scopedBiome": true,
+    "scopedRustfmt": true,
+    "workspaceOrTeaFeatureClaimed": false
+  },
+  "results": {
+    "path": "/private/tmp/demlik-cli-unreachable-proof-01a16c9d/results.json",
+    "sha256": "19888a2a98ea1692ce361f3423b5540066fa9f645181721b7c9fa8ba261ea36f"
+  },
+  "reports": {
+    "cli-final.json": "fbfc845ceb32fa813aec6da24335d49ad2f371662671cb9d354476253681f562",
+    "render-final.json": "789164b3e19e3922e9e3251c9aca4fb58d4f54d0a8c459f3586dc848c1a8c5a8",
+    "affected-library-78.json": "ae24a0dc038fc93e1fd26338c36e7176b2b6499d7cd1b2b3836968628abe73e9",
+    "affected-plain-49.json": "fa0bf425d2c48804e4a3483ef802a0dbae8db65461ca25b9d839c5f3c5824d5a",
+    "control-summary.json": "ece4187eda5bbd66f428647b6df25377bb7319dd960a0019d0c6150d7a35d977",
+    "controls-final/controls.json": "4c9a3d0b77ba9067334d2732ea921ffdbca40afce0912d8e3597f3cd81de574b",
+    "controls/controls.json": "a879b87a25f5fdcafc0e4ce3bf7880221caddac4a2b6bce8fd89ec08ccebd516",
+    "control-harness-recovery.json": "56270d667f82c694937b3cbcf574ee992dc15ca6255c74618be7813fe9a298f5",
+    "retained-artifacts.json": "2937cdfd8371a1cbc8c18ad3ce127bd96276c110facd2292e044a82fd065758b",
+    "artifact-path-map.json": "f700111f330737fb79b072c664c43c653d2b89913e0c03c5bdf6e58247d49b86",
+    "source-manifest.json": "feaba6e305a0b0a701033dfd90fa84bb41c30cb754840e99011ee5fb9e07c126",
+    "frozen-source-pins.json": "fa4dd07e555f236a1800d74ab6ba54dc063eed05d43568ba1eba2b5b6b9baf64",
+    "native-summary.json": "f4930c8ec4dc534a1f775e756e62578157dbda1f5e0320e19cabe13f6f7813c0",
+    "current/same-source-green.json": "2d043a210deabcd5b17c47ea515a4b58e6c6119a9c7626154592464bb11ecfe5",
+    "missing-dispatch.json": "6213d36144d99608886af87fee33569968c3e25b132cb6d61272e15a9fbda652",
+    "old-control-data-audit.json": "97e2f612a6173407f7cd1fc3aac252616151f304216133cd971962cba8fc7ce3",
+    "cli-harness-recovery.json": "14875cc5b0b2c997a26dbc8471ba498073395af940be06824bc422cce314e4a4",
+    "workflow-fixture-recovery.json": "d283f1d779b70507d2b227ab7ec1d99fc528d89273c0e255c70508910417ecdd",
+    "baseline-1.json": "92a20da96cd200e705b9fca83e39f3fd889b952a8d58040863354f2f7cce273f",
+    "examples-2.json": "63e39a4c338329457a474fbccf58ee45333109dba391d5d8c2803d4afc4b6a4c",
+    "native-3.json": "a5d34f610f19a4c0731bb2a43c4e551c175cf251d345cf4f9c7f0e2da38b450b",
+    "clippy-4.json": "9bc72006cb4ffb923d3950d6b8c0c2a546d79457301a1d42163c3571f810768f"
+  },
+  "qualifications": [
+    {
+      "id": "warning-before-assembly-failure",
+      "profiles": [
+        "backend-exception-text-native-qualified",
+        "controlled-loaded-source-drift"
+      ]
+    },
+    {
+      "id": "out-missing-parent",
+      "profiles": [
+        "backend-exception-text-native-qualified"
+      ]
+    },
+    {
+      "id": "out-directory",
+      "profiles": [
+        "backend-exception-text-native-qualified"
+      ]
+    },
+    {
+      "id": "out-nul",
+      "profiles": [
+        "backend-exception-text-native-qualified",
+        "raw-JavaScript-argv-and-stdio-callback-units-qualified; original raw callback and native encoded payload retained"
+      ]
+    },
+    {
+      "id": "stdout-failure",
+      "profiles": [
+        "pending-stdio-notification-contract"
+      ]
+    },
+    {
+      "id": "warning-stdio-failure",
+      "profiles": [
+        "pending-stdio-notification-contract"
+      ]
+    },
+    {
+      "id": "acknowledgement-stdio-failure",
+      "profiles": [
+        "pending-stdio-notification-contract"
+      ]
+    }
+  ],
+  "remainingOpen": [
+    "All53 CLI gaps remain OPEN; only three existing unreachable/accept-dead/dead-only IDs get supporting evidence, no fabricated helper IDs or registry edit.",
+    "HTML/smell/generic-CI and other late modes remain same-Box continuations, zero complete Source-CLI credit. No bootstrap/distribution claim.",
+    "Existing Graph String/usize/reflection and raw argv/OS/stdio profiles remain OPEN, as do the prior mixed-lone ICU comparator rows in the affected library suite.",
+    "The seven qualified CLI rows preserve original Source/native diagnostics/pending IO/encoded output facts. Three native-only rows are explicitly excluded from Source pair credit."
+  ],
+  "retention": {
+    "actualCargoArtifactBindings": 39,
+    "uniqueOriginalArtifactHashes": 38,
+    "baselineLibraryBytesRetained": true,
+    "all15ModifiedLibraryAndExecutedConsumerBytesRetained": true,
+    "selectedNativeTestRetained": true,
+    "otherNativeExecutablesNotRetained": true,
+    "unexecutedExtraExampleNotRetained": true,
+    "compiledSetupOnlyConsumerNotClaimedExecuted": true,
+    "immutableBaselineRetainedCompressedAfterSuite": true,
+    "noWholeTargetOrDependencyCacheCopies": true,
+    "controlTreeAndDefaultTargetRemoved": true,
+    "constructionRetirement": "Pending receipt; actual retirement recorded externally before handoff"
+  },
+  "capabilityProposal": {
+    "onlySupportingExistingIds": [
+      "@demlik/code-graph:cli:option:--unreachable",
+      "@demlik/code-graph:cli:option:--accept-dead",
+      "@demlik/code-graph:cli:option:--dead-only"
+    ],
+    "newIds": [],
+    "registryChanges": false,
+    "all53CliGapsOpen": true
+  }
+}
