@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,7 +84,34 @@ export function reportsMutations({
   oldCliReport,
   oldSmellReport,
   evidence,
+  sourceArchive,
+  python = process.env.DEMLIK_ICU77_PYTHON,
 }) {
+  assert.ok(
+    sourceArchive,
+    "explicit ICU77 source archive is required before Cargo",
+  );
+  assert.ok(
+    python,
+    "scoped DEMLIK_ICU77_PYTHON (Python >=3.12) is required before Cargo",
+  );
+  const archive = fs.realpathSync(sourceArchive),
+    pythonExecutable = fs.realpathSync(python);
+  assert.ok(
+    fs.statSync(archive).isFile(),
+    "ICU77 source archive must be a file",
+  );
+  assert.ok(
+    fs.statSync(pythonExecutable).isFile(),
+    "ICU77 Python must be an executable file",
+  );
+  fs.accessSync(archive, fs.constants.R_OK);
+  fs.accessSync(pythonExecutable, fs.constants.X_OK);
+  assert.equal(
+    fs.realpathSync(os.tmpdir()),
+    "/private/tmp",
+    "call this suite with scoped TMPDIR=/private/tmp, outside Git ignores",
+  );
   fs.mkdirSync(evidence, { recursive: true });
   assert.equal(
     execFileSync("git", ["status", "--porcelain=v1"], {
@@ -138,6 +166,8 @@ export function reportsMutations({
     CARGO_INCREMENTAL: "0",
     CARGO_PROFILE_DEV_DEBUG: "0",
     CARGO_PROFILE_TEST_DEBUG: "0",
+    DEMLIK_ICU77_PYTHON: pythonExecutable,
+    RUST_ICU_MAJOR_VERSION_NUMBER: "77",
   });
   const report = {
     planned: 26,
@@ -148,6 +178,7 @@ export function reportsMutations({
       encoding: "utf8",
     }).trim(),
     cargoSelections: 0,
+    nativePreparations: 0,
     baseline,
     controls: [],
     complete: false,
@@ -179,6 +210,56 @@ export function reportsMutations({
         fs.symlinkSync(fs.realpathSync(from), to);
       }
     }
+    env.RUST_ICU_LINK_SEARCH_DIR = path.join(check.target, "icu77/install/lib");
+    env.DEMLIK_ICU77_PREPARED = path.join(check.target, "icu77/prepared.json");
+    report.active = { status: "native-preparation" };
+    report.nativePreparations++;
+    save();
+    const prepared = run(
+      pythonExecutable,
+      [
+        "tools/icu77/prepare.py",
+        "prepare",
+        "--host",
+        "aarch64-apple-darwin",
+        "--target",
+        "aarch64-apple-darwin",
+        "--source-archive",
+        archive,
+        "--cargo",
+        process.env.CARGO ?? "cargo",
+      ],
+      check.root,
+      env,
+    );
+    fs.writeFileSync(
+      path.join(evidence, "native-preparation.stdout"),
+      prepared.stdout ?? "",
+    );
+    fs.writeFileSync(
+      path.join(evidence, "native-preparation.stderr"),
+      prepared.stderr ?? "",
+    );
+    report.nativePreparation = {
+      ...prepared,
+      stdout: undefined,
+      stderr: undefined,
+      sourceArchive: archive,
+      python: pythonExecutable,
+      stamp: env.DEMLIK_ICU77_PREPARED,
+      linkSearch: env.RUST_ICU_LINK_SEARCH_DIR,
+      major: env.RUST_ICU_MAJOR_VERSION_NUMBER,
+      semanticCredit: 0,
+    };
+    save();
+    assert.equal(prepared.error, undefined);
+    assert.equal(prepared.signal, null);
+    assert.equal(
+      prepared.exit,
+      0,
+      "native preparation failure earns no mutation credit",
+    );
+    delete report.active;
     for (const fault of faults) {
       for (const [file, text] of Object.entries(originals))
         fs.writeFileSync(path.join(check.root, file), text);
@@ -357,13 +438,46 @@ export function reportsMutations({
     };
   } finally {
     if (check) {
-      for (const [file, text] of Object.entries(originals))
-        fs.writeFileSync(path.join(check.root, file), text);
-      report.checkOwnersRestored = owners.every(
-        (file) =>
-          fs.readFileSync(path.join(check.root, file), "utf8") ===
-          originals[file],
-      );
+      try {
+        const native = path.join(check.target, "icu77");
+        for (const file of [
+          "prepared.json",
+          "attempt.json",
+          "metadata.stdout",
+          "metadata.stderr",
+        ]) {
+          const from = path.join(native, file);
+          if (fs.existsSync(from))
+            fs.copyFileSync(from, path.join(evidence, `native-${file}`));
+        }
+        if (fs.existsSync(path.join(native, "logs")))
+          fs.cpSync(
+            path.join(native, "logs"),
+            path.join(evidence, "native-preparation-logs"),
+            { recursive: true },
+          );
+      } catch (error) {
+        report.preparationProvenanceFailure = {
+          name: error.name,
+          message: error.message,
+        };
+        operationError ??= error;
+      }
+      try {
+        for (const [file, text] of Object.entries(originals))
+          fs.writeFileSync(path.join(check.root, file), text);
+        report.checkOwnersRestored = owners.every(
+          (file) =>
+            fs.readFileSync(path.join(check.root, file), "utf8") ===
+            originals[file],
+        );
+      } catch (error) {
+        report.ownerRestoreFailure = {
+          name: error.name,
+          message: error.message,
+        };
+        operationError ??= error;
+      }
       try {
         check.remove();
       } catch (error) {
@@ -400,15 +514,25 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  const [cliBinary, cliReport, oldCliReport, oldSmellReport, evidence] =
-    process.argv.slice(2);
-  assert.ok(evidence);
+  const [
+    cliBinary,
+    cliReport,
+    oldCliReport,
+    oldSmellReport,
+    evidence,
+    sourceArchive,
+  ] = process.argv.slice(2);
+  assert.ok(
+    evidence && sourceArchive && process.argv.length === 8,
+    "usage: cli-reports-mutations.mjs <binary> <report> <old-cli-report> <old-smell-report> <evidence> <icu77-source-archive>; set DEMLIK_ICU77_PYTHON",
+  );
   const r = reportsMutations({
     cliBinary,
     cliReport,
     oldCliReport,
     oldSmellReport,
     evidence: path.resolve(evidence),
+    sourceArchive,
   });
   console.log(
     JSON.stringify({
