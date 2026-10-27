@@ -35,10 +35,7 @@
     "defaultScoped": 12,
     "pbtScoped": 12,
     "overlapNotSum": true,
-    "allTargetClippy": [
-      "default",
-      "pbt"
-    ],
+    "allTargetClippy": ["default", "pbt"],
     "typeRecords": 18,
     "positiveTypeExecutions": 6,
     "soleIntendedRefusals": 12

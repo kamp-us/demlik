@@ -104,15 +104,11 @@
     },
     {
       "id": "out-missing-parent",
-      "profiles": [
-        "backend-exception-text-native-qualified"
-      ]
+      "profiles": ["backend-exception-text-native-qualified"]
     },
     {
       "id": "out-directory",
-      "profiles": [
-        "backend-exception-text-native-qualified"
-      ]
+      "profiles": ["backend-exception-text-native-qualified"]
     },
     {
       "id": "out-nul",
@@ -123,21 +119,15 @@
     },
     {
       "id": "stdout-failure",
-      "profiles": [
-        "pending-stdio-notification-contract"
-      ]
+      "profiles": ["pending-stdio-notification-contract"]
     },
     {
       "id": "warning-stdio-failure",
-      "profiles": [
-        "pending-stdio-notification-contract"
-      ]
+      "profiles": ["pending-stdio-notification-contract"]
     },
     {
       "id": "acknowledgement-stdio-failure",
-      "profiles": [
-        "pending-stdio-notification-contract"
-      ]
+      "profiles": ["pending-stdio-notification-contract"]
     }
   ],
   "remainingOpen": [
