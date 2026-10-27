@@ -2,16 +2,16 @@
   {
     "name": "snapshot-message-list-dropped",
     "file": "crates/tea/src/agent/snapshot.rs",
-    "before": "    fn settle_in(self, messages: Vec<M>, _: &CommandEdge) -> Result<Vec<M>, CommandContractError> {\n        Ok(messages)\n    }",
-    "after": "    fn settle_in(self, messages: Vec<M>, _: &CommandEdge) -> Result<Vec<M>, CommandContractError> {\n        Ok(vec![])\n    }",
+    "before": "    fn settle(self, messages: Vec<M>, _: f64) -> Result<Vec<M>, CommandContractError> {\n        Ok(messages)\n    }",
+    "after": "    fn settle(self, messages: Vec<M>, _: f64) -> Result<Vec<M>, CommandContractError> {\n        Ok(vec![])\n    }",
     "witness": "agent-snapshot-messages.promise.single",
     "contract": "a plain writer returned Cancel reaches the queue; it is not dropped"
   },
   {
     "name": "snapshot-message-list-reversed",
     "file": "crates/tea/src/agent/snapshot.rs",
-    "before": "    fn settle_in(self, messages: Vec<M>, _: &CommandEdge) -> Result<Vec<M>, CommandContractError> {\n        Ok(messages)\n    }",
-    "after": "    fn settle_in(self, mut messages: Vec<M>, _: &CommandEdge) -> Result<Vec<M>, CommandContractError> {\n        messages.reverse();\n        Ok(messages)\n    }",
+    "before": "    fn settle(self, messages: Vec<M>, _: f64) -> Result<Vec<M>, CommandContractError> {\n        Ok(messages)\n    }",
+    "after": "    fn settle(self, mut messages: Vec<M>, _: f64) -> Result<Vec<M>, CommandContractError> {\n        messages.reverse();\n        Ok(messages)\n    }",
     "witness": "agent-snapshot-messages.promise.ordered",
     "contract": "context-dispatched message precedes the original returned list in its order"
   },
