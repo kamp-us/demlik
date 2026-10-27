@@ -1,0 +1,80 @@
+{
+  "sourceCommit": "9940cb90a6483691a74773a705ab58341ad8b17e",
+  "base": "b64ecb917b7344e4a3b502ffc485332b66329a7c",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-unreachable-ledger-proof-01a16c9d",
+  "scope": "Unreachable ledger reconciliation/serialization/write, renderers and borrowed library runner only",
+  "productionOwners": 5,
+  "sourceFilesChanged": 12,
+  "currentEvidence": {
+    "observations": 78,
+    "strict": 72,
+    "qualified": 6,
+    "pure": 57,
+    "kernel": 12,
+    "realGoWorkflow": 9,
+    "protocolRefusals": 4,
+    "nativeTests": 233,
+    "nativeBinaries": 65,
+    "newNativeTestsIncluded": 7,
+    "publicTypeProbes": 3,
+    "sameSourceMissingInterfaceRedToGreen": true,
+    "semanticControls": 9,
+    "constructionCargoSelections": 7,
+    "mutationCargoSelections": 9,
+    "cargoTotal": 16
+  },
+  "reports": {
+    "pairs-final-runtime.json": "09d4116a366451725e48a03b1dd1af63b77a3f9632c61b32cacd22538fc4d12a",
+    "controls/controls.json": "2ac223d8dca114a6eb759b9aad60b7c8c9f0df9031aa10bde6c3348bf33c5bab",
+    "public-types-final.json": "addc5a9d1b2c48f9dc03a0df230aa66ea9bc69d5c091b37dc4f9e0e53bcbd382",
+    "same-source-green.json": "bcc013435d29cafdaf6f8a4ad8d95509decdd4eb279d9a3aa98676dfc69acf4e",
+    "baseline-probes.json": "d59f2b38b8397af215764cae557efa37fa4b24d875f1f9120e31807b7edd29a0",
+    "raw-baseline.json": "ffd45494c96db652e04daf5b8a782858caa1ffa835dc2892828d00df7a89259b",
+    "retained-artifacts.json": "ec74b036569a4f7e53291165dcf270d387000dd357a188a65109c67be0ad85a6",
+    "source-manifest.json": "e6d3cf0b6cf72d155f5c1398739410de1344b3bcfb1847903dd24333a5daf0c1",
+    "frozen-source-manifest.json": "b95edaeb3255f6e5ea6d3343216b6574610bd4df238d6e477bc954505edd33b1",
+    "whole-package-source-pins.json": "a9cbee418b6367aa910c2b2715133ca8832d7935481b1dc64c7ae62b682e3aa2",
+    "native-full-4.json": "0a8cb6dd89b82e35e35ecd1aa04ba33dd5d425d2ff41ad0a948056182c7907a4",
+    "clippy-final-6.json": "4fcd4b97f1bb5c4bc3b6fba431cafa62e4b018cd6297ac19ae7d7702bac1d54a",
+    "driver-final-7.json": "62ec60887e55480e4b3a734169b12a82f273a9d1733d55c349db93d7cd998270"
+  },
+  "static": {
+    "allTargetClippy": true,
+    "verificationTypescript": true,
+    "biomeScoped": true,
+    "rustfmtScoped": true
+  },
+  "qualifications": [
+    "Three pure.locale.* rows: existing locale_compare_units replacement of lone UTF16 changes its rank against U+E000; exact Source/native output retained, no strict credit, shared comparator unchanged.",
+    "run.missing-parent-write and run.directory-write: original OS diagnostic wording retained; stage/kind/effects matched.",
+    "run.nul-write: Source TypeError path validation vs native IO refusal is qualified; actual diagnostics and stage retained.",
+    "Graph unreachable ID and related fields remain existing String/native profile; no widening or reflection claim.",
+    "No global CLI attachment, standalone bootstrap/distribution or functional flag closure. All53 CLI gaps remain open."
+  ],
+  "historicalFailures": [
+    "Initial rustc E0463 search-path setup, retained and unscored.",
+    "Task Rustup env omission in initial standalone type attempt, unscored; final exact type diagnostics retained.",
+    "Cargo5 driver-only Clippy failure; exact hash-reconstructed old driver and narrow diff retained, Cargo6/7 final pass.",
+    "First mixed-lone corpus three failures retained, Root-qualified outside strict evidence."
+  ],
+  "retention": {
+    "effectiveArtifacts": 19,
+    "executedMutantBinaries": 9,
+    "mutantLibraryBytesRetained": false,
+    "mutantLibraryHashesAndCargoEventsRetained": true,
+    "noTargetOrCacheCopies": true,
+    "mutationWorktreeAndDefaultTargetRemoved": true,
+    "constructionRetirement": "Pending final receipt commit, actual final retirement will be recorded externally before handoff"
+  },
+  "inventory": {
+    "onlySupportingExistingCliIds": [
+      "@demlik/code-graph:cli:option:--unreachable",
+      "@demlik/code-graph:cli:option:--accept-dead",
+      "@demlik/code-graph:cli:option:--dead-only"
+    ],
+    "newIds": [],
+    "registryChanges": false,
+    "all53CliGapsOpen": true
+  }
+}
