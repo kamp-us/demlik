@@ -1,0 +1,305 @@
+{
+  "kind": "accepted-local-runtime-graph-checkpoint",
+  "createdAt": "2026-10-27T18:41:27.805424+00:00",
+  "implementationCommit": "4a70177d8a5b07681946083a98e9e53d73732f34",
+  "typescriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Implemented documented native profiles of TEA and code-graph; full monorepo goal remains incomplete. Entirely local, sweeps excluded.",
+  "outcomes": {
+    "total": 15699,
+    "passed": 15699,
+    "strictNative": 15500,
+    "qualified": 199,
+    "qualifiedByArea": {
+      "graph": 173,
+      "apiGit": 15,
+      "apiDiff": 4,
+      "subscriptions": 3,
+      "defaultStructuredError": 4
+    },
+    "comparisonFailures": 0,
+    "referenceChanges": 0,
+    "sourceFilesByteFixed": 2545,
+    "newStrictKeys": 202,
+    "previousStrictKeysAbsent": []
+  },
+  "freshNativeAndStatic": {
+    "sourceCommit": "4a70177d8a5b07681946083a98e9e53d73732f34",
+    "defaultNativeAndDocs": {
+      "testsAndDocs": 675,
+      "resultGroups": 205,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allFeaturesNativeAndDocs": {
+      "testsAndDocs": 689,
+      "resultGroups": 205,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allTargetClippy": ["default", "all features"],
+    "publicConsumers": [
+      "authored state and typed subscription interface checks in both configurations",
+      "agent_runtime_interface executed in both configurations",
+      "agent_runtime_borrowed executed in both configurations",
+      "agent_turn_interface executed in both configurations",
+      "collapse_render_public executed in both configurations",
+      "collapse_plain_public executed in both configurations",
+      "cli_unreachable_public executed in both configurations"
+    ],
+    "static": [
+      "cargo fmt --all --check",
+      "full parity TSC",
+      "full parity Biome",
+      "frozen source code-graph build",
+      "early canonical inventory"
+    ],
+    "qualification": "Default and feature counts overlap. Native, static, consumer and full comparison checks were actually run at the implementation commit.",
+    "publicExampleExecutions": 12
+  },
+  "components": {
+    "logicalRoot": {
+      "source": "c7b6afb9642ccb82a63ffcd5004ef7948b0f4d04",
+      "strictCases": 16,
+      "controls": 2,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/logical-root-c7b6afb9-parent-review.json",
+      "parentReviewSha256": "ff468ce1c89beb8610574026fe40e725e81b438b7aa2c4e2b212b2fd00544787"
+    },
+    "earlyCollapseGate": {
+      "source": "8e92d8d39c9001f3e660171183593cdc45a43dda",
+      "strictCases": 48,
+      "qualifiedCases": 21,
+      "controls": 23,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-gate-8e92d8d3-parent-review.json",
+      "parentReviewSha256": "7779d599c67c59ec9d9b231151a61b218046c85ab0069653324c2b3c09664bcc"
+    },
+    "baseAgentRuntime": {
+      "source": "d589705ee605717116342531d6093431dc36fd23",
+      "strictCases": 34,
+      "controls": 9,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-runtime-d589705e-parent-review.json",
+      "parentReviewSha256": "80e3737c4f425c11cef7fd0644ed518f4863d6173675270a1490dc75a89decf2"
+    },
+    "pureCollapseFinder": {
+      "source": "5e99179180616873286110ef49a235fc43e43790",
+      "strictCases": 99,
+      "controls": 20,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-report-5e991791-parent-review.json",
+      "parentReviewSha256": "577b4be67dad8a43a3c8994e1ce0dc9b9e480407b981dd37ca8460b9fe988256"
+    },
+    "typedReducerDiskMigration": {
+      "source": "29f75eb6ccd5cee6d74227e64659551622cb14a4",
+      "repeatedCases": 94,
+      "controls": 16,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/typed-reducer-layout-29f75eb6-parent-review.json",
+      "parentReviewSha256": "4de8ca5ea4b1cc13e502efb0c98c2dfd085e58559c54485436179d46c27d688a"
+    },
+    "composeDiskMigration": {
+      "source": "103a19139e3cb6370ce9aef303b98bd7d3530856",
+      "repeatedCases": 119,
+      "controls": 8,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/compose-layout-103a1913-parent-review.json",
+      "parentReviewSha256": "35ee0a615381cc3f940c708c2ee9ef48dc6df626574fb532af7be5a063efce90"
+    },
+    "defaultAgentTurns": {
+      "source": "0ad203c65bb7ff9d2c7d3d45cc1d6711d8d28e24",
+      "interfaceSource": "03ff5d4c0d67208802c543171f248b8dc6b57a86",
+      "strictCases": 54,
+      "controls": 6,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-turn-conformance-0ad203c6-parent-review.json",
+      "parentReviewSha256": "6a9f9b5992c67c56440ee185b16014b4c60df570c7684b6ee338a14ce83394bc"
+    },
+    "collapseRendererAndPlainCli": {
+      "source": "957e90434a0f051698adb87bde2c3ff478338b7b",
+      "productionSource": "5ecd3c682429ead52ab27b98f03c688ff705abf8",
+      "controlSource": "788790c44fa523bf85b870c93d2d6257a8ea8510",
+      "strictCases": 71,
+      "qualifiedCases": 10,
+      "nativeOnlyExcluded": 4,
+      "controls": 16,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-render-cli-957e9043-parent-review.json",
+      "parentReviewSha256": "bae9e14cbd4a7ece06936155c030aa2f7db86d667c548bf4433d596f4c1319ab"
+    },
+    "unreachableLedger": {
+      "source": "9940cb90a6483691a74773a705ab58341ad8b17e",
+      "strictCases": 72,
+      "qualifiedCases": 6,
+      "controls": 9,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/unreachable-ledger-9940cb90-parent-review.json",
+      "parentReviewSha256": "5ab2afda4581756218b6bf9e28ca61bd092f9560b6257c4487dcf75f4513bcbc"
+    },
+    "agentColdJsonApplicationCodec": {
+      "source": "75d1375bc9407b4f4356876690e7374233b49f53",
+      "strictCases": 12,
+      "exactCheckpointBytePairs": 24,
+      "freshProcesses": 48,
+      "controls": 3,
+      "defaultGuardedCodecClosed": false,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-state-json-75d1375b-parent-review.json",
+      "parentReviewSha256": "c3d44166ddac1ab54f9134ff665b25ff233d8f9b5f3a3e9aeb94bc11ce2ac0c2"
+    },
+    "smellLedger": {
+      "source": "786a095400e851faa553762b37897098519113a5",
+      "strictCases": 135,
+      "qualifiedCases": 4,
+      "controls": 13,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/smell-ledger-786a0954-parent-review.json",
+      "parentReviewSha256": "59d3d3dd9afbebcf5a070a51ee4d4c4295ee2ead3a4a6c3d9a9d3ce0b8dcd5ef"
+    },
+    "unreachableCliAndRenderer": {
+      "source": "4e772f7c7c8b45ab6e1da381143bad30bd7f9d6b",
+      "supportSource": "b4c4a8b77ee076923ee561f18e0b43861da2cec0",
+      "strictCases": 48,
+      "qualifiedCases": 7,
+      "nativeOnlyExcluded": 3,
+      "controls": 15,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-unreachable-b4c4a8b7-parent-review.json",
+      "parentReviewSha256": "49831b26ed2195448d4764ba8ad1cf25691ec916cfbdfaf5b2788da6d28a4482"
+    },
+    "defaultStructuredError": {
+      "source": "2e41cb1659a6d48f6725d28b471305933b7c7b30",
+      "supportSource": "df947aea44fc9c366209cbcf705078f861e1fc4f",
+      "strictCases": 19,
+      "qualifiedCases": 4,
+      "affectedComparisons": 350,
+      "typeRecords": 18,
+      "controls": 15,
+      "retainedMutantLibraries": 3,
+      "unretainedMutantLibraries": 12,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/default-structured-error-df947aea-parent-review.json",
+      "parentReviewSha256": "2284f6ad7f86ee1d205fa7040606dec707f5637af1d300d12404e8fa876d987f"
+    },
+    "subscriptionTestDeadlineRepair": {
+      "source": "f49c68e7ad548006fc7c310feed15b640d9f63df",
+      "testOnly": true,
+      "extraSharedCaseCredit": 0,
+      "focusedNativeFeatureTests": 9,
+      "actualBinaryRepeats": 300,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/subscription-test-repair-f49c68e7-parent-review.json",
+      "parentReviewSha256": "f386aa776a3c17d42ceaf585dd0d957551c9fc440a2fa4575573a7e83eaa950a"
+    },
+    "pbtConstructorDiskMigration": {
+      "source": "a023da26f08a14709b0d463b5da4f7224804d407",
+      "repeatedCases": 90,
+      "controls": 19,
+      "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/pbt-constructors-layout-a023da26-parent-review.json",
+      "parentReviewSha256": "450118bf75b581c48e074399e839fbb722a74fa1f8e0e52a74acca2b301bc3a7"
+    }
+  },
+  "componentFaultQualification": "Inherited independently audited executions; counts overlap prior controls and are not a full aggregate run.",
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 832,
+    "gapRows": 2793,
+    "unmapped": 2613,
+    "all53CliGapsOpen": true
+  },
+  "proof": {
+    "status": "passed",
+    "sourceCommit": "4a70177d8a5b07681946083a98e9e53d73732f34",
+    "archive": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/4a70177d-runtime-graph-checkpoint-proof.tar.gz",
+    "archiveBytes": 232959828,
+    "archiveSha256": "9f410c02f5167345e2cb89ada008d65c1a9be42534ab21b1682dea567c403952",
+    "inventory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-4a70177d/archive-inventory.json",
+    "inventorySha256": "d7eae611444f09784e8705d12bbadbbeda1de952191e4ccb90f9e387b9e65aac",
+    "members": 988,
+    "allArchiveMembersByteVerified": true,
+    "parentAudit": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/runtime-graph-checkpoint-4a70177d/parent-audit.json",
+    "parentAuditSha256": "62ce29043bf99c7287123ce1447f53630da8d8d29cfe00f9eff8784d7ace1f92",
+    "checkedOutcomes": 15699,
+    "strict": 15500,
+    "qualified": 199,
+    "nativeArtifactBindings": 45,
+    "coldSourceArchiveRebuild": false
+  },
+  "peerReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/demlik-4a70177d-independent-review-01a16c9d.json",
+    "sha256": "12f0aa928055eaca85eb9c83c6fd429772c4401cebd2f3c5e941888413934732",
+    "verdict": "PASS_SCOPED_ACCEPTANCE_NO_FINDINGS",
+    "verified": {
+      "observations": 15699,
+      "strict": 15500,
+      "qualified": 199,
+      "previousObservations": 15482,
+      "newStrict": 202,
+      "newQualified": 15,
+      "lostStrict": 0,
+      "nativeDefault": 675,
+      "nativeFeatures": 689,
+      "nativeGroupsEach": 205,
+      "nativeTotalsOverlap": true,
+      "publicExecuted": 12,
+      "coverageCapabilities": 3445,
+      "existingMappings": 832,
+      "gapRows": 2793,
+      "allCliGapIdsOpen": 53,
+      "archivePayloads": 988,
+      "sourceFiles": {
+        "currentGitArchiveFiles": 2545,
+        "referenceGitArchiveFiles": 1336,
+        "currentMatchesSourceBefore": true,
+        "frozenTeaCodeGraphFiles": 1043,
+        "frozenProductObjectIdsAndSetsUnchanged": true
+      },
+      "actualCargoBindings": 45,
+      "sixGraphSelectorOriginsSameNativeDefault": true,
+      "distinctColdCodecProducers": {
+        "agent-cold-json-driver": "681bdab6236f78349534fe480c981e2f4f4279418463d4fc1e206c57ca7a4b28",
+        "agent-error-cold-driver": "5f44e0a573829ca60174e3074ece91a32a76855e47e532ea8181d60002fcfb98"
+      },
+      "qualifiedIdsAbsentFromStrict": 199,
+      "existingMappingIdSetUnchanged": true,
+      "allStepLogHashesVerified": 26,
+      "cleanup": {
+        "worktreeAbsent": true,
+        "defaultTargetAbsent": true,
+        "registrationAbsent": true
+      }
+    }
+  },
+  "artifactSelectionQualification": "Six graph drivers are selected from exact compiler events of the same current native-default invocation, with the original full stdout retained.",
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-runtime-graph-combined-check-4a70177d-01a16c9d"
+    ],
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "stderr": ""
+  },
+  "completionExit": {
+    "actual": 1,
+    "reason": "Coverage gaps, with zero comparison or frozen-reference failures"
+  },
+  "blindSpots": [
+    "Full monorepo port is incomplete; remaining capabilities, CLI modes, optional agent profiles, providers, hosts and packaging remain open.",
+    "Twelve cold writer/reader cases prove an application-owned error-codec persistence route, including exact bytes and commandless ready then explicit Boot. The separate default structured-error component now proves conditional default GuardedSchema State JSON with actual serializable fields; arbitrary opaque fields remain OPEN; no arbitrary state validation, process-kill or universal once-only guarantee.",
+    "Missing/null restored stamps, native panic/JS error reflection, controlled scheduling, backend/path representation and inherited aliases remain explicit gaps.",
+    "All 53 CLI gaps stay open. Eligible plain collapse, unreachable ordinary/prepared-ledger dispatch and graph priority are included; smell and other late owners, general dispatch/bootstrap and distribution remain incomplete. The older four plus new three native-only CLI rows have zero comparison credit.",
+    "Effect cleanup, raw Error/host diagnostic labels and ICU4X unmatched-surrogate collation qualifications remain outside strict evidence. The locked ICU already uses compare_utf16, which internally substitutes unmatched surrogates; this backend mismatch remains open.",
+    "Legacy aggregate mutation runners remain unsafe pending migration; Compose, typed-reducer and PBT constructor migrations are complete; other standalone workers remain unsafe.",
+    "Component compiled controls are inherited from their sealed source-bound executions, not rerun globally; default/current feature native gates are fresh.",
+    "No cold archive rebuild, release, remote publication or deployment claim."
+  ],
+  "newOutcomes": {
+    "smellLedgerStrict": 135,
+    "smellLedgerQualified": 4,
+    "unreachableCliStrict": 38,
+    "unreachableCliQualified": 7,
+    "unreachableRendererStrict": 10,
+    "defaultStructuredErrorStrict": 19,
+    "defaultStructuredErrorQualified": 4,
+    "totalNewShared": 217,
+    "baselineAccepted": "75a9a1a77c9a3825ef1e0b2488f8517fd752c8c3",
+    "protocolNativeOnlyAndPhaseCountsNotExtraCases": true
+  },
+  "historicalFailures": {
+    "formatPreflight": "aeabaf5d: two imported JSON receipt formatting errors before Rust, repaired JSON-identically in5cb55164; failed tree removed and evidence retained.",
+    "nativeTestFailure": "5cb55164: an error-identity test used zero drain budget but required one report. Controlled probes showed legitimate independent DrainTimeout notices. Test-onlyf49c68e7/4a70177d separates ordinary-policy error identity and deterministic zero-budget save-tail deadline. No production policy change or error filtering.",
+    "exactHistoricalSchedulingProven": false,
+    "failedAttemptSharedCaseCredit": 0,
+    "retainedInArchive": true
+  },
+  "fullGoalComplete": false
+}
