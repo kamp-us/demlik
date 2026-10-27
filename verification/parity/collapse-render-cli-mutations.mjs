@@ -52,9 +52,9 @@ const baselines = {
 assert.equal(baselines.render.passed, 36);
 assert.equal(baselines.render.attempted, 36);
 assert.equal(baselines.render.binary.sha256, baselineHashes.render);
-assert.equal(baselines.cli.passed, 48);
-assert.equal(baselines.cli.attempted, 48);
-assert.equal(baselines.cli.strictPairs, 34);
+assert.equal(baselines.cli.passed, 49);
+assert.equal(baselines.cli.attempted, 49);
+assert.equal(baselines.cli.strictPairs, 35);
 assert.equal(baselines.cli.qualifiedPairs, 10);
 assert.equal(baselines.cli.nativeOnlyCases, 4);
 assert.equal(baselines.cli.driverSha256, baselineHashes.cli);
@@ -482,7 +482,7 @@ try {
   }
   fs.writeFileSync(
     reportFile,
-    `${JSON.stringify({ detected: controls.length, escaped: 0, baselineReports: { render: { sha256: hash(fs.readFileSync(renderReport)), cases: 36 }, cli: { sha256: hash(fs.readFileSync(cliReport)), cases: 48, strict: 34, qualified: 10, nativeOnly: 4 } }, baselineHashes, sourceHashes: Object.fromEntries([...originals].map(([file, source]) => [file, hash(source)])), controls, buildProfile: { defaultTarget: true, worktree: check.root, target: check.target, jobs: 1, debug: 0, incremental: false }, noBuildOrProtocolFailureCredit: true }, null, 2)}\n`,
+    `${JSON.stringify({ detected: controls.length, escaped: 0, baselineReports: { render: { sha256: hash(fs.readFileSync(renderReport)), cases: 36 }, cli: { sha256: hash(fs.readFileSync(cliReport)), cases: 49, strict: 35, qualified: 10, nativeOnly: 4 } }, baselineHashes, sourceHashes: Object.fromEntries([...originals].map(([file, source]) => [file, hash(source)])), controls, buildProfile: { defaultTarget: true, worktree: check.root, target: check.target, jobs: 1, debug: 0, incremental: false }, noBuildOrProtocolFailureCredit: true }, null, 2)}\n`,
   );
 } catch (error) {
   fs.writeFileSync(

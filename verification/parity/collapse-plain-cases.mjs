@@ -86,6 +86,10 @@ export function plainFixture(location, options) {
   }
   if (options.preparedUnreachable)
     put(f.root, "unreachable-ledger.json", '{"entries":[]}');
+  if (options.outputMode !== undefined) {
+    put(f.root, options.out, "previous-output\n");
+    fs.chmodSync(path.join(f.root, options.out), options.outputMode);
+  }
   const git = spawnSync("git", ["init", "--quiet", "--template=", f.root], {
     encoding: "utf8",
   });
@@ -149,6 +153,7 @@ export const plainCases = [
   ["pretty-human", { flags: ["--pretty"] }],
   ["out-file", { out: "result.txt" }],
   ["out-existing-mode", { out: "old.txt", outReadonly: true }],
+  ["out-writable-mode", { out: "existing.txt", outputMode: 0o640 }],
   ["out-json-pretty", { flags: ["--json", "--pretty"], out: "result.json" }],
   ["initial-exit-preserved", { initial: 7 }],
   ["by-warning", { flags: ["--by", "loc"] }],

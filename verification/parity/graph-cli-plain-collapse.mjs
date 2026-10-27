@@ -491,6 +491,10 @@ try {
             assert.ok(write >= 0 && write < acknowledgment);
           }
         }
+        if (id === "out-writable-mode") {
+          assert.equal(n.files[o.out].mode, 0o640);
+          assert.notEqual(n.files[o.out].base64, before[o.out].base64);
+        }
         if (o.workflow) {
           const expected = steps[i];
           if (expected.expectedClusters !== undefined)
