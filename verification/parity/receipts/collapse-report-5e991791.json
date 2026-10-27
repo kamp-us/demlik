@@ -1,0 +1,214 @@
+{
+  "status": "Bounded pure-collapse report component verified, sealed for independent review; not combined acceptance or full-port completion",
+  "sourceBase": "8bd776a8a225693e4c170a7db846b864b4f1fc74",
+  "sourceCommits": [
+    "8e97642b84d09c396ca768f15e6d48917956e5f4",
+    "03aeb66f19e1597322426434529351722c892fa5",
+    "cff607fb1ccad1da2eea8247152d14e90a07bb09",
+    "5e99179180616873286110ef49a235fc43e43790"
+  ],
+  "sourceCommit": "5e99179180616873286110ef49a235fc43e43790",
+  "branch": "can/rust-collapse-report-01a16c9d",
+  "scope": "Complete pure find_collapse_candidates report and shared pair/cluster owner; stop before renderer/late plain collapse CLI. Reuses predicate, partial twins, canonical graph/settings, query reach, locale and JSON owners.",
+  "sourceManifest": {
+    "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/source-manifest-5e991791.json",
+    "sha256": "5b11059ea6df3527d041d3e4570dcac5c8557d819b9effff35f5e0de753eeffe",
+    "bytes": 7624
+  },
+  "sourceArchive": {
+    "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/source-5e991791.tar.gz",
+    "sha256": "ff681c6816fcf8c9123a69961c1ec879e1789462b5730633177ab9c17655f723",
+    "bytes": 8704055,
+    "totalMembers": 2849,
+    "fileMembers": 2438,
+    "directoryMembers": 411,
+    "otherMembers": 0,
+    "coldArchiveBuild": false
+  },
+  "evidenceManifest": {
+    "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/evidence-manifest-5e991791.json",
+    "sha256": "8c47d1b4737d855cfdf26d10d2aebee92fb7f9364240602bcc644a0cc9d59fbd",
+    "bytes": 101846
+  },
+  "selectedArtifactManifest": {
+    "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/selected-artifacts.json",
+    "sha256": "357644f340ce50471c018f7f2dc8bc980d8bdbc132289cdcc48871b5ec6145fa",
+    "bytes": 207608
+  },
+  "reports": {
+    "shared": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/runs/shared-dedup-final.json",
+      "sha256": "ca3cbab1f7b1a8693fb70bbf6ab13cb2f2d29a84c51bc62729a9ae82e1a82c91",
+      "bytes": 1482562
+    },
+    "historical104": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/runs/shared-final.json",
+      "sha256": "d563bff31b7c7cf115ffff66f5afa3ac3a8fdfdef9738e564f16bc93b815e310",
+      "bytes": 1560781
+    },
+    "public": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/runs/public-final.json",
+      "sha256": "9f4fc121b4d43f37a8840059d5d848814f1551817ce9c88547dfe0b5d2117b23",
+      "bytes": 4661
+    },
+    "controls": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/controls-complete.json",
+      "sha256": "3cb82ddc0d9494052a5aca62f2f32706222172ce9b113426105529cc879a7566",
+      "bytes": 133776
+    },
+    "numeric": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/numeric-probe-targeted.json",
+      "sha256": "bf5fe9fdca1a8c94961ccb02b7ff7ec2e6edec27001929c5ab71c719c3711c1a",
+      "bytes": 204796
+    },
+    "nativeGates": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/runs/native-gates.json",
+      "sha256": "89d6147aeba0dd6f1f3eac0afa82d009ae52aa0ae757417831cefee583d5e249",
+      "bytes": 1614
+    },
+    "affected": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/runs/affected-gates.json",
+      "sha256": "17cf603467a0ff57f6ae7b0a1133a8518f23b0277f2dd921f744419090026bd1",
+      "bytes": 3116
+    },
+    "accounting": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/case-accounting.json",
+      "sha256": "eba3d6711330e24b03b60b4ce0758424afd7d25ce7025316875ffb13cc93d26a",
+      "bytes": 720
+    },
+    "productEquivalence": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/product-dedup-check.json",
+      "sha256": "f3db49f513dc0d64f9203f9cfb58e24ed1f1be76bf11deb91427b1f6feef12ef",
+      "bytes": 372
+    },
+    "packagingSelfCheck": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/packaging-self-check.json",
+      "sha256": "c7c2fbcdaedae915e7c6cebb944eac7cb3a0381672c027a169de6d5bd4b86d56",
+      "bytes": 458
+    }
+  },
+  "results": {
+    "shared": {
+      "observations": 99,
+      "strict": 99,
+      "qualified": 0,
+      "uniqueIds": 99,
+      "pureDistinctPayloads": 92,
+      "workflowActions": 7,
+      "workflowFileStates": 5,
+      "protocolRejects": 4,
+      "responseGuards": 3
+    },
+    "native": {
+      "package": "demlik-code-graph",
+      "allTargetsPassed": 226,
+      "executedTestSuites": 114,
+      "ignored": 0,
+      "fmt": "pass",
+      "clippy": "all-targets -D warnings pass",
+      "typePositive": "borrowed inferred same graph/settings and retained pair/representative owners compile0/run0",
+      "typeRefusal": "sole E0597 graph lifetime escape",
+      "scope": "No workspace/all-feature or cold archive claim"
+    },
+    "static": {
+      "scopedTsc": "pass before and after corpus dedup",
+      "scopedBiome": "pass",
+      "finalTscDiagnosticsBytes": 0,
+      "finalBiomeDiagnosticsBytes": 0
+    },
+    "affected": {
+      "observations": 1053,
+      "partial": 71,
+      "collapseGate": 69,
+      "gateStrict": 48,
+      "gateQualified": 21,
+      "logicalRoot": 16,
+      "queryReach": 33,
+      "kinds": 113,
+      "comments": 245,
+      "commentPolicy": 506,
+      "invalidProtocolRejects": 43,
+      "scope": "Affected historical suites retain their own original profiles and qualifications; not1053 new strict finder cases"
+    },
+    "controls": {
+      "detected": 20,
+      "escaped": 0,
+      "compiledBuildExit0": 20,
+      "actualLibraryAndDriverFreshFalse": 20,
+      "namedSemanticWitnesses": 20,
+      "baselineCohort": 104,
+      "allFinalWitnessInputsAndAssertionsPreserved": true,
+      "initialSetupFailures": 2,
+      "setupFailuresHaveZeroSemanticCredit": true,
+      "allThreeControlWorktreesRetired": true
+    },
+    "numeric": {
+      "standalonePrimitiveVectors": 21338,
+      "rawStdLog2Mismatches": 361,
+      "roundedStdCostMismatches": 47,
+      "rawLibmMismatches": 0,
+      "roundedLibmMismatches": 0,
+      "sourceRepeatedPasses": 2,
+      "qualification": "PinnedNode22.21.1/V812.4 primitive-selection probe, not21338 public finder observations; actual public threshold case and compiled std-log2 mutant separately prove production choice"
+    },
+    "packaging": {
+      "selectedArtifactBindings": 124,
+      "selectedUniqueArtifactFiles": 123,
+      "allSelectedDecompressedHashesPassed": true,
+      "compiledSemanticControls": 20,
+      "controlArtifactCopies": 40,
+      "allControlsBuild0ActualLibraryAndDriverFreshFalse": true,
+      "allControlSourceDepInfoReportsHashesPassed": true,
+      "unchangedFrozenTsPackageFiles": 1044,
+      "unchangedCargoCgProductFiles": 308,
+      "scope": "Worker packaging self-check only, independent review pending"
+    }
+  },
+  "dependency": {
+    "change": "libm.workspace=true in CG; one added CG Cargo.lock edge",
+    "existingPinnedPackage": "libm0.2.16",
+    "newExternalPackages": 0,
+    "rootCargoManifestChanged": false
+  },
+  "nativeInterface": {
+    "call": "find_collapse_candidates<'g,'s>(&'g [FunctionNode], &[String], &'s CollapseSettings) -> CollapseReport<'g,'s>",
+    "owners": "Borrow original nodes/settings and partial-call views; report candidate and cluster representative share one Arc instance; wire fields remain flat",
+    "extraBounds": "No added Clone/Send/static/serde bound on the borrowed call or its local consumer context"
+  },
+  "proofQualifications": [
+    "Cargo/default-target checks ran in registered worktrees with all four target aliases unset; no cache/target copies. Executed artifacts selected from actual Cargo JSON and retained before retirement.",
+    "Native/product checks used8e97642b. Later03a/cff harness fixes and5e99 corpus dedup change only verification files; all308Cargo/CG product bytes unchanged. Final99 shared/static follow-up uses the identical hash-pinned driver.",
+    "Controls used the frozen historical104 cohort atcff607fb; all20 final witness IDs/inputs/assertions retained. No redundant product rebuild or semantic-fault rerun after corpus-only dedup.",
+    "Two failed control setup attempts built0 but failed provenance harness checks (absolute-vs-relative .d, then macOS path alias). Reports/logs/source/retirement retained, zero semantic credit. Their library bytes were not copied before those assertions.",
+    "Initial driver tagged-Serde protocol red is retained separately; fixed only test-driver variant decode through direct RawValue. Initial scopedTSC Zod cross-version generic diagnostic and lint recovery retained.",
+    "Source archive contains full committed source only,2849total members=2438files+411directories. No cold/archive build claimed; artifacts/evidence manifest is separate."
+  ],
+  "knownGaps": [
+    "FunctionNode String-only reflection fields do not admit raw lone UTF16",
+    "Raw/unvalidated/fractional/noncanonical graph/settings and JS object/prototype profiles remain outside the canonical typed/validated profile",
+    "Human renderer and late plain-collapse CLI dispatch/emit/standalone/bootstrap remain outside this checkpoint; all53existingCLI gaps stay OPEN.",
+    "Source internal finder/types are not packaged source exports; mapping proposal invents no inventory alias and does not claim CLI callsite coverage."
+  ],
+  "mappingProposal": {
+    "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/mapping-proposal-final.json",
+    "sha256": "052b3a0adb8df51d0959ae07baa5b77aa3a496482949317b69ac273374af9b13",
+    "bytes": 2710
+  },
+  "frozenSource": {
+    "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "packageFilesUnchanged": 1044,
+    "pins": {
+      "path": "/private/tmp/demlik-collapse-report-proof-01a16c9d/frozen-ts-package-pins.json",
+      "sha256": "f6114ca36c1d9ab4f63605740fcd3038ec62476b1802f26dbb8514aa5fb66c4e",
+      "bytes": 192310
+    }
+  },
+  "retirement": {
+    "worktree": "/private/tmp/demlik-rust-collapse-report-01a16c9d",
+    "target": "/private/tmp/demlik-rust-collapse-report-01a16c9d/target",
+    "required": true,
+    "finalRecord": "/private/tmp/demlik-collapse-report-proof-01a16c9d/retirement.json",
+    "state": "Pending immediately after receipt commit; authoritative final status is external retirement.json"
+  },
+  "createdAt": "2026-10-27T12:22:54.690595+00:00"
+}
