@@ -1,0 +1,99 @@
+{
+  "kind": "bounded-component receipt, not whole monorepo completion",
+  "base": "a79473a0426fda190bcf1c140ff16441b270e5b1",
+  "productionSourceCommit": "5ecd3c682429ead52ab27b98f03c688ff705abf8",
+  "controlCohortSourceCommit": "788790c44fa523bf85b870c93d2d6257a8ea8510",
+  "finalSourceCommit": "957e90434a0f051698adb87bde2c3ff478338b7b",
+  "sourceArchive": {
+    "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/source-957e9043.tar.gz",
+    "sha256": "4c440367ad375c4119212e3416e38bd9dd40743bafce712cbdc86b0fb539d1a5",
+    "bytes": 8768445,
+    "totalMembers": 2882,
+    "fileMembers": 2468,
+    "directoryMembers": 414,
+    "otherMembers": 0
+  },
+  "counts": {
+    "renderer": {
+      "strict": 36,
+      "protocol": 4,
+      "guards": 2
+    },
+    "cli": {
+      "scripts": 49,
+      "strict": 35,
+      "qualified": 10,
+      "nativeOnly": 4,
+      "pairedExecutions": 51,
+      "nativeExecutions": 55,
+      "protocol": 5,
+      "guards": 3
+    },
+    "newDistinctScripts": 85,
+    "newStrictSharedScripts": 71,
+    "oldAffectedScripts": 606,
+    "codeGraphNativeTests": 229,
+    "compiledSemanticControls": 16
+  },
+  "controlCohort": {
+    "renderer": 36,
+    "cliScripts": 48,
+    "cliStrict": 34,
+    "cliQualified": 10,
+    "cliNativeOnly": 4,
+    "pairedExecutions": 50,
+    "allOld48InputsAndAssertionsPreserved": "same before files/options/step sequence/call traces; only new ID gated overwrite assertion and future count metadata added",
+    "retainedReport": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/controls-final.json",
+    "reportSha256": "6fd287374aab14d9e0873fcab4621416a7de1edbfb5320358ed1ac071b8d2331"
+  },
+  "nativeOnlyIds": [
+    "missing-compiler-is-not-load-refusal",
+    "inactive-continuation",
+    "html-continuation",
+    "prepared-unreachable-continuation"
+  ],
+  "qualifications": [
+    "Eligible prepared route only; all53CLI inventory gaps remain OPEN.",
+    "HTML, prepared unreachable ledger and inactive route preserve the same Box; no executed downstream Source parity credit.",
+    "Missing native compiler is native-only retained failure data, not Source success parity.",
+    "Canonical dense graph and validated settings; existing String-only reflection IDs/names/files/callers/package roots and arbitrary raw/prototype/fractional graph profiles remain open.",
+    "Raw argv row keeps original JS-unit callback payload and native encoded bytes separately; actual encoded stdout/stderr equality is retained, raw callback-unit equality is not claimed.",
+    "Backend diagnostic stack/OS text, controlled loaded-source drift and pending stdio notification stay case-qualified; only strict cases populate nativeEvidence.",
+    "No root/compiler/schema/count duplication, new dependencies, production TypeScript changes, provider/runtime/bootstrap or standalone distribution."
+  ],
+  "proofDirectory": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d",
+  "proofs": {
+    "final-seal.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/final-seal.json",
+      "sha256": "c624a051af4a2117c9e325271aea085761af08c42f492d5fb0c8a25ed80f2749"
+    },
+    "baseline-artifacts.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/baseline-artifacts.json",
+      "sha256": "68872cc073cc25f9e260f29ca0e68b335a5efe63f709604d66a7620d93116fb2"
+    },
+    "final-public-proofs.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/final-public-proofs.json",
+      "sha256": "3f05fd6528645b79d67af8af977330873b32eb693373503b94226a1e9438b0db"
+    },
+    "frozen-source-integrity.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/frozen-source-integrity.json",
+      "sha256": "b26e57eea705b356f31278ee075e4cc333e7b7bb87811e4bdfce6df5d6153cef"
+    },
+    "controls-final.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/controls-final.json",
+      "sha256": "6fd287374aab14d9e0873fcab4621416a7de1edbfb5320358ed1ac071b8d2331"
+    },
+    "mapping-proposal.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/mapping-proposal.json",
+      "sha256": "e5a71523f5ff3a19f2538275b005c34a9fbfa8fdf7edb5953c7a4db56b883113"
+    },
+    "logical-root-recovery.json": {
+      "path": "/private/tmp/demlik-collapse-render-cli-proof-01a16c9d/logical-root-recovery.json",
+      "sha256": "02ba1fa9f01e8f2023bb194eb549202f7a322a88747b0014208b29d46e092fb8"
+    }
+  },
+  "retirement": "Separate post-check retirement.json and handoff.json will bind completed worktree/default-target removal.",
+  "changes": "One collapse renderer and eligible prepared late CLI route. Existing private immediate-warning assembly accepts its existing optional data owner. One b_block_line getter reads the existing selected B offset for wire and human output. No duplicate graph/root/count/schema/compiler ownership.",
+  "centralRegistration": "Parent-owned; only the two existing --collapse / --collapse-config inventory IDs are proposed, all53CLI gaps retained.",
+  "historicalSetupFailures": "Retained and explicitly zero credit: verifier fixture-parent absence, wrong old logical-root driver, public artifact-selector discrimination, test/driver setup and pre-lint diagnostics."
+}
