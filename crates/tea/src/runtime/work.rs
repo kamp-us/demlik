@@ -121,12 +121,12 @@ impl<M: Tagged, E> CommandContext<M, E> {
         (self.detach)(work.boxed_local());
     }
 }
-pub trait Interpreter<C: CommandFamily> {
+pub trait Interpreter<C: CommandFamily, M = <C as CommandFamily>::Msg> {
     type Error;
     fn interpret<'a>(
         &'a self,
         command: &'a C,
-        context: CommandContext<C::Msg, Self::Error>,
+        context: CommandContext<M, Self::Error>,
     ) -> Option<CommandWork<'a, C::Completion, Self::Error>>;
 }
 pub struct NoInterpreter<E>(PhantomData<fn() -> E>);
@@ -140,12 +140,12 @@ impl<E> Default for NoInterpreter<E> {
         Self::new()
     }
 }
-impl<C: CommandFamily, E> Interpreter<C> for NoInterpreter<E> {
+impl<C: CommandFamily, M, E> Interpreter<C, M> for NoInterpreter<E> {
     type Error = E;
     fn interpret<'a>(
         &'a self,
         _: &'a C,
-        _: CommandContext<C::Msg, E>,
+        _: CommandContext<M, E>,
     ) -> Option<CommandWork<'a, C::Completion, E>> {
         None
     }

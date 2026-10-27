@@ -21,8 +21,13 @@ use std::rc::Rc;
 
 mod command;
 mod error;
+mod runtime;
 pub use command::AgentCommand;
 pub use error::{AgentError, OptionalProfile};
+pub use runtime::{
+    AgentCompletion, AgentMachineError, AgentMachineMsg, AgentToolMsg, AgentWired, AgentWorkError,
+    agent_boot_msg, agent_cancel_msg,
+};
 pub type CommandOf<P, I, S, C> = AgentCommand<P, I, <S as Schema>::Output, <S as Schema>::Error, C>;
 pub type StepOf<Stage, P, I, S, R, TE, A, T, C> =
     crate::Step<SharedStateOf<Stage, P, I, S, R, TE, A, T>, CommandOf<P, I, S, C>>;

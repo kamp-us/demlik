@@ -14,8 +14,10 @@ mod state;
 
 mod knob;
 pub use knob::{
-    Agent, AgentCommand, AgentConfig, AgentError, BrainCommandOf, BrainMessageOf, CommandOf,
-    OptionalProfile, SharedStateOf, StateOf, StepOf, create_agent,
+    Agent, AgentCommand, AgentCompletion, AgentConfig, AgentError, AgentMachineError,
+    AgentMachineMsg, AgentToolMsg, AgentWired, AgentWorkError, BrainCommandOf, BrainMessageOf,
+    CommandOf, OptionalProfile, SharedStateOf, StateOf, StepOf, agent_boot_msg, agent_cancel_msg,
+    create_agent,
 };
 
 mod status;
