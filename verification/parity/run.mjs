@@ -5,6 +5,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { agentCompactionCheckpointParity } from "./agent-compaction-parity.mjs";
 import { agentContentParity } from "./agent-content-run.mjs";
 import { agentErrorCheckpointParity } from "./agent-error-parity.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
@@ -1137,6 +1138,12 @@ if (!mutationSuite) {
               : path.resolve(args[coldArgument + 1]),
         });
       },
+    },
+    {
+      name: "agentCompaction",
+      operation: "tea.agent-compaction",
+      binaryArgument: "--agent-compaction-bin",
+      run: (options) => agentCompactionCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",

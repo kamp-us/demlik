@@ -110,7 +110,8 @@
     "verify:agent-runtime": "node agent-runtime-run.mjs",
     "verify:agent-turn": "node agent-turn-run.mjs",
     "verify:agent-state-json": "node agent-state-json-run.mjs",
-    "verify:agent-error": "node agent-error-run.mjs"
+    "verify:agent-error": "node agent-error-run.mjs",
+    "verify:agent-compaction": "node agent-compaction-run.mjs"
   },
   "dependencies": {
     "zod": "catalog:"
