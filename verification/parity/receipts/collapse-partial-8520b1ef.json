@@ -33,12 +33,7 @@
     "historicalPartialRunsExcluded": true,
     "sourceOnlyRawProfileQualifications": 6,
     "modifiedLibraryAndDriverFreshFalse": true,
-    "realWorkflowCounts": [
-      1,
-      1,
-      3,
-      0
-    ],
+    "realWorkflowCounts": [1, 1, 3, 0],
     "externalBorrowedOwnerConsumer": true,
     "clippyAllTargetsFmtScopedTscBiome": true
   },

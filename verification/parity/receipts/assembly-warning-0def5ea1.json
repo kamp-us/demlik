@@ -30,9 +30,7 @@
       "bytes": 19479
     }
   ],
-  "productionOwners": [
-    "crates/code-graph/src/extract/assemble.rs"
-  ],
+  "productionOwners": ["crates/code-graph/src/extract/assemble.rs"],
   "unchangedPrerequisiteSnapshots": [
     {
       "file": "crates/code-graph/src/checker/context.rs",
@@ -158,12 +156,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "lib"
-            ],
-            "crate_types": [
-              "lib"
-            ],
+            "kind": ["lib"],
+            "crate_types": ["lib"],
             "name": "demlik_code_graph",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
             "edition": "2024",
@@ -196,12 +190,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "example"
-            ],
-            "crate_types": [
-              "bin"
-            ],
+            "kind": ["example"],
+            "crate_types": ["bin"],
             "name": "text_assembly_driver",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/examples/text_assembly_driver.rs",
             "edition": "2024",
@@ -234,12 +224,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "lib"
-            ],
-            "crate_types": [
-              "lib"
-            ],
+            "kind": ["lib"],
+            "crate_types": ["lib"],
             "name": "demlik_code_graph",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
             "edition": "2024",
@@ -273,12 +259,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "lib"
-            ],
-            "crate_types": [
-              "lib"
-            ],
+            "kind": ["lib"],
+            "crate_types": ["lib"],
             "name": "demlik_code_graph",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
             "edition": "2024",
@@ -312,12 +294,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "example"
-            ],
-            "crate_types": [
-              "bin"
-            ],
+            "kind": ["example"],
+            "crate_types": ["bin"],
             "name": "text_assembly_driver",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/examples/text_assembly_driver.rs",
             "edition": "2024",
@@ -351,12 +329,8 @@
           "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
           "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
           "target": {
-            "kind": [
-              "lib"
-            ],
-            "crate_types": [
-              "lib"
-            ],
+            "kind": ["lib"],
+            "crate_types": ["lib"],
             "name": "demlik_code_graph",
             "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
             "edition": "2024",
@@ -391,12 +365,8 @@
         "package_id": "path+file:///private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph#demlik-code-graph@0.1.0",
         "manifest_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/Cargo.toml",
         "target": {
-          "kind": [
-            "lib"
-          ],
-          "crate_types": [
-            "lib"
-          ],
+          "kind": ["lib"],
+          "crate_types": ["lib"],
           "name": "demlik_code_graph",
           "src_path": "/private/tmp/demlik-rust-assembly-warning-01a16c9d/crates/code-graph/src/lib.rs",
           "edition": "2024",
