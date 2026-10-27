@@ -1,0 +1,188 @@
+{
+  "sourceCommit": "cc794a81b9f8f593975d83f1bd57c050625b893e",
+  "base": "cc2c0f794e336f85e4783fd3546c52e7429aedeb",
+  "scope": "Tree, blast and find domain/render/prepared report continuation only",
+  "sourceFiles": [
+    {
+      "path": "crates/code-graph/examples/collapse_cli_driver.rs",
+      "sha256": "175724fd5663cdbc1975e2e6d26f254742dae69828ad1f4e43b2280c75e291bb"
+    },
+    {
+      "path": "crates/code-graph/examples/tree_blast_find_interface.rs",
+      "sha256": "e905fdf3c5240f9ba9b479d7e7cc9f1af1a30daa218d804b9de323c89fb7ee9c"
+    },
+    {
+      "path": "crates/code-graph/licenses/Chalk-LICENSE",
+      "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+    },
+    {
+      "path": "crates/code-graph/src/cli/frontdoor.rs",
+      "sha256": "9436ef6582a678c9e7394f912380286e341d5237d292248b534a7b48f0a26752"
+    },
+    {
+      "path": "crates/code-graph/src/declarations/find.rs",
+      "sha256": "8e9f6c3a31e4535be3b74c457ffc2fbc89723f4776d899ff7a21173c26ea69a9"
+    },
+    {
+      "path": "crates/code-graph/src/declarations/mod.rs",
+      "sha256": "ec9cd676ec482d31f4781298444870fadcc33552800356fcb6aef3b05a3f7b77"
+    },
+    {
+      "path": "crates/code-graph/src/render/blast.rs",
+      "sha256": "1e209e54a3864e3deb63856a27f3006c903d919052f717d01a9126b1391affaf"
+    },
+    {
+      "path": "crates/code-graph/src/render/mod.rs",
+      "sha256": "c15c6c6f99f978f3026b5b84d4a3e943bb0e667b269ac0b0459898b279d4fb25"
+    },
+    {
+      "path": "crates/code-graph/src/render/tree.rs",
+      "sha256": "913a222dc7476dc8a3aa85143615fa7104487c88aceba2a86326638dd81633f4"
+    },
+    {
+      "path": "crates/code-graph/tests/cli_reports.rs",
+      "sha256": "2522d023e1e0e5cf24ab0c7b06ccbf4e5645baa34411de3353dbe92192e250a1"
+    },
+    {
+      "path": "crates/code-graph/tests/tail_reports.rs",
+      "sha256": "d76cbe2b909a1f6205d117fbf679e65add26ef9308e276c7d457aeb703ab2da1"
+    },
+    {
+      "path": "verification/parity/cli-reports-cases.mjs",
+      "sha256": "a44c3089e2ca5d9f39539974100e5196944361ac6d62ee471b59d877447f5594"
+    },
+    {
+      "path": "verification/parity/cli-reports-mutations.mjs",
+      "sha256": "1b1af0f87badffe4a4f02275e8e1ce4117c5e2898852cade41ccbda3dc1a9519"
+    },
+    {
+      "path": "verification/parity/cli-tree-blast-find-cases.mjs",
+      "sha256": "5b348bcb73bbee35a9063eec8557e682981ad6cd193ed42dd22ec3c640c83be1"
+    },
+    {
+      "path": "verification/parity/cli-tree-blast-find-faults.mjs",
+      "sha256": "09c0ef0fd07c9ddaf1282818c89d7a90a3142566ce2528644c0279e218bd11c6"
+    },
+    {
+      "path": "verification/parity/cli-tree-blast-find-mutations.mjs",
+      "sha256": "8d1747a6fce086318a425f69a8e69d5e23b1084fb1fa73d49a0df790568d0f5c"
+    },
+    {
+      "path": "verification/parity/graph-cli-reports-run.mjs",
+      "sha256": "78e536e6f4c0e8020fca3557545a63c4b0ddf0e999fd4ed71b19705a326455a1"
+    },
+    {
+      "path": "verification/parity/graph-cli-reports.mjs",
+      "sha256": "f65d6424bdb11f4b5db92e9cf4f9e6d41808eca34ce75a353267c88a6e6bd588"
+    }
+  ],
+  "reference": {
+    "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "chalk": "5.6.2 MIT / explicit Plain and ANSI host profiles",
+    "compiler": "Existing explicit pinned native Go TsgoBinary, no production JS forwarding"
+  },
+  "pairs": {
+    "report": "tail-pairs-final.json",
+    "sha256": "8f724443f93ef37caae1786f1d838189b1f0f5c0dc59ab0b7845c082cb73b1f5",
+    "observations": 32,
+    "strict": 28,
+    "qualified": 4,
+    "sourceProcesses": 38,
+    "nativeSharedProcesses": 38,
+    "workflowCases": 1,
+    "workflowSteps": 7,
+    "protocolRefusals": 5,
+    "responseGuards": 3,
+    "qualifiedRows": [
+      {
+        "id": "blast-warning-before-file-failure",
+        "qualifications": ["backend-exception-diagnostic-qualified"]
+      },
+      {
+        "id": "blast-warning-output-pending-stdout",
+        "qualifications": ["pending-stdio-notification-contract"]
+      },
+      {
+        "id": "find-pending-stderr-still-writes-file",
+        "qualifications": ["pending-stdio-notification-contract"]
+      },
+      {
+        "id": "find-raw-query-units",
+        "qualifications": [
+          "caller-supplied-UTF16-argv-profile",
+          "source-unit-versus-native-encoded-write-observer"
+        ]
+      }
+    ]
+  },
+  "affected": {
+    "oldConsoleShared": 77,
+    "strict": 72,
+    "qualified": 5,
+    "sourceProcesses": 85,
+    "nativeSharedProcesses": 85,
+    "rawNativeProcesses": 87,
+    "remainingNativeOnly": [
+      "unsupported-html-same-box",
+      "unsupported-hotspots-same-box"
+    ],
+    "nativeOnlyCredit": 0,
+    "reportSha256": "06d7389a6ccfd7f641a0b407f92bfb79012ad7b4bbf2ebf3f55fa1d4d5229694"
+  },
+  "native": {
+    "tests": 256,
+    "groups": 70,
+    "configuration": "focused CG library/integration tests, no doc/default-feature sum",
+    "allTargetCgClippy": 0,
+    "biome": 0,
+    "parityTsc": 0,
+    "coldBorrowedRcCaller": "unchanged source from missing-interface red, rustc0/exec0 with explicit nonexistent compiler/no tsconfig; original graph nodes/uses borrowed",
+    "lifetimeRefusal": "sole E0597",
+    "initialInterfaceRed": ["E0432", "E0599"]
+  },
+  "controls": {
+    "new": 8,
+    "affectedOld": 1,
+    "total": 9,
+    "strictWitnesses": 9,
+    "compileExit": 0,
+    "protocolValid": true,
+    "namedSemanticMismatch": true,
+    "controlsSha256": "392ea62e5103ec9235487f51b0cf7028dd062255789ed236299c34a24b12676c",
+    "ownIcuPreparations": 1,
+    "restoredPerFault": true,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true
+  },
+  "construction": {
+    "cargoSelections": 5,
+    "limit": 6,
+    "steps": [
+      "cargo1-baseline-library",
+      "cargo2-native",
+      "cargo3-drivers",
+      "cargo4-native",
+      "cargo5-clippy"
+    ],
+    "failedCargo2": "Compilation succeeded; execution stopped at old native fixture still asserting3 now-implemented modes return Continue. Those same3 placeholders retired as approved; final Cargo4 full CG run passed. Historical log unchanged.",
+    "nativePreparations": 1,
+    "allFourTargetAliasesUnset": true,
+    "defaultTarget": "/private/var/folders/7l/10nvtdw13mn_cgvnnnc93td00000gn/T/demlik-check-tree-blast-find-construction-01a16c9d-jznIy5/repo/target"
+  },
+  "history": {
+    "sourceOnlyCalibration": "Initial anchors were corrected before shared final proof: frozen extractor dedupes same-line self calls, so2site fixture uses2physical lines. Deep chooses config, so cross-package workflow explicitly analyzes repo root. Source-only partial reports earn0 shared/native credit.",
+    "rawOsArgv": "Original31/32 red retained at tail-pairs-os-argv-red.json. OS-spawned Node replaces lone units; native JsString library preserves them. Final raw row uses existing Source caller-argv hook, explicitly qualified; no bootstrap or OS-argv equivalence claim.",
+    "tscSetup": "Initial missing packages/tea/node_modules link produced dependency/cascading diagnostics; existing owner dependency link added, final TSC0, no dependency/oracle changes."
+  },
+  "retention": "retention.json",
+  "blindSpots": [
+    "Hotspots Date/Git mode, HTML/assets/bootstrap/distribution remain open.",
+    "All53 CLI knownGaps remain open; only proposed existing3flag evidence refinements, no contracts/central registration changes.",
+    "Native Graph String/usize reflection/raw/numeric profiles remain open; no Graph/schema widening.",
+    "ANSI is an explicit host fact, not an automatic TTY/environment bootstrap implementation.",
+    "Actual OS/stack/pending-stdio/caller-UTF16 qualifications remain outside strict credit.",
+    "Other native executables/mutant rlibs not retained; no cold source-archive rebuild or whole-workspace acceptance claim."
+  ]
+}
