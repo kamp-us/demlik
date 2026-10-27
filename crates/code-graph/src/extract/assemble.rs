@@ -126,7 +126,14 @@ struct EdgeBundle {
     scope: EdgeScope,
     ts_config: String,
 }
-fn report_unjoined(unjoined: &[String], what: &str) {
+struct TextAssembly<'a> {
+    root: &'a JsString,
+    warning: &'a mut dyn FnMut(&JsString),
+}
+fn stderr_warning(line: &JsString) {
+    eprint!("{}", line.to_lossy());
+}
+fn report_unjoined(unjoined: &[String], what: &str, warning: Option<&mut dyn FnMut(&JsString)>) {
     if unjoined.is_empty() {
         return;
     }
@@ -137,10 +144,15 @@ fn report_unjoined(unjoined: &[String], what: &str) {
         .collect::<Vec<_>>()
         .join(", ");
     let more = if unjoined.len() > 5 { ", ..." } else { "" };
-    eprintln!(
-        "code-graph: warning: {} {what}: {shown}{more}",
+    let line = format!(
+        "code-graph: warning: {} {what}: {shown}{more}\n",
         unjoined.len()
-    );
+    )
+    .into();
+    match warning {
+        Some(warning) => warning(&line),
+        None => stderr_warning(&line),
+    }
 }
 
 pub fn assemble_graph_with_edges(
@@ -172,6 +184,27 @@ pub fn assemble_graph_with_analysis_text(
     fields: NodeFields,
     options: &AnalysisOptions<'_>,
 ) -> Result<Graph, AssemblyError> {
+    assemble_graph_with_analysis_text_and_warning(
+        loaded,
+        root_text,
+        thresholds,
+        binary,
+        fields,
+        options,
+        &mut stderr_warning,
+    )
+}
+
+/// Deliver complete warning lines immediately; the local CLI sink records pending IO failures.
+pub(crate) fn assemble_graph_with_analysis_text_and_warning(
+    loaded: &LoadedEdgeProject,
+    root_text: &JsString,
+    thresholds: Thresholds,
+    binary: &TsgoBinary,
+    fields: NodeFields,
+    options: &AnalysisOptions<'_>,
+    warning: &mut dyn FnMut(&JsString),
+) -> Result<Graph, AssemblyError> {
     assemble_graph_with_reports_in(
         loaded,
         thresholds,
@@ -179,7 +212,10 @@ pub fn assemble_graph_with_analysis_text(
         fields,
         Some(options),
         None,
-        Some(root_text),
+        Some(TextAssembly {
+            root: root_text,
+            warning,
+        }),
     )
 }
 
@@ -201,8 +237,9 @@ fn assemble_graph_with_reports_in(
     fields: NodeFields,
     options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
-    root_text: Option<&JsString>,
+    mut text: Option<TextAssembly<'_>>,
 ) -> Result<Graph, AssemblyError> {
+    let root_text = text.as_ref().map(|text| text.root);
     thresholds.validate().map_err(AssemblyError::Threshold)?;
     let functions = discover_functions(&loaded.project.source_files).functions;
     let ids: Vec<_> = functions
@@ -229,6 +266,8 @@ fn assemble_graph_with_reports_in(
         report_unjoined(
             &context.unjoined,
             "function(s) have no node in tsgo's tree, so their calls are not resolved",
+            text.as_mut()
+                .map(|text| &mut *text.warning as &mut dyn FnMut(&JsString)),
         );
         Ok((|| -> Result<_, AnalysisError> {
             let prep = options
@@ -257,6 +296,8 @@ fn assemble_graph_with_reports_in(
             report_unjoined(
                 &uses.unjoined,
                 "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+                text.as_mut()
+                    .map(|text| &mut *text.warning as &mut dyn FnMut(&JsString)),
             );
             let analysis = options
                 .map(|options| {
@@ -525,3 +566,7 @@ fn build(
         .map_err(AssemblyError::Data)?;
     Ok(graph)
 }
+
+#[cfg(test)]
+#[path = "assembly_warning_tests.rs"]
+mod warning_tests;
