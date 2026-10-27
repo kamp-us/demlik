@@ -32,6 +32,12 @@ export function agentCompactionCheckpointParity(cargo, options = {}) {
     binary = producer.binary;
   }
   const raw = agentCompactionParity({ binary, output: reportFile });
+  const report = normalizeAgentCompactionReport(raw, producer);
+  fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+  return report;
+}
+
+export function normalizeAgentCompactionReport(raw, producer = null) {
   assert.equal(raw.cases, raw.observations.length);
   assert.equal(new Set(raw.observations.map((row) => row.id)).size, raw.cases);
   const successful = raw.observations.filter((row) => row.equal === true);
@@ -41,8 +47,10 @@ export function agentCompactionCheckpointParity(cargo, options = {}) {
     successful.map((row) => row.id),
   );
   assert.deepEqual(raw.qualifiedNativeEvidence, []);
-  const report = {
+  return {
     ...raw,
+    observations: raw.cases,
+    raw,
     nativeEvidenceIds: raw.nativeEvidence,
     nativeEvidence: Object.fromEntries(
       successful.map((row) => {
@@ -57,6 +65,4 @@ export function agentCompactionCheckpointParity(cargo, options = {}) {
     qualifiedNativeEvidence: {},
     producer,
   };
-  fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
-  return report;
 }
