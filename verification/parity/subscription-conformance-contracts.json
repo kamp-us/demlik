@@ -1,0 +1,98 @@
+{
+  "@demlik/tea:./promise#run": {
+    "signature": "4d620c5089f3e5672c8bebcdd48e6b9ac16badb418e5658e07fea94066d7313f",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::try_launch"]
+    },
+    "cases": [
+      "subscription.promise.recover",
+      "subscription.promise.two-failures",
+      "subscription.promise.boot-projection",
+      "subscription.promise.held-load",
+      "subscription.promise.held-save-projection"
+    ],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:./effect#run": {
+    "signature": "197124b0444c5c9b3f2965171dc40817b69a81c5cdba7678c85d9f26dadd93fb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::try_run"]
+    },
+    "cases": [
+      "subscription.effect.recover",
+      "subscription.effect.two-failures",
+      "subscription.effect.boot-projection",
+      "subscription.effect.held-load",
+      "subscription.effect.held-save-projection"
+    ],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call.",
+    "knownGaps": [
+      "OPEN: Effect Stream interrupted-finalizer failure remains inspectable in the fiber Exit but Fiber.interrupt resolves void; native SubscriptionWork cleanup Result reports sub-cleanup. Exact observed unmatched rows subscription.effect.mixed-cleanup, subscription.effect.mixed-all, subscription.effect.mixed-cleanup.producer are qualified and excluded from strict nativeEvidence."
+    ]
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb": {
+    "signature": "c48f2f11828c5d0a570a385efbca7ee6e4ead69f8a6b8fc4e16599e998944ebb",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch"]
+    },
+    "cases": [
+      "subscription.promise.recover",
+      "subscription.promise.mixed-runner"
+    ],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c": {
+    "signature": "95118b3b0f8743195e29b6c4b91734cb89d409d7a6e29941b974a25d9a42e69c",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::observe"]
+    },
+    "cases": ["subscription.promise.recover", "subscription.effect.recover"],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70": {
+    "signature": "3bc5cc774269eac9a0790a561254db9016cab42d7ce46c3d183a82bf59168c70",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::on_boot"]
+    },
+    "cases": [
+      "subscription.promise.held-load",
+      "subscription.effect.held-load"
+    ],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef": {
+    "signature": "346ec987b1acd7a237d97e2ba9968e6f5773e74734640359a89b48e88e8e6cef",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::stop"]
+    },
+    "cases": [
+      "subscription.promise.held-cleanup",
+      "subscription.effect.held-cleanup"
+    ],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:.#BootingRuntime/member:published:463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9": {
+    "signature": "463eddc9319e61408a88f3d0f8d147f65f4d46a6801f1fbc37c8dbae9aecaac9",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch_once"]
+    },
+    "cases": ["subscription.promise.recover.once"],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  },
+  "@demlik/tea:./effect#EffectBootingRuntime/member:published:85a099fd43453c122a2a58fe18e1c73d7f78a4735ded5f9661bed1b3d2775f13": {
+    "signature": "85a099fd43453c122a2a58fe18e1c73d7f78a4735ded5f9661bed1b3d2775f13",
+    "rust": {
+      "file": "crates/tea/src/runtime/engine.rs",
+      "symbols": ["demlik_tea::runtime::Runtime::dispatch_once"]
+    },
+    "cases": ["subscription.effect.recover.once"],
+    "nativeProfile": "Typed native subscription Result causes use the existing reducer-error family slot without reducer supervision. Strict evidence compares controlled action traces, state/save/effect/callback ordering and authored cause identity; native Projection transport, Source throws/Effect wrappers and callback/prototype profiles remain distinct and retained. Producer action acknowledgements do not claim successful delivery; failure is observed through follow-up reports. Before failed ready, Source snapshots retain the init owner, not a public failed-ready getState call."
+  }
+}

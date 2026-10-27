@@ -672,6 +672,9 @@ impl<
                                 Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload))))
                             })
                     };
+                    // The Source step Promise settles before its next continuation.
+                    // Let already-started disposals publish their rejection first.
+                    tokio::task::yield_now().await;
                     if matches!(origin, Origin::Producer)
                         && let Err(error) = &result
                     {
@@ -691,8 +694,10 @@ impl<
                     }
                 }
             }
-            self.producer.mailbox.completed(seq);
+            // Publish the caller receipt before notifying the swallowed tail's
+            // waiters, including stop's drain continuation.
             tokio::task::yield_now().await;
+            self.producer.mailbox.completed(seq);
         }
     }
     async fn step(self: Rc<Self>, message: Arc<M>) -> Answer<SE, HE, RE> {
