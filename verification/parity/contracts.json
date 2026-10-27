@@ -7675,20 +7675,27 @@
   "@demlik/code-graph:cli:option:--thresholds <file>": {
     "signature": "0ff54bf2ea365ec4c7a48b15c1004377faa3991740fb65d6a5aa7fd21f4af24c",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.thresholds.space",
       "graph.cli-parser.option.thresholds.equal",
       "graph.cli-parser.option.thresholds.empty",
       "graph.cli-parser.option.thresholds.missing",
-      "graph.cli-parser.option.thresholds.raw-0"
+      "graph.cli-parser.option.thresholds.raw-0",
+      "graph.cli-reports.ci-high-fails",
+      "graph.cli-reports.smells-human",
+      "graph.cli-reports.smells-real-coupling"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--accept-smells": {
     "signature": "b09e1ab6827a3c410649d3d86fe46f054ffeadf352dc73cb5198abc687db54d8",
@@ -7711,43 +7718,59 @@
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
+    "nativeProfile": "Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. That prepared-ledger profile excludes ordinary smells and generic CI; their separate bounded console-report evidence is recorded independently. Bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
   },
   "@demlik/code-graph:cli:option:--max <n>": {
     "signature": "7d577c59f1f05ba7c17c459368971f57fa6ffa35744598a8a1e07e3036783946",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.max.space",
       "graph.cli-parser.option.max.equal",
       "graph.cli-parser.option.max.empty",
       "graph.cli-parser.option.max.missing",
-      "graph.cli-parser.option.max.raw-0"
+      "graph.cli-parser.option.max.raw-0",
+      "graph.cli-reports.ci-max-zero-fails",
+      "graph.cli-reports.ci-max-infinity",
+      "graph.cli-reports.ci-max-whitespace-leading-zero",
+      "graph.cli-reports.ci-unknown-policy-before-invalid-max",
+      "graph.cli-reports.ci-empty-max",
+      "graph.cli-reports.missing-config-before-invalid-ci-max"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--fail-on <level>": {
     "signature": "8b900eeb66b6a4a69e11f63945a4a27e33b140cca246c42e2f18ca03d58b70e3",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.failOn.space",
       "graph.cli-parser.option.failOn.equal",
       "graph.cli-parser.option.failOn.empty",
       "graph.cli-parser.option.failOn.missing",
-      "graph.cli-parser.option.failOn.raw-0"
+      "graph.cli-parser.option.failOn.raw-0",
+      "graph.cli-reports.ci-warn-fails",
+      "graph.cli-reports.ci-unknown-policy-before-invalid-max"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--ci": {
     "signature": "4a926ef4afc08b0c1dd52bcf1d121c7de52b008d4864b17e0377709934978670",
@@ -7756,7 +7779,8 @@
       "symbols": [
         "demlik_code_graph::cli::parse",
         "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
       ]
     },
     "cases": [
@@ -7769,13 +7793,25 @@
       "graph.cli-boundaries.out-ci",
       "graph.cli-smell.cheap-ci-text",
       "graph.cli-smell.edge-fanin-ci",
-      "graph.cli-smell.syntax-two-package-workflow"
+      "graph.cli-smell.syntax-two-package-workflow",
+      "graph.cli-reports.ci-pass-cheap",
+      "graph.cli-reports.ci-high-fails",
+      "graph.cli-reports.ci-warn-fails",
+      "graph.cli-reports.ci-max-zero-fails",
+      "graph.cli-reports.ci-max-infinity",
+      "graph.cli-reports.ci-max-whitespace-leading-zero",
+      "graph.cli-reports.ci-unknown-policy-before-invalid-max",
+      "graph.cli-reports.ci-empty-max",
+      "graph.cli-reports.ci-ignores-output-destination",
+      "graph.cli-reports.ci-zero-preserves-initial",
+      "graph.cli-reports.ci-beats-graph-and-html",
+      "graph.cli-reports.missing-config-before-invalid-ci-max"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete. Prepared smell-ledger CI/accept execution is additionally covered by the listed strict witnesses.",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. That prepared-ledger profile excludes ordinary smells and generic CI; their separate bounded console-report evidence is recorded independently. Bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified. Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--html": {
     "signature": "c733e003bd5e690ca8cea7efa6cba4beb3954208154d49bbe40c1ad98d183854",
@@ -7867,37 +7903,53 @@
   "@demlik/code-graph:cli:option:--edges": {
     "signature": "9893ee81db41148e731be01eb75e02dfd9b3e4a16d7745d2305aab078b7f7e72",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.edges.before",
       "graph.cli-parser.option.edges.after",
       "graph.cli-parser.option.edges.equal-is-unknown",
-      "graph.cli-parser.option.edges.negated-is-unknown"
+      "graph.cli-parser.option.edges.negated-is-unknown",
+      "graph.cli-reports.graph-pretty",
+      "graph.cli-reports.plan-impact-real-edges",
+      "graph.cli-reports.smells-real-coupling",
+      "graph.cli-reports.warning-before-edge-load-refusal"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--file <f>": {
     "signature": "c835db80cd46d387c651ac9327d2f0c555205e42d65b48f9ea92b47f0e6ef8de",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.file.space",
       "graph.cli-parser.option.file.equal",
       "graph.cli-parser.option.file.empty",
       "graph.cli-parser.option.file.missing",
-      "graph.cli-parser.option.file.raw-0"
+      "graph.cli-parser.option.file.raw-0",
+      "graph.cli-reports.file-cwd-relative",
+      "graph.cli-reports.file-literal-fallback",
+      "graph.cli-reports.file-missing-warning",
+      "graph.cli-reports.file-parse-failure-warning"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--hexagon": {
     "signature": "134fb59cef3955437b7e3f2e330d7aac16bc33e488653b9f6babf726a7fddf3a",
@@ -7943,71 +7995,112 @@
   "@demlik/code-graph:cli:option:--smells": {
     "signature": "217f135306957dd194a277c3fa99023a280dbce75415a9f566672dc6a91e9d71",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.smells.before",
       "graph.cli-parser.option.smells.after",
       "graph.cli-parser.option.smells.equal-is-unknown",
-      "graph.cli-parser.option.smells.negated-is-unknown"
+      "graph.cli-parser.option.smells.negated-is-unknown",
+      "graph.cli-reports.smells-human",
+      "graph.cli-reports.smells-json",
+      "graph.cli-reports.smells-pretty",
+      "graph.cli-reports.smells-empty",
+      "graph.cli-reports.smells-real-coupling"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--by <axis>": {
     "signature": "6d31250e5c61dbb629008c7f574bef290fb784ba902acbc2db0623d8b2fc3b1e",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.by.space",
       "graph.cli-parser.option.by.equal",
       "graph.cli-parser.option.by.empty",
       "graph.cli-parser.option.by.missing",
-      "graph.cli-parser.option.by.raw-0"
+      "graph.cli-parser.option.by.raw-0",
+      "graph.cli-reports.plan-rot",
+      "graph.cli-reports.plan-complexity",
+      "graph.cli-reports.plan-size",
+      "graph.cli-reports.plan-unknown-axis",
+      "graph.cli-reports.plan-impact-needs-edges",
+      "graph.cli-reports.plan-impact-real-edges",
+      "graph.cli-reports.unused-by-warning-before-summary",
+      "graph.cli-reports.graph-wins-plan-axis"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--plan": {
     "signature": "42a3139c13689bf504a126a5e2c4ef3dff4cace9fde6bc079f9ee74a7c13b8ea",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.plan.before",
       "graph.cli-parser.option.plan.after",
       "graph.cli-parser.option.plan.equal-is-unknown",
-      "graph.cli-parser.option.plan.negated-is-unknown"
+      "graph.cli-parser.option.plan.negated-is-unknown",
+      "graph.cli-reports.plan-rot",
+      "graph.cli-reports.plan-complexity",
+      "graph.cli-reports.plan-size",
+      "graph.cli-reports.plan-json",
+      "graph.cli-reports.plan-pretty",
+      "graph.cli-reports.plan-unknown-axis",
+      "graph.cli-reports.plan-impact-needs-edges",
+      "graph.cli-reports.plan-impact-real-edges"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--graph": {
     "signature": "7940149dde111ecd457172cc424cdbbd889cc1a602130088c4f2459e120c430a",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.graph.before",
       "graph.cli-parser.option.graph.after",
       "graph.cli-parser.option.graph.equal-is-unknown",
-      "graph.cli-parser.option.graph.negated-is-unknown"
+      "graph.cli-parser.option.graph.negated-is-unknown",
+      "graph.cli-reports.graph-cheap",
+      "graph.cli-reports.graph-pretty",
+      "graph.cli-reports.graph-wins-plan-axis",
+      "graph.cli-reports.graph-losing-unguarded-runs-analysis"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--entry-preset <name>": {
     "signature": "a22bacf29b6c58ee82efcd9563a925e1562272214be7a1a1da44ad63cff38fd1",
@@ -8030,105 +8123,151 @@
   "@demlik/code-graph:cli:option:--node-kinds <file>": {
     "signature": "99d9f8ba4e6bbc9ae4946cedeed92b2f5aea7de344120ec29122a0e855c98068",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.nodeKinds.space",
       "graph.cli-parser.option.nodeKinds.equal",
       "graph.cli-parser.option.nodeKinds.empty",
       "graph.cli-parser.option.nodeKinds.missing",
-      "graph.cli-parser.option.nodeKinds.raw-0"
+      "graph.cli-parser.option.nodeKinds.raw-0",
+      "graph.cli-reports.unguarded-text",
+      "graph.cli-reports.kinds-json",
+      "graph.cli-reports.graph-losing-unguarded-runs-analysis"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--cycles": {
     "signature": "d5b4219b163a50718ad75fc43087916eb8a8a233e696ebf27c7b25ad83b3ad31",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.cycles.before",
       "graph.cli-parser.option.cycles.after",
       "graph.cli-parser.option.cycles.equal-is-unknown",
-      "graph.cli-parser.option.cycles.negated-is-unknown"
+      "graph.cli-parser.option.cycles.negated-is-unknown",
+      "graph.cli-reports.cycles-text",
+      "graph.cli-reports.cycles-json",
+      "graph.cli-reports.cycles-pretty",
+      "graph.cli-reports.cycles-whole-workspace",
+      "graph.cli-reports.missing-config-before-invalid-ci-max"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--data": {
     "signature": "60c263226da1c68000048a4a6157a809bc4717dd641dffc2d891f8af62cd1f4c",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.data.before",
       "graph.cli-parser.option.data.after",
       "graph.cli-parser.option.data.equal-is-unknown",
-      "graph.cli-parser.option.data.negated-is-unknown"
+      "graph.cli-parser.option.data.negated-is-unknown",
+      "graph.cli-reports.data-text-cheap",
+      "graph.cli-reports.data-json-cheap",
+      "graph.cli-reports.data-pretty-cheap",
+      "graph.cli-reports.data-raw-json"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--interface-width": {
     "signature": "0910997980e7d17ab98e63c6869a8c971496cd24da9e2cc9d5a17ce9dff38813",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.interfaceWidth.before",
       "graph.cli-parser.option.interfaceWidth.after",
       "graph.cli-parser.option.interfaceWidth.equal-is-unknown",
-      "graph.cli-parser.option.interfaceWidth.negated-is-unknown"
+      "graph.cli-parser.option.interfaceWidth.negated-is-unknown",
+      "graph.cli-reports.interface-width-text",
+      "graph.cli-reports.interface-width-json",
+      "graph.cli-reports.interface-width-pretty"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--clusters": {
     "signature": "b2fea936654fdd1c6522b65aaca6d404dcc70fd30893c0e69460c497efc40fb3",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.clusters.before",
       "graph.cli-parser.option.clusters.after",
       "graph.cli-parser.option.clusters.equal-is-unknown",
-      "graph.cli-parser.option.clusters.negated-is-unknown"
+      "graph.cli-parser.option.clusters.negated-is-unknown",
+      "graph.cli-reports.clusters-text",
+      "graph.cli-reports.clusters-json",
+      "graph.cli-reports.clusters-pretty"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--unguarded": {
     "signature": "2ae8e4da7a7b538e68913e2237a1b26b9a27dbba319c5f32ce80a91094b83a0a",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.unguarded.before",
       "graph.cli-parser.option.unguarded.after",
       "graph.cli-parser.option.unguarded.equal-is-unknown",
-      "graph.cli-parser.option.unguarded.negated-is-unknown"
+      "graph.cli-parser.option.unguarded.negated-is-unknown",
+      "graph.cli-reports.unguarded-text",
+      "graph.cli-reports.unguarded-json",
+      "graph.cli-reports.unguarded-pretty",
+      "graph.cli-reports.graph-losing-unguarded-runs-analysis"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--dead-only": {
     "signature": "e7ff9f418cf26a41d0bb9b1f24d8cac94a8e4dcf72bf757ae7063506464e311b",
@@ -8151,7 +8290,7 @@
     "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
-      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+      "OPEN remaining HTML/hotspots/blast/find/colored-tree, standalone bootstrap/distribution and platform coverage. Prepared smell and bounded console CI have separate strict witnesses; deferred native continuations receive zero shared credit. Raw graph/settings/reflection, backend exceptions and pending stdio remain limited. Pinned ICU77 covers unreachable-ledger ordering under its documented local profile; other comparison calls still use the legacy backend. All53 global CLI IDs stay OPEN."
     ],
     "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
@@ -8178,7 +8317,7 @@
     "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
-      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+      "OPEN remaining HTML/hotspots/blast/find/colored-tree, standalone bootstrap/distribution and platform coverage. Prepared smell and bounded console CI have separate strict witnesses; deferred native continuations receive zero shared credit. Raw graph/settings/reflection, backend exceptions and pending stdio remain limited. Pinned ICU77 covers unreachable-ledger ordering under its documented local profile; other comparison calls still use the legacy backend. All53 global CLI IDs stay OPEN."
     ],
     "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
@@ -8207,43 +8346,57 @@
     "scope": "Parser/value-source/target contract plus the listed exact prepared unreachable gate, eligible ordinary report and ordered flag-refusal witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage.",
-      "OPEN remaining smell/HTML/general-CI and other mode continuations, standalone bootstrap/distribution and platform coverage. Three new native-only CLI rows have zero comparison credit; backend exceptions and pending stdio remain qualified. Existing raw graph/settings/reflection/ICU ordering limits remain. All53 global CLI IDs stay OPEN."
+      "OPEN remaining HTML/hotspots/blast/find/colored-tree, standalone bootstrap/distribution and platform coverage. Prepared smell and bounded console CI have separate strict witnesses; deferred native continuations receive zero shared credit. Raw graph/settings/reflection, backend exceptions and pending stdio remain limited. Pinned ICU77 covers unreachable-ledger ordering under its documented local profile; other comparison calls still use the legacy backend. All53 global CLI IDs stay OPEN."
     ],
     "nativeProfile": "Actual prepared CLI execution retains its owner and ledger roots, uses the shared warning/data-root/edge-assembly owner, and preserves output/write/acknowledgement/exit priority. Nine workflow actions remain one shared case; only strict actual flag-bearing cases bind here."
   },
   "@demlik/code-graph:cli:option:--kinds": {
     "signature": "c7e63fcbae9b1c0ce783ba6c256ffeae067ca89af258639ea98fd904aec7a83a",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.kinds.before",
       "graph.cli-parser.option.kinds.after",
       "graph.cli-parser.option.kinds.equal-is-unknown",
-      "graph.cli-parser.option.kinds.negated-is-unknown"
+      "graph.cli-parser.option.kinds.negated-is-unknown",
+      "graph.cli-reports.kinds-text",
+      "graph.cli-reports.kinds-json",
+      "graph.cli-reports.kinds-pretty"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--cross-runtime": {
     "signature": "8f49e5f1bb5c6f3b93734c9e23f53d2c54f481f6f2a72dcf1c9bef310d1ec221",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.crossRuntime.before",
       "graph.cli-parser.option.crossRuntime.after",
       "graph.cli-parser.option.crossRuntime.equal-is-unknown",
-      "graph.cli-parser.option.crossRuntime.negated-is-unknown"
+      "graph.cli-parser.option.crossRuntime.negated-is-unknown",
+      "graph.cli-reports.cross-runtime-text",
+      "graph.cli-reports.cross-runtime-json",
+      "graph.cli-reports.cross-runtime-pretty"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--write-ceilings": {
     "signature": "6fd95a1056e8559847dbf51aea6bd8e834a7e9a36ad145f51ca1823e7116c889",
@@ -8538,7 +8691,7 @@
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. That prepared-ledger profile excludes ordinary smells and generic CI; their separate bounded console-report evidence is recorded independently. Bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
   },
   "@demlik/code-graph:cli:option:--accept-crossings": {
     "signature": "4cd8e9e589fc174ace89898fbb7bbe13782ae7a286835107945a6bd12381209b",
@@ -8693,10 +8846,11 @@
   "@demlik/code-graph:cli:option:--out <file>": {
     "signature": "3ce3755ebf6f438eb4c64108031cfe1c5c36531ba3e2440552abc4cab49d1f79",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
       ]
     },
     "cases": [
@@ -8706,21 +8860,25 @@
       "graph.cli-parser.option.out.missing",
       "graph.cli-parser.option.out.raw-0",
       "graph.cli-boundaries.out-ci",
-      "graph.cli-boundaries.stdout-unused-with-out"
+      "graph.cli-boundaries.stdout-unused-with-out",
+      "graph.cli-reports.summary-out-mode",
+      "graph.cli-reports.two-package-console-workflow",
+      "graph.cli-reports.ci-ignores-output-destination"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--json": {
     "signature": "bdf56d6571184b1d2dde7d4f51354eeb61f6134da40b7e528b0cb72246ae74d7",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
       ]
     },
     "cases": [
@@ -8729,21 +8887,31 @@
       "graph.cli-parser.option.json.equal-is-unknown",
       "graph.cli-parser.option.json.negated-is-unknown",
       "graph.cli-boundaries.report-json",
-      "graph.cli-boundaries.ci-json"
+      "graph.cli-boundaries.ci-json",
+      "graph.cli-reports.plan-json",
+      "graph.cli-reports.smells-json",
+      "graph.cli-reports.unguarded-json",
+      "graph.cli-reports.clusters-json",
+      "graph.cli-reports.interface-width-json",
+      "graph.cli-reports.cycles-json",
+      "graph.cli-reports.kinds-json",
+      "graph.cli-reports.cross-runtime-json",
+      "graph.cli-reports.data-json-cheap"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:option:--pretty": {
     "signature": "a97c92bb69ef9ec69eaddbcfb0b2c1844269a6d78880e4b1834eaeefe99de9c0",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
       ]
     },
     "cases": [
@@ -8752,21 +8920,28 @@
       "graph.cli-parser.option.pretty.equal-is-unknown",
       "graph.cli-parser.option.pretty.negated-is-unknown",
       "graph.cli-boundaries.report-pretty-text",
-      "graph.cli-boundaries.report-pretty-json"
+      "graph.cli-boundaries.report-pretty-json",
+      "graph.cli-reports.default-pretty",
+      "graph.cli-reports.graph-pretty",
+      "graph.cli-reports.plan-pretty",
+      "graph.cli-reports.smells-pretty",
+      "graph.cli-reports.unguarded-pretty",
+      "graph.cli-reports.file-literal-fallback"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/code-graph:cli:argument:<path>": {
     "signature": "4258a1e79987c9c3bab87314071d2c5ce6ca079f79a2799253b4c0415db9ea1b",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
       ]
     },
     "cases": [
@@ -8777,13 +8952,16 @@
       "graph.cli-parser.target.raw-1",
       "graph.cli-boundaries.no-tsconfig",
       "graph.cli-boundaries.replacement-self-root",
-      "graph.cli-boundaries.supplementary-self-root"
+      "graph.cli-boundaries.supplementary-self-root",
+      "graph.cli-reports.default-cheap-no-compiler",
+      "graph.cli-reports.default-empty",
+      "graph.cli-reports.two-package-console-workflow"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Existing parser and mode witnesses plus the listed strict prepared console report process cases; full global CLI parity remains open.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared graph-console dispatch reuses one cheap/edge assembly owner and canonical report facts. The fixed actual-process corpus covers default summary, graph/plan/smells/CI, existing-analysis/data/file views, losing-flag analysis requirements, precise output/write/exit behavior and strict flag-bearing cases. Ordinary CI writes direct stdout and ignores --out; max may parse to Infinity, impact validates after graph, and cycles/human smells freshly discover package roots. Selected raw-unit/encoded-IO, backend exception and pending-stdio profiles remain separately qualified; deferred HTML/hotspots/blast/find/colored-tree, bootstrap/distribution, broader reflection/raw/ICU and full global CLI closure are not claimed."
   },
   "@demlik/tea:./agent#MediaSource": {
     "signature": "fb8241f24178d26bd49577696455649a0896e752ec2f15b8c63bbecba859d767",
@@ -11208,7 +11386,7 @@
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
@@ -11344,7 +11522,7 @@
     ],
     "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy.",
     "knownGaps": [
-      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite→JSON-null restore).",
+      "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",
       "reserved raw tag collisions/reflection",
       "OPEN advanced router/concurrency/children/provider/snapshot/tool-policy profiles, broader compaction integration and inherited callable/type aliases; the enabled low-level caller-handler compaction corpus does not close those profiles.",
