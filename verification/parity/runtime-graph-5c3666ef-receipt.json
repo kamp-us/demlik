@@ -33,10 +33,7 @@
       "resultGroups": 202,
       "overlap": "default and feature totals overlap, never sum"
     },
-    "allTargetClippy": [
-      "default",
-      "all features"
-    ],
+    "allTargetClippy": ["default", "all features"],
     "publicConsumers": [
       "authored state and typed subscription interface checks in both configurations",
       "agent_runtime_interface executed in both configurations",
