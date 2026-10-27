@@ -22,6 +22,9 @@ fn guarded_turn_schema_retains_the_original_raw_object_and_unknown_fields() {
     let Err(CallValue::Shared(error)) = AGENT_TURN_SCHEMA.parse(Rc::clone(&bad)) else {
         panic!("out-of-safe-range usage must be a structured parse failure")
     };
+    let demlik_tea::agent::StructuredOutputError::Live(error) = error.as_ref() else {
+        panic!("fresh turn rejection must be live");
+    };
     assert_eq!(error.name(), "Error");
     assert_eq!(
         error.message(),
@@ -50,6 +53,9 @@ fn compaction_schema_reuses_the_parser_contract_and_retains_lone_units_and_extra
     else {
         panic!("a non-string summary must fail")
     };
+    let demlik_tea::agent::StructuredOutputError::Live(error) = error.as_ref() else {
+        panic!("fresh summary rejection must be live");
+    };
     assert_eq!(
         error.message(),
         "structured-output parse failed: not a CompactionSummary"
@@ -67,7 +73,7 @@ fn the_actual_llm_decoder_uses_the_builtin_guard_schema_without_rebuilding_outpu
     let schema = Rc::new(AGENT_TURN_SCHEMA);
     let llm: LlmCall<'_, &str, (), _> = LlmCall::new(
         Config::new(move |_| Rc::clone(&schema)),
-        |error: &StructuredOutputError| Ok(error.message().into()),
+        StructuredOutputError::describe,
     );
     let attempted = llm
         .attempt(&llm.init(), Rc::new(Request::new("turn", None, ())), 0.0)

@@ -162,6 +162,8 @@ const controls = [
     "fold-negative-near-zero",
   ),
 ];
+export { controls as agentGuardControls };
+
 export async function agentGuardsMutations(options = {}) {
   const baselineTarget =
       process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),

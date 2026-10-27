@@ -6,7 +6,7 @@ mod schema;
 pub mod transcript;
 pub mod types;
 
-pub use schema::{GuardedSchema, StructuredOutputError};
+pub use schema::{GuardedSchema, StructuredOutputError, StructuredOutputRejection};
 
 pub mod turn_view;
 pub use turn_view::{

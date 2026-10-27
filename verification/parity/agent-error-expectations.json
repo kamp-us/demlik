@@ -1,0 +1,30 @@
+{
+  "guard-null": {
+    "wire": {},
+    "name": "Error",
+    "message": "structured-output parse failed: not an AgentTurn",
+    "decodedKind": "plain",
+    "decodedDescription": {
+      "ok": true,
+      "value": "[object Object]"
+    }
+  },
+  "summary-null": {
+    "message": "structured-output parse failed: not a CompactionSummary"
+  },
+  "plain-message-shaped": {
+    "kind": "plain",
+    "description": {
+      "ok": true,
+      "value": "[object Object]"
+    }
+  },
+  "plain-coercion-fails": {
+    "kind": "plain",
+    "description": {
+      "ok": false,
+      "name": "TypeError",
+      "message": "Cannot convert object to primitive value"
+    }
+  }
+}

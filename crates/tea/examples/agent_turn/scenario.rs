@@ -985,24 +985,22 @@ pub async fn execute(input: Input) -> Value {
     }
     let describe = Rc::clone(&ctx);
     let llm = Rc::new(
-        LlmCall::new(config, move |error: &Cause| {
-            Ok(match error {
-                Cause::Model(value) => {
-                    assert!(Rc::ptr_eq(value, &describe.cause));
-                    assert_eq!(value.marker.get(), 71);
-                    "invoice model rejected".into()
-                }
-                Cause::Guard(value) => {
-                    assert!(
-                        describe
-                            .guard_errors
-                            .borrow()
-                            .iter()
-                            .any(|e| Rc::ptr_eq(e, value))
-                    );
-                    value.message().into()
-                }
-            })
+        LlmCall::new(config, move |error: &Cause| match error {
+            Cause::Model(value) => {
+                assert!(Rc::ptr_eq(value, &describe.cause));
+                assert_eq!(value.marker.get(), 71);
+                Ok("invoice model rejected".into())
+            }
+            Cause::Guard(value) => {
+                assert!(
+                    describe
+                        .guard_errors
+                        .borrow()
+                        .iter()
+                        .any(|e| Rc::ptr_eq(e, value))
+                );
+                value.describe()
+            }
         })
         .with_rng(|| 0.0),
     );
@@ -1207,7 +1205,7 @@ pub async fn execute(input: Input) -> Value {
         None
     };
     drop(requests);
-    let out = json!({"id":input.id,"view":{"state":view,"savedSame":Rc::ptr_eq(state.as_ref(),saved.borrow().as_ref().unwrap()),"modelCalls":ctx.model_calls.get(),"toolCalls":ctx.tool_calls.get(),"schemaSame":ctx.schema_same.get(),"requestReused":request_reused,"dispatchFailures":dispatch_failures,"doneSame":done_same,"restart":restart_observation,"trace":ctx.trace.borrow().clone(),"timers":timer.events.borrow().clone(),"reports":reports.borrow().clone(),"ownership":{"parsedOriginal":ctx.parsed_original.get(),"callOriginal":ctx.call_original.get(),"argsOriginal":ctx.args_original.get(),"viewsRetained":ctx.views_retained.get(),"recordsOriginal":ctx.records_original.get(),"firstWins":ctx.first_wins.get()},"rawTurns":ctx.raw_turns.borrow().clone(),"usageReadings":ctx.usage_readings.borrow().clone(),"codecs":ctx.codecs.borrow().clone(),"selections":ctx.selections.borrow().clone()},"calls":ctx.calls.borrow().clone(),"projectionFailure":projection_failure,"guardDiagnostics":ctx.guard_errors.borrow().iter().map(|e|json!({"name":e.name(),"message":e.message(),"value":wire(&JsonData(e.value()))})).collect::<Vec<_>>()});
+    let out = json!({"id":input.id,"view":{"state":view,"savedSame":Rc::ptr_eq(state.as_ref(),saved.borrow().as_ref().unwrap()),"modelCalls":ctx.model_calls.get(),"toolCalls":ctx.tool_calls.get(),"schemaSame":ctx.schema_same.get(),"requestReused":request_reused,"dispatchFailures":dispatch_failures,"doneSame":done_same,"restart":restart_observation,"trace":ctx.trace.borrow().clone(),"timers":timer.events.borrow().clone(),"reports":reports.borrow().clone(),"ownership":{"parsedOriginal":ctx.parsed_original.get(),"callOriginal":ctx.call_original.get(),"argsOriginal":ctx.args_original.get(),"viewsRetained":ctx.views_retained.get(),"recordsOriginal":ctx.records_original.get(),"firstWins":ctx.first_wins.get()},"rawTurns":ctx.raw_turns.borrow().clone(),"usageReadings":ctx.usage_readings.borrow().clone(),"codecs":ctx.codecs.borrow().clone(),"selections":ctx.selections.borrow().clone()},"calls":ctx.calls.borrow().clone(),"projectionFailure":projection_failure,"guardDiagnostics":ctx.guard_errors.borrow().iter().map(|e| { let StructuredOutputError::Live(e)=e.as_ref() else { panic!("fresh guard diagnostic must be live") }; json!({"name":e.name(),"message":e.message(),"value":wire(&JsonData(e.value()))}) }).collect::<Vec<_>>()});
     std::fs::remove_dir_all(path).unwrap();
     out
 }

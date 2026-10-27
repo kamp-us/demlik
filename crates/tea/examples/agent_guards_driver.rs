@@ -163,6 +163,9 @@ fn parse(
             ("observation", observation(&parsed)),
         ]),
         Err(CallValue::Shared(error)) => {
+            let demlik_tea::agent::StructuredOutputError::Live(error) = error.as_ref() else {
+                panic!("a fresh built-in guard rejection must be live");
+            };
             errors.push(object([
                 ("name", string(error.name())),
                 ("message", string(error.message())),

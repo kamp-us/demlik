@@ -577,7 +577,7 @@ async fn execute(input: Input) -> Value {
                     assert_eq!(v.0.get(), 71);
                     Ok("invoice model rejected".into())
                 }
-                AppCause::Guard(v) => Ok(v.message().into()),
+                AppCause::Guard(v) => v.describe(),
                 AppCause::Data(v) => demlik_tea::describe_error::describe_error(
                     demlik_tea::describe_error::ErrorView::Value(v),
                 ),

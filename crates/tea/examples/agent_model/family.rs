@@ -190,7 +190,10 @@ pub fn prove() {
                         panic!("schema cause")
                     };
                     assert!(Rc::ptr_eq(inner, seen.borrow().as_ref().unwrap()));
-                    assert!(Rc::ptr_eq(inner.value(), &raw));
+                    let StructuredOutputError::Live(rejection) = inner.as_ref() else {
+                        panic!("fresh guard rejection must be live");
+                    };
+                    assert!(Rc::ptr_eq(rejection.value(), &raw));
                 } else {
                     assert!(Rc::ptr_eq(cause, &family));
                     let FamilyCause::Model(inner) = cause.as_ref() else {

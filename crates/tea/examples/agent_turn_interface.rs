@@ -145,7 +145,7 @@ async fn consume(profile: Profile) {
     let schema_handle = Rc::clone(&schema);
     let llm = Rc::new(LlmCall::new(
         llm_call::Config::new(move |_: &JsText| Rc::clone(&schema_handle)),
-        |e: &StructuredOutputError| Ok(e.message().into()),
+        StructuredOutputError::describe,
     ));
     let observed = Rc::new(RefCell::new(None::<Rc<PlainToolCall>>));
     let recorded = Rc::new(RefCell::new(
