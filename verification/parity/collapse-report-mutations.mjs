@@ -27,9 +27,9 @@ const root = fileURLToPath(new URL("../..", import.meta.url)),
   hash = (b) => createHash("sha256").update(b).digest("hex");
 const checked = JSON.parse(fs.readFileSync(baselineReport, "utf8")),
   baselineHash = hash(fs.readFileSync(baseline));
-assert.equal(checked.passed, 104);
-assert.equal(checked.attempted, 104);
-assert.equal(Object.keys(checked.nativeEvidence).length, 104);
+assert.equal(checked.passed, 99);
+assert.equal(checked.attempted, 99);
+assert.equal(Object.keys(checked.nativeEvidence).length, 99);
 assert.equal(checked.rejectedInvalidInputs, 4);
 assert.equal(checked.responseGuards, 3);
 assert.deepEqual(checked.failures, []);

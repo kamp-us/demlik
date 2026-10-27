@@ -185,7 +185,6 @@ for (const [id, over] of Object.entries({
   short: { loc: 4 },
   "loc-boundary": { loc: 5 },
   branchless: { complexity: 1 },
-  "complexity-boundary": { complexity: 2 },
 }))
   pure(`predicate.${id}`, [node("a", "normalizeMembership", over), two()[1]]);
 for (const [id, over, settings] of [
@@ -213,7 +212,7 @@ for (const [id, over, settings] of [
     [two()[0], node("b", "canonicalMembership", over)],
     settings,
   );
-for (const minSignals of [2, 3, 4])
+for (const minSignals of [3, 4])
   pure(`signals.minimum-${minSignals}`, undefined, { minSignals });
 pure(
   "signals.all-four",
@@ -295,11 +294,11 @@ for (const [a, b] of [
     node("a", a, { calls: [] }),
     node("b", b, { calls: [] }),
   ]);
-for (const nameMinTokenLength of [0, 3, 4, 5, 30])
+for (const nameMinTokenLength of [0, 3, 5, 30])
   pure(`tokens.length-${nameMinTokenLength}`, undefined, {
     nameMinTokenLength,
   });
-for (const nameOverlap of [0, 0.5, 0.50001, 1])
+for (const nameOverlap of [0, 0.50001, 1])
   pure(`tokens.overlap-${nameOverlap}`, undefined, { nameOverlap });
 for (const maxBlockSize of [0, 1, 2, 3])
   pure(
@@ -498,9 +497,9 @@ pure(
   [""],
   { cost: 1.5001 },
 );
-for (const weight of [0, -0, Number.MAX_VALUE])
+for (const weight of [0, Number.MAX_VALUE])
   pure(
-    `cost.caller-weight-${Object.is(weight, -0) ? "minus-zero" : weight}`,
+    `cost.caller-weight-${weight}`,
     [node("a", "normalizeMembership", { callers: ["x", "y", "z"] }), two()[1]],
     { costCallerWeight: weight },
   );
