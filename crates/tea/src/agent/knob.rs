@@ -7,6 +7,7 @@ use crate::{
             CompactionPolicy, CompactionProfile, CompactionPurpose, NoCompaction, WithCompaction,
         },
         conversation::shared_no_usage,
+        snapshot::{NoSnapshot, SnapshotProfile, WithSnapshot},
         turn_view::{
             CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReader, read_native,
             read_plain,
@@ -23,7 +24,7 @@ use crate::{
     llm_call::{self, LlmCall, LlmErr, LlmOk, Purpose, Request, Schema},
     resilience::resilient_call::ResilientCall,
 };
-use std::rc::Rc;
+use std::{marker::PhantomData, rc::Rc};
 
 mod command;
 mod error;
@@ -34,23 +35,24 @@ pub use runtime::{
     AgentCompletion, AgentMachineError, AgentMachineMsg, AgentToolMsg, AgentWired, AgentWorkError,
     agent_boot_msg, agent_cancel_msg,
 };
-pub type CommandOf<P, I, S, C, K = NoCompaction> = AgentCommand<
+pub type CommandOf<P, I, S, C, K = NoCompaction, Q = NoSnapshot> = AgentCommand<
     P,
     I,
     <S as Schema>::Output,
     <S as Schema>::Error,
     C,
     <K as CompactionProfile>::Command,
+    <Q as SnapshotProfile>::Command,
 >;
-pub type StepOf<Stage, P, I, S, R, TE, A, T, C, V = NativeCalls, K = NoCompaction> =
-    crate::Step<SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>, CommandOf<P, I, S, C, K>>;
-type MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
-    Option<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K>>;
-type ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
-    Result<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K>, AgentError>;
-type MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> =
-    Result<MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K>, AgentError>;
-type CommandListOf<P, I, S, C, K> = Vec<CommandOf<P, I, S, C, K>>;
+pub type StepOf<Stage, P, I, S, R, TE, A, T, C, V = NativeCalls, K = NoCompaction, Q = NoSnapshot> =
+    crate::Step<SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>, CommandOf<P, I, S, C, K, Q>>;
+type MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
+    Option<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>>;
+type ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
+    Result<StepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>, AgentError>;
+type MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
+    Result<MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>, AgentError>;
+type CommandListOf<P, I, S, C, K, Q> = Vec<CommandOf<P, I, S, C, K, Q>>;
 type StopWhen<'a, Stage, P, I, S, R, TE, A, T, V, K> =
     Option<Box<dyn Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> bool + 'a>>;
 
@@ -108,6 +110,7 @@ pub struct AgentConfig<
     C,
     V: CallSource<A> = NativeCalls,
     K: CompactionProfile = NoCompaction,
+    Q: SnapshotProfile = NoSnapshot,
 > {
     llm: Rc<LlmCall<'a, P, I, S>>,
     stages: Vec<Rc<Stage>>,
@@ -121,6 +124,8 @@ pub struct AgentConfig<
     tool_concurrency: f64,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
+    snapshot_every: f64,
+    snapshot_profile: PhantomData<fn() -> Q>,
     compaction: Option<PolicyOf<'a, R, T, TE, A, V, K>>,
     stop_when: StopWhen<'a, Stage, P, I, S, R, TE, A, T, V, K>,
 }
@@ -192,7 +197,8 @@ impl<
     C: Tagged,
     V: CallSource<A>,
     K: CompactionProfile,
-> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 {
     fn from_reader(
         llm: Rc<LlmCall<'a, P, I, S>>,
@@ -218,6 +224,8 @@ impl<
             max_elapsed_ms: None,
             stop_when: None,
             compaction: None,
+            snapshot_every: 1.0,
+            snapshot_profile: PhantomData,
         }
     }
     pub fn instructions(mut self, value: impl Into<JsText>) -> Self {
@@ -267,12 +275,21 @@ pub struct Agent<
     C,
     V: CallSource<A> = NativeCalls,
     K: CompactionProfile = NoCompaction,
+    Q: SnapshotProfile = NoSnapshot,
 > {
-    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>,
-    run: MonitoredRun<Stage, ()>,
+    #[expect(
+        clippy::type_complexity,
+        reason = "The Agent retains the original independently typed config and optional profiles."
+    )]
+    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>,
+    run: MonitoredRun<Stage, PlainData>,
     fan: FanOut<'a, CallOf<A, V>, ToolOutcome<R, TE>, C, TE>,
     compact: CompactCall<'a, K>,
 }
+#[expect(
+    clippy::type_complexity,
+    reason = "Construction preserves the independently typed config and optional profiles without erasing owners."
+)]
 pub fn create_agent<
     'a,
     Stage,
@@ -287,9 +304,10 @@ pub fn create_agent<
     C: Tagged + 'a,
     V: CallSource<A>,
     K: CompactionProfile,
+    Q: SnapshotProfile,
 >(
-    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>,
-) -> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>,
+) -> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 where
     CallOf<A, V>: 'a,
 {
@@ -297,6 +315,7 @@ where
     let run = MonitoredRun::new(MonitoredRunConfig {
         stages: config.stages.clone(),
         deadline_ms: config.deadline_ms,
+        snapshot_every: Q::ENABLED.then_some(config.snapshot_every),
         ..Default::default()
     });
     let fan = FanOut::new(FanOutConfig::new(
@@ -326,7 +345,8 @@ impl<
     C: Tagged,
     V: CallSource<A>,
     K: CompactionProfile,
-> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 {
     pub fn init(&self) -> SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K> {
         Rc::new(AgentState {
@@ -376,7 +396,7 @@ use crate::{
         },
     },
     command::Settlement,
-    flow::monitored_run::{MonitoredRunState, RunPhase, StageResult},
+    flow::monitored_run::{RunPhase, StageResult},
     resilience::{
         deadline::{Deadline, DeadlineExceeded},
         resilient_call::{CallPhase, CallValue},
@@ -417,7 +437,8 @@ impl<
     C: Tagged,
     V: CallSource<A>,
     K: CompactionProfile,
-> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 {
     fn empty_compaction(&self) -> CompactState<K> {
         self.compact.init()
@@ -468,8 +489,8 @@ impl<
         at: AgentNumber,
         verb: impl FnOnce(
             &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
-        ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K>,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+        ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>,
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.supported(s)?;
         let current = s.with_usage_defaults();
         let entered = if current
@@ -520,23 +541,11 @@ impl<
             })
             .collect()
     }
-    fn run_state(
-        &self,
-        step: Step<Rc<MonitoredRunState<Stage>>, crate::flow::monitored_run::MonitoredRunCmd<()>>,
-    ) -> Result<Rc<MonitoredRunState<Stage>>, AgentError> {
-        if !step.commands.is_empty() {
-            return Err(AgentError::UnsupportedRestoredProfile {
-                profile: OptionalProfile::SnapshotCommand,
-                keys: vec![],
-            });
-        }
-        Ok(step.state)
-    }
     fn fire_brain(
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let call = self.brain_call(s);
         let step = self
             .config
@@ -567,10 +576,10 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         run_id: impl Into<JsText>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             let mut next = s.as_ref().clone();
-            next.run = self.run_state(self.run.start(&s.run, run_id, at))?;
+            next.run = self.run.start(&s.run, run_id, at).state;
             next.conversation = Some(Rc::new(Conversation::fresh()));
             next.usage = AgentField::Value(Some(shared_no_usage()));
             next.failure = AgentField::Value(None);
@@ -586,7 +595,7 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         result: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| self.turn_body(s, result, at))
     }
     fn turn_body(
@@ -594,7 +603,7 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         result: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let Some(conv) = s.require_awaiting(AwaitingKind::Llm) else {
             return Ok(Step::new(Rc::clone(s), vec![]));
         };
@@ -637,7 +646,10 @@ impl<
         measured.awaiting = Awaiting::Tools {
             batch_turn: measured.turn_count,
         };
-        counted.run = self.run_state(self.run.progress(&s.run, Rc::new(()), at))?;
+        counted.run = self
+            .run
+            .progress(&s.run, Rc::new(PlainData::Undefined), at)
+            .state;
         counted.tool_resilience = AgentField::Value(self.tool_slice(s));
         let commands = scattered
             .state
@@ -655,19 +667,31 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         terminating: Rc<T>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
-        let run = self.run_state(self.run.advance(&s.run, Rc::new(()), StageResult::Ok, at))?;
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
+        let step = self
+            .run
+            .advance(&s.run, Rc::new(PlainData::Undefined), StageResult::Ok, at);
+        let commands = step
+            .commands
+            .into_iter()
+            .map(|command| Q::command(command).map(AgentCommand::Snapshot))
+            .collect::<Result<Vec<_>, _>>()?;
+        let run = step.state;
         let mut next = s.as_ref().clone();
         let done = matches!(run.phase, RunPhase::Done { .. });
         next.run = run;
         if done {
             next.conversation = None;
             next.output = AgentField::Value(Some(terminating));
-            return Ok(Step::new(Rc::new(next), vec![]));
+            return Ok(Step::new(Rc::new(next), commands));
         }
         next.conversation = Some(Rc::new(Conversation::fresh()));
         next.tools = self.fan.init();
-        self.fire_brain(&Rc::new(next), at)
+        let mut fired = self.fire_brain(&Rc::new(next), at)?;
+        let mut commands = commands;
+        commands.append(&mut fired.commands);
+        fired.commands = commands;
+        Ok(fired)
     }
     fn tool_slice(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> ToolState<A, TE, V> {
         s.tool_resilience
@@ -691,7 +715,7 @@ impl<
         id: impl Into<JsText>,
         result: Rc<R>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
             let before = if self.in_flight(s, &id).is_some() {
@@ -710,7 +734,7 @@ impl<
         id: impl Into<JsText>,
         failure: Rc<TE>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
             let before = if self.in_flight(s, &id).is_some() {
@@ -729,7 +753,7 @@ impl<
         id: &JsText,
         outcome: Rc<ToolOutcome<R, TE>>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let Some(conv) = s.require_awaiting(AwaitingKind::Tools) else {
             return Ok(Step::new(Rc::clone(s), vec![]));
         };
@@ -787,7 +811,10 @@ impl<
         let mut next = noted.as_ref().clone();
         next.tools = settled.state;
         if !self.fan.is_complete(&next.tools) {
-            next.run = self.run_state(self.run.progress(&next.run, Rc::new(()), at))?;
+            next.run = self
+                .run
+                .progress(&next.run, Rc::new(PlainData::Undefined), at)
+                .state;
             next.conversation = Some(Rc::new(conversation));
             return Ok(Step::new(Rc::new(next), launch_commands));
         }
@@ -805,7 +832,10 @@ impl<
             return Ok(compacting);
         }
         let mut drained = drained.as_ref().clone();
-        drained.run = self.run_state(self.run.progress(&drained.run, Rc::new(()), at))?;
+        drained.run = self
+            .run
+            .progress(&drained.run, Rc::new(PlainData::Undefined), at)
+            .state;
         let mut fired = self.fire_brain(&Rc::new(drained), at)?;
         let mut commands = launch_commands;
         commands.append(&mut fired.commands);
@@ -816,7 +846,7 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> MaybeStepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let count = s
             .conversation
             .as_ref()
@@ -847,7 +877,7 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         msg: &BrainMessageOf<P, I, S>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             let retry = self.config.llm.succeed(&s.resilience, msg)?;
             let Settlement::Ok(CallValue::Shared(value)) = msg.outcome() else {
@@ -871,7 +901,7 @@ impl<
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         msg: &BrainMessageOf<P, I, S>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             let retry = self.config.llm.fail(&s.resilience, msg)?;
             let mut next = s.as_ref().clone();
@@ -901,14 +931,14 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| Ok(self.cancel_body(s, at)))
     }
     fn cancel_body(
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> StepOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> StepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let mut next = s.as_ref().clone();
         next.run = self.run.cancel(&s.run, at).state;
         Step::new(Rc::new(next), vec![])
@@ -917,7 +947,7 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             let mut resumed = s.as_ref().clone();
             resumed.run = self.run.boot(&s.run, at).state;
@@ -963,7 +993,7 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         msg: &DeadlineExceeded,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, msg.at_ms, |s| {
             let has = |prefix: &str| {
                 msg.id
@@ -1049,7 +1079,8 @@ impl<
     C: Tagged,
     V: CallSource<A>,
     K: CompactionProfile,
-> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
 {
     pub fn tool_err_reason(
         &self,
@@ -1057,7 +1088,7 @@ impl<
         id: impl Into<JsText>,
         reason: impl Into<JsText>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, PlainData, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, PlainData, A, T, C, V, K, Q> {
         let fields = [
             ("kind".into(), PlainData::String("error".into())),
             ("reason".into(), PlainData::String(reason.into())),
@@ -1090,7 +1121,8 @@ impl<
     Provider,
     C: Tagged,
     V: CallSource<A>,
-> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
+    Q: SnapshotProfile,
+> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, NoCompaction, Q>
 {
     /// Select compaction before a state-dependent stop predicate. A refusal
     /// retains both original owners instead of reprojecting a different state.
@@ -1102,7 +1134,7 @@ impl<
         self,
         policy: PolicyOf<'a, R, T, TE, A, V, WithCompaction<CI, CO, CE>>,
     ) -> Result<
-        AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, WithCompaction<CI, CO, CE>>,
+        AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, WithCompaction<CI, CO, CE>, Q>,
         CompactionConfigError<Self, PolicyOf<'a, R, T, TE, A, V, WithCompaction<CI, CO, CE>>>,
     > {
         if self.stop_when.is_some() {
@@ -1126,6 +1158,8 @@ impl<
             max_elapsed_ms: self.max_elapsed_ms,
             stop_when: None,
             compaction: Some(policy),
+            snapshot_every: self.snapshot_every,
+            snapshot_profile: PhantomData,
         })
     }
 }
@@ -1144,7 +1178,8 @@ impl<
     C: Tagged,
     V: CallSource<A>,
     K: CompactionProfile,
-> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 {
     fn compaction_call(
         &self,
@@ -1169,7 +1204,7 @@ impl<
         &self,
         s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
         at: f64,
-    ) -> MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let Some(policy) = self.config.compaction.as_ref() else {
             return Ok(None);
         };
@@ -1180,7 +1215,10 @@ impl<
         if folding < 2.0 {
             return Ok(None);
         }
-        let run = self.run_state(self.run.progress(&s.run, Rc::new(()), at))?;
+        let run = self
+            .run
+            .progress(&s.run, Rc::new(PlainData::Undefined), at)
+            .state;
         let input = self.compaction_call(conv, folding.into())?;
         let step = self
             .compact
@@ -1216,7 +1254,7 @@ impl<
     fn compact_commands(
         &self,
         commands: Vec<CompactCommand<K>>,
-    ) -> Result<CommandListOf<P, I, S, C, K>, AgentError> {
+    ) -> Result<CommandListOf<P, I, S, C, K, Q>, AgentError> {
         commands
             .into_iter()
             .map(|command| {
@@ -1237,7 +1275,7 @@ impl<
         key: &JsText,
         msg: &crate::agent::compaction::CompactOk<K::Output>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             use crate::resilience::resilient_call::SettleInput;
             let settled = self
@@ -1292,7 +1330,7 @@ impl<
         key: &JsText,
         msg: &crate::agent::compaction::CompactErr<K::Error>,
         at: f64,
-    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K> {
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         self.transition(s, at.into(), |s| {
             use crate::resilience::resilient_call::{CallFailure, SettleInput, SettleOutcome};
             let settled = self
@@ -1334,3 +1372,50 @@ impl<C, P> std::fmt::Display for CompactionConfigError<C, P> {
     }
 }
 impl<C, P> std::error::Error for CompactionConfigError<C, P> {}
+
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+    K: CompactionProfile,
+> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K>
+{
+    /// Select the caller-owned named checkpoint write. The State type and any
+    /// existing stop_when callback remain unchanged.
+    #[expect(
+        clippy::type_complexity,
+        reason = "Selecting snapshots retains the concrete original callbacks and State while changing the command profile."
+    )]
+    pub fn with_snapshots(
+        self,
+        every: f64,
+    ) -> AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, WithSnapshot> {
+        AgentConfig {
+            llm: self.llm,
+            stages: self.stages,
+            turn_of: self.turn_of,
+            payload_of: self.payload_of,
+            tool_of: self.tool_of,
+            turn_view: self.turn_view,
+            instructions: self.instructions,
+            model_id: self.model_id,
+            deadline_ms: self.deadline_ms,
+            tool_concurrency: self.tool_concurrency,
+            max_turns: self.max_turns,
+            max_elapsed_ms: self.max_elapsed_ms,
+            compaction: self.compaction,
+            stop_when: self.stop_when,
+            snapshot_every: every,
+            snapshot_profile: PhantomData,
+        }
+    }
+}

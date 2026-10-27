@@ -4,6 +4,10 @@ use crate::agent::compaction::{
     CompactMessage, CompactionProfile, NoCompactCommand, NoCompactMessage, NoCompaction,
     WithCompaction,
 };
+use crate::agent::snapshot::{
+    AgentSnapshotWrite, NoSnapshot, NoSnapshotCommand, NoSnapshotMessage, SnapshotProfile,
+    WithSnapshot,
+};
 use crate::agent::turn_view::{CallSource, NativeCalls};
 use crate::{
     Machine, PlainData, Step, Tagged, TryUpdate,
@@ -98,10 +102,11 @@ impl<P, I, O, E, R, CM: Tagged> Message for AgentMachineMsg<P, I, O, E, AgentToo
         "compact_err",
     ];
 }
-pub enum AgentCompletion<B, T, CC = NoCompactMessage> {
+pub enum AgentCompletion<B, T, CC = NoCompactMessage, SC = NoSnapshotMessage> {
     Brain(B),
     Tool(T),
     Compact(CC),
+    Snapshot(SC),
 }
 
 fn classify_brain<E>(error: &RunError<E>) -> Result<PlainData, CommandContractError> {
@@ -111,20 +116,25 @@ fn classify_brain<E>(error: &RunError<E>) -> Result<PlainData, CommandContractEr
             .collect(),
     ))
 }
-impl<P, I, O, E, C: CommandFamily, CC: CommandFamily> CommandFamily
-    for AgentCommand<P, I, O, E, C, CC>
+impl<P, I, O, E, C: CommandFamily, CC: CommandFamily, SC: CommandFamily<Msg = NoSnapshotMessage>>
+    CommandFamily for AgentCommand<P, I, O, E, C, CC, SC>
 where
     C::Msg: Tagged,
     CC::Msg: Tagged,
 {
     type Msg = AgentMachineMsg<P, I, O, E, C::Msg, CC::Msg>;
-    type Completion =
-        AgentCompletion<Completion<RunSpec<P, I, O, E>>, C::Completion, CC::Completion>;
+    type Completion = AgentCompletion<
+        Completion<RunSpec<P, I, O, E>>,
+        C::Completion,
+        CC::Completion,
+        SC::Completion,
+    >;
     fn is_defined(&self) -> bool {
         match self {
             Self::Brain(_) => true,
             Self::Tool(c) => c.is_defined(),
             Self::Compact(c) => c.is_defined(),
+            Self::Snapshot(c) => c.is_defined(),
         }
     }
     fn engine_stamp(message: &Self::Msg) -> Option<&EngineStamp> {
@@ -157,6 +167,11 @@ where
                 .into_iter()
                 .map(AgentMachineMsg::Compact)
                 .collect()),
+            (Self::Snapshot(c), AgentCompletion::Snapshot(v)) => Ok(c
+                .settle(v, at)?
+                .into_iter()
+                .map(|never| match never {})
+                .collect()),
             (c, _) => Err(CommandContractError::mismatched(
                 c.tag(),
                 "different agent command family",
@@ -184,6 +199,11 @@ where
                 .settle_in(v, edge)?
                 .into_iter()
                 .map(AgentMachineMsg::Compact)
+                .collect()),
+            (Self::Snapshot(c), AgentCompletion::Snapshot(v)) => Ok(c
+                .settle_in(v, edge)?
+                .into_iter()
+                .map(|never| match never {})
                 .collect()),
             (c, _) => Err(CommandContractError::mismatched(
                 c.tag(),
@@ -236,32 +256,47 @@ type HostMsg<P, I, S, R, K = NoCompaction> = AgentMachineMsg<
     AgentToolMsg<R>,
     <<K as CompactionProfile>::Command as CommandFamily>::Msg,
 >;
-type WiredMachine<'a, Stage, P, I, S, R, A, T, C, V = NativeCalls, K = NoCompaction> = Machine<
+type WiredMachine<
+    'a,
+    Stage,
+    P,
+    I,
+    S,
+    R,
+    A,
+    T,
+    C,
+    V = NativeCalls,
+    K = NoCompaction,
+    Q = NoSnapshot,
+> = Machine<
     'a,
     SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V, K>,
     HostMsg<P, I, S, R, K>,
-    CommandOf<P, I, S, C, K>,
+    CommandOf<P, I, S, C, K, Q>,
     DeadlinesSub,
     (),
     AgentMachineError,
 >;
 
-struct AgentInterpreter<'a, P, I, S: Schema, F, L, TI, CI, M, H> {
+struct AgentInterpreter<'a, P, I, S: Schema, F, L, TI, CI, SI, M, H> {
     llm: Rc<LlmCall<'a, P, I, S>>,
     model: F,
     loader: L,
     tools: TI,
     compact: CI,
+    snapshot: SI,
     marker: PhantomData<fn() -> (M, H)>,
 }
-impl<P: Purpose, I, S: Schema, F, L, TI, CI, M, H, C, CC>
-    Interpreter<AgentCommand<P, I, S::Output, S::Error, C, CC>>
-    for AgentInterpreter<'_, P, I, S, F, L, TI, CI, M, H>
+impl<P: Purpose, I, S: Schema, F, L, TI, CI, SI, M, H, C, CC, SC>
+    Interpreter<AgentCommand<P, I, S::Output, S::Error, C, CC, SC>>
+    for AgentInterpreter<'_, P, I, S, F, L, TI, CI, SI, M, H>
 where
     C: CommandFamily,
     C::Msg: Tagged,
     CC: CommandFamily,
     CC::Msg: Tagged,
+    SC: CommandFamily<Msg = NoSnapshotMessage>,
     F: ModelFactory<M, S>,
     L: MessageLoader<P, I, M, S::Error>,
     TI: Interpreter<
@@ -274,11 +309,16 @@ where
             AgentMachineMsg<P, I, S::Output, S::Error, C::Msg, CC::Msg>,
             Error = AgentWorkError<H>,
         >,
+    SI: Interpreter<
+            SC,
+            AgentMachineMsg<P, I, S::Output, S::Error, C::Msg, CC::Msg>,
+            Error = AgentWorkError<H>,
+        >,
 {
     type Error = AgentWorkError<H>;
     fn interpret<'b>(
         &'b self,
-        command: &'b AgentCommand<P, I, S::Output, S::Error, C, CC>,
+        command: &'b AgentCommand<P, I, S::Output, S::Error, C, CC, SC>,
         context: CommandContext<
             AgentMachineMsg<P, I, S::Output, S::Error, C::Msg, CC::Msg>,
             Self::Error,
@@ -286,7 +326,7 @@ where
     ) -> Option<
         CommandWork<
             'b,
-            <AgentCommand<P, I, S::Output, S::Error, C, CC> as CommandFamily>::Completion,
+            <AgentCommand<P, I, S::Output, S::Error, C, CC, SC> as CommandFamily>::Completion,
             Self::Error,
         >,
     > {
@@ -320,6 +360,18 @@ where
                     future: work
                         .future
                         .map(|r| r.map(AgentCompletion::Compact))
+                        .boxed_local(),
+                    cleanup: work.cleanup,
+                    detached: work.detached,
+                    uninterruptible: work.uninterruptible,
+                })
+            }
+            AgentCommand::Snapshot(cmd) => {
+                let work = self.snapshot.interpret(cmd, context)?;
+                Some(CommandWork {
+                    future: work
+                        .future
+                        .map(|r| r.map(AgentCompletion::Snapshot))
                         .boxed_local(),
                     cleanup: work.cleanup,
                     detached: work.detached,
@@ -375,7 +427,8 @@ impl<
     C,
     V: CallSource<A>,
     K: CompactionProfile,
-> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K>
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
 where
     C: CommandFamily<Msg = AgentToolMsg<R>>,
     <K::Command as CommandFamily>::Msg: Tagged,
@@ -391,16 +444,17 @@ where
         clippy::type_complexity,
         reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
     )]
-    fn wire<F, L, TI, CI, M, H, TM>(
+    fn wire<F, L, TI, CI, SI, M, H, TM>(
         self: Rc<Self>,
         model: F,
         loader: L,
         tools: TI,
         compact: CI,
+        snapshot: SI,
         timer: Rc<TM>,
     ) -> AgentWired<
-        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, K>,
-        impl Interpreter<CommandOf<P, I, S, C, K>, Error = AgentWorkError<H>> + 'a,
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, K, Q>,
+        impl Interpreter<CommandOf<P, I, S, C, K, Q>, Error = AgentWorkError<H>> + 'a,
         impl Subscriptions<DeadlinesSub, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>>,
     >
     where
@@ -408,6 +462,7 @@ where
         L: MessageLoader<P, I, M, S::Error> + 'a,
         TI: Interpreter<C, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
         CI: Interpreter<K::Command, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
+        SI: Interpreter<Q::Command, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
         TM: Timer + 'static,
         H: 'static,
         M: 'a,
@@ -424,6 +479,8 @@ where
         V: 'a,
         K: 'a,
         K::Command: 'a,
+        Q: 'a,
+        Q::Command: 'a,
     {
         let init = Rc::clone(&self);
         let reduce = Rc::clone(&self);
@@ -485,6 +542,7 @@ where
                 loader,
                 tools,
                 compact,
+                snapshot,
                 marker: PhantomData,
             },
             subscribe: DeadlineRunner {
@@ -554,6 +612,7 @@ where
             loader,
             tools,
             NoCompactInterpreter(PhantomData),
+            NoSnapshotInterpreter(PhantomData),
             timer,
         )
     }
@@ -631,6 +690,185 @@ where
         CO: 'a,
         CE: 'a,
     {
-        self.wire(model, loader, tools, compact, timer)
+        self.wire(
+            model,
+            loader,
+            tools,
+            compact,
+            NoSnapshotInterpreter(PhantomData),
+            timer,
+        )
+    }
+}
+
+struct NoSnapshotInterpreter<H>(PhantomData<fn() -> H>);
+impl<H, M> Interpreter<NoSnapshotCommand, M> for NoSnapshotInterpreter<H> {
+    type Error = AgentWorkError<H>;
+    fn interpret<'b>(
+        &'b self,
+        command: &'b NoSnapshotCommand,
+        _: CommandContext<M, Self::Error>,
+    ) -> Option<CommandWork<'b, NoSnapshotMessage, Self::Error>> {
+        match *command {}
+    }
+}
+
+impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>>, R, A, T, Provider, C, V: CallSource<A>>
+    Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, NoCompaction, WithSnapshot>
+where
+    C: CommandFamily<Msg = AgentToolMsg<R>>,
+{
+    /// The enabled checkpoint profile requires actual caller-owned named IO.
+    /// Progress-only commands stay discarded, and loaded init stays commandless.
+    #[expect(
+        clippy::type_complexity,
+        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+    )]
+    pub fn to_machine_with_snapshot<F, L, TI, SI, M, H, TM>(
+        self: Rc<Self>,
+        model: F,
+        loader: L,
+        tools: TI,
+        snapshot: SI,
+        timer: Rc<TM>,
+    ) -> AgentWired<
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, NoCompaction, WithSnapshot>,
+        impl Interpreter<CommandOf<P, I, S, C, NoCompaction, WithSnapshot>, Error = AgentWorkError<H>>
+        + 'a,
+        impl Subscriptions<DeadlinesSub, HostMsg<P, I, S, R, NoCompaction>, Error = AgentWorkError<H>>,
+    >
+    where
+        F: ModelFactory<M, S> + 'a,
+        L: MessageLoader<P, I, M, S::Error> + 'a,
+        TI: Interpreter<C, HostMsg<P, I, S, R, NoCompaction>, Error = AgentWorkError<H>> + 'a,
+        SI: Interpreter<
+                AgentSnapshotWrite,
+                HostMsg<P, I, S, R, NoCompaction>,
+                Error = AgentWorkError<H>,
+            > + 'a,
+        TM: Timer + 'static,
+        H: 'static,
+        M: 'a,
+        HostMsg<P, I, S, R, NoCompaction>: 'static,
+        Stage: 'a,
+        P: 'a,
+        I: 'a,
+        S: 'a,
+        R: 'a,
+        A: 'a,
+        T: 'a,
+        Provider: 'a,
+        C: 'a,
+        V: 'a,
+    {
+        self.wire(
+            model,
+            loader,
+            tools,
+            NoCompactInterpreter(PhantomData),
+            snapshot,
+            timer,
+        )
+    }
+}
+
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>>,
+    R,
+    A,
+    T,
+    Provider,
+    C,
+    V: CallSource<A>,
+    CI,
+    CO,
+    CE,
+>
+    Agent<
+        'a,
+        Stage,
+        P,
+        I,
+        S,
+        R,
+        PlainData,
+        A,
+        T,
+        Provider,
+        C,
+        V,
+        WithCompaction<CI, CO, CE>,
+        WithSnapshot,
+    >
+where
+    C: CommandFamily<Msg = AgentToolMsg<R>>,
+{
+    /// The enabled checkpoint profile requires actual caller-owned named IO.
+    /// Progress-only commands stay discarded, and loaded init stays commandless.
+    #[expect(
+        clippy::type_complexity,
+        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+    )]
+    pub fn to_machine_with_snapshot_and_compaction<F, L, TI, SI, CT, M, H, TM>(
+        self: Rc<Self>,
+        model: F,
+        loader: L,
+        tools: TI,
+        snapshot: SI,
+        compact: CT,
+        timer: Rc<TM>,
+    ) -> AgentWired<
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, WithCompaction<CI, CO, CE>, WithSnapshot>,
+        impl Interpreter<
+            CommandOf<P, I, S, C, WithCompaction<CI, CO, CE>, WithSnapshot>,
+            Error = AgentWorkError<H>,
+        > + 'a,
+        impl Subscriptions<
+            DeadlinesSub,
+            HostMsg<P, I, S, R, WithCompaction<CI, CO, CE>>,
+            Error = AgentWorkError<H>,
+        >,
+    >
+    where
+        F: ModelFactory<M, S> + 'a,
+        L: MessageLoader<P, I, M, S::Error> + 'a,
+        TI: Interpreter<
+                C,
+                HostMsg<P, I, S, R, WithCompaction<CI, CO, CE>>,
+                Error = AgentWorkError<H>,
+            > + 'a,
+        SI: Interpreter<
+                AgentSnapshotWrite,
+                HostMsg<P, I, S, R, WithCompaction<CI, CO, CE>>,
+                Error = AgentWorkError<H>,
+            > + 'a,
+        CT: Interpreter<
+                crate::agent::compaction::CompactRun<CI, CO, CE>,
+                HostMsg<P, I, S, R, WithCompaction<CI, CO, CE>>,
+                Error = AgentWorkError<H>,
+            > + 'a,
+        TM: Timer + 'static,
+        H: 'static,
+        M: 'a,
+        HostMsg<P, I, S, R, WithCompaction<CI, CO, CE>>: 'static,
+        Stage: 'a,
+        P: 'a,
+        I: 'a,
+        S: 'a,
+        R: 'a,
+        A: 'a,
+        T: 'a,
+        Provider: 'a,
+        C: 'a,
+        V: 'a,
+        CI: 'a,
+        CO: 'a,
+        CE: 'a,
+    {
+        self.wire(model, loader, tools, compact, snapshot, timer)
     }
 }

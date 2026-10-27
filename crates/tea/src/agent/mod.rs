@@ -17,6 +17,8 @@ mod wire;
 
 mod state;
 
+pub mod snapshot;
+
 mod knob;
 pub use knob::{
     Agent, AgentCommand, AgentCompletion, AgentConfig, AgentError, AgentMachineError,
