@@ -96,6 +96,34 @@ impl Subscriptions<Sub<u8>, Msg> for Runner {
         })))
     }
 }
+#[derive(Default)]
+struct SaveGate {
+    hold: Cell<bool>,
+    entered: Notify,
+    release: Notify,
+}
+struct GatedStore {
+    inner: MemoryStore<Arc<Model>>,
+    gate: Rc<SaveGate>,
+}
+impl Store<Arc<Model>> for GatedStore {
+    type Raw = Option<Arc<Model>>;
+    type Error = storage::MemoryStoreError;
+    async fn load(&self) -> Result<Self::Raw, Self::Error> {
+        self.inner.load().await
+    }
+    async fn save(&self, state: &Arc<Model>) -> Result<(), Self::Error> {
+        if state.n == 2 && self.gate.hold.replace(false) {
+            let released = self.gate.release.notified();
+            self.gate.entered.notify_one();
+            released.await;
+        }
+        self.inner.save(state).await
+    }
+    fn migrate(&self, raw: Self::Raw) -> storage::Migrated<Arc<Model>> {
+        self.inner.migrate(raw)
+    }
+}
 type Error = RuntimeError<storage::MemoryStoreError, HostFailure, Rc<Opaque>>;
 type Run =
     runtime::Runtime<Arc<Model>, Msg, storage::MemoryStoreError, HostFailure, NoEvent, Rc<Opaque>>;
@@ -109,11 +137,20 @@ struct Fixture {
     sources: Rc<Sources>,
     policy_calls: Rc<Cell<usize>>,
 }
+fn fixture(profile: Profile, boot_refusal: bool, whole: bool) -> Fixture {
+    fixture_with_options(profile, boot_refusal, whole, Some(Duration::ZERO), None)
+}
 #[expect(
     clippy::arc_with_non_send_sync,
     reason = "The real local actor and memory store share opaque non-Send model owners without cloning models."
 )]
-fn fixture(profile: Profile, boot_refusal: bool, whole: bool) -> Fixture {
+fn fixture_with_options(
+    profile: Profile,
+    boot_refusal: bool,
+    whole: bool,
+    dispose_timeout: Option<Duration>,
+    save_gate: Option<Rc<SaveGate>>,
+) -> Fixture {
     let original = Rc::new(Opaque {
         value: Cell::new(73),
     });
@@ -174,8 +211,16 @@ fn fixture(profile: Profile, boot_refusal: bool, whole: bool) -> Fixture {
         NoEvent,
         Rc<Opaque>,
     > = Options::new(profile);
-    options.store = Some(Persistence::new(store.clone()));
-    options.dispose_timeout = Duration::ZERO;
+    options.store = Some(match save_gate {
+        Some(gate) => Persistence::new(GatedStore {
+            inner: store.clone(),
+            gate,
+        }),
+        None => Persistence::new(store.clone()),
+    });
+    if let Some(timeout) = dispose_timeout {
+        options.dispose_timeout = timeout;
+    }
     let policy = Rc::clone(&policy_calls);
     options.supervision = Supervision::Restart(Rc::new(move |s, _, _| {
         policy.set(policy.get() + 1);
@@ -304,37 +349,102 @@ async fn whole_projection_refusal_keeps_all_existing_kinds_until_real_recovery()
 #[tokio::test(flavor = "current_thread")]
 async fn projection_does_not_fail_effect_scope_but_runner_failure_retains_its_own_cause() {
     local(async {
-        let f = fixture(Profile::Effect, false, false);
+        for queued in [1, 256] {
+            // Error identity uses the production default drain policy. A zero
+            // budget independently permits a serial-tail deadline notice.
+            let f = fixture_with_options(Profile::Effect, false, false, None, None);
+            let scope = EffectScope::new();
+            scope.attach(&f.live).await.unwrap();
+            assert!(f.live.ready().await.is_ok());
+            let runner = Rc::new(Opaque {
+                value: Cell::new(91),
+            });
+            f.sources.fail.replace(Some(Rc::clone(&runner)));
+            let answers =
+                futures::future::join_all((0..queued).map(|_| f.live.dispatch(Msg::Next))).await;
+            let first = answers[0].as_ref().expect_err("projection lost");
+            assert!(Rc::ptr_eq(projection(first), &f.original));
+            scope.close().await;
+            let scoped = scope.failure().expect("actual runner must fail the scope");
+            let Some(Error::Handler(cause)) = scoped.downcast_ref::<Error>() else {
+                panic!("runner cause erased")
+            };
+            assert!(Rc::ptr_eq(&cause.0, &runner));
+            let reports = f.live.reports();
+            assert_eq!(reports.len(), 1);
+            assert_eq!(reports[0].phase, ErrorPhase::Sub);
+            let Error::Handler(cause) = reports[0].error.as_ref() else {
+                panic!("runner reclassified")
+            };
+            assert!(Rc::ptr_eq(&cause.0, &runner));
+            assert!(std::ptr::eq(
+                scoped.downcast_ref::<Error>().unwrap(),
+                reports[0].error.as_ref()
+            ));
+            assert_eq!(f.sources.live.get(), 0);
+            assert_eq!(f.sources.closed.get(), 2);
+            assert_eq!(f.policy_calls.get(), 0);
+            assert!(scope.is_closed());
+        }
+    })
+    .await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn zero_budget_stop_reports_serial_tail_deadline_while_save_is_pending() {
+    local(async {
+        let gate = Rc::new(SaveGate {
+            hold: Cell::new(true),
+            ..SaveGate::default()
+        });
+        let f = fixture_with_options(
+            Profile::Effect,
+            false,
+            false,
+            Some(Duration::ZERO),
+            Some(Rc::clone(&gate)),
+        );
         let scope = EffectScope::new();
         scope.attach(&f.live).await.unwrap();
         assert!(f.live.ready().await.is_ok());
-        let runner = Rc::new(Opaque {
-            value: Cell::new(91),
-        });
-        f.sources.fail.replace(Some(Rc::clone(&runner)));
-        let Err(first) = f.live.dispatch(Msg::Next).await else {
-            panic!("projection lost")
-        };
+        let first = f
+            .live
+            .dispatch(Msg::Next)
+            .await
+            .expect_err("projection lost");
         assert!(Rc::ptr_eq(projection(&first), &f.original));
+        let second = f.live.dispatch_once(Msg::Recover);
+        tokio::pin!(second);
+        assert!(futures::poll!(second.as_mut()).is_pending());
+        gate.entered.notified().await;
+        assert_eq!(f.sources.closed.get(), 1);
         scope.close().await;
-        let scoped = scope.failure().expect("actual runner must fail the scope");
-        let Some(Error::Handler(cause)) = scoped.downcast_ref::<Error>() else {
-            panic!("runner cause erased")
-        };
-        assert!(Rc::ptr_eq(&cause.0, &runner));
+        assert!(scope.is_closed());
+        assert!(scope.failure().is_none());
+        assert_eq!(f.live.gate(), Gate::Abandoned);
         let reports = f.live.reports();
         assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].phase, ErrorPhase::Sub);
-        let Error::Handler(cause) = reports[0].error.as_ref() else {
-            panic!("runner reclassified")
+        assert_eq!(reports[0].phase, ErrorPhase::Discard);
+        let Error::DrainTimeout {
+            timeout,
+            pending,
+            cmd_types,
+        } = reports[0].error.as_ref()
+        else {
+            panic!("serial-tail deadline lost its category")
         };
-        assert!(Rc::ptr_eq(&cause.0, &runner));
-        assert!(std::ptr::eq(
-            scoped.downcast_ref::<Error>().unwrap(),
-            reports[0].error.as_ref()
-        ));
+        assert_eq!(*timeout, Duration::ZERO);
+        assert_eq!(*pending, 0);
+        assert!(cmd_types.is_empty());
+        assert_eq!(f.sources.live.get(), 0);
+        assert_eq!(f.sources.closed.get(), 3);
+        assert!(futures::poll!(second.as_mut()).is_pending());
+        gate.release.notify_one();
+        assert!(second.await.is_ok());
+        assert!(f.live.idle().await.is_ok());
+        assert_eq!(f.live.reports().len(), 1);
+        assert_eq!(f.sources.closed.get(), 3);
         assert_eq!(f.policy_calls.get(), 0);
-        assert!(scope.is_closed());
+        assert!(Rc::ptr_eq(projection(&first), &f.original));
     })
     .await;
 }
