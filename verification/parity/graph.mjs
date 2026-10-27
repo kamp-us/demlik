@@ -178,6 +178,14 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "cli-tree-blast-find",
+    driver: "collapse_cli_driver",
+    script: "graph-cli-tree-blast-find-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
