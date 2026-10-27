@@ -1,0 +1,76 @@
+{
+  "source": "f516986ed581fdc2b73aae7c018b7fab6c4ae627",
+  "base": "4a70177d8a5b07681946083a98e9e53d73732f34",
+  "scope": "Prepared smell-ledger CLI CI/accept through canonical cheap/edge assembly; ordinary smells/generic CI remain explicit unsupported continuations",
+  "constructionCargo": {
+    "used": 5,
+    "maxApproved": 6,
+    "nativeTests": 246,
+    "package": "demlik-code-graph",
+    "wholeWorkspace": false,
+    "docs": false
+  },
+  "publicCaller": {
+    "sameSourceRed": "sole E0599",
+    "greenCompile": 0,
+    "greenRun": 0,
+    "borrowedRcHost": true,
+    "noTsConfig": true,
+    "nonexistentExplicitCompiler": true
+  },
+  "newObservations": {
+    "total": 50,
+    "shared": 47,
+    "strict": 39,
+    "qualified": 8,
+    "nativeOnly": 3,
+    "sourceCliExecutions": 55,
+    "workflowActionsInOneCase": 9,
+    "protocolRefusals": 5,
+    "responseGuards": 3
+  },
+  "affectedObservations": {
+    "smellLedger": 139,
+    "plainCollapseTotal": 49,
+    "plainCollapseNativeOnly": 4,
+    "unreachableCliTotal": 48,
+    "unreachableCliNativeOnly": 3,
+    "unreachablePureRender": 10,
+    "unreachableLedger": 78,
+    "newCredit": 0
+  },
+  "controls": {
+    "total": 14,
+    "new": 7,
+    "affectedOld": 7,
+    "cargoSelections": 14,
+    "compiled": 14,
+    "protocolValidNamedFailures": 14,
+    "strictWitnesses": 9,
+    "qualifiedWitnesses": 5,
+    "qualifiedStrictCredit": 0,
+    "worktreeAndDefaultTargetRemoved": true,
+    "baselineUnchanged": true,
+    "mutantLibraries": "Actual hashes and Cargo events retained; library bytes NOT retained",
+    "executedConsumers": "Individually compressed selected binaries retained"
+  },
+  "static": {
+    "codeGraphAllTargetClippy": 0,
+    "rustfmt": 0,
+    "biome": 0,
+    "verificationTsc": 0,
+    "diffCheck": 0
+  },
+  "qualifications": [
+    "Controlled warning filesystem transition",
+    "Raw JavaScript argv and callback units",
+    "Pending stdio notification contract",
+    "OS/backend exception diagnostics"
+  ],
+  "historicalFailures": {
+    "relativeBinaryEnoent": "verification setup only, zero semantic credit; verifier now resolves input paths before changing cwd",
+    "invalidRegexExpectations": "Both Source/native refused in global config; original mismatch reports retained, no product mismatch claimed"
+  },
+  "knownGaps": "All53 CLI knownGaps remain OPEN; no contracts/registration/TypeScript product/dependency changes",
+  "proof": "/private/tmp/demlik-cli-smell-ledger-proof-01a16c9d"
+}
