@@ -52,6 +52,7 @@ import { runtimeHooksParity } from "./runtime-hooks.mjs";
 import { sagaParity } from "./saga-run.mjs";
 import { snapshotInputParity } from "./snapshot-input-run.mjs";
 import { storedCellParity } from "./stored-cell-run.mjs";
+import { subscriptionConformance } from "./subscription-conformance-run.mjs";
 import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
@@ -1063,6 +1064,12 @@ if (!mutationSuite) {
       run: typedReducerParity,
     },
     {
+      name: "subscriptionConformance",
+      operation: "tea.subscription-runtime",
+      binaryArgument: "--subscription-conformance-bin",
+      run: subscriptionConformance,
+    },
+    {
       name: "agentStatePrerequisite",
       operation: "tea.agent-conversation-owners",
       binaryArgument: "--agent-state-prerequisite-bin",
@@ -1180,7 +1187,10 @@ const report = {
     .digest("hex"),
   cases:
     cases.length +
-    nativeSiblings.reduce((sum, suite) => sum + suite.cases, 0) +
+    nativeSiblings.reduce(
+      (sum, suite) => sum + (suite.observations ?? suite.cases),
+      0,
+    ) +
     graph.passed +
     runtime.cases +
     timing.cases +
@@ -1212,7 +1222,10 @@ const report = {
     suiteFailures,
   passed:
     cases.length +
-    nativeSiblings.reduce((sum, suite) => sum + suite.passed, 0) +
+    nativeSiblings.reduce(
+      (sum, suite) => sum + suite.passed + (suite.qualifiedPassed ?? 0),
+      0,
+    ) +
     graph.passed +
     runtime.passed +
     timing.passed +
@@ -1289,6 +1302,9 @@ const report = {
   nativeSiblings: nativeSiblings.map((suite) => ({
     ...suite,
     nativeEvidence: undefined,
+    qualifiedNativeEvidence: undefined,
+    qualifiedEvidenceCases: Object.keys(suite.qualifiedNativeEvidence ?? {})
+      .length,
     nativeErrors: undefined,
     failures: undefined,
   })),
