@@ -78,7 +78,7 @@ pub enum RuntimeError<SE, HE, RE = Infallible> {
         timeout: Duration,
     },
     Projection {
-        failures: Vec<crate::core::ProjectionFailure>,
+        failures: Vec<crate::core::ProjectionFailure<RE>>,
     },
     MissingSubscription {
         kind: String,

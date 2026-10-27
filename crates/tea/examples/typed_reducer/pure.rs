@@ -123,7 +123,7 @@ pub fn execute(verb: Verb, scenario: Scenario, calls: &Calls) -> Value {
     let machine: Machine<'_, Model, Msg, Cmd, Sub, (), Failure> = Machine {
         init: Box::new(|_, _| panic!("update-only fold called init")),
         update,
-        subscriptions: demlik_tea::core::subscriptions(|_| {
+        subscriptions: demlik_tea::core::try_subscriptions(|_| {
             panic!("update-only fold selected subscriptions")
         }),
     };

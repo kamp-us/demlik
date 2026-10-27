@@ -133,7 +133,7 @@ fn machine(
             )
         }),
         update,
-        subscriptions: demlik_tea::core::subscriptions(|_| vec![]),
+        subscriptions: demlik_tea::core::try_subscriptions(|_| Ok(vec![])),
     }
 }
 

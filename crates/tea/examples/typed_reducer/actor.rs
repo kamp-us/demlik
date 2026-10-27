@@ -216,9 +216,9 @@ pub async fn execute(
             )
         }),
         update,
-        subscriptions: demlik_tea::core::subscriptions(move |s: &Model| {
+        subscriptions: demlik_tea::core::try_subscriptions(move |s: &Model| {
             sub_log.borrow_mut().push(format!("subs:{}", s.n));
-            vec![]
+            Ok(vec![])
         }),
     };
     let authored = observe!(

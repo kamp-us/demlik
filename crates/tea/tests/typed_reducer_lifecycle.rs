@@ -150,12 +150,12 @@ fn boot(profile: Profile, live_sub: bool, held: bool, policy: Policy) -> Fixture
             )
         }),
         update: TryUpdate::try_reducer(reducing),
-        subscriptions: demlik_tea::core::subscriptions(move |_: &Model| {
-            if live_sub {
+        subscriptions: demlik_tea::core::try_subscriptions(move |_: &Model| {
+            Ok(if live_sub {
                 vec![Sub::new("source", ()).unwrap()]
             } else {
                 vec![]
-            }
+            })
         }),
     };
     let mut options: Options<Model, Msg, Infallible, Infallible, NoEvent, ReducerFailure> =
@@ -363,8 +363,8 @@ async fn scope_failure_downcast_keeps_the_actual_runtime_allocation_with_a_typed
                     )
                 }),
                 update: TryUpdate::try_reducer(reducing),
-                subscriptions: demlik_tea::core::subscriptions(|_| {
-                    vec![Sub::new("source", ()).unwrap()]
+                subscriptions: demlik_tea::core::try_subscriptions(|_| {
+                    Ok(vec![Sub::new("source", ()).unwrap()])
                 }),
             };
             let mut options: Options<Model, Msg, Infallible, Rc<str>, NoEvent, ReducerFailure> =
@@ -483,7 +483,7 @@ async fn retained_recording_replays_typed_updates_without_init_subscriptions_or_
                         update_calls.set(update_calls.get() + 1);
                         reducing(s, m)
                     }),
-                    subscriptions: demlik_tea::core::subscriptions(move |_| {
+                    subscriptions: demlik_tea::core::try_subscriptions(move |_| {
                         sub_calls.set(sub_calls.get() + 1);
                         panic!("record replay selected subscriptions")
                     }),

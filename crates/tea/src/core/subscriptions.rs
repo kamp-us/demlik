@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::convert::Infallible;
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 
@@ -6,11 +7,12 @@ use serde::Serialize;
 
 use crate::data::{DependencyError, Sub};
 
-pub enum ProjectionError {
+pub enum ProjectionError<E = Infallible> {
     Dependency(DependencyError),
     Panic(Box<dyn Any + Send>),
+    Declared(E),
 }
-impl fmt::Debug for ProjectionError {
+impl<E> fmt::Debug for ProjectionError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Dependency(error) => f.debug_tuple("Dependency").field(error).finish(),
@@ -24,89 +26,116 @@ impl fmt::Debug for ProjectionError {
                         .unwrap_or("non-string panic"),
                 )
                 .finish(),
+            Self::Declared(_) => f.write_str("Declared(..)"),
         }
     }
 }
 #[derive(Debug)]
-pub struct ProjectionFailure {
+pub struct ProjectionFailure<E = Infallible> {
     pub kind: Option<String>,
-    pub cause: ProjectionError,
+    pub cause: ProjectionError<E>,
 }
-pub struct SubEvaluation<U> {
+pub struct SubEvaluation<U, E = Infallible> {
     pub desired: Vec<U>,
-    pub failures: Vec<ProjectionFailure>,
+    pub failures: Vec<ProjectionFailure<E>>,
 }
 
 /// Pure declarations retain each dependency projection's owner through a failure.
-pub trait SubscriptionProjection<S, U> {
-    fn desired(&self, state: &S) -> Vec<U>;
-    fn evaluate(&self, state: &S) -> SubEvaluation<U> {
-        match std::panic::catch_unwind(AssertUnwindSafe(|| self.desired(state))) {
-            Ok(desired) => SubEvaluation {
-                desired,
-                failures: vec![],
-            },
-            Err(payload) => SubEvaluation {
-                desired: vec![],
-                failures: vec![ProjectionFailure {
-                    kind: None,
-                    cause: ProjectionError::Panic(payload),
-                }],
-            },
+pub trait SubscriptionProjection<S, U, E = Infallible> {
+    fn desired(&self, state: &S) -> Result<Vec<U>, ProjectionError<E>>;
+    fn evaluate(&self, state: &S) -> SubEvaluation<U, E> {
+        let cause = match std::panic::catch_unwind(AssertUnwindSafe(|| self.desired(state))) {
+            Ok(Ok(desired)) => {
+                return SubEvaluation {
+                    desired,
+                    failures: vec![],
+                };
+            }
+            Ok(Err(cause)) => cause,
+            Err(payload) => ProjectionError::Panic(payload),
+        };
+        SubEvaluation {
+            desired: vec![],
+            failures: vec![ProjectionFailure { kind: None, cause }],
         }
     }
 }
 impl<S, U, F: Fn(&S) -> Vec<U>> SubscriptionProjection<S, U> for F {
-    fn desired(&self, state: &S) -> Vec<U> {
-        self(state)
+    fn desired(&self, state: &S) -> Result<Vec<U>, ProjectionError> {
+        Ok(self(state))
     }
 }
-pub type Subscriptions<'a, S, U> = Box<dyn SubscriptionProjection<S, U> + 'a>;
+pub type Subscriptions<'a, S, U, E = Infallible> = Box<dyn SubscriptionProjection<S, U, E> + 'a>;
 
-/// The whole-state projection form, with closure argument inference preserved.
+/// The infallible projection keeps closure inference independent of an error type.
 pub fn subscriptions<'a, S, U>(project: impl Fn(&S) -> Vec<U> + 'a) -> Subscriptions<'a, S, U> {
     Box::new(project)
 }
+struct FallibleProjection<F>(F);
+impl<S, U, E, F: Fn(&S) -> Result<Vec<U>, E>> SubscriptionProjection<S, U, E>
+    for FallibleProjection<F>
+{
+    fn desired(&self, state: &S) -> Result<Vec<U>, ProjectionError<E>> {
+        (self.0)(state).map_err(ProjectionError::Declared)
+    }
+}
+/// A whole-state typed refusal has no known unread kind. Use fallible entries
+/// when sibling subscription types must reconcile independently.
+pub fn try_subscriptions<'a, S, U, E>(
+    project: impl Fn(&S) -> Result<Vec<U>, E> + 'a,
+) -> Subscriptions<'a, S, U, E> {
+    Box::new(FallibleProjection(project))
+}
 
-type Dependencies<'a, S, D> = Box<dyn Fn(&S) -> Option<D> + 'a>;
-pub struct SubEntry<'a, S, D> {
+type Dependencies<'a, S, D, E> = Box<dyn Fn(&S) -> Result<Option<D>, E> + 'a>;
+pub struct SubEntry<'a, S, D, E = Infallible> {
     kind: String,
-    deps: Dependencies<'a, S, D>,
+    deps: Dependencies<'a, S, D, E>,
 }
 impl<'a, S, D> SubEntry<'a, S, D> {
     pub fn new(kind: impl Into<String>, deps: impl Fn(&S) -> Option<D> + 'a) -> Self {
+        Self::try_new(kind, move |state| Ok(deps(state)))
+    }
+}
+impl<'a, S, D, E> SubEntry<'a, S, D, E> {
+    pub fn try_new(
+        kind: impl Into<String>,
+        deps: impl Fn(&S) -> Result<Option<D>, E> + 'a,
+    ) -> Self {
         Self {
             kind: kind.into(),
             deps: Box::new(deps),
         }
     }
 }
-impl<S, D: Serialize> SubEntry<'_, S, D> {
-    fn project(&self, state: &S) -> Result<Option<Sub<D>>, DependencyError> {
+impl<S, D: Serialize, E> SubEntry<'_, S, D, E> {
+    fn project(&self, state: &S) -> Result<Option<Sub<D>>, ProjectionError<E>> {
         (self.deps)(state)
+            .map_err(ProjectionError::Declared)?
             .map(|deps| Sub::new(self.kind.clone(), deps))
             .transpose()
+            .map_err(ProjectionError::Dependency)
     }
 }
-pub struct SubscriptionEntries<'a, S, D> {
-    entries: Vec<SubEntry<'a, S, D>>,
+pub struct SubscriptionEntries<'a, S, D, E = Infallible> {
+    entries: Vec<SubEntry<'a, S, D, E>>,
 }
-impl<'a, S, D> SubscriptionEntries<'a, S, D> {
-    pub fn new(entries: Vec<SubEntry<'a, S, D>>) -> Self {
+impl<'a, S, D, E> SubscriptionEntries<'a, S, D, E> {
+    pub fn new(entries: Vec<SubEntry<'a, S, D, E>>) -> Self {
         Self { entries }
     }
 }
-impl<S, D: Serialize> SubscriptionProjection<S, Sub<D>> for SubscriptionEntries<'_, S, D> {
-    fn desired(&self, state: &S) -> Vec<Sub<D>> {
-        self.entries
-            .iter()
-            .filter_map(|entry| match entry.project(state) {
-                Ok(sub) => sub,
-                Err(error) => std::panic::panic_any(error),
-            })
-            .collect()
+impl<S, D: Serialize, E> SubscriptionProjection<S, Sub<D>, E> for SubscriptionEntries<'_, S, D, E> {
+    fn desired(&self, state: &S) -> Result<Vec<Sub<D>>, ProjectionError<E>> {
+        let mut desired = Vec::new();
+        for entry in &self.entries {
+            if let Some(sub) = entry.project(state)? {
+                desired.push(sub);
+            }
+        }
+        Ok(desired)
     }
-    fn evaluate(&self, state: &S) -> SubEvaluation<Sub<D>> {
+    fn evaluate(&self, state: &S) -> SubEvaluation<Sub<D>, E> {
         let mut evaluation = SubEvaluation {
             desired: vec![],
             failures: vec![],
@@ -118,7 +147,7 @@ impl<S, D: Serialize> SubscriptionProjection<S, Sub<D>> for SubscriptionEntries<
                     continue;
                 }
                 Ok(Ok(None)) => continue,
-                Ok(Err(error)) => ProjectionError::Dependency(error),
+                Ok(Err(cause)) => cause,
                 Err(payload) => ProjectionError::Panic(payload),
             };
             evaluation.failures.push(ProjectionFailure {

@@ -70,7 +70,7 @@ fn typed_update_only_folds_retain_opaque_borrowed_causes_and_seed_without_effect
     let machine: Machine<'_, Model<'_>, Msg, Command<'_>, Sub, (), Failure<'_>> = Machine {
         init: Box::new(|_, _| panic!("update-only fold called init")),
         update,
-        subscriptions: demlik_tea::core::subscriptions(|_| {
+        subscriptions: demlik_tea::core::try_subscriptions(|_| {
             panic!("update-only fold selected subscriptions")
         }),
     };

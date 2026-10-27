@@ -3,7 +3,7 @@ pub use identity::{AuthoredMachine, Identity};
 mod subscriptions;
 pub use subscriptions::{
     ProjectionError, ProjectionFailure, SubEntry, SubEvaluation, SubscriptionEntries,
-    SubscriptionProjection, Subscriptions, subscriptions,
+    SubscriptionProjection, Subscriptions, subscriptions, try_subscriptions,
 };
 
 use std::collections::HashSet;
@@ -245,7 +245,7 @@ pub type Init<'a, S, C, X> = Box<dyn Fn(Option<S>, &X) -> Step<S, C> + 'a>;
 pub struct Machine<'a, S, M, C, U, X = (), RE = Infallible> {
     pub init: Init<'a, S, C, X>,
     pub update: TryUpdate<'a, S, M, C, RE>,
-    pub subscriptions: Subscriptions<'a, S, U>,
+    pub subscriptions: Subscriptions<'a, S, U, RE>,
 }
 
 #[derive(Debug, Serialize)]
@@ -360,9 +360,15 @@ pub fn replay<S: Tagged, M: Tagged, C, U: Subscription, X>(
     let mut commands = initial.commands;
     commands.extend(folded.commands);
     let mut seen = HashSet::new();
-    let subs = machine
-        .subscriptions
-        .desired(&folded.state)
+    // Only infallible machines use this facade. Keep its existing dependency
+    // and panic propagation; a declared cause cannot inhabit this error slot.
+    let desired = match machine.subscriptions.desired(&folded.state) {
+        Ok(desired) => desired,
+        Err(ProjectionError::Declared(never)) => match never {},
+        Err(ProjectionError::Dependency(error)) => std::panic::panic_any(error),
+        Err(ProjectionError::Panic(payload)) => std::panic::resume_unwind(payload),
+    };
+    let subs = desired
         .into_iter()
         .filter(|sub| seen.insert(sub.id().clone()))
         .collect();
