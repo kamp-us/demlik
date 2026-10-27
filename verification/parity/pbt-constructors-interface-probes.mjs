@@ -52,6 +52,11 @@ export function pbtConstructorsInterfaceProbes({
     check && teaLibrary && proptestLibrary && dependencies && reportFile,
     "owning check and immutable actual Cargo Tea/Proptest libraries are required",
   );
+  for (const library of [teaLibrary, proptestLibrary])
+    assert(
+      /^lib.+\.rlib$/.test(path.basename(library)),
+      "rustc --extern requires a lib*.rlib filename",
+    );
   assertCheckPath(dependencies, check.target);
   const evidence = path.dirname(path.resolve(reportFile));
   const relative = path.relative(path.resolve(check.root), evidence);

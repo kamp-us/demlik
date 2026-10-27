@@ -209,7 +209,7 @@ export async function pbtConstructorChecks({ directory } = {}) {
       const digest = hash(fs.readFileSync(actualPath));
       const saved = path.join(
         evidence,
-        `${name}-${digest}${actualPath.endsWith(".rlib") ? ".rlib" : ".bin"}`,
+        `${actualPath.endsWith(".rlib") ? "lib" : ""}${name}-${digest}${actualPath.endsWith(".rlib") ? ".rlib" : ".bin"}`,
       );
       fs.copyFileSync(actualPath, saved);
       assert.equal(hash(fs.readFileSync(saved)), digest);
