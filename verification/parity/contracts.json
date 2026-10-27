@@ -7693,19 +7693,25 @@
   "@demlik/code-graph:cli:option:--accept-smells": {
     "signature": "b09e1ab6827a3c410649d3d86fe46f054ffeadf352dc73cb5198abc687db54d8",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.acceptSmells.before",
       "graph.cli-parser.option.acceptSmells.after",
       "graph.cli-parser.option.acceptSmells.equal-is-unknown",
-      "graph.cli-parser.option.acceptSmells.negated-is-unknown"
+      "graph.cli-parser.option.acceptSmells.negated-is-unknown",
+      "graph.cli-smell.cheap-accept-text",
+      "graph.cli-smell.cheap-accept-pretty"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Parser/value-source/target contract plus the listed exact prepared smell-ledger CI/accept dispatch witnesses; full global CLI parity remains incomplete.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
-    ]
+    ],
+    "nativeProfile": "Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
   },
   "@demlik/code-graph:cli:option:--max <n>": {
     "signature": "7d577c59f1f05ba7c17c459368971f57fa6ffa35744598a8a1e07e3036783946",
@@ -7746,10 +7752,11 @@
   "@demlik/code-graph:cli:option:--ci": {
     "signature": "4a926ef4afc08b0c1dd52bcf1d121c7de52b008d4864b17e0377709934978670",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking"
       ]
     },
     "cases": [
@@ -7759,13 +7766,16 @@
       "graph.cli-parser.option.ci.negated-is-unknown",
       "graph.cli-boundaries.ci-text",
       "graph.cli-boundaries.ci-json",
-      "graph.cli-boundaries.out-ci"
+      "graph.cli-boundaries.out-ci",
+      "graph.cli-smell.cheap-ci-text",
+      "graph.cli-smell.edge-fanin-ci",
+      "graph.cli-smell.syntax-two-package-workflow"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete. Prepared smell-ledger CI/accept execution is additionally covered by the listed strict witnesses.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
   },
   "@demlik/code-graph:cli:option:--html": {
     "signature": "c733e003bd5e690ca8cea7efa6cba4beb3954208154d49bbe40c1ad98d183854",
@@ -8505,10 +8515,11 @@
   "@demlik/code-graph:cli:option:--reason <text>": {
     "signature": "92c27dc811d2b8c5667fd9b7a5de9ab70b0ddfe98a918a9da86c58848db580b5",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
       "symbols": [
         "demlik_code_graph::cli::parse",
-        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries"
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking"
       ]
     },
     "cases": [
@@ -8519,13 +8530,15 @@
       "graph.cli-parser.option.reason.raw-0",
       "graph.cli-boundaries.accept-text",
       "graph.cli-boundaries.accept-json",
-      "graph.cli-boundaries.blank-reason"
+      "graph.cli-boundaries.blank-reason",
+      "graph.cli-smell.cheap-accept-text",
+      "graph.cli-smell.cheap-accept-pretty"
     ],
-    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete.",
+    "scope": "Parser/value-source/target contract plus the explicitly listed exact prepared boundaries dispatch witnesses; full CLI parity remains incomplete. Prepared smell-ledger CI/accept execution is additionally covered by the listed strict witnesses.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ],
-    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open."
+    "nativeProfile": "Actual prepared boundaries CLI dispatch uses the canonical aggregate gate and shared logical-root import resolver. Selected exact process cases cover flag values, reports, real fixture file writes and exit behavior. Raw JavaScript argv, controlled filesystem transitions, backend exception text and pending stdio notification remain explicitly qualified. Standalone bootstrap, later modes, distribution and Windows remain open. Prepared smell-ledger dispatch uses the existing canonical ledger runner and one source-shaped cheap/edge assembly owner; writes precede output and exit. Ordinary smells, generic CI, bootstrap/distribution and all global CLI gaps remain open; controlled roots, raw argv, backend and stdio profiles stay explicitly qualified."
   },
   "@demlik/code-graph:cli:option:--accept-crossings": {
     "signature": "4cd8e9e589fc174ace89898fbb7bbe13782ae7a286835107945a6bd12381209b",
