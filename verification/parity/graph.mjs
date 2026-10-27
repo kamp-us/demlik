@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,14 @@ const nativeCompilerManifest = require.resolve(
   { paths: [path.join(root, "packages/code-graph")] },
 );
 const suites = [
+  {
+    name: "assembly-warning",
+    driver: "demlik_code_graph",
+    unitTest: true,
+    script: "graph-assembly-warning.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+  },
   {
     name: "collapse-partial",
     driver: "collapse_partial_driver",
@@ -287,10 +295,11 @@ export async function graphParity(cargo) {
       "--locked",
       "--package",
       "demlik-code-graph",
-      ...[...new Set(suites.map(({ driver }) => driver))].flatMap((driver) => [
-        "--example",
-        driver,
-      ]),
+      ...[
+        ...new Set(
+          suites.filter((suite) => !suite.unitTest).map(({ driver }) => driver),
+        ),
+      ].flatMap((driver) => ["--example", driver]),
     ],
     { cwd: root, stdio: "inherit" },
   );
@@ -301,7 +310,44 @@ export async function graphParity(cargo) {
   const qualifiedNativeEvidence = {};
   const transportProbes = {};
   for (const suite of suites) {
-    const binary = path.join(root, "target/debug/examples", suite.driver);
+    let binary = path.join(root, "target/debug/examples", suite.driver);
+    if (suite.unitTest) {
+      const artifacts = execFileSync(
+        cargo,
+        [
+          "test",
+          "--locked",
+          "--package",
+          "demlik-code-graph",
+          "--lib",
+          "--no-run",
+          "--message-format=json",
+        ],
+        { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+      );
+      await writeFile(
+        path.join(directory, `graph-${suite.name}.cargo.jsonl`),
+        artifacts,
+      );
+      const selected = artifacts
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .filter(
+          (event) =>
+            event.reason === "compiler-artifact" &&
+            event.target.name === suite.driver &&
+            event.profile.test &&
+            event.executable,
+        );
+      assert.equal(
+        selected.length,
+        1,
+        `${suite.name}: actual Cargo test artifact`,
+      );
+      binary = selected[0].executable;
+      assert.ok(binary.startsWith(path.join(root, "target/")));
+    }
     if (checkedUtf8.has(suite.driver) && !transportProbes[suite.driver]) {
       const invalid = spawnSync(binary, suite.args ?? [], {
         cwd: root,
