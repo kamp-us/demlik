@@ -1,0 +1,26 @@
+[
+  {
+    "name": "snapshot-stage-writes-dropped",
+    "file": "crates/tea/src/agent/knob.rs",
+    "before": ".map(|command| Q::command(command).map(AgentCommand::Snapshot))\n            .collect::<Result<Vec<_>, _>>()?;",
+    "after": ".map(|command| Q::command(command).map(AgentCommand::Snapshot))\n            .filter(|_| false)\n            .collect::<Result<Vec<_>, _>>()?;",
+    "witness": "agent-snapshot.promise.nominal.on-off",
+    "contract": "stage checkpoint commands reach actual named IO before the next brain"
+  },
+  {
+    "name": "snapshot-writer-treated-as-defined",
+    "file": "crates/tea/src/agent/snapshot.rs",
+    "before": "impl CommandFamily for AgentSnapshotWrite {\n    type Msg = NoSnapshotMessage;",
+    "after": "impl CommandFamily for AgentSnapshotWrite {\n    fn is_defined(&self) -> bool { true }\n    type Msg = NoSnapshotMessage;",
+    "witness": "agent-snapshot.promise.writer-fail",
+    "contract": "plain writer failure stops its queued transition and retains follow-up cause; it is not swallowed as a defined-command defect"
+  },
+  {
+    "name": "loaded-snapshot-eager-in-init",
+    "file": "crates/tea/src/agent/knob/runtime.rs",
+    "before": "                Step::new(loaded.unwrap_or_else(|| init.init()), vec![])",
+    "after": "                match loaded { Some(state) if Q::ENABLED => init.boot(&state, 57.25).expect(\"counterfeit eager snapshot resume\"), Some(state) => Step::new(state, vec![]), None => Step::new(init.init(), vec![]) }",
+    "witness": "agent-snapshot.promise.cold.off",
+    "contract": "loaded ready is commandless and retains the decoded owner until explicit Boot"
+  }
+]
