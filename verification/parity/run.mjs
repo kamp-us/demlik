@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentContentParity } from "./agent-content-run.mjs";
+import { agentErrorCheckpointParity } from "./agent-error-parity.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
 import { runAgentRuntimeConformance } from "./agent-runtime-run.mjs";
@@ -1121,6 +1122,21 @@ if (!mutationSuite) {
       operation: "tea.agent-cold-json-resume",
       binaryArgument: "--agent-state-json-bin",
       run: (options) => agentStateJsonParity(cargo, options),
+    },
+    {
+      name: "agentError",
+      operation: "tea.default-structured-error",
+      binaryArgument: "--agent-error-bin",
+      run: (options) => {
+        const coldArgument = args.indexOf("--agent-error-cold-bin");
+        return agentErrorCheckpointParity(cargo, {
+          ...options,
+          coldBinary:
+            coldArgument === -1
+              ? undefined
+              : path.resolve(args[coldArgument + 1]),
+        });
+      },
     },
     {
       name: "agentStatus",
