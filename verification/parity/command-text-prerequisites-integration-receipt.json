@@ -1,0 +1,85 @@
+{
+  "status": "accepted-local-integration-checkpoint",
+  "createdAt": "2026-10-27T07:36:10.179025+00:00",
+  "implementationSourceCommit": "bc8502863fec3f80be48d5b747f27f7041056f8e",
+  "previousAcceptedCheckpoint": "660ce41462d55e78f37ba5c423134c6c464c674c",
+  "frozenTypeScriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Opaque-error ClassifiedCmd settlement and text-aware code-graph context/assembly prerequisites. Full monorepo port remains incomplete; sweeps excluded.",
+  "comparison": {
+    "cases": 14870,
+    "passed": 14870,
+    "behavioralFailures": 0,
+    "typeScriptReferenceChanges": 0,
+    "strictNativeEvidence": 14732,
+    "qualifiedObservations": 138,
+    "qualificationBreakdown": {
+      "graph": 119,
+      "git": 15,
+      "apiDiff": 4
+    },
+    "reportSha256": "351ab1075e76565eb2a0caa9f662b0e69157e23e1472417634a8625d54f82248"
+  },
+  "nativeAndStatic": {
+    "defaultNativeAndDocs": 605,
+    "allFeaturesNativeAndDocs": 619,
+    "overlappingSuitesMustNotBeAdded": true,
+    "formatTypesLintBothAllTargetClippyPassed": true,
+    "executedSourceCommit": "ed55ca2e418fd5bb546cc5b8303fbad77e50cef8",
+    "qualification": "All Rust, TypeScript, Cargo manifests and lock files are identical to the accepted implementation. Only the three listed verifier files changed; their static checks and nine controls passed.",
+    "verifierOnlyChanges": [
+      "verification/parity/check-worktree.mjs",
+      "verification/parity/command-classified-controls.mjs",
+      "verification/parity/text-interface-mutations.mjs"
+    ]
+  },
+  "compiledFaultControls": {
+    "newControlsExecuted": 9,
+    "graphText": 8,
+    "classifiedCommand": 1,
+    "escaped": 0,
+    "compileSuccessAndNamedSemanticWitnesses": true,
+    "modifiedLibraryAndDriverFreshFalse": true,
+    "canonicalCheckSourceAndDefaultTargetOwnership": true,
+    "executedCopiesPreserved": true,
+    "allFinishedCheckTreesAndTargetsRemoved": true
+  },
+  "inheritedProofQualifications": {
+    "classifiedPublicConsumer": "Actual-Cargo positive and sole E0308/E0308/E0277 refusals inherited from1751607b. Entire Tea crate and workspace Cargo manifest/lock are byte-identical; not recompiled in this combined run.",
+    "graphFaultBaseline": "Preserved final actual-Cargo driver from90352aa4, SHA8e8ccf7cc2a74d2c3b0850dabc4d1ee3c79c82ac25daef69155f7ef508259b00. Entire code-graph crate and workspace Cargo manifest/lock are byte-identical. Baseline witnesses rerun before current mutants.",
+    "otherComponentControls": "Existing reviewed component proof is inherited, not claimed rerun here.",
+    "coldRebuild": "No cold archive rebuild or standalone dependency-complete archive claim."
+  },
+  "coverage": {
+    "inventoriedCapabilities": 3445,
+    "mapped": 828,
+    "gapRows": 2775,
+    "unmappedCapabilities": 2617,
+    "allCliGapRowsStillOpen": 53,
+    "notACompletionPercentage": true
+  },
+  "sourceIntegrity": {
+    "trackedFilesByteUnchangedDuringComparisonAndControls": 2366,
+    "acceptanceCommitAddsOnlyThisReceipt": true
+  },
+  "recoveredVerificationFailures": {
+    "missingPackageOutput": "First disposable comparison omitted the documented code-graph build and failed at inventory. Corrected setup builds and checks inventory before comparison. Failed worktrees were removed.",
+    "metadataExpectation": "Successful complete report was followed by a controller assertion expecting14727 native keys. Independent audit established14732:45 new text keys and5 older backend-offset cases now exact, with no lost native keys or changed call arrays. Underlying offset cause is unmeasured. Failed controller history is retained unchanged."
+  },
+  "independentReview": {
+    "finalSha256": "7a723ba86d63b00bcb2dc66f88251c95889bb85ac660abac89d4e19ae8604cd8",
+    "qualificationAuditSha256": "8b5352b49f36d5e5e930410011375bcd364bc1b5fa356b77add436814b62135c",
+    "materialFindings": []
+  },
+  "evidence": {
+    "archive": "bc850286-prerequisite-checkpoint-proof.tar.gz",
+    "archiveSha256": "f7d9b45c6b04d10f0585ff9ccf88ea1c61737d91f5fda1271045d9bfbc7bd0c9",
+    "archiveBytes": 77251616,
+    "verifiedMembers": 233,
+    "inventory": "bc850286-prerequisite-checkpoint-proof.inventory.json",
+    "inventorySha256": "00877cc2a3a3be861b91df8473fe3e63f96e4cee7fbd03ee0b510d256e9ec23b",
+    "archiveOutsideCheckWorktrees": true,
+    "retainsCompilerProcessSourceAndBehaviorRecords": true,
+    "wholeCargoCachesExcluded": true
+  },
+  "remainingWork": "Agent interpreter/runtime wiring, projection actor conformance, optional agents/providers/tool routing, remaining CLI/public APIs/testing helpers, host adapters/distribution and final whole-port verification. Candidate/partial-twin component and subscription interface are separately reviewed or pending; neither is included in this checkpoint."
+}
