@@ -316,7 +316,11 @@ try {
       path.join(check.root, "crates/code-graph/src/collapse", m.file),
     );
     assert.ok(
-      depInfo.toString("utf8").includes(modifiedPath),
+      depInfo
+        .toString("utf8")
+        .includes(
+          path.relative(check.root, assertCheckPath(modifiedPath, check.root)),
+        ),
       `${m.name}: modified owner in actual library dep-info`,
     );
     const depInfoCopy = path.join(evidence, `${m.name}.d`);
