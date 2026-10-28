@@ -1,0 +1,78 @@
+{
+  "status": "Reviewed components integrated; fresh combined checkpoint remains a1a3fa10",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "lastAcceptedImplementation": "a1a3fa10cade07ecb933ff3d540193cf53d193c6",
+  "lastAcceptedReceipt": "82fb302c",
+  "lastAcceptedAdmissions": 16215,
+  "coupling": {
+    "source": "7c292c04e35543bbf932a7ea74be67762d08e5ea",
+    "sourcePick": "53a6adc5",
+    "receiptPick": "d49d6645",
+    "thinSource": "0733b8e33e2e704ac21ef7d26447d544ecfe425f",
+    "thinPick": "ade4005e",
+    "strictComponentViews": 18,
+    "qualifiedComponentViews": 0,
+    "nativeFocused": 40,
+    "affectedObservations": 447,
+    "affectedQualified": 37,
+    "compiledStrictControls": 4,
+    "newCombinedCredit": 0,
+    "retainedRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-i-source",
+    "retainedThinRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-i-registration-source",
+    "currentCodeGraphSrcTree": "3a9cd021f6c17a85aaf015448f6f45f0886b93d4",
+    "productSourceTreeExactlyComponentSource": true,
+    "remainingLegacyOrdering": "37 helper calls plus two direct sorts",
+    "bindingIdentity": "Original moved cross-boundary rows preserve all contributing edge counts, including literal-tab group-key collision; standalone coupling retains original edges iterator.",
+    "limits": [
+      "Supplied render provenance and actual Go extraction have distinct profiles.",
+      "Saved adapter checks and exact product-tree identity do not claim a fresh combined execution."
+    ]
+  },
+  "agentToolBinding": {
+    "source": "b81b513670c4b2a9f9d803d7fd315d3af3b773cb",
+    "sourcePick": "f4c9e5c0",
+    "retainedRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-tool-binding-source",
+    "currentTeaSrcTree": "9ebecd7901465fece7a1f0a54c113d74e606a362",
+    "productSourceTreeExactlyComponentSource": true,
+    "newTypeScriptOrCombinedCredit": 0,
+    "nativeLaws": 7,
+    "oldNative": 10,
+    "oldPublicExecutions": 2,
+    "typeRefusals": 3,
+    "nativeOnlyCompiledControl": 1,
+    "limits": [
+      "Generic outer-message interpreter proof is compile-only; actual executions are bare handler/reader/pure Agent.",
+      "Full Agent wire/actor behavior is not yet implemented by this prerequisite.",
+      "Tiny sole-E0599 baseline probe is not the identical full 299-line consumer.",
+      "C6 uses cached C2 library bytes; producer history retained."
+    ]
+  },
+  "reviews": {
+    "couplingSourcePeer": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-i-map/source-peer-review-flexible.json",
+      "sha256": "28c5dd3c3f8e9e26ecf287bea6f344d4d853db56e0acd34c31b7a495f7cafdf3"
+    },
+    "couplingArtifactPeer": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-i-map/final-artifact-peer-review-flexible.json",
+      "sha256": "44d30cf2d7f223912527d3ccb2746503dc9104e201f5e16fe1811745c7b84d06"
+    },
+    "couplingThinRoot": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-i-map/thin-root-review.json",
+      "sha256": "178fb05867b3d337f68e6fca65924e2c9cefd93180e039086b1c0ccea4870401"
+    },
+    "bindingSourcePeer": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-tool-binding-map/final-source-peer-review-flexible.json",
+      "sha256": "9ea24ff4c588358cb4faf69427d2d5fbbe8a23ff1390993aff195dcbd91dadb0"
+    },
+    "bindingArtifactPeer": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-tool-binding-map/final-artifact-peer-review-flexible.json",
+      "sha256": "96181bdf208c1bc2f3db5ee88a8604e6199cc4966b8bdda48b9b46111a09763b"
+    }
+  },
+  "verificationPolicy": "Inherit independently verified component builds for exact Git product trees. Validate thin registration and saved admission separately without repeating unchanged native builds. Next material combined run must include new registered suite.",
+  "limits": [
+    "All53 broad CLI gaps remain open.",
+    "Full goal, arbitrary JS/host/raw/scheduling profiles, supported targets/MSRV/packaging and complete routed agents remain open.",
+    "No cold source archive, release, publication, push or deployment claim."
+  ]
+}
