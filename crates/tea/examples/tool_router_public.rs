@@ -90,6 +90,7 @@ fn run<'a>(text: &'a str) {
         )),
     ]));
     let retained_parts = Rc::clone(&parts);
+    let content_cause = Rc::clone(&host.cause);
     let read = tool(
         "read_invoice",
         ToolSpec::new(
@@ -98,7 +99,13 @@ fn run<'a>(text: &'a str) {
             ErrorFamily::<Unavailable<'a>>::new(["unavailable"], view),
         )
         .description("Read an invoice")
-        .content(move |_| Rc::clone(&retained_parts)),
+        .try_content(move |_| {
+            if content_cause.1.get() == 8 {
+                Err(Rc::clone(&content_cause))
+            } else {
+                Ok(Rc::clone(&retained_parts))
+            }
+        }),
         |args: &Rc<ReadArgs<'a>>, ctx: ToolContext<'_, Host<'a>>| {
             Box::pin(async move {
                 assert_eq!(args.0, ctx.host.label);
@@ -129,8 +136,8 @@ fn run<'a>(text: &'a str) {
     )
     .unwrap();
     let tools = invoice_tools::Router::new(read, check).unwrap();
-    assert!(Rc::ptr_eq(tools.read.input_schema(), &input));
-    assert!(Rc::ptr_eq(tools.read.output_schema(), &output));
+    assert!(Rc::ptr_eq(tools.read().input_schema(), &input));
+    assert!(Rc::ptr_eq(tools.read().output_schema(), &output));
     let call = ToolCall {
         call_id: "invoice-1".into(),
         name: "read_invoice".into(),
@@ -164,6 +171,31 @@ fn run<'a>(text: &'a str) {
         .unwrap();
     assert!(Rc::ptr_eq(&rendered, &parts));
     assert!(rendered.borrow()[0].same_identity(&parts.borrow()[0]));
+    let checked_call = ToolCall {
+        call_id: "checked".into(),
+        name: "check_invoice".into(),
+        args: Rc::new(Raw {
+            invoice: text,
+            value: 15,
+        }),
+    };
+    let checked = tools.tool_of(&checked_call).unwrap();
+    let completed =
+        futures::executor::block_on(tools.interpret(&checked, ToolContext::bare(&host))).unwrap();
+    let checked = demlik_tea::command::CommandFamily::settle_in(
+        checked,
+        completed,
+        &demlik_tea::command::CommandEdge::new(|| 17.25),
+    )
+    .unwrap();
+    let checked = tools.outcome_of(&checked[0]).unwrap().unwrap();
+    let ToolOutcome::Ok(value) = checked.outcome else {
+        panic!("check failed")
+    };
+    let invoice_tools::Results::Check(value) = value.as_ref() else {
+        panic!("wrong check result")
+    };
+    assert!(value.0);
     let failure_call = ToolCall {
         call_id: "failure".into(),
         name: "check_invoice".into(),
@@ -202,6 +234,11 @@ fn run<'a>(text: &'a str) {
             .unwrap_or_else(|_| panic!("content called on failure"))
             .is_none()
     );
+    marker.set(8);
+    let content_failure = tools.parts_of(&call, &settled.outcome).err().unwrap();
+    let invoice_tools::ContentErrors::Read(original_content) = content_failure;
+    assert!(Rc::ptr_eq(&original_content, &host.cause));
+    marker.set(7);
     drop(tools);
     assert!(Rc::ptr_eq(&original_error.0, &host.cause));
     assert!(Rc::ptr_eq(original, &host.result));

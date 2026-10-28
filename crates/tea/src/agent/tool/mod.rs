@@ -19,7 +19,9 @@ use crate::{
 use futures::future::LocalBoxFuture;
 use serde::{Serialize, ser::SerializeMap};
 use std::{convert::Infallible, fmt, marker::PhantomData, rc::Rc};
+mod empty;
 mod router;
+pub use empty::{EmptyInterpreter, EmptyRouter};
 #[doc(hidden)]
 pub use serde as __serde;
 
@@ -283,6 +285,10 @@ where
     tags: Vec<String>,
     handler: Handler<'a, A, OS::Raw, E, X, H>,
 }
+#[expect(
+    clippy::type_complexity,
+    reason = "Construction infers the actual schemas, host, opaque failure, and content channels."
+)]
 pub fn tool<'a, R, A, O, IS, OS, E, X, H, C>(
     name: impl Into<String>,
     spec: ToolSpec<'a, R, A, O, IS, OS, E, C, X>,
@@ -357,10 +363,7 @@ pub trait ToolDefinition: Sized {
         &'s self,
         args: &'s Rc<Self::Args>,
         context: ToolContext<'s, Self::Host>,
-    ) -> LocalBoxFuture<
-        's,
-        Result<Option<Outcome<Self::RawResult, ToolFailure<Self::Error, Self::Thrown>>>, ToolError>,
-    >;
+    ) -> LocalBoxFuture<'s, Result<command::Completion<SignatureOf<Self>>, ToolError>>;
     fn parts(&self, result: &Rc<Self::Ok>) -> Result<Option<Parts>, Self::ContentError>;
     fn resilience(&self) -> Option<&ToolResilience>;
     fn command(
@@ -480,6 +483,10 @@ pub struct ToolInput<A> {
     pub args: Rc<A>,
 }
 impl<A> CommandRecord for ToolInput<A> {}
+#[expect(
+    clippy::type_complexity,
+    reason = "The contravariant marker names five typed channels without owning or bounding their payloads."
+)]
 pub struct ToolSignature<A, R, O, E, X>(PhantomData<fn(A, R, O, E, X)>);
 pub type SignatureOf<T> = ToolSignature<
     <T as ToolDefinition>::Args,
@@ -510,9 +517,12 @@ impl<A, R, O, E: Tagged, X> CommandSpec for ToolSignature<A, R, O, E, X> {
 }
 pub struct ToolCommand<T: ToolDefinition> {
     command: Cmd<SignatureOf<T>>,
-    pub tool: Rc<T>,
+    tool: Rc<T>,
 }
 impl<T: ToolDefinition> ToolCommand<T> {
+    pub fn tool(&self) -> &Rc<T> {
+        &self.tool
+    }
     pub fn cmd(&self) -> &Cmd<SignatureOf<T>> {
         &self.command
     }
@@ -646,6 +656,7 @@ pub struct ToolSettlement<R, E> {
     pub call_id: JsText,
     pub outcome: ToolOutcome<R, E>,
 }
+pub type FailureOf<D> = FailureView<Failure<<D as CommandSpec>::Error>>;
 pub struct FailureView<E> {
     pub error: E,
     pub reason: JsText,
@@ -706,7 +717,7 @@ pub fn failure<E>(error: E, view: PlainData) -> Result<FailureView<E>, CommandCo
 pub fn snapshot_error<T: ToolDefinition>(
     tool: &T,
     error: &Failure<ToolFailure<T::Error, T::Thrown>>,
-) -> Result<FailureView<Failure<ToolFailure<T::Error, T::Thrown>>>, CommandContractError> {
+) -> Result<FailureOf<SignatureOf<T>>, CommandContractError> {
     let (error, view) = match error {
         Failure::Declared(e) => (Failure::Declared(e.clone()), tool.failure_view(e)?),
         Failure::Malformed(e) => (
@@ -720,7 +731,7 @@ pub fn snapshot_error<T: ToolDefinition>(
 #[doc(hidden)]
 pub fn rejected_error(
     error: &Failure<ToolRejection>,
-) -> Result<FailureView<Failure<ToolRejection>>, CommandContractError> {
+) -> Result<FailureOf<RejectedSpec>, CommandContractError> {
     match error {
         Failure::Declared(e) => failure(
             Failure::Declared(e.clone()),

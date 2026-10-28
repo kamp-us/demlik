@@ -2,6 +2,14 @@
 /// result variants all come from these entries; no handler registry is built.
 #[macro_export]
 macro_rules! tool_router {
+    ($vis:vis mod $module:ident {}) => {
+        $vis mod $module {
+            pub use $crate::agent::tool::{EmptyRouter as Router, EmptyInterpreter as Interpreter};
+            pub type Commands=$crate::command::Cmd<$crate::agent::tool::RejectedSpec>;
+            pub type Completions=$crate::command::Completion<$crate::agent::tool::RejectedSpec>;
+            pub type Messages=$crate::command::Settled<$crate::agent::tool::RejectedSpec>;
+        }
+    };
     ($vis:vis mod $module:ident { $first:ident($first_field:ident) $(, $tool:ident($field:ident))* $(,)? }) => {
         $vis mod $module {
             use $crate::{Tagged as _, command::CommandFamily as _};
@@ -59,8 +67,10 @@ macro_rules! tool_router {
             impl<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> $crate::agent::tool::__serde::Serialize for Errors<$first,$($tool),*> {
                 fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
             }
-            pub struct Router<$first:ToolDefinition,$($tool:ToolDefinition),*> {pub $first_field:std::rc::Rc<$first>,$(pub $field:std::rc::Rc<$tool>,)*}
+            pub struct Router<$first:ToolDefinition,$($tool:ToolDefinition),*> {$first_field:std::rc::Rc<$first>,$($field:std::rc::Rc<$tool>,)*}
             impl<$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> Router<$first,$($tool),*> {
+                pub fn $first_field(&self)->&std::rc::Rc<$first>{&self.$first_field}
+                $(pub fn $field(&self)->&std::rc::Rc<$tool>{&self.$field})*
                 pub fn new($first_field:std::rc::Rc<$first>,$($field:std::rc::Rc<$tool>),*)->Result<Self,$crate::agent::tool::ToolError>{
                     let names=[$first_field.name(),$($field.name()),*];let mut seen=std::collections::HashSet::new();for name in names {if !seen.insert(name){return Err($crate::agent::tool::ToolError::Duplicate{name:name.into()})}}Ok(Self{$first_field,$($field),*})
                 }
@@ -70,7 +80,7 @@ macro_rules! tool_router {
                     Ok(Commands::Rejected($crate::agent::tool::rejected(call.call_id.clone(),$crate::agent::tool::ToolRejection::UnknownTool{name:call.name.clone()})))
                 }
                 pub async fn interpret(&self,cmd:&Commands<$first,$($tool),*>,ctx:$crate::agent::tool::ToolContext<'_,$first::Host>)->Result<Completions<SignatureOf<$first>,$(SignatureOf<$tool>),*>,$crate::agent::tool::ToolError>{
-                    match cmd {Commands::$first(c)=>Ok(Completions::$first(self.$first_field.handle(&c.cmd().input().args,ctx).await?)),$(Commands::$tool(c)=>Ok(Completions::$tool(self.$field.handle(&c.cmd().input().args,ctx).await?)),)*Commands::Rejected(c)=>Ok(Completions::Rejected(Some($crate::command::Outcome::err(c.input().error.clone()))))}
+                    match cmd {Commands::$first(c)=>{if c.tag()!=self.$first_field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$first_field.name()).into())}Ok(Completions::$first(self.$first_field.handle(&c.cmd().input().args,ctx).await?))},$(Commands::$tool(c)=>{if c.tag()!=self.$field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$field.name()).into())}Ok(Completions::$tool(self.$field.handle(&c.cmd().input().args,ctx).await?))},)*Commands::Rejected(c)=>{if c.tag()!=$crate::agent::tool::REJECTED_TYPE{return Err($crate::command::CommandContractError::mismatched(c.tag(),$crate::agent::tool::REJECTED_TYPE).into())}Ok(Completions::Rejected(Some($crate::command::Outcome::err(c.input().error.clone()))))}}
                 }
                 pub fn resilience_of(&self,call:&$crate::agent::types::ToolCall<$first::RawArgs>)->Option<&$crate::agent::tool_resilience::ToolResilience>{if call.name.as_utf8()==Some(self.$first_field.name()){return self.$first_field.resilience()}$(if call.name.as_utf8()==Some(self.$field.name()){return self.$field.resilience()})*None}
                 pub fn outcome_of(&self,msg:&Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>)->Result<Option<$crate::agent::tool::ToolSettlement<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>>,$crate::command::CommandContractError>{

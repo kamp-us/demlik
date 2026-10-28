@@ -99,6 +99,8 @@ pub struct Cmd<D: CommandSpec> {
 impl<D: CommandSpec> Cmd<D> {
     /// Supply this execution's output parser and failure view. The typed Cmd
     /// remains replay data; callback/tag values may own or borrow their services.
+    /// An inner error is schema validation; an outer error refuses this execution
+    /// without manufacturing a malformed-result message.
     pub fn with_contract_view<P, T, F>(
         self,
         output: P,

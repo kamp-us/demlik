@@ -24,6 +24,7 @@ use std::{
     time::Duration,
 };
 demlik_tea::tool_router! { pub mod invoices { Read(read), Check(check) } }
+demlik_tea::tool_router! {mod empty_invoices {}}
 macro_rules! observe {($f:path $(,$arg:expr)* $(,)?)=>{{let v=$f($($arg),*);CALLS.with(|c|c.borrow_mut().push(stringify!($f)));v}};}
 thread_local! {static CALLS:RefCell<Vec<&'static str>>=const{RefCell::new(Vec::new())};}
 #[derive(Deserialize)]
@@ -385,14 +386,17 @@ fn fail(phase: &str, error: D, captured: &D, f: &Fixture) -> D {
     D::Object(fields)
 }
 async fn execute(input: Input) -> D {
+    if input.mode == "empty" {
+        return empty_view(&input).await;
+    }
     let (router, f, args_schema, _ok_schema) = make(&input);
     let mut captured = obj([]);
     let host = Host { bias: 1.0 };
     if input.declaration.as_deref() == Some("duplicate") {
         let error = match observe!(
             invoices::Router::new,
-            Rc::clone(&router.read),
-            Rc::clone(&router.read)
+            Rc::clone(router.read()),
+            Rc::clone(router.read())
         ) {
             Err(e) => e,
             Ok(_) => panic!("duplicate accepted"),
@@ -546,7 +550,7 @@ async fn execute(input: Input) -> D {
     let own = obj([
         (
             "inputSchemaSame",
-            D::Bool(Rc::ptr_eq(router.read.input_schema(), &args_schema)),
+            D::Bool(Rc::ptr_eq(router.read().input_schema(), &args_schema)),
         ),
         ("argsSame", optional(args_same)),
         ("returnedSame", optional(returned_same)),
@@ -717,7 +721,7 @@ async fn runtime_view(
         .await
         .unwrap();
     if let Err(e) = ready {
-        return obj([("error", text(format!("{}", e.name())))]);
+        return obj([("error", text(e.name()))]);
     }
     let state = tokio::time::timeout(Duration::from_secs(5), live.done())
         .await
@@ -729,6 +733,120 @@ async fn runtime_view(
     ]);
     live.stop().await;
     result
+}
+async fn empty_view(input: &Input) -> D {
+    let router = Rc::new(observe!(empty_invoices::Router::new).unwrap());
+    let call = ToolCall {
+        call_id: "empty-call".into(),
+        name: "read_invoice".into(),
+        args: Rc::new(obj([("invoice", text("INV-17"))])),
+    };
+    let command = observe!(empty_invoices::Router::tool_of, router.as_ref(), &call).unwrap();
+    let defs = arr([text(command.tag())]);
+    if input.scenario.as_deref().unwrap_or("edge") == "edge" {
+        let returned = observe!(empty_invoices::Router::interpret, router.as_ref(), &command)
+            .await
+            .unwrap();
+        let returned_wire = wire(&returned);
+        let command_wire = wire(&command);
+        let message = observe!(
+            demlik_tea::command::CommandFamily::settle_in,
+            command,
+            returned,
+            &CommandEdge::new(|| 17.25)
+        )
+        .unwrap()
+        .remove(0);
+        let outcome = observe!(
+            empty_invoices::Router::outcome_of,
+            router.as_ref(),
+            &message
+        )
+        .unwrap()
+        .unwrap();
+        return obj([
+            ("defs", defs),
+            ("command", command_wire),
+            ("returned", returned_wire),
+            ("settled", wire(&message)),
+            ("outcome", wire(&outcome)),
+            (
+                "parts",
+                wire(
+                    &observe!(
+                        empty_invoices::Router::parts_of,
+                        router.as_ref(),
+                        &call,
+                        &outcome.outcome
+                    )
+                    .unwrap(),
+                ),
+            ),
+            (
+                "resilience",
+                wire(&observe!(
+                    empty_invoices::Router::resilience_of,
+                    router.as_ref(),
+                    &call
+                )),
+            ),
+        ]);
+    }
+    let init = Rc::clone(&router);
+    let update = Rc::clone(&router);
+    let machine: Machine<
+        'static,
+        State,
+        empty_invoices::Messages,
+        empty_invoices::Commands,
+        Sub<()>,
+    > = Machine {
+        init: Box::new(move |_, _| {
+            Step::new(
+                State { messages: vec![] },
+                vec![observe!(empty_invoices::Router::tool_of, init.as_ref(), &call).unwrap()],
+            )
+        }),
+        update: observe!(
+            empty_invoices::Router::update,
+            router.as_ref(),
+            move |state: &State, message| {
+                let mut messages = state.messages.clone();
+                messages.push(obj([
+                    ("message", wire(message)),
+                    (
+                        "outcome",
+                        wire(
+                            &observe!(empty_invoices::Router::outcome_of, update.as_ref(), message)
+                                .unwrap(),
+                        ),
+                    ),
+                ]));
+                Step::new(State { messages }, vec![])
+            }
+        ),
+        subscriptions: demlik_tea::core::subscriptions(|_: &State| vec![]),
+    };
+    let mut options: Options<State, empty_invoices::Messages, Infallible, tool::ToolError> =
+        Options::new(if input.profile.as_deref() == Some("effect") {
+            Profile::Effect
+        } else {
+            Profile::Promise
+        });
+    options.clock = Rc::new(|| 17.25);
+    options.terminal = Some(Rc::new(|s: &State| s.messages.len() == 1));
+    let live = observe!(
+        demlik_tea::runtime::launch,
+        machine,
+        (),
+        observe!(empty_invoices::Router::interpreter, router.as_ref()),
+        NoSubscriptions::new(),
+        options
+    );
+    live.ready().await.unwrap();
+    let state = live.done().await.unwrap();
+    live.stop().await;
+    obj([("defs", defs), ("state", wire(state.as_ref()))])
 }
 fn main() {
     let runner = tokio::runtime::Builder::new_current_thread()

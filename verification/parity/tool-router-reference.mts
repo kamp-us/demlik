@@ -264,7 +264,10 @@ async function execute(input: Input) {
       captured.command = wire(command);
       const edge = cmdEdgeOver(router.defs, () => 17.25);
       phase = "interpret";
-      let returned;
+      let returned:
+        | Awaited<ReturnType<typeof read.interpret>>
+        | Awaited<ReturnType<typeof check.interpret>>
+        | Awaited<ReturnType<typeof router.interpret.tool_rejected>>;
       if (command.type === "read_invoice")
         returned = await read.interpret(command, ctx);
       else if (command.type === "check_invoice")
@@ -432,7 +435,9 @@ for await (const line of createInterface({
     const frame = z
       .object({ id: z.string(), input: inputSchema })
       .parse(JSON.parse(line));
-    let view;
+    let view:
+      | Awaited<ReturnType<typeof execute>>
+      | { error: ReturnType<typeof details> };
     try {
       view = await execute(frame.input);
     } catch (error) {
