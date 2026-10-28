@@ -1,0 +1,192 @@
+{
+  "status": "Verified bounded local HTML component; integration and global acceptance are separate",
+  "base": "5c2ac5546d44f02839b7cd6c03f3d340cf220b1e",
+  "source": "a58e186a89e3a8dc13628e4042f29c1040a06872",
+  "controlsSource": "e63cd94feba331d6eac90e1ecf1cdf01bbff215f",
+  "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "evidence": "/private/tmp/demlik-cli-html-proof-01a16c9d",
+  "scope": [
+    "Borrowed render::html model and exact page through existing ConsoleOutput/IO",
+    "One existing Graph assembly owner; original Summary identity",
+    "Frozen Source CSS/client/sections materialized as inert assets",
+    "No standalone/bootstrap/browser/server/dependency/TS product changes"
+  ],
+  "newComparisons": {
+    "total": 34,
+    "strict": 30,
+    "qualified": 4,
+    "pure": {
+      "cases": 14,
+      "strict": 14,
+      "qualified": 0,
+      "protocolRefusals": 5
+    },
+    "preparedCLI": {
+      "cases": 20,
+      "strict": 16,
+      "qualified": 4,
+      "SourceExecutions": 22,
+      "nativeExecutions": 22,
+      "workflow": "one 3-step file/overwrite/stdout workflow counts as one case",
+      "protocolRefusals": 5,
+      "responseGuards": 3
+    }
+  },
+  "qualifiedCases": [
+    {
+      "id": "html-write-failure",
+      "profiles": ["backend-exception-diagnostic-qualified"]
+    },
+    {
+      "id": "html-warning-before-write-failure",
+      "profiles": ["backend-exception-diagnostic-qualified"]
+    },
+    {
+      "id": "html-pending-stdout",
+      "profiles": ["pending-stdio-notification-contract"]
+    },
+    {
+      "id": "html-file-before-pending-banner",
+      "profiles": ["pending-stdio-notification-contract"]
+    }
+  ],
+  "affectedComparisons": {
+    "total": 246,
+    "newCredit": 0,
+    "suites": {
+      "console": 77,
+      "treeBlastFind": 32,
+      "plainCollapse": 45,
+      "unreachable": 45,
+      "preparedSmell": 47
+    }
+  },
+  "oldConsole": {
+    "shared77Unchanged": true,
+    "rawBefore": 79,
+    "rawAfter": 78,
+    "remainingNativeOnly": 1,
+    "remainingCase": "unsupported-hotspots-same-box",
+    "SourceExecutions": 85,
+    "sharedNativeExecutions": 85,
+    "rawNativeExecutions": 86,
+    "retiredOnly": "unsupported-html-same-box"
+  },
+  "native": {
+    "uniqueTests": 23,
+    "groups": 5,
+    "finalCorrectedCliReportsTests": 3,
+    "overlapNotAdditional": true,
+    "finalSameActualBinaryRecoveredFromIgnoredTMPDIR": true,
+    "wholeWorkspaceRun": false
+  },
+  "types": {
+    "exactPublicRed": "sole E0432 with actual baseline Cargo library",
+    "exactSamePublicInputGreen": "compile0/exec0, original Summary pointer after Collation drop, rendered page after Graph drop",
+    "lifetimeRefusal": "sole E0597",
+    "borrowedRcHostCause": "compile0/exec0; actual nonexistent tsgo error retained in typed FrontdoorError::Assembly; zero shared credit"
+  },
+  "controls": {
+    "planned": 4,
+    "detected": 4,
+    "compileExit": 0,
+    "actualModifiedLibraryAndConsumerFreshFalse": true,
+    "strictNamedProtocolValidMismatches": 4,
+    "qualified": 0,
+    "restoredOwners": true,
+    "ownWorktreeAndDefaultTargetRemoved": true,
+    "report": "controls/controls.json",
+    "sha256": "17c2a3d973dde34e57e2c8ea059a0e193793c869e60187e2a22cb42e99661f27"
+  },
+  "constructionCodegenCargoSelections": 6,
+  "controlCodegenCargoSelections": 4,
+  "totalCodegenCargoSelections": 10,
+  "constructionSelections": [
+    {
+      "ordinal": 1,
+      "record": "baseline-cargo.json",
+      "result": 0
+    },
+    {
+      "ordinal": 2,
+      "record": "green-drivers-cargo.json",
+      "result": 0
+    },
+    {
+      "ordinal": 3,
+      "record": "scoped-native-cargo.json",
+      "result": 0
+    },
+    {
+      "ordinal": 4,
+      "record": "all-target-clippy.json",
+      "result": 101,
+      "credit": 0,
+      "cause": "Retired HTML placeholder left one-element test loop"
+    },
+    {
+      "ordinal": 5,
+      "record": "all-target-clippy-recovered.json",
+      "result": 0
+    },
+    {
+      "ordinal": 6,
+      "record": "final-cli-native-cargo.json",
+      "result": 0
+    }
+  ],
+  "nativePreparation": {
+    "constructionAttempts": 2,
+    "firstFailedBeforeCompile": true,
+    "additionalGuardRefusalRetained": true,
+    "successfulConstruction": 1,
+    "successfulControlSuite": 1,
+    "noTargetOrCacheCopies": true
+  },
+  "static": {
+    "allTargetCodeGraphClippy": 0,
+    "fmt": 0,
+    "parityTSC": 0,
+    "scopedBiome": 0,
+    "workerNodeSyntax": 0,
+    "sourceDiffCheck": 0,
+    "noBroadWorkspaceRepeat": true
+  },
+  "failureHistory": {
+    "record": "recoveries.json",
+    "sha256": "39371c71e26db3de5c17d99f984e1f051f82623876ac4cde029ea01ce427278b",
+    "setupCompilerLauncherProtocolAndHarnessFailuresEarnNoCredit": true
+  },
+  "artifactRetention": {
+    "record": "construction-artifact-bindings.json",
+    "constructionRetainedRoles": 8,
+    "controlsRetainedRoles": 8,
+    "historicalNativeExecutablesNotRetained": 5,
+    "allMutantLibraryAndExecutedConsumerBytesRetained": true,
+    "dependencyCachesAndWholeTargetsRetained": false,
+    "CargoSelectedExampleNotExecuted": "html_public_interface (exact external same-input public consumer executed separately)"
+  },
+  "frozenInputs": {
+    "record": "source-retention.json",
+    "sha256": "8c290dd3cbc73230ca39e5dc319309d6a605b7c12c7012ff386929a28e2cab63",
+    "sourceArchive": "source.tar.gz",
+    "archiveSha256": "c340bb2929040cc8f56a4a4a8ef86a4b212972adfa4b8a12bc76c11f746d982f",
+    "bothPackageTreesIdenticalFrozenSource": true,
+    "rootPackageJsonHasInheritedNativeScriptsQualified": true
+  },
+  "fileBeforeBanner": {
+    "record": "saved-file-order-guard.json",
+    "actualComparedWriteSteps": 4,
+    "independentSourceAndNativeObservations": true
+  },
+  "registration": "registration-proposal.json",
+  "remainingOpen": [
+    "All53 CLI known gaps remain open",
+    "Automatic browser/TTY and standalone bootstrap/distribution",
+    "CDN availability/browser execution and offline asset bundling",
+    "Existing Graph String/numeric/OS/stdio profiles",
+    "Two existing rank_plan legacy collation sites; no fallback on checked ICU failure",
+    "Hotspots Date grammar"
+  ],
+  "constructionRetirement": "Recorded separately after committing this receipt; no future rebuild is required by this receipt"
+}
