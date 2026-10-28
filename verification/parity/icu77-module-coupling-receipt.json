@@ -1,0 +1,121 @@
+{
+  "sourceCheckpoint": "7c292c04e35543bbf932a7ea74be67762d08e5ea",
+  "base": "9ca932488bec061a6e9ef1772b23ac533bc71dec",
+  "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "ICU77 I10 module coupling, SCC cycles, boundary groups, counts and rank ordering with precise existing caller errors. Existing kernels and caller-borrowed checked Collation. No central registration, new IDs or CLI closure.",
+  "productionOwners": [
+    "crates/code-graph/src/cli/frontdoor.rs",
+    "crates/code-graph/src/extract/assemble.rs",
+    "crates/code-graph/src/query/clusters.rs",
+    "crates/code-graph/src/render/analysis.rs",
+    "crates/code-graph/src/render/smells.rs",
+    "crates/code-graph/src/smells/coupling.rs"
+  ],
+  "comparisons": 10,
+  "remainingLegacy": {
+    "helperOccurrences": 37,
+    "directTermini": 2,
+    "noCapabilityProgressPercentage": true
+  },
+  "proofDirectory": "/private/tmp/demlik-icu77-group-i-proof-01a16c9d",
+  "sourceFirst": {
+    "freezeSha256": "9ad6c17d1fad697c2f6cddfd07f440dace1f65a02566462fcd0d2493c3855306",
+    "reportSha256": "a0b63ec921e20b7c8c6cabc9227018b8d42b6db6d5da3585a044a261d2eeee3f",
+    "wholeviews": 18,
+    "successfulViews": 18,
+    "filesBeforeAfterExact": true,
+    "beforeNativeProjection": true
+  },
+  "verification": {
+    "sourceNative": {
+      "passed": 18,
+      "strict": 18,
+      "qualified": 0,
+      "protocolRefusals": 5,
+      "responseGuards": 3,
+      "protocolGuardCredit": 0,
+      "reportSha256": "c862b9b460fdf44982f99042a28fa731c99aaf64237872290bbb650293aecb6d"
+    },
+    "nativeFocused": {
+      "passed": 40,
+      "groups": 10,
+      "newSourceCredit": 0,
+      "reportSha256": "61f67d5b00230fa71c1ba55280ba3297249e27cfe0d4a9f98087dcafd262652b"
+    },
+    "affected": {
+      "passed": 447,
+      "suites": 12,
+      "qualified": 37,
+      "newSourceCredit": 0,
+      "reportSha256": "804b91014204527bf541e4efed270db8cebd3cb43c1502a5d013d8124817bff5"
+    },
+    "publicCaller": {
+      "inputSha256": "a9ed0d49689412b120f2878a2147a14f63478737b0436554c69adf8516e1d213",
+      "cheapNoConfigNonexistentCompiler": 0,
+      "officialGo": 0,
+      "originalRcAndModuleInputs": true,
+      "returnedFactsAfterCollationDrop": true
+    },
+    "statics": {
+      "CodeGraphAllTargetClippy": 0,
+      "rustfmt": 0,
+      "scopedBiome": 0,
+      "parityTypecheck": 0,
+      "nodeSyntax": 0
+    },
+    "controls": {
+      "compiled": 4,
+      "strictNamedSemanticMismatches": 4,
+      "nativeOnly": 0,
+      "compileProtocolFailuresCredited": 0,
+      "reportSha256": "9f179f03a38eb257b678e01f047482359c521d547fe7fdf618661fd31be9bf9f"
+    }
+  },
+  "resources": {
+    "registeredRoots": 1,
+    "defaultTargetOnly": true,
+    "allFourAliasesUnset": true,
+    "ICUPreparations": 1,
+    "constructionCargoSelections": 4,
+    "controlCargoSelections": 4,
+    "externalPublicRustcCalls": 2,
+    "cacheCopies": 0,
+    "baselineExecutablesRetainedBeforeMutants": true,
+    "sourceRestorePerFaultAndFinally": true,
+    "lastTargetOutputsMutantAndNotReusedAsBaseline": true
+  },
+  "history": [
+    {
+      "stage": "baseline external public interface",
+      "exit": 1,
+      "diagnostics": "E0061 plus dependent cascade diagnostics, not a sole diagnostic claim",
+      "semanticCredit": 0
+    },
+    {
+      "stage": "Source18 strengthened group collision",
+      "retained": "source18-before-group-collision",
+      "semanticCredit": 0
+    },
+    {
+      "stage": "Cargo2 no-run",
+      "exit": 0,
+      "diagnostics": "one unused driver import warning",
+      "repair": "removed before final Cargo3 driver execution; no product change",
+      "semanticCredit": 0
+    }
+  ],
+  "artifactPolicy": {
+    "baselineLibraryCompileRedOnly": true,
+    "executedArtifactBytesSnapshotBeforeTargetReuse": true,
+    "actualCargoEventsRetained": true,
+    "unexecutedCargoProductsNotRetained": true,
+    "noWholeTargetCopies": true
+  },
+  "limits": [
+    "No whole-workspace, Tea, all-feature or archive rebuild; scoped CodeGraph evidence only.",
+    "Raw function/identifier reflection, model String paths and numerical families beyond these actual inputs remain open.",
+    "Existing affected-suite backend, host, filesystem and stdio qualifications remain qualified with no new credit.",
+    "No new Source export aliases, capability mappings or global counts; all53 CLI gaps remain open."
+  ],
+  "handoffRequiresActualRetirement": true
+}
