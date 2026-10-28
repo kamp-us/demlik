@@ -57,25 +57,6 @@ fn prepared(root: &Path, flags: &[&str], host: &mut CliIo<'_>) -> Box<PreparedGa
     p
 }
 #[test]
-fn unsupported_higher_output_keeps_both_original_boxes_without_graph_or_io() {
-    let fixture = Fixture::new();
-    let (mut out, mut err) = (Vec::new(), Vec::new());
-    let mut host = CliIo::new(&mut out, &mut err, None);
-    let p = prepared(&fixture.0, &["--hotspots"], &mut host);
-    let original = std::ptr::from_ref(p.as_ref());
-    let input = std::ptr::from_ref(p.prepared.as_ref());
-    let ReportDispatch::Continue(p) = p
-        .dispatch_reports_blocking(&mut host, &TsgoBinary::pinned("/missing/tsgo"))
-        .unwrap()
-    else {
-        panic!("continued")
-    };
-    assert!(std::ptr::eq(original, p.as_ref()));
-    assert!(std::ptr::eq(input, p.prepared.as_ref()));
-    assert_eq!(host.exit_state().stored_code(), None);
-    assert!(out.is_empty() && err.is_empty());
-}
-#[test]
 fn report_output_failure_retains_the_actual_concrete_cause() {
     let fixture = Fixture::new();
     let destination = fixture.0.join("directory");

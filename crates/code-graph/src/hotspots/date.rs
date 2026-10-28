@@ -139,7 +139,7 @@ impl<'a> Scanner<'a> {
                 length: self.position - start,
             };
         }
-        if [b':', b'-', b'+', b'.', b')'].map(u16::from).contains(&c) {
+        if (*b":-+.)").map(u16::from).contains(&c) {
             self.position += 1;
             return Token::Symbol(c);
         }

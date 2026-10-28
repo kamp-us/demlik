@@ -32,15 +32,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let window = {
         let zone = LocalTimeZone::try_named(&JsString::from("America/Los_Angeles"))?;
         assert_eq!(zone.data_version(), "2025a", "actual prepared release data");
-        resolve_churn_window(
-            90.0,
-            Some(&since),
-            || {
-                reads.set(reads.get() + 1);
-                1_793_102_400_123.75
-            },
-            &zone,
-        )?
+        let once: Box<dyn FnOnce() -> f64 + '_> = Box::new(|| {
+            reads.set(reads.get() + 1);
+            1_793_102_400_123.75
+        });
+        resolve_churn_window(90.0, Some(&since), once, &zone)?
     };
     assert_eq!(reads.get(), 1);
     assert_eq!(window.since_iso, "2026-03-08T10:30:00.000Z");
@@ -76,14 +72,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let GatePreflightDispatch::Continue(prepared) = prepared.prepare_gates(&mut host)? else {
         panic!("gates")
     };
+    let once: Box<dyn FnOnce() -> f64 + '_> = Box::new(|| {
+        reads.set(reads.get() + 1);
+        1_793_102_400_123.75
+    });
     let result = prepared.dispatch_reports_with_clock_blocking(
         &mut host,
         &TsgoBinary::pinned("/nonexistent/explicit-tsgo"),
         TreeStyle::Plain,
-        || {
-            reads.set(reads.get() + 1);
-            1_793_102_400_123.75
-        },
+        once,
     )?;
     assert!(matches!(result, ReportDispatch::Complete));
     assert_eq!(host.normal_exit_code(), 7);

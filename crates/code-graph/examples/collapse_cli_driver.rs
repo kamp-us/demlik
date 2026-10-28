@@ -43,6 +43,8 @@ struct Request {
     #[serde(default)]
     ansi: bool,
     #[serde(default, deserialize_with = "some")]
+    clock_ms: Option<f64>,
+    #[serde(default, deserialize_with = "some")]
     warning_marker: Option<JsString>,
     #[serde(default, deserialize_with = "some")]
     initial: Option<i32>,
@@ -465,7 +467,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 } else { value };
                 if request.late_reports {
-                    let result = if request.ansi {
+                    let result = if let Some(clock) = request.clock_ms {
+                        observe!(
+                            &mut calls,
+                            demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_with_clock_blocking,
+                            value,
+                            &mut host,
+                            &TsgoBinary::pinned(&request.compiler),
+                            if request.ansi { demlik_code_graph::render::tree::TreeStyle::Ansi } else { demlik_code_graph::render::tree::TreeStyle::Plain },
+                            || clock
+                        )
+                    } else if request.ansi {
                         observe!(
                             &mut calls,
                             demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_with_style_blocking,

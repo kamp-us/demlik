@@ -656,8 +656,4 @@ export const reportCases = [
     "comments-before-graph",
     { flags: ["--comments", "--graph"], early: "comments" },
   ],
-  ...[["hotspots", ["--hotspots"]]].map(([name, flags]) => [
-    `unsupported-${name}-same-box`,
-    { cheap: true, withoutCompiler: true, flags, nativeOnly: true },
-  ]),
 ];

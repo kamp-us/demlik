@@ -103,7 +103,13 @@ fn resolve_window(
         None => date::time_clip(until - days * MS_PER_DAY),
     };
     let span = js_round((until - since_value) / MS_PER_DAY);
-    let span = if span.is_nan() { span } else { span.max(0.0) };
+    let span = if span.is_nan() {
+        span
+    } else if span <= 0.0 {
+        0.0
+    } else {
+        span
+    };
     let invalid = |part, value| {
         ChurnWindowError::InvalidTimeValue(InvalidTimeValue {
             part,
