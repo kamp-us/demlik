@@ -16254,5 +16254,111 @@
       "OPEN broader agentEvents profiles: by-value/PlainCalls/routed tool payloads, optional feature grids, SDK/provider/children and arbitrary raw JavaScript/getter/prototype/reflection are outside the canonical NativeCalls/Rc profile.",
       "OPEN raw host error representation: JavaScript Error names/messages/stacks and native callback Panic/store wrappers have four measured exact qualifications, not general equivalence. Missing/null original event numbers and payloads remain typed native refusals, with zero paired Source credit."
     ]
+  },
+  "@demlik/tea:./agent#renderPrompt": {
+    "signature": "8cd770e7c3902aa82a33208e58edbbd8aa0b77a105894eafe06ced07933689bd",
+    "rust": {
+      "file": "crates/tea/src/agent/prompt.rs",
+      "symbols": [
+        "demlik_tea::agent::render_prompt",
+        "demlik_tea::agent::render_prompt_with"
+      ]
+    },
+    "cases": [
+      "render-prompt.empty.fresh-array",
+      "render-prompt.head.null-versus-empty",
+      "render-prompt.head.instructions-only",
+      "render-prompt.head.input-utf16",
+      "render-prompt.history.plan-act-order",
+      "render-prompt.records.duplicates-orphans",
+      "render-prompt.provider.presence",
+      "render-prompt.owners.original-handles",
+      "render-prompt.parts.null-versus-empty",
+      "render-prompt.parts.media-original",
+      "render-prompt.parts.error-callback",
+      "render-prompt.parts.failure-prefix",
+      "render-prompt.indices.exact-number",
+      "render-prompt.history.turn-count-ignored",
+      "render-prompt.render.repeat-no-cache",
+      "render-prompt.parts.mutate-after-render",
+      "render-prompt.port.invoice-native-and-raw"
+    ],
+    "nativeProfile": "The seventeen typed Source renderPrompt wholeviews consume dense ordered Conversation owners through the recorded native render_prompt/render_prompt_with functions. Null versus empty heads, exact numeric record association including nonfinite values, provider/parts presence, callback order/error prefix, original turn/call/outcome/result/parts owners and fresh message batches are measured. Native aliases use existing CallSource/Rc owners and a borrowed AgentPrompt view with no blanket Clone/Debug/serde/Send/static bounds. The raw-null input row stays runtime-qualified and is excluded. Optional parts callback is render_prompt_with; omitted callback is render_prompt. Original Result failure escapes unchanged.",
+    "knownGaps": [
+      "OPEN full defineAgent/messagesOf/raw-router/provider/SDK/actor adoption and automatic routed/raw Parts adaptation; the measured scope is the pure function plus explicit fixed-M caller-provided loader/model ports.",
+      "OPEN arbitrary JavaScript reflection/prototypes/getters/inherited slots, sparse/custom-iterator/mutable arrays, async callbacks and panic/Error equivalence. The published-null instructions/input and f64-number record profile do not imply malformed restored-state admission.",
+      "OPEN automatic wire projection for arbitrary T and provider extras: native AgentMessage retains original owners; an explicit caller/provider adapter selects the Source fields. No serialization of the entire turn or usage/extras is claimed."
+    ]
+  },
+  "@demlik/tea:./agent#AgentPrompt": {
+    "signature": "c96ecfa858338075ae595dd32b3704dba2b7fffd6fb07a0a32c3cf6fb7503805",
+    "rust": {
+      "file": "crates/tea/src/agent/prompt.rs",
+      "symbols": [
+        "demlik_tea::agent::render_prompt",
+        "demlik_tea::agent::render_prompt_with"
+      ]
+    },
+    "cases": [
+      "render-prompt.empty.fresh-array",
+      "render-prompt.head.null-versus-empty",
+      "render-prompt.head.instructions-only",
+      "render-prompt.head.input-utf16",
+      "render-prompt.history.plan-act-order",
+      "render-prompt.records.duplicates-orphans",
+      "render-prompt.provider.presence",
+      "render-prompt.owners.original-handles",
+      "render-prompt.parts.null-versus-empty",
+      "render-prompt.parts.media-original",
+      "render-prompt.parts.error-callback",
+      "render-prompt.parts.failure-prefix",
+      "render-prompt.indices.exact-number",
+      "render-prompt.history.turn-count-ignored",
+      "render-prompt.render.repeat-no-cache",
+      "render-prompt.parts.mutate-after-render",
+      "render-prompt.port.invoice-native-and-raw"
+    ],
+    "nativeProfile": "The seventeen typed Source renderPrompt wholeviews consume dense ordered Conversation owners through the recorded native render_prompt/render_prompt_with functions. Null versus empty heads, exact numeric record association including nonfinite values, provider/parts presence, callback order/error prefix, original turn/call/outcome/result/parts owners and fresh message batches are measured. Native aliases use existing CallSource/Rc owners and a borrowed AgentPrompt view with no blanket Clone/Debug/serde/Send/static bounds. The raw-null input row stays runtime-qualified and is excluded. Rust owner demlik_tea::agent::AgentPrompt is consumed by these real functions; its struct fields are not fabricated function-call trace labels.",
+    "knownGaps": [
+      "OPEN full defineAgent/messagesOf/raw-router/provider/SDK/actor adoption and automatic routed/raw Parts adaptation; the measured scope is the pure function plus explicit fixed-M caller-provided loader/model ports.",
+      "OPEN arbitrary JavaScript reflection/prototypes/getters/inherited slots, sparse/custom-iterator/mutable arrays, async callbacks and panic/Error equivalence. The published-null instructions/input and f64-number record profile do not imply malformed restored-state admission.",
+      "OPEN universal AgentPrompt JSON/serde/reflection/field-presence compatibility. The native borrowed struct represents the required typed heads/conversation; None means Source null, not omitted/undefined."
+    ]
+  },
+  "@demlik/tea:./agent#AgentMessage": {
+    "signature": "c08350d26bd3ca1267948b4cf5db007a39dd354c4870bbf229054cbf0c15d521",
+    "rust": {
+      "file": "crates/tea/src/agent/prompt.rs",
+      "symbols": [
+        "demlik_tea::agent::render_prompt",
+        "demlik_tea::agent::render_prompt_with"
+      ]
+    },
+    "cases": [
+      "render-prompt.empty.fresh-array",
+      "render-prompt.head.null-versus-empty",
+      "render-prompt.head.instructions-only",
+      "render-prompt.head.input-utf16",
+      "render-prompt.history.plan-act-order",
+      "render-prompt.records.duplicates-orphans",
+      "render-prompt.provider.presence",
+      "render-prompt.owners.original-handles",
+      "render-prompt.parts.null-versus-empty",
+      "render-prompt.parts.media-original",
+      "render-prompt.parts.error-callback",
+      "render-prompt.parts.failure-prefix",
+      "render-prompt.indices.exact-number",
+      "render-prompt.history.turn-count-ignored",
+      "render-prompt.render.repeat-no-cache",
+      "render-prompt.parts.mutate-after-render",
+      "render-prompt.port.invoice-native-and-raw"
+    ],
+    "nativeProfile": "The seventeen typed Source renderPrompt wholeviews consume dense ordered Conversation owners through the recorded native render_prompt/render_prompt_with functions. Null versus empty heads, exact numeric record association including nonfinite values, provider/parts presence, callback order/error prefix, original turn/call/outcome/result/parts owners and fresh message batches are measured. Native aliases use existing CallSource/Rc owners and a borrowed AgentPrompt view with no blanket Clone/Debug/serde/Send/static bounds. The raw-null input row stays runtime-qualified and is excluded. Rust owner demlik_tea::agent::AgentMessage (retained by PromptMessages) is returned and inspected by these real consumers; its variants are not fabricated constructor/function trace labels.",
+    "knownGaps": [
+      "OPEN full defineAgent/messagesOf/raw-router/provider/SDK/actor adoption and automatic routed/raw Parts adaptation; the measured scope is the pure function plus explicit fixed-M caller-provided loader/model ports.",
+      "OPEN arbitrary JavaScript reflection/prototypes/getters/inherited slots, sparse/custom-iterator/mutable arrays, async callbacks and panic/Error equivalence. The published-null instructions/input and f64-number record profile do not imply malformed restored-state admission.",
+      "OPEN complete AgentMessage authoring/wire surface: renderPrompt emits string user heads, so user ContentPart-array authoring is not established by these seventeen rows. Native enum variants expose original owners, and the caller/provider adapter selects Source fields without automatically serializing arbitrary T or turn usage/extras.",
+      "OPEN Source assistant-object allocation/identity and arbitrary field mutation/reflection. The actual measured identities are nested toolCalls/provider/call/outcome/result/parts and the fresh returned message batch."
+    ]
   }
 }

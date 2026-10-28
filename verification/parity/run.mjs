@@ -58,6 +58,7 @@ import { pollerParity } from "./poller-run.mjs";
 import { reconcilerParity } from "./reconciler-run.mjs";
 import { recorderParity } from "./recorder-run.mjs";
 import { recorderRuntime as recorderRuntimeParity } from "./recorder-runtime.mjs";
+import { renderPromptCheckpointParity } from "./render-prompt-parity.mjs";
 import { resilientCallParity } from "./resilient-call-run.mjs";
 import { runtimeParity } from "./runtime.mjs";
 import { runtimeContractParity } from "./runtime-contracts.mjs";
@@ -1210,6 +1211,12 @@ if (!mutationSuite) {
       operation: "tea.agent-events",
       binaryArgument: "--agent-events-bin",
       run: (options) => agentEventsCheckpointParity(cargo, options),
+    },
+    {
+      name: "renderPrompt",
+      operation: "tea.render-prompt",
+      binaryArgument: "--render-prompt-bin",
+      run: (options) => renderPromptCheckpointParity(cargo, options),
     },
     {
       name: "machineViz",
