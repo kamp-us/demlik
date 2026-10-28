@@ -160,6 +160,8 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
         .map_err(|error| error.to_string())
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
     match request.operation.as_str() {
         "code_graph.test-reach" => {
             use demlik_code_graph::boundaries::zones::test_reach::{
@@ -267,8 +269,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             let uses = observe!(
                 calls,
                 demlik_code_graph::boundaries::impure_uses::detect_impure_uses,
-                &syntax
-            );
+                &syntax,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let edges: Vec<_> = observe!(
                 calls,
                 demlik_code_graph::syntax::imports::import_literals,
@@ -388,8 +392,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             let uses = observe!(
                 calls,
                 demlik_code_graph::boundaries::impure_uses::detect_impure_uses,
-                &syntax
-            );
+                &syntax,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let names = observe!(
                 calls,
                 demlik_code_graph::boundaries::impure_uses::impure_names_of,

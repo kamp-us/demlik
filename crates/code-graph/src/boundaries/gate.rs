@@ -1,12 +1,12 @@
 use super::{
-    analyze::{BoundaryModule, ScopeAnalysis, ScopeInputs, analyze_boundaries},
+    analyze::{AnalysisError, BoundaryModule, ScopeAnalysis, ScopeInputs, analyze_boundaries},
     config::{BoundaryConfigError, BoundaryConfigResolution, resolve_boundary_rules},
     deployables::{
         BindingOwners, BindingSite, Deployables, DeployablesRead, NO_CATALOG, binding_owners_of,
         bindings::{binding_owner_issue, binding_sites_of},
         census::{SiteRow, deployable_census},
         cycles::worker_cycles,
-        read_deployables,
+        read_deployables_request,
     },
     impure_uses::{ImpureUse, detect_impure_uses},
     ledger::{
@@ -257,10 +257,11 @@ fn read_run<'a, 'c>(
             LibrariesRead::Read(libraries) => libraries,
             LibrariesRead::Refused { message } => return Ok(Err(message)),
         };
-    let deployables = match read_deployables(rules, args.repo_root, listing, catalog) {
-        DeployablesRead::Read(deployables) => deployables,
-        DeployablesRead::Refused { message } => return Ok(Err(message)),
-    };
+    let deployables =
+        match read_deployables_request(rules, args.repo_root, listing, catalog, request)? {
+            DeployablesRead::Read(deployables) => deployables,
+            DeployablesRead::Refused { message } => return Ok(Err(message)),
+        };
     let shape = match read_shape(rules, catalog).map_err(BoundaryGateError::Pattern)? {
         ShapeRead::Read(shape) => shape,
         ShapeRead::Refused { message } => return Ok(Err(message)),
@@ -309,6 +310,22 @@ enum ScopeFailure {
 impl From<JsString> for ScopeFailure {
     fn from(message: JsString) -> Self {
         Self::Refused(message)
+    }
+}
+impl From<CollationError> for ScopeFailure {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+impl From<AnalysisError> for ScopeFailure {
+    fn from(error: AnalysisError) -> Self {
+        match error {
+            AnalysisError::Collation(error)
+            | AnalysisError::Deployable(super::deployables::DeployableJudgmentError::Collation(
+                error,
+            )) => Self::Collation(error),
+            error => Self::Refused(error.to_string().into()),
+        }
     }
 }
 impl From<ImportResolveError> for ScopeFailure {
@@ -379,20 +396,22 @@ fn analyze_scope(
         .flat_map(|loaded| &loaded.project.source_files)
         .map(|unit| {
             let file = JsString::from(unit.file.as_str());
-            ModuleFacts {
-                shape: shape_facts_of(&reads.shape, scope, &file, &unit.syntax),
-                imported_names: imported_names_for(&reads.libraries, scope, &unit.syntax),
-                impure_uses: detect_impure_uses(&unit.syntax),
-                runtime_specifiers: runtime_specifiers(&unit.syntax),
-                binding_sites: binding_sites_of(
-                    &reads.deployables,
-                    &in_scope(scope, &file),
-                    &unit.syntax,
-                ),
+            let impure_uses = detect_impure_uses(&unit.syntax, collation)?;
+            let runtime_specifiers = runtime_specifiers(&unit.syntax);
+            let imported_names = imported_names_for(&reads.libraries, scope, &unit.syntax);
+            let binding_sites =
+                binding_sites_of(&reads.deployables, &in_scope(scope, &file), &unit.syntax);
+            let shape = shape_facts_of(&reads.shape, scope, &file, &unit.syntax);
+            Ok(ModuleFacts {
                 file,
-            }
+                impure_uses,
+                runtime_specifiers,
+                imported_names,
+                binding_sites,
+                shape,
+            })
         })
-        .collect();
+        .collect::<std::result::Result<Vec<_>, CollationError>>()?;
     let modules: Vec<_> = facts
         .iter()
         .zip(
@@ -441,8 +460,8 @@ fn analyze_scope(
         ])
         .into());
     }
-    analyze_boundaries(scope, &modules, rules, reads.inputs())
-        .map_err(|error| ScopeFailure::Refused(error.to_string().into()))
+    analyze_boundaries(scope, &modules, rules, reads.inputs(), collation)
+        .map_err(ScopeFailure::from)
 }
 struct Analysis {
     reports: Vec<ScopeBoundaryReport>,
@@ -483,7 +502,7 @@ fn analyze_all(
             scope: ".".into(),
             features: Vec::new(),
             files_scanned: 0.0,
-            violations: worker_cycles(&reads.deployables.graph),
+            violations: worker_cycles(&reads.deployables.graph, collation)?,
             workers: Some(reads.deployables.graph.workers.clone()),
         });
     }
@@ -740,5 +759,34 @@ fn run<'c>(
             }
         }
         Mode::Migrate => unreachable!("handled before scoped analysis"),
+    }
+}
+
+#[cfg(test)]
+mod judgment_cause_tests {
+    use super::*;
+    #[test]
+    fn nested_collation_is_not_a_recoverable_boundary_refusal() {
+        let error = AnalysisError::Deployable(
+            super::super::deployables::DeployableJudgmentError::Collation(
+                CollationError::InputTooLong {
+                    units: 17,
+                    maximum: 16,
+                },
+            ),
+        );
+        assert!(matches!(
+            ScopeFailure::from(error),
+            ScopeFailure::Collation(CollationError::InputTooLong {
+                units: 17,
+                maximum: 16
+            })
+        ));
+        assert!(matches!(
+            ScopeFailure::from(AnalysisError::Deployable(
+                super::super::deployables::DeployableJudgmentError::InheritedOwners
+            )),
+            ScopeFailure::Refused(_)
+        ));
     }
 }

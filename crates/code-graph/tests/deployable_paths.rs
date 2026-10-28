@@ -45,14 +45,22 @@ fn real_worker_configs_form_one_cycle_while_workspace_crossings_keep_the_first_s
         &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
-    let graph = worker_graph(&catalog);
+    let graph = worker_graph(
+        &catalog,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         graph.workers,
         vec![JsString::from("a"), JsString::from("b")]
     );
     assert_eq!(graph.unresolved, 1);
     assert_eq!(graph.edges.len(), 2);
-    let cycles = worker_cycles(&graph);
+    let cycles = worker_cycles(
+        &graph,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(
         matches!(&cycles[..],[BoundaryViolation::WorkerCallCycle {from,specifier,..}] if from=="a, b"&&specifier=="a.B -> b; b.A -> a")
     );
@@ -133,7 +141,14 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
     )
     .unwrap();
     let rules=BoundaryRules::parse(&JsValue::parse(r#"{"acrossDeployables":["binding-outside-driven-adapter","relative-import-crosses-workspace"]}"#).unwrap()).unwrap();
-    let DeployablesRead::Read(deployables) = read_deployables(&rules, &root, None, &catalog) else {
+    let DeployablesRead::Read(deployables) = read_deployables(
+        &rules,
+        &root,
+        None,
+        &catalog,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("valid worker configs refused")
     };
     let scope = JsString::from("services/a");
@@ -166,17 +181,39 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
         is_main: true,
         owners: BindingOwners::Record(&owners),
     };
-    assert!(binding_violations(&facts).unwrap().is_empty());
+    assert!(
+        binding_violations(
+            &facts,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .is_empty()
+    );
     let application = DeployableFile {
         is_main: false,
         ..facts
     };
-    assert_eq!(binding_violations(&application).unwrap().len(), 2);
+    assert_eq!(
+        binding_violations(
+            &application,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .len(),
+        2
+    );
     let driven = DeployableFile {
         driven: true,
         ..application
     };
-    assert!(binding_violations(&driven).unwrap().is_empty());
+    assert!(
+        binding_violations(
+            &driven,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .is_empty()
+    );
     let ownership = [(JsString::from("DB"), vec![rel.clone()])]
         .into_iter()
         .collect();
@@ -210,7 +247,9 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
         &root.join("missing"),
         None,
         &catalog,
-    ) else {
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("disabled rules refused")
     };
     assert!(disabled.catalog.manifests.is_empty());

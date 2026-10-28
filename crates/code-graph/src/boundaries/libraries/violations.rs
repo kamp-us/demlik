@@ -4,6 +4,7 @@ use super::{
     import_target_of, imported_from_outside, is_world_library, library_type_of, owner_of,
     undeclared_under,
 };
+use crate::project::{Collation, CollationError};
 use crate::{
     boundaries::{
         impure_uses::{ImpureFacts, impure_names_of},
@@ -148,8 +149,12 @@ pub fn judge_libraries(
         },
     })
 }
-pub fn undeclared_libraries(libraries: &Libraries<'_>, root: &JsString) -> Vec<BoundaryViolation> {
-    undeclared_under(libraries, root)
+pub fn undeclared_libraries(
+    libraries: &Libraries<'_>,
+    root: &JsString,
+    collation: &Collation,
+) -> Result<Vec<BoundaryViolation>, CollationError> {
+    Ok(undeclared_under(libraries, root, collation)?
         .into_iter()
         .map(|dir| {
             let dir = JsString::from(dir);
@@ -165,5 +170,5 @@ pub fn undeclared_libraries(libraries: &Libraries<'_>, root: &JsString) -> Vec<B
                 type_only: False,
             }
         })
-        .collect()
+        .collect())
 }

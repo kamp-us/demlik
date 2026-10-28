@@ -15,7 +15,11 @@ fn real_syntax_distinguishes_global_reads_from_type_names_and_bound_parameters()
     "#,
     )
     .unwrap();
-    let uses = detect_impure_uses(&syntax);
+    let uses = detect_impure_uses(
+        &syntax,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(
         uses.iter()
             .any(|item| item.name == "process.stdin" && item.path == ["process", "stdin", "isTTY"])
@@ -28,5 +32,12 @@ fn real_syntax_distinguishes_global_reads_from_type_names_and_bound_parameters()
         "function injected(fetch: unknown) {} function other() { fetch('url'); }",
     )
     .unwrap();
-    assert!(detect_impure_uses(&bound).is_empty());
+    assert!(
+        detect_impure_uses(
+            &bound,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .is_empty()
+    );
 }

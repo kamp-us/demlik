@@ -209,7 +209,11 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 })
                 .collect();
             let runtime = demlik_code_graph::syntax::imports::runtime_specifiers(&syntax);
-            let impure = demlik_code_graph::boundaries::impure_uses::detect_impure_uses(&syntax);
+            let impure = demlik_code_graph::boundaries::impure_uses::detect_impure_uses(
+                &syntax,
+                &metadata_collation,
+            )
+            .map_err(|error| error.to_string())?;
             let licensed = checked(observe!(
                 calls,
                 demlik_code_graph::boundaries::libraries::allowance::is_licensed,
@@ -278,10 +282,12 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                         calls,
                         demlik_code_graph::boundaries::libraries::violations::undeclared_libraries,
                         &libraries,
-                        root
+                        root,
+                        &metadata_collation
                     )
+                    .map_err(|error| error.to_string())
                 })
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
             let census = observe!(
                 calls,
                 demlik_code_graph::boundaries::libraries::census::library_census,
@@ -444,10 +450,12 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                         calls,
                         demlik_code_graph::boundaries::libraries::undeclared_under,
                         &libraries,
-                        root
+                        root,
+                        &metadata_collation
                     )
+                    .map_err(|error| error.to_string())
                 })
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
             json(&LibrariesOutput {
                 kind: "read",
                 declared: libraries.declared(),

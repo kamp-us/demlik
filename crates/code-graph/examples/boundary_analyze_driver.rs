@@ -179,7 +179,17 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
         LibrariesRead::Read(value) => value,
         LibrariesRead::Refused { message } => return refused("libraries", message),
     };
-    let deployables = match observe!(calls, read_deployables, &rules, root, None, &catalog) {
+    let deployables = match observe!(
+        calls,
+        read_deployables,
+        &rules,
+        root,
+        None,
+        &catalog,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?
+    {
         DeployablesRead::Read(value) => value,
         DeployablesRead::Refused { message } => return refused("deployables", message),
     };
@@ -204,7 +214,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             libraries: &libraries,
             deployables: &deployables,
             shape: &shape
-        }
+        },
+        &metadata_collation
     ) {
         Ok(analysis) => analysis,
         Err(error) => {

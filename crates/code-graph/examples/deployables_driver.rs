@@ -76,8 +76,8 @@ fn checked<T>(
         Ok(value) => Checked::Value(value),
         Err(error) => Checked::Thrown {
             thrown: Thrown {
-                name: "TypeError",
-                message: error.message().into(),
+                name: error.name(),
+                message: error.message(),
             },
         },
     }
@@ -165,8 +165,11 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 &rules,
                 root,
                 listing.as_ref(),
-                &catalog
-            ) {
+                &catalog,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?
+            {
                 domain::DeployablesRead::Read(deployables) => deployables,
                 domain::DeployablesRead::Refused { message } => {
                     #[derive(Serialize)]
@@ -224,13 +227,15 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 let direct = checked(observe!(
                     calls,
                     demlik_code_graph::boundaries::deployables::bindings::binding_violations,
-                    &facts
+                    &facts,
+                    &metadata_collation
                 ));
                 let judged = checked(observe!(
                     calls,
                     demlik_code_graph::boundaries::deployables::judge::judge_deployables,
                     &deployables,
-                    &facts
+                    &facts,
+                    &metadata_collation
                 ));
                 let owner_issue = observe!(
                     calls,
@@ -316,11 +321,15 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
         "code_graph.worker-cycles" => {
             let graph: WorkerGraph =
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
-            json(&observe!(
-                calls,
-                demlik_code_graph::boundaries::deployables::cycles::worker_cycles,
-                &graph
-            ))
+            json(
+                &observe!(
+                    calls,
+                    demlik_code_graph::boundaries::deployables::cycles::worker_cycles,
+                    &graph,
+                    &metadata_collation
+                )
+                .map_err(|error| error.to_string())?,
+            )
         }
         "code_graph.worker-graph" => {
             let input: CatalogInput =
@@ -341,13 +350,17 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             let graph = observe!(
                 calls,
                 demlik_code_graph::boundaries::deployables::cycles::worker_graph,
-                &catalog
-            );
+                &catalog,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let cycles = observe!(
                 calls,
                 demlik_code_graph::boundaries::deployables::cycles::worker_cycles,
-                &graph
-            );
+                &graph,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             json(&GraphOutput {
                 graph: &graph,
                 cycles,

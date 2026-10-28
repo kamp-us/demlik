@@ -5,7 +5,7 @@ use crate::{
         violation::{BoundaryViolation, False},
     },
     data::extract::binding_sites,
-    project::locale_compare_units,
+    project::{Collation, CollationInput},
     syntax::file::SyntaxFile,
     text::{JsString, object_keys},
 };
@@ -35,6 +35,7 @@ pub fn binding_sites_of(
 }
 pub fn binding_violations(
     file: &DeployableFile<'_>,
+    collation: &Collation,
 ) -> Result<Vec<BoundaryViolation>, DeployableJudgmentError> {
     let mut used: Vec<_> = file
         .binding_sites
@@ -42,10 +43,11 @@ pub fn binding_violations(
         .map(|site| &site.binding)
         .collect::<IndexSet<_>>()
         .into_iter()
-        .collect();
-    used.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
+        .map(|binding| CollationInput::from_utf16(binding.units()).map(|key| (binding, key)))
+        .collect::<Result<_, _>>()?;
+    used.sort_by(|a, b| collation.compare(&a.1, &b.1));
     let mut violations = Vec::new();
-    for binding in used {
+    for (binding, _) in used {
         let clean = if file.is_main {
             true
         } else if !file.driven {

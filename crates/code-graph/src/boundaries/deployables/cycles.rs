@@ -1,7 +1,7 @@
 use crate::{
     boundaries::violation::{BoundaryViolation, False},
     extract::wrangler_config::BindingCatalog,
-    project::locale_compare_units,
+    project::{Collation, CollationError, CollationInput},
     scc::{scc_members, strongly_connected_components},
     schema::BindingKind,
     text::JsString,
@@ -22,14 +22,21 @@ pub struct WorkerGraph {
     pub edges: Vec<WorkerEdge>,
     pub unresolved: usize,
 }
-pub fn worker_graph(catalog: &BindingCatalog) -> WorkerGraph {
-    let known: IndexSet<_> = catalog
+pub fn worker_graph(
+    catalog: &BindingCatalog,
+    collation: &Collation,
+) -> Result<WorkerGraph, CollationError> {
+    let mut workers = catalog
         .manifests
         .iter()
         .map(|manifest| &manifest.service)
-        .collect();
-    let mut workers: Vec<_> = known.iter().map(|name| (*name).clone()).collect();
-    workers.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
+        .collect::<IndexSet<_>>()
+        .into_iter()
+        .map(|name| CollationInput::from_utf16(name.units()).map(|key| (name.clone(), key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    workers.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    let workers: Vec<_> = workers.into_iter().map(|(name, _)| name).collect();
+    let known: IndexSet<_> = workers.iter().collect();
     let mut edges = Vec::new();
     let mut unresolved = 0;
     for manifest in &catalog.manifests {
@@ -48,23 +55,26 @@ pub fn worker_graph(catalog: &BindingCatalog) -> WorkerGraph {
             }
         }
     }
-    WorkerGraph {
+    Ok(WorkerGraph {
         workers,
         edges,
         unresolved,
-    }
+    })
 }
-fn join(parts: impl IntoIterator<Item = JsString>, separator: &str) -> JsString {
+fn join<'a>(parts: impl IntoIterator<Item = &'a JsString>, separator: &str) -> JsString {
     let mut result = JsString::default();
     for (index, part) in parts.into_iter().enumerate() {
         if index > 0 {
             result.push_str(separator);
         }
-        result.extend(&part);
+        result.extend(part);
     }
     result
 }
-pub fn worker_cycles(graph: &WorkerGraph) -> Vec<BoundaryViolation> {
+pub fn worker_cycles(
+    graph: &WorkerGraph,
+    collation: &Collation,
+) -> Result<Vec<BoundaryViolation>, CollationError> {
     let mut adjacency: HashMap<_, Vec<_>> = graph
         .workers
         .iter()
@@ -77,36 +87,47 @@ pub fn worker_cycles(graph: &WorkerGraph) -> Vec<BoundaryViolation> {
         }
     }
     let components = strongly_connected_components(&graph.workers, &adjacency);
-    let mut rows: Vec<_> = scc_members(&graph.workers, &components)
+    let mut rows = Vec::new();
+    for members in scc_members(&graph.workers, &components)
         .into_values()
         .filter(|members| members.len() > 1)
-        .map(|mut members| {
-            let inside: IndexSet<_> = members.iter().collect();
-            let mut written: Vec<_> = graph
-                .edges
-                .iter()
-                .filter(|edge| inside.contains(&edge.from) && inside.contains(&edge.to))
-                .map(|edge| {
-                    let mut text = edge.from.clone();
-                    text.push_str(".");
-                    text.extend(&edge.binding);
-                    text.push_str(" -> ");
-                    text.extend(&edge.to);
-                    text
-                })
-                .collect();
-            written.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-            members.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-            (join(members, ", "), join(written, "; "))
-        })
-        .collect();
-    rows.sort_by(|(a, _), (b, _)| locale_compare_units(a.units(), b.units()));
-    rows.into_iter()
-        .map(|(from, specifier)| BoundaryViolation::WorkerCallCycle {
+    {
+        let inside: IndexSet<_> = members.iter().collect();
+        let edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|edge| inside.contains(&edge.from) && inside.contains(&edge.to))
+            .collect();
+        let mut presentation = members
+            .iter()
+            .map(|name| CollationInput::from_utf16(name.units()).map(|key| (name, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        presentation.sort_by(|a, b| collation.compare(&a.1, &b.1));
+        let from = join(presentation.iter().map(|(name, _)| *name), ", ");
+        let mut written = edges
+            .into_iter()
+            .map(|edge| {
+                let mut text = edge.from.clone();
+                text.push_str(".");
+                text.extend(&edge.binding);
+                text.push_str(" -> ");
+                text.extend(&edge.to);
+                CollationInput::from_utf16(text.units()).map(|key| (text, key))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        written.sort_by(|a, b| collation.compare(&a.1, &b.1));
+        let specifier = join(written.iter().map(|(text, _)| text), "; ");
+        let key = CollationInput::from_utf16(from.units())?;
+        rows.push((from, specifier, key));
+    }
+    rows.sort_by(|a, b| collation.compare(&a.2, &b.2));
+    Ok(rows
+        .into_iter()
+        .map(|(from, specifier, _)| BoundaryViolation::WorkerCallCycle {
             from,
             to: (),
             specifier,
             type_only: False,
         })
-        .collect()
+        .collect())
 }

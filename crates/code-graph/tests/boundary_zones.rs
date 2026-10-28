@@ -23,7 +23,11 @@ fn a_pure_zone_reports_each_global_once_and_the_test_role_keeps_original_crossin
         "console.log('x'); console.warn('x'); fetch('url');",
     )
     .unwrap();
-    let uses = detect_impure_uses(&syntax);
+    let uses = detect_impure_uses(
+        &syntax,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let mut rules = BoundaryRules::default();
     rules.features.insert(scope.clone(), vec!["orders".into()]);
     let zoning = scope_zoning(&rules, &scope).unwrap();

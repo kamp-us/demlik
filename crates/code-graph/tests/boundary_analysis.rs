@@ -120,8 +120,14 @@ fn a_loaded_worker_combines_rules_and_shares_its_write_fact_across_crossings() {
     .unwrap() else {
         panic!("fixture libraries refused");
     };
-    let DeployablesRead::Read(deployables) = read_deployables(&rules, &repo.0, None, &catalog)
-    else {
+    let DeployablesRead::Read(deployables) = read_deployables(
+        &rules,
+        &repo.0,
+        None,
+        &catalog,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("fixture deployables refused");
     };
     let ShapeRead::Read(shape) = read_shape(&rules, &catalog).unwrap() else {
@@ -151,7 +157,11 @@ fn a_loaded_worker_combines_rules_and_shares_its_write_fact_across_crossings() {
             let file: JsString = unit.file.as_str().into();
             let shape = shape_facts_of(&shape, &scope, &file, &unit.syntax);
             let imported = imported_names_for(&libraries, &scope, &unit.syntax);
-            let uses = detect_impure_uses(&unit.syntax);
+            let uses = detect_impure_uses(
+                &unit.syntax,
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
             let runtime = runtime_specifiers(&unit.syntax);
             let sites = binding_sites_of(&deployables, &in_scope(&scope, &file), &unit.syntax);
             (file, shape, imported, uses, runtime, sites)
@@ -181,6 +191,7 @@ fn a_loaded_worker_combines_rules_and_shares_its_write_fact_across_crossings() {
             deployables: &deployables,
             shape: &shape,
         },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(result.report.files_scanned, 10.0);

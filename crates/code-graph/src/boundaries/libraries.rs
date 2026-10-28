@@ -6,8 +6,8 @@ use crate::{
     },
     layers::resolve_target::{WorkspacePackages, match_package, workspace_packages_request},
     project::{
-        Collation, CollationError, RepoListing, discover_package_roots, join_path_text, list_repo,
-        locale_compare, normalize_path_text,
+        Collation, CollationError, CollationInput, RepoListing, discover_package_roots,
+        join_path_text, list_repo, normalize_path_text,
     },
     text::{JsString, object_keys},
 };
@@ -282,15 +282,19 @@ fn root_of<'a>(libraries: &'a Libraries<'_>, dir: &str) -> Option<&'a JsString> 
     }
     nearest
 }
-pub fn undeclared_under(libraries: &Libraries<'_>, root: &JsString) -> Vec<String> {
+pub fn undeclared_under(
+    libraries: &Libraries<'_>,
+    root: &JsString,
+    collation: &Collation,
+) -> Result<Vec<String>, CollationError> {
     let mut dirs = libraries
         .package_dirs
         .iter()
         .filter(|dir| {
             !libraries.type_of_dir.contains_key(*dir) && root_of(libraries, dir) == Some(root)
         })
-        .cloned()
-        .collect::<Vec<_>>();
-    dirs.sort_by(|a, b| locale_compare(a, b));
-    dirs
+        .map(|dir| CollationInput::from_text(dir).map(|key| (dir.clone(), key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    dirs.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(dirs.into_iter().map(|(dir, _)| dir).collect())
 }

@@ -5,7 +5,7 @@ use crate::{
         cross_runtime::owner_of_text,
         wrangler_config::{BindingCatalog, ServiceManifest},
     },
-    project::{RepoListing, discover_package_roots, list_repo},
+    project::{Collation, CollationError, RepoListing, discover_package_roots, list_repo},
     schema::{BindingKind, DataBindingKind},
     text::JsString,
 };
@@ -146,9 +146,19 @@ pub fn read_deployables<'a>(
     repo_root: &Path,
     listing: Option<&RepoListing>,
     catalog: &'a BindingCatalog,
-) -> DeployablesRead<'a> {
+    collation: &Collation,
+) -> Result<DeployablesRead<'a>, CollationError> {
+    read_deployables_request(rules, repo_root, listing, catalog, &mut || Ok(collation))
+}
+pub(crate) fn read_deployables_request<'a, 'c>(
+    rules: &BoundaryRules,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+    catalog: &'a BindingCatalog,
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<DeployablesRead<'a>, CollationError> {
     if !declares_deployables(rules) {
-        return DeployablesRead::Read(Box::new(Deployables::empty()));
+        return Ok(DeployablesRead::Read(Box::new(Deployables::empty())));
     }
     let owned;
     let files = match listing {
@@ -170,8 +180,9 @@ pub fn read_deployables<'a>(
             .map(|kind| format!("\"{}\"", kind_name(*kind)))
             .collect::<Vec<_>>()
             .join(" and ");
-        return DeployablesRead::Refused {message:format!("a wrangler config cannot be parsed: {}. With {names} listed, a worker whose config is not read is never judged: fix the file (JSON with comments, or TOML) and run again.",catalog.unparsed_configs.join(", ")).into()};
+        return Ok(DeployablesRead::Refused {message:format!("a wrangler config cannot be parsed: {}. With {names} listed, a worker whose config is not read is never judged: fix the file (JSON with comments, or TOML) and run again.",catalog.unparsed_configs.join(", ")).into()});
     }
+    let graph = worker_graph(catalog, request()?)?;
     let workspaces = if kinds.contains(&DeployableKind::RelativeImportCrossesWorkspace) {
         (repo_root
             .join("package.json")
@@ -188,13 +199,13 @@ pub fn read_deployables<'a>(
     } else {
         IndexSet::new()
     };
-    DeployablesRead::Read(Box::new(Deployables {
+    Ok(DeployablesRead::Read(Box::new(Deployables {
         kinds,
         catalog,
-        graph: worker_graph(catalog),
+        graph,
         workspaces,
         judged: catalog.manifests.iter().map(judged_bindings).collect(),
-    }))
+    })))
 }
 pub fn worker_of<'a>(
     deployables: &'a Deployables<'_>,
@@ -289,24 +300,135 @@ pub struct DeployableFile<'a> {
     pub is_main: bool,
     pub owners: BindingOwners<'a>,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum DeployableJudgmentError {
     InheritedOwners,
     NullOwners,
     RestrictedFunctionProperty,
+    Collation(CollationError),
 }
 impl DeployableJudgmentError {
-    pub fn message(self) -> &'static str {
-        match self {
-            Self::InheritedOwners => "owners.includes is not a function",
-            Self::NullOwners => "Cannot read properties of null (reading 'includes')",
-            Self::RestrictedFunctionProperty => crate::text::RESTRICTED_FUNCTION_PROPERTY_MESSAGE,
+    pub fn name(&self) -> &'static str {
+        if matches!(self, Self::Collation(_)) {
+            "Error"
+        } else {
+            "TypeError"
         }
+    }
+    pub fn message(&self) -> JsString {
+        match self {
+            Self::InheritedOwners => "owners.includes is not a function".into(),
+            Self::NullOwners => "Cannot read properties of null (reading 'includes')".into(),
+            Self::RestrictedFunctionProperty => {
+                crate::text::RESTRICTED_FUNCTION_PROPERTY_MESSAGE.into()
+            }
+            Self::Collation(error) => error.to_string().into(),
+        }
+    }
+}
+impl From<CollationError> for DeployableJudgmentError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
     }
 }
 impl std::fmt::Display for DeployableJudgmentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.message())
+        match self {
+            Self::Collation(error) => error.fmt(f),
+            _ => f.write_str(&self.message().to_lossy()),
+        }
     }
 }
-impl std::error::Error for DeployableJudgmentError {}
+impl std::error::Error for DeployableJudgmentError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Collation(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod collation_admission_tests {
+    use super::*;
+    use std::cell::Cell;
+    #[test]
+    fn deployable_admission_defers_initializer_until_configuration_is_usable() {
+        let requests = Cell::new(0);
+        let mut request = || {
+            requests.set(requests.get() + 1);
+            Err(CollationError::InputTooLong {
+                units: 17,
+                maximum: 16,
+            })
+        };
+        let root = Path::new("unused-deployable-admission-root");
+        let listing = RepoListing {
+            root: root.to_path_buf(),
+            files: Vec::new(),
+        };
+        let disabled = BoundaryRules::default();
+        assert!(matches!(
+            read_deployables_request(&disabled, root, Some(&listing), &NO_CATALOG, &mut request),
+            Ok(DeployablesRead::Read(_))
+        ));
+        assert_eq!(
+            requests.get(),
+            0,
+            "an undeclared family must not request collation"
+        );
+        let mut enabled = BoundaryRules::default();
+        enabled
+            .across_deployables
+            .push(DeployableKind::WorkerCallCycle);
+        let unread = BindingCatalog {
+            manifests: Vec::new(),
+            unparsed_configs: vec!["broken/wrangler.json".into()],
+        };
+        assert!(matches!(
+            read_deployables_request(&enabled, root, Some(&listing), &unread, &mut request),
+            Ok(DeployablesRead::Refused { .. })
+        ));
+        assert_eq!(
+            requests.get(),
+            0,
+            "a configuration refusal must precede collation"
+        );
+        assert!(matches!(
+            read_deployables_request(&enabled, root, Some(&listing), &NO_CATALOG, &mut request),
+            Err(CollationError::InputTooLong {
+                units: 17,
+                maximum: 16
+            })
+        ));
+        assert_eq!(
+            requests.get(),
+            1,
+            "a usable declaration reaches the original initializer cause"
+        );
+    }
+    #[test]
+    fn deployable_collation_errors_keep_the_original_typed_source() {
+        use std::error::Error;
+        let error = DeployableJudgmentError::from(CollationError::InputTooLong {
+            units: 17,
+            maximum: 16,
+        });
+        assert_eq!(error.name(), "Error");
+        let DeployableJudgmentError::Collation(original) = &error else {
+            panic!("typed cause")
+        };
+        assert!(std::ptr::eq(
+            error
+                .source()
+                .unwrap()
+                .downcast_ref::<CollationError>()
+                .unwrap(),
+            original
+        ));
+        let old = DeployableJudgmentError::InheritedOwners;
+        assert_eq!(old.name(), "TypeError");
+        assert_eq!(old.message(), "owners.includes is not a function");
+        assert!(old.source().is_none());
+    }
+}

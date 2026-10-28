@@ -28,7 +28,7 @@ use super::{
     },
 };
 use crate::{
-    project::{locale_compare, locale_compare_units},
+    project::{Collation, CollationError, CollationInput},
     syntax::imports::{ImportEdge, ImportedNames},
     text::JsString,
 };
@@ -78,6 +78,7 @@ pub enum AnalysisError {
     Zoning(ZoningError),
     Library(LibraryRuleError),
     Deployable(DeployableJudgmentError),
+    Collation(CollationError),
 }
 impl std::fmt::Display for AnalysisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -85,10 +86,25 @@ impl std::fmt::Display for AnalysisError {
             Self::Zoning(error) => error.fmt(f),
             Self::Library(error) => error.fmt(f),
             Self::Deployable(error) => error.fmt(f),
+            Self::Collation(error) => error.fmt(f),
         }
     }
 }
-impl std::error::Error for AnalysisError {}
+impl std::error::Error for AnalysisError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Zoning(error) => error,
+            Self::Library(error) => error,
+            Self::Deployable(error) => error,
+            Self::Collation(error) => error,
+        })
+    }
+}
+impl From<CollationError> for AnalysisError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
 impl From<ZoningError> for AnalysisError {
     fn from(error: ZoningError) -> Self {
         Self::Zoning(error)
@@ -101,10 +117,14 @@ impl From<LibraryRuleError> for AnalysisError {
 }
 impl From<DeployableJudgmentError> for AnalysisError {
     fn from(error: DeployableJudgmentError) -> Self {
-        Self::Deployable(error)
+        match error {
+            DeployableJudgmentError::Collation(error) => Self::Collation(error),
+            error => Self::Deployable(error),
+        }
     }
 }
 struct ScopeContext<'a> {
+    collation: &'a Collation,
     scope: &'a JsString,
     owners: BindingOwners<'a>,
     inputs: ScopeInputs<'a>,
@@ -246,6 +266,7 @@ fn across_deployables(
             is_main: is_worker_main(deployables, &from),
             owners: ctx.owners,
         },
+        ctx.collation,
     )?;
     let sites = module
         .binding_sites
@@ -348,6 +369,7 @@ pub fn analyze_boundaries(
     modules: &[BoundaryModule<'_>],
     rules: &BoundaryRules,
     inputs: ScopeInputs<'_>,
+    collation: &Collation,
 ) -> Result<ScopeAnalysis, AnalysisError> {
     let zoning = scope_zoning(rules, scope)?;
     let read_modules: Vec<_> = modules
@@ -361,6 +383,7 @@ pub fn analyze_boundaries(
     let openings: Vec<_> = modules.iter().map(BoundaryModule::opening).collect();
     let reach = root_reach_of(&inputs.shape.roots, scope, &openings);
     let context = ScopeContext {
+        collation,
         scope,
         owners: binding_owners_of(rules, scope),
         inputs,
@@ -385,14 +408,30 @@ pub fn analyze_boundaries(
         unjudged += found.unjudged;
     }
     violations.extend(unknown_entries.into_values());
-    violations.extend(undeclared_libraries(inputs.libraries, scope));
+    violations.extend(undeclared_libraries(inputs.libraries, scope, collation)?);
+    let mut violations = violations
+        .into_iter()
+        .map(|row| {
+            let kind = CollationInput::from_text(row.kind().as_str())?;
+            let from = CollationInput::from_utf16(row.from_file().units())?;
+            let specifier = CollationInput::from_utf16(row.specifier().units())?;
+            Ok((row, kind, from, specifier))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     violations.sort_by(|a, b| {
-        locale_compare(a.kind().as_str(), b.kind().as_str())
-            .then_with(|| locale_compare_units(a.from_file().units(), b.from_file().units()))
-            .then_with(|| locale_compare_units(a.specifier().units(), b.specifier().units()))
+        collation
+            .compare(&a.1, &b.1)
+            .then_with(|| collation.compare(&a.2, &b.2))
+            .then_with(|| collation.compare(&a.3, &b.3))
     });
-    let mut features: Vec<_> = zoning.features.into_iter().collect();
-    features.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
+    let violations = violations.into_iter().map(|(row, _, _, _)| row).collect();
+    let mut features = zoning
+        .features
+        .into_iter()
+        .map(|name| CollationInput::from_utf16(name.units()).map(|key| (name, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    features.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    let features = features.into_iter().map(|(name, _)| name).collect();
     Ok(ScopeAnalysis {
         report: ScopeBoundaryReport {
             scope: scope.clone(),

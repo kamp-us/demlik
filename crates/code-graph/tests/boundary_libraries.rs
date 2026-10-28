@@ -61,11 +61,21 @@ fn libraries_share_workspace_owners_and_assign_an_unlisted_package_to_its_neares
         Some("packages/core")
     );
     assert_eq!(
-        undeclared_under(&libraries, &"packages/core".into()),
+        undeclared_under(
+            &libraries,
+            &"packages/core".into(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap(),
         vec!["packages/core/nested"]
     );
     assert_eq!(
-        undeclared_under(&libraries, &"packages".into()),
+        undeclared_under(
+            &libraries,
+            &"packages".into(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap(),
         vec!["packages/other"]
     );
     assert!(matches!(
@@ -137,7 +147,11 @@ fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census(
             target: None,
         })
         .collect();
-    let impure = detect_impure_uses(&syntax);
+    let impure = detect_impure_uses(
+        &syntax,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let runtime = runtime_specifiers(&syntax);
     let verdict = judge_libraries(
         &libraries,

@@ -3,7 +3,7 @@ use super::{
     rules::join,
 };
 use crate::{
-    project::locale_compare_units,
+    project::{Collation, CollationError, CollationInput},
     syntax::{
         bindings::pattern_names,
         file::{NodeRef, SyntaxFile},
@@ -297,7 +297,10 @@ fn key_name(property: NodeRef<'_>) -> Option<JsString> {
         string_literal(key)
     }
 }
-pub fn detect_impure_uses(syntax: &SyntaxFile) -> Vec<ImpureUse> {
+pub fn detect_impure_uses(
+    syntax: &SyntaxFile,
+    collation: &Collation,
+) -> Result<Vec<ImpureUse>, CollationError> {
     let mut scan = Scan {
         bound: bound_names(syntax),
         found: IndexMap::new(),
@@ -305,13 +308,20 @@ pub fn detect_impure_uses(syntax: &SyntaxFile) -> Vec<ImpureUse> {
     for child in code_children(syntax.root()) {
         scan.visit(child);
     }
-    let mut found: Vec<_> = scan.found.into_values().collect();
-    found.sort_by(|a, b| {
-        locale_compare_units(a.name.units(), b.name.units()).then_with(|| {
-            let a = join(&a.path.iter().collect::<Vec<_>>(), ".");
-            let b = join(&b.path.iter().collect::<Vec<_>>(), ".");
-            locale_compare_units(a.units(), b.units())
+    let mut found = scan
+        .found
+        .into_values()
+        .map(|usage| {
+            let name = CollationInput::from_utf16(usage.name.units())?;
+            let path = join(&usage.path.iter().collect::<Vec<_>>(), ".");
+            let path = CollationInput::from_utf16(path.units())?;
+            Ok((usage, name, path))
         })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    found.sort_by(|a, b| {
+        collation
+            .compare(&a.1, &b.1)
+            .then_with(|| collation.compare(&a.2, &b.2))
     });
-    found
+    Ok(found.into_iter().map(|(usage, _, _)| usage).collect())
 }
