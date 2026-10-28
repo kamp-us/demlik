@@ -287,7 +287,9 @@ export function baseCases() {
         { op: "boot", at: 10 },
       ],
       {},
-      `OPEN unsupported restored ${profile} profile; Source resumes it, native must return an observable refusal. Excluded from strict/nativeEvidence.`,
+      profile === "compacting"
+        ? `OPEN unsupported restored ${profile} profile; Source resumes it, native must return an observable refusal. Excluded from strict/nativeEvidence.`
+        : undefined,
     );
   return out;
 }
