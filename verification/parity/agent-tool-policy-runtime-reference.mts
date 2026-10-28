@@ -19,6 +19,7 @@ import { subscribeWith } from "../../packages/tea/src/internal/resilience/deadli
 import { fileStore } from "../../packages/tea/src/node/index.ts";
 import { run as runPromise } from "../../packages/tea/src/promise/index.ts";
 import { Outcome } from "../../packages/tea/src/pure/core.ts";
+import { refuse } from "../../packages/tea/src/runtime-types.ts";
 
 type Purpose = "collect" | "check" | "summarize";
 type Outputs = Record<Purpose, AgentTurn>;
@@ -215,10 +216,12 @@ async function execute(input: any) {
     store = fileStore<State>(path.join(input.path, "state.json"), (raw) => {
       if (raw == null) {
         loaded = raw;
-        return raw;
+        return null;
       }
-      loaded = stateBoundary.parse(raw);
-      return loaded;
+      const parsed = stateBoundary.safeParse(raw);
+      if (!parsed.success) return refuse(parsed.error.message);
+      loaded = parsed.data;
+      return parsed.data;
     });
   let getState: any,
     dispatch: any,
@@ -249,7 +252,9 @@ async function execute(input: any) {
             resilient_run: (cmd: any) =>
               Effect.promise(() =>
                 wired.interpret.resilient_run(cmd, {
-                  emit: () => {},
+                  emit: () => {
+                    throw new Error("unexpected emission");
+                  },
                   ok: Outcome.ok,
                   err: Outcome.err,
                 }),
