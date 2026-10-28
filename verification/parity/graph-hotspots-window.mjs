@@ -46,7 +46,7 @@ function execute(name, command, args, input, env) {
   });
   const prefix = path.join(folder, name);
   const files = {
-    input: `${prefix}.request`,
+    input: `${prefix}.input`,
     stdout: `${prefix}.stdout`,
     stderr: `${prefix}.stderr`,
   };
