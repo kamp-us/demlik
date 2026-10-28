@@ -15934,5 +15934,272 @@
       "symbols": ["demlik_tea::jev::reply::is_transient_ask_err"]
     },
     "cases": ["jev.protocol.tag-guards"]
+  },
+  "@demlik/tea:./jev#createJevAsk": {
+    "signature": "e02f894f9766ab5d54b850ac6345abe6302ae5f49eff1d3b5bdf63bf2ca4a9ac",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::new"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged.",
+      "Only the actual JevAsk::new trace is bound. init()/with_rng are called but untraced; the () => number member is caller-supplied RNG, not a library method."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:b0e49f23dd736ebf8066d8e75f01399d84a5ecb3d9b69d35970e3c3c88982e86": {
+    "signature": "b0e49f23dd736ebf8066d8e75f01399d84a5ecb3d9b69d35970e3c3c88982e86",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::attempt"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:4240d3209c01bbc096628bc55247cd7f3e0a7802aea69167f920cc49988b87df": {
+    "signature": "4240d3209c01bbc096628bc55247cd7f3e0a7802aea69167f920cc49988b87df",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::succeed"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:c7a8291655027451761d2eefe181810bdab44db0a5ba238424429c2bbed58c57": {
+    "signature": "c7a8291655027451761d2eefe181810bdab44db0a5ba238424429c2bbed58c57",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::fail"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:42cdc0082370aa30ced9799fe397dd3f99bef9bd1bcf24a7745499ac334b81a3": {
+    "signature": "42cdc0082370aa30ced9799fe397dd3f99bef9bd1bcf24a7745499ac334b81a3",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::on_timer"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:c97e8a8e59ff23208b4426e38ca93d8764d1d2d7653485cf2a292db7ca7473da": {
+    "signature": "c97e8a8e59ff23208b4426e38ca93d8764d1d2d7653485cf2a292db7ca7473da",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::deadlines"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:5ae75c0fdb9a7528316bc1d5549115dfe3bcc442c617e82f0417539a8e53d979": {
+    "signature": "5ae75c0fdb9a7528316bc1d5549115dfe3bcc442c617e82f0417539a8e53d979",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::timer"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:1f9e84a5918a8047bca8e8f2d55a427033f94f959187a8ce0d81948f9fdb45fa": {
+    "signature": "1f9e84a5918a8047bca8e8f2d55a427033f94f959187a8ce0d81948f9fdb45fa",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::decode"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.named",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.named"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#createJevAsk/member:published:083b800f2e252837563ddc3eafba743c0c76f11e7195cab759dade12ff23ade9": {
+    "signature": "083b800f2e252837563ddc3eafba743c0c76f11e7195cab759dade12ff23ade9",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::offline"]
+    },
+    "cases": ["jev-ask.promise.offline", "jev-ask.effect.offline"],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged."
+    ]
+  },
+  "@demlik/tea:./jev#jevCallThrew": {
+    "signature": "022c621081972580d3c722c3e77fb3d84dc251094a5be23cc3af962df510d19e",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::rejected"]
+    },
+    "cases": ["jev-ask.promise.thrownRetry", "jev-ask.effect.thrownRetry"],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged.",
+      "Only an actual caught Source Error with message socket invoice, versus explicit native ErrorView::ErrorMessage, is measured. Arbitrary thrown values/Error subclasses/getters/coercion failures and native panic/unwinding are not proved. Source intentionally stores description, not original thrown-cause identity."
+    ]
+  },
+  "@demlik/tea:./jev#jevAskErrOf": {
+    "signature": "06ff70cde54ef8f442c017dc10b9ff51b9a3a26ee98e61d7e4774d504be7fe18",
+    "rust": {
+      "file": "crates/tea/src/jev/ask.rs",
+      "symbols": ["demlik_tea::jev::ask::JevAsk::err_of"]
+    },
+    "cases": [
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.promise.offline",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.effect.offline"
+    ],
+    "knownGaps": [
+      "Bounded local online/no-configured-fallback profile only; configured fallback/exhaustion-fallback and classify batching remain OPEN.",
+      "Native checked question/answer maps do not preserve TypeScript literal-key mapped result typing.",
+      "Only the measured valid typed Jev requests/carriers are covered; arbitrary JS prototypes/getters/own __proto__/non-wire values, raw input identity/reflection and foreign/unclassified wrapper coercion remain OPEN.",
+      "In-process state and canonical outgoing wire are covered; complete Jev request/result/error/state Deserialize and cold full-state persistence remain OPEN.",
+      "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged.",
+      "Only actual engine-minted declared JevRejected carriers with known typed Jev errors are covered: native err_of takes the whole typed Settled receipt and returns the original Rc. Source unknown/raw errors, absent/inherited jev, getters, arbitrary inner tags, outer-tag-independent foreign carriers and describeError fallback are NOT implemented by this reader."
+    ]
   }
 }

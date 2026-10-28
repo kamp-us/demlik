@@ -1,0 +1,39 @@
+{
+  "status": "11 additive partial public Jev bindings registered from actual Source and compiled views",
+  "proposal": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/jev-ask-map/bindings-proposal.json",
+  "proposalSha256": "02fa9394bd392019e3aedfe232e7aae7b11c07d10d474508a6d042a887642d6e",
+  "sourceInventory": "accepted8a756e13 retained inventory, frozen75deSource",
+  "sourceInventorySha256": "f35f8daca5d75589e469789cc0341b3b223403b95e7cc0a9740b5ef5e1385ab4",
+  "before": 1748,
+  "after": 1759,
+  "direct": 844,
+  "canonicalReferences": 915,
+  "allOldMappingsAndReferencesUnchanged": true,
+  "newCasesCredited": 0,
+  "constructorBoundRuntimeCases": 12,
+  "wireCasesNotUsedForFactory": 6,
+  "gapReasonAccounting": {
+    "previousReasons": 1907,
+    "removedGenericMissingBindingReasons": 11,
+    "newExplicitKnownGapReasons": 58,
+    "currentReasons": 1954,
+    "unboundCapabilities": 1686,
+    "notARegressionOrCompletionPercentage": true
+  },
+  "validation": {
+    "actualSignatureAndDeclarations": true,
+    "everyBoundSymbolObservedInEverySelectedCase": true,
+    "nativeCallsFromSavedActual18": true,
+    "unchangedResolveContractAndEvidenceGaps": true,
+    "NodeSavedCheck": 0,
+    "Biome": 0,
+    "SourceNativeCargoExecutions": 0
+  },
+  "open": [
+    "untraced init/with_rng/caller RNG are not bound",
+    "Standalone CmdDef/offline helper/constant/lift/types/batching remain unbound",
+    "Existing inherited Core aliases do not prove a parent export is implemented",
+    "Configured fallback, literal-key typing, rawforeign wrappers, fullcodecs and broaderstamp profiles retain per-binding known gaps",
+    "Latestacceptedfullsuite remains16315;18 newJev views await combinedrun"
+  ]
+}
