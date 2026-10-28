@@ -1,4 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["tool-router-reference.mts", "tool-router-empty-reference.mts"]
+  "include": [
+    "tool-router-reference.mts",
+    "tool-router-empty-reference.mts",
+    "tool-router-same-name-reference.mts"
+  ]
 }

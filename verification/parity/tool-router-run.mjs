@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toolRouterCases } from "./tool-router-cases.mjs";
 import { toolRouterEmptyCases } from "./tool-router-empty-cases.mjs";
+import { toolRouterSameNameCases } from "./tool-router-same-name-cases.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   require = createRequire(import.meta.url),
@@ -17,8 +18,13 @@ export function toolRouterParity(options) {
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
   const binary = path.resolve(options.binary),
     output = path.resolve(options.output),
-    cases = [...toolRouterCases, ...toolRouterEmptyCases];
-  assert.equal(new Set(cases.map((c) => c.id)).size, 37);
+    cases = [
+      ...toolRouterCases,
+      ...toolRouterEmptyCases,
+      ...toolRouterSameNameCases,
+    ];
+  assert.equal(new Set(cases.map((c) => c.id)).size, 39);
+  const binaryHash = sha(binary);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const processRecords = [];
   const sourceFiles = [
@@ -101,8 +107,21 @@ export function toolRouterParity(options) {
       ],
       toolRouterEmptyCases,
     ),
+    ...run(
+      "source-same-name2",
+      process.execPath,
+      [
+        "--import",
+        require.resolve("tsx"),
+        path.join(
+          root,
+          "verification/parity/tool-router-same-name-reference.mts",
+        ),
+      ],
+      toolRouterSameNameCases,
+    ),
   ];
-  const native = run("native37", binary, [], cases),
+  const native = run("native39", binary, [], cases),
     failures = [],
     nativeEvidence = {};
   for (let i = 0; i < cases.length; i++) {
@@ -128,6 +147,11 @@ export function toolRouterParity(options) {
       });
     }
   }
+  assert.equal(
+    sha(binary),
+    binaryHash,
+    "native executable changed during comparison",
+  );
   const byId = (id) => source.find((r) => r.id === id).view;
   assert.equal(
     byId("tool-router.edge.read-transform").command.args.invoice,
@@ -162,9 +186,9 @@ export function toolRouterParity(options) {
     engine: { node: process.version, v8: process.versions.v8 },
     sourceHashes,
     binary,
-    binaryHash: sha(binary),
-    cases: 37,
-    strictCases: 37,
+    binaryHash,
+    cases: 39,
+    strictCases: 39,
     qualifiedCases: [],
     qualifiedNativeEvidence: {},
     failures,
@@ -176,6 +200,12 @@ export function toolRouterParity(options) {
       reference: source[i],
       native: native[i],
     })),
+    sourceOnlyObservations: {
+      ids: toolRouterSameNameCases.map((test) => test.id),
+      profile:
+        "Top-level JS command object identity is retained in raw Source frames; native ownership checks original args/error handles.",
+      nativeCredit: 0,
+    },
     newNativeOnlyCredit: 0,
   };
   fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);

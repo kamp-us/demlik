@@ -18,8 +18,8 @@ macro_rules! tool_router {
                 $first($crate::agent::tool::ToolCommand<$first>),$($tool($crate::agent::tool::ToolCommand<$tool>),)*
                 Rejected($crate::command::Cmd<$crate::agent::tool::RejectedSpec>),
             }
-            pub enum Completions<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> {
-                $first($crate::command::Completion<$first>),$($tool($crate::command::Completion<$tool>),)*
+            pub enum Completions<$first:ToolDefinition,$($tool:ToolDefinition),*> {
+                $first($crate::agent::tool::ToolCompletion<$first>),$($tool($crate::agent::tool::ToolCompletion<$tool>),)*
                 Rejected($crate::command::Completion<$crate::agent::tool::RejectedSpec>),
             }
             pub enum Messages<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> {
@@ -42,7 +42,7 @@ macro_rules! tool_router {
             }
             impl<$first:ToolDefinition,$($tool:ToolDefinition),*> $crate::command::CommandFamily for Commands<$first,$($tool),*> {
                 type Msg=Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>;
-                type Completion=Completions<SignatureOf<$first>,$(SignatureOf<$tool>),*>;
+                type Completion=Completions<$first,$($tool),*>;
                 fn is_defined(&self)->bool{true}
                 fn engine_stamp(m:&Self::Msg)->Option<&$crate::command::EngineStamp>{match m {Messages::$first(m)=>m.engine_stamp(),$(Messages::$tool(m)=>m.engine_stamp(),)*Messages::Rejected(m)=>m.engine_stamp()}}
                 fn settle(self,c:Self::Completion,at:f64)->Result<Vec<Self::Msg>,$crate::command::CommandContractError>{match(self,c){(Self::$first(cmd),Completions::$first(out))=>Ok(cmd.settle(out,at)?.into_iter().map(Messages::$first).collect()),$((Self::$tool(cmd),Completions::$tool(out))=>Ok(cmd.settle(out,at)?.into_iter().map(Messages::$tool).collect()),)*(Self::Rejected(cmd),Completions::Rejected(out))=>Ok(cmd.settle(out,at)?.into_iter().map(Messages::Rejected).collect()),(cmd,_)=>Err($crate::command::CommandContractError::mismatched(cmd.tag(),"wrong tool completion family"))}}
@@ -52,8 +52,8 @@ macro_rules! tool_router {
             where $first::Args:$crate::agent::tool::__serde::Serialize,$($tool::Args:$crate::agent::tool::__serde::Serialize),* {
                 fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
             }
-            impl<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> $crate::agent::tool::__serde::Serialize for Completions<$first,$($tool),*>
-            where $first::RawOutput:$crate::agent::tool::__serde::Serialize,$first::Error:$crate::agent::tool::__serde::Serialize,$($tool::RawOutput:$crate::agent::tool::__serde::Serialize,$tool::Error:$crate::agent::tool::__serde::Serialize),* {
+            impl<$first:ToolDefinition,$($tool:ToolDefinition),*> $crate::agent::tool::__serde::Serialize for Completions<$first,$($tool),*>
+            where $first::RawResult:$crate::agent::tool::__serde::Serialize,$first::Error:$crate::agent::tool::__serde::Serialize,$($tool::RawResult:$crate::agent::tool::__serde::Serialize,$tool::Error:$crate::agent::tool::__serde::Serialize),* {
                 fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
             }
             impl<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> $crate::agent::tool::__serde::Serialize for Messages<$first,$($tool),*>
@@ -79,8 +79,8 @@ macro_rules! tool_router {
                     $(if call.name.as_utf8()==Some(self.$field.name()){return Ok(match $crate::agent::tool::reject_route(&self.$field,call)?{Ok(c)=>Commands::$tool(c),Err(c)=>Commands::Rejected(c)})})*
                     Ok(Commands::Rejected($crate::agent::tool::rejected(call.call_id.clone(),$crate::agent::tool::ToolRejection::UnknownTool{name:call.name.clone()})))
                 }
-                pub async fn interpret(&self,cmd:&Commands<$first,$($tool),*>,ctx:$crate::agent::tool::ToolContext<'_,$first::Host>)->Result<Completions<SignatureOf<$first>,$(SignatureOf<$tool>),*>,$crate::agent::tool::ToolError>{
-                    match cmd {Commands::$first(c)=>{if c.tag()!=self.$first_field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$first_field.name()).into())}Ok(Completions::$first(self.$first_field.handle(&c.cmd().input().args,ctx).await?))},$(Commands::$tool(c)=>{if c.tag()!=self.$field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$field.name()).into())}Ok(Completions::$tool(self.$field.handle(&c.cmd().input().args,ctx).await?))},)*Commands::Rejected(c)=>{if c.tag()!=$crate::agent::tool::REJECTED_TYPE{return Err($crate::command::CommandContractError::mismatched(c.tag(),$crate::agent::tool::REJECTED_TYPE).into())}Ok(Completions::Rejected(Some($crate::command::Outcome::err(c.input().error.clone()))))}}
+                pub async fn interpret(&self,cmd:&Commands<$first,$($tool),*>,ctx:$crate::agent::tool::ToolContext<'_,$first::Host>)->Result<Completions<$first,$($tool),*>,$crate::agent::tool::ToolError>{
+                    match cmd {Commands::$first(c)=>{if c.tag()!=self.$first_field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$first_field.name()).into())}Ok(Completions::$first($crate::agent::tool::ToolCompletion::new(std::rc::Rc::clone(&self.$first_field),self.$first_field.handle(&c.cmd().input().args,ctx).await?)))},$(Commands::$tool(c)=>{if c.tag()!=self.$field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$field.name()).into())}Ok(Completions::$tool($crate::agent::tool::ToolCompletion::new(std::rc::Rc::clone(&self.$field),self.$field.handle(&c.cmd().input().args,ctx).await?)))},)*Commands::Rejected(c)=>{if c.tag()!=$crate::agent::tool::REJECTED_TYPE{return Err($crate::command::CommandContractError::mismatched(c.tag(),$crate::agent::tool::REJECTED_TYPE).into())}Ok(Completions::Rejected(Some($crate::command::Outcome::err(c.input().error.clone()))))}}
                 }
                 pub fn resilience_of(&self,call:&$crate::agent::types::ToolCall<$first::RawArgs>)->Option<&$crate::agent::tool_resilience::ToolResilience>{if call.name.as_utf8()==Some(self.$first_field.name()){return self.$first_field.resilience()}$(if call.name.as_utf8()==Some(self.$field.name()){return self.$field.resilience()})*None}
                 pub fn outcome_of(&self,msg:&Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>)->Result<Option<$crate::agent::tool::ToolSettlement<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>>,$crate::command::CommandContractError>{

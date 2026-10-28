@@ -1,4 +1,5 @@
 //! Invoice fixture over the public tool declaration, router, and real actor.
+use demlik_tea::agent::tool::ToolDefinition;
 use demlik_tea::{
     Machine, PlainData as D, Step, Sub, Tagged,
     agent::{
@@ -25,6 +26,7 @@ use std::{
 };
 demlik_tea::tool_router! { pub mod invoices { Read(read), Check(check) } }
 demlik_tea::tool_router! {mod empty_invoices {}}
+demlik_tea::tool_router! {mod same_invoices {Only(only)}}
 macro_rules! observe {($f:path $(,$arg:expr)* $(,)?)=>{{let v=$f($($arg),*);CALLS.with(|c|c.borrow_mut().push(stringify!($f)));v}};}
 thread_local! {static CALLS:RefCell<Vec<&'static str>>=const{RefCell::new(Vec::new())};}
 #[derive(Deserialize)]
@@ -386,6 +388,9 @@ fn fail(phase: &str, error: D, captured: &D, f: &Fixture) -> D {
     D::Object(fields)
 }
 async fn execute(input: Input) -> D {
+    if input.mode == "same-name" {
+        return same_name_view(&input).await;
+    }
     if input.mode == "empty" {
         return empty_view(&input).await;
     }
@@ -847,6 +852,176 @@ async fn empty_view(input: &Input) -> D {
     let state = live.done().await.unwrap();
     live.stop().await;
     obj([("defs", defs), ("state", wire(state.as_ref()))])
+}
+struct SameParser {
+    owner: &'static str,
+    output: bool,
+    trace: Rc<RefCell<Vec<D>>>,
+}
+impl Schema for SameParser {
+    type Raw = Rc<D>;
+    type Output = Rc<D>;
+    type Error = SchemaError;
+    fn parse(&self, raw: Rc<D>) -> Result<Rc<D>, CallValue<SchemaError>> {
+        self.trace.borrow_mut().push(text(format!(
+            "{}:{}",
+            if self.output { "output" } else { "input" },
+            self.owner
+        )));
+        if self.output {
+            let total = field(&raw, "total").and_then(number).unwrap();
+            Ok(Rc::new(obj([
+                (
+                    "total",
+                    D::Number(total + if self.owner == "B" { 100.0 } else { 1.0 }),
+                ),
+                ("parser", text(self.owner)),
+            ])))
+        } else {
+            Ok(Rc::new(obj([(
+                "invoice",
+                text(format!(
+                    "{}:{}",
+                    self.owner,
+                    field(&raw, "invoice").and_then(string).unwrap()
+                )),
+            )])))
+        }
+    }
+}
+struct SameHost {
+    error: bool,
+}
+type SameDef =
+    tool::ToolDef<'static, D, D, D, SameParser, SameParser, Declared, Cause, SameHost, Infallible>;
+fn same_def(owner: &'static str, trace: Rc<RefCell<Vec<D>>>, error: Rc<D>) -> Rc<SameDef> {
+    let handler_trace = Rc::clone(&trace);
+    observe!(
+        demlik_tea::agent::tool::tool,
+        "same_invoice",
+        ToolSpec::new(
+            Rc::new(SameParser {
+                owner,
+                output: false,
+                trace: Rc::clone(&trace)
+            }),
+            Rc::new(SameParser {
+                owner,
+                output: true,
+                trace
+            }),
+            ErrorFamily::new(
+                [if owner == "B" { "b_only" } else { "a_only" }],
+                |e: &Declared| Ok(e.0.as_ref().clone())
+            )
+        )
+        .description(owner)
+        .raised::<Cause>(),
+        move |args: &Rc<D>, ctx: ToolContext<'_, SameHost>| {
+            let trace = Rc::clone(&handler_trace);
+            let error = Rc::clone(&error);
+            Box::pin(async move {
+                trace.borrow_mut().push(text(format!(
+                    "handler:{owner}:{}",
+                    field(args, "invoice").and_then(string).unwrap()
+                )));
+                if ctx.host.error {
+                    Ok(Outcome::err(Rc::new(Declared(error))))
+                } else {
+                    Ok(Outcome::ok(Rc::new(obj([
+                        ("total", D::Number(if owner == "B" { 20.0 } else { 1.0 })),
+                        ("parser", text(format!("raw-{owner}"))),
+                    ]))))
+                }
+            })
+        }
+    )
+    .unwrap()
+}
+async fn same_name_view(input: &Input) -> D {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let error = Rc::new(obj([("_tag", text("b_only")), ("from", text("B"))]));
+    let a = observe!(
+        same_invoices::Router::new,
+        same_def("A", Rc::clone(&trace), Rc::clone(&error))
+    )
+    .unwrap();
+    let b = observe!(
+        same_invoices::Router::new,
+        same_def("B", Rc::clone(&trace), Rc::clone(&error))
+    )
+    .unwrap();
+    let command = observe!(
+        same_invoices::Router::tool_of,
+        &a,
+        &ToolCall {
+            call_id: "from-A".into(),
+            name: "same_invoice".into(),
+            args: Rc::new(obj([("invoice", text("inv-17"))]))
+        }
+    )
+    .unwrap();
+    let original_args = match &command {
+        same_invoices::Commands::Only(c) => Rc::clone(&c.cmd().input().args),
+        _ => panic!("rejected same-name"),
+    };
+    let command_wire = wire(&command);
+    let host = SameHost {
+        error: input.scenario.as_deref() == Some("error"),
+    };
+    let returned = observe!(
+        same_invoices::Router::interpret,
+        &b,
+        &command,
+        ToolContext::bare(&host)
+    )
+    .await
+    .unwrap();
+    let returned_wire = wire(&returned);
+    let messages = match observe!(
+        demlik_tea::command::CommandFamily::settle_in,
+        command,
+        returned,
+        &CommandEdge::new(|| 17.25)
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return obj([
+                ("command", command_wire),
+                ("returned", returned_wire),
+                ("phase", text("settle")),
+                ("error", details(&e.into())),
+                ("trace", arr(trace.borrow().clone())),
+            ]);
+        }
+    };
+    let message = &messages[0];
+    let (args_same, error_same) = match message {
+        same_invoices::Messages::Only(m) => (
+            Rc::ptr_eq(&m.cmd().input().args, &original_args),
+            match m.outcome() {
+                Settlement::Err(Failure::Declared(ToolFailure::Declared(e))) => {
+                    Some(Rc::ptr_eq(&e.0, &error))
+                }
+                _ => None,
+            },
+        ),
+        _ => panic!("rejected same-name"),
+    };
+    obj([
+        ("command", command_wire),
+        ("returned", returned_wire),
+        ("settled", wire(message)),
+        (
+            "outcome",
+            wire(&observe!(same_invoices::Router::outcome_of, &b, message).unwrap()),
+        ),
+        ("argsSame", D::Bool(args_same)),
+        ("errorSame", optional(error_same)),
+        ("tagsA", wire(&a.only().tags())),
+        ("tagsB", wire(&b.only().tags())),
+        ("trace", arr(trace.borrow().clone())),
+    ])
 }
 fn main() {
     let runner = tokio::runtime::Builder::new_current_thread()

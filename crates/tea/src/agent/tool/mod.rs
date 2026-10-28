@@ -515,6 +515,32 @@ impl<A, R, O, E: Tagged, X> CommandSpec for ToolSignature<A, R, O, E, X> {
         )]))
     }
 }
+/// The selected interpreter's immutable instance contract travels with its raw outcome.
+/// Serialization still writes only the ordinary Outcome record.
+pub struct ToolCompletion<T: ToolDefinition> {
+    chosen: Rc<T>,
+    outcome: command::Completion<SignatureOf<T>>,
+}
+impl<T: ToolDefinition> ToolCompletion<T> {
+    pub fn new(chosen: Rc<T>, outcome: command::Completion<SignatureOf<T>>) -> Self {
+        Self { chosen, outcome }
+    }
+    pub fn tool(&self) -> &Rc<T> {
+        &self.chosen
+    }
+    pub fn outcome(&self) -> &command::Completion<SignatureOf<T>> {
+        &self.outcome
+    }
+}
+impl<T: ToolDefinition> Serialize for ToolCompletion<T>
+where
+    T::RawResult: Serialize,
+    T::Error: Serialize,
+{
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.outcome.serialize(serializer)
+    }
+}
 pub struct ToolCommand<T: ToolDefinition> {
     command: Cmd<SignatureOf<T>>,
     tool: Rc<T>,
@@ -542,7 +568,7 @@ where
 }
 impl<T: ToolDefinition> CommandFamily for ToolCommand<T> {
     type Msg = Settled<SignatureOf<T>>;
-    type Completion = command::Completion<SignatureOf<T>>;
+    type Completion = ToolCompletion<T>;
     fn is_defined(&self) -> bool {
         true
     }
@@ -554,40 +580,50 @@ impl<T: ToolDefinition> CommandFamily for ToolCommand<T> {
         completion: Self::Completion,
         at: f64,
     ) -> Result<Vec<Self::Msg>, CommandContractError> {
+        let chosen = completion.chosen;
+        if chosen.name() != self.tag() {
+            return Err(CommandContractError::mismatched(self.tag(), chosen.name()));
+        }
+        let outcome = completion.outcome;
         self.command
             .with_contract_view(
-                |raw| match self.tool.parse_result(raw) {
+                |raw| match chosen.parse_result(raw) {
                     Ok(value) => Ok(Ok(value)),
                     Err(ToolError::Schema(error)) => Ok(Err(error)),
                     Err(error) => Err(CommandContractError::Outcome {
-                        cmd_type: self.tool.name().into(),
+                        cmd_type: chosen.name().into(),
                         detail: error.to_string(),
                     }),
                 },
-                self.tool.tags(),
-                |error| self.tool.failure_view(error),
+                chosen.tags(),
+                |error| chosen.failure_view(error),
             )
-            .settle(completion, at)
+            .settle(outcome, at)
     }
     fn settle_in(
         self,
         completion: Self::Completion,
         edge: &CommandEdge,
     ) -> Result<Vec<Self::Msg>, CommandContractError> {
+        let chosen = completion.chosen;
+        if chosen.name() != self.tag() {
+            return Err(CommandContractError::mismatched(self.tag(), chosen.name()));
+        }
+        let outcome = completion.outcome;
         self.command
             .with_contract_view(
-                |raw| match self.tool.parse_result(raw) {
+                |raw| match chosen.parse_result(raw) {
                     Ok(value) => Ok(Ok(value)),
                     Err(ToolError::Schema(error)) => Ok(Err(error)),
                     Err(error) => Err(CommandContractError::Outcome {
-                        cmd_type: self.tool.name().into(),
+                        cmd_type: chosen.name().into(),
                         detail: error.to_string(),
                     }),
                 },
-                self.tool.tags(),
-                |error| self.tool.failure_view(error),
+                chosen.tags(),
+                |error| chosen.failure_view(error),
             )
-            .settle_in(completion, edge)
+            .settle_in(outcome, edge)
     }
 }
 

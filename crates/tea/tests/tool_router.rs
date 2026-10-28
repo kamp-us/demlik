@@ -68,11 +68,14 @@ fn unsupported_absent_schema_carriers_refuse_without_malformed_settlement() {
         )
         .unwrap();
         assert_eq!(calls.get(), 0);
-        let error =
-            match command.settle_in(Some(Outcome::ok(Rc::new(()))), &CommandEdge::new(|| 1.0)) {
-                Err(e) => e,
-                Ok(_) => panic!("missing carrier accepted"),
-            };
+        let chosen = Rc::clone(command.tool());
+        let error = match command.settle_in(
+            tool::ToolCompletion::new(chosen, Some(Outcome::ok(Rc::new(())))),
+            &CommandEdge::new(|| 1.0),
+        ) {
+            Err(e) => e,
+            Ok(_) => panic!("missing carrier accepted"),
+        };
         let CommandContractError::Outcome { detail, .. } = error else {
             panic!("refusal reclassified")
         };
@@ -127,7 +130,10 @@ fn name_reader_and_engine_dispatch_guard_keep_separate_authorities() {
     assert!(guard.check(&forged).is_err());
     let messages = command
         .settle_in(
-            one::Completions::Only(Some(Outcome::ok(Rc::new(())))),
+            one::Completions::Only(tool::ToolCompletion::new(
+                Rc::clone(router.only()),
+                Some(Outcome::ok(Rc::new(()))),
+            )),
             &edge,
         )
         .unwrap();
@@ -177,13 +183,19 @@ fn missing_input_schema_carrier_is_an_observable_refusal() {
 struct Opaque {
     marker: Rc<Cell<u32>>,
 }
-struct OpaqueSchema;
+struct OpaqueSchema(bool);
 impl Schema for OpaqueSchema {
     type Raw = Rc<Opaque>;
     type Output = Rc<Opaque>;
     type Error = SchemaError;
     fn parse(&self, raw: Rc<Opaque>) -> Result<Rc<Opaque>, CallValue<SchemaError>> {
-        Ok(raw)
+        if self.0 {
+            Err(CallValue::value(SchemaError::Issues(vec![
+                demlik_tea::command::Issue::new("", "origin contract must not run"),
+            ])))
+        } else {
+            Ok(raw)
+        }
     }
 }
 struct OpaqueFailure(Rc<Opaque>);
@@ -234,8 +246,8 @@ async fn actual_profiles_keep_opaque_payloads_and_forward_the_original_runtime_e
                 let def = tool::tool(
                     "native_opaque",
                     ToolSpec::new(
-                        Rc::new(OpaqueSchema),
-                        Rc::new(OpaqueSchema),
+                        Rc::new(OpaqueSchema(false)),
+                        Rc::new(OpaqueSchema(false)),
                         ErrorFamily::new(["unavailable"], |_: &OpaqueFailure| {
                             Ok(PlainData::Object(
                                 [("_tag".into(), PlainData::String("unavailable".into()))]
@@ -262,8 +274,27 @@ async fn actual_profiles_keep_opaque_payloads_and_forward_the_original_runtime_e
                     },
                 )
                 .unwrap();
+                let origin_def = tool::tool(
+                    "native_opaque",
+                    ToolSpec::new(
+                        Rc::new(OpaqueSchema(false)),
+                        Rc::new(OpaqueSchema(true)),
+                        ErrorFamily::new(["a_only"], |_: &OpaqueFailure| {
+                            Ok(PlainData::Object(
+                                [("_tag".into(), PlainData::String("unavailable".into()))]
+                                    .into_iter()
+                                    .collect(),
+                            ))
+                        }),
+                    ),
+                    |_: &Rc<Opaque>, ctx: tool::ToolContext<'_, Services>| {
+                        Box::pin(async move { Ok(Outcome::ok(Rc::clone(&ctx.host.result))) })
+                    },
+                )
+                .unwrap();
+                let origin = Rc::new(one::Router::new(origin_def).unwrap());
                 let router = Rc::new(one::Router::new(def).unwrap());
-                let init = Rc::clone(&router);
+                let init = Rc::clone(&origin);
                 let update = Rc::clone(&router);
                 let raw = Rc::clone(&services.result);
                 let machine = Machine {
@@ -399,4 +430,22 @@ fn a_same_generic_foreign_name_refuses_before_any_other_handler() {
         futures::executor::block_on(first.interpret(&command, tool::ToolContext::bare(&())));
     assert!(completed.is_ok());
     assert_eq!(called.get(), 1);
+    let command = first
+        .tool_of(&ToolCall {
+            call_id: "wrong-completion".into(),
+            name: "first".into(),
+            args: Rc::new(()),
+        })
+        .unwrap();
+    let failed = command.settle_in(
+        one::Completions::Only(tool::ToolCompletion::new(
+            Rc::clone(second.only()),
+            Some(Outcome::ok(Rc::new(()))),
+        )),
+        &CommandEdge::new(|| 1.0),
+    );
+    assert!(matches!(
+        failed,
+        Err(CommandContractError::CompletionMismatch { .. })
+    ));
 }
