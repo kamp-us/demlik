@@ -1,0 +1,112 @@
+{
+  "component": "ICU77 Group D import/declaration metadata",
+  "sourceCommit": "eb07eb42e98618c4a0aabf28224e63f94c9622c5",
+  "base": "dbe529f6d7dc01ac241847643a7813206d593c43",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-icu77-group-d-proof-01a16c9d",
+  "scope": "20 real metadata comparator calls in seven owners, removal of the schema-valid one-element preset sort, and necessary precise result/error/caller lifts. One existing PreparedGatesCli collation slot; no Graph/context carrier, new model bounds, fallback, dependency or Source product edits.",
+  "legacyTermini": {
+    "helperCallsBefore": 128,
+    "helperCallsAfter": 107,
+    "directProjectSortsRemaining": 2,
+    "source": "remaining-legacy-sites.json"
+  },
+  "construction": {
+    "cargoCommands": 12,
+    "compilerInvocations": 11,
+    "precompileArgumentRefusals": 1,
+    "compilerExit0": 5,
+    "compilerFailures": 6,
+    "nativePreparations": 1,
+    "finalVerifyEnvRecoveryNoRebuild": true,
+    "finalAllTargetCodeGraphClippy": 0,
+    "finalLibraryAndTwoExamplesBuild": 0,
+    "wholeWorkspace": false,
+    "featureProfiles": false,
+    "coldArchiveRebuild": false,
+    "ledger": "cargo-ledger.json"
+  },
+  "public": {
+    "sameExactRedGreenInput": "borrowed-public.rs",
+    "red": "actual E0061/E0277 plus dependent E0599 diagnostics, no forced sole-error claim",
+    "green": "same input rustc0 and official Go exec0 with original Rc files, borrowed Rc host and returned declarations usable after Collation drop",
+    "finalCargoSelectedPublicExample": true,
+    "affectedOpaqueBorrowedFixturesCompileRun": 2,
+    "blanketCloneSerdeSendOrModelBoundsAdded": false
+  },
+  "comparisons": {
+    "newShared": 24,
+    "strict": 23,
+    "qualified": 1,
+    "qualification": "Only rule-regex-error-retained differs in backend diagnostic wording; original Source/native stage/name/message preserved. No qualified strict credit.",
+    "protocolRefusals": 5,
+    "protocolExtraCredit": 0,
+    "frozenSourceOnlyBaselineExtraCredit": 0,
+    "finalReport": "final-pairs.json.raw.json",
+    "affectedSuites": 33,
+    "affectedReportedOutcomes": 4405,
+    "affectedExtraCredit": 0,
+    "affectedHTML": 34,
+    "affectedReport": "affected.json"
+  },
+  "native": {
+    "executedUniqueTests": 91,
+    "groups": 23,
+    "newAdmissionTestsIncluded": 2,
+    "sourceSharedCredit": 0,
+    "report": "native-focused.json",
+    "phase": "Cargo8 pre-lint-only assembly attributes and equivalent driver initialization. Exact original selected executables/logs retained or explicitly unretained; no full-native rerun claim after lint-only delta. Final source is fully checked by Clippy11 and library/two-consumer Cargo12."
+  },
+  "controls": {
+    "named": 4,
+    "cargoCompilerSelections": 4,
+    "compiledExit0": 4,
+    "strictSourceSemanticDetections": 3,
+    "nativeOnlyInitializationOrderDetection": 1,
+    "nativeOnlySourceCredit": 0,
+    "protocolOrCompilerFailuresCredited": 0,
+    "allModifiedLibrariesAndEffectiveConsumersFreshFalse": true,
+    "all4ModifiedRlibsAndExecutedConsumersRetained": true,
+    "ownerRestorePerFault": true,
+    "baselineUnchanged": true,
+    "ownNativePreparations": 1,
+    "registeredSuites": 1,
+    "worktreeAndDefaultTargetRemoved": true,
+    "report": "controls/controls.json",
+    "qualification": "The fourth control unit executable compiles its owner directly. Its additional normal rlib is retained without a false extern-link claim. No extra case credit."
+  },
+  "static": {
+    "finalFmt": 0,
+    "parityTypeScript": 0,
+    "newWorkerNodeSyntax": 0,
+    "newWorkersBiome": 0,
+    "gitDiff": 0,
+    "allTargetCodeGraphClippy": 0
+  },
+  "artifacts": {
+    "retainedRoles": 20,
+    "decodedSha256Verified": true,
+    "bindingReport": "effective-artifacts.json",
+    "unretainedOldExecutedConsumers": 46,
+    "unretainedReport": "unretained-artifacts.json",
+    "dependencyCachesCopied": false,
+    "wholeTargetCopies": false,
+    "retainedBaselineRlibRole": "compile-red-only, not linked into any successful executed consumer"
+  },
+  "recoveries": [
+    "Initial preparation completed native configure/make/install and stamp, then final verify refused missing own-tree stamp env. Canonical verify with corrected exact env passed; no new native build or guard weakening.",
+    "Construction Cargo3/4/5/6 preserved transport Serialize projection, typed Result closure, typed IO/Collation closure and cfg(test) crate-namespace diagnostics. Caller-only repairs preserve old responses and original causes.",
+    "Cargo7 was a precompile CLI flag refusal. It earns no compiler/semantic credit. Cargo8 ordinary documented no-run then compiled70 test targets and62 examples.",
+    "Clippy9 found three existing assembly kernels exceeded7 args after the earned trailing handle; scoped expectations retain explicit original inputs. Clippy10 found only new-driver field reassignment; equivalent struct initialization repaired it. Clippy11 passed.",
+    "One unscoped rustfmt shim refused before edits; canonical scoped fmt passed. No native/compiler credit.",
+    "Affected runner initially selected layer_driver for layer-gate, then lacked the existing comparer target/parity parent. Both original setup failures remain; corrected remaining-only invocations passed. No product/corpus/schema relaxation or additional Cargo.",
+    "An initial warning-test filter selected0 tests. Zero receives0credit; same actual test binary full13 plus22 integration groups yields91 unique. Earlier2-test overlap is not added twice."
+  ],
+  "limits": [
+    "Finite Node22.21.1/V8 and ICU77.1 aarch64-apple-darwin/static-data profile only. Other hosts/locales/distribution and automatic initialization are not proved.",
+    "APFS case-only filenames alias in existing literal fixtures; actual before/after bytes and modes are retained. No claim of distinct physical A/a or Z/z files on this host.",
+    "Existing raw Graph/identifier String/reflection/OS/stdio/regex profiles remain open; this slice does not widen Graph or establish a general JavaScript runtime.",
+    "All53 broad CLI gaps remain OPEN. No contracts, capability IDs, central runner, dependencies, Source product or global collation helper changes.",
+    "Affected91 native (including two new admission tests) and4405 comparison outcomes are regression evidence, not new shared credit. Unused compiled examples and46 old executed consumer bytes are explicitly unretained; no cold rebuild or global/full-suite acceptance claim."
+  ]
+}
