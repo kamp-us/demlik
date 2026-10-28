@@ -1,0 +1,1854 @@
+{
+  "Source": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "sourceTree": "80a13ee9c4560c1c3d3cfad6a01407dd3bb9f27e",
+  "sourcePins": {
+    "smells/evaluate.ts": "f11d732fe53a1ac63ac5dabd0bb0767c648d4ed285f95970ef956680f2285a1a",
+    "smells/plan.ts": "b832c8f96557898ce747e09c836e5e40d7eefb53f8d19ffabffa4ffbe8b12cbb",
+    "smells/rules.ts": "d269fa83239158d224ffbce49925bf451f2105807204efea26391a9fdbc11df2",
+    "smells/coupling.ts": "524050ec76ab072125c53940746b4c7ab76364c60bf71994c00f7d24b274f027",
+    "render/plan.ts": "78e2263b8d6faf8ca9e88c4c01e9092260e2addfdea11ef9146801b995acc505",
+    "render/analysis.ts": "0dd853e703dd0b0dcd8ce8880b84e5cc01e6122a898767904de5a2ab04eb78d2",
+    "render/html-model.ts": "07e14eb42ab4bffafce0a25ea3649a8bc718e9734944c3959fd450b989fd3ae1",
+    "render/json.ts": "972e63df22fcf30504717be86a82dbd09014016b475bfa62c6d453967c80a61f",
+    "extract/assemble.ts": "b30d35677ccd714af2bb00c9b94374a0d7d621f2be5957f0e08a54cad829b644",
+    "extract/directories.ts": "1448b76eb752a4f6ac11b9e63235ffb24e1e39dfd9100ed5138b9142d6ab94cb",
+    "extract/edges.ts": "857e177da82d6bb994cfbc45154f2cdcba4fb6ba5dacc4caff2b90e86a82db2d",
+    "extract/project.ts": "08aa30497ce1dde9d1d8587fc5f17bfd77c47de7206222d12285db5bad5cf69a",
+    "schema/core.ts": "13d33837f3765d59c359f4c8f541bd8b665206bdc54bbbc7278d1fd7f4393ad2",
+    "schema/reachability.ts": "ade473558620d921a844773370938e7ecfa6198c030c2851b1cb3ae8a9a1a5c0",
+    "index.ts": "a57a3ed8c585cafaf0c5667dad942eafd20269ca56f5ed2f305fb6bd593692b1",
+    "cli.ts": "128a353027f720b3729b0d1c4c5685088cff042ddaf1a11f923cf0b80d55c2cf"
+  },
+  "caseInputs": [
+    {
+      "id": "closed-kind-pair-matrix",
+      "mode": "kind-matrix",
+      "words": [
+        "long-function",
+        "deep-nesting",
+        "high-complexity",
+        "dense-undocumented",
+        "big-file",
+        "high-fan-in",
+        "deep-call-chain",
+        "directory-sprawl",
+        "dependency-cycle",
+        "cross-boundary-import"
+      ]
+    },
+    {
+      "id": "withheld-tally-permutations",
+      "mode": "tally",
+      "reasons": [
+        "referenced-in-non-test-file",
+        "public-entry-surface",
+        "test-support-surface"
+      ]
+    },
+    {
+      "id": "function-rule-order",
+      "mode": "function",
+      "thresholds": {
+        "longFunctionLoc": 3,
+        "highComplexity": 2,
+        "deepNesting": 1,
+        "highFanIn": 1,
+        "deepCallChain": 1
+      },
+      "functions": [
+        {
+          "id": "bad",
+          "file": "z.ts",
+          "loc": 9,
+          "complexity": 7,
+          "nestingDepth": 3,
+          "commentLines": 0,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "bad",
+                "line": 1
+              },
+              {
+                "callerId": "a",
+                "line": 2
+              },
+              {
+                "callerId": "b",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 3
+          }
+        },
+        {
+          "id": "clean",
+          "file": "a.ts"
+        }
+      ]
+    },
+    {
+      "id": "module-coupling-facts",
+      "mode": "module",
+      "thresholds": {
+        "bigFileLoc": 4
+      },
+      "modules": [
+        {
+          "file": "z.ts",
+          "loc": 20
+        },
+        {
+          "file": "a.ts",
+          "loc": 2
+        }
+      ],
+      "coupling": [
+        {
+          "cycleSize": 3,
+          "crossBoundaryOutCount": 5
+        },
+        null
+      ]
+    },
+    {
+      "id": "directory-threshold",
+      "mode": "directory",
+      "thresholds": {
+        "directorySprawl": 2
+      },
+      "directories": [
+        {
+          "dir": "z",
+          "fileCount": 6
+        },
+        {
+          "dir": "a",
+          "fileCount": 2
+        },
+        {
+          "dir": ".",
+          "fileCount": 0
+        }
+      ]
+    },
+    {
+      "id": "flat-mixed-locators",
+      "mode": "flat",
+      "smells": [
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "z.ts",
+            "id": "z.ts",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "high-complexity",
+          "target": {
+            "type": "module",
+            "file": "a.ts"
+          },
+          "severity": "high",
+          "value": 6,
+          "threshold": 1
+        },
+        {
+          "kind": "directory-sprawl",
+          "target": {
+            "type": "directory",
+            "dir": "a"
+          },
+          "severity": "warn",
+          "value": 2,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "a.ts",
+            "id": "line10",
+            "startLine": 10
+          },
+          "severity": "warn",
+          "value": 4,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "a.ts",
+            "id": "line2",
+            "startLine": 2
+          },
+          "severity": "warn",
+          "value": 4,
+          "threshold": 1
+        }
+      ]
+    },
+    {
+      "id": "flat-kind-severity-value",
+      "mode": "flat",
+      "smells": [
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "same.ts",
+            "id": "warn3",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 3,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "same.ts",
+            "id": "high5",
+            "startLine": 1
+          },
+          "severity": "high",
+          "value": 5,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "same.ts",
+            "id": "high9",
+            "startLine": 1
+          },
+          "severity": "high",
+          "value": 9,
+          "threshold": 1
+        },
+        {
+          "kind": "deep-nesting",
+          "target": {
+            "type": "function",
+            "file": "same.ts",
+            "id": "kind",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "same.ts",
+            "id": "equal-later",
+            "startLine": 1
+          },
+          "severity": "high",
+          "value": 5,
+          "threshold": 1
+        }
+      ]
+    },
+    {
+      "id": "flat-unicode-stable-ties",
+      "mode": "flat",
+      "smells": [
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "z.ts",
+            "id": "id0",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "10.ts",
+            "id": "id1",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "2.ts",
+            "id": "id2",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "é.ts",
+            "id": "id3",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "é.ts",
+            "id": "id4",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "a.ts",
+            "id": "id5",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "A.ts",
+            "id": "id6",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": ".ts",
+            "id": "id7",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        },
+        {
+          "kind": "long-function",
+          "target": {
+            "type": "function",
+            "file": "𐀀.ts",
+            "id": "id8",
+            "startLine": 1
+          },
+          "severity": "warn",
+          "value": 1,
+          "threshold": 1
+        }
+      ]
+    },
+    {
+      "id": "plan-rot",
+      "mode": "plan",
+      "axis": "rot",
+      "functions": [
+        {
+          "id": "z:Z",
+          "file": "z.ts",
+          "loc": 40,
+          "complexity": 3,
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "z.ts",
+                "id": "z.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "a:a",
+          "file": "a.ts",
+          "loc": 20,
+          "complexity": 4,
+          "smells": [
+            {
+              "kind": "high-complexity",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            },
+            {
+              "kind": "deep-nesting",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "m:m",
+          "file": "m.ts",
+          "loc": 60,
+          "complexity": 2,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "m:m",
+                "line": 1
+              },
+              {
+                "callerId": "caller",
+                "line": 2
+              },
+              {
+                "callerId": "caller",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-impact",
+      "mode": "plan",
+      "axis": "impact",
+      "functions": [
+        {
+          "id": "z:Z",
+          "file": "z.ts",
+          "loc": 40,
+          "complexity": 3,
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "z.ts",
+                "id": "z.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "a:a",
+          "file": "a.ts",
+          "loc": 20,
+          "complexity": 4,
+          "smells": [
+            {
+              "kind": "high-complexity",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            },
+            {
+              "kind": "deep-nesting",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "m:m",
+          "file": "m.ts",
+          "loc": 60,
+          "complexity": 2,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "m:m",
+                "line": 1
+              },
+              {
+                "callerId": "caller",
+                "line": 2
+              },
+              {
+                "callerId": "caller",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-complexity",
+      "mode": "plan",
+      "axis": "complexity",
+      "functions": [
+        {
+          "id": "z:Z",
+          "file": "z.ts",
+          "loc": 40,
+          "complexity": 3,
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "z.ts",
+                "id": "z.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "a:a",
+          "file": "a.ts",
+          "loc": 20,
+          "complexity": 4,
+          "smells": [
+            {
+              "kind": "high-complexity",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            },
+            {
+              "kind": "deep-nesting",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "m:m",
+          "file": "m.ts",
+          "loc": 60,
+          "complexity": 2,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "m:m",
+                "line": 1
+              },
+              {
+                "callerId": "caller",
+                "line": 2
+              },
+              {
+                "callerId": "caller",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-size",
+      "mode": "plan",
+      "axis": "size",
+      "functions": [
+        {
+          "id": "z:Z",
+          "file": "z.ts",
+          "loc": 40,
+          "complexity": 3,
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "z.ts",
+                "id": "z.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "a:a",
+          "file": "a.ts",
+          "loc": 20,
+          "complexity": 4,
+          "smells": [
+            {
+              "kind": "high-complexity",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            },
+            {
+              "kind": "deep-nesting",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "m:m",
+          "file": "m.ts",
+          "loc": 60,
+          "complexity": 2,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "m:m",
+                "line": 1
+              },
+              {
+                "callerId": "caller",
+                "line": 2
+              },
+              {
+                "callerId": "caller",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-null-zero-self-fanin",
+      "mode": "plan",
+      "axis": "impact",
+      "functions": [
+        {
+          "id": "none",
+          "file": "z.ts"
+        },
+        {
+          "id": "zero",
+          "file": "a.ts",
+          "edges": {
+            "calls": [],
+            "calledBy": [],
+            "callChainDepth": 0
+          }
+        },
+        {
+          "id": "self",
+          "file": "m.ts",
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "self",
+                "line": 1
+              },
+              {
+                "callerId": "self",
+                "line": 2
+              }
+            ],
+            "callChainDepth": 0
+          }
+        },
+        {
+          "id": "once",
+          "file": "b.ts",
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "x",
+                "line": 1
+              },
+              {
+                "callerId": "x",
+                "line": 2
+              }
+            ],
+            "callChainDepth": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "plan-line-before-id",
+      "mode": "plan",
+      "axis": "rot",
+      "functions": [
+        {
+          "id": "A",
+          "file": "same.ts",
+          "startLine": 20,
+          "endLine": 20
+        },
+        {
+          "id": "z",
+          "file": "same.ts",
+          "startLine": 2,
+          "endLine": 2
+        },
+        {
+          "id": "a",
+          "file": "same.ts",
+          "startLine": 2,
+          "endLine": 2
+        },
+        {
+          "id": "same",
+          "file": "z.ts"
+        }
+      ]
+    },
+    {
+      "id": "plan-unicode-numeric-keys",
+      "mode": "plan",
+      "axis": "rot",
+      "functions": [
+        {
+          "id": "id0",
+          "file": "10.ts"
+        },
+        {
+          "id": "10",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id1",
+          "file": "2.ts"
+        },
+        {
+          "id": "2",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id2",
+          "file": "é.ts"
+        },
+        {
+          "id": "é",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id3",
+          "file": "é.ts"
+        },
+        {
+          "id": "é",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id4",
+          "file": "a.ts"
+        },
+        {
+          "id": "a",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id5",
+          "file": "A.ts"
+        },
+        {
+          "id": "A",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id6",
+          "file": ".ts"
+        },
+        {
+          "id": "",
+          "file": "shared.ts"
+        },
+        {
+          "id": "id7",
+          "file": "𐀀.ts"
+        },
+        {
+          "id": "𐀀",
+          "file": "shared.ts"
+        }
+      ]
+    },
+    {
+      "id": "plan-equal-input-stability",
+      "mode": "plan",
+      "axis": "rot",
+      "functions": [
+        {
+          "id": "same",
+          "file": "same.ts",
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "same.ts",
+                "id": "same.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "same",
+          "file": "same.ts",
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "same.ts",
+                "id": "same.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 2,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "same",
+          "file": "same.ts",
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "same.ts",
+                "id": "same.ts",
+                "startLine": 1
+              },
+              "severity": "high",
+              "value": 3,
+              "threshold": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-null-json-guards",
+      "mode": "empty",
+      "reasons": [
+        "referenced-in-non-test-file",
+        "public-entry-surface",
+        "test-support-surface"
+      ]
+    },
+    {
+      "id": "plan-top20-render-modes",
+      "mode": "render-plan",
+      "axis": "size",
+      "functions": [
+        {
+          "id": "id23",
+          "file": "file0.ts",
+          "loc": 30,
+          "startLine": 1,
+          "endLine": 2
+        },
+        {
+          "id": "id22",
+          "file": "file1.ts",
+          "loc": 29,
+          "startLine": 2,
+          "endLine": 3
+        },
+        {
+          "id": "id21",
+          "file": "file2.ts",
+          "loc": 28,
+          "startLine": 3,
+          "endLine": 4
+        },
+        {
+          "id": "id20",
+          "file": "file0.ts",
+          "loc": 27,
+          "startLine": 4,
+          "endLine": 5
+        },
+        {
+          "id": "id19",
+          "file": "file1.ts",
+          "loc": 26,
+          "startLine": 5,
+          "endLine": 6
+        },
+        {
+          "id": "id18",
+          "file": "file2.ts",
+          "loc": 25,
+          "startLine": 6,
+          "endLine": 7
+        },
+        {
+          "id": "id17",
+          "file": "file0.ts",
+          "loc": 24,
+          "startLine": 7,
+          "endLine": 8
+        },
+        {
+          "id": "id16",
+          "file": "file1.ts",
+          "loc": 23,
+          "startLine": 8,
+          "endLine": 9
+        },
+        {
+          "id": "id15",
+          "file": "file2.ts",
+          "loc": 22,
+          "startLine": 9,
+          "endLine": 10
+        },
+        {
+          "id": "id14",
+          "file": "file0.ts",
+          "loc": 21,
+          "startLine": 10,
+          "endLine": 11
+        },
+        {
+          "id": "id13",
+          "file": "file1.ts",
+          "loc": 20,
+          "startLine": 11,
+          "endLine": 12
+        },
+        {
+          "id": "id12",
+          "file": "file2.ts",
+          "loc": 19,
+          "startLine": 12,
+          "endLine": 13
+        },
+        {
+          "id": "id11",
+          "file": "file0.ts",
+          "loc": 18,
+          "startLine": 13,
+          "endLine": 14
+        },
+        {
+          "id": "id10",
+          "file": "file1.ts",
+          "loc": 17,
+          "startLine": 14,
+          "endLine": 15
+        },
+        {
+          "id": "id9",
+          "file": "file2.ts",
+          "loc": 16,
+          "startLine": 15,
+          "endLine": 16
+        },
+        {
+          "id": "id8",
+          "file": "file0.ts",
+          "loc": 15,
+          "startLine": 16,
+          "endLine": 17
+        },
+        {
+          "id": "id7",
+          "file": "file1.ts",
+          "loc": 14,
+          "startLine": 17,
+          "endLine": 18
+        },
+        {
+          "id": "id6",
+          "file": "file2.ts",
+          "loc": 13,
+          "startLine": 18,
+          "endLine": 19
+        },
+        {
+          "id": "id5",
+          "file": "file0.ts",
+          "loc": 12,
+          "startLine": 19,
+          "endLine": 20
+        },
+        {
+          "id": "id4",
+          "file": "file1.ts",
+          "loc": 11,
+          "startLine": 20,
+          "endLine": 21
+        },
+        {
+          "id": "id3",
+          "file": "file2.ts",
+          "loc": 10,
+          "startLine": 21,
+          "endLine": 22
+        },
+        {
+          "id": "id2",
+          "file": "file0.ts",
+          "loc": 9,
+          "startLine": 22,
+          "endLine": 23
+        },
+        {
+          "id": "id1",
+          "file": "file1.ts",
+          "loc": 8,
+          "startLine": 23,
+          "endLine": 24
+        },
+        {
+          "id": "id0",
+          "file": "file2.ts",
+          "loc": 7,
+          "startLine": 24,
+          "endLine": 25
+        }
+      ]
+    },
+    {
+      "id": "summary-top10-worst",
+      "mode": "cheap",
+      "thresholds": {
+        "highComplexity": 1
+      },
+      "files": {
+        "src/f13.ts": "export function f0(x:number){if(x>0)return x;return 0;}\n",
+        "src/f12.ts": "export function f1(x:number){if(x>0)return x;return 0;}\n",
+        "src/f11.ts": "export function f2(x:number){if(x>0)return x;return 0;}\n",
+        "src/f10.ts": "export function f3(x:number){if(x>0)return x;return 0;}\n",
+        "src/f9.ts": "export function f4(x:number){if(x>0)return x;return 0;}\n",
+        "src/f8.ts": "export function f5(x:number){if(x>0)return x;return 0;}\n",
+        "src/f7.ts": "export function f6(x:number){if(x>0)return x;return 0;}\n",
+        "src/f6.ts": "export function f7(x:number){if(x>0)return x;return 0;}\n",
+        "src/f5.ts": "export function f8(x:number){if(x>0)return x;return 0;}\n",
+        "src/f4.ts": "export function f9(x:number){if(x>0)return x;return 0;}\n",
+        "src/f3.ts": "export function f10(x:number){if(x>0)return x;return 0;}\n",
+        "src/f2.ts": "export function f11(x:number){if(x>0)return x;return 0;}\n",
+        "src/f1.ts": "export function f12(x:number){if(x>0)return x;return 0;}\n",
+        "src/f0.ts": "export function f13(x:number){if(x>0)return x;return 0;}\n"
+      }
+    },
+    {
+      "id": "html-plan-original-summary",
+      "mode": "html",
+      "functions": [
+        {
+          "id": "z:Z",
+          "file": "z.ts",
+          "loc": 40,
+          "complexity": 3,
+          "smells": [
+            {
+              "kind": "long-function",
+              "target": {
+                "type": "function",
+                "file": "z.ts",
+                "id": "z.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "a:a",
+          "file": "a.ts",
+          "loc": 20,
+          "complexity": 4,
+          "smells": [
+            {
+              "kind": "high-complexity",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            },
+            {
+              "kind": "deep-nesting",
+              "target": {
+                "type": "function",
+                "file": "a.ts",
+                "id": "a.ts",
+                "startLine": 1
+              },
+              "severity": "warn",
+              "value": 1,
+              "threshold": 1
+            }
+          ]
+        },
+        {
+          "id": "m:m",
+          "file": "m.ts",
+          "loc": 60,
+          "complexity": 2,
+          "edges": {
+            "calls": [],
+            "calledBy": [
+              {
+                "callerId": "m:m",
+                "line": 1
+              },
+              {
+                "callerId": "caller",
+                "line": 2
+              },
+              {
+                "callerId": "caller",
+                "line": 3
+              }
+            ],
+            "callChainDepth": 1
+          }
+        }
+      ],
+      "modules": [
+        {
+          "file": "z.ts",
+          "loc": 40,
+          "functionIds": ["z:Z"]
+        },
+        {
+          "file": "a.ts",
+          "loc": 20,
+          "functionIds": ["a:a"]
+        },
+        {
+          "file": "m.ts",
+          "loc": 60,
+          "functionIds": ["m:m"]
+        }
+      ]
+    },
+    {
+      "id": "cli-priority-initial-exit-out-workflow",
+      "mode": "cli",
+      "files": {
+        "package.json": "{\"private\":true}",
+        "pnpm-workspace.yaml": "packages: []\n",
+        "z.ts": "export function Z(n:number){if(n>0){if(n>1)return n;return 0;}return -1;}\n",
+        "a.ts": "export function a(n:number){if(n>2)return n;return 1;}\n",
+        "m.ts": "export function m(){return 2;}\n"
+      },
+      "actions": [
+        {
+          "id": "plan-text",
+          "flags": ["--plan"]
+        },
+        {
+          "id": "plan-json",
+          "flags": ["--plan", "--json"]
+        },
+        {
+          "id": "plan-pretty",
+          "flags": ["--plan", "--json", "--pretty"]
+        },
+        {
+          "id": "file",
+          "flags": ["--plan", "--out", "result.txt"]
+        },
+        {
+          "id": "overwrite",
+          "flags": ["--plan", "--json", "--out", "result.txt"]
+        },
+        {
+          "id": "initial7",
+          "flags": ["--plan", "--json"],
+          "initial": 7
+        },
+        {
+          "id": "plan-before-smells",
+          "flags": ["--plan", "--smells"]
+        },
+        {
+          "id": "graph-before-plan",
+          "flags": ["--graph", "--plan", "--json"]
+        },
+        {
+          "id": "unknown-axis-warning",
+          "flags": ["--plan", "--by", "unknown"]
+        },
+        {
+          "id": "impact-refusal",
+          "flags": ["--plan", "--by", "impact"],
+          "code": 2
+        }
+      ]
+    },
+    {
+      "id": "real-cheap-three-modules",
+      "mode": "cheap",
+      "thresholds": {
+        "highComplexity": 1,
+        "longFunctionLoc": 2
+      },
+      "files": {
+        "package.json": "{\"private\":true}",
+        "pnpm-workspace.yaml": "packages: []\n",
+        "z.ts": "export function Z(n:number){if(n>0){if(n>1)return n;return 0;}return -1;}\n",
+        "a.ts": "export function a(n:number){if(n>2)return n;return 1;}\n",
+        "m.ts": "export function m(){return 2;}\n"
+      }
+    },
+    {
+      "id": "real-go-two-packages",
+      "mode": "go",
+      "thresholds": {
+        "highComplexity": 1,
+        "highFanIn": 0
+      },
+      "files": {
+        "package.json": "{\"private\":true}",
+        "pnpm-workspace.yaml": "packages: [packages/*]\n",
+        "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"target\":\"ES2022\",\"module\":\"NodeNext\",\"moduleResolution\":\"NodeNext\",\"types\":[]},\"include\":[\"packages/**/*.ts\"]}",
+        "packages/a/package.json": "{\"name\":\"a\"}",
+        "packages/b/package.json": "{\"name\":\"b\"}",
+        "packages/a/entry.ts": "import {helper} from './helper.js';import {work} from '../b/work.js';export function main(n:number){if(n>0)return helper(n)+work(n);return 0;}\n",
+        "packages/a/helper.ts": "export function helper(n:number){return n+1;}\n",
+        "packages/b/work.ts": "import {cycle} from './cycle.js';export function work(n:number){if(n>1)return cycle(n-1);return 1;}\n",
+        "packages/b/cycle.ts": "import {work} from './work.js';export function cycle(n:number){return n>2?work(n-1):0;}\n"
+      }
+    }
+  ],
+  "wholeviews": {
+    "closed-kind-pair-matrix": "87edac44c4dd1badee1ea35b9a69b136bfe3ac28ee6c3c88bee4f3343d4c1f4d",
+    "withheld-tally-permutations": "f42ba9d9cf7adb6951cf4e262e40726c810a2c9bc158a2c1863a1b8190078e2e",
+    "function-rule-order": "dd005472faaefdc3a0467c3f802018005001d5e9bdb79268dba9045484b58295",
+    "module-coupling-facts": "6aafd87af2ba3ca0fb2c1fe2e8f9b1b84a40203c29ae5697a863818163352a43",
+    "directory-threshold": "ec6d6d2bf504b115bb97265d90cd275d642032a3552f8b3f7b505929fd03e584",
+    "flat-mixed-locators": "8bb7ad06e0396e23d199ae3df012884c61c66b78bc089e2ed43ef187b579a96c",
+    "flat-kind-severity-value": "b427b9e814a65c257b2be872ed2728ed875b32778b328258130f4be6720467fd",
+    "flat-unicode-stable-ties": "114b49e4a4066f70763b4bb1d9f29a14f5456f6888ab041529467c4b7bdf4fc8",
+    "plan-rot": "03e2997505d9ed0a43009b8f0c9967f07a555b29fc4ecec252af2034f5d4226f",
+    "plan-impact": "ae0a63162e1d25c610397db4bf6e6c5f295889363bdd5c77eddfac74d5128480",
+    "plan-complexity": "2ba33e43b6dbf2ebe7cb9d8c0f25e1904038641b2fd4a79603efe0e137d87e0b",
+    "plan-size": "9b5e8dc0fc6295411f500df92582f49ad852950335a8c0f3c2481218ccf0991c",
+    "plan-null-zero-self-fanin": "ad075a6557a4fa03b821e611ed490ddc73c6a33aa396c926ecd1ef708258bd3e",
+    "plan-line-before-id": "a5115731288790b4dead173fa089ff3c1e09c3b1710a506694dcee2257514275",
+    "plan-unicode-numeric-keys": "fd7b7232e9509ad1323ca83ebd638cc879d5f87e84985c2621e90d6f8bcad30b",
+    "plan-equal-input-stability": "f4c01317ed332e814981a0c2ca0e5172b319313e5a8668173d357b47cfa098de",
+    "empty-null-json-guards": "1a800dcf40bc6fc7a778591f5e7216cf16e363b2a7456df0624b53069f41dfc2",
+    "plan-top20-render-modes": "bdbc85af5a925ce5d0e1db4923fcc71985edf2d9de562330c6f65ebec8b4a15a",
+    "summary-top10-worst": "ee410d498dd9eca5901f2fac07fe6334ec84c42ccbbbc4431e377265e355057f",
+    "html-plan-original-summary": "8905dda9c6bc79c924bcb24b20434c9222730d5711403ed75ab6a43d36351bba",
+    "cli-priority-initial-exit-out-workflow": "393118940e03e3fbc6e8d298b1a0e30ad78c3b393d78f0e92b7ad3e19204a7be",
+    "real-cheap-three-modules": "05ca4f52320871236f2e3281bdfebb92f48da6dafe96951e6b107cf78b3da058",
+    "real-go-two-packages": "3c8919f892445c54a1cd668f06d4a159f04ca3d157c59651ff7a45af10ecc1e9"
+  },
+  "observedCalls": {
+    "closed-kind-pair-matrix": [
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells"
+    ],
+    "withheld-tally-permutations": [
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable"
+    ],
+    "function-rule-order": [
+      "demlik_code_graph::smells::evaluate::smells_for_function",
+      "demlik_code_graph::smells::evaluate::smells_for_function"
+    ],
+    "module-coupling-facts": [
+      "demlik_code_graph::smells::evaluate::smells_for_module",
+      "demlik_code_graph::smells::evaluate::smells_for_module"
+    ],
+    "directory-threshold": [
+      "demlik_code_graph::smells::evaluate::smells_for_directory",
+      "demlik_code_graph::smells::evaluate::smells_for_directory",
+      "demlik_code_graph::smells::evaluate::smells_for_directory"
+    ],
+    "flat-mixed-locators": [
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells"
+    ],
+    "flat-kind-severity-value": [
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells"
+    ],
+    "flat-unicode-stable-ties": [
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells",
+      "demlik_code_graph::smells::evaluate::compare_flat_smells"
+    ],
+    "plan-rot": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-impact": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-complexity": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-size": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-null-zero-self-fanin": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-line-before-id": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-unicode-numeric-keys": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "plan-equal-input-stability": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "empty-null-json-guards": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable",
+      "demlik_code_graph::render::analysis::render_unreachable"
+    ],
+    "plan-top20-render-modes": [
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "summary-top10-worst": [
+      "demlik_code_graph::extract::assemble::assemble_graph",
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "html-plan-original-summary": [
+      "demlik_code_graph::render::html::build_html_model"
+    ],
+    "cli-priority-initial-exit-out-workflow": [
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_comments",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_collapse_gate",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_unreachable_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_smell_ledger_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+    ],
+    "real-cheap-three-modules": [
+      "demlik_code_graph::extract::assemble::assemble_graph",
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ],
+    "real-go-two-packages": [
+      "demlik_code_graph::extract::assemble::assemble_graph_with_edges",
+      "demlik_code_graph::smells::plan::rank_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan",
+      "demlik_code_graph::render::plan::render_plan"
+    ]
+  },
+  "cliTraceWholeviews": {
+    "plan-text": "2362691c37fcbbc9bee9e4606a4fe0513c5dc6caaf38b55a1782b7a1afd22555",
+    "plan-json": "3008c670fb7eaea96a4fd368022463f38f0b428e516e88ae3e1ef8a7872de616",
+    "plan-pretty": "15316e761eb02afeb7da260d301fcf6d2865ad2dddab5818456dc664a16e8153",
+    "file": "2a49e4d14c1d84e89825969939b61e67edddf5a8d2d71daae79bdb907398e407",
+    "overwrite": "c94a74308e3f5cdf98231ac64d0506fb962a96e02e967924a105255dbf3d4e01",
+    "initial7": "d2d5c94a247a579289439d790391a88d7d07cdeb952daeabdfe3586744283674",
+    "plan-before-smells": "c6ca48ff22a776c990321327e430af7bd470e79bf86c40879dd548602efe7c5e",
+    "graph-before-plan": "a844bbc83e8d1342308b24c146f9d66bbb3dbcdbf57e51a1f579a23bac133fc2",
+    "unknown-axis-warning": "4251eff874eb494aec8045b5109c8192e2958f0549ea15dc7fb3c76977ac2ac0",
+    "impact-refusal": "0df48af35eec82a57e3c2d51be194977765640675681e4761a1c9fe73ce52412"
+  },
+  "archivedCwd": "/private/tmp/demlik-check-report-ordering-01a16c9d-kntu2ui5/repo",
+  "archivedRuntime": "/private/tmp/demlik-report-ordering-source-ZlFbZ6",
+  "frozenSourceSha256": "71baf669d39e9ce65f0d2e40dc11eb860fa3000f4a841708a248f0809c9694fa",
+  "sourceObserverPins": {
+    "report-ordering-cases.mjs": "44468734894f3c44927f48f2724fda051628bcf35f578a25ddec6435c60622f1",
+    "report-ordering-reference.mjs": "a7de28f9f6f33ee69706f425d279e4747feb2b86e40d5d726b8662029f20e31e",
+    "report-ordering-source.mjs": "9eca81fc4591c8f498f966c54846aca9baa45eb2ecf07dca18a369bda226eceb"
+  },
+  "nativeObserverSha256": "973741e5473cac8a1a504f118eef9a0809d83002f8af4004d8bfde6eb10f0fb8",
+  "scope": "Existing usize/String authored wholeviews only; preexisting smell-array alias/raw/model/CLI gaps remain open. No generic protocol/UTF8 observations.",
+  "nativeCompilerManifestSha256": "ed3dc00f87fe557612c7d72eb442322b57fd3e9160889045c84d6a5c91fce06c"
+}

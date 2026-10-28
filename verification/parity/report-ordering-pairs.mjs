@@ -79,6 +79,12 @@ function run(binary, argv, cwd, input, directory, env = process.env) {
     requestSha256: hash(input),
     stdoutSha256: hash(child.stdout),
     stderrSha256: hash(child.stderr),
+    requestFile: path.join(directory, "request.json"),
+    stdoutFile: path.join(directory, "stdout"),
+    stderrFile: path.join(directory, "stderr"),
+    requestBase64: Buffer.from(input).toString("base64"),
+    stdoutBase64: child.stdout.toString("base64"),
+    stderrBase64: child.stderr.toString("base64"),
   };
   fs.writeFileSync(
     path.join(directory, "process.json"),
