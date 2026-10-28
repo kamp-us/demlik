@@ -21,6 +21,7 @@ import {
   agentStatePrerequisiteParity,
   agentStatusCheckpointParity,
 } from "./agent-state-parity.mjs";
+import { agentToolMapCheckpointParity } from "./agent-tool-map-run.mjs";
 import { agentToolPolicyCheckpointParity } from "./agent-tool-policy-parity.mjs";
 import { runAgentTurnConformance } from "./agent-turn-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
@@ -1186,6 +1187,12 @@ if (!mutationSuite) {
       operation: "tea.tool-parsed-input",
       binaryArgument: "--tool-parsed-input-bin",
       run: (options) => toolParsedInputCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentToolMap",
+      operation: "tea.agent-tool-map",
+      binaryArgument: "--agent-tool-map-bin",
+      run: (options) => agentToolMapCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",

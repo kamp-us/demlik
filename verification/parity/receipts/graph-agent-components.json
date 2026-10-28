@@ -1,0 +1,95 @@
+{
+  "status": "reviewed-components-pending-one-combined-check",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "lastAcceptedImplementation": "f2444214455c348948edc2472ca22c01fe67edbf",
+  "lastAcceptedReceipt": "cdc8002126dd42fdcad14589edff02a6e016e58c",
+  "lastAcceptedAdmissions": 16161,
+  "newAdmissionsNotYetCombinedAccepted": {
+    "reachability": {
+      "strict": 18,
+      "qualified": 0
+    },
+    "parsedToolInput": {
+      "strict": 6,
+      "qualified": 0
+    },
+    "ownedReducerMetadata": {
+      "strict": 0,
+      "qualified": 0,
+      "nativePrerequisiteOnly": true
+    },
+    "graphPipeline": {
+      "strict": 18,
+      "qualified": 0
+    },
+    "fallibleAgentMapping": {
+      "strict": 10,
+      "qualified": 2
+    }
+  },
+  "graphPipeline": {
+    "source": "7dd46469eb52070bca7989f8cfb5e99949c79d29",
+    "receiptCommit": "0b52c309638384915fb1baf47e7acf95e33bfa9a",
+    "sourcePick": "57c66b58",
+    "receiptPick": "cee38604",
+    "thinSource": "78bd64422ab4054d334675bb0d9c562cc06275ae",
+    "thinPick": "5ff2ecfa",
+    "registration": "cd0e8ee4",
+    "selectedRoles": 47,
+    "uniqueDecodedDigests": 46,
+    "payloads": 661,
+    "payloadBytes": 864521117,
+    "retainedRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-h-source",
+    "hardlinkRetention": "Sealed selected proof files retained in the goal via hardlinks, no copied target or compiled cache.",
+    "retirementVerified": true
+  },
+  "fallibleAgentMapping": {
+    "source": "7e689b313a42445ee3407f5248f2e512dfe0eccf",
+    "sourcePick": "9ca93248",
+    "thinSource": "0323dbad12b3b7422ad1127bcb66309087811d56",
+    "thinPick": "43f65c38",
+    "selectedRoles": 24,
+    "uniqueDecodedDigests": 22,
+    "payloads": 322,
+    "payloadBytes": 73364565,
+    "retainedRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-fallible-tool-map-source",
+    "retirementVerified": true,
+    "reporterQualification": "Exactly runtime.promise and runtime.effect name/message/Source-only stack fields; full state, commands, trace, original cause/rejection/identity/cardinality and save phases remain mandatory.",
+    "history": "Consolidated retention sidecar repaired offline AFTER separately invoked removal. Actual per-selection bytes were already retained. No rebuild or final git-clean preflight claim.",
+    "olderRegressions": "12 native tests and40policy observations are pre-alias evidence, zero new credit. Final C7 public/driver/library/type refusals and4controls use frozen source.",
+    "publicEnumCompatibility": "New ToolMapping variants and owned metadata variants require exhaustive external matches to include them."
+  },
+  "reviews": {
+    "graphSourcePeer": {
+      "path": "evidence/icu77-group-h-map/source-peer-review-flexible.json",
+      "sha256": "0ae4c56610b6d3ae4109b79be948ac98e514ec931c0314c819f6ade65ef9ea81"
+    },
+    "graphArtifactsPeer": {
+      "path": "evidence/icu77-group-h-map/final-artifact-peer-review-flexible.json",
+      "sha256": "93ea157a4943c104951dd8851ce2e080adf61ea63d20693637850b659e40d4bd"
+    },
+    "graphThinRoot": {
+      "path": "evidence/icu77-group-h-map/thin-root-review.json",
+      "sha256": "42f49eb914e097f953fdb339bf0d84780c5a3d8d5e50d239bd6fb66d90cefd93"
+    },
+    "agentSourcePeer": {
+      "path": "evidence/agent-fallible-tool-map/final-source-peer-review-flexible.json",
+      "sha256": "9a54a695edd378196feda2113df910a1e07b84c622186883c9d677b836df5b58"
+    },
+    "agentArtifactsPeer": {
+      "path": "evidence/agent-fallible-tool-map/final-artifact-peer-review-flexible.json",
+      "sha256": "70d545f7117402ea5c8e4ef817864c17ed40c4c8904e6efbadeb879fa323b5e7"
+    },
+    "agentThinRoot": {
+      "path": "evidence/agent-fallible-tool-map/thin-root-review.json",
+      "sha256": "2c0b262892c52c8320b960e6bf21c02998fa026a982a707b265f7414df4bbf3a"
+    }
+  },
+  "limits": [
+    "No new combined acceptance until the next full run and qualification review.",
+    "Runtime envelope parity, full routed Agent wiring, arbitrary JS exceptions/reflection and Effect held-stop trace remain open.",
+    "All53 broad CLI gaps and packaging/target/MSRV/adapter gaps remain open.",
+    "Historical18missing f244 executable digests are not recovered retrospectively.",
+    "Only Darwin arm64 with pinned Node22/ICU77 has this local evidence."
+  ]
+}
