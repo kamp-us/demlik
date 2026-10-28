@@ -1,0 +1,232 @@
+{
+  "status": "Bounded component verified; frozen for Root and independent peer review, not integrated acceptance",
+  "sourceBase": "0e4e170c5208d74f2b8c6d521d1e5fe7fe026d86",
+  "sourceCommits": [
+    "30c399a0",
+    "a784a9776854d0ffad01f8b5f372ade269278ecd",
+    "39702fdb697632a4e16d2119b4454c60a147f83e"
+  ],
+  "sourceCommit": "39702fdb697632a4e16d2119b4454c60a147f83e",
+  "proofDirectory": "/private/tmp/demlik-tool-router-proof-01a16c9d",
+  "sourceManifest": "source-manifest.json",
+  "sourceArchive": {
+    "kind": "Compact Git source only; no full proof/target/dependency-cache archive",
+    "record": "source-archive.json",
+    "sha256": "ad64fd7bd87b0d01739a6441eb06bf10a7500394abb3c113daa17dff4ef9101b",
+    "bytes": 56353
+  },
+  "shared": {
+    "cases": 39,
+    "strict": 39,
+    "qualified": 0,
+    "original34": 34,
+    "empty3": 3,
+    "sameName2": 2,
+    "runtimeRowsIncluded": 8,
+    "pureEdgeRows": 31,
+    "report": "final-shared39.json",
+    "reportSha256": "8c06e9c3b9928163a490384e79532e718cb577279167b6af539694ec3bd5d274",
+    "metadataAssemblyOnly": true,
+    "actualNativeExecution": "chosen-native39.json",
+    "producerRebinding": "chosen-producer-rebinding.json",
+    "behaviorRerunForMetadata": false,
+    "protocolExtraCredit": 0,
+    "nativeOnlyExtraCredit": 0
+  },
+  "currentNative": {
+    "tests": 28,
+    "report": "chosen-focused-native.json",
+    "includesToolTests": 5,
+    "originalOpaqueBorrowedConsumer": "public-final.json (pre-chosen) and chosen-focused-native.json (post-chosen)",
+    "bothProfilesOriginAExecuteB": true
+  },
+  "currentTypes": {
+    "positive": 1,
+    "intendedRefusals": 7,
+    "report": "typing-chosen/report.json",
+    "codes": ["E0271", "E0308", "E0616", "E0521"]
+  },
+  "currentStatic": {
+    "allTargetClippyCargoIndex": 15,
+    "allTargetClippyExit": 0,
+    "scopedTscExit": 0,
+    "scopedBiomeExit": 0,
+    "report": "chosen-static-final.json"
+  },
+  "currentControls": {
+    "count": 4,
+    "compiledZero": 4,
+    "processZero": 4,
+    "effectiveNamedWitnesses": 4,
+    "report": "controls-chosen/report.json",
+    "retirement": "controls-chosen/retirement.json",
+    "faults": [
+      "malformed-args-drop-issues",
+      "instance-output-static-fallback",
+      "payload-kind-and-reason-win",
+      "chosen-contract-ignored"
+    ],
+    "strictCaseCredit": 0
+  },
+  "historicalProof": {
+    "preChosenNativeTests": 414,
+    "preChosenExecutedHarnesses": 119,
+    "report": "native-final.json",
+    "preChosenFullAllTargetBuildCargoIndex": 12,
+    "preChosenControls": "controls/report.json",
+    "preChosenControlWorktreeRetired": "controls/retirement.json",
+    "originalSource34": "source-first.json",
+    "sourceEmpty3": "empty-source-first.json",
+    "sourceSameName2": "same-name-source-first.json",
+    "realSameNameRed": "same-name-native-red.json"
+  },
+  "actualBuildAccounting": {
+    "constructionCargoSelections": 15,
+    "aim": 6,
+    "aimExceeded": "Retained implementation/fixture/lint recoveries plus independently reviewed empty/private-owner and same-name contract repairs. No permission pause or hidden failures.",
+    "currentPassingProducerCargoIndex": 14,
+    "currentArtifactOriginCargoIndex": 13,
+    "originOverallFailure": "C13 only unlifted native unit fixture; library/driver targets succeeded, identical C14 executable and product source demonstrated.",
+    "controlsCargoSelections": 8,
+    "controlsSuites": 2,
+    "controlNote": "Four a784 historical controls, then four required fixed39702 controls; not misreported as one cohort.",
+    "dependenciesAdded": false,
+    "nativeIcuBuilds": 0,
+    "networkOrDocker": false,
+    "targets": "Each registered owning worktree defaulttarget, scrubbed task env, no target/cache copies."
+  },
+  "retainedFailures": [
+    "Baseline public missing-interface red.",
+    "Implementation private serialization/Option misuse; moved outcome and Runtime constructor fixture compile mistakes; eager port-listener fixture ordering corrected with explicitoneshot.",
+    "First scoped tsgo/cwd/type fixture attempts and Biome diagnostics, then zero gates.",
+    "Same-name Rustc instrumentation setup errors, then actual2semantic red responses against unchanged C12 library.",
+    "Type harness expected E0308 but actual intended wrong-result E0271, corrected without changing product.",
+    "Incorrect old LLM standalone example used as JSONL producer, failed protocol beforecomparison; zero regression credit. No broad old parity rerun claimed."
+  ],
+  "frozenSourceIntegrity": "frozen-source-integrity.json",
+  "dependencyAndLicenseInputs": "source-39702fdb/Cargo.lock and copied existing manifests/licenses; no added dependencies",
+  "mappingProposal": "binding-proposal.json (6 existing IDs, UNAPPLIED, generated actual method labels, direct helper/inherited entries deliberately unclaimed)",
+  "knownGaps": [
+    "Direct already-parsed ToolInput -> owned ToolCommand Runtime constructor remains open; core replay builders alone do not prove that Source callable entry.",
+    "No automatic Agent typed-error/model bridge, defineAgent, fan-out interpretation, optional agent profiles, providers, SDKs, children or streaming host.",
+    "Tool names, declared tag names and Issue strings use current UTF8 owners; other text/data uses canonical JsText/PlainData.",
+    "Schema profile is existing SchemaError::Issues/Async; native Missing/Undefined failure carriers explicitly refuse, no Source parity credit. Arbitrary opaque thrown schema exceptions are outside this profile.",
+    "Rust declared Result/Raised is the native handler boundary. Panics, mutable JS getters/function arity/prototypes/custom iterators/sparse arrays/cyclic/BigInt values and manual cross-family content misuse are not claimed equivalent.",
+    "Eight pre-existing uncoordinated ready-future scheduling gaps and broader missing/null command-stamp/raw profiles remain open. Only the recorded controlled Promise/Effect workflows are strict here.",
+    "Top-level JS command object pointer identity is retained in raw Source-only same-name observations, with zero native identity credit; native owned moves preserve original args/result/error/schema/content handles and full wire.",
+    "No whole-port, all public utility-type, CLI, browser/Wasm-target, release/distribution or arbitrary executor scheduling closure. All53CLI gaps untouched."
+  ],
+  "retirement": "external final handoff + retirement.json must verify removed construction worktree/defaulttarget; source branch refs retained",
+  "sourceSnapshotRecords": [
+    {
+      "path": "crates/tea/examples/tool_router_driver.rs",
+      "sha256": "7253c3e70825223ebb9338f4dcc1d62b6b933413fb2c14edc13b0d1b0630112b",
+      "bytes": 35199
+    },
+    {
+      "path": "crates/tea/examples/tool_router_public.rs",
+      "sha256": "a9fb47157a569e0b9d380d5907e24a96a94bd1b5976a81ae1363c5388a510b61",
+      "bytes": 8560
+    },
+    {
+      "path": "crates/tea/src/agent/mod.rs",
+      "sha256": "8a9f77399768c430eb7975b25cc661b93487c43b54899fd2389f6091f425eab5",
+      "bytes": 926
+    },
+    {
+      "path": "crates/tea/src/agent/tool/empty.rs",
+      "sha256": "2781a538a36fa2b42e5b8845f08e449b1265b1cfa334ee45cf37fcd9ac1ea19b",
+      "bytes": 3001
+    },
+    {
+      "path": "crates/tea/src/agent/tool/mod.rs",
+      "sha256": "9e450fcb1bc139479a99b4e17d817ec7a40a31e5350c27fa4d33ef44dbd5bc39",
+      "bytes": 25842
+    },
+    {
+      "path": "crates/tea/src/agent/tool/router.rs",
+      "sha256": "39fc4753f16423f377a6f4451f70a71b0c497cdd0adbb1c911e7cc180f471316",
+      "bytes": 16223
+    },
+    {
+      "path": "crates/tea/src/command.rs",
+      "sha256": "73c5274b5d6ddf0792ced5b4e0cdffdb31047acdd1637e5708951ca16ea3abc6",
+      "bytes": 42460
+    },
+    {
+      "path": "crates/tea/src/runtime/mod.rs",
+      "sha256": "60156c788df7e9b3fc51f17121e3708950eebd3a20512b18211074b08efdbaf2",
+      "bytes": 964
+    },
+    {
+      "path": "crates/tea/tests/tool_router.rs",
+      "sha256": "97d5d8fbc9f817d2731569220b09697238a7e2f3b9afdc635cf50fea1e21eb7e",
+      "bytes": 16820
+    },
+    {
+      "path": "verification/parity/tool-router-cases.mjs",
+      "sha256": "b5e0804fe453fb324936eb22de521c13ee8d76e37e84065a2d3730482e9c98be",
+      "bytes": 1939
+    },
+    {
+      "path": "verification/parity/tool-router-empty-cases.mjs",
+      "sha256": "6ced97717471cb585ad4eebcbfaf1c79121f7db347021393366f824ed16875f0",
+      "bytes": 283
+    },
+    {
+      "path": "verification/parity/tool-router-empty-reference.mts",
+      "sha256": "b2980a5bc3ca6d876fd27219a4798b9f36fa9cb94ffedb7ead98b0d932636d0f",
+      "bytes": 4302
+    },
+    {
+      "path": "verification/parity/tool-router-reference.mts",
+      "sha256": "01e9521bd108ba4c742ab13b3a0d4ba41848a5eee80a90c0f37fbe419ea0d220",
+      "bytes": 14375
+    },
+    {
+      "path": "verification/parity/tool-router-run.mjs",
+      "sha256": "c85ae5a74e6fcb483bd0d07d97038aadfff867f021962d5d6bc27332f35c9c1a",
+      "bytes": 6877
+    },
+    {
+      "path": "verification/parity/tool-router-same-name-cases.mjs",
+      "sha256": "a81abe332323256625b5c0d5bbbff96daf3bc415f8379c2a1374bf9b041403be",
+      "bytes": 182
+    },
+    {
+      "path": "verification/parity/tool-router-same-name-reference.mts",
+      "sha256": "3735041018757e6c3f631a5b6442f5a82bd197c9e77ea0d7e6fa52a6b96114a5",
+      "bytes": 4356
+    },
+    {
+      "path": "verification/parity/tsconfig.tool-router.json",
+      "sha256": "d2dab1332b2ea4adbaac631ba681b20c143a0dab7e0f00b86a198caceeaf5671",
+      "bytes": 169
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "26406f4c9fa7c44b0b198fa25588f4a289f353c80740c5c550ab6a9656845c99",
+      "bytes": 889
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "7331a5196e7e3f9bc37d1ef608d58f3411ab8380fa159e4274a6bb9696c5a5f5",
+      "bytes": 59347
+    },
+    {
+      "path": "crates/tea/Cargo.toml",
+      "sha256": "cb42485fc65c7d2467096877782c280fd45f6d513f46ce23ab990d7a1262efe8",
+      "bytes": 883
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "bytes": 1066
+    },
+    {
+      "path": "packages/tea/LICENSE",
+      "sha256": "0571226734a8570915fcfb57a319b9b917d69fb5ec2f4a8235792020d395f8d8",
+      "bytes": 1066
+    }
+  ]
+}
