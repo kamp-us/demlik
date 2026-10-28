@@ -1,0 +1,866 @@
+[
+  {
+    "id": "window.UTC.relative90",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.relative90",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.relative0",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.relative0",
+      "days": 0,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.relative-half-day",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.relative-half-day",
+      "days": 0.5,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.relative-negative-direct-pure",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.relative-negative-direct-pure",
+      "days": -1,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.huge-finite100m",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.huge-finite100m",
+      "days": 100000000,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.outside-timeclip200m",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.outside-timeclip200m",
+      "days": 200000000,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.infinite-days",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.infinite-days",
+      "days": "Infinity",
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.nan-days-direct-pure",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.nan-days-direct-pure",
+      "days": "NaN",
+      "clockMs": 1793102400123.75,
+      "zone": "UTC"
+    }
+  },
+  {
+    "id": "window.UTC.iso-z",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.iso-z",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01T12:30:45.123Z"
+    }
+  },
+  {
+    "id": "window.UTC.iso-offset",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.iso-offset",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01T12:30:45.123+05:30"
+    }
+  },
+  {
+    "id": "window.UTC.date-only",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.date-only",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01"
+    }
+  },
+  {
+    "id": "window.UTC.datetime-no-zone",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.datetime-no-zone",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01T12:30:45.123"
+    }
+  },
+  {
+    "id": "window.UTC.rfc2822",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.rfc2822",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "Thu, 01 Oct 2026 12:30:45 GMT"
+    }
+  },
+  {
+    "id": "window.UTC.us-slash",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.us-slash",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "10/01/2026"
+    }
+  },
+  {
+    "id": "window.UTC.month-name",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.month-name",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "October 1, 2026"
+    }
+  },
+  {
+    "id": "window.UTC.legacy-number0",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.legacy-number0",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "0"
+    }
+  },
+  {
+    "id": "window.UTC.legacy-number42",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.legacy-number42",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "42"
+    }
+  },
+  {
+    "id": "window.UTC.legacy-number13",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.legacy-number13",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "13"
+    }
+  },
+  {
+    "id": "window.UTC.invalid-text",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.invalid-text",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "not-a-date"
+    }
+  },
+  {
+    "id": "window.UTC.empty",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.empty",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": ""
+    }
+  },
+  {
+    "id": "window.UTC.whitespace",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.whitespace",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": " \t\n"
+    }
+  },
+  {
+    "id": "window.UTC.bad-month",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.bad-month",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-13-01"
+    }
+  },
+  {
+    "id": "window.UTC.normalized-feb30",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.normalized-feb30",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-02-30"
+    }
+  },
+  {
+    "id": "window.UTC.normalized-nonleap",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.normalized-nonleap",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2025-02-29"
+    }
+  },
+  {
+    "id": "window.UTC.future",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.future",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2027-01-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "window.UTC.half-day-span",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.half-day-span",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-27T00:00:00.123Z"
+    }
+  },
+  {
+    "id": "window.UTC.fractional-second-extra",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.fractional-second-extra",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01T12:30:45.123456789Z"
+    }
+  },
+  {
+    "id": "window.UTC.fractional-second-one",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.fractional-second-one",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01T12:30:45.1Z"
+    }
+  },
+  {
+    "id": "window.UTC.timeclip-min",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.timeclip-min",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "-271821-04-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "window.UTC.timeclip-max",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.timeclip-max",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "+275760-09-13T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "window.UTC.timeclip-over-max",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.timeclip-over-max",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "+275760-09-13T00:00:00.001Z"
+    }
+  },
+  {
+    "id": "window.UTC.timeclip-under-min",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.timeclip-under-min",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "-271821-04-19T23:59:59.999Z"
+    }
+  },
+  {
+    "id": "window.UTC.infinite-days-overridden",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.infinite-days-overridden",
+      "days": "Infinity",
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-10-01"
+    }
+  },
+  {
+    "id": "window.UTC.local-dst-gap",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.local-dst-gap",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-03-08T02:30:00"
+    }
+  },
+  {
+    "id": "window.UTC.local-dst-fold",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.local-dst-fold",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "2026-11-01T01:30:00"
+    }
+  },
+  {
+    "id": "window.UTC.raw-lone-surrogate",
+    "profile": "window",
+    "input": {
+      "id": "window.UTC.raw-lone-surrogate",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "UTC",
+      "since": "\ud800"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.relative90",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.relative90",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.relative0",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.relative0",
+      "days": 0,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.relative-half-day",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.relative-half-day",
+      "days": 0.5,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.relative-negative-direct-pure",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.relative-negative-direct-pure",
+      "days": -1,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.huge-finite100m",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.huge-finite100m",
+      "days": 100000000,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.outside-timeclip200m",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.outside-timeclip200m",
+      "days": 200000000,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.infinite-days",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.infinite-days",
+      "days": "Infinity",
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.nan-days-direct-pure",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.nan-days-direct-pure",
+      "days": "NaN",
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.iso-z",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.iso-z",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01T12:30:45.123Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.iso-offset",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.iso-offset",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01T12:30:45.123+05:30"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.date-only",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.date-only",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.datetime-no-zone",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.datetime-no-zone",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01T12:30:45.123"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.rfc2822",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.rfc2822",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "Thu, 01 Oct 2026 12:30:45 GMT"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.us-slash",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.us-slash",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "10/01/2026"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.month-name",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.month-name",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "October 1, 2026"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.legacy-number0",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.legacy-number0",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "0"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.legacy-number42",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.legacy-number42",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "42"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.legacy-number13",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.legacy-number13",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "13"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.invalid-text",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.invalid-text",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "not-a-date"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.empty",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.empty",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": ""
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.whitespace",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.whitespace",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": " \t\n"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.bad-month",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.bad-month",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-13-01"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.normalized-feb30",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.normalized-feb30",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-02-30"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.normalized-nonleap",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.normalized-nonleap",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2025-02-29"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.future",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.future",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2027-01-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.half-day-span",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.half-day-span",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-27T00:00:00.123Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.fractional-second-extra",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.fractional-second-extra",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01T12:30:45.123456789Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.fractional-second-one",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.fractional-second-one",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01T12:30:45.1Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.timeclip-min",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.timeclip-min",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "-271821-04-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.timeclip-max",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.timeclip-max",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "+275760-09-13T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.timeclip-over-max",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.timeclip-over-max",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "+275760-09-13T00:00:00.001Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.timeclip-under-min",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.timeclip-under-min",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "-271821-04-19T23:59:59.999Z"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.infinite-days-overridden",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.infinite-days-overridden",
+      "days": "Infinity",
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-10-01"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.local-dst-gap",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.local-dst-gap",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-03-08T02:30:00"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.local-dst-fold",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.local-dst-fold",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "2026-11-01T01:30:00"
+    }
+  },
+  {
+    "id": "window.America-Los-Angeles.raw-lone-surrogate",
+    "profile": "window",
+    "input": {
+      "id": "window.America-Los-Angeles.raw-lone-surrogate",
+      "days": 90,
+      "clockMs": 1793102400123.75,
+      "zone": "America/Los_Angeles",
+      "since": "\ud800"
+    }
+  },
+  {
+    "id": "parser.UTC.unix-like-digits",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.unix-like-digits",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "1511648546"
+    }
+  },
+  {
+    "id": "parser.UTC.time-only",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.time-only",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "6:15pm"
+    }
+  },
+  {
+    "id": "parser.UTC.rfc3339-arbitrary-separator",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.rfc3339-arbitrary-separator",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "2026-10-01X12:30:45Z"
+    }
+  },
+  {
+    "id": "parser.UTC.leap-second",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.leap-second",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "2016-12-31T23:59:60Z"
+    }
+  },
+  {
+    "id": "parser.UTC.iso-end-of-day",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.iso-end-of-day",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "2026-10-01T24:00:00Z"
+    }
+  },
+  {
+    "id": "parser.UTC.iso-surrounding-space",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.iso-surrounding-space",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": " 2026-10-01T12:30:45Z "
+    }
+  },
+  {
+    "id": "parser.UTC.positive-expanded-year",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.positive-expanded-year",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "+002026-10-01T12:30:45Z"
+    }
+  },
+  {
+    "id": "parser.UTC.negative-zero-year",
+    "profile": "parser",
+    "input": {
+      "id": "parser.UTC.negative-zero-year",
+      "days": 90,
+      "clockMs": 1793102400123,
+      "zone": "UTC",
+      "since": "-000000-10-01T12:30:45Z"
+    }
+  }
+]

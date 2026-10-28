@@ -1,0 +1,287 @@
+{
+  "schema": 1,
+  "profile": "Actual frozen Source CLI, Node22.21.1, fixed Date constructor forwarding real parsing, neutral disposable Git fixtures",
+  "clockMs": 1793102400123.75,
+  "cases": [
+    { "id": "window-default-90", "steps": [{ "id": "default" }] },
+    {
+      "id": "window-zero-fractional-clock",
+      "steps": [
+        { "id": "zero-days", "flags": ["--hotspots-days", "0"] },
+        {
+          "id": "epoch-fraction",
+          "clockMs": 0.75,
+          "flags": ["--hotspots-days", "0"]
+        },
+        {
+          "id": "negative-fraction",
+          "clockMs": -0.75,
+          "flags": ["--hotspots-days", "0"]
+        }
+      ]
+    },
+    {
+      "id": "explicit-since-ignores-days",
+      "steps": [
+        {
+          "id": "infinite-days-overridden",
+          "flags": [
+            "--hotspots-days",
+            "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+            "--hotspots-since",
+            "2026-10-01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ISO-UTC-offsets",
+      "steps": [
+        { "id": "positive-offset", "since": "2026-10-01T12:30:45.123+05:30" },
+        { "id": "negative-offset", "since": "2026-10-01T12:30:45.123-03:30" }
+      ]
+    },
+    {
+      "id": "date-only-UTC-vs-zone-less",
+      "steps": [
+        { "id": "date-only-utc", "since": "2026-10-01", "TZ": "UTC" },
+        {
+          "id": "date-only-la",
+          "since": "2026-10-01",
+          "TZ": "America/Los_Angeles"
+        },
+        {
+          "id": "datetime-utc",
+          "since": "2026-10-01T12:30:45.123",
+          "TZ": "UTC"
+        },
+        {
+          "id": "datetime-la",
+          "since": "2026-10-01T12:30:45.123",
+          "TZ": "America/Los_Angeles"
+        }
+      ]
+    },
+    {
+      "id": "local-DST-gap-fold",
+      "steps": [
+        {
+          "id": "gap",
+          "since": "2026-03-08T02:30:00",
+          "TZ": "America/Los_Angeles"
+        },
+        {
+          "id": "fold",
+          "since": "2026-11-01T01:30:00",
+          "TZ": "America/Los_Angeles"
+        },
+        {
+          "id": "unknown-zone",
+          "since": "2026-03-08T02:30:00",
+          "TZ": "Demlik/Not_A_Zone"
+        },
+        {
+          "id": "default-host-zone",
+          "since": "2026-03-08T02:30:00",
+          "TZ": null
+        }
+      ]
+    },
+    {
+      "id": "legacy-month-RFC-slash",
+      "steps": [
+        {
+          "id": "month-name",
+          "since": "October 1, 2026",
+          "TZ": "America/Los_Angeles"
+        },
+        {
+          "id": "rfc",
+          "since": "Thu, 01 Oct 2026 12:30:45 GMT",
+          "TZ": "America/Los_Angeles"
+        },
+        { "id": "slash", "since": "10/01/2026", "TZ": "America/Los_Angeles" }
+      ]
+    },
+    {
+      "id": "legacy-short-numbers",
+      "steps": [
+        { "id": "zero", "since": "0" },
+        { "id": "forty-two", "since": "42" },
+        { "id": "thirteen", "since": "13" }
+      ]
+    },
+    {
+      "id": "civil-overflow-normalization",
+      "steps": [
+        { "id": "february-thirty", "since": "2026-02-30" },
+        { "id": "non-leap-february", "since": "2025-02-29" }
+      ]
+    },
+    {
+      "id": "fractional-seconds-and-24-midnight",
+      "steps": [
+        { "id": "long-fraction", "since": "2026-10-01T12:30:45.123456789Z" },
+        { "id": "short-fraction", "since": "2026-10-01T12:30:45.1Z" },
+        { "id": "midnight-rollover", "since": "2026-10-01T24:00:00Z" }
+      ]
+    },
+    {
+      "id": "expanded-years-TimeClip-endpoints",
+      "steps": [
+        { "id": "minimum", "since": "-271821-04-20T00:00:00.000Z" },
+        { "id": "maximum", "since": "+275760-09-13T00:00:00.000Z" },
+        { "id": "over-maximum", "since": "+275760-09-13T00:00:00.001Z" },
+        { "id": "under-minimum", "since": "-271821-04-19T23:59:59.999Z" },
+        { "id": "expanded-year", "since": "+001234-01-01T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "invalid-empty-parser-countercases",
+      "steps": [
+        { "id": "invalid", "since": "not-a-date" },
+        { "id": "empty", "since": "" },
+        { "id": "space", "since": " \t\n" },
+        { "id": "bad-month", "since": "2026-13-01" },
+        { "id": "leap-second", "since": "2026-10-01T12:30:60Z" },
+        { "id": "negative-zero-year", "since": "-000000-01-01T00:00:00Z" }
+      ]
+    },
+    {
+      "id": "span-rounding-and-future-zero",
+      "steps": [
+        { "id": "half-rounds-one", "since": "2026-10-27T00:00:00.123Z" },
+        { "id": "under-half", "since": "2026-10-27T00:00:00.124Z" },
+        { "id": "future", "since": "2027-01-01T00:00:00Z" }
+      ]
+    },
+    {
+      "id": "options-order-large-digits-Infinity",
+      "steps": [
+        {
+          "id": "days-before-limit",
+          "flags": ["--hotspots-days", "bad", "--hotspots-limit", "also-bad"]
+        },
+        {
+          "id": "limit-before-clock",
+          "flags": ["--hotspots-days", "90", "--hotspots-limit", "-2"]
+        },
+        {
+          "id": "trim-large-limit",
+          "flags": [
+            "--hotspots-days",
+            "\ufeff\u00a090\u00a0",
+            "--hotspots-limit",
+            "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+          ]
+        },
+        {
+          "id": "days-overflow",
+          "flags": [
+            "--hotspots-days",
+            "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "real-two-scope-three-module-Git-repeat-out",
+      "steps": [
+        { "id": "root-json" },
+        { "id": "repeat-root-json" },
+        {
+          "id": "human-limit-one",
+          "json": false,
+          "flags": ["--hotspots-limit", "1"]
+        },
+        { "id": "json-limit-one", "flags": ["--hotspots-limit", "1"] },
+        { "id": "write", "out": "report.json" },
+        {
+          "id": "overwrite-pretty",
+          "out": "report.json",
+          "flags": ["--pretty"],
+          "chmodBefore": 416
+        },
+        { "id": "first-scope", "target": "packages/alpha" },
+        { "id": "second-scope", "target": "packages/second" },
+        { "id": "initial-exit-seven", "initial": 7 }
+      ]
+    },
+    {
+      "id": "Git-notrepo-unborn-unavailable",
+      "steps": [
+        { "id": "not-repo", "fixture": "not-repo" },
+        { "id": "unborn", "fixture": "unborn" },
+        { "id": "unavailable", "withoutGit": true }
+      ]
+    },
+    {
+      "id": "higher-priority-and-losing-edge-flags",
+      "steps": [
+        {
+          "id": "graph-wins-invalid-window",
+          "flags": ["--graph", "--hotspots-since", "not-a-date"]
+        },
+        {
+          "id": "hexagon-wins-invalid-window",
+          "flags": ["--hexagon", "--hotspots-since", "not-a-date"]
+        },
+        {
+          "id": "losing-blast-requires-edge-load",
+          "flags": ["--blast", "alpha", "--hotspots-days", "bad"],
+          "since": "not-a-date"
+        }
+      ]
+    },
+    {
+      "id": "human-limit-vs-JSON-all-rows-overwrite",
+      "steps": [
+        {
+          "id": "human-one",
+          "json": false,
+          "flags": ["--hotspots-limit", "1"]
+        },
+        { "id": "json-one-all-rows", "flags": ["--hotspots-limit", "1"] },
+        {
+          "id": "overwrite-human",
+          "json": false,
+          "flags": ["--hotspots-limit", "2"],
+          "out": "existing.txt",
+          "seedOutput": "old-output\n",
+          "seedMode": 416
+        }
+      ]
+    },
+    {
+      "id": "window-error-before-Git-initial-exit",
+      "steps": [
+        {
+          "id": "invalid-before-notrepo",
+          "fixture": "not-repo",
+          "since": "not-a-date",
+          "initial": 7
+        },
+        {
+          "id": "warning-before-invalid-window",
+          "since": "not-a-date",
+          "flags": ["--by", "complexity"],
+          "out": "must-not-write.json",
+          "initial": 7
+        }
+      ]
+    },
+    {
+      "id": "cheap-no-tsconfig-noGo-pending-stdio",
+      "steps": [
+        { "id": "cheap-no-compiler", "PATH": "/usr/bin:/bin" },
+        { "id": "pending-stdout", "badStdout": true },
+        {
+          "id": "warning-pending-stderr",
+          "badStderr": true,
+          "flags": ["--by", "complexity"],
+          "out": "pending-output.json"
+        }
+      ]
+    }
+  ]
+}
