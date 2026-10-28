@@ -1,0 +1,172 @@
+{
+  "sourceCommit": "5a4da68fde1b7153ec84948d0232822071c60fe0",
+  "base": "b81b513670c4b2a9f9d803d7fd315d3af3b773cb",
+  "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "NativeCalls serial no-policy routed tools through one existing Agent wire; all six legacy public method headers unchanged.",
+  "production": ["crates/tea/src/agent/knob/runtime.rs"],
+  "shared": {
+    "cases": 20,
+    "strict": 16,
+    "qualified": 4,
+    "failures": 0,
+    "qualifiedIds": [
+      "agent-routed.promise.cold-pending",
+      "agent-routed.promise.map-refusal",
+      "agent-routed.effect.cold-pending",
+      "agent-routed.effect.map-refusal"
+    ],
+    "SourceProcesses": 22,
+    "nativeProcesses": 22,
+    "pendingOnlyColdRows": 2,
+    "checkpointBytes": "Compared within those two logical cases, zero additional credit.",
+    "report": "shared20-frozen.json",
+    "reportSHA256": "3d098615f75567c664a9dcf3e2c4d09fbe09a2abac2b7c87fe93b075df99ff53",
+    "canonicalSourceReport": "source-node22/source-first.json",
+    "canonicalSourceReportSHA256": "e0e2ed9f0139d8d4583640c965b7e453eaf2ec885a86c70ed2cb19c65967d113"
+  },
+  "native": {
+    "focusedTests": 13,
+    "groups": 4,
+    "actualOpaqueActorWorkflows": 4,
+    "profiles": ["promise", "effect"],
+    "borrowedLocalConstruction": true,
+    "lateReaderRefusal": "Actual caller-owned late failure projector refusal, original precise ToolContract/no Step; native-only, zero Source credit.",
+    "typeRefusals": {
+      "missingMethod": "E0599 against actual own C8 b81 library",
+      "wrongBusiness": "E0277",
+      "wrongMessage": "E0308",
+      "borrowedActor": "E0521"
+    },
+    "publicConsumer": "crates/tea/examples/agent_routed_public.rs"
+  },
+  "controls": [
+    {
+      "name": "routed-next-brain-dropped",
+      "compile": 0,
+      "modifiedLibraryFresh": false,
+      "executedConsumerFresh": false,
+      "kind": "strict-shared",
+      "detected": true,
+      "sourceRestored": true
+    },
+    {
+      "name": "routed-original-time-lost",
+      "compile": 0,
+      "modifiedLibraryFresh": false,
+      "executedConsumerFresh": false,
+      "kind": "strict-shared",
+      "detected": true,
+      "sourceRestored": true
+    },
+    {
+      "name": "routed-reader-refusal-swallowed",
+      "compile": 0,
+      "modifiedLibraryFresh": false,
+      "executedConsumerFresh": false,
+      "kind": "native-only",
+      "detected": true,
+      "sourceRestored": true
+    }
+  ],
+  "regressions": {
+    "oldRuntimeCases": 34,
+    "oldRouterCases": 39,
+    "oldFallibleMapCases": 12,
+    "extraCredit": 0,
+    "phase": "Executed against initial wire library/selected C1/C3 drivers; final private alias is behavior-neutral. Final exact source reran the 13 focused tests and opaque public program; no claimed final rerun of all old pairs.",
+    "legacyPublicExecutions": [
+      "agent_runtime_interface",
+      "agent_runtime_borrowed",
+      "tool_agent_binding_public"
+    ]
+  },
+  "gates": {
+    "clippy": "C12 default/all-targets exit0 on exact final Rust source",
+    "build": "C13 final library/examples/tests exit0, actual selected fresh:false",
+    "static": [
+      "Source TSC0",
+      "Node syntax0",
+      "Biome0",
+      "rustfmt0",
+      "git diff --check0"
+    ],
+    "constructionCargo": 13,
+    "controlCargo": 3,
+    "failedConstructionCargo": [2, 4, 5, 10, 11]
+  },
+  "actualFinalArtifacts": [
+    {
+      "role": "demlik_tea",
+      "sha256": "5df27feccb2aa580977c5fc677fda48dadb6a905347dd98990cd1a413868e1b6",
+      "retained": "artifacts/cargo13-final-demlik_tea.gz",
+      "fresh": false
+    },
+    {
+      "role": "tool_router",
+      "sha256": "a91d19fccea74c49d3f235714b9a4f728bf8dce66f735dd4c7c7e7b9a6f5bc7b",
+      "retained": "artifacts/cargo13-final-tool_router.gz",
+      "fresh": false
+    },
+    {
+      "role": "agent_runtime_stamp",
+      "sha256": "1eef3e6119043c47aa64d0907ac556d29aec50b48fcaf578d8ec714615ce1d35",
+      "retained": "artifacts/cargo13-final-agent_runtime_stamp.gz",
+      "fresh": false
+    },
+    {
+      "role": "agent_runtime",
+      "sha256": "ae4e0c18f0e032156943c6327508d9053af630f969284f7d3cd94d82e6ce1912",
+      "retained": "artifacts/cargo13-final-agent_runtime.gz",
+      "fresh": false
+    },
+    {
+      "role": "agent_conversation_owners",
+      "sha256": "539cbdbddc6902c575f6bef032ecd746e57f7f9a1c17249616c9e26e85aedae2",
+      "retained": "artifacts/cargo13-final-agent_conversation_owners.gz",
+      "fresh": false
+    },
+    {
+      "role": "agent_routed_public",
+      "sha256": "b4ef3429951618c1f9b53c7f886797e5e4dccbc567a82c6bf1990f20239ddf7c",
+      "retained": "artifacts/cargo13-final-agent_routed_public.gz",
+      "fresh": false
+    },
+    {
+      "role": "agent_routed_driver",
+      "sha256": "e66d2a901eeab3510217b56a3e40307e637a9143d0dfaeabe1d937a1fba537a0",
+      "retained": "artifacts/cargo13-final-agent_routed_driver.gz",
+      "fresh": false
+    }
+  ],
+  "lineage": {
+    "canonicalEngine": {
+      "node": "v22.21.1",
+      "v8": "12.4.254.21-node.33"
+    },
+    "canonicalSourceFreeze": "source-freeze-node22.json",
+    "canonicalSourceFreezeSHA256": "a12d660c9385ad2c4e9b8fc5019bc7f7097bb72326d520d11711ba53afbdf48f",
+    "originalCasesAndLiteralValuesBeforeWire": true,
+    "canonicalNode22AfterLegacyOnlyWireCompileBeforeRoutedProjection": true,
+    "provisionalNode26": "Original measurements/freezes immutable and uncredited; exact output drift audit0.",
+    "firstRaw20": "native-first/native-first.json immutable. Temporary Python type-sensitive diff flagged50/50.0; authoritative Node compares same JSON Number, checkpoint strings never normalized.",
+    "phaseCodec": "Fixture Debug-lowercase was replaced with existing ErrorPhase kebab-case serde. Phases remain exact in every admitted whole comparison.",
+    "setupFailures": "Initial retained-baseline E0463 is dependency-metadata setup only; own C8 actual b81 library provides sole E0599. Original wrong-business multi-error probe and two public fixture panics retained, zero shared credit."
+  },
+  "qualifications": [
+    "Four exact rows qualify only typed runtime error name/message and Source-only stack. Phase, cause pointer receipts, cardinality, all state/trace/messages/ports/save/checkpoint fields remain mandatory.",
+    "No raw child-args bridge, extra/manual message acceptance, missing/null/manual timestamp parity, arbitrary JS exceptions/prototypes or generic executor/eager Promise parity.",
+    "No tool-policy, snapshot, compaction, parallel/fanout/provider/router-child feature grid.",
+    "Cold JSON profile is pending-only, generated settled result/error decoders explicitly refuse. No full routed-state codec or identity across serialization.",
+    "Local borrowed stage/model construction is supported; timer/message/actor static limits remain. Borrowed actor launch is an intended E0521.",
+    "New public AgentMachineError::ToolContract variant can affect downstream exhaustive matches; no old method signature change.",
+    "One historical first external-rustc public executable was overwritten; command/hash/log/source history retained, bytes not claimed. All Cargo-selected libraries/consumers and all3 modified libraries+executed controls retained."
+  ],
+  "proof": {
+    "source": "source-retention.json",
+    "artifacts": "artifact-retention.json",
+    "controls": "controls/controls.json",
+    "controlRetirement": "controls/agent-routed-controls-worktree.json",
+    "constructionRetirement": "retirement.json, finalized externally after this receipt commit",
+    "manifest": "payload-manifest.json, finalized at handoff"
+  }
+}
