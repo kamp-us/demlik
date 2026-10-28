@@ -18,9 +18,7 @@ impl OptionalProfile {
 }
 #[derive(Debug)]
 pub enum AgentError {
-    UnsupportedConfiguredProfile {
-        profile: OptionalProfile,
-    },
+    ToolResilience(super::super::tool_resilience::ToolResilienceError),
     Compaction(crate::js_record::JsAccessError),
     MissingCompactionInput,
     TurnRead(super::super::turn_view::TurnReadError),
@@ -45,7 +43,7 @@ impl AgentError {
             Self::Llm(_) => "AgentLlmError",
             Self::TurnRead(_) => "AgentTurnReadError",
             Self::UnsupportedRestoredProfile { .. } => "UnsupportedRestoredAgentProfile",
-            Self::UnsupportedConfiguredProfile { .. } => "UnsupportedAgentProfile",
+            Self::ToolResilience(error) => error.name(),
             Self::NullUsage | Self::MissingBrainOutput => "TypeError",
         }
     }
@@ -53,9 +51,7 @@ impl AgentError {
 impl std::fmt::Display for AgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedConfiguredProfile { profile } => {
-                write!(f, "base agent cannot execute configured {}", profile.name())
-            }
+            Self::ToolResilience(error) => error.fmt(f),
             Self::Compaction(e) => e.fmt(f),
             Self::MissingCompactionInput => f.write_str("compaction command has no request"),
             Self::Llm(e) => write!(f, "{e:?}"),
@@ -76,3 +72,8 @@ impl std::fmt::Display for AgentError {
     }
 }
 impl std::error::Error for AgentError {}
+impl From<super::super::tool_resilience::ToolResilienceError> for AgentError {
+    fn from(error: super::super::tool_resilience::ToolResilienceError) -> Self {
+        Self::ToolResilience(error)
+    }
+}

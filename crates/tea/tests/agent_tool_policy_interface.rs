@@ -1,8 +1,8 @@
 use demlik_tea::{
     PlainData, Tagged,
     agent::{
-        AgentConfig, AgentError, OptionalProfile, PlainCalls, PlainToolCall, StructuredOutputError,
-        ToolResilience, create_agent,
+        AgentConfig, PlainCalls, PlainToolCall, StructuredOutputError, ToolResilience,
+        create_agent,
         types::{AGENT_TURN_SCHEMA, Conversation},
     },
     llm_call::{self, LlmCall},
@@ -16,12 +16,11 @@ impl Tagged for Tool {
     }
 }
 
-// Contract: a new policy declaration stays inert during construction/init and
-// refuses behavior while the retry/timer implementation is deliberately pending.
-// Regression: silently ignore a selected policy or invoke its callback early.
-// This uses public constructors and preserves snapshot selection, with no test export.
+// Contract: policy selection waits for a launch and survives snapshot selection.
+// Regression: invoke the selector during construction/start or drop it on profile selection.
+// Existing base constructors have no policy callback; this uses the public config only.
 #[test]
-fn policy_declaration_refuses_before_callbacks_and_preserves_snapshot_selection() {
+fn policy_declaration_is_deferred_and_preserves_snapshot_selection() {
     let schema = Rc::new(AGENT_TURN_SCHEMA);
     let llm = Rc::new(LlmCall::new(
         llm_call::Config::new(move |_: &&str| Rc::clone(&schema)),
@@ -54,27 +53,10 @@ fn policy_declaration_refuses_before_callbacks_and_preserves_snapshot_selection(
     );
     let state = agent.init();
     assert_eq!((callbacks.get(), payloads.get()), (0, 0));
-    let Err(error) = agent.start(&state, "r", 0.0) else {
-        panic!("pending profile must refuse")
-    };
-    assert!(matches!(
-        error,
-        AgentError::UnsupportedConfiguredProfile {
-            profile: OptionalProfile::ToolResilience
-        }
-    ));
-    assert_eq!(error.name(), "UnsupportedAgentProfile");
-    assert_eq!(
-        error.to_string(),
-        "base agent cannot execute configured toolResilience"
-    );
-    assert!(matches!(
-        agent.subs(&state),
-        Err(AgentError::UnsupportedConfiguredProfile {
-            profile: OptionalProfile::ToolResilience
-        })
-    ));
-    assert_eq!((callbacks.get(), payloads.get()), (0, 0));
+    let started = agent.start(&state, "r", 0.0).unwrap();
+    assert!(!started.commands.is_empty());
+    assert!(agent.subs(&started.state).unwrap().is_empty());
+    assert_eq!((callbacks.get(), payloads.get()), (0, 1));
 }
 
 // Contract: omission/default policy data has no invented fields or durable tag.

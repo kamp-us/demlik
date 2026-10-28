@@ -1,5 +1,5 @@
 //! Base pure agent knob over the canonical run, brain and tool ledgers.
-//! Optional snapshot/compaction/tool-policy and Runtime wiring are separate profiles.
+//! Optional snapshot/compaction and hand-wired tool policies share the canonical ledgers.
 use crate::{
     PlainData, Tagged,
     agent::{
@@ -8,7 +8,7 @@ use crate::{
         },
         conversation::shared_no_usage,
         snapshot::{NoSnapshot, SnapshotProfile, WithSnapshot},
-        tool_resilience::ToolResilience,
+        tool_resilience::{self, FailureRelations, TimerOutcome, ToolLadder, ToolResilience},
         turn_view::{
             CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReader, read_native,
             read_plain,
@@ -125,6 +125,7 @@ pub struct AgentConfig<
     deadline_ms: Option<f64>,
     tool_concurrency: f64,
     tool_resilience_of: Option<ToolResilienceOf<'a, A, V>>,
+    tool_failures: Option<FailureRelations<TE>>,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
     snapshot_every: f64,
@@ -224,6 +225,7 @@ impl<
             deadline_ms: None,
             tool_concurrency: 1.0,
             tool_resilience_of: None,
+            tool_failures: None,
             max_turns: None,
             max_elapsed_ms: None,
             stop_when: None,
@@ -281,8 +283,8 @@ impl<
     Q: SnapshotProfile,
 > AgentConfig<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
 {
-    /// Retains the caller's policy selector without invoking it. This declaration
-    /// currently refuses at behavior admission; it does not enable tool retries.
+    /// Retains the caller's policy selector without invoking it. Policies are
+    /// selected on launch and rebuild the same durable ladder after a restart.
     /// The initial enabled family uses PlainData tool failures, like to_machine;
     /// opaque tool-failure configs without this declaration remain unrestricted.
     pub fn tool_resilience_of(
@@ -290,6 +292,7 @@ impl<
         select: impl Fn(&Rc<CallOf<A, V>>) -> Option<ToolResilience> + 'a,
     ) -> Self {
         self.tool_resilience_of = Some(Box::new(select));
+        self.tool_failures = Some(FailureRelations::plain());
         self
     }
 }
@@ -318,6 +321,7 @@ pub struct Agent<
     run: MonitoredRun<Stage, PlainData>,
     fan: FanOut<'a, CallOf<A, V>, ToolOutcome<R, TE>, C, TE>,
     compact: CompactCall<'a, K>,
+    ladder: ToolLadder<'a, CallOf<A, V>, C, TE>,
 }
 #[expect(
     clippy::type_complexity,
@@ -339,7 +343,7 @@ pub fn create_agent<
     K: CompactionProfile,
     Q: SnapshotProfile,
 >(
-    config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>,
+    mut config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>,
 ) -> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 where
     CallOf<A, V>: 'a,
@@ -357,11 +361,24 @@ where
         move |call| tool(call),
     ));
     let compact = config.llm.retry_sibling();
+    let ladder = ToolLadder::new(
+        config
+            .llm
+            .retry_sibling_with(crate::resilience::resilient_call::Config::<
+                crate::retry_backoff::RetryBudget,
+            >::default()),
+        config.tool_resilience_of.take(),
+        Rc::clone(&config.tool_of),
+        V::name,
+        V::call_id,
+        config.tool_failures.take(),
+    );
     Agent {
         config,
         run,
         fan,
         compact,
+        ladder,
     }
 }
 impl<
@@ -477,11 +494,6 @@ impl<
         self.compact.init()
     }
     fn supported(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> Result<(), AgentError> {
-        if self.config.tool_resilience_of.is_some() {
-            return Err(AgentError::UnsupportedConfiguredProfile {
-                profile: OptionalProfile::ToolResilience,
-            });
-        }
         if !K::ENABLED {
             if matches!(
                 s.conversation.as_ref().map(|c| &c.awaiting),
@@ -505,18 +517,6 @@ impl<
                         keys,
                     });
                 }
-            }
-        }
-        if let AgentField::Value(tools) = &s.tool_resilience {
-            let keys = tools
-                .own_entries()
-                .map(|(k, _)| k.clone())
-                .collect::<Vec<_>>();
-            if !keys.is_empty() {
-                return Err(AgentError::UnsupportedRestoredProfile {
-                    profile: OptionalProfile::ToolResilience,
-                    keys,
-                });
             }
         }
         Ok(())
@@ -688,13 +688,11 @@ impl<
             .run
             .progress(&s.run, Rc::new(PlainData::Undefined), at)
             .state;
-        counted.tool_resilience = AgentField::Value(self.tool_slice(s));
-        let commands = scattered
-            .state
-            .running
-            .iter()
-            .map(|call| AgentCommand::Tool((self.config.tool_of)(call)))
-            .collect();
+        let (slice, commands) =
+            self.ladder
+                .launch(&self.tool_slice(s), &scattered.state.running, at)?;
+        counted.tool_resilience = AgentField::Value(slice);
+        let commands = commands.into_iter().map(AgentCommand::Tool).collect();
         let notes = self.tool_started(&scattered.state.running, at);
         counted.tools = scattered.state;
         counted.conversation = Some(Rc::new(measured));
@@ -756,9 +754,10 @@ impl<
     ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
-            let before = if self.in_flight(s, &id).is_some() {
+            let before = if let Some(call) = self.in_flight(s, &id) {
                 let mut next = s.as_ref().clone();
-                next.tool_resilience = AgentField::Value(self.tool_slice(s));
+                next.tool_resilience =
+                    AgentField::Value(self.ladder.ok(&self.tool_slice(s), &call, at)?);
                 Rc::new(next)
             } else {
                 Rc::clone(s)
@@ -775,12 +774,17 @@ impl<
     ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
         let id = id.into();
         self.transition(s, at.into(), |s| {
-            let before = if self.in_flight(s, &id).is_some() {
+            let (before, failure) = if let Some(call) = self.in_flight(s, &id) {
+                let (slice, settled) = self.ladder.err(&self.tool_slice(s), &call, failure, at)?;
                 let mut next = s.as_ref().clone();
-                next.tool_resilience = AgentField::Value(self.tool_slice(s));
-                Rc::new(next)
+                next.tool_resilience = AgentField::Value(slice);
+                let next = Rc::new(next);
+                let Some(failure) = settled else {
+                    return Ok(Step::new(next, vec![]));
+                };
+                (next, failure)
             } else {
-                Rc::clone(s)
+                (Rc::clone(s), failure)
             };
             self.settle_tool(&before, &id, Rc::new(ToolOutcome::Error(failure)), at)
         })
@@ -816,12 +820,13 @@ impl<
             .filter(|call| !known.contains(V::call_id(call)))
             .map(Rc::clone)
             .collect::<Vec<_>>();
-        let launch_commands = launched
-            .iter()
-            .map(|call| AgentCommand::Tool((self.config.tool_of)(call)))
+        let (slice, launch_commands) = self.ladder.launch(&self.tool_slice(s), &launched, at)?;
+        let launch_commands = launch_commands
+            .into_iter()
+            .map(AgentCommand::Tool)
             .collect::<Vec<_>>();
         let mut next = s.as_ref().clone();
-        next.tool_resilience = AgentField::Value(self.tool_slice(s));
+        next.tool_resilience = AgentField::Value(slice);
         let mut notes = vec![];
         if let ToolOutcome::Error(failure) = outcome.as_ref() {
             let mut refused = s
@@ -1015,16 +1020,11 @@ impl<
                 next.compaction = AgentField::Value(step.state);
                 return Ok(Step::new(Rc::new(next), commands));
             }
-            let commands = resumed
-                .tools
-                .running
-                .iter()
-                .map(|call| AgentCommand::Tool((self.config.tool_of)(call)))
-                .collect();
+            let (slice, outcome) =
+                self.ladder
+                    .boot(&self.tool_slice(&resumed), &resumed.tools.running, at)?;
             let noted = self.noted(&resumed, self.tool_started(&resumed.tools.running, at));
-            let mut next = noted.as_ref().clone();
-            next.tool_resilience = AgentField::Value(self.tool_slice(&resumed));
-            Ok(Step::new(Rc::new(next), commands))
+            self.apply_ladder(&noted, slice, outcome, at)
         })
     }
     pub fn on_timer(
@@ -1063,11 +1063,9 @@ impl<
                 next.compaction = AgentField::Value(step.state);
                 return Ok(Step::new(Rc::new(next), commands));
             }
-            if has("resilient:retry:$tool:") || has("resilient:deadline:$tool:") {
-                return Err(AgentError::UnsupportedRestoredProfile {
-                    profile: OptionalProfile::ToolResilience,
-                    keys: vec![msg.id.clone()],
-                });
+            if tool_resilience::is_tool_timer(&msg.id) {
+                let (slice, outcome) = self.ladder.on_timer(&self.tool_slice(s), msg)?;
+                return self.apply_ladder(s, slice, outcome, msg.at_ms.number_or_zero());
             }
             let step = self.config.llm.on_timer(&s.resilience, msg)?;
             let mut next = s.as_ref().clone();
@@ -1077,6 +1075,33 @@ impl<
                 step.commands.into_iter().map(AgentCommand::Brain).collect(),
             ))
         })
+    }
+    fn apply_ladder(
+        &self,
+        s: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
+        slice: ToolState<A, TE, V>,
+        outcome: TimerOutcome<C, TE>,
+        at: f64,
+    ) -> ResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> {
+        let mut next = s.as_ref().clone();
+        next.tool_resilience = AgentField::Value(slice);
+        let mut next = Rc::new(next);
+        let mut commands = outcome
+            .commands
+            .into_iter()
+            .map(AgentCommand::Tool)
+            .collect::<Vec<_>>();
+        for order in outcome.settle {
+            let step = self.settle_tool(
+                &next,
+                &order.id,
+                Rc::new(ToolOutcome::Error(order.failure)),
+                at,
+            )?;
+            next = step.state;
+            commands.extend(step.commands);
+        }
+        Ok(Step::new(next, commands))
     }
     pub fn subs(
         &self,
@@ -1091,6 +1116,7 @@ impl<
         }
         let mut list = self.config.llm.deadlines(&s.resilience);
         list.extend(self.compact.deadlines(self.compact_slice(s)?));
+        list.extend(self.ladder.subs(&self.tool_slice(s))?);
         list.extend(self.run.deadlines(&s.run));
         Ok(list)
     }
@@ -1193,6 +1219,7 @@ impl<
             deadline_ms: self.deadline_ms,
             tool_concurrency: self.tool_concurrency,
             tool_resilience_of: self.tool_resilience_of,
+            tool_failures: self.tool_failures,
             max_turns: self.max_turns,
             max_elapsed_ms: self.max_elapsed_ms,
             stop_when: None,
@@ -1450,6 +1477,7 @@ impl<
             deadline_ms: self.deadline_ms,
             tool_concurrency: self.tool_concurrency,
             tool_resilience_of: self.tool_resilience_of,
+            tool_failures: self.tool_failures,
             max_turns: self.max_turns,
             max_elapsed_ms: self.max_elapsed_ms,
             compaction: self.compaction,

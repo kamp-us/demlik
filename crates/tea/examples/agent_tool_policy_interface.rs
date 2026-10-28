@@ -1,4 +1,4 @@
-//! Public inferred construction only; no per-tool retry/timer behavior is claimed.
+//! Public inferred borrowed policy consumer; Runtime ownership is a separate profile.
 use demlik_tea::{
     PlainData, Tagged,
     agent::{
@@ -84,17 +84,17 @@ fn main() {
         "construction and init never select a policy"
     );
     assert!(
-        agent.start(&state, "r", 0.0).is_err(),
-        "interface-only profile must refuse execution"
+        agent.start(&state, "r", 0.0).is_ok(),
+        "bare selector must preserve ordinary start"
     );
     assert_eq!(
         selections.get(),
         0,
-        "refusal must precede policy and payload callbacks"
+        "start must not select a policy before a tool launch"
     );
     let payload = Payload(borrowed);
     assert_eq!(payload.0, borrowed);
     println!(
-        "tool-policy-interface: inferred borrowed arguments/result/cause; original Rc; deferred callback; explicit admission refusal"
+        "tool-policy-interface: inferred borrowed arguments/result/cause; original Rc; deferred callback; ordinary start remains supported"
     );
 }

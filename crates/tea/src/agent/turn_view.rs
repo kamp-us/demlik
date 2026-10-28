@@ -16,6 +16,7 @@ mod private {
 pub trait CallSource<A>: private::Sealed {
     type Call;
     fn call_id(call: &Self::Call) -> &JsText;
+    fn name(call: &Self::Call) -> &JsText;
 }
 pub struct NativeCalls;
 pub struct PlainCalls;
@@ -26,11 +27,17 @@ impl<A> CallSource<A> for NativeCalls {
     fn call_id(call: &Self::Call) -> &JsText {
         &call.call_id
     }
+    fn name(call: &Self::Call) -> &JsText {
+        &call.name
+    }
 }
 impl CallSource<PlainData> for PlainCalls {
     type Call = PlainToolCall;
     fn call_id(call: &Self::Call) -> &JsText {
         call.call_id()
+    }
+    fn name(call: &Self::Call) -> &JsText {
+        call.name()
     }
 }
 pub type CallOf<A, V> = <V as CallSource<A>>::Call;
