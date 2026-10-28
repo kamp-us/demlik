@@ -1,17 +1,21 @@
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::FunctionNode;
 use indexmap::{IndexMap, IndexSet};
 
 pub type Adjacency = IndexMap<String, Vec<String>>;
 
-pub fn invoked_adjacency(functions: &[FunctionNode]) -> Adjacency {
-    full_adjacency(functions, &IndexMap::new())
+pub fn invoked_adjacency(
+    functions: &[FunctionNode],
+    collation: &Collation,
+) -> Result<Adjacency, CollationError> {
+    full_adjacency(functions, &IndexMap::new(), collation)
 }
 
 pub fn full_adjacency(
     functions: &[FunctionNode],
     references_by_id: &IndexMap<String, Vec<String>>,
-) -> Adjacency {
+    collation: &Collation,
+) -> Result<Adjacency, CollationError> {
     let ids: IndexSet<_> = functions.iter().map(|node| node.id.as_str()).collect();
     functions
         .iter()
@@ -29,9 +33,15 @@ pub fn full_adjacency(
                     targets.insert(id.clone());
                 }
             }
-            let mut targets: Vec<_> = targets.into_iter().collect();
-            targets.sort_by(|left, right| locale_compare(left, right));
-            (node.id.clone(), targets)
+            let mut targets = targets
+                .into_iter()
+                .map(|value| CollationInput::from_text(&value).map(|key| (value, key)))
+                .collect::<Result<Vec<_>, _>>()?;
+            targets.sort_by(|left, right| collation.compare(&left.1, &right.1));
+            Ok((
+                node.id.clone(),
+                targets.into_iter().map(|(value, _)| value).collect(),
+            ))
         })
         .collect()
 }

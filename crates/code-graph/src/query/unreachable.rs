@@ -3,7 +3,7 @@ use super::surface::public_surface_files;
 use crate::extract::functions::is_test_file;
 use crate::extract::references::ReferenceResult;
 use crate::kinds::rules::{CompiledRule, JsRegex, matching_rules};
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{
     FunctionNode, ModuleNode, NodeKind, UnreachableCategory, UnreachableSymbol, WithheldReason,
     WithheldSymbol,
@@ -27,16 +27,22 @@ pub fn find_unreachable(
     extra_entry_files: &[String],
     test_support: &[CompiledRule],
     export_patterns: &[JsRegex],
-) -> UnreachableResult {
+    collation: &Collation,
+) -> Result<UnreachableResult, CollationError> {
+    let adjacency = full_adjacency(functions, &refs.references_by_id, collation)?;
     let mut roots: IndexSet<_> = refs.module_scope_roots.iter().cloned().collect();
     for node in functions {
         if matches!(node.node_kind, Some(NodeKind::Entry { .. })) {
             roots.insert(node.id.clone());
         }
     }
-    let mut roots: Vec<_> = roots.into_iter().collect();
-    roots.sort_by(|left, right| locale_compare(left, right));
-    let reachable = reachable_from(&full_adjacency(functions, &refs.references_by_id), &roots);
+    let mut roots = roots
+        .into_iter()
+        .map(|id| CollationInput::from_text(&id).map(|key| (id, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    roots.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    let roots = roots.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+    let reachable = reachable_from(&adjacency, &roots);
     let surface = public_surface_files(modules, extra_entry_files, export_patterns);
     let test_like =
         |file: &str| is_test_file(file) || !matching_rules(test_support, &file.into()).is_empty();
@@ -90,18 +96,36 @@ pub fn find_unreachable(
             });
         }
     }
+    let mut unreachable = unreachable
+        .into_iter()
+        .map(|row| {
+            let category = CollationInput::from_text(row.category.as_str())?;
+            let id = CollationInput::from_text(&row.id)?;
+            Ok((row, category, id))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     unreachable.sort_by(|left, right| {
-        locale_compare(left.category.as_str(), right.category.as_str())
-            .then_with(|| locale_compare(&left.id, &right.id))
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| collation.compare(&left.2, &right.2))
     });
+    let mut withheld = withheld
+        .into_iter()
+        .map(|row| {
+            let reason = CollationInput::from_text(row.reason.as_str())?;
+            let id = CollationInput::from_text(&row.id)?;
+            Ok((row, reason, id))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     withheld.sort_by(|left, right| {
-        locale_compare(left.reason.as_str(), right.reason.as_str())
-            .then_with(|| locale_compare(&left.id, &right.id))
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| collation.compare(&left.2, &right.2))
     });
-    UnreachableResult {
-        unreachable,
-        withheld,
+    Ok(UnreachableResult {
+        unreachable: unreachable.into_iter().map(|(row, _, _)| row).collect(),
+        withheld: withheld.into_iter().map(|(row, _, _)| row).collect(),
         reachable_count: reachable.len(),
         exported_count,
-    }
+    })
 }

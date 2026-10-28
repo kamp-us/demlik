@@ -328,7 +328,7 @@ pub fn find_collapse_candidates<'g, 's>(
         .map(|f| Twin::new(f, collation))
         .collect::<Result<Vec<_>, _>>()?;
     let (pairs, skipped) = propose_pairs(&twins, settings, collation)?;
-    let context = CostContext::new(functions, package_roots);
+    let context = CostContext::new(functions, package_roots, collation)?;
     let stride = twins.len() as f64;
     let mut candidates = Vec::new();
     for encoded in &pairs {

@@ -372,7 +372,8 @@ impl AnalysisBundle {
                     &mains,
                     &self.compiled.test_support,
                     &patterns,
-                );
+                    collation,
+                )?;
                 graph.reachability = Some(ReachabilityReport {
                     entry_count: graph
                         .functions
@@ -381,7 +382,7 @@ impl AnalysisBundle {
                         .count(),
                     exported_count: found.exported_count,
                     reachable_count: found.reachable_count,
-                    unguarded: find_unguarded(&graph.functions),
+                    unguarded: find_unguarded(&graph.functions, collation)?,
                     unreachable: found.unreachable,
                     withheld: found.withheld,
                 });

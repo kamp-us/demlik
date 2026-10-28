@@ -1,5 +1,5 @@
 use super::reach::invoked_adjacency;
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{EntryReach, FunctionNode, NodeKind, UnguardedEffect};
 use indexmap::IndexMap;
 
@@ -31,19 +31,26 @@ fn witness_path(visits: &IndexMap<State, Visit>, state: &State) -> Vec<String> {
     path
 }
 
-pub fn find_unguarded(functions: &[FunctionNode]) -> Vec<UnguardedEffect> {
+pub fn find_unguarded(
+    functions: &[FunctionNode],
+    collation: &Collation,
+) -> Result<Vec<UnguardedEffect>, CollationError> {
     let by_id: IndexMap<_, _> = functions
         .iter()
         .map(|node| (node.id.as_str(), node))
         .collect();
-    let adjacency = invoked_adjacency(functions);
+    let adjacency = invoked_adjacency(functions, collation)?;
     let mut found = IndexMap::new();
     for reach in EntryReach::ALL {
-        let mut entries: Vec<_> = functions.iter().filter(|node| matches!(node.node_kind, Some(NodeKind::Entry { reach: own, .. }) if own == reach)).map(|node| node.id.clone()).collect();
-        entries.sort_by(|left, right| locale_compare(left, right));
+        let entries: Vec<_> = functions.iter().filter(|node| matches!(node.node_kind, Some(NodeKind::Entry { reach: own, .. }) if own == reach)).map(|node| node.id.clone()).collect();
+        let mut entries = entries
+            .into_iter()
+            .map(|id| CollationInput::from_text(&id).map(|key| (id, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by(|left, right| collation.compare(&left.1, &right.1));
         let mut visits: IndexMap<State, Visit> = IndexMap::new();
         let mut queue = Vec::new();
-        for id in entries {
+        for (id, _) in entries {
             let state = State {
                 id: id.clone(),
                 guarded: false,
@@ -99,7 +106,10 @@ pub fn find_unguarded(functions: &[FunctionNode]) -> Vec<UnguardedEffect> {
             index += 1;
         }
     }
-    let mut found: Vec<_> = found.into_values().collect();
-    found.sort_by(|left, right| locale_compare(&left.effect_id, &right.effect_id));
-    found
+    let mut found = found
+        .into_values()
+        .map(|row| CollationInput::from_text(&row.effect_id).map(|key| (row, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    found.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    Ok(found.into_iter().map(|(row, _)| row).collect())
 }

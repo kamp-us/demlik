@@ -7,7 +7,7 @@ use demlik_code_graph::checker::context::{TypeContextInput, with_type_context};
 use demlik_code_graph::engine::tsgo::TsgoBinary;
 use demlik_code_graph::extract::assemble::{NodeFields, assemble_graph_with_edges};
 use demlik_code_graph::extract::references::{ReferenceResult, resolve_references};
-use demlik_code_graph::project::{EdgeScope, load_edge_project};
+use demlik_code_graph::project::{Collation, EdgeScope, load_edge_project};
 use demlik_code_graph::schema::{EntryReach, Graph, NodeKind, Thresholds};
 
 struct Project(PathBuf);
@@ -125,7 +125,9 @@ fn distinguishes_dead_test_only_public_and_callback_exports_across_real_packages
         &[],
         &support,
         &[],
-    );
+        &Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(found.exported_count, 6);
     assert_eq!(
         found
@@ -186,8 +188,12 @@ fn distinguishes_dead_test_only_public_and_callback_exports_across_real_packages
             .external_consumers,
         ["packages/b/main.ts"]
     );
-    let full =
-        demlik_code_graph::query::reach::full_adjacency(&graph.functions, &refs.references_by_id);
+    let full = demlik_code_graph::query::reach::full_adjacency(
+        &graph.functions,
+        &refs.references_by_id,
+        &Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         demlik_code_graph::query::reach::reachable_from(&full, &refs.module_scope_roots)
             .into_iter()
@@ -335,7 +341,11 @@ fn reports_a_public_unguarded_witness_even_when_other_reaches_have_shorter_paths
             _ => NodeKind::Plain,
         });
     }
-    let findings = demlik_code_graph::query::unguarded::find_unguarded(&graph.functions);
+    let findings = demlik_code_graph::query::unguarded::find_unguarded(
+        &graph.functions,
+        &Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].entry_id, "entry.ts:fetch");
     assert_eq!(findings[0].effect_id, "entry.ts:persist");
@@ -344,7 +354,11 @@ fn reports_a_public_unguarded_witness_even_when_other_reaches_have_shorter_paths
         ["entry.ts:fetch", "entry.ts:open", "entry.ts:persist"]
     );
     assert!(matches!(findings[0].reach, EntryReach::Public));
-    let adjacency = demlik_code_graph::query::reach::invoked_adjacency(&graph.functions);
+    let adjacency = demlik_code_graph::query::reach::invoked_adjacency(
+        &graph.functions,
+        &Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let reachable = demlik_code_graph::query::reach::reachable_from(
         &adjacency,
         &["entry.ts:fetch".into(), "outside".into()],

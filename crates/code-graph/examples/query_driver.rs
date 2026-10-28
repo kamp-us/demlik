@@ -226,14 +226,18 @@ fn query(
     let invoked = observe!(
         calls,
         demlik_code_graph::query::reach::invoked_adjacency,
-        &graph.functions
-    );
+        &graph.functions,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let full = observe!(
         calls,
         demlik_code_graph::query::reach::full_adjacency,
         &graph.functions,
-        &references.references_by_id
-    );
+        &references.references_by_id,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let reachable = observe!(
         calls,
         demlik_code_graph::query::reach::reachable_from,
@@ -255,13 +259,17 @@ fn query(
         &references,
         &input.extra_entry_files,
         &support,
-        &patterns
-    );
+        &patterns,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let unguarded = observe!(
         calls,
         demlik_code_graph::query::unguarded::find_unguarded,
-        &graph.functions
-    );
+        &graph.functions,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let width = observe!(
         calls,
         demlik_code_graph::query::interface_width::find_interface_width,

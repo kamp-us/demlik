@@ -3,6 +3,7 @@ use super::{
     signals::{Twin, round4},
 };
 use crate::{
+    project::{Collation, CollationError},
     query::reach::{Adjacency, invoked_adjacency, reachable_from},
     schema::{FunctionNode, NodeKind},
 };
@@ -21,10 +22,14 @@ pub(super) struct CostContext<'g, 'p> {
     reaches_effect: IndexSet<String>,
 }
 impl<'g, 'p> CostContext<'g, 'p> {
-    pub fn new(functions: &'g [FunctionNode], package_roots: &'p [String]) -> Self {
+    pub fn new(
+        functions: &'g [FunctionNode],
+        package_roots: &'p [String],
+        collation: &Collation,
+    ) -> Result<Self, CollationError> {
         let mut roots: Vec<_> = package_roots.iter().map(String::as_str).collect();
         roots.sort_by_key(|p| std::cmp::Reverse(p.encode_utf16().count()));
-        let forward = invoked_adjacency(functions);
+        let forward = invoked_adjacency(functions, collation)?;
         let mut reverse = Adjacency::new();
         for (from, tos) in forward {
             for to in tos {
@@ -37,14 +42,14 @@ impl<'g, 'p> CostContext<'g, 'p> {
             .map(|f| f.id.clone())
             .collect();
         let reaches_effect = reachable_from(&reverse, &seeds.into_iter().collect::<Vec<_>>());
-        Self {
+        Ok(Self {
             roots,
             file_of: functions
                 .iter()
                 .map(|f| (f.id.as_str(), f.file.as_str()))
                 .collect(),
             reaches_effect,
-        }
+        })
     }
     fn package_of(&self, file: &str) -> &str {
         for root in &self.roots {
