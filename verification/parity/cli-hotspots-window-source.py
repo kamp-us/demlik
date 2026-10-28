@@ -220,7 +220,7 @@ except BaseException as failure:
 finally:
     source_after = {name: digest((MAIN / name).read_bytes()) for name in source_files}
     final_files = {key: files(root) for key, root in fixtures.items() if root.exists()}
-    
+
     for child in temporary.iterdir():
         if child.is_dir() and not child.is_symlink(): shutil.rmtree(child)
         else: child.unlink()
