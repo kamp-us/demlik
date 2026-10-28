@@ -1,0 +1,92 @@
+{
+  "kind": "bounded verification producer repair; no new Source parity credit",
+  "base": "cdb0116eaa7d39750a98b907ecc6120b667f768f",
+  "sourceCommit": "4424a6fb9b33bc6419752b1b75222f01a6b2cd78",
+  "sourceChain": [
+    "0dcdf8e64e9d2f7f32dd3350f2f93469fb2427da",
+    "4424a6fb9b33bc6419752b1b75222f01a6b2cd78"
+  ],
+  "proof": "/private/tmp/demlik-producer-selection-proof-01a16c9d",
+  "scope": "Future builds for the measured 15 path-only consumers use actual Cargo JSON selections through the existing shared build owner; old sealed proofs are unchanged.",
+  "supportFiles": [
+    "verification/parity/api-base-run.mjs",
+    "verification/parity/api-git-run.mjs",
+    "verification/parity/compiled-traces.mjs",
+    "verification/parity/compose-run.mjs",
+    "verification/parity/json-text-run.mjs",
+    "verification/parity/runtime-contracts.mjs",
+    "verification/parity/runtime.mjs",
+    "verification/parity/tea-example.d.mts",
+    "verification/parity/tea-example.mjs",
+    "verification/parity/tea-example.test.mjs"
+  ],
+  "changes": [
+    "Package-correct selected executables, immediate retained bytes, raw Cargo logs and exact event/source/features metadata.",
+    "Selected Tea/Graph libraries retained gzip by content before later commands; no all-dependency claim.",
+    "All four target aliases refused before Cargo in shared buildArtifact.",
+    "Legacy default and explicit-example paths reuse selected bytes; external overrides have no invented local producer."
+  ],
+  "verification": {
+    "builderProtocolTests": 8,
+    "sourceOnlyBaseline": {
+      "correctedOldTests": 7,
+      "passed": 2,
+      "failed": 5,
+      "failures": "four alias guards absent and selected library bytes not retained",
+      "firstHarnessUnusedReportError": "preserved0credit"
+    },
+    "initialThree": {
+      "source": "0dcdf8e64e9d2f7f32dd3350f2f93469fb2427da",
+      "runtime": 16,
+      "compose": 119,
+      "apiBase": 325,
+      "unchangedBaselineViewsOrCorpus": true
+    },
+    "jsonFollowup": {
+      "source": "4424a6fb9b33bc6419752b1b75222f01a6b2cd78",
+      "cases": 218,
+      "unchangedCallsRefusalsAndCorpus": true,
+      "originalReferenceError": "preserved; corrected by one binary binding"
+    },
+    "all15BinaryBindingsResolve": true,
+    "externalOverride": {
+      "composeCases": 119,
+      "CargoInvoked": false,
+      "producer": null,
+      "extraCredit": 0
+    },
+    "actualCargoSelections": 4,
+    "nativeIcuPreparations": 1,
+    "node": "v22.21.1",
+    "v8": "12.4.254.21-node.33",
+    "scopeStatics": "Node syntax/Biome/parity TypeScript/diff0 on initial source; binary symbol audit +syntax/Biome/diff0 on one-line JSON followup.",
+    "newCaseCredit": 0
+  },
+  "artifacts": {
+    "roles": 8,
+    "uniqueExecutedConsumers": 4,
+    "uniqueSelectedLibraries": 2,
+    "allRoleBytesRetained": true,
+    "effectiveArtifactsSha256": "539ea77b08847d5071d8b60f39762e6b1838bd6df1fc492fd670c7e1e2df1285",
+    "allFeaturesOrDependenciesClaimed": false
+  },
+  "lifecycle": {
+    "worktree": "/private/tmp/demlik-check-producer-selection-01a16c9d-ht2se05c/repo",
+    "defaultTarget": "/private/tmp/demlik-check-producer-selection-01a16c9d-ht2se05c/repo/target",
+    "aliasesAbsent": 4,
+    "neutralRuntimeTmpdir": "/private/tmp",
+    "cleanup": "Pending after this receipt commit; see external retirement.json for actual terminal result.",
+    "initialThreeIcuSeconds": 80.25816391699482,
+    "initialThreeSuiteSeconds": 81.78757308307104,
+    "jsonFollowupSeconds": 1.1663840420078486,
+    "measuredInitialSuiteFinalTargetLogicalBytes": 1113376987,
+    "peakTargetBytesMeasured": false
+  },
+  "limits": [
+    "The other 11 measured consumers are statically routed but not individually rerun here; next material combined checkpoint owns broader validation.",
+    "Old 15 path-only records remain path-only; no inferred historical producer records.",
+    "No full workspace/Tea features/native-doc/cold archive or unsafe aggregate run.",
+    "External binary overrides remain producer-unproved unless a separate actual producer is supplied.",
+    "No native product, TS oracle, case, matcher, count, contract or registry changes."
+  ]
+}
