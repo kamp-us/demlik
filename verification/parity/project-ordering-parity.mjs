@@ -410,12 +410,14 @@ export function normalizeProjectOrderingReport(raw, producers = null) {
       files(s.after, input.id, true),
       files(after, input.id, false),
     );
-    const unique = [...new Set(calls)];
     assert.ok(
-      unique.length > 0 &&
-        unique.every((call) => call.startsWith("demlik_code_graph::")),
+      calls.length > 0 &&
+        calls.every(
+          (call) =>
+            typeof call === "string" && call.startsWith("demlik_code_graph::"),
+        ),
     );
-    const nativeTrace = { observedCalls: unique };
+    const nativeTrace = { observedCalls: calls };
     evidence[input.id] = nativeTrace;
     cases.push({
       id: input.id,
