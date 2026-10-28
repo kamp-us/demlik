@@ -1,0 +1,55 @@
+{
+  "status": "Reviewed pure Jev component and checkpoint adapter integrated; next full composed run pending",
+  "source": "281ad484750203c34097aea1db6a8a1f89363db8",
+  "sourcePick": "fac3b8e6",
+  "receiptPick": "d144d693",
+  "thinSource": "94eb63c41b68fc4f6461976b00cef99c2c59926d",
+  "thinPick": "b2e5d118",
+  "componentStrict": 24,
+  "componentQualified": 0,
+  "newCombinedCredit": 0,
+  "realPublicCallableBindingsAdded": 5,
+  "referenceOwner": "Frozen75de protocol/ask; existing PlainData/JsText/RunError/Outcome own data and errors.",
+  "reviews": {
+    "source": {
+      "path": "evidence/jev-map/source-peer-review-minimal.json",
+      "sha256": "3e59764a2d8398607a12259171868b3f71c24c18d65a9b2abb0e668bae0620b4"
+    },
+    "artifacts": {
+      "path": "evidence/jev-map/final-artifact-peer-review-minimal.json",
+      "sha256": "736ada8f6d40bd225c686941251343c03ac8382d76407d10f8ff8241fec7b1b3"
+    },
+    "thinRoot": {
+      "path": "evidence/jev-map/thin-root-review.json",
+      "sha256": "48c4e12247220da1a6ee762b6e21a2c8dd179249e9b28b149b4292f11f0c088e"
+    }
+  },
+  "proof": {
+    "root": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/jev-protocol-source",
+    "payloads": 231,
+    "bytes": 67371597,
+    "roles": 29,
+    "decodedHashes": 29,
+    "archiveMembers": 20,
+    "nativeRegressions": 36,
+    "compiledStrictControls": 4,
+    "ownedTreesTargetsRemoved": true
+  },
+  "oracleLineage": "Original Source24/first native23of24 kept immutable; one explicit Undefined helper default corrected after native. All24 inputs unchanged, other23 Source views unchanged, direct SourceUndefined anchor retained. No assertion that all correct24 views were measured before Rust.",
+  "wireProfile": "Canonical plain_data then stringify_json; not arbitrary raw serde_json byte equivalence. JevRejected holds the canonical RunError and projects tag-before-jev order.",
+  "registration": {
+    "name": "jevProtocol",
+    "operation": "tea.jev-protocol",
+    "binaryArgument": "--jev-protocol-bin",
+    "example": "jev_protocol_driver",
+    "observations": 24,
+    "strict": 24,
+    "qualified": 0
+  },
+  "limits": [
+    "No network/askfactory/retry/batching/fallback/foreign-error-unwrapping/actor/full-state codec.",
+    "Literal-key mapped typing and arbitrary JS/manual/raw/host profiles remain open.",
+    "Only scoped default native/static/type profiles; whole-workspace/features/MSRV/other targets/cold archive/full goal not claimed.",
+    "All53 broad CLI gaps remain open; last accepted full checkpoint remains16215."
+  ]
+}

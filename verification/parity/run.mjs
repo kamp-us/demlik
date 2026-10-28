@@ -37,6 +37,7 @@ import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { intakeParity } from "./intake-run.mjs";
 import { intakeRuntimeParity } from "./intake-runtime-run.mjs";
+import { jevProtocolCheckpointParity } from "./jev-protocol-parity.mjs";
 import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
 import { jsonTextParity } from "./json-text-run.mjs";
@@ -1200,6 +1201,12 @@ if (!mutationSuite) {
       operation: "tea.machine-viz",
       binaryArgument: "--machine-viz-bin",
       run: (options) => machineVizCheckpointParity(cargo, options),
+    },
+    {
+      name: "jevProtocol",
+      operation: "tea.jev-protocol",
+      binaryArgument: "--jev-protocol-bin",
+      run: (options) => jevProtocolCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",

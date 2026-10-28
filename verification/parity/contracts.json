@@ -15867,5 +15867,67 @@
       "Native panic hooks/abort-mode and arbitrary JS throw channels differ. Two measured panic cases are qualified, outside strict evidence.",
       "Opaque custom projection closures cannot prove declared emptiness; only SubscriptionEntries owns that metadata."
     ]
+  },
+  "@demlik/tea:./jev#parseAnswers": {
+    "signature": "94bf613033efd82a7de7407cd64af0d703821b1469907b5e5a295e7d98092fc4",
+    "rust": {
+      "file": "crates/tea/src/jev/protocol.rs",
+      "symbols": ["demlik_tea::jev::protocol::parse_answers"]
+    },
+    "cases": [
+      "jev.protocol.invoice-200",
+      "jev.protocol.http-429",
+      "jev.protocol.http-401",
+      "jev.protocol.http-529",
+      "jev.protocol.status-number-family"
+    ],
+    "knownGaps": [
+      "Initial native checked question/answer enums do not preserve TypeScript literal-key mapped result typing.",
+      "Decoded PlainData and valid typed question maps only; arbitrary JS prototypes/getters/own __proto__/non-wire values remain unproved."
+    ]
+  },
+  "@demlik/tea:./jev#classifyStatus": {
+    "signature": "f0788643d66f1c29132b12c90ef37522c0a1f6a09fafe8ee01cebab1e2c6ab25",
+    "rust": {
+      "file": "crates/tea/src/jev/protocol.rs",
+      "symbols": ["demlik_tea::jev::protocol::classify_status"]
+    },
+    "cases": ["jev.protocol.status-number-family"]
+  },
+  "@demlik/tea:./jev#isJevErr": {
+    "signature": "e3ac637c70723af93339f369b5381a17a9a87423375f140d9f9cebbab5dfd0f3",
+    "rust": {
+      "file": "crates/tea/src/jev/protocol.rs",
+      "symbols": ["demlik_tea::jev::protocol::is_jev_err"]
+    },
+    "cases": ["jev.protocol.tag-guards"],
+    "knownGaps": [
+      "PlainData/valid typed protocol only; arbitrary JS object/prototype/getter/non-wire behavior remains unproved."
+    ]
+  },
+  "@demlik/tea:./jev#decodeJevReply": {
+    "signature": "49f1cf3d678af82fd8e6f5fdd0e5199699a349b18c00076b76fb79a03dbbf1bc",
+    "rust": {
+      "file": "crates/tea/src/jev/reply.rs",
+      "symbols": ["demlik_tea::jev::reply::decode_reply"]
+    },
+    "cases": [
+      "jev.protocol.invoice-200",
+      "jev.protocol.http-429",
+      "jev.protocol.http-401",
+      "jev.protocol.http-529",
+      "jev.protocol.status-number-family"
+    ],
+    "knownGaps": [
+      "PlainData/valid typed protocol only; arbitrary JS object/prototype/getter/non-wire behavior remains unproved."
+    ]
+  },
+  "@demlik/tea:./jev#isTransientJevAskErr": {
+    "signature": "84a2b19bf4bdde1a04040713111bb16499ed473ad2b1eefda3fc223a9ee9823e",
+    "rust": {
+      "file": "crates/tea/src/jev/reply.rs",
+      "symbols": ["demlik_tea::jev::reply::is_transient_ask_err"]
+    },
+    "cases": ["jev.protocol.tag-guards"]
   }
 }
