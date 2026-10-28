@@ -138,6 +138,15 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-env-keys",
+    driver: "demlik_code_graph",
+    unitTest: true,
+    script: "icu77-env-keys-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-comments",
     driver: "comment_cli_driver",
     script: "graph-cli-comments.mjs",
