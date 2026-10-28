@@ -1,0 +1,121 @@
+{
+  "status": "verified-component-pending-retirement-and-parent-review",
+  "base": "872f3fae84b64388eb8927bd2387429a0304deaf",
+  "implementationSourceCommit": "1a80a8b522d4224b0e30965f03883596f1b9f894",
+  "reviewedProductionCommit": "8ef23091",
+  "scope": "11 environment-key comparisons; existing local memoized borrowed Collation request and direct typed EnvKeyError::Collation; no frontdoor/model/sorter/framework changes",
+  "source18": {
+    "strict": 18,
+    "qualified": 0,
+    "privateWholeViews": 17,
+    "cliWorkflowCases": 1,
+    "cliActions": 9,
+    "nativeProcesses": 26,
+    "frozenBeforeNativeProjection": true,
+    "rawNumericAndMalformedPureSourceOnlyCredit": 0,
+    "closedViaReasonPairs": 13,
+    "globalCreditPendingReview": true
+  },
+  "baseline": {
+    "matched": 15,
+    "mismatched": 3,
+    "namedMismatches": [
+      "scan-raw-name-order",
+      "scan-occurrence-entries",
+      "query-service-raw-order"
+    ],
+    "allActualFramesProtocolValid": true
+  },
+  "public": {
+    "actualBorrowedRcWriters": true,
+    "cheapNoTsconfigNoCompilerExit": 0,
+    "ownedReportUsableAfterPreparedHandleDrop": true,
+    "unchangedPublicAPI": true,
+    "noArtificialMissingMethodOrLifetimeRefusal": true
+  },
+  "native": {
+    "passed": 24,
+    "groups": 7,
+    "newLazyOwnershipCauseTests": 4,
+    "existingEnvTests": 6,
+    "otherAffectedNativeTests": 14,
+    "ignoredPairedEntrypointOnlyRunsWhenExplicitlySelected": true
+  },
+  "oldComparisons": {
+    "passed": 134,
+    "strict": 118,
+    "qualified": 16,
+    "suites": 5,
+    "newCredit": 0
+  },
+  "controls": {
+    "validNamed": 4,
+    "strictSemantic": 3,
+    "nativeOnly": 1,
+    "actualFaultCargo": 4,
+    "normalLibrarySeparateFromExecutedLibtest": true,
+    "firstControllerFailedAfterRealNamedMismatch": true,
+    "savedActualRequestResponseAndCargoAdjudication": true,
+    "noReplayForControl1": true,
+    "remaining3ActualControllerExit": 0,
+    "controlIcuPreparations": 2,
+    "extraPreparationDueToFirstCheckerFailureAndRequiredCleanup": true
+  },
+  "constructionCargoSelections": 7,
+  "failedSelection6": "Clippy unused private-fixture import; retained0credit; fixed by deleting only the import",
+  "finalClippyAndScopedStaticsExit": 0,
+  "constructionIcuPreparations": 1,
+  "phaseQualification": "Green executions use actualC3/C4/C5 selected bytes before fixture-only import deletion; all three product-owner bytes are identical to final. FinalC7 scoped lint uses repaired fixture. Control1 source983 and remaining3 source1a80 retained separately. No claim that libtest links the separate selected normal rlib.",
+  "artifactRoles": 25,
+  "uniqueDecodedArtifacts": 25,
+  "snapshotRetention": "Actual executed bytes captured before overwrite. Raw executable aliases later gzip-retained with exact decoded hash/mode map; original reports/commands remain unchanged. Whole targets/dependency caches/unused metadata not retained.",
+  "remainingInventory": "6 legacy helper calls plus2 direct sorts, inventory only",
+  "all53CLIGapsOpen": true,
+  "noRegistryOrContractsChanges": true,
+  "limitations": [
+    "No full workspace, Tea, allfeatures, cold archive build, packaging or bootstrap claim.",
+    "Unpaired Source NaN/infinity/malformed pure-query observations remain open; computed scan-line facts unchanged, no finite clamp or new sorter.",
+    "Raw Graph/model/host/stdIO profiles and all existing CLI known gaps remain open.",
+    "Protocol acceptance in this component is actual valid request/response frames; no additional protocol-refusal executions were introduced.",
+    "Initial Source setup/banner/priority expectation history, failed lint and failed control checker remain retained with zero extra case credit."
+  ],
+  "proof": "/private/tmp/demlik-icu77-env-keys-proof-01a16c9d",
+  "reports": {
+    "source-first.json": {
+      "sha256": "36147d7d936a2dc02c32744babe23377859094b9b64d0f5304050d0e6defaeeb"
+    },
+    "source-freeze.json": {
+      "sha256": "451c696e34157f18ebc53eb6cbb17beb8d9a67ff8b5bc2201ec1b2db9137c864"
+    },
+    "baseline-pairs.json": {
+      "sha256": "b6ffa208bf324eac88a3b4a388e242c6241ced60c7506a5ae86fae7f57f62dd4"
+    },
+    "green-pairs.json": {
+      "sha256": "78a7a31654bffccb6d9ba4bc83d7387d8bb4497e0c5a2f59f1f49177488069bf"
+    },
+    "controls-final.json": {
+      "sha256": "34d8f61dfd4e51b2dc03d9b7def95228395516a834b3b78afd53c8f80e23ba2d"
+    },
+    "control1-saved-adjudication.json": {
+      "sha256": "17fe3545a0a25d46345c674a97636ec7c7b63d1023651c879c528391b31c2f15"
+    },
+    "effective-artifacts.json": {
+      "sha256": "454ddd4564f01ff3735164d9bc8f635077df35ac270ca94add06776ec794b96d"
+    },
+    "retained-binary-path-map.json": {
+      "sha256": "0db4215b81796aa58fa6ccfd193f6bc762e085a62b1297c20ca94cd6c77f4a11"
+    },
+    "source-manifest.json": {
+      "sha256": "6e2699e9290a3a0a409cc6297b0d90ba2f0d0113f52d3a97dbfe7bb04eb2ac60"
+    },
+    "source.tar.gz": {
+      "sha256": "7f6ddc2150e064674a4087daeb88b1f1c02f9539239b4acac704db6ed684f33f"
+    },
+    "final-recheck-processes.json": {
+      "sha256": "14169586b4ea1468600f7ba1a36a52719e936e8a31f84d7f8987aab1d0f1c2e3"
+    },
+    "affected-processes.json": {
+      "sha256": "c2766068a64ca0468498b4914d13871a72c32cf6253fd341d7ca2be99bd1237d"
+    }
+  }
+}
