@@ -39,9 +39,13 @@ fn run(host: &mut CliIo<'_>) -> i32 {
             return host.normal_exit_code();
         }
     };
-    // This first executable is workspace-local, using the package's installed pin.
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
+    let manifest = std::env::var_os("DEMLIK_CODE_GRAPH_COMPILER_MANIFEST")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join(
+                "../../packages/code-graph/node_modules/@typescript/native-preview/package.json",
+            )
+        });
     let compiler = match TsgoBinary::from_native_preview_manifest(&manifest) {
         Ok(compiler) => compiler,
         Err(error) => {
