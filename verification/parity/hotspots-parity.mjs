@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 const node22 = "/Users/cansirin/.volta/tools/image/node/22.21.1/bin/node";
 const driver = "crates/code-graph/examples/hotspots_driver.rs";
 const driverSHA =
-  "2ef5636150d7d6a3da1e33cbca488cb2aee2297ea6c017187a73929698401f9b";
+  "07147b8686d7aa858655bda94fa6730759983cda0bb87859ebac53032a19fcfc";
 const sourcePins = {
   "packages/code-graph/src/hotspots/churn.ts":
     "4d0a140e604eee8ed332f8caf4a5a66e8ff9b71f30c15975c64e2cd930d023c0",
