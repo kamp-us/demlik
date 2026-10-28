@@ -1,0 +1,953 @@
+{
+  "status": "LITERAL_PREDICTIONS_BEFORE_SOURCE_BEHAVIOR",
+  "cases": [
+    {
+      "id": "empty.fresh-array",
+      "expected": {
+        "messages": [],
+        "receipts": {
+          "sameReturnedArray": false
+        },
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "head.null-versus-empty",
+      "expected": {
+        "messages": {
+          "absent": [],
+          "empty": [
+            {
+              "role": "system",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": ""
+            }
+          ]
+        },
+        "receipts": {},
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "head.instructions-only",
+      "expected": {
+        "messages": [
+          {
+            "role": "system",
+            "content": "Follow invoice policy"
+          },
+          {
+            "role": "assistant",
+            "content": "ready",
+            "toolCalls": []
+          }
+        ],
+        "receipts": {},
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "head.input-utf16",
+      "expected": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "\u0000\ud800a\udc00\ud83d\ude00"
+          }
+        ],
+        "receipts": {
+          "contentUnits": [
+            0,
+            55296,
+            97,
+            56320,
+            55357,
+            56832
+          ]
+        },
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "history.plan-act-order",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "plan",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "read-b",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "callId": "read-a",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "act",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "check",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          }
+        ],
+        "receipts": {},
+        "trace": [
+          "read-b",
+          "read-a",
+          "check"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "records.duplicates-orphans",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "no calls",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "repeat",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "callId": "repeat",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          }
+        ],
+        "receipts": {},
+        "trace": [
+          "repeat",
+          "repeat"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "provider.presence",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "absent",
+            "toolCalls": []
+          },
+          {
+            "role": "assistant",
+            "content": "undefined",
+            "toolCalls": [],
+            "provider": {
+              "$value": "undefined"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": "null",
+            "toolCalls": [],
+            "provider": null
+          },
+          {
+            "role": "assistant",
+            "content": "opaque",
+            "toolCalls": [],
+            "provider": {
+              "$opaque": "original-opaque",
+              "read": 17
+            }
+          }
+        ],
+        "receipts": {
+          "providerOwn": [
+            false,
+            true,
+            true,
+            true
+          ],
+          "opaqueProviderOriginal": true
+        },
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "owners.original-handles",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "inspect",
+            "toolCalls": [
+              {
+                "callId": "read",
+                "name": "invoice",
+                "args": {
+                  "$opaque": "original-opaque",
+                  "read": 17
+                }
+              },
+              {
+                "callId": "check",
+                "name": "invoice",
+                "args": {
+                  "$opaque": "original-opaque",
+                  "read": 17
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "callId": "read",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "$opaque": "original-opaque",
+                "read": 17
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "callId": "check",
+            "name": "invoice",
+            "outcome": {
+              "kind": "error",
+              "_tag": "declined",
+              "reason": "declined",
+              "original": {
+                "$opaque": "original-opaque",
+                "read": 17
+              }
+            }
+          }
+        ],
+        "receipts": {
+          "readCallbackCallOriginal": true,
+          "readCallbackOutcomeOriginal": true,
+          "checkCallbackCallOriginal": true,
+          "checkCallbackOutcomeOriginal": true,
+          "originalToolCallsArray": true,
+          "originalArgs": true,
+          "originalOutcome": true,
+          "originalResult": true,
+          "originalError": true
+        },
+        "trace": [
+          "read",
+          "check"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "parts.null-versus-empty",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "parts",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "none",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "callId": "empty",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": []
+          }
+        ],
+        "receipts": {
+          "partsOwn": [
+            false,
+            true
+          ],
+          "emptyOriginal": true
+        },
+        "trace": [
+          "none",
+          "empty"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "parts.media-original",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "media",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "media",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "invoice"
+              },
+              {
+                "type": "image",
+                "mediaType": "image/png",
+                "source": {
+                  "type": "bytes",
+                  "data": {
+                    "$bytes": [
+                      9,
+                      3
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "file",
+                "mediaType": "application/pdf",
+                "source": {
+                  "type": "url",
+                  "url": "invoice.pdf"
+                }
+              }
+            ]
+          }
+        ],
+        "receipts": {
+          "partsOwnerOriginal": true,
+          "partOwnersOriginal": true,
+          "mediaSourceOriginal": true,
+          "mediaBufferShared": true
+        },
+        "trace": [],
+        "error": null,
+        "after": [
+          {
+            "type": "text",
+            "text": "invoice"
+          },
+          {
+            "type": "image",
+            "mediaType": "image/png",
+            "source": {
+              "type": "bytes",
+              "data": {
+                "$bytes": [
+                  9,
+                  3
+                ]
+              }
+            }
+          },
+          {
+            "type": "file",
+            "mediaType": "application/pdf",
+            "source": {
+              "type": "url",
+              "url": "invoice.pdf"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "parts.error-callback",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "failure",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "failed",
+            "name": "invoice",
+            "outcome": {
+              "kind": "error",
+              "_tag": "declined",
+              "reason": "no"
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "error explanation"
+              }
+            ]
+          }
+        ],
+        "receipts": {
+          "outcomeOriginal": true,
+          "partsOriginal": true
+        },
+        "trace": [
+          "error"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "parts.failure-prefix",
+      "expected": {
+        "messages": null,
+        "receipts": {},
+        "trace": [
+          "first",
+          "second"
+        ],
+        "error": {
+          "originalCause": true,
+          "name": "Error",
+          "message": "parts-original"
+        },
+        "after": null
+      }
+    },
+    {
+      "id": "indices.exact-number",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "indices",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "zero",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "callId": "negative-zero",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          }
+        ],
+        "receipts": {},
+        "trace": [
+          "zero",
+          "negative-zero"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "indices.raw-null",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "raw null",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "real-zero",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            }
+          }
+        ],
+        "receipts": {},
+        "trace": [
+          "real-zero"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "history.turn-count-ignored",
+      "expected": {
+        "messages": {
+          "first": [
+            {
+              "role": "assistant",
+              "content": "counter",
+              "toolCalls": []
+            },
+            {
+              "role": "tool",
+              "callId": "r",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            }
+          ],
+          "second": [
+            {
+              "role": "assistant",
+              "content": "counter",
+              "toolCalls": []
+            },
+            {
+              "role": "tool",
+              "callId": "r",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            }
+          ]
+        },
+        "receipts": {
+          "sameMessages": true
+        },
+        "trace": [],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "render.repeat-no-cache",
+      "expected": {
+        "messages": {
+          "first": [
+            {
+              "role": "assistant",
+              "content": "repeat",
+              "toolCalls": []
+            },
+            {
+              "role": "tool",
+              "callId": "r",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            }
+          ],
+          "second": [
+            {
+              "role": "assistant",
+              "content": "repeat",
+              "toolCalls": []
+            },
+            {
+              "role": "tool",
+              "callId": "r",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            }
+          ]
+        },
+        "receipts": {
+          "sameReturnedArray": false,
+          "sameAssistantWrapper": false,
+          "originalToolCallsBoth": true
+        },
+        "trace": [
+          "r",
+          "r"
+        ],
+        "error": null,
+        "after": null
+      }
+    },
+    {
+      "id": "parts.mutate-after-render",
+      "expected": {
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "mutable",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "one",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": "during callback"
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "callId": "two",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": "during callback"
+              }
+            ]
+          }
+        ],
+        "receipts": {
+          "partsOriginal": true,
+          "secondCallbackMutationVisible": true,
+          "afterRenderMutationVisible": true,
+          "originalPartOwner": true
+        },
+        "trace": [
+          "one",
+          "two"
+        ],
+        "error": null,
+        "after": [
+          {
+            "role": "assistant",
+            "content": "mutable",
+            "toolCalls": []
+          },
+          {
+            "role": "tool",
+            "callId": "one",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": "during callback"
+              },
+              {
+                "type": "text",
+                "text": "after render"
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "callId": "two",
+            "name": "invoice",
+            "outcome": {
+              "kind": "ok",
+              "result": {
+                "total": 120
+              }
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": "during callback"
+              },
+              {
+                "type": "text",
+                "text": "after render"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "port.invoice-native-and-raw",
+      "expected": {
+        "messages": [
+          [
+            {
+              "role": "system",
+              "content": "Invoice policy"
+            },
+            {
+              "role": "user",
+              "content": "inv-17"
+            },
+            {
+              "role": "assistant",
+              "content": "read",
+              "toolCalls": [
+                {
+                  "callId": "invoice-read",
+                  "name": "invoice",
+                  "args": {
+                    "invoice": "inv-17"
+                  }
+                }
+              ],
+              "provider": {
+                "adapter": "original"
+              }
+            },
+            {
+              "role": "tool",
+              "callId": "invoice-read",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "check",
+              "toolCalls": [
+                {
+                  "callId": "invoice-check",
+                  "name": "invoice",
+                  "args": {
+                    "invoice": "inv-17"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "callId": "invoice-check",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "done",
+              "toolCalls": []
+            }
+          ],
+          [
+            {
+              "role": "system",
+              "content": "Invoice policy"
+            },
+            {
+              "role": "user",
+              "content": "inv-17"
+            },
+            {
+              "role": "assistant",
+              "content": "read",
+              "toolCalls": [
+                {
+                  "callId": "invoice-read",
+                  "name": "invoice",
+                  "args": {
+                    "invoice": "inv-17"
+                  }
+                }
+              ],
+              "provider": {
+                "adapter": "original"
+              }
+            },
+            {
+              "role": "tool",
+              "callId": "invoice-read",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "check",
+              "toolCalls": [
+                {
+                  "callId": "invoice-check",
+                  "name": "invoice",
+                  "args": {
+                    "invoice": "inv-17"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "callId": "invoice-check",
+              "name": "invoice",
+              "outcome": {
+                "kind": "ok",
+                "result": {
+                  "total": 120
+                }
+              }
+            },
+            {
+              "role": "assistant",
+              "content": "done",
+              "toolCalls": []
+            }
+          ]
+        ],
+        "receipts": {
+          "typedRequestOriginal": true,
+          "typedPayloadOriginal": true,
+          "typedMessagesOriginal": true,
+          "typedProviderOriginal": true,
+          "typedToolCallsOriginal": true,
+          "typedOutcomeOriginal": true,
+          "typedOutputOriginal": true,
+          "guarded-rawRequestOriginal": true,
+          "guarded-rawPayloadOriginal": true,
+          "guarded-rawMessagesOriginal": true,
+          "guarded-rawProviderOriginal": true,
+          "guarded-rawToolCallsOriginal": true,
+          "guarded-rawOutcomeOriginal": true,
+          "guarded-rawOutputOriginal": true,
+          "parses": 4,
+          "modelInvokes": 2,
+          "guardedRawHistoryOriginal": true
+        },
+        "trace": [
+          "typed:loader",
+          "typed:parts:invoice-read",
+          "typed:parts:invoice-check",
+          "typed:model",
+          "guarded-raw:loader",
+          "guarded-raw:parts:invoice-read",
+          "guarded-raw:parts:invoice-check",
+          "guarded-raw:model"
+        ],
+        "error": null,
+        "after": null
+      }
+    }
+  ]
+}
