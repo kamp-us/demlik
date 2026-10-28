@@ -1,0 +1,137 @@
+{
+  "scope": "Local implementation checkpoint for admitted profiles. Full Demlik Rust port remains incomplete.",
+  "status": "accepted local implementation checkpoint",
+  "verifiedImplementation": "3f39fb801b27299e54913e895b94404d3fd23d91",
+  "previousAcceptedReceipt": "788d0e3f66395eb4f0bb98871a37d118182efa8b",
+  "outcomes": {
+    "admitted": 16060,
+    "strict": 15828,
+    "qualified": 232,
+    "comparisonFailures": 0,
+    "referenceChanges": 0,
+    "addedOutcomes": 96,
+    "newStrictKeys": 91,
+    "newQualifiedOutcomes": 5,
+    "previousStrictNowQualified": ["graph.collapse-partial.graph.raw-source"]
+  },
+  "freshGraph": {
+    "outcomes": 9752,
+    "suites": 71,
+    "transportProbes": 34,
+    "artifactBindings": 75,
+    "retainedRoles": 105,
+    "uniqueDecodedArtifacts": 53,
+    "sourceFilesByteVerified": 2676,
+    "postBuildCargoSelection": "fresh:true selects paths only, not original code generation. Unit artifact uses its actual original Cargo event."
+  },
+  "inheritedAtIdenticalRelevantSource": {
+    "sourceCommit": "0e4e170c5208d74f2b8c6d521d1e5fe7fe026d86",
+    "onlyDelta": "Two reviewed graph verifier files; all native, TypeScript and non-graph fixture bytes identical.",
+    "nonGraphPassed": 6308,
+    "nativeAndDocs": {
+      "default": {
+        "testsAndDocs": 701,
+        "resultGroups": 213,
+        "overlap": "default and feature totals overlap, never sum"
+      },
+      "allFeatures": {
+        "testsAndDocs": 715,
+        "resultGroups": 213,
+        "overlap": "default and feature totals overlap, never sum"
+      },
+      "countsOverlap": true
+    },
+    "bothTypeConfigurations": true,
+    "bothClippyConfigurations": true,
+    "publicExampleExecutions": 26,
+    "originalCheckStatuses": "failed reader checks, immutable. Only actually passing hashed steps are inherited.",
+    "comparisonBinaryLimitation": "Some old non-graph executed comparison binaries were not retained before the reader failure; no byte-retention or producer-link claim is invented."
+  },
+  "newSlices": {
+    "icu77Collapse": {
+      "shared": 7,
+      "strict": 7,
+      "qualified": 0
+    },
+    "html": {
+      "shared": 34,
+      "strict": 30,
+      "qualified": 4
+    },
+    "toolPolicy": {
+      "shared": 54,
+      "strict": 53,
+      "qualified": 1
+    },
+    "restoredBaseToolPolicy": {
+      "newlyAdmitted": 1,
+      "strict": 1
+    },
+    "componentSourceAndControlReviews": "Existing independently reviewed source-bound component receipts and artifacts retained. No global mutation sweep."
+  },
+  "rawDiagnosticBoundary": {
+    "id": "graph.collapse-partial.graph.raw-source",
+    "qualification": ["actual-backend-offset"],
+    "oldSourceNativeOffsets": [167, 167],
+    "freshSourceNativeOffsets": [165, 166],
+    "existingComparerUnchanged": true,
+    "all20FilesAndFourSnapshotsByteModeEqual": true,
+    "strictDiagnosticParity": "OPEN, zero strict credit",
+    "cause": "Unproven",
+    "review": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/raw-backend-offset-review.json",
+    "reviewSha256": "52e5401c3f39e52442779f88eec5175a57f919a552649e8c112c9bc72861f9bd",
+    "independentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/demlik-collapse-partial-raw-source-offset-peer-01a16c9d.json",
+    "independentReviewSha256": "f7a308df6eed3b1126c4534bfba41aa3672aa7bd1c4b4d2706ecd57d8170a3a9"
+  },
+  "coverage": {
+    "total": 3445,
+    "mapped": 832,
+    "unmapped": 2613,
+    "gapRows": 2793,
+    "all53CliGapsOpen": true,
+    "notCompletionPercentage": true,
+    "completeFlag": "Not rerun; full-coverage gaps remain. No whole-port pass."
+  },
+  "proof": {
+    "composedReport": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/report.json",
+    "composedReportSha256": "0bb2f98ed4eee2e074bed6720708b588e110bea0fe2d54a620b8fe25ee1b4536",
+    "offlineChecks": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/checks.json",
+    "offlineChecksSha256": "4e45ec0df6496d22ed156f0c9013a9c623cac674da25320a6d338a481d9307f5",
+    "freshGraphChecks": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-only-recovery-3f39fb80/checks.json",
+    "freshGraphChecksSha256": "a166ffba285076e12db77c56fd4e4c3a745cb0a85710f7db56c9817b4d74a889",
+    "freshGraphCheckStatus": "failed only original strict-key policy assertion; fresh graph execution, retention and cleanup passed. Never relabeled passed.",
+    "freshManifest": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-only-recovery-3f39fb80/proof-files.json",
+    "freshManifestSha256": "98d0d7ff2cfe208eeb1619d16ac921fafe8ef00d73de3bc409a762671bae4be4",
+    "freshManifestFiles": 431,
+    "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-only-recovery-parent-review-3f39fb80.json",
+    "parentReviewSha256": "20fb0f3ff37c4c9541b96ff4be2e6e4a50ed73ad95e9eff46a6c80a1ac8b780b",
+    "inheritedInitialChecks": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-combined-0e4e170c/checks.json",
+    "inheritedInitialChecksSha256": "d5013a690ae8603700db1e2a09a461b2157d7f8a09f7cdf1d9e20054f0aa1742",
+    "inheritedContinuationChecks": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-continuation-0e4e170c/checks.json",
+    "inheritedContinuationChecksSha256": "8e5b278a558c96cd28bb8f07cbb0dc297f7b26e074ce3ce0de3bbb5bf2180ee4",
+    "archive": "No duplicate whole archive; exact retained files and hashed immutable prior proof are linked.",
+    "coldSourceArchiveRebuild": false,
+    "offlinePacketManifest": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/proof-files.json",
+    "offlinePacketManifestSha256": "64f8b36a15284626275c34741422bcccbb0798ed05a91618d1e86ede6c2fbeb1"
+  },
+  "cleanup": {
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "stderr": ""
+  },
+  "independentFinalReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/collapse-html-tool-policy-recomposed-3f39fb80/demlik-graph-only-recovery-final-peer-review-01a16c9d.json",
+    "sha256": "a2adf4c78a2a27a46608d9794410195008f7e6f5b7c8a86207409079c7b03283",
+    "verdict": "PASS completed checkpoint evidence within its admitted profiles"
+  },
+  "blindSpots": [
+    "Full goal incomplete; remaining agent constructors/providers/hosts/CLI/packaging/public bindings and raw/scheduling profiles remain open.",
+    "One old strict raw-source diagnostic is now qualified under its existing offset-only rule. Exact diagnostic parity and the cause remain open.",
+    "Original Effect held-stop snapshot-message full-trace mismatch remains open and uncredited; nine other snapshot-message rows are runtime-qualified only.",
+    "Some inherited non-graph executed comparison bytes are explicitly unretained; selected current graph bytes and actual producer events are retained.",
+    "Static ICU77 profile is Darwin arm64 only;128 legacy helpers plus2direct project sorts remain in this verified implementation. D and E are separate pending work.",
+    "No cold source rebuild, cross-platform release, publication, deployment or whole-runtime equivalence claim."
+  ],
+  "acceptanceRecordedAt": "2026-10-28T03:59:15.272704+00:00"
+}
