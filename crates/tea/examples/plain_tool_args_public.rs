@@ -539,6 +539,7 @@ async fn owned(profile: Profile, mode: u8) {
     );
     match record.outcome.as_ref() {
         ToolOutcome::Ok(value) => {
+            assert_ne!(mode, 1, "declared-failure-mode-must-not-succeed");
             let original = match value.as_ref() {
                 invoice::Results::Collect(v) | invoice::Results::Check(v) => v,
                 invoice::Results::Rejected(_) => panic!("success family"),
