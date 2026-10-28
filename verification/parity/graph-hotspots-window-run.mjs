@@ -305,32 +305,25 @@ async function main() {
       producerFile,
     );
     assert.equal(receipt.producer.binarySha256, before);
-    const result = spawnSync(
+    const command = [
       process.execPath,
-      [
-        "--import",
-        createRequire(import.meta.url).resolve("tsx"),
-        fileURLToPath(new URL("./graph-hotspots-window.mjs", import.meta.url)),
-        receipt.producer.binary,
-        rawFile,
-      ],
-      {
-        cwd: root,
-        env: { ...process.env, TMPDIR: "/private/tmp" },
-        encoding: "utf8",
-        timeout: 300000,
-        maxBuffer: 8 << 20,
-      },
-    );
+      "--import",
+      createRequire(import.meta.url).resolve("tsx"),
+      fileURLToPath(new URL("./graph-hotspots-window.mjs", import.meta.url)),
+      receipt.producer.binary,
+      rawFile,
+    ];
+    const result = spawnSync(command[0], command.slice(1), {
+      cwd: root,
+      env: { ...process.env, TMPDIR: "/private/tmp" },
+      encoding: "utf8",
+      timeout: 300000,
+      maxBuffer: 8 << 20,
+    });
     fs.writeFileSync(`${reportFile}.worker.stdout`, result.stdout ?? "");
     fs.writeFileSync(`${reportFile}.worker.stderr`, result.stderr ?? "");
     receipt.launch = {
-      command: [
-        process.execPath,
-        "graph-hotspots-window.mjs",
-        receipt.producer.binary,
-        rawFile,
-      ],
+      command,
       status: result.status,
       signal: result.signal,
       error: result.error?.message ?? null,
