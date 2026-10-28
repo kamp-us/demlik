@@ -708,8 +708,9 @@ fn run<'c>(
                     undeclared: &undeclared,
                     unjudged: analysis.unjudged as f64,
                 },
-            );
-            let deployables = deployable_census(&reads.deployables, &analysis.sites);
+                collation,
+            )?;
+            let deployables = deployable_census(&reads.deployables, &analysis.sites, collation)?;
             Ok(emitted(
                 render_boundaries(
                     &analysis.reports,

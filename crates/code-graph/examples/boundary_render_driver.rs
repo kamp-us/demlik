@@ -208,12 +208,41 @@ fn site(value: &JsValue) -> Result<SiteRow> {
     canonical_fields(value, &site)?;
     Ok(site)
 }
-fn worker(value: &JsValue) -> Result<WorkerCensus> {
+// Parsed fixture rows own the backing storage until rendering completes.
+struct WorkerInput {
+    worker: JsString,
+    files: Vec<JsString>,
+    bindings: IndexMap<JsString, f64>,
+    sites: Vec<SiteRow>,
+}
+impl WorkerInput {
+    fn borrowed(&self) -> WorkerCensus<'_> {
+        WorkerCensus {
+            worker: self.worker.clone(),
+            files: self.files.clone(),
+            bindings: self.bindings.clone(),
+            sites: self.sites.iter().collect(),
+        }
+    }
+}
+struct DeployableInput {
+    workers: Vec<WorkerInput>,
+    unresolved_service_bindings: f64,
+}
+impl DeployableInput {
+    fn borrowed(&self) -> DeployableCensus<'_> {
+        DeployableCensus {
+            workers: self.workers.iter().map(WorkerInput::borrowed).collect(),
+            unresolved_service_bindings: self.unresolved_service_bindings,
+        }
+    }
+}
+fn worker(value: &JsValue) -> Result<WorkerInput> {
     let bindings = object(field(value, "bindings")?)?
         .iter()
         .map(|(name, value)| Ok((name.clone(), scalar(value)?)))
         .collect::<Result<_>>()?;
-    let worker = WorkerCensus {
+    let worker = WorkerInput {
         worker: decode(field(value, "worker")?)?,
         files: decode(field(value, "files")?)?,
         bindings,
@@ -222,21 +251,21 @@ fn worker(value: &JsValue) -> Result<WorkerCensus> {
             .map(site)
             .collect::<Result<_>>()?,
     };
-    canonical_fields(value, &worker)?;
+    canonical_fields(value, &worker.borrowed())?;
     Ok(worker)
 }
-fn deployable(value: &JsValue) -> Result<DeployableCensus> {
-    let deployable = DeployableCensus {
+fn deployable(value: &JsValue) -> Result<DeployableInput> {
+    let deployable = DeployableInput {
         workers: array(field(value, "workers")?)?
             .iter()
             .map(worker)
             .collect::<Result<_>>()?,
         unresolved_service_bindings: scalar(field(value, "unresolvedServiceBindings")?)?,
     };
-    canonical_fields(value, &deployable)?;
+    canonical_fields(value, &deployable.borrowed())?;
     Ok(deployable)
 }
-fn censuses(value: &JsValue) -> Result<(Option<LibraryCensus>, Option<DeployableCensus>)> {
+fn censuses(value: &JsValue) -> Result<(Option<LibraryCensus>, Option<DeployableInput>)> {
     fields(value, &["libraries", "deployables"])?;
     let optional = |name| -> Result<Option<&JsValue>> {
         let value = field(value, name)?;
@@ -320,7 +349,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             fields(&input, &["reports", "under", "censuses", "json", "pretty"])?;
             let reports = reports(field(&input, "reports")?)?;
             let under: JsString = decode(field(&input, "under")?)?;
-            let (libraries, deployables) = censuses(field(&input, "censuses")?)?;
+            let (libraries, deployable_input) = censuses(field(&input, "censuses")?)?;
+            let deployables = deployable_input.as_ref().map(DeployableInput::borrowed);
             let json_flag: bool = decode(field(&input, "json")?)?;
             let pretty: bool = decode(field(&input, "pretty")?)?;
             json(

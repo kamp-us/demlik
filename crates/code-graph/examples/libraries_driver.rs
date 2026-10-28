@@ -296,8 +296,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                     scopes: &input.measured_scopes,
                     undeclared: &input.measured_undeclared,
                     unjudged: input.unjudged
-                }
-            );
+                },
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let lines = census.as_ref().map(|census| {
                 observe!(
                     calls,

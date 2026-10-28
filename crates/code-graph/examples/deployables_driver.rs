@@ -108,7 +108,7 @@ struct JudgmentOutput<'a> {
         )>,
     )>,
     files: Vec<FileOutput<'a>>,
-    census: Option<demlik_code_graph::boundaries::deployables::census::DeployableCensus>,
+    census: Option<demlik_code_graph::boundaries::deployables::census::DeployableCensus<'a>>,
     lines: Option<Vec<JsString>>,
 }
 #[derive(Serialize)]
@@ -269,8 +269,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 calls,
                 demlik_code_graph::boundaries::deployables::census::deployable_census,
                 &deployables,
-                &rows
-            );
+                &rows,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let lines = census.as_ref().map(|census| {
                 observe!(
                     calls,

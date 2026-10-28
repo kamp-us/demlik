@@ -1,5 +1,7 @@
 //! JavaScript strings, patterns, and JSON values at native boundaries.
 
+pub(crate) mod v8_sort;
+
 use std::fmt::Write;
 
 use indexmap::IndexMap;

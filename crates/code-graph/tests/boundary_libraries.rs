@@ -196,7 +196,9 @@ fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census(
             undeclared: &["packages/free".into()],
             unjudged: 1.0,
         },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
+    .unwrap()
     .unwrap();
     assert_eq!(
         census.types[&JsString::from("adapter")],

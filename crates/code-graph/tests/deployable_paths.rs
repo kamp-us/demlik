@@ -235,7 +235,13 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
         })
         .collect();
     rows.push(rows[0].clone());
-    let census = deployable_census(&deployables, &rows).unwrap();
+    let census = deployable_census(
+        &deployables,
+        &rows,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(census.workers.len(), 1);
     assert_eq!(census.workers[0].bindings[&JsString::from("DB")], 2.0);
     assert_eq!(

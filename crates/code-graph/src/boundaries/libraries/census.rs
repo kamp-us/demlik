@@ -1,6 +1,6 @@
 use super::Libraries;
 use crate::{
-    project::locale_compare_units,
+    project::{Collation, CollationError, CollationInput},
     render::text::number,
     text::{JsString, JsValue, object_keys},
 };
@@ -41,32 +41,41 @@ pub struct MeasuredLibraries<'a> {
 pub fn library_census(
     libraries: &Libraries<'_>,
     measured: MeasuredLibraries<'_>,
-) -> Option<LibraryCensus> {
-    let rules = libraries.rules()?;
+    collation: &Collation,
+) -> Result<Option<LibraryCensus>, CollationError> {
+    let Some(rules) = libraries.rules() else {
+        return Ok(None);
+    };
     let scopes: IndexSet<_> = measured.scopes.iter().collect();
-    let mut names = object_keys(&rules.library_types);
-    names.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-    let types = names
+    let mut names = object_keys(&rules.library_types)
         .into_iter()
-        .map(|name| {
-            let mut dirs: Vec<JsString> = libraries
-                .dirs
-                .iter()
-                .filter(|dir| libraries.type_of_dir.get(*dir) == Some(&name))
-                .map(|dir| dir.as_str().into())
-                .filter(|dir| scopes.contains(dir))
-                .collect();
-            dirs.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-            (name.clone(), dirs)
-        })
-        .collect();
-    let mut undeclared = measured.undeclared.to_vec();
-    undeclared.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-    Some(LibraryCensus {
+        .map(|name| CollationInput::from_utf16(name.units()).map(|input| (name, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    names.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    let mut types = IndexMap::new();
+    for (name, _) in names {
+        let mut dirs = libraries
+            .dirs
+            .iter()
+            .filter(|dir| libraries.type_of_dir.get(*dir) == Some(&name))
+            .map(|dir| JsString::from(dir.as_str()))
+            .filter(|dir| scopes.contains(dir))
+            .map(|dir| CollationInput::from_utf16(dir.units()).map(|input| (dir, input)))
+            .collect::<Result<Vec<_>, _>>()?;
+        dirs.sort_by(|a, b| collation.compare(&a.1, &b.1));
+        types.insert(name.clone(), dirs.into_iter().map(|(dir, _)| dir).collect());
+    }
+    let mut undeclared = measured
+        .undeclared
+        .iter()
+        .map(|name| CollationInput::from_utf16(name.units()).map(|input| (name.clone(), input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    undeclared.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(Some(LibraryCensus {
         types,
-        undeclared,
+        undeclared: undeclared.into_iter().map(|(name, _)| name).collect(),
         unjudged_imports: measured.unjudged,
-    })
+    }))
 }
 fn join(parts: impl IntoIterator<Item = JsString>, separator: &str) -> JsString {
     let mut result = JsString::default();

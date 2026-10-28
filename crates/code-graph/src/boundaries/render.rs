@@ -29,7 +29,7 @@ pub struct BoundaryRender {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Censuses<'a> {
     pub libraries: Option<&'a LibraryCensus>,
-    pub deployables: Option<&'a DeployableCensus>,
+    pub deployables: Option<&'a DeployableCensus<'a>>,
 }
 // Variant order is the source renderer's advice block order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -158,7 +158,7 @@ pub fn render_boundaries(
             #[serde(skip_serializing_if = "Option::is_none")]
             libraries: Option<&'a LibraryCensus>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            deployables: Option<&'a DeployableCensus>,
+            deployables: Option<&'a DeployableCensus<'a>>,
         }
         return stable_stringify(
             &Snapshot {

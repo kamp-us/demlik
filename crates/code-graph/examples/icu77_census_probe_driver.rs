@@ -149,20 +149,13 @@ fn deployable(request: &Request) -> Result<String, Box<dyn std::error::Error>> {
     model.graph.unresolved = 3;
     let mut rows: Vec<SiteRow> = Vec::new();
     let mut names: HashMap<String, usize> = HashMap::new();
-    let mut has_alias = false;
+    let mut references = Vec::new();
     for input in &request.rows {
         if let Some(alias) = &input.alias {
-            let original = &rows[*names.get(alias).expect("earlier Source reference")];
-            // The old &[SiteRow] API cannot encode an aliased input. This
-            // materialization is explicit evidence of that API limit, not identity.
-            rows.push(SiteRow {
-                file: original.file.clone(),
-                line: original.line,
-                binding: original.binding.clone(),
-            });
-            has_alias = true;
+            references.push(*names.get(alias).expect("earlier Source reference"));
         } else {
             names.insert(input.id.as_ref().expect("row id").clone(), rows.len());
+            references.push(rows.len());
             rows.push(SiteRow {
                 file: input
                     .file
@@ -173,24 +166,29 @@ fn deployable(request: &Request) -> Result<String, Box<dyn std::error::Error>> {
             });
         }
     }
-    let before: Vec<_> = rows
+    let row_refs: Vec<_> = references.iter().map(|index| &rows[*index]).collect();
+    let before: Vec<_> = row_refs
         .iter()
         .map(|r| (r.file.clone(), r.line.to_bits(), r.binding.clone()))
         .collect();
     let mut calls = vec!["demlik_code_graph::boundaries::deployables::census::deployable_census"];
-    let census =
-        demlik_code_graph::boundaries::deployables::census::deployable_census(&model, &rows);
+    let collation = Collation::try_node22_en_us()?;
+    let census = demlik_code_graph::boundaries::deployables::census::deployable_census(
+        &model,
+        row_refs.iter().copied(),
+        &collation,
+    )?;
     let reports = vec![ScopeBoundaryReport {
         scope: ".".into(),
         features: vec!["demo".into()],
-        files_scanned: rows.len() as f64,
+        files_scanned: row_refs.len() as f64,
         violations: vec![],
         workers: None,
     }];
     let mut identity = Vec::new();
     let workers = census.as_ref().map(|c| c.workers.iter().map(|w| {
-        let indices: Vec<Vec<usize>> = w.sites.iter().map(|site| rows.iter().enumerate().filter_map(|(i, original)| std::ptr::eq(original, site).then_some(i)).collect()).collect();
-        identity.push(Identity {all_original_rows: indices.iter().all(|x| !x.is_empty()), original_indices: indices, alias_input_materialized_as_separate_owned_rows: has_alias, qualification: "Unchanged census owns cloned SiteRows; values do not prove original-reference identity."});
+        let indices: Vec<Vec<usize>> = w.sites.iter().map(|site| row_refs.iter().enumerate().filter_map(|(i, original)| std::ptr::eq(*original, *site).then_some(i)).collect()).collect();
+        identity.push(Identity {all_original_rows: indices.iter().all(|x| !x.is_empty()), original_indices: indices, alias_input_materialized_as_separate_owned_rows: false, qualification: "Original input references, including repeated references, are retained."});
         WorkerView {worker: &w.worker, files: &w.files, bindings: object_keys(&w.bindings).into_iter().map(|key| (key,w.bindings[key])).collect(), sites: w.sites.iter().map(|s| SiteView {file: &s.file,line: line(s.line),binding: &s.binding}).collect()}
     }).collect());
     let lines = census.as_ref().map(|c| {
@@ -214,7 +212,7 @@ fn deployable(request: &Request) -> Result<String, Box<dyn std::error::Error>> {
     let report_json = render(true, false)?;
     let report_pretty = render(true, true)?;
     let unchanged = before
-        == rows
+        == row_refs
             .iter()
             .map(|r| (r.file.clone(), r.line.to_bits(), r.binding.clone()))
             .collect::<Vec<_>>();
@@ -267,10 +265,10 @@ fn library(request: &Request, root: &Path) -> Result<String, Box<dyn std::error:
         "packages/aa".into(),
     ];
     let mut calls = Vec::new();
+    let collation = Collation::try_node22_en_us()?;
     let libraries = if request.mode == "library-disabled" {
         Libraries::default()
     } else {
-        let collation = Collation::try_node22_en_us()?;
         calls.push("demlik_code_graph::boundaries::libraries::read_libraries");
         match demlik_code_graph::boundaries::libraries::read_libraries(
             &rules, root, None, &collation,
@@ -293,7 +291,8 @@ fn library(request: &Request, root: &Path) -> Result<String, Box<dyn std::error:
             undeclared: &undeclared,
             unjudged: f64::INFINITY,
         },
-    );
+        &collation,
+    )?;
     let output = if let Some(census) = &census {
         calls.push("demlik_code_graph::boundaries::libraries::census::census_lines");
         let lines = demlik_code_graph::boundaries::libraries::census::census_lines(census);
