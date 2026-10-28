@@ -105,8 +105,19 @@ fn a_loaded_worker_combines_rules_and_shares_its_write_fact_across_crossings() {
         .unwrap(),
     )
     .unwrap();
-    let catalog = load_binding_catalog(&repo.0, None).unwrap();
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &repo.0, None).unwrap() else {
+    let catalog = load_binding_catalog(
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("fixture libraries refused");
     };
     let DeployablesRead::Read(deployables) = read_deployables(&rules, &repo.0, None, &catalog)
@@ -129,7 +140,9 @@ fn a_loaded_worker_combines_rules_and_shares_its_write_fact_across_crossings() {
         &loaded.project.root_absolute,
         &loaded.project.source_files,
         &loaded.ts_config_path,
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let facts: Vec<_> = loaded
         .project
         .source_files

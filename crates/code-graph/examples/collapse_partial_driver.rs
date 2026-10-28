@@ -232,6 +232,8 @@ fn assembly_failure(error: AssemblyError) -> Failure {
     }
 }
 fn execute(request: Request) -> Result<Response, Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let tag: Tag = serde_json::from_str(request.input.get())?;
     let mut calls = vec![];
     let result = match tag.operation {
@@ -293,7 +295,8 @@ fn execute(request: Request) -> Result<Response, Box<dyn std::error::Error>> {
                         Thresholds::default(),
                         &binary,
                         NodeFields::default(),
-                        &options
+                        &options,
+                        &metadata_collation
                     ) {
                         Err(error) => Err(assembly_failure(error)),
                         Ok(graph) => {

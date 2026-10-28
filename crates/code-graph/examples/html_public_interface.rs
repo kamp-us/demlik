@@ -6,12 +6,15 @@ use demlik_code_graph::{
 };
 use std::path::Path;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let root = std::env::args().nth(1).expect("project path");
     let loaded = load_cheap_project(Path::new(&root), None)?;
     let graph = assemble_graph(
         &loaded,
         Thresholds::default(),
         NodeFields { headers: false },
+        &metadata_collation,
     )?;
     let model = {
         let collation = Collation::try_node22_en_us()?;

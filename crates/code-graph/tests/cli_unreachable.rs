@@ -49,7 +49,13 @@ impl Drop for Fixture {
 fn renderer_keeps_witness_order_and_counts_sorted_withheld_reasons() {
     let fixture = Fixture::new();
     let loaded = load_cheap_project(&fixture.0, None).unwrap();
-    let mut graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default()).unwrap();
+    let mut graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         render_unreachable(&graph, true, true).unwrap(),
         "reachability: pass did not run — add --unreachable or --unguarded."

@@ -247,6 +247,7 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
             &binary,
             NodeFields::default(),
             &options,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
         )
         .unwrap();
         assert_eq!(graph.modules.len(), 3);

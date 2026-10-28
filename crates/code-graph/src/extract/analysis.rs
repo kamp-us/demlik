@@ -4,6 +4,7 @@ use super::package_exports::{ExportPatternError, public_export_patterns};
 use super::references::{ReferenceResult, resolve_references};
 use super::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog};
 use crate::checker::context::TypeContext;
+use crate::declarations::uses::DeclarationUseError;
 use crate::engine::tsgo::TsgoError;
 use crate::kinds::classify::{
     ClassifyContext, CompiledKindRules, classify_function, compile_kind_rules,
@@ -13,7 +14,9 @@ use crate::kinds::declarations::{
 };
 use crate::kinds::glob::GlobError;
 use crate::kinds::rules::NodeKindRules;
+use crate::kinds::rules::RuleCompileError;
 use crate::project::locale_compare;
+use crate::project::{Collation, CollationError};
 use crate::project::{
     discover_package_roots, join_path_text, locale_compare_units, relative_path_text,
 };
@@ -44,6 +47,7 @@ pub struct AnalysisOptions<'a> {
 }
 #[derive(Debug)]
 pub enum AnalysisError {
+    Collation(CollationError),
     Catalog(CatalogError),
     Compiler(TsgoError),
     Pattern(regress::Error),
@@ -54,6 +58,7 @@ pub enum AnalysisError {
 impl AnalysisError {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Collation(_) => "Error",
             Self::Catalog(error) => error.name(),
             Self::Pattern(_)
             | Self::Convention(GlobError::Pattern(_))
@@ -67,6 +72,7 @@ impl AnalysisError {
     pub fn message(&self) -> JsString {
         match self {
             Self::Catalog(error) => error.message(),
+            Self::Collation(error) => error.to_string().into(),
             Self::Convention(GlobError::Syntax(message)) => message.clone(),
             Self::Compiler(_)
             | Self::Pattern(_)
@@ -79,6 +85,7 @@ impl AnalysisError {
 impl std::fmt::Display for AnalysisError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(f),
             Self::Catalog(error) => error.fmt(f),
             Self::Compiler(error) => error.fmt(f),
             Self::Pattern(error) => error.fmt(f),
@@ -91,6 +98,7 @@ impl std::fmt::Display for AnalysisError {
 impl std::error::Error for AnalysisError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
+            Self::Collation(error) => error,
             Self::Catalog(error) => error,
             Self::Compiler(error) => error,
             Self::Pattern(error) => error,
@@ -105,15 +113,47 @@ impl From<TsgoError> for AnalysisError {
         Self::Compiler(error)
     }
 }
+impl From<CollationError> for AnalysisError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+impl From<DeclarationUseError> for AnalysisError {
+    fn from(error: DeclarationUseError) -> Self {
+        match error {
+            DeclarationUseError::Compiler(error) => Self::Compiler(error),
+            DeclarationUseError::Collation(error) => Self::Collation(error),
+        }
+    }
+}
+impl From<RuleCompileError> for AnalysisError {
+    fn from(error: RuleCompileError) -> Self {
+        match error {
+            RuleCompileError::Regex(error) => Self::Pattern(error),
+            RuleCompileError::Collation(error) => Self::Collation(error),
+        }
+    }
+}
+impl From<super::conventions::ConventionEntriesError> for AnalysisError {
+    fn from(error: super::conventions::ConventionEntriesError) -> Self {
+        match error {
+            super::conventions::ConventionEntriesError::Pattern(error) => Self::Convention(error),
+            super::conventions::ConventionEntriesError::Collation(error) => Self::Collation(error),
+        }
+    }
+}
 #[derive(Default)]
 pub struct AnalysisPrep {
     pub catalog: Option<BindingCatalog>,
 }
-pub fn prepare_analysis(options: &AnalysisOptions<'_>) -> Result<AnalysisPrep, AnalysisError> {
+pub fn prepare_analysis(
+    options: &AnalysisOptions<'_>,
+    collation: &Collation,
+) -> Result<AnalysisPrep, AnalysisError> {
     Ok(AnalysisPrep {
         catalog: options
             .cross_runtime
-            .then(|| load_binding_catalog(options.repo_root, None))
+            .then(|| load_binding_catalog(options.repo_root, None, collation))
             .transpose()
             .map_err(AnalysisError::Catalog)?,
     })
@@ -181,6 +221,7 @@ pub struct AnalysisBundle {
 }
 pub fn complete_analysis(
     input: CompleteInput<'_, '_, '_>,
+    collation: &Collation,
 ) -> Result<AnalysisBundle, AnalysisError> {
     let CompleteInput {
         options,
@@ -209,7 +250,7 @@ pub fn complete_analysis(
         }
         _ => None,
     };
-    let compiled = compile_kind_rules(options.kind_rules).map_err(AnalysisError::Pattern)?;
+    let compiled = compile_kind_rules(options.kind_rules, collation)?;
     let cross_runtime_targets = cross_runtime
         .iter()
         .flat_map(|report| &report.edges)
@@ -241,8 +282,8 @@ pub fn complete_analysis(
                 options.kind_rules,
                 root_absolute,
                 options.repo_root,
-            )
-            .map_err(AnalysisError::Convention)?
+                collation,
+            )?
         } else {
             IndexMap::new()
         },

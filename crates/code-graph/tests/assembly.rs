@@ -31,7 +31,13 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
         directory_sprawl: 1,
         ..Thresholds::default()
     };
-    let graph = assemble_graph(&loaded, thresholds, NodeFields { headers: true }).unwrap();
+    let graph = assemble_graph(
+        &loaded,
+        thresholds,
+        NodeFields { headers: true },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(graph.functions.len(), 1);
     assert_eq!(graph.declarations.len(), 2);
     assert_eq!(graph.modules.len(), 2);
@@ -52,8 +58,13 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
     );
     assert_eq!(graph.modules[0].imports, ["./values"]);
     assert!(graph.modules[0].import_edges.is_empty());
-    let default_graph =
-        assemble_graph(&loaded, Thresholds::default(), NodeFields::default()).unwrap();
+    let default_graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert!(
         !serde_json::to_string(&default_graph)
             .unwrap()
@@ -64,7 +75,12 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
         ..Thresholds::default()
     };
     assert!(matches!(
-        assemble_graph(&loaded, invalid, NodeFields::default()),
+        assemble_graph(
+            &loaded,
+            invalid,
+            NodeFields::default(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        ),
         Err(demlik_code_graph::extract::assemble::AssemblyError::Threshold(_))
     ));
     fs::remove_dir_all(root).unwrap();
@@ -143,6 +159,7 @@ fn assembles_real_measured_edges_uses_and_package_coupling_facts() {
         Thresholds::default(),
         &binary,
         NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 3);

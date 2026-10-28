@@ -1,4 +1,7 @@
-use super::rules::{CompiledRule, JsRegex, NodeKindRules, compile_group, matching_rules};
+use super::rules::{
+    CompiledRule, JsRegex, NodeKindRules, RuleCompileError, compile_group, matching_rules,
+};
+use crate::project::Collation;
 use crate::project::locale_compare_units;
 use crate::schema::{EntryReach, FunctionNode, NodeKind};
 use crate::text::JsString;
@@ -28,16 +31,19 @@ pub struct CompiledKindRules {
     pub test_support: Vec<CompiledRule>,
     pub entry_reach: Vec<ReachRule>,
 }
-pub fn compile_kind_rules(rules: &NodeKindRules) -> Result<CompiledKindRules, regress::Error> {
+pub fn compile_kind_rules(
+    rules: &NodeKindRules,
+    collation: &Collation,
+) -> Result<CompiledKindRules, RuleCompileError> {
     Ok(CompiledKindRules {
-        entry_names: compile_group(&rules.entry_names)?,
-        entry_base_classes: compile_group(&rules.entry_base_classes)?,
-        entry_guard_properties: compile_group(&rules.entry_guard_properties)?,
-        entry_file_patterns: compile_group(&rules.entry_file_patterns)?,
-        auth_names: compile_group(&rules.auth_names)?,
-        auth_callees: compile_group(&rules.auth_callees)?,
-        effect_declarations: compile_group(&rules.effect_declarations)?,
-        test_support: compile_group(&rules.test_support_file_patterns)?,
+        entry_names: compile_group(&rules.entry_names, collation)?,
+        entry_base_classes: compile_group(&rules.entry_base_classes, collation)?,
+        entry_guard_properties: compile_group(&rules.entry_guard_properties, collation)?,
+        entry_file_patterns: compile_group(&rules.entry_file_patterns, collation)?,
+        auth_names: compile_group(&rules.auth_names, collation)?,
+        auth_callees: compile_group(&rules.auth_callees, collation)?,
+        effect_declarations: compile_group(&rules.effect_declarations, collation)?,
+        test_support: compile_group(&rules.test_support_file_patterns, collation)?,
         entry_reach: vec![
             ReachRule {
                 reach: EntryReach::ServiceBinding,

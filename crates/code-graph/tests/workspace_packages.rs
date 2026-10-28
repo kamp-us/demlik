@@ -39,7 +39,9 @@ fn a_workspace_package_keeps_its_first_owner_and_source_entry_for_subpath_import
             "packages/b".into(),
             "packages/plain".into(),
         ],
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(packages.len(), 2);
     let api = match_package(&"@shop/api/sub/path".into(), &packages).unwrap();
     assert_eq!(api.dir, "packages/a");

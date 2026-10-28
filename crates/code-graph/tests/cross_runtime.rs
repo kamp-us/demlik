@@ -55,7 +55,12 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
         fs::write(file, text).unwrap();
     }
     let root = fs::canonicalize(root).unwrap();
-    let catalog = load_binding_catalog(&root, None).unwrap();
+    let catalog = load_binding_catalog(
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         owner_of(&catalog.manifests, "api/entry.ts")
             .unwrap()
@@ -70,7 +75,13 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
         .iter()
         .map(|node| node.id.clone())
         .collect::<Vec<_>>();
-    let imports = resolve_imports(&root, &loaded.source_files, &root.join("tsconfig.json"));
+    let imports = resolve_imports(
+        &root,
+        &loaded.source_files,
+        &root.join("tsconfig.json"),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();

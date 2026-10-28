@@ -349,9 +349,13 @@ fn classifies_import_reach_names_ambient_modules_and_dynamic_literals() {
         .collect();
     assert_eq!(opened, ["mixed", "\u{fffd}", "dynamic"]);
     assert!(
-        import_declaration_specifiers(&syntax)
-            .iter()
-            .any(|name| name.units().is_empty())
+        import_declaration_specifiers(
+            &syntax,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .iter()
+        .any(|name| name.units().is_empty())
     );
     assert!(
         serde_json::to_string(&literals)
@@ -378,7 +382,13 @@ fn resolves_import_targets_only_for_loaded_external_modules() {
     fs::write(root.join("script.ts"), "const globalValue = 2;").unwrap();
     fs::write(root.join("meta.ts"), "const url = import.meta.url;").unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
-    let graph = resolve_imports(&root, &loaded.source_files, &root.join("tsconfig.json"));
+    let graph = resolve_imports(
+        &root,
+        &loaded.source_files,
+        &root.join("tsconfig.json"),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let edges = &graph.import_edges_by_file["entry.ts"];
     assert_eq!(edges.len(), 5);
     assert_eq!(

@@ -58,7 +58,13 @@ fn reads_package_entry_targets_with_root_assignment_semantics_and_lossless_path_
             .contains("inherited")
     );
     assert_eq!(
-        package_source_entry(&project.0, "pkg").unwrap(),
+        package_source_entry(
+            &project.0,
+            "pkg",
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .unwrap(),
         "pkg/src/first.ts"
     );
     let patterns =
@@ -88,7 +94,14 @@ fn reads_package_entry_targets_with_root_assignment_semantics_and_lossless_path_
     expected.push(0xd800);
     expected.extend(".ts".encode_utf16());
     assert_eq!(
-        package_source_entry(&project.0, "raw").unwrap().units(),
+        package_source_entry(
+            &project.0,
+            "raw",
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .unwrap()
+        .units(),
         expected
     );
     let raw_patterns =
@@ -155,6 +168,7 @@ fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_sur
         &binary,
         NodeFields { headers: true },
         &options,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 4);
@@ -233,6 +247,7 @@ fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_sur
         &binary,
         NodeFields::default(),
         &none,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert!(

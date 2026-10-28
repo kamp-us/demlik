@@ -88,7 +88,9 @@ fn real_application_imports_keep_only_the_allowlist_verdicts_and_fold_the_first_
         &absolute,
         &loaded.source_files,
         &repo.0.join("tsconfig.json"),
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let edges = &graph.import_edges_by_file[&file.to_utf8().unwrap()];
     let judged: Vec<_> = edges
         .iter()
@@ -100,11 +102,22 @@ fn real_application_imports_keep_only_the_allowlist_verdicts_and_fold_the_first_
         .find(|unit| unit.file == file.to_utf8().unwrap())
         .unwrap();
     let runtime = runtime_specifiers(&unit.syntax);
-    let catalog = load_binding_catalog(&repo.0, None).unwrap();
+    let catalog = load_binding_catalog(
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let ShapeRead::Read(shape) = read_shape(&rules, &catalog).unwrap() else {
         panic!("shape refused")
     };
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &repo.0, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("libraries refused")
     };
     let zoning = scope_zoning(&rules, &scope).unwrap();
@@ -213,11 +226,22 @@ fn extracted_entry_forms_judge_the_feature_entry_and_only_a_librarys_own_entry()
     let repo = Repo::new();
     repo.write("packages/core/package.json", r#"{"name":"@shop/core"}"#);
     let rules=BoundaryRules::parse(&JsValue::parse(r#"{"features":{"services/api":["orders"]},"libraryTypes":{"core":{"imports":[],"pure":true}},"libraries":{"packages/core":"core"},"applicationShape":["index-not-exports-only"]}"#).unwrap()).unwrap();
-    let catalog = load_binding_catalog(&repo.0, None).unwrap();
+    let catalog = load_binding_catalog(
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let ShapeRead::Read(shape) = read_shape(&rules, &catalog).unwrap() else {
         panic!("shape refused")
     };
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &repo.0, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("libraries refused")
     };
     for (scope, file, expected) in [

@@ -4,7 +4,7 @@ use crate::kinds::conventions::{compile_conventions, matching_conventions};
 use crate::kinds::glob::GlobError;
 use crate::kinds::presets::{entry_export_preset, entry_export_preset_names};
 use crate::kinds::rules::NodeKindRules;
-use crate::project::to_relative;
+use crate::project::{Collation, CollationError, to_relative};
 use crate::text::{JsString, JsValue};
 use indexmap::{IndexMap, IndexSet};
 use std::{
@@ -56,13 +56,45 @@ fn locate(
     cache.insert(dir.into(), found.clone());
     found
 }
+#[derive(Debug)]
+pub enum ConventionEntriesError {
+    Pattern(GlobError),
+    Collation(CollationError),
+}
+impl std::fmt::Display for ConventionEntriesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pattern(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for ConventionEntriesError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Pattern(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<GlobError> for ConventionEntriesError {
+    fn from(error: GlobError) -> Self {
+        Self::Pattern(error)
+    }
+}
+impl From<CollationError> for ConventionEntriesError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
 pub fn convention_entries(
     functions: &[DiscoveredFunction],
     rules: &NodeKindRules,
     root: &Path,
     repo: &Path,
-) -> Result<IndexMap<String, Vec<JsString>>, GlobError> {
-    let export_names = export_names_by_id(functions);
+    collation: &Collation,
+) -> Result<IndexMap<String, Vec<JsString>>, ConventionEntriesError> {
+    let export_names = export_names_by_id(functions, collation)?;
     let user = compile_conventions(&rules.entry_export_conventions)?;
     let presets: Vec<_> = entry_export_preset_names()
         .into_iter()

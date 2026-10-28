@@ -318,6 +318,9 @@ fn run(
         )
     }
     .map_err(Failure::Project)?;
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| Failure::Assembly(AssemblyError::Collation(error)))?;
+
     if let Some(rules) = rules {
         let options = AnalysisOptions {
             cross_runtime: true,
@@ -337,7 +340,8 @@ fn run(
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
-                &options
+                &options,
+                &metadata_collation
             )
         } else {
             observe!(
@@ -347,7 +351,8 @@ fn run(
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
-                &options
+                &options,
+                &metadata_collation
             )
         }
         .map_err(Failure::Assembly)?;

@@ -119,6 +119,15 @@ fn measure<'c>(
             };
             let loaded = load_edge_project_text(&absolute, EdgeScope::Package, repo_root, None)
                 .map_err(CollapseGateError::Load)?;
+            let collation = match collation {
+                Some(collation) => collation,
+                None => {
+                    let handle = request.take().expect("one first measurement")()
+                        .map_err(CollapseGateError::Collation)?;
+                    collation = Some(handle);
+                    handle
+                }
+            };
             let graph = assemble_graph_with_analysis_text_and_warning(
                 &loaded,
                 args.thresholds.clone(),
@@ -138,6 +147,7 @@ fn measure<'c>(
                     root: &absolute,
                     warning,
                 },
+                collation,
             )
             .map_err(CollapseGateError::Assembly)?;
             let candidates = graph
@@ -145,15 +155,6 @@ fn measure<'c>(
                 .iter()
                 .filter(|function| is_candidate_function(function, args.settings))
                 .collect::<Vec<_>>();
-            let collation = match collation {
-                Some(collation) => collation,
-                None => {
-                    let handle = request.take().expect("one first measurement")()
-                        .map_err(CollapseGateError::Collation)?;
-                    collation = Some(handle);
-                    handle
-                }
-            };
             Ok(ScopeCount {
                 scope: scope.clone(),
                 count: find_partial_twins(&candidates, args.settings, collation)

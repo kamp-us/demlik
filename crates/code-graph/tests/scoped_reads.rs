@@ -52,7 +52,12 @@ fn handlers_borrow_one_write_fact_and_need_a_runtime_decision_for_listed_reads()
       "libraries":{"packages/kernel":"kernel"},
       "readAllowance":{"services/api":{"driven":["read.ts","write.ts","gone.ts"],"decidedBy":["kernel"]}}
     }"#).unwrap()).unwrap();
-    let catalog = load_binding_catalog(&repo.0, None).unwrap();
+    let catalog = load_binding_catalog(
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let allowance = read_allowance_of(&rules.read_allowance, &catalog);
     let scope = "services/api".into();
     let read: JsString = "read.ts".into();
@@ -81,7 +86,13 @@ fn handlers_borrow_one_write_fact_and_need_a_runtime_decision_for_listed_reads()
         ],
     )
     .unwrap();
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &repo.0, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("fixture libraries refused")
     };
     for (source, licensed) in [
@@ -154,7 +165,12 @@ fn listed_files_keep_the_first_visible_write_of_their_nearest_worker() {
     let nested: JsString = "nested/read.ts".into();
     repo.write(&format!("services/api/{}", file.to_utf8().unwrap()), source);
     repo.write("services/api/nested/read.ts", source);
-    let catalog = load_binding_catalog(&repo.0, None).unwrap();
+    let catalog = load_binding_catalog(
+        &repo.0,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(catalog.manifests.len(), 2);
     let rules = BoundaryRules::parse(&JsValue::parse(r#"{"readAllowance":{"services/api":{"driven":["src/orders/adapters/driven/read.ts","nested/read.ts"]}}}"#).unwrap()).unwrap();
     let allowance = read_allowance_of(&rules.read_allowance, &catalog);

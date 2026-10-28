@@ -202,6 +202,9 @@ fn encode(
     ))
 }
 fn execute(request: Request) -> Result<String, Box<dyn Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     let mut calls = Vec::new();
     match request.input {
         Input::Pure {
@@ -252,7 +255,8 @@ fn execute(request: Request) -> Result<String, Box<dyn Error>> {
                     interface_width: false,
                     kind_rules: &rules,
                     repo_root: repo
-                }
+                },
+                &metadata_collation
             )?;
             let native_root = root.to_lossy();
             let roots = observe!(

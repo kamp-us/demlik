@@ -10,7 +10,7 @@ use super::file::{NodeRef, SyntaxFile};
 use crate::api::real_path;
 use crate::engine::oxc::create_module_resolver;
 use crate::project::{
-    SourceUnit, locale_compare, locale_compare_units, relative_path_text_from, to_relative,
+    Collation, CollationError, CollationInput, SourceUnit, relative_path_text_from, to_relative,
 };
 use crate::text::JsString;
 
@@ -276,16 +276,26 @@ pub fn imported_names_of(syntax: &SyntaxFile) -> IndexMap<JsString, ImportedName
     by_specifier
 }
 
-fn sorted_names(values: impl IntoIterator<Item = JsString>) -> Vec<JsString> {
-    let mut values: Vec<_> = values
+fn sorted_names(
+    values: impl IntoIterator<Item = JsString>,
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
+    let values: Vec<_> = values
         .into_iter()
         .collect::<IndexSet<_>>()
         .into_iter()
         .collect();
-    values.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-    values
+    let mut values = values
+        .into_iter()
+        .map(|value| CollationInput::from_utf16(value.units()).map(|input| (value, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    Ok(values.into_iter().map(|(value, _)| value).collect())
 }
-pub fn import_declaration_specifiers(syntax: &SyntaxFile) -> Vec<JsString> {
+pub fn import_declaration_specifiers(
+    syntax: &SyntaxFile,
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
     sorted_names(
         syntax
             .root()
@@ -293,6 +303,7 @@ pub fn import_declaration_specifiers(syntax: &SyntaxFile) -> Vec<JsString> {
             .into_iter()
             .filter(|statement| statement.kind() == "ImportDeclaration")
             .filter_map(|statement| string_value(statement.node("source"))),
+        collation,
     )
 }
 
@@ -324,11 +335,43 @@ fn is_external_module(syntax: &SyntaxFile) -> bool {
     false
 }
 
+#[derive(Debug)]
+pub enum ImportResolveError {
+    WorkingDirectory(io::Error),
+    Collation(CollationError),
+}
+impl std::fmt::Display for ImportResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WorkingDirectory(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for ImportResolveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::WorkingDirectory(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<io::Error> for ImportResolveError {
+    fn from(error: io::Error) -> Self {
+        Self::WorkingDirectory(error)
+    }
+}
+impl From<CollationError> for ImportResolveError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
 pub fn resolve_imports(
     root: &Path,
     source_files: &[Rc<SourceUnit>],
     ts_config: &Path,
-) -> ImportGraph {
+    collation: &Collation,
+) -> Result<ImportGraph, ImportResolveError> {
     resolve(
         ImportRoot::Native {
             logical: root,
@@ -336,14 +379,15 @@ pub fn resolve_imports(
         },
         source_files,
         ts_config,
+        collation,
     )
-    .expect("native Path comparisons do not have the text branch's working-directory failure")
 }
 pub(crate) fn resolve_imports_text(
     root: &JsString,
     source_files: &[Rc<SourceUnit>],
     ts_config: &Path,
-) -> io::Result<ImportGraph> {
+    collation: &Collation,
+) -> Result<ImportGraph, ImportResolveError> {
     resolve(
         ImportRoot::Text {
             logical: root,
@@ -351,6 +395,7 @@ pub(crate) fn resolve_imports_text(
         },
         source_files,
         ts_config,
+        collation,
     )
 }
 enum ImportRoot<'a> {
@@ -367,7 +412,8 @@ fn resolve(
     root: ImportRoot<'_>,
     source_files: &[Rc<SourceUnit>],
     ts_config: &Path,
-) -> io::Result<ImportGraph> {
+    collation: &Collation,
+) -> Result<ImportGraph, ImportResolveError> {
     let resolver = create_module_resolver(ts_config);
     let units: IndexMap<_, _> = source_files
         .iter()
@@ -441,23 +487,39 @@ fn resolve(
         }
         imports_by_file.insert(
             unit.file.clone(),
-            sorted_names(edges.iter().map(|edge| edge.specifier.clone())),
+            sorted_names(edges.iter().map(|edge| edge.specifier.clone()), collation)?,
         );
+        let mut edges = edges
+            .into_iter()
+            .map(|edge| {
+                let specifier = CollationInput::from_utf16(edge.specifier.units())?;
+                let kind = CollationInput::from_text(edge.kind.as_str())?;
+                Ok((edge, specifier, kind))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
         edges.sort_by(|left, right| {
-            locale_compare_units(left.specifier.units(), right.specifier.units())
-                .then_with(|| locale_compare(left.kind.as_str(), right.kind.as_str()))
-                .then_with(|| left.type_only.cmp(&right.type_only))
+            collation
+                .compare(&left.1, &right.1)
+                .then_with(|| collation.compare(&left.2, &right.2))
+                .then_with(|| left.0.type_only.cmp(&right.0.type_only))
         });
-        import_edges_by_file.insert(unit.file.clone(), edges);
+        import_edges_by_file.insert(
+            unit.file.clone(),
+            edges.into_iter().map(|(edge, _, _)| edge).collect(),
+        );
     }
     for values in imported_by_file.values_mut() {
-        let mut dedup: Vec<_> = values
+        let dedup: Vec<_> = values
             .drain(..)
             .collect::<IndexSet<_>>()
             .into_iter()
             .collect();
-        dedup.sort_by(|left, right| locale_compare(left, right));
-        *values = dedup;
+        let mut dedup = dedup
+            .into_iter()
+            .map(|value| CollationInput::from_text(&value).map(|input| (value, input)))
+            .collect::<Result<Vec<_>, _>>()?;
+        dedup.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        *values = dedup.into_iter().map(|(value, _)| value).collect();
     }
     Ok(ImportGraph {
         imports_by_file,

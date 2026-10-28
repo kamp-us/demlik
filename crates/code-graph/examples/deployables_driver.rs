@@ -126,6 +126,9 @@ fn json(value: &impl Serialize) -> Result<Box<RawValue>, String> {
         .map_err(|error| error.to_string())
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     match request.operation.as_str() {
         "code_graph.deployable-judgment" => {
             use demlik_code_graph::boundaries::deployables::{self as domain, census};
@@ -152,7 +155,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 calls,
                 demlik_code_graph::extract::wrangler_config::load_binding_catalog,
                 root,
-                catalog_listing.as_ref()
+                catalog_listing.as_ref(),
+                &metadata_collation
             )
             .map_err(|error| error.to_string())?;
             let deployables = match observe!(
@@ -330,7 +334,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 calls,
                 demlik_code_graph::extract::wrangler_config::load_binding_catalog,
                 root,
-                listing.as_ref()
+                listing.as_ref(),
+                &metadata_collation
             )
             .map_err(|error| error.to_string())?;
             let graph = observe!(

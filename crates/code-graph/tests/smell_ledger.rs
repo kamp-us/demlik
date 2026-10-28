@@ -39,7 +39,13 @@ impl Fixture {
     }
     fn graph(&self) -> Graph {
         let loaded = load_cheap_project(&self.0, None).unwrap();
-        assemble_graph(&loaded, Default::default(), NodeFields::default()).unwrap()
+        assemble_graph(
+            &loaded,
+            Default::default(),
+            NodeFields::default(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap()
     }
     fn file(&self) -> JsString {
         self.0.join("ledger.json").to_string_lossy().as_ref().into()

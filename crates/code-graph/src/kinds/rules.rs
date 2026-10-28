@@ -1,6 +1,6 @@
 use super::conventions::{EntryExportConvention, EntryExportConventions};
 use super::presets::EntryExportPresetName;
-use crate::project::locale_compare_units;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::text::JsString;
 use crate::text::{JsObject, JsValue, object_keys};
 use crate::validation::{InputIssue, PathSegment, record_object};
@@ -14,11 +14,48 @@ pub struct CompiledRule {
     pub key: JsString,
     pub patterns: Vec<JsRegex>,
 }
-pub fn compile_group(group: &PatternGroup) -> Result<Vec<CompiledRule>, regress::Error> {
-    let mut keys: Vec<_> = group.keys().collect();
-    keys.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
+#[derive(Debug)]
+pub enum RuleCompileError {
+    Regex(regress::Error),
+    Collation(CollationError),
+}
+impl std::fmt::Display for RuleCompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Regex(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for RuleCompileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Regex(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<regress::Error> for RuleCompileError {
+    fn from(error: regress::Error) -> Self {
+        Self::Regex(error)
+    }
+}
+impl From<CollationError> for RuleCompileError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+pub fn compile_group(
+    group: &PatternGroup,
+    collation: &Collation,
+) -> Result<Vec<CompiledRule>, RuleCompileError> {
+    let mut keys = group
+        .keys()
+        .map(|key| CollationInput::from_utf16(key.units()).map(|input| (key, input)))
+        .collect::<Result<Vec<_>, _>>()?;
+    keys.sort_by(|left, right| collation.compare(&left.1, &right.1));
     keys.into_iter()
-        .map(|key| {
+        .map(|(key, _)| {
             Ok(CompiledRule {
                 key: key.clone(),
                 patterns: group[key]

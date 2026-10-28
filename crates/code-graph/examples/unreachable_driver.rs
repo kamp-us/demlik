@@ -131,8 +131,15 @@ fn ordinary_render(
     input: RenderInput,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let loaded = load_cheap_project(Path::new(&input.root), None)?;
-    let mut graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default())?;
+    let mut graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &metadata_collation,
+    )?;
     graph.reachability = input.report.map(|r| ReachabilityReport {
         entry_count: r.entry_count,
         exported_count: r.exported_count,
@@ -390,6 +397,8 @@ fn run(
     binary: &TsgoBinary,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let collation = observe!(
         calls,
         demlik_code_graph::project::Collation::try_node22_en_us
@@ -474,11 +483,17 @@ fn run(
                 interface_width: false,
                 kind_rules: &rules,
                 repo_root: Path::new(&physical_repo)
-            }
+            },
+            &metadata_collation
         )?
     } else {
         let loaded = load_cheap_project(Path::new(&physical_root), None)?;
-        let mut graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default())?;
+        let mut graph = assemble_graph(
+            &loaded,
+            Thresholds::default(),
+            NodeFields::default(),
+            &metadata_collation,
+        )?;
         graph.reachability = input.reach.map(|symbols| ReachabilityReport {
             entry_count: 0,
             exported_count: symbols.len(),

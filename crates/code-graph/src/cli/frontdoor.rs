@@ -714,7 +714,7 @@ impl PreparedGatesCli {
     }
 
     fn assemble_classified_graph(
-        &self,
+        &mut self,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<Graph, ClassifiedGraphFailure> {
@@ -755,12 +755,16 @@ impl PreparedGatesCli {
         if !want_edges {
             let loaded = load_cheap_project(Path::new(&root.to_lossy()), None)
                 .map_err(ClassifiedGraphFailure::CheapParse)?;
+            let collation = prepared_collation(&mut self.collation).map_err(|error| {
+                ClassifiedGraphFailure::Assembly(AssemblyError::Collation(error))
+            })?;
             return assemble_graph_text(
                 &loaded,
                 root,
                 self.prepared.thresholds.clone(),
                 fields,
                 data,
+                collation,
             )
             .map_err(ClassifiedGraphFailure::Assembly);
         }
@@ -790,6 +794,8 @@ impl PreparedGatesCli {
             kind_rules: &self.prepared.kind_rules,
             repo_root,
         });
+        let collation = prepared_collation(&mut self.collation)
+            .map_err(|error| ClassifiedGraphFailure::Assembly(AssemblyError::Collation(error)))?;
         assemble_graph_with_analysis_text_and_warning(
             &loaded,
             self.prepared.thresholds.clone(),
@@ -801,6 +807,7 @@ impl PreparedGatesCli {
                 root,
                 warning: &mut |line| host.write_stderr(line),
             },
+            collation,
         )
         .map_err(ClassifiedGraphFailure::Assembly)
     }
@@ -812,11 +819,7 @@ impl PreparedGatesCli {
         binary: &TsgoBinary,
     ) -> Result<UnreachableDispatch, FrontdoorError> {
         let options = &self.prepared.options;
-        let prepared_gate = match &self.unreachable {
-            UnreachablePreparation::Prepared { gate } => Some(gate),
-            _ => None,
-        };
-        if prepared_gate.is_none()
+        if !matches!(self.unreachable, UnreachablePreparation::Prepared { .. })
             && (options.unreachable() != Some(true)
                 || options.html() == Some(true)
                 || options.collapse() == Some(true)
@@ -836,6 +839,11 @@ impl PreparedGatesCli {
             Err(ClassifiedGraphFailure::CheapParse(cause)) => {
                 return Err(FrontdoorError::CheapParse(cause));
             }
+        };
+        let options = &self.prepared.options;
+        let prepared_gate = match &self.unreachable {
+            UnreachablePreparation::Prepared { gate } => Some(gate),
+            _ => None,
         };
         if let Some(gate) = prepared_gate {
             // Public prepared facts may be replaced by a native caller. Reuse the
@@ -894,10 +902,9 @@ impl PreparedGatesCli {
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
     ) -> Result<SmellDispatch, FrontdoorError> {
-        let gate = match &self.smells {
-            SmellPreparation::Prepared { gate } => gate,
-            _ => return Ok(SmellDispatch::Continue(self)),
-        };
+        if !matches!(self.smells, SmellPreparation::Prepared { .. }) {
+            return Ok(SmellDispatch::Continue(self));
+        }
         let graph = match self.assemble_classified_graph(host, binary) {
             Ok(graph) => graph,
             Err(ClassifiedGraphFailure::LoadRefused(cause)) => {
@@ -909,6 +916,9 @@ impl PreparedGatesCli {
             Err(ClassifiedGraphFailure::CheapParse(cause)) => {
                 return Err(FrontdoorError::CheapParse(cause));
             }
+        };
+        let SmellPreparation::Prepared { gate } = &self.smells else {
+            unreachable!("admitted smell gate");
         };
         let options = &self.prepared.options;
         // A native caller may replace public prepared facts. Reuse the admitted
@@ -963,6 +973,7 @@ impl PreparedGatesCli {
                 return Err(FrontdoorError::CheapParse(cause));
             }
         };
+        let options = &self.prepared.options;
         let root = &self.prepared.root_absolute;
         let mut payload = if options.graph() == Some(true) {
             stable_stringify(&graph, options.pretty() == Some(true))
@@ -1028,15 +1039,18 @@ impl PreparedGatesCli {
 
     /// Read and emit environment keys after boundaries, or retain the same continuation.
     pub fn dispatch_env_keys(
-        self: Box<Self>,
+        mut self: Box<Self>,
         host: &mut CliIo<'_>,
     ) -> Result<EnvKeyDispatch, FrontdoorError> {
         if self.prepared.options.env_keys() != Some(true) {
             return Ok(EnvKeyDispatch::Continue(self));
         }
         let repo_root = find_repo_root_text(&self.prepared.root_absolute);
-        let report = load_env_key_report(&self.prepared.root_absolute, &repo_root)
-            .map_err(FrontdoorError::EnvKeys)?;
+        let slot = &mut self.collation;
+        let report = load_env_key_report(&self.prepared.root_absolute, &repo_root, || {
+            prepared_collation(slot)
+        })
+        .map_err(FrontdoorError::EnvKeys)?;
         let mut payload = render_env_keys(
             &report,
             self.prepared.options.json() == Some(true),

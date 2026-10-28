@@ -16,8 +16,8 @@ use crate::declarations::uses::resolve_declaration_uses;
 use crate::engine::tsgo::{TsgoBinary, TsgoError};
 use crate::extract::wrangler_config::CatalogError;
 use crate::project::{
-    EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots, locale_compare,
-    relative_path_text, resolve_path_text, to_relative,
+    Collation, CollationError, EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots,
+    locale_compare, relative_path_text, resolve_path_text, to_relative,
 };
 use crate::schema::{
     Edges, FunctionNode, Graph, ModuleNode, Provenance, Severity, Stats, Summary, ThresholdError,
@@ -47,6 +47,7 @@ pub struct DataOptions<'a> {
 
 #[derive(Debug)]
 pub enum AssemblyError {
+    Collation(CollationError),
     WorkingDirectory(io::Error),
     Threshold(ThresholdError),
     Compiler(TsgoError),
@@ -56,6 +57,7 @@ pub enum AssemblyError {
 impl AssemblyError {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Collation(_) => "Error",
             Self::Analysis(error) => error.name(),
             Self::Data(error) => error.name(),
             Self::WorkingDirectory(_) | Self::Threshold(_) | Self::Compiler(_) => "Error",
@@ -63,6 +65,7 @@ impl AssemblyError {
     }
     pub fn message(&self) -> JsString {
         match self {
+            Self::Collation(error) => error.to_string().into(),
             Self::Analysis(error) => error.message(),
             Self::Data(error) => error.message(),
             Self::WorkingDirectory(_) | Self::Threshold(_) | Self::Compiler(_) => {
@@ -74,6 +77,7 @@ impl AssemblyError {
 impl std::fmt::Display for AssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Collation(error) => error.fmt(formatter),
             Self::WorkingDirectory(error) => error.fmt(formatter),
             Self::Threshold(error) => error.fmt(formatter),
             Self::Compiler(error) => error.fmt(formatter),
@@ -85,6 +89,7 @@ impl std::fmt::Display for AssemblyError {
 impl std::error::Error for AssemblyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Collation(error) => Some(error),
             Self::WorkingDirectory(error) => Some(error),
             Self::Threshold(error) => Some(error),
             Self::Compiler(error) => Some(error),
@@ -96,8 +101,24 @@ impl std::error::Error for AssemblyError {
 impl From<AnalysisError> for AssemblyError {
     fn from(error: AnalysisError) -> Self {
         match error {
+            AnalysisError::Collation(error) => Self::Collation(error),
             AnalysisError::Compiler(error) => Self::Compiler(error),
             error => Self::Analysis(error),
+        }
+    }
+}
+impl From<CollationError> for AssemblyError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+impl From<crate::syntax::imports::ImportResolveError> for AssemblyError {
+    fn from(error: crate::syntax::imports::ImportResolveError) -> Self {
+        match error {
+            crate::syntax::imports::ImportResolveError::WorkingDirectory(error) => {
+                Self::WorkingDirectory(error)
+            }
+            crate::syntax::imports::ImportResolveError::Collation(error) => Self::Collation(error),
         }
     }
 }
@@ -107,6 +128,7 @@ pub fn assemble_graph(
     loaded: &LoadedProject,
     thresholds: Thresholds,
     fields: NodeFields,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     build(
         BuildInput {
@@ -119,6 +141,7 @@ pub fn assemble_graph(
         None,
         None,
         None,
+        collation,
     )
 }
 
@@ -127,6 +150,7 @@ pub fn assemble_graph_with_data(
     thresholds: Thresholds,
     fields: NodeFields,
     data: DataOptions<'_>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     build(
         BuildInput {
@@ -139,6 +163,7 @@ pub fn assemble_graph_with_data(
         None,
         None,
         Some(data),
+        collation,
     )
 }
 
@@ -148,6 +173,7 @@ pub(crate) fn assemble_graph_text(
     thresholds: Thresholds,
     fields: NodeFields,
     data: Option<DataOptions<'_>>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     build(
         BuildInput {
@@ -160,6 +186,7 @@ pub(crate) fn assemble_graph_text(
         None,
         None,
         data,
+        collation,
     )
 }
 
@@ -208,8 +235,9 @@ pub fn assemble_graph_with_edges(
     thresholds: Thresholds,
     binary: &TsgoBinary,
     fields: NodeFields,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
-    assemble_graph_with_reports(loaded, thresholds, binary, fields, None, None)
+    assemble_graph_with_reports(loaded, thresholds, binary, fields, None, None, collation)
 }
 
 pub fn assemble_graph_with_analysis(
@@ -218,8 +246,17 @@ pub fn assemble_graph_with_analysis(
     binary: &TsgoBinary,
     fields: NodeFields,
     options: &AnalysisOptions<'_>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
-    assemble_graph_with_reports(loaded, thresholds, binary, fields, Some(options), None)
+    assemble_graph_with_reports(
+        loaded,
+        thresholds,
+        binary,
+        fields,
+        Some(options),
+        None,
+        collation,
+    )
 }
 
 /// Reuse the original logical root supplied to `load_edge_project_text`.
@@ -231,6 +268,7 @@ pub fn assemble_graph_with_analysis_text(
     binary: &TsgoBinary,
     fields: NodeFields,
     options: &AnalysisOptions<'_>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     assemble_graph_with_analysis_text_and_warning(
         loaded,
@@ -243,10 +281,15 @@ pub fn assemble_graph_with_analysis_text(
             root: root_text,
             warning: &mut stderr_warning,
         },
+        collation,
     )
 }
 
 /// Deliver complete warning lines immediately; the local CLI sink records pending IO failures.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Retain the existing assembly inputs and caller-owned collation."
+)]
 pub(crate) fn assemble_graph_with_analysis_text_and_warning(
     loaded: &LoadedEdgeProject,
     thresholds: Thresholds,
@@ -255,6 +298,7 @@ pub(crate) fn assemble_graph_with_analysis_text_and_warning(
     options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
     text: TextAssembly<'_>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     assemble_graph_with_reports_in(
         loaded,
@@ -264,6 +308,7 @@ pub(crate) fn assemble_graph_with_analysis_text_and_warning(
         options,
         data,
         Some(text),
+        collation,
     )
 }
 
@@ -274,10 +319,17 @@ pub fn assemble_graph_with_reports(
     fields: NodeFields,
     options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
-    assemble_graph_with_reports_in(loaded, thresholds, binary, fields, options, data, None)
+    assemble_graph_with_reports_in(
+        loaded, thresholds, binary, fields, options, data, None, collation,
+    )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Retain the existing assembly inputs and caller-owned collation."
+)]
 fn assemble_graph_with_reports_in(
     loaded: &LoadedEdgeProject,
     thresholds: Thresholds,
@@ -286,6 +338,7 @@ fn assemble_graph_with_reports_in(
     options: Option<&AnalysisOptions<'_>>,
     data: Option<DataOptions<'_>>,
     mut text: Option<TextAssembly<'_>>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     let root_text = text.as_ref().map(|text| text.root);
     thresholds.validate().map_err(AssemblyError::Threshold)?;
@@ -295,15 +348,19 @@ fn assemble_graph_with_reports_in(
         .map(|function| function.id.clone())
         .collect();
     let imports = match root_text {
-        Some(root) => {
-            resolve_imports_text(root, &loaded.project.source_files, &loaded.ts_config_path)
-                .map_err(AssemblyError::WorkingDirectory)?
-        }
+        Some(root) => resolve_imports_text(
+            root,
+            &loaded.project.source_files,
+            &loaded.ts_config_path,
+            collation,
+        )
+        .map_err(AssemblyError::from)?,
         None => resolve_imports(
             &loaded.project.root_absolute,
             &loaded.project.source_files,
             &loaded.ts_config_path,
-        ),
+            collation,
+        )?,
     };
     let input = TypeContextInput {
         project: &loaded.project,
@@ -319,7 +376,7 @@ fn assemble_graph_with_reports_in(
         );
         Ok((|| -> Result<_, AnalysisError> {
             let prep = options
-                .map(prepare_analysis)
+                .map(|options| prepare_analysis(options, collation))
                 .transpose()?
                 .unwrap_or_else(AnalysisPrep::default);
             let mut resolver = options
@@ -339,7 +396,8 @@ fn assemble_graph_with_reports_in(
                 resolve_edges_with_cross_runtime(context, imports, &ids, resolver.as_mut())?;
             let uses = resolve_declaration_uses(
                 context,
-                &discover_declarations(&loaded.project.source_files),
+                &discover_declarations(&loaded.project.source_files, collation)?,
+                collation,
             )?;
             report_unjoined(
                 &uses.unjoined,
@@ -349,15 +407,18 @@ fn assemble_graph_with_reports_in(
             );
             let analysis = options
                 .map(|options| {
-                    complete_analysis(CompleteInput {
-                        options,
-                        prep: &prep,
-                        root_absolute: &loaded.project.root_absolute,
-                        context,
-                        functions: &functions,
-                        inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
-                        resolver: resolver.as_ref(),
-                    })
+                    complete_analysis(
+                        CompleteInput {
+                            options,
+                            prep: &prep,
+                            root_absolute: &loaded.project.root_absolute,
+                            context,
+                            functions: &functions,
+                            inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
+                            resolver: resolver.as_ref(),
+                        },
+                        collation,
+                    )
                 })
                 .transpose()?;
             Ok((result, uses.uses_by_id, analysis))
@@ -391,9 +452,14 @@ fn assemble_graph_with_reports_in(
         Some(functions),
         analysis,
         data,
+        collation,
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Retain the existing assembly inputs and caller-owned collation."
+)]
 fn build(
     input: BuildInput<'_>,
     thresholds: Thresholds,
@@ -402,6 +468,7 @@ fn build(
     discovered: Option<Vec<DiscoveredFunction>>,
     analysis: Option<AnalysisBundle>,
     data: Option<DataOptions<'_>>,
+    collation: &Collation,
 ) -> Result<Graph, AssemblyError> {
     let BuildInput { loaded, root_text } = input;
     thresholds.validate().map_err(AssemblyError::Threshold)?;
@@ -470,7 +537,7 @@ fn build(
     let mut modules: Vec<_> = loaded
         .source_files
         .iter()
-        .map(|unit| {
+        .map(|unit| -> Result<ModuleNode, CollationError> {
             let mut function_ids = ids_by_file
                 .shift_remove(unit.file.as_str())
                 .unwrap_or_default();
@@ -495,12 +562,12 @@ fn build(
                 )
             } else {
                 (
-                    import_declaration_specifiers(&unit.syntax),
+                    import_declaration_specifiers(&unit.syntax, collation)?,
                     Vec::new(),
                     Vec::new(),
                 )
             };
-            ModuleNode {
+            Ok(ModuleNode {
                 file: unit.file.clone(),
                 loc: module_loc(&unit.syntax),
                 comment_lines: module_comment_lines(&unit.syntax),
@@ -510,9 +577,9 @@ fn build(
                 import_edges,
                 is_test: is_test_file(&unit.file),
                 smells: Vec::new(),
-            }
+            })
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
     modules.sort_by(|left, right| locale_compare(&left.file, &right.file));
     let coupling = edges.as_ref().map(|_| {
         coupling_by_file(
@@ -608,7 +675,8 @@ fn build(
         declarations: build_declaration_nodes(
             &loaded.source_files,
             edges.as_ref().map(|bundle| &bundle.declaration_uses),
-        ),
+            collation,
+        )?,
         modules,
         directories,
         smells,
@@ -618,7 +686,14 @@ fn build(
         analysis.apply(&mut graph).map_err(AssemblyError::from)?;
     }
     graph.data = data
-        .map(|options| load_data_report(&loaded.source_files, &discovered, options.repo_root))
+        .map(|options| {
+            load_data_report(
+                &loaded.source_files,
+                &discovered,
+                options.repo_root,
+                collation,
+            )
+        })
         .transpose()
         .map_err(AssemblyError::Data)?;
     Ok(graph)

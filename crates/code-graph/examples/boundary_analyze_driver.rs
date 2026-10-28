@@ -149,6 +149,9 @@ fn refused(phase: &'static str, message: JsString) -> Result<Box<RawValue>, Stri
     })
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     if request.operation != "code_graph.boundary-analysis" {
         return Err("unsupported operation".into());
     }
@@ -161,10 +164,17 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
     )
     .map_err(|error| error.to_string())?;
     let root = Path::new(&input.repo_root);
-    let catalog =
-        observe!(calls, load_binding_catalog, root, None).map_err(|error| error.to_string())?;
-    let libraries = match observe!(calls, read_libraries, &rules, root, None)
-        .map_err(|error| error.to_string())?
+    let catalog = observe!(calls, load_binding_catalog, root, None, &metadata_collation)
+        .map_err(|error| error.to_string())?;
+    let libraries = match observe!(
+        calls,
+        read_libraries,
+        &rules,
+        root,
+        None,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?
     {
         LibrariesRead::Read(value) => value,
         LibrariesRead::Refused { message } => return refused("libraries", message),

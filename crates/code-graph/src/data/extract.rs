@@ -316,8 +316,9 @@ pub fn load_data_report(
     units: &[Rc<SourceUnit>],
     functions: &[DiscoveredFunction],
     repo_root: &Path,
+    collation: &crate::project::Collation,
 ) -> Result<DataReport, CatalogError> {
-    let catalog = load_binding_catalog(repo_root, None)?;
+    let catalog = load_binding_catalog(repo_root, None, collation)?;
     let scan = scan_data_sites(DataScanInput {
         units,
         functions,

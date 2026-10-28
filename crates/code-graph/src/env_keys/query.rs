@@ -5,8 +5,10 @@ use super::{
     read_site_owner::{ReadSiteOwner, read_site_owner},
 };
 use crate::{
-    extract::wrangler_config::{BindingCatalog, load_binding_catalog},
-    project::{join_path_text, load_cheap_project, locale_compare_units},
+    extract::wrangler_config::{BindingCatalog, load_binding_catalog_request},
+    project::{
+        Collation, CollationError, join_path_text, load_cheap_project, locale_compare_units,
+    },
     text::JsString,
 };
 use indexmap::IndexSet;
@@ -132,14 +134,15 @@ fn to_repo_relative(repo: &JsString, absolute: JsString) -> JsString {
         absolute
     }
 }
-pub(crate) fn load_env_key_report(
+pub(crate) fn load_env_key_report<'c>(
     root: &JsString,
     repo: &JsString,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<EnvKeyReport, EnvKeyError> {
     let source =
         load_cheap_project(Path::new(&root.to_lossy()), None).map_err(EnvKeyError::Project)?;
-    let catalog =
-        load_binding_catalog(Path::new(&repo.to_lossy()), None).map_err(EnvKeyError::Catalog)?;
+    let catalog = load_binding_catalog_request(Path::new(&repo.to_lossy()), None, request)
+        .map_err(EnvKeyError::Catalog)?;
     let candidates = catalog
         .manifests
         .iter()

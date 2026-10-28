@@ -59,7 +59,13 @@ fn main() {
     fs::create_dir(&root).unwrap();
     fs::write(root.join("tsconfig.json"), "{}").unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
-    let mut graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default()).unwrap();
+    let mut graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     graph.reachability = Some(ReachabilityReport {
         entry_count: 0,
         exported_count: 0,
@@ -92,7 +98,8 @@ fn main() {
             json: false,
             pretty: false,
         },
-     &collation()) {
+        &collation(),
+    ) {
         Err(UnreachableRunError::Emit(actual)) => {
             assert!(Rc::ptr_eq(&actual, &same));
             assert_eq!(actual.name, name);

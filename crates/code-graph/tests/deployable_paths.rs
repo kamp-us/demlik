@@ -39,7 +39,12 @@ fn real_worker_configs_form_one_cycle_while_workspace_crossings_keep_the_first_s
         fs::create_dir_all(root.join(dir)).unwrap();
         fs::write(root.join(dir).join("wrangler.json"), source).unwrap();
     }
-    let catalog = load_binding_catalog(&root, None).unwrap();
+    let catalog = load_binding_catalog(
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let graph = worker_graph(&catalog);
     assert_eq!(
         graph.workers,
@@ -121,7 +126,12 @@ fn worker_facts_own_binding_policy_and_census_while_disabled_rules_read_nothing(
     }
     let source = "env.DB.prepare('select 1'); env.API.fetch('/'); env.FLOW.create();";
     fs::write(root.join("services/a/src/main.ts"), source).unwrap();
-    let catalog = load_binding_catalog(&root, None).unwrap();
+    let catalog = load_binding_catalog(
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let rules=BoundaryRules::parse(&JsValue::parse(r#"{"acrossDeployables":["binding-outside-driven-adapter","relative-import-crosses-workspace"]}"#).unwrap()).unwrap();
     let DeployablesRead::Read(deployables) = read_deployables(&rules, &root, None, &catalog) else {
         panic!("valid worker configs refused")

@@ -68,6 +68,9 @@ struct Response {
 }
 
 fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     if case.operation != "code_graph.structure" {
         return Err(format!("unsupported operation: {}", case.operation));
     }
@@ -85,14 +88,17 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, S
         case.input.thresholds,
         NodeFields {
             headers: case.input.headers
-        }
+        },
+        &metadata_collation
     )
     .map_err(|error| error.to_string())?;
     let declarations = observe!(
         calls,
         demlik_code_graph::declarations::discover::discover_declarations,
-        &loaded.source_files
-    );
+        &loaded.source_files,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let imports = loaded
         .source_files
         .iter()
@@ -119,26 +125,34 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, S
             let declaration_specifiers = observe!(
                 calls,
                 demlik_code_graph::syntax::imports::import_declaration_specifiers,
-                &unit.syntax
-            );
-            Imports {
+                &unit.syntax,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
+            Ok::<_, String>(Imports {
                 file: unit.file.clone(),
                 literals,
                 runtime_specifiers,
                 imported_names,
                 declaration_specifiers,
-            }
+            })
         })
-        .collect();
-    let resolved_imports = case.input.ts_config.map(|ts_config| {
-        observe!(
-            calls,
-            demlik_code_graph::syntax::imports::resolve_imports,
-            &case.input.root,
-            &loaded.source_files,
-            &ts_config
-        )
-    });
+        .collect::<Result<_, _>>()?;
+    let resolved_imports = case
+        .input
+        .ts_config
+        .map(|ts_config| {
+            observe!(
+                calls,
+                demlik_code_graph::syntax::imports::resolve_imports,
+                &case.input.root,
+                &loaded.source_files,
+                &ts_config,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
     to_raw_value(&Output {
         graph,
         imports,

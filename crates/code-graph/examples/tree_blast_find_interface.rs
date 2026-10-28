@@ -31,9 +31,17 @@ impl Write for Borrowed<'_> {
     }
 }
 fn main() {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
+
     let root = std::env::args().nth(1).expect("owned cheap fixture");
     let loaded = load_cheap_project(Path::new(&root), None).unwrap();
-    let graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default()).unwrap();
+    let graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &metadata_collation,
+    )
+    .unwrap();
     let collation = Collation::try_node22_en_us().unwrap();
     let tree = render_tree(&graph, TreeStyle::Plain, &collation).unwrap();
     assert!(tree.to_lossy().contains("Shared"));

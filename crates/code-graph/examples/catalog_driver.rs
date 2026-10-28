@@ -43,6 +43,12 @@ struct Response {
     observed_calls: Vec<&'static str>,
 }
 fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, DriverError> {
+    let metadata_collation =
+        demlik_code_graph::project::Collation::try_node22_en_us().map_err(|error| DriverError {
+            kind: "backend-error",
+            message: error.to_string(),
+        })?;
+
     if case.operation != "code_graph.catalog" {
         return Err(DriverError {
             kind: "driver-error",
@@ -69,7 +75,8 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
         calls,
         demlik_code_graph::extract::wrangler_config::load_binding_catalog,
         &case.input.root,
-        listing.as_ref()
+        listing.as_ref(),
+        &metadata_collation
     )
     .map_err(|error| DriverError {
         kind: if matches!(error, CatalogError::Record(_)) {

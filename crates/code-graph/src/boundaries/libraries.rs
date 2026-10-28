@@ -4,10 +4,10 @@ use crate::{
         glob::{GlobError, glob_to_regexp},
         rules::JsRegex,
     },
-    layers::resolve_target::{WorkspacePackages, match_package, workspace_packages},
+    layers::resolve_target::{WorkspacePackages, match_package, workspace_packages_request},
     project::{
-        RepoListing, discover_package_roots, join_path_text, list_repo, locale_compare,
-        normalize_path_text,
+        Collation, CollationError, RepoListing, discover_package_roots, join_path_text, list_repo,
+        locale_compare, normalize_path_text,
     },
     text::{JsString, object_keys},
 };
@@ -65,11 +65,51 @@ pub enum LibrariesRead<'a> {
     Read(Libraries<'a>),
     Refused { message: JsString },
 }
+#[derive(Debug)]
+pub enum LibraryReadError {
+    Pattern(GlobError),
+    Collation(CollationError),
+}
+impl std::fmt::Display for LibraryReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pattern(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for LibraryReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Pattern(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<GlobError> for LibraryReadError {
+    fn from(error: GlobError) -> Self {
+        Self::Pattern(error)
+    }
+}
+impl From<CollationError> for LibraryReadError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
 pub fn read_libraries<'a>(
     rules: &'a BoundaryRules,
     repo_root: &Path,
     listing: Option<&RepoListing>,
-) -> Result<LibrariesRead<'a>, GlobError> {
+    collation: &Collation,
+) -> Result<LibrariesRead<'a>, LibraryReadError> {
+    read_libraries_request(rules, repo_root, listing, &mut || Ok(collation))
+}
+pub(crate) fn read_libraries_request<'a, 'c>(
+    rules: &'a BoundaryRules,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<LibrariesRead<'a>, LibraryReadError> {
     if !declares_libraries(rules) {
         return Ok(LibrariesRead::Read(Libraries::default()));
     }
@@ -124,7 +164,7 @@ pub fn read_libraries<'a>(
         rules: Some(rules),
         dirs,
         type_of_dir,
-        packages: workspace_packages(repo_root, &package_dirs),
+        packages: workspace_packages_request(repo_root, &package_dirs, request)?,
         package_dirs,
         world: rules
             .world_libraries

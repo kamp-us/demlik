@@ -150,7 +150,7 @@ pub fn with_entry_presets(
             presets.push(preset);
         }
     }
-    presets.sort_by(|left, right| crate::project::locale_compare(left.as_str(), right.as_str()));
+    // The frozen schema has one preset variant; deduplication leaves at most one value.
     rules.entry_export_presets = presets;
     ConfigResolution::Resolved(rules)
 }

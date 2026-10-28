@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use serde::Serialize;
 
 use crate::extract::functions::{exported_local_names, is_test_file};
-use crate::project::{SourceUnit, locale_compare};
+use crate::project::{Collation, CollationError, CollationInput, SourceUnit};
 use crate::schema::{DeclarationKind, DeclarationNode, UseSite};
 use crate::syntax::file::NodeRef;
 
@@ -95,7 +95,10 @@ fn declared_in(statement: NodeRef<'_>) -> Vec<Found> {
     }]
 }
 
-pub fn discover_declarations(source_files: &[Rc<SourceUnit>]) -> Vec<DiscoveredDeclaration> {
+pub fn discover_declarations(
+    source_files: &[Rc<SourceUnit>],
+    collation: &Collation,
+) -> Result<Vec<DiscoveredDeclaration>, CollationError> {
     let mut discovered = Vec::new();
     for unit in source_files {
         let found: Vec<_> = unit
@@ -141,20 +144,31 @@ pub fn discover_declarations(source_files: &[Rc<SourceUnit>]) -> Vec<DiscoveredD
             });
         }
     }
+    let mut discovered = discovered
+        .into_iter()
+        .map(|row| {
+            let file = CollationInput::from_text(&row.file)?;
+            let kind = CollationInput::from_text(row.kind.as_str())?;
+            let id = CollationInput::from_text(&row.id)?;
+            Ok((row, file, kind, id))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     discovered.sort_by(|left, right| {
-        locale_compare(&left.file, &right.file)
-            .then_with(|| left.line.cmp(&right.line))
-            .then_with(|| locale_compare(left.kind.as_str(), right.kind.as_str()))
-            .then_with(|| locale_compare(&left.id, &right.id))
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| left.0.line.cmp(&right.0.line))
+            .then_with(|| collation.compare(&left.2, &right.2))
+            .then_with(|| collation.compare(&left.3, &right.3))
     });
-    discovered
+    Ok(discovered.into_iter().map(|(row, _, _, _)| row).collect())
 }
 
 pub fn build_declaration_nodes(
     source_files: &[Rc<SourceUnit>],
     uses_by_id: Option<&IndexMap<String, Vec<UseSite>>>,
-) -> Vec<DeclarationNode> {
-    discover_declarations(source_files)
+    collation: &Collation,
+) -> Result<Vec<DeclarationNode>, CollationError> {
+    Ok(discover_declarations(source_files, collation)?
         .into_iter()
         .map(|declaration| {
             let uses = uses_by_id
@@ -171,5 +185,5 @@ pub fn build_declaration_nodes(
                 uses,
             }
         })
-        .collect()
+        .collect())
 }

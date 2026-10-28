@@ -1,6 +1,6 @@
 use crate::extract::functions::DiscoveredFunction;
 use crate::kinds::conventions::DEFAULT_EXPORT;
-use crate::project::{SourceUnit, locale_compare_units};
+use crate::project::{Collation, CollationError, CollationInput, SourceUnit};
 use crate::syntax::file::NodeRef;
 use crate::text::JsString;
 use indexmap::{IndexMap, IndexSet};
@@ -83,7 +83,10 @@ fn declared(node: NodeRef<'_>) -> (Option<JsString>, Option<JsString>) {
         )
     }
 }
-pub fn export_names_by_id(functions: &[DiscoveredFunction]) -> IndexMap<String, Vec<JsString>> {
+pub fn export_names_by_id(
+    functions: &[DiscoveredFunction],
+    collation: &Collation,
+) -> Result<IndexMap<String, Vec<JsString>>, CollationError> {
     let mut locals: HashMap<*const SourceUnit, IndexMap<JsString, Vec<JsString>>> = HashMap::new();
     let mut out = IndexMap::new();
     for function in functions {
@@ -104,9 +107,15 @@ pub fn export_names_by_id(functions: &[DiscoveredFunction]) -> IndexMap<String, 
         if names.is_empty() {
             continue;
         }
-        let mut names: Vec<_> = names.into_iter().collect();
-        names.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-        out.insert(function.id.clone(), names);
+        let mut names = names
+            .into_iter()
+            .map(|name| CollationInput::from_utf16(name.units()).map(|input| (name, input)))
+            .collect::<Result<Vec<_>, _>>()?;
+        names.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        out.insert(
+            function.id.clone(),
+            names.into_iter().map(|(name, _)| name).collect(),
+        );
     }
-    out
+    Ok(out)
 }

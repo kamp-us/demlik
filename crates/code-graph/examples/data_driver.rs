@@ -169,6 +169,9 @@ fn execute(
     manifest: Option<&Path>,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, DriverError> {
+    let metadata_collation =
+        demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?;
+
     match case.operation.as_str() {
         "code_graph.data_graph" => {
             let input: GraphInput = parse(&case.input)?;
@@ -203,14 +206,16 @@ fn execute(
                             &loaded,
                             input.thresholds,
                             fields,
-                            data
+                            data,
+                            &metadata_collation
                         ),
                         None => observe!(
                             calls,
                             demlik_code_graph::extract::assemble::assemble_graph,
                             &loaded,
                             input.thresholds,
-                            fields
+                            fields,
+                            &metadata_collation
                         ),
                     }
                 }
@@ -254,7 +259,8 @@ fn execute(
                         &binary,
                         fields,
                         analysis.as_ref(),
-                        data
+                        data,
+                        &metadata_collation
                     )
                 }
             }?;
@@ -299,7 +305,8 @@ fn execute(
                 calls,
                 demlik_code_graph::extract::wrangler_config::load_binding_catalog,
                 repo,
-                None
+                None,
+                &metadata_collation
             )?;
             let scan = observe!(
                 calls,
@@ -316,7 +323,8 @@ fn execute(
                 demlik_code_graph::data::extract::load_data_report,
                 &units,
                 &functions,
-                repo
+                repo,
+                &metadata_collation
             )?;
             to_raw_value(&ReportOutput {
                 functions: functions.len(),

@@ -17,6 +17,8 @@ impl Drop for Scratch {
     }
 }
 fn main() -> Result<(), Box<dyn Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let scratch = Scratch(
         std::env::current_dir()?
             .join("target/parity")
@@ -24,7 +26,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     fs::create_dir_all(&scratch.0)?;
     let loaded = load_cheap_project(&scratch.0, None)?;
-    let graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default())?;
+    let graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &metadata_collation,
+    )?;
     let root: JsString = scratch.0.to_string_lossy().as_ref().into();
     let settings = CollapseSettings::default();
     let label = String::from("borrowed local renderer context");

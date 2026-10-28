@@ -74,7 +74,13 @@ fn main() {
     fs::create_dir(&root).unwrap();
     fs::write(root.join("tsconfig.json"), "{}").unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
-    let mut graph = assemble_graph(&loaded, Default::default(), NodeFields::default()).unwrap();
+    let mut graph = assemble_graph(
+        &loaded,
+        Default::default(),
+        NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     graph.smells = vec![Smell {
         kind: Kind::HighComplexity,
         target: SmellTarget::Module {

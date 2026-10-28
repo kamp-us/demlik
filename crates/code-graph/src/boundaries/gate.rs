@@ -14,10 +14,10 @@ use super::{
         write_boundary_ledger,
     },
     libraries::{
-        Libraries, LibrariesRead,
+        Libraries, LibrariesRead, LibraryReadError,
         allowance::{NamedFile, allowance_issue, imported_names_for},
         census::{MeasuredLibraries, library_census},
-        library_scopes, read_libraries,
+        library_scopes, read_libraries_request,
     },
     migrate::{LEGACY_CEILINGS_FILENAME, Migration, migrated_ledger},
     reconcile::{reconcile, with_accepted},
@@ -34,14 +34,17 @@ use super::{
     zones::reads::unknown_driven,
 };
 use crate::{
-    extract::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog},
+    extract::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog_request},
     kinds::glob::GlobError,
     project::{
         Collation, CollationError, EdgeScope, RepoListing, join_path_text, list_repo,
         load_edge_project_text,
     },
     ratchet::scope_count::{ScopeCeilingsResolution, read_scope_ceilings, scope_of, scopes_under},
-    syntax::imports::{ImportedNames, resolve_imports, resolve_imports_text, runtime_specifiers},
+    syntax::imports::{
+        ImportResolveError, ImportedNames, resolve_imports, resolve_imports_text,
+        runtime_specifiers,
+    },
     text::{JsString, object_keys},
     validation::RecordTypeError,
 };
@@ -237,14 +240,20 @@ impl Reads<'_> {
         }
     }
 }
-fn read_run<'a>(
+fn read_run<'a, 'c>(
     rules: &'a BoundaryRules,
     args: BoundaryGateArgs<'_>,
     listing: Option<&RepoListing>,
     catalog: &'a BindingCatalog,
+    request: &mut impl FnMut() -> std::result::Result<&'c Collation, CollationError>,
 ) -> Result<std::result::Result<Reads<'a>, JsString>> {
     let libraries =
-        match read_libraries(rules, args.repo_root, listing).map_err(BoundaryGateError::Pattern)? {
+        match read_libraries_request(rules, args.repo_root, listing, request).map_err(|error| {
+            match error {
+                LibraryReadError::Pattern(error) => BoundaryGateError::Pattern(error),
+                LibraryReadError::Collation(error) => BoundaryGateError::Collation(error),
+            }
+        })? {
             LibrariesRead::Read(libraries) => libraries,
             LibrariesRead::Refused { message } => return Ok(Err(message)),
         };
@@ -293,13 +302,31 @@ struct ModuleFacts {
     runtime_specifiers: IndexSet<JsString>,
     binding_sites: Vec<BindingSite>,
 }
+enum ScopeFailure {
+    Refused(JsString),
+    Collation(CollationError),
+}
+impl From<JsString> for ScopeFailure {
+    fn from(message: JsString) -> Self {
+        Self::Refused(message)
+    }
+}
+impl From<ImportResolveError> for ScopeFailure {
+    fn from(error: ImportResolveError) -> Self {
+        match error {
+            ImportResolveError::WorkingDirectory(error) => Self::Refused(error.to_string().into()),
+            ImportResolveError::Collation(error) => Self::Collation(error),
+        }
+    }
+}
 fn analyze_scope(
     scope: &JsString,
     rules: &BoundaryRules,
     reads: &Reads<'_>,
     listing: Option<&RepoListing>,
     input: GateInput<'_>,
-) -> std::result::Result<ScopeAnalysis, JsString> {
+    collation: &Collation,
+) -> std::result::Result<ScopeAnalysis, ScopeFailure> {
     let args = input.native;
     let folders = feature_folders_of(rules, scope);
     if folders.is_defined()
@@ -307,7 +334,7 @@ fn analyze_scope(
             .unlisted_port_folder_issue(scope, &src_entries(scope, input))
             .map_err(|error| JsString::from(error.to_string()))?
     {
-        return Err(message);
+        return Err(message.into());
     }
     let reads_files = folders.is_defined()
         || scope
@@ -334,13 +361,16 @@ fn analyze_scope(
                 &scope_root(input, scope),
                 &loaded.project.source_files,
                 &loaded.ts_config_path,
+                collation,
             )
-            .map_err(|error| JsString::from(error.to_string())),
-            None => Ok(resolve_imports(
+            .map_err(ScopeFailure::from),
+            None => resolve_imports(
                 &loaded.project.root_absolute,
                 &loaded.project.source_files,
                 &loaded.ts_config_path,
-            )),
+                collation,
+            )
+            .map_err(ScopeFailure::from),
         })
         .transpose()?;
     let facts: Vec<_> = loaded
@@ -388,7 +418,7 @@ fn analyze_scope(
     if let BindingOwners::Record(owners) = binding_owners_of(rules, scope)
         && let Some(message) = binding_owner_issue(scope, owners, &files, &reads.deployables)
     {
-        return Err(message);
+        return Err(message.into());
     }
     let named: Vec<_> = modules
         .iter()
@@ -398,7 +428,7 @@ fn analyze_scope(
         })
         .collect();
     if let Some(message) = allowance_issue(&reads.libraries, scope, &named) {
-        return Err(message);
+        return Err(message.into());
     }
     let unread = unknown_driven(&reads.shape.allowance, scope, &files);
     if !unread.is_empty() {
@@ -408,10 +438,11 @@ fn analyze_scope(
             "\" name no file the scope loads: ".into(),
             super::rules::join(&unread, "; "),
             ". A listed file is an exact scope-relative .ts/.tsx path.".into(),
-        ]));
+        ])
+        .into());
     }
     analyze_boundaries(scope, &modules, rules, reads.inputs())
-        .map_err(|error| error.to_string().into())
+        .map_err(|error| ScopeFailure::Refused(error.to_string().into()))
 }
 struct Analysis {
     reports: Vec<ScopeBoundaryReport>,
@@ -425,14 +456,19 @@ fn analyze_all(
     listing: Option<&RepoListing>,
     under: &JsString,
     input: GateInput<'_>,
-) -> std::result::Result<Analysis, JsString> {
+    collation: &Collation,
+) -> Result<std::result::Result<Analysis, JsString>> {
     let mut analysis = Analysis {
         reports: Vec::new(),
         unjudged: 0,
         sites: Vec::new(),
     };
     for scope in scopes {
-        let scope = analyze_scope(scope, rules, reads, listing, input)?;
+        let scope = match analyze_scope(scope, rules, reads, listing, input, collation) {
+            Ok(scope) => scope,
+            Err(ScopeFailure::Refused(message)) => return Ok(Err(message)),
+            Err(ScopeFailure::Collation(error)) => return Err(BoundaryGateError::Collation(error)),
+        };
         analysis.unjudged += scope.unjudged;
         analysis.sites.extend(scope.sites);
         analysis.reports.push(scope.report);
@@ -451,7 +487,7 @@ fn analyze_all(
             workers: Some(reads.deployables.graph.workers.clone()),
         });
     }
-    Ok(analysis)
+    Ok(Ok(analysis))
 }
 fn current_ledger(
     ledger: &Path,
@@ -503,6 +539,19 @@ fn run<'c>(
     input: GateInput<'_>,
     request: impl FnOnce() -> std::result::Result<&'c Collation, CollationError>,
 ) -> Result<BoundaryGateResult> {
+    let mut retained = None;
+    let mut request = Some(request);
+    let mut request = || {
+        if let Some(collation) = retained {
+            return Ok(collation);
+        }
+        let collation = request
+            .take()
+            .expect("boundary gate requests the same borrowed handle once")(
+        )?;
+        retained = Some(collation);
+        Ok(collation)
+    };
     let args = input.native;
     let mode = match mode_of(args.flags) {
         Ok(mode) => mode,
@@ -518,7 +567,7 @@ fn run<'c>(
     let listing = (configs || declares_libraries(&rules)).then(|| list_repo(args.repo_root));
     let catalog = if configs {
         Some(
-            load_binding_catalog(args.repo_root, listing.as_ref())
+            load_binding_catalog_request(args.repo_root, listing.as_ref(), &mut request)
                 .map_err(BoundaryGateError::Catalog)?,
         )
     } else {
@@ -529,6 +578,7 @@ fn run<'c>(
         args,
         listing.as_ref(),
         catalog.as_ref().unwrap_or(&NO_CATALOG),
+        &mut request,
     )? {
         Ok(reads) => reads,
         Err(message) => return Ok(refused(message)),
@@ -576,7 +626,8 @@ fn run<'c>(
             listing.as_ref(),
             &".".into(),
             input,
-        ) {
+            collation,
+        )? {
             Ok(analysis) => analysis.reports,
             Err(message) => return Ok(refused(message)),
         };
@@ -610,7 +661,8 @@ fn run<'c>(
         listing.as_ref(),
         &under,
         input,
-    ) {
+        collation,
+    )? {
         Ok(analysis) => analysis,
         Err(message) => return Ok(refused(message)),
     };

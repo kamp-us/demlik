@@ -106,7 +106,13 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     let loaded = load_cheap_project(&root, None).unwrap();
     assert!(loaded.parse_failures.is_empty());
     let functions = discover_functions(&loaded.source_files).functions;
-    let report = load_data_report(&loaded.source_files, &functions, &root).unwrap();
+    let report = load_data_report(
+        &loaded.source_files,
+        &functions,
+        &root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         report.config_files,
         [
@@ -329,7 +335,13 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     let broken = load_cheap_project(&root, None).unwrap();
     assert!(broken.parse_failures.is_empty());
     let broken_functions = discover_functions(&broken.source_files).functions;
-    let broken_report = load_data_report(&broken.source_files, &broken_functions, &root).unwrap();
+    let broken_report = load_data_report(
+        &broken.source_files,
+        &broken_functions,
+        &root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         broken_report.unparsed_configs,
         ["workers/broken/wrangler.jsonc"]
@@ -342,7 +354,12 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     )
     .unwrap();
     assert!(matches!(
-        load_data_report(&broken.source_files, &broken_functions, &root),
+        load_data_report(
+            &broken.source_files,
+            &broken_functions,
+            &root,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        ),
         Err(CatalogError::Record(_))
     ));
     fs::remove_dir_all(root).unwrap();
@@ -390,13 +407,25 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
     let loaded = load_cheap_project(&root, None).unwrap();
     let fields = NodeFields { headers: true };
     assert!(
-        assemble_graph(&loaded, Thresholds::default(), fields)
-            .unwrap()
-            .data
-            .is_none()
+        assemble_graph(
+            &loaded,
+            Thresholds::default(),
+            fields,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .data
+        .is_none()
     );
     let data = DataOptions { repo_root: &root };
-    let cheap = assemble_graph_with_data(&loaded, Thresholds::default(), fields, data).unwrap();
+    let cheap = assemble_graph_with_data(
+        &loaded,
+        Thresholds::default(),
+        fields,
+        data,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let report = cheap.data.as_ref().unwrap();
     assert_eq!((report.edges.len(), report.unattributed.len()), (1, 1));
     assert_eq!(report.edges[0].function_id, "src/entry.ts:read");
@@ -428,6 +457,7 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
             fields,
             options,
             Some(data),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
         )
         .unwrap();
         assert_eq!(serde_json::to_value(&graph.data).unwrap(), expected_data);
@@ -457,6 +487,7 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
         Thresholds::default(),
         fields,
         DataOptions { repo_root: &empty },
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -469,10 +500,15 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
     )
     .unwrap();
     assert!(
-        assemble_graph(&loaded, Thresholds::default(), fields)
-            .unwrap()
-            .data
-            .is_none()
+        assemble_graph(
+            &loaded,
+            Thresholds::default(),
+            fields,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .unwrap()
+        .data
+        .is_none()
     );
     assert!(
         assemble_graph_with_reports(
@@ -481,14 +517,21 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
             &binary,
             fields,
             None,
-            None
+            None,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
         )
         .unwrap()
         .data
         .is_none()
     );
     assert!(matches!(
-        assemble_graph_with_data(&loaded, Thresholds::default(), fields, data),
+        assemble_graph_with_data(
+            &loaded,
+            Thresholds::default(),
+            fields,
+            data,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        ),
         Err(AssemblyError::Data(CatalogError::Record(_)))
     ));
     assert!(matches!(
@@ -498,7 +541,8 @@ fn assembles_requested_data_in_both_passes_and_preserves_unrequested_empty_and_f
             &binary,
             fields,
             None,
-            Some(data)
+            Some(data),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
         ),
         Err(AssemblyError::Data(CatalogError::Record(_)))
     ));

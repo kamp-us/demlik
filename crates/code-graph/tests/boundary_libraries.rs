@@ -47,7 +47,13 @@ fn libraries_share_workspace_owners_and_assign_an_unlisted_package_to_its_neares
     rules
         .libraries
         .insert("packages/core".into(), "kernel".into());
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &root, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("valid libraries were refused")
     };
     assert_eq!(
@@ -109,7 +115,13 @@ fn real_imports_drive_library_verdicts_stale_allowances_and_the_measured_census(
         "worldLibraries":["node:*"],
         "allowImportNames":{"packages/core":{"packages/adapter":["A","Never"]}}
     }"#).unwrap()).unwrap();
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &root, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("fixture refused")
     };
     let scope = JsString::from("packages/core");
@@ -214,7 +226,13 @@ fn inherited_allowances_keep_function_names_and_eager_getter_errors() {
         .unwrap();
     }
     let rules=BoundaryRules::parse(&JsValue::parse(r#"{"libraryTypes":{"low":{"imports":[],"pure":false},"high":{"imports":[],"pure":false}},"libraries":{"toString":"low","name":"high"}}"#).unwrap()).unwrap();
-    let LibrariesRead::Read(libraries) = read_libraries(&rules, &root, None).unwrap() else {
+    let LibrariesRead::Read(libraries) = read_libraries(
+        &rules,
+        &root,
+        None,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap() else {
         panic!("fixture refused")
     };
     let scope = JsString::from("toString");

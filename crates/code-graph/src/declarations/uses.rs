@@ -1,7 +1,7 @@
 use super::discover::DiscoveredDeclaration;
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeFile, NativeNode, NativeSymbol, TsgoError, native_flag};
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{DeclarationKind, UseSite};
 use indexmap::{IndexMap, IndexSet};
 use serde::Serialize;
@@ -131,10 +131,42 @@ fn resolved_symbol(
     };
     Ok(Some(context.aliased_symbol(&symbol)?.unwrap_or(symbol)))
 }
+#[derive(Debug)]
+pub enum DeclarationUseError {
+    Compiler(TsgoError),
+    Collation(CollationError),
+}
+impl std::fmt::Display for DeclarationUseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Compiler(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for DeclarationUseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Compiler(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<TsgoError> for DeclarationUseError {
+    fn from(error: TsgoError) -> Self {
+        Self::Compiler(error)
+    }
+}
+impl From<CollationError> for DeclarationUseError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
 pub fn resolve_declaration_uses(
     context: &mut TypeContext<'_, '_>,
     declarations: &[DiscoveredDeclaration],
-) -> Result<DeclarationUses, TsgoError> {
+    collation: &Collation,
+) -> Result<DeclarationUses, DeclarationUseError> {
     let node_to_id = join(context, declarations)?;
     let mut sites: IndexMap<String, IndexMap<String, UseSite>> = node_to_id
         .values()
@@ -182,13 +214,18 @@ pub fn resolve_declaration_uses(
     let uses_by_id: IndexMap<_, _> = sites
         .into_iter()
         .map(|(id, sites)| {
-            let mut sites: Vec<_> = sites.into_values().collect();
+            let mut sites: Vec<_> = sites
+                .into_values()
+                .map(|site| CollationInput::from_text(&site.file).map(|key| (site, key)))
+                .collect::<Result<_, _>>()?;
             sites.sort_by(|left, right| {
-                locale_compare(&left.file, &right.file).then_with(|| left.line.cmp(&right.line))
+                collation
+                    .compare(&left.1, &right.1)
+                    .then_with(|| left.0.line.cmp(&right.0.line))
             });
-            (id, sites)
+            Ok((id, sites.into_iter().map(|(site, _)| site).collect()))
         })
-        .collect();
+        .collect::<Result<_, CollationError>>()?;
     let unjoined = declarations
         .iter()
         .filter(|declaration| !uses_by_id.contains_key(&declaration.id))

@@ -19,12 +19,26 @@ fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels(
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("entry.ts"), "export function fetch() {} export function requireAuth() {} export function plain() {} export function custom() {} ").unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
-    let graph = assemble_graph(&loaded, Thresholds::default(), NodeFields::default()).unwrap();
+    let graph = assemble_graph(
+        &loaded,
+        Thresholds::default(),
+        NodeFields::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let rules =
         NodeKindRules::parse(&JsValue::parse(r#"{"entryNames":{"\ud800":["^custom$"]}}"#).unwrap())
             .unwrap();
-    let custom = compile_kind_rules(&rules).unwrap();
-    let defaults = compile_kind_rules(&NodeKindRules::default()).unwrap();
+    let custom = compile_kind_rules(
+        &rules,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
+    let defaults = compile_kind_rules(
+        &NodeKindRules::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let context = ClassifyContext::default();
     for function in &graph.functions {
         let kind = classify_function(function, &defaults, &context);
@@ -53,7 +67,13 @@ fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels(
     );
     let invalid =
         NodeKindRules::parse(&JsValue::parse(r#"{"authNames":{"bad":["["]}}"#).unwrap()).unwrap();
-    assert!(compile_kind_rules(&invalid).is_err());
+    assert!(
+        compile_kind_rules(
+            &invalid,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
+        )
+        .is_err()
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -126,10 +146,21 @@ fn selects_framework_export_conventions_from_each_functions_actual_owning_packag
     let loaded = load_cheap_project(&root, None).unwrap();
     let functions = discover_functions(&loaded.source_files).functions;
     let rules = NodeKindRules::parse(&JsValue::parse(r#"{"entryExportConventions":{"job-runner":{"files":"jobs/*.ts","exports":["execute"]}}}"#).unwrap()).unwrap();
-    let names = export_names_by_id(&functions);
+    let names = export_names_by_id(
+        &functions,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(names["apps/web/app/[slug]/page.tsx:Home"], ["default"]);
     assert_eq!(names["apps/jobs/jobs/run.ts:run"], ["execute"]);
-    let entries = convention_entries(&functions, &rules, &root, &root).unwrap();
+    let entries = convention_entries(
+        &functions,
+        &rules,
+        &root,
+        &root,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(entries.len(), 3);
     assert_eq!(
         entries["apps/web/app/[slug]/page.tsx:Home"],
@@ -169,7 +200,11 @@ fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_dec
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
-    let rules = compile_kind_rules(&NodeKindRules::default()).unwrap();
+    let rules = compile_kind_rules(
+        &NodeKindRules::default(),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     with_type_context(
         &binary,
         TypeContextInput {

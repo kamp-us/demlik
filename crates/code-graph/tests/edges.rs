@@ -64,7 +64,9 @@ fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
         &project.0,
         &loaded.source_files,
         &project.0.join("tsconfig.json"),
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let edges = with_type_context(
         &project.binary(),
         TypeContextInput {
@@ -115,7 +117,9 @@ fn preserves_a_valid_external_callee_with_a_lone_surrogate_name() {
         &project.0,
         &loaded.source_files,
         &project.0.join("tsconfig.json"),
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let edges = with_type_context(
         &project.binary(),
         TypeContextInput {
@@ -155,7 +159,11 @@ fn measures_alias_type_uses_shorthand_values_callbacks_and_module_roots() {
     );
     let loaded = load_cheap_project(&project.0, None).unwrap();
     let functions = discover_functions(&loaded.source_files).functions;
-    let declarations = discover_declarations(&loaded.source_files);
+    let declarations = discover_declarations(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let names: IndexSet<_> = functions
         .iter()
         .map(|function| function.name.clone())
@@ -178,7 +186,12 @@ fn measures_alias_type_uses_shorthand_values_callbacks_and_module_roots() {
         },
         |context| {
             Ok((
-                resolve_declaration_uses(context, &declarations)?,
+                resolve_declaration_uses(
+                    context,
+                    &declarations,
+                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                )
+                .unwrap(),
                 resolve_references(context, &names, &exported)?,
             ))
         },

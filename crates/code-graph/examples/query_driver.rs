@@ -130,6 +130,7 @@ fn query(
     input: QueryInput,
     manifest: &Path,
     calls: &mut Vec<&'static str>,
+    metadata_collation: &demlik_code_graph::project::Collation,
 ) -> Result<Box<RawValue>, String> {
     let patterns: Vec<_> = input
         .export_patterns
@@ -206,7 +207,8 @@ fn query(
         &loaded,
         Thresholds::default(),
         &binary,
-        NodeFields::default()
+        NodeFields::default(),
+        metadata_collation
     )
     .map_err(|error| error.to_string())?;
     for (id, kind) in input.node_kinds {
@@ -288,11 +290,15 @@ fn execute(
     manifest: &Path,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     match case.operation.as_str() {
         "code_graph.query" => query(
             serde_json::from_str(case.input.get()).map_err(|error| error.to_string())?,
             manifest,
             calls,
+            &metadata_collation,
         ),
         "code_graph.partition" => {
             let input: PartitionInput =
@@ -349,7 +355,8 @@ fn execute(
             let rules = observe!(
                 calls,
                 demlik_code_graph::kinds::rules::compile_group,
-                &group
+                &group,
+                &metadata_collation
             )
             .map_err(|error| error.to_string())?;
             let matches: Vec<_> = input

@@ -90,6 +90,14 @@ impl From<io::Error> for LayerAnalysisError {
         Self::Io(error)
     }
 }
+impl From<super::resolve_target::TargetResolverError> for LayerAnalysisError {
+    fn from(error: super::resolve_target::TargetResolverError) -> Self {
+        match error {
+            super::resolve_target::TargetResolverError::Io(error) => Self::Io(error),
+            super::resolve_target::TargetResolverError::Collation(error) => Self::Collation(error),
+        }
+    }
+}
 impl From<LayerTieError> for LayerAnalysisError {
     fn from(error: LayerTieError) -> Self {
         Self::Tie(error)
@@ -131,8 +139,8 @@ pub(super) fn analyze<'c>(
     let collation = request().map_err(LayerAnalysisError::Collation)?;
     let matchers = order_matchers(matchers, collation).map_err(LayerAnalysisError::Collation)?;
     let mut resolver = match text {
-        Some((_, repo)) => create_target_resolver_text(repo)?,
-        None => create_target_resolver(repo_root)?,
+        Some((_, repo)) => create_target_resolver_text(repo, collation)?,
+        None => create_target_resolver(repo_root, collation)?,
     };
     let mut census = LayerCensus::default();
     let mut violations = Vec::new();

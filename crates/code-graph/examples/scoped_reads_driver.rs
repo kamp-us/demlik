@@ -144,12 +144,17 @@ fn parse_rules(raw: &RawValue, calls: &mut Vec<&'static str>) -> Result<Boundary
     let value = JsValue::parse(raw.get()).map_err(|error| error.to_string())?;
     observe!(calls, BoundaryRules::parse, &value).map_err(|error| error.to_string())
 }
-fn catalog(root: &Path, calls: &mut Vec<&'static str>) -> Result<BindingCatalog, String> {
+fn catalog(
+    root: &Path,
+    calls: &mut Vec<&'static str>,
+    metadata_collation: &demlik_code_graph::project::Collation,
+) -> Result<BindingCatalog, String> {
     observe!(
         calls,
         demlik_code_graph::extract::wrangler_config::load_binding_catalog,
         root,
-        None
+        None,
+        metadata_collation
     )
     .map_err(|error| error.to_string())
 }
@@ -157,13 +162,15 @@ fn libraries<'a>(
     rules: &'a BoundaryRules,
     root: &Path,
     calls: &mut Vec<&'static str>,
+    metadata_collation: &demlik_code_graph::project::Collation,
 ) -> Result<Libraries<'a>, String> {
     match observe!(
         calls,
         demlik_code_graph::boundaries::libraries::read_libraries,
         rules,
         root,
-        None
+        None,
+        metadata_collation
     )
     .map_err(|error| error.to_string())?
     {
@@ -198,6 +205,9 @@ fn verdicts<'a>(
         .collect()
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     match request.operation.as_str() {
         "code_graph.scoped-reads" => {
             let input: OpaqueInput =
@@ -222,7 +232,7 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let rules = parse_rules(&input.rules, calls)?;
-            let catalog = catalog(Path::new(&input.repo_root), calls)?;
+            let catalog = catalog(Path::new(&input.repo_root), calls, &metadata_collation)?;
             let allowance = observe!(
                 calls,
                 demlik_code_graph::boundaries::zones::reads::read_allowance_of,
@@ -252,7 +262,12 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 &input.scope,
                 &input.loaded
             );
-            let libraries = libraries(&rules, Path::new(&input.repo_root), calls)?;
+            let libraries = libraries(
+                &rules,
+                Path::new(&input.repo_root),
+                calls,
+                &metadata_collation,
+            )?;
             let edges: Vec<_> = input
                 .import_specifiers
                 .iter()
@@ -292,7 +307,7 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
             let rules = parse_rules(&input.rules, calls)?;
             let root = Path::new(&input.repo_root);
-            let catalog = catalog(root, calls)?;
+            let catalog = catalog(root, calls, &metadata_collation)?;
             let read = observe!(
                 calls,
                 demlik_code_graph::boundaries::shape::read_shape,
@@ -314,7 +329,7 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 }
                 Err(error) => return glob_error(error),
             };
-            let libraries = libraries(&rules, root, calls)?;
+            let libraries = libraries(&rules, root, calls, &metadata_collation)?;
             let mut held = Vec::new();
             for file in &input.files {
                 let source = match &file.source {

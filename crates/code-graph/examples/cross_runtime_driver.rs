@@ -102,6 +102,9 @@ fn execute(
     manifest: &Path,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, DriverError> {
+    let metadata_collation =
+        demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?;
+
     if case.operation != "code_graph.cross_runtime" {
         return Err(DriverError::transport(format!(
             "unsupported operation: {}",
@@ -132,7 +135,8 @@ fn execute(
         calls,
         demlik_code_graph::extract::wrangler_config::load_binding_catalog,
         repo,
-        None
+        None,
+        &metadata_collation
     )
     .map_err(|error| DriverError {
         kind: if matches!(error, CatalogError::Record(_)) {
@@ -171,8 +175,10 @@ fn execute(
         demlik_code_graph::syntax::imports::resolve_imports,
         &case.input.root,
         &loaded.project.source_files,
-        &loaded.ts_config_path
-    );
+        &loaded.ts_config_path,
+        &metadata_collation
+    )
+    .map_err(DriverError::backend)?;
     let input = || CrossRuntimeInput {
         catalog: &catalog,
         root_absolute: &case.input.root,

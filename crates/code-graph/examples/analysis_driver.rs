@@ -147,6 +147,9 @@ fn execute(
     manifest: &Path,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, DriverError> {
+    let metadata_collation =
+        demlik_code_graph::project::Collation::try_node22_en_us().map_err(DriverError::backend)?;
+
     if case.operation != "code_graph.analysis" {
         return Err(DriverError::transport(format!(
             "unsupported operation: {}",
@@ -196,7 +199,8 @@ fn execute(
         NodeFields {
             headers: case.input.headers
         },
-        &options
+        &options,
+        &metadata_collation
     )?;
     let mut packages = Vec::new();
     for dir in &case.input.package_dirs {
@@ -220,8 +224,10 @@ fn execute(
             calls,
             demlik_code_graph::extract::package_exports::package_source_entry,
             repo,
-            dir
-        );
+            dir,
+            &metadata_collation
+        )
+        .map_err(DriverError::backend)?;
         packages.push(Package {
             dir: dir.clone(),
             manifest,

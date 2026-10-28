@@ -3,11 +3,11 @@
 use crate::{
     api::real_path,
     engine::oxc::{FileResolution, NearestTsconfigResolver, create_nearest_tsconfig_resolver},
-    extract::package_exports::{package_name, package_source_entry, read_manifest},
+    extract::package_exports::{package_name, package_source_entry_request, read_manifest},
     extract::wrangler_config::document::jsonc_recovered,
     project::{
-        dirname_path_text, discover_package_roots, find_nearest_tsconfig, join_path_text,
-        relative_path_text_from,
+        Collation, CollationError, dirname_path_text, discover_package_roots,
+        find_nearest_tsconfig, join_path_text, relative_path_text_from,
     },
     text::JsString,
 };
@@ -27,7 +27,18 @@ pub struct WorkspacePackage {
 }
 pub type WorkspacePackages = IndexMap<JsString, WorkspacePackage>;
 
-pub fn workspace_packages(repo_root: &Path, package_dirs: &[String]) -> WorkspacePackages {
+pub fn workspace_packages(
+    repo_root: &Path,
+    package_dirs: &[String],
+    collation: &Collation,
+) -> Result<WorkspacePackages, CollationError> {
+    workspace_packages_request(repo_root, package_dirs, &mut || Ok(collation))
+}
+pub(crate) fn workspace_packages_request<'c>(
+    repo_root: &Path,
+    package_dirs: &[String],
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<WorkspacePackages, CollationError> {
     let mut by_name = IndexMap::new();
     for dir in package_dirs {
         if dir.is_empty() {
@@ -47,11 +58,11 @@ pub fn workspace_packages(repo_root: &Path, package_dirs: &[String]) -> Workspac
             WorkspacePackage {
                 name: name.clone(),
                 dir: dir.clone(),
-                entry: package_source_entry(repo_root, dir),
+                entry: package_source_entry_request(repo_root, dir, request)?,
             },
         );
     }
-    by_name
+    Ok(by_name)
 }
 pub fn match_package<'a>(
     specifier: &JsString,
@@ -95,13 +106,53 @@ enum ResolverRoot<'a> {
     Native(&'a Path),
     Text(&'a JsString),
 }
-pub fn create_target_resolver(repo_root: &Path) -> io::Result<TargetResolver> {
-    create(ResolverRoot::Native(repo_root))
+#[derive(Debug)]
+pub enum TargetResolverError {
+    Io(io::Error),
+    Collation(CollationError),
 }
-pub(super) fn create_target_resolver_text(repo_root: &JsString) -> io::Result<TargetResolver> {
-    create(ResolverRoot::Text(repo_root))
+impl std::fmt::Display for TargetResolverError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
+        }
+    }
 }
-fn create(root: ResolverRoot<'_>) -> io::Result<TargetResolver> {
+impl std::error::Error for TargetResolverError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Io(e) => e,
+            Self::Collation(e) => e,
+        })
+    }
+}
+impl From<io::Error> for TargetResolverError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+impl From<CollationError> for TargetResolverError {
+    fn from(error: CollationError) -> Self {
+        Self::Collation(error)
+    }
+}
+pub fn create_target_resolver(
+    repo_root: &Path,
+    collation: &Collation,
+) -> Result<TargetResolver, TargetResolverError> {
+    create(ResolverRoot::Native(repo_root), collation)
+}
+pub(super) fn create_target_resolver_text(
+    repo_root: &JsString,
+    collation: &Collation,
+) -> Result<TargetResolver, TargetResolverError> {
+    create(ResolverRoot::Text(repo_root), collation)
+}
+fn create(
+    root: ResolverRoot<'_>,
+    collation: &Collation,
+) -> Result<TargetResolver, TargetResolverError> {
     let (repo_native, root_text) = match root {
         ResolverRoot::Native(path) => (
             path.to_path_buf(),
@@ -109,7 +160,11 @@ fn create(root: ResolverRoot<'_>) -> io::Result<TargetResolver> {
         ),
         ResolverRoot::Text(text) => (PathBuf::from(text.to_lossy()), text.clone()),
     };
-    let packages = workspace_packages(&repo_native, &discover_package_roots(&repo_native, None));
+    let packages = workspace_packages(
+        &repo_native,
+        &discover_package_roots(&repo_native, None),
+        collation,
+    )?;
     let real_root_text = match root {
         ResolverRoot::Native(path) => fs::canonicalize(path)?.to_string_lossy().as_ref().into(),
         ResolverRoot::Text(text) => real_path(text)?,

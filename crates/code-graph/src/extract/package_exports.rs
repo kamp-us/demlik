@@ -1,5 +1,7 @@
 use crate::kinds::rules::JsRegex;
-use crate::project::{join_path_text, locale_compare_units, relative_path_text};
+use crate::project::{
+    Collation, CollationError, CollationInput, join_path_text, relative_path_text,
+};
 use crate::text::{JsObject, JsString, JsValue, object_keys, serialize_object};
 use serde::{Serialize, Serializer};
 use std::{fs, io, path::Path};
@@ -90,24 +92,47 @@ fn source_path(target: &JsString) -> JsString {
 fn typescript_path(path: &JsString) -> bool {
     strip_suffix(path.units(), ".ts").is_some() || strip_suffix(path.units(), ".tsx").is_some()
 }
-pub fn package_source_entry(repo_root: &Path, dir: &str) -> Option<JsString> {
-    let manifest = read_manifest(repo_root, dir)?;
+pub fn package_source_entry(
+    repo_root: &Path,
+    dir: &str,
+    collation: &Collation,
+) -> Result<Option<JsString>, CollationError> {
+    package_source_entry_request(repo_root, dir, &mut || Ok(collation))
+}
+pub(crate) fn package_source_entry_request<'c>(
+    repo_root: &Path,
+    dir: &str,
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<Option<JsString>, CollationError> {
+    let Some(manifest) = read_manifest(repo_root, dir) else {
+        return Ok(None);
+    };
     let mut candidates: Vec<_> = declared_targets(&manifest)
         .iter()
         .map(source_path)
         .filter(|path| typescript_path(path) && !path.units().contains(&u16::from(b'*')))
         .collect();
-    candidates.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
+    if candidates.len() > 1 {
+        let collation = request()?;
+        let mut keyed = candidates
+            .into_iter()
+            .map(|candidate| {
+                CollationInput::from_utf16(candidate.units()).map(|input| (candidate, input))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        keyed.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        candidates = keyed.into_iter().map(|(candidate, _)| candidate).collect();
+    }
     let base = join_path_text(&repo_root.to_string_lossy().as_ref().into(), &dir.into());
     for candidate in candidates {
         if Path::new(&join_path_text(&base, &candidate).to_lossy()).exists() {
             let mut entry = JsString::from(dir);
             entry.push_str("/");
             entry.extend(&candidate);
-            return Some(entry);
+            return Ok(Some(entry));
         }
     }
-    None
+    Ok(None)
 }
 #[derive(Debug)]
 pub enum ExportPatternError {

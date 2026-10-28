@@ -46,6 +46,8 @@ macro_rules! observe {
     }};
 }
 fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let mut calls = Vec::new();
     let root = PathBuf::from(input.root.to_lossy());
     let repo = PathBuf::from(input.repo_root.to_lossy());
@@ -62,7 +64,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
             demlik_code_graph::extract::assemble::assemble_graph,
             &loaded,
             Thresholds::default(),
-            NodeFields::default()
+            NodeFields::default(),
+            &metadata_collation
         )?;
         (graph, count)
     } else {
@@ -110,7 +113,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
-                &options
+                &options,
+                &metadata_collation
             ),
             Mode::Path => observe!(
                 calls,
@@ -119,7 +123,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
                 Thresholds::default(),
                 &binary,
                 NodeFields::default(),
-                &options
+                &options,
+                &metadata_collation
             ),
             Mode::Cheap => unreachable!(),
         }?;

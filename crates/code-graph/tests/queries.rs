@@ -46,6 +46,7 @@ impl Project {
             Thresholds::default(),
             &binary,
             NodeFields::default(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
         )
         .unwrap()
     }

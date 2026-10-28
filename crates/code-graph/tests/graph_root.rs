@@ -101,6 +101,7 @@ fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
             &binary,
             NodeFields::default(),
             &options,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
         )
         .unwrap();
         assert_eq!(root_of(&graph).units().last(), Some(&unit));
@@ -122,6 +123,7 @@ fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
             &loaded.project,
             Thresholds::default(),
             NodeFields::default(),
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
         )
         .unwrap();
         assert_eq!(root_of(&legacy).units().last(), Some(&0xfffd));

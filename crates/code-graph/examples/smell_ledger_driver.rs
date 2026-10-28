@@ -416,6 +416,8 @@ fn run(
     binary: &TsgoBinary,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
+
     let collation = Collation::try_node22_en_us()?;
     let mut output = RunResult {
         exit: None,
@@ -496,11 +498,17 @@ fn run(
                 interface_width: false,
                 kind_rules: &NodeKindRules::default(),
                 repo_root: Path::new(&physical_repo)
-            }
+            },
+            &metadata_collation
         )?
     } else {
         let loaded = load_cheap_project(Path::new(&physical_root), None)?;
-        let mut graph = assemble_graph(&loaded, input.thresholds, NodeFields::default())?;
+        let mut graph = assemble_graph(
+            &loaded,
+            input.thresholds,
+            NodeFields::default(),
+            &metadata_collation,
+        )?;
         graph.smells = input.smells.into_iter().map(InputSmell::owned).collect();
         if input.edges {
             graph.provenance = Provenance::Edges {

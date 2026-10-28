@@ -117,6 +117,9 @@ fn error_kind(error: &io::Error) -> &'static str {
     }
 }
 fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     if request.operation != "code_graph.layer_targets" {
         return Err(format!("unsupported operation: {}", request.operation));
     }
@@ -124,26 +127,29 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
         serde_json::from_str(request.input.get()).map_err(|error| error.to_string())?;
     let root_text = input.repo_root.to_lossy();
     let root = Path::new(&root_text);
-    let output = (|| {
-        let mut resolver = observe!(calls, create_target_resolver, root)?;
-        let mut targets = Vec::new();
-        for step in input.steps {
-            match step {
-                Step::Resolve {
-                    from_file,
-                    specifier,
-                } => targets.push(observe!(
-                    calls,
-                    TargetResolver::resolve,
-                    &mut resolver,
-                    &from_file,
-                    &specifier
-                )?),
-                Step::Write { file, contents } => fs::write(root.join(file.to_lossy()), contents)?,
+    let output =
+        (|| -> Result<_, demlik_code_graph::layers::resolve_target::TargetResolverError> {
+            let mut resolver = observe!(calls, create_target_resolver, root, &metadata_collation)?;
+            let mut targets = Vec::new();
+            for step in input.steps {
+                match step {
+                    Step::Resolve {
+                        from_file,
+                        specifier,
+                    } => targets.push(observe!(
+                        calls,
+                        TargetResolver::resolve,
+                        &mut resolver,
+                        &from_file,
+                        &specifier
+                    )?),
+                    Step::Write { file, contents } => {
+                        fs::write(root.join(file.to_lossy()), contents)?
+                    }
+                }
             }
-        }
-        Ok::<_, io::Error>(targets)
-    })();
+            Ok(targets)
+        })();
     match output {
         Ok(targets) => to_raw_value(&targets),
         Err(error) => {
@@ -153,7 +159,7 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
             }
             to_raw_value(&Failure {
                 thrown: Thrown {
-                    kind: error_kind(&error),
+                    kind: match &error { demlik_code_graph::layers::resolve_target::TargetResolverError::Io(error) => error_kind(error), demlik_code_graph::layers::resolve_target::TargetResolverError::Collation(_) => "collation-error" },
                     diagnostic: error.to_string(),
                 },
             })

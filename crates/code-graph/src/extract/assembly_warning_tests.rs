@@ -91,6 +91,7 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
             root: &root,
             warning: &mut warning,
         },
+        &crate::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -160,6 +161,7 @@ fn function_warning_survives_later_analysis_failure_with_original_cause() {
             root: &root,
             warning: &mut warning,
         },
+        &crate::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap_err();
     assert_eq!(
@@ -239,6 +241,7 @@ fn warning_bridge_keeps_both_callbacks_and_pending_real_stdio_failure() {
             root: &root,
             warning: &mut warning,
         },
+        &crate::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -374,6 +377,7 @@ fn observe(request: Request) -> Result<Observation, String> {
                     root: &request.root,
                     warning: &mut warning,
                 },
+                &crate::project::Collation::try_node22_en_us().unwrap(),
             )
         }
         Mode::DefaultText => super::assemble_graph_with_analysis_text(
@@ -383,6 +387,7 @@ fn observe(request: Request) -> Result<Observation, String> {
             &binary,
             NodeFields::default(),
             &options,
+            &crate::project::Collation::try_node22_en_us().unwrap(),
         ),
         Mode::DefaultPath => super::assemble_graph_with_analysis(
             &loaded,
@@ -390,6 +395,7 @@ fn observe(request: Request) -> Result<Observation, String> {
             &binary,
             NodeFields::default(),
             &options,
+            &crate::project::Collation::try_node22_en_us().unwrap(),
         ),
     };
     match graph {

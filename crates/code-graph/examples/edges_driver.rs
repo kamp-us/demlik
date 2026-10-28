@@ -85,6 +85,9 @@ fn execute(
     manifest: &Path,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     if case.operation != "code_graph.edges" {
         return Err(format!("unsupported operation: {}", case.operation));
     }
@@ -117,15 +120,19 @@ fn execute(
     let declarations = observe!(
         calls,
         demlik_code_graph::declarations::discover::discover_declarations,
-        &loaded.project.source_files
-    );
+        &loaded.project.source_files,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let imports = observe!(
         calls,
         demlik_code_graph::syntax::imports::resolve_imports,
         &loaded.project.root_absolute,
         &loaded.project.source_files,
-        &loaded.ts_config_path
-    );
+        &loaded.ts_config_path,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let ids: Vec<_> = functions
         .iter()
         .map(|function| function.id.clone())
@@ -146,16 +153,18 @@ fn execute(
     for bucket in exported.values_mut() {
         bucket.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
     }
-    let details = observe!(
-        calls,
-        demlik_code_graph::checker::context::with_type_context,
-        &binary,
-        TypeContextInput {
-            project: &loaded.project,
-            ts_config_path: &loaded.ts_config_path,
-            functions: &functions
-        },
-        |context| {
+    let details =
+        observe!(
+            calls,
+            demlik_code_graph::checker::context::with_type_context,
+            &binary,
+            TypeContextInput {
+                project: &loaded.project,
+                ts_config_path: &loaded.ts_config_path,
+                functions: &functions
+            },
+            |context| {
+                Ok((|| -> Result<_, demlik_code_graph::declarations::uses::DeclarationUseError> {
             let edges = observe!(
                 calls,
                 demlik_code_graph::extract::edges::resolve_edges,
@@ -168,7 +177,7 @@ fn execute(
                 demlik_code_graph::declarations::uses::resolve_declaration_uses,
                 context,
                 &declarations
-            )?;
+            , &metadata_collation)?;
             let references = observe!(
                 calls,
                 demlik_code_graph::extract::references::resolve_references,
@@ -209,9 +218,11 @@ fn execute(
                 uses,
                 references,
             })
-        }
-    )
-    .map_err(|error| error.to_string())?;
+            })())
+            }
+        )
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
     let graph = observe!(
         calls,
         demlik_code_graph::extract::assemble::assemble_graph_with_edges,
@@ -220,7 +231,8 @@ fn execute(
         &binary,
         NodeFields {
             headers: case.input.headers
-        }
+        },
+        &metadata_collation
     )
     .map_err(|error| error.to_string())?;
     to_raw_value(&Output { graph, details }).map_err(|error| error.to_string())

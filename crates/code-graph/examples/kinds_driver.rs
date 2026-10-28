@@ -122,6 +122,18 @@ impl From<demlik_code_graph::kinds::glob::GlobError> for DriverError {
         }
     }
 }
+impl From<demlik_code_graph::extract::conventions::ConventionEntriesError> for DriverError {
+    fn from(error: demlik_code_graph::extract::conventions::ConventionEntriesError) -> Self {
+        match error {
+            demlik_code_graph::extract::conventions::ConventionEntriesError::Pattern(error) => {
+                error.into()
+            }
+            demlik_code_graph::extract::conventions::ConventionEntriesError::Collation(error) => {
+                Self::new("backend-error", error.to_string())
+            }
+        }
+    }
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Response {
@@ -145,6 +157,9 @@ fn execute(
     manifest: &Path,
     calls: &mut Vec<&'static str>,
 ) -> Result<Box<RawValue>, DriverError> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
+
     match case.operation.as_str() {
         "code_graph.kind_rules" => {
             let input: RulesInput = parse(&case.input)?;
@@ -189,7 +204,8 @@ fn execute(
             let compiled = observe!(
                 calls,
                 demlik_code_graph::kinds::classify::compile_kind_rules,
-                &rules
+                &rules,
+                &metadata_collation
             )
             .map_err(|error| DriverError::new("regex-error", error.to_string()))?;
             let binary = observe!(
@@ -216,15 +232,18 @@ fn execute(
             let export_names = observe!(
                 calls,
                 demlik_code_graph::extract::conventions::export_names_by_id,
-                &discovered
-            );
+                &discovered,
+                &metadata_collation
+            )
+            .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let convention_entries = observe!(
                 calls,
                 demlik_code_graph::extract::conventions::convention_entries,
                 &discovered,
                 &rules,
                 &loaded.project.root_absolute,
-                input.repo_root.as_deref().unwrap_or(&input.root)
+                input.repo_root.as_deref().unwrap_or(&input.root),
+                &metadata_collation
             )?;
             let (base_class_entries, sibling_guards, type_guards) = observe!(
                 calls,
@@ -275,7 +294,8 @@ fn execute(
                 &loaded,
                 Thresholds::default(),
                 &binary,
-                NodeFields::default()
+                NodeFields::default(),
+                &metadata_collation
             )
             .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let mut simple_callees = Vec::new();

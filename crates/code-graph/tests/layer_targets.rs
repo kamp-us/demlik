@@ -62,7 +62,11 @@ fn ordinary_layer_imports_resolve_source_probes_workspace_names_and_external_dep
         ),
         ("node_modules/pad/index.js", "module.exports = 1;"),
     ]);
-    let mut resolver = create_target_resolver(&project.0).unwrap();
+    let mut resolver = create_target_resolver(
+        &project.0,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let from = "apps/web/src/ui/page.tsx".into();
     for (specifier, expected) in [
         ("../lib/money.js", "apps/web/src/lib/money.ts"),
@@ -103,7 +107,11 @@ fn nearest_aliases_resolve_files_and_keep_missing_inherited_aliases_distinct_fro
             r#"{"extends":"../../tsconfig.base.json"}"#,
         ),
     ]);
-    let mut resolver = create_target_resolver(&project.0).unwrap();
+    let mut resolver = create_target_resolver(
+        &project.0,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let from = "apps/web/src/page.ts".into();
     assert!(
         matches!(resolver.resolve(&from, &"@app/lib/money.js".into()).unwrap(), ResolvedTarget::File { file } if file == "apps/web/src/lib/money.ts")
@@ -128,7 +136,11 @@ fn source_recovered_alias_keys_remain_real_gaps_even_when_the_compiler_rejects_t
         r#"{"compilerOptions":{"paths":{"@a/*":[]}}, bad:1}"#,
     ] {
         fs::write(project.0.join("tsconfig.json"), raw).unwrap();
-        let mut resolver = create_target_resolver(&project.0).unwrap();
+        let mut resolver = create_target_resolver(
+            &project.0,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
         assert!(
             matches!(
                 resolver

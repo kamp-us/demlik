@@ -117,6 +117,9 @@ struct Thrown {
     message: JsString,
 }
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     if request.operation != "code_graph.shape-judgment" {
         return Err("unsupported operation".into());
     }
@@ -167,8 +170,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
     )
     .map_err(|error| error.to_string())?;
     let root = Path::new(&input.repo_root);
-    let catalog =
-        observe!(calls, load_binding_catalog, root, None).map_err(|error| error.to_string())?;
+    let catalog = observe!(calls, load_binding_catalog, root, None, &metadata_collation)
+        .map_err(|error| error.to_string())?;
     let shape = match observe!(calls, read_shape, &rules, &catalog) {
         Ok(ShapeRead::Read(shape)) => shape,
         Ok(ShapeRead::Refused { message }) => {
@@ -189,8 +192,15 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
             });
         }
     };
-    let libraries = match observe!(calls, read_libraries, &rules, root, None)
-        .map_err(|error| error.to_string())?
+    let libraries = match observe!(
+        calls,
+        read_libraries,
+        &rules,
+        root,
+        None,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?
     {
         LibrariesRead::Read(libraries) => libraries,
         LibrariesRead::Refused { message } => return Err(message.to_lossy()),
@@ -232,8 +242,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 resolve_imports,
                 &absolute,
                 &loaded.project.source_files,
-                &loaded.ts_config_path
-            );
+                &loaded.ts_config_path,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let facts = observe!(
                 calls,
                 shape_facts_of,

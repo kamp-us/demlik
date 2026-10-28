@@ -168,6 +168,7 @@ fn public_text_context_keeps_borrowed_rc_state_and_real_semantic_facts() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_decision_graph(&text);
@@ -177,6 +178,7 @@ fn public_text_context_keeps_borrowed_rc_state_and_real_semantic_facts() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -204,6 +206,7 @@ fn selected_config_provenance_uses_the_same_normalized_text_sent_to_go() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_decision_graph(&graph);
@@ -241,6 +244,7 @@ fn raw_config_text_reaches_real_go_while_replacement_and_native_paths_stay_valid
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap_err();
     let AssemblyError::Compiler(ref compiler) = error else {
@@ -255,6 +259,7 @@ fn raw_config_text_reaches_real_go_while_replacement_and_native_paths_stay_valid
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_decision_graph(&text);
@@ -264,6 +269,7 @@ fn raw_config_text_reaches_real_go_while_replacement_and_native_paths_stay_valid
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -304,6 +310,7 @@ fn raw_source_lookup_survives_an_ascii_ancestor_config() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap_err();
     let AssemblyError::Compiler(ref compiler) = error else {
@@ -318,6 +325,7 @@ fn raw_source_lookup_survives_an_ascii_ancestor_config() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_decision_graph(&text);
@@ -327,6 +335,7 @@ fn raw_source_lookup_survives_an_ascii_ancestor_config() {
         &binary(),
         NodeFields::default(),
         &arguments,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -353,6 +362,7 @@ fn real_catalog_type_error_retains_its_type_message_and_original_source() {
         &binary(),
         NodeFields::default(),
         &options(&rules, &project.0),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
     )
     .unwrap_err();
     let original = catalog_record(&error);

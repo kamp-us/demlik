@@ -150,7 +150,22 @@ fn glob_error(error: demlik_code_graph::kinds::glob::GlobError) -> Result<Box<Ra
         thrown: Thrown { name, message },
     })
 }
+fn library_error(
+    error: demlik_code_graph::boundaries::libraries::LibraryReadError,
+) -> Result<Box<RawValue>, String> {
+    match error {
+        demlik_code_graph::boundaries::libraries::LibraryReadError::Pattern(error) => {
+            glob_error(error)
+        }
+        demlik_code_graph::boundaries::libraries::LibraryReadError::Collation(error) => {
+            Err(error.to_string())
+        }
+    }
+}
 fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, String> {
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
+
     match request.operation.as_str() {
         "code_graph.library-judgment" => {
             let input: JudgmentInput =
@@ -163,11 +178,12 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 demlik_code_graph::boundaries::libraries::read_libraries,
                 &rules,
                 Path::new(&input.repo_root),
-                None
+                None,
+                &metadata_collation
             ) {
                 Ok(LibrariesRead::Read(libraries)) => libraries,
                 Ok(LibrariesRead::Refused { message }) => return Err(message.to_lossy()),
-                Err(error) => return glob_error(error),
+                Err(error) => return library_error(error),
             };
             let syntax = observe!(
                 calls,
@@ -330,7 +346,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 demlik_code_graph::boundaries::libraries::read_libraries,
                 &rules,
                 root,
-                listing.as_ref()
+                listing.as_ref(),
+                &metadata_collation
             );
             let libraries = match read {
                 Ok(LibrariesRead::Read(libraries)) => libraries,
@@ -345,7 +362,7 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                         message,
                     });
                 }
-                Err(error) => return glob_error(error),
+                Err(error) => return library_error(error),
             };
             let scopes = observe!(
                 calls,
@@ -458,8 +475,10 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 calls,
                 demlik_code_graph::layers::resolve_target::workspace_packages,
                 Path::new(&input.repo_root),
-                &input.dirs
-            );
+                &input.dirs,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let matches: Vec<_> = input
                 .specifiers
                 .iter()
