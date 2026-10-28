@@ -253,6 +253,15 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-graph-pipeline",
+    driver: "icu77_graph_pipeline_driver",
+    script: "icu77-graph-pipeline-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
@@ -438,6 +447,7 @@ const checkedUtf8 = new Set([
   "icu77_callable_driver",
   "icu77_query_driver",
   "icu77_reach_driver",
+  "icu77_graph_pipeline_driver",
   "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",
