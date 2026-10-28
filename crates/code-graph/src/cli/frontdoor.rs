@@ -208,6 +208,7 @@ pub enum ReportDispatch {
 }
 enum ConsoleOutput {
     Ci,
+    Html,
     Graph,
     Collapse,
     Unreachable,
@@ -1163,7 +1164,7 @@ impl PreparedGatesCli {
         let output = if options.ci() == Some(true) {
             ConsoleOutput::Ci
         } else if options.html() == Some(true) {
-            return Ok(ReportDispatch::Continue(self));
+            ConsoleOutput::Html
         } else if options.graph() == Some(true) {
             ConsoleOutput::Graph
         } else if options.collapse() == Some(true) {
@@ -1237,6 +1238,20 @@ impl PreparedGatesCli {
         if matches!(output, ConsoleOutput::Ci) {
             let code = ci::run_smell_gate(&graph, options.fail_on(), options.max(), host);
             exit_with(host, f64::from(code)).map_err(FrontdoorError::ExitCode)?;
+            return Ok(ReportDispatch::Complete);
+        }
+        if matches!(output, ConsoleOutput::Html) {
+            let collation = self
+                .collation
+                .take()
+                .map(Ok)
+                .unwrap_or_else(Collation::try_node22_en_us)
+                .map_err(FrontdoorError::Collation)?;
+            let payload = crate::render::html::render_html(&graph, &collation)
+                .map_err(FrontdoorError::ReportRender)?;
+            output_to(options.out())
+                .emit(host, &payload)
+                .map_err(FrontdoorError::ReportEmit)?;
             return Ok(ReportDispatch::Complete);
         }
         if matches!(output, ConsoleOutput::Blast | ConsoleOutput::Find) {
@@ -1369,6 +1384,7 @@ impl PreparedGatesCli {
                 plan::render_plan(&graph, axis, json, pretty).map_err(ReportRenderError::from)
             }
             ConsoleOutput::Ci
+            | ConsoleOutput::Html
             | ConsoleOutput::Collapse
             | ConsoleOutput::Unreachable
             | ConsoleOutput::Blast

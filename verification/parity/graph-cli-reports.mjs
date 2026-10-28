@@ -7,6 +7,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
+  htmlCliCases,
+  htmlFixture,
+  htmlLiteral,
+  htmlSteps,
+} from "./cli-html-cases.mjs";
+import {
   reportCases as consoleCases,
   reportsFixture as consoleFixture,
   reportSteps as consoleSteps,
@@ -21,10 +27,13 @@ import {
 const [binaryArg, reportArg] = process.argv.slice(2);
 assert.ok(binaryArg && reportArg);
 const tail = process.argv[4] === "tree-blast-find";
-assert.ok(process.argv.length === 4 || (tail && process.argv.length === 5));
-const reportCases = tail ? tailCases : consoleCases;
-const reportSteps = tail ? tailSteps : consoleSteps;
-const reportsFixture = tail ? tailFixture : consoleFixture;
+const html = process.argv[4] === "html";
+assert.ok(
+  process.argv.length === 4 || ((tail || html) && process.argv.length === 5),
+);
+const reportCases = html ? htmlCliCases : tail ? tailCases : consoleCases;
+const reportSteps = html ? htmlSteps : tail ? tailSteps : consoleSteps;
+const reportsFixture = html ? htmlFixture : tail ? tailFixture : consoleFixture;
 assert.equal(process.version, "v22.21.1");
 assert.equal(process.versions.v8, "12.4.254.21-node.33");
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -309,6 +318,10 @@ function literal(run, o, step) {
     return;
   }
   if (expected.exception || expected.pending || expected.early) return;
+  if (html && mode === "html") {
+    htmlLiteral(text, o, step, run);
+    return;
+  }
   if (mode === "summary") {
     const v = JSON.parse(text);
     assert.equal(v.fileCount, expected.files);
@@ -525,6 +538,35 @@ try {
           continue;
         }
         const s = source[i];
+        if (html && (steps[i].mode ?? o.mode) === "html") {
+          const out = steps[i].out ?? o.out;
+          if (out !== undefined && s.files[out]) {
+            const wrote = s.io.findIndex(
+              (event) =>
+                event.op === "writeFileSync-return" && event.file === out,
+            );
+            const ack = s.io.findIndex(
+              (event) =>
+                event.op === "stdio-write" &&
+                event.stream === "stderr" &&
+                event.payload.startsWith("code-graph: wrote "),
+            );
+            assert.ok(
+              wrote >= 0 && ack > wrote,
+              "Source file write completes before banner",
+            );
+            const observedAck = observed.writeObservations.find(
+              (event) =>
+                event.stream === "stderr" &&
+                event.payload.startsWith("code-graph: wrote "),
+            );
+            assert.deepEqual(
+              observedAck?.fileAtAck,
+              [...Buffer.from(s.files[out].base64, "base64")],
+              "native file already exists at banner, including a failed banner write",
+            );
+          }
+        }
         assert.deepEqual(n.before, s.before);
         assert.deepEqual(n.files, s.files, "real file bytes and modes");
         const error = s.events.find((e) => e.event === "uncaught"),

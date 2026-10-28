@@ -6,11 +6,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function sharedReports(report, rawFile) {
   assert.equal(report.sourceOnly, false);
-  assert.equal(report.passed, 79);
-  assert.equal(report.attempted, 79);
+  assert.equal(report.passed, 78);
+  assert.equal(report.attempted, 78);
   assert.equal(report.strictPairs, 72);
   assert.equal(report.qualifiedPairs, 5);
-  assert.equal(report.nativeOnlyCases, 2);
+  assert.equal(report.nativeOnlyCases, 1);
   assert.equal(report.sourceExecutions, 85);
   assert.equal(report.rejectedInvalidInputs, 5);
   assert.equal(report.responseGuards, 3);
@@ -18,7 +18,7 @@ export function sharedReports(report, rawFile) {
   const nativeOnly = report.cases.filter((row) => row.nativeOnly === true);
   assert.deepEqual(
     nativeOnly.map((row) => row.id),
-    ["unsupported-html-same-box", "unsupported-hotspots-same-box"],
+    ["unsupported-hotspots-same-box"],
   );
   for (const row of nativeOnly) {
     assert.equal(row.passed, true);
@@ -34,11 +34,11 @@ export function sharedReports(report, rawFile) {
   assert.equal(workflow.native.length, 9);
   const valid = report.cases.filter((row) => row.protocol !== true);
   report.nativeExecutions = valid.reduce((n, row) => n + row.native.length, 0);
-  assert.equal(report.nativeExecutions, 87);
+  assert.equal(report.nativeExecutions, 86);
   report.nativeOnlyRecording = {
     rawReport: rawFile,
     ids: nativeOnly.map((row) => row.id),
-    nativeExecutions: 2,
+    nativeExecutions: 1,
     comparisonCredit: 0,
   };
   report.cases = report.cases.filter((row) => row.nativeOnly !== true);

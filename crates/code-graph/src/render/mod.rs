@@ -3,6 +3,7 @@ pub mod blast;
 pub mod ci;
 pub mod file;
 pub mod graph;
+pub mod html;
 pub mod json;
 pub mod plan;
 pub mod smells;
