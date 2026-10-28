@@ -277,7 +277,11 @@ fn library(request: &Request, root: &Path) -> Result<String, Box<dyn std::error:
         )? {
             LibrariesRead::Read(libraries) => libraries,
             LibrariesRead::Refused { message } => {
-                return Err(format!("native fixture admission: {message}").into());
+                return Err(format!(
+                    "native fixture admission: {}",
+                    serde_json::to_string(&message)?
+                )
+                .into());
             }
         }
     };
