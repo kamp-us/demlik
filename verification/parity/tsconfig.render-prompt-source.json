@@ -1,6 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": [
-    "render-prompt-source.mts"
-  ]
+  "include": ["render-prompt-source.mts"]
 }

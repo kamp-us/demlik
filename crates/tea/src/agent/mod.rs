@@ -4,10 +4,12 @@ mod events;
 pub use events::{AgentEventProjection, AgentEventReadError, AgentEvents, agent_events};
 pub mod conversation;
 pub mod model;
+pub mod prompt;
 mod schema;
 pub mod transcript;
 pub mod types;
 
+pub use prompt::{AgentMessage, AgentPrompt, PromptMessages, render_prompt, render_prompt_with};
 pub use schema::{GuardedSchema, StructuredOutputError, StructuredOutputRejection};
 
 pub mod turn_view;

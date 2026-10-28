@@ -65,14 +65,7 @@
           }
         ],
         "receipts": {
-          "contentUnits": [
-            0,
-            55296,
-            97,
-            56320,
-            55357,
-            56832
-          ]
+          "contentUnits": [0, 55296, 97, 56320, 55357, 56832]
         },
         "trace": [],
         "error": null,
@@ -128,11 +121,7 @@
           }
         ],
         "receipts": {},
-        "trace": [
-          "read-b",
-          "read-a",
-          "check"
-        ],
+        "trace": ["read-b", "read-a", "check"],
         "error": null,
         "after": null
       }
@@ -170,10 +159,7 @@
           }
         ],
         "receipts": {},
-        "trace": [
-          "repeat",
-          "repeat"
-        ],
+        "trace": ["repeat", "repeat"],
         "error": null,
         "after": null
       }
@@ -212,12 +198,7 @@
           }
         ],
         "receipts": {
-          "providerOwn": [
-            false,
-            true,
-            true,
-            true
-          ],
+          "providerOwn": [false, true, true, true],
           "opaqueProviderOriginal": true
         },
         "trace": [],
@@ -289,10 +270,7 @@
           "originalResult": true,
           "originalError": true
         },
-        "trace": [
-          "read",
-          "check"
-        ],
+        "trace": ["read", "check"],
         "error": null,
         "after": null
       }
@@ -331,16 +309,10 @@
           }
         ],
         "receipts": {
-          "partsOwn": [
-            false,
-            true
-          ],
+          "partsOwn": [false, true],
           "emptyOriginal": true
         },
-        "trace": [
-          "none",
-          "empty"
-        ],
+        "trace": ["none", "empty"],
         "error": null,
         "after": null
       }
@@ -375,10 +347,7 @@
                 "source": {
                   "type": "bytes",
                   "data": {
-                    "$bytes": [
-                      9,
-                      3
-                    ]
+                    "$bytes": [9, 3]
                   }
                 }
               },
@@ -412,10 +381,7 @@
             "source": {
               "type": "bytes",
               "data": {
-                "$bytes": [
-                  9,
-                  3
-                ]
+                "$bytes": [9, 3]
               }
             }
           },
@@ -460,9 +426,7 @@
           "outcomeOriginal": true,
           "partsOriginal": true
         },
-        "trace": [
-          "error"
-        ],
+        "trace": ["error"],
         "error": null,
         "after": null
       }
@@ -472,10 +436,7 @@
       "expected": {
         "messages": null,
         "receipts": {},
-        "trace": [
-          "first",
-          "second"
-        ],
+        "trace": ["first", "second"],
         "error": {
           "originalCause": true,
           "name": "Error",
@@ -517,10 +478,7 @@
           }
         ],
         "receipts": {},
-        "trace": [
-          "zero",
-          "negative-zero"
-        ],
+        "trace": ["zero", "negative-zero"],
         "error": null,
         "after": null
       }
@@ -547,9 +505,7 @@
           }
         ],
         "receipts": {},
-        "trace": [
-          "real-zero"
-        ],
+        "trace": ["real-zero"],
         "error": null,
         "after": null
       }
@@ -649,10 +605,7 @@
           "sameAssistantWrapper": false,
           "originalToolCallsBoth": true
         },
-        "trace": [
-          "r",
-          "r"
-        ],
+        "trace": ["r", "r"],
         "error": null,
         "after": null
       }
@@ -715,10 +668,7 @@
           "afterRenderMutationVisible": true,
           "originalPartOwner": true
         },
-        "trace": [
-          "one",
-          "two"
-        ],
+        "trace": ["one", "two"],
         "error": null,
         "after": [
           {
