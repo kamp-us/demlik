@@ -41,6 +41,7 @@ import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
 import { jsonTextParity } from "./json-text-run.mjs";
 import { llmCallParity } from "./llm-call-run.mjs";
+import { machineVizCheckpointParity } from "./machine-viz-run.mjs";
 import { monitoredRunParity } from "./monitored-run-run.mjs";
 import { paginateQueueParity } from "./paginate-queue-run.mjs";
 import { paginatedWalkParity } from "./paginated-walk-run.mjs";
@@ -1193,6 +1194,12 @@ if (!mutationSuite) {
       operation: "tea.agent-tool-map",
       binaryArgument: "--agent-tool-map-bin",
       run: (options) => agentToolMapCheckpointParity(cargo, options),
+    },
+    {
+      name: "machineViz",
+      operation: "tea.machine-viz",
+      binaryArgument: "--machine-viz-bin",
+      run: (options) => machineVizCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",

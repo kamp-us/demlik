@@ -23,6 +23,8 @@ const qualifiedIds = new Set([
   "machine-viz.caught-cell-failure",
   "machine-viz.init-failure",
 ]);
+const panicQualification =
+  "Native panic hook diagnostics differ from JavaScript throw/catch. Whole diagram/error and callback order remain exact.";
 
 export function assertMachineVizFrame(row, actual) {
   if (actual.error) throw actual.error;
@@ -157,8 +159,7 @@ export function machineVizParity({ binary, reportFile }) {
         .map((row) => [
           row.id,
           {
-            qualification:
-              "Native panic hook diagnostics differ from JavaScript throw/catch. Whole diagram/error and callback order remain exact.",
+            qualification: panicQualification,
             fields: ["nativeStderr"],
             binarySha256: before,
           },
@@ -179,18 +180,99 @@ export function machineVizCheckpointParity(cargo, options = {}) {
   const reportFile = path.resolve(
     options.reportFile ?? path.join(root, "target/parity/machine-viz.json"),
   );
-  const producer = options.binary
-    ? null
-    : buildTeaExample(cargo, "machine_viz_driver", reportFile);
-  const report = {
-    ...machineVizParity({
-      binary: options.binary ?? producer.binary,
-      reportFile,
-    }),
-    producer,
-  };
+  let producer = null;
+  if (!options.binary) {
+    for (const name of [
+      "CARGO_TARGET_DIR",
+      "DEMLIK_MUTATION_TARGET_DIR",
+      "CARGO_BUILD_TARGET_DIR",
+      "CARGO_BUILD_BUILD_DIR",
+    ])
+      assert.equal(process.env[name], undefined, `${name} must be unset`);
+    producer = buildTeaExample(cargo, "machine_viz_driver", reportFile);
+  }
+  const raw = machineVizParity({
+    binary: options.binary ?? producer.binary,
+    reportFile: `${reportFile}.raw.json`,
+  });
+  const report = normalizeMachineVizReport(raw, producer);
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   return report;
+}
+
+export function normalizeMachineVizReport(raw, producer = null) {
+  assert.match(raw.binarySha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(raw.failures, []);
+  assert.equal(raw.cases, 18);
+  assert.equal(raw.passed, 16);
+  assert.equal(raw.qualifiedEvidenceCases, 2);
+  assert.deepEqual(raw.sourcePins, sourcePins);
+  const expected = JSON.parse(
+    fs.readFileSync(
+      new URL("./machine-viz-cases.json.fixture", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    raw.observations.map((row) => row.id),
+    expected.map((row) => row.id),
+  );
+  for (const row of raw.observations) {
+    assert.equal(row.equal, true);
+    assert.equal(row.failure, undefined);
+    assert.equal(row.qualified, qualifiedIds.has(row.id));
+    assertMachineVizFrame(
+      { id: row.id, comparison: row.source },
+      {
+        status: 0,
+        stdout: JSON.stringify(row.native),
+        stderr: row.nativeStderr,
+      },
+    );
+  }
+  const nativeEvidence = Object.fromEntries(
+    raw.observations
+      .filter((row) => !row.qualified)
+      .map((row) => {
+        const symbols =
+          row.id === "machine-viz.sanitizers"
+            ? [
+                "demlik_tea::machine_viz::safe_id",
+                "demlik_tea::machine_viz::safe_label",
+              ]
+            : ["demlik_tea::machine_viz::to_mermaid"];
+        assert.deepEqual(raw.nativeEvidence[row.id].rust, symbols);
+        assert.equal(raw.nativeEvidence[row.id].binarySha256, raw.binarySha256);
+        return [row.id, symbols];
+      }),
+  );
+  assert.deepEqual(
+    Object.keys(raw.nativeEvidence),
+    Object.keys(nativeEvidence),
+  );
+  assert.deepEqual(Object.keys(raw.qualifiedNativeEvidence), [...qualifiedIds]);
+  for (const id of qualifiedIds)
+    assert.deepEqual(raw.qualifiedNativeEvidence[id], {
+      qualification: panicQualification,
+      fields: ["nativeStderr"],
+      binarySha256: raw.binarySha256,
+    });
+  return {
+    cases: 16,
+    observations: 18,
+    passed: 16,
+    qualifiedPassed: 2,
+    qualifiedEvidenceCases: 2,
+    failures: [],
+    binarySha256: raw.binarySha256,
+    nativeEvidence,
+    qualifiedNativeEvidence: raw.qualifiedNativeEvidence,
+    producer,
+    raw,
+    scope:
+      "Measured pure machine diagram, sanitizer and borrowed-declaration profiles only; full port remains incomplete.",
+    openGaps: raw.openGaps,
+  };
 }
 
 if (

@@ -1,0 +1,26 @@
+{
+  "status": "Machine diagram component source/artifact reviewed and registered; next full composed checkpoint pending",
+  "source": "7d53dc83396fd73d6d369d9e41bd610edea4e4a1",
+  "sourcePick": "f301798e",
+  "receiptPick": "0302e65a",
+  "strictComponentViews": 16,
+  "qualifiedComponentViews": 2,
+  "newCombinedCredit": 0,
+  "publicCallableBindingsAdded": 3,
+  "optionsTypeBindingStillOpen": true,
+  "rawProof": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/machine-viz-component",
+  "sourcePeerSha256": "78ecfa5e6feecf9641646b5f89f7e5af45904903cbeb0d1e22e7d294e6734ebe",
+  "artifactPeer": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/machine-viz-map/final-artifact-peer-review.json",
+  "artifactPeerSha256": "678608e082a825177f9d58c0268f44a4193a9ee459b5895f23ad45c946ee4e46",
+  "producerHistoryErratum": "Sealed original receipt called C4 driver cached incorrectly. Actual C4 library fresh:true; driver/public fresh:false. C5 library/public fresh:true; driver fresh:false. The independent review owns exact role digests; original receipt remains immutable.",
+  "checkpointAdapter": "Only converts measured raw observations and Rust symbol lists to the existing common runner schema. Saved18+6meaningful refusals checked, zero Source/native/Cargo executions.",
+  "lastFullCheckpoint": {
+    "implementation": "a1a3fa10cade07ecb933ff3d540193cf53d193c6",
+    "admissions": 16215
+  },
+  "limits": [
+    "Native panic diagnostic qualifications remain outside strict evidence.",
+    "Supported targets/MSRV/features/packaging/raw host profiles and full port remain open.",
+    "All53 broad CLI gaps remain open."
+  ]
+}
