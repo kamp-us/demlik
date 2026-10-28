@@ -1,0 +1,114 @@
+{
+  "status": "Accepted bounded local checkpoint; full Rust port remains in progress",
+  "verifiedImplementation": "a1a3fa10cade07ecb933ff3d540193cf53d193c6",
+  "previousAcceptedReceipt": "cdc8002126dd42fdcad14589edff02a6e016e58c",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": [
+    "G reachability and guard ordering",
+    "Already-parsed typed tool input",
+    "Instance-owned reducer message metadata (native prerequisite)",
+    "H graph extraction/assembly/data ordering",
+    "Synchronous fallible tool mapping through FanOut and Agent",
+    "Actual ordinary verifier executable retention before overwrite"
+  ],
+  "outcomes": {
+    "admitted": 16215,
+    "strict": 15981,
+    "qualified": 234,
+    "failures": 0,
+    "referenceChanges": 0,
+    "newOutcomes": 54,
+    "newStrictKeys": 52,
+    "newQualifiedKeys": 2,
+    "priorStrictLost": [],
+    "priorQualifiedPromoted": [],
+    "priorGraphQualificationReasonsProfilesUnchanged": 192,
+    "newQualifiedIds": [
+      "agent-tool-map.runtime.promise",
+      "agent-tool-map.runtime.effect"
+    ],
+    "newQualifiedFields": [
+      "output.diagnostics[0].name",
+      "output.diagnostics[0].message",
+      "output.diagnostics[0].stack (Source only)"
+    ]
+  },
+  "freshVerification": {
+    "graphObservations": 9850,
+    "graphSuites": 76,
+    "nonGraphObservations": 6365,
+    "checkedUtf8Drivers": 39,
+    "nativeDefault": 711,
+    "nativeAllFeatures": 725,
+    "nativeResultGroupsEach": 215,
+    "nativeTotalsOverlap": true,
+    "bothClippyConfigurations": 0,
+    "bothTypeConfigurations": "passed",
+    "actualNamedPublicRustExecutions": 38,
+    "authoredApplyTypePositiveExecutionsSeparate": 2,
+    "oneOwnedIcuPreparation": true,
+    "allOwnedWorktreeAndDefaultTargetRemoved": true
+  },
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 839,
+    "unmapped": 2606,
+    "gapRows": 2808,
+    "all53CliGapsOpen": true,
+    "isCompletionPercentage": false
+  },
+  "readerRecovery": {
+    "originalControllerStatus": "failed",
+    "originalControllerFailure": "KeyError('qualifiedNativeEvidence')",
+    "originalChecksAndControllerUnmodified": true,
+    "explanation": "Final controller attempted to read qualifiedNativeEvidence from the compact sibling summary. The immutable detailed Agent report owns that map. Independent saved-report reviews proved every compact field equals its detailed projection, all counts and exact qualification fields. No implementation, matcher, report or original status was changed; no successful build/comparison was repeated.",
+    "separateParentArtifactPendingFieldPreserved": true,
+    "separateIndependentAuditClosesArtifactReview": true
+  },
+  "retention": {
+    "sourceGitFileContentsIndependentlyVerified": 2758,
+    "initialLiveSourceModeSnapshotRetained": false,
+    "gitSourceModesAvailable": {
+      "100644": 2756,
+      "100755": 2
+    },
+    "manifestPayloads": 1937,
+    "manifestPayloadBytes": 2541825300,
+    "actualArtifactHashes": 147,
+    "actualCargoSelections": 145,
+    "actualDirectRustcSelections": 2,
+    "reportDigestClaims": 975,
+    "boundClaims": 975,
+    "unretainedClaims": 0,
+    "metadataOnlyThirdPartyDependency": "proptest producer metadata verified; no all-dependency-byte claim",
+    "historicalLimit": "Earlier f24418 distinct ordinary executable digests (35 report claims) remain unrecovered. Current completeness does not repair historical bytes."
+  },
+  "proof": {
+    "directory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-agent-combined-a1a3fa10",
+    "originalChecksSha256": "2895ecc15e50b06ff78c8ba14fcdf79e4ca0050aea670893f37cebbc5e7da8ab",
+    "reportSha256": "30e076c345a02dce72b6533f1f2be31daa32fbb71250da265f8cc4e5933b536e",
+    "manifestSha256": "c61a234d218df981b810d9f688508797e1955870b7f951e286b7edbc10c254fa",
+    "sourceManifestSha256": "85746d6ea914656247cba64b216e784aa15e5fca88244a54fe4a9dcc86176bdf",
+    "controllerSha256": "ba5a5bc53a27cb2035ee277180d7f5776a6c5d4bc54f94ca108150586613c141",
+    "actualArtifactBindingsSha256": "9416c6a24765667c18119b7705a86d9ae3970654673f8a7eb42d60c216c08c93",
+    "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-agent-combined-a1a3fa10-post-review.json",
+    "parentReviewSha256": "87a8b978db58b72a21a1fdae08c10bcfb42b6dacc5da00b62ef50433d82706b3",
+    "independentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-agent-combined-a1a3fa10-independent-review.json",
+    "independentReviewSha256": "bc099e963a4e43d0e4e17f774a2780ae5b040750d75c76f74c20e05ff436d580"
+  },
+  "openBoundaries": [
+    "agent-snapshot-messages.effect.held-stop remains uncredited",
+    "Raw reflection/string/numeric/error/host and eight scheduling profiles remain open",
+    "Complete Agent tool bridge/providers/SDK/streaming/children remain open",
+    "Remaining ICU ordering, CLI, adapters, public bindings, targets/MSRV/features/packaging and realistic complete workflows remain open",
+    "No whole-port, cold source archive, release, remote write, PR, publication or deployment claim",
+    "Initial live source mode snapshot absent; Git modes and exact contents retained.",
+    "Full port, supported target/MSRV/feature/packaging grid and cold dependency/source rebuild remain unverified."
+  ],
+  "laterUnacceptedWork": [
+    "I10 coupling source7c292c04/receipt6837b82a/thin0733b8e3, component reviewed; pending integration",
+    "Router/Agent bindingb81b5136, native-only prerequisite; pending integration",
+    "J12 boundary judgment/topology construction",
+    "Serial/no-policy routed Agent runtime construction"
+  ]
+}
