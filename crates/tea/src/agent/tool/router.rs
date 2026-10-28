@@ -4,7 +4,7 @@
 macro_rules! tool_router {
     ($vis:vis mod $module:ident {}) => {
         $vis mod $module {
-            pub use $crate::agent::tool::{EmptyRouter as Router, EmptyInterpreter as Interpreter};
+            pub use $crate::agent::tool::{EmptyRouter as Router, EmptyInterpreter as Interpreter, EmptyAgentTools as AgentTools};
             pub type Commands=$crate::command::Cmd<$crate::agent::tool::RejectedSpec>;
             pub type Completions=$crate::command::Completion<$crate::agent::tool::RejectedSpec>;
             pub type Messages=$crate::command::Settled<$crate::agent::tool::RejectedSpec>;
@@ -109,12 +109,27 @@ macro_rules! tool_router {
                     $crate::Update::raw_reducer(row)
                 }
                 pub fn interpreter(self:std::rc::Rc<Self>,host:std::rc::Rc<$first::Host>)->Interpreter<$first,$($tool),*>{Interpreter{router:self,host}}
+                pub fn for_agent(self:std::rc::Rc<Self>,host:std::rc::Rc<$first::Host>)->AgentTools<$first,$($tool),*>{AgentTools{router:self,host}}
             }
             pub struct Interpreter<$first:ToolDefinition,$($tool:ToolDefinition),*>{router:std::rc::Rc<Router<$first,$($tool),*>>,host:std::rc::Rc<$first::Host>}
             impl<$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> $crate::runtime::Interpreter<Commands<$first,$($tool),*>> for Interpreter<$first,$($tool),*> {
                 type Error=$crate::agent::tool::ToolError;
                 fn interpret<'s>(&'s self,cmd:&'s Commands<$first,$($tool),*>,ctx:$crate::runtime::CommandContext<<Commands<$first,$($tool),*> as $crate::command::CommandFamily>::Msg,Self::Error>)->Option<$crate::runtime::CommandWork<'s,<Commands<$first,$($tool),*> as $crate::command::CommandFamily>::Completion,Self::Error>>{
                     Some($crate::runtime::CommandWork::new(async move{self.router.interpret(cmd,$crate::agent::tool::ToolContext::runtime(self.host.as_ref(),&ctx)).await}))
+                }
+            }
+            /// Retains the actual router and host for an Agent's outer message family.
+            pub struct AgentTools<$first:ToolDefinition,$($tool:ToolDefinition),*>{router:std::rc::Rc<Router<$first,$($tool),*>>,host:std::rc::Rc<$first::Host>}
+            impl<$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> $crate::agent::tool::AgentToolRoutes<Commands<$first,$($tool),*>,Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>> for AgentTools<$first,$($tool),*> {
+                fn settlement_types(&self)->Vec<String>{self.router.settlement_types()}
+                fn outcome_of(&self,message:&Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>)->Result<Option<$crate::agent::tool::ToolSettlement<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>>,$crate::command::CommandContractError>{self.router.outcome_of(message)}
+                fn at(&self,message:&Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>)->Option<$crate::data::NumberOrNull>{match message{Messages::$first(m)=>m.at(),$(Messages::$tool(m)=>m.at(),)*Messages::Rejected(m)=>m.at()}}
+            }
+            impl<M,$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> $crate::runtime::Interpreter<Commands<$first,$($tool),*>,M> for AgentTools<$first,$($tool),*> {
+                type Error=$crate::agent::AgentWorkError<$crate::agent::tool::ToolError>;
+                fn interpret<'s>(&'s self,cmd:&'s Commands<$first,$($tool),*>,ctx:$crate::runtime::CommandContext<M,Self::Error>)->Option<$crate::runtime::CommandWork<'s,<Commands<$first,$($tool),*> as $crate::command::CommandFamily>::Completion,Self::Error>>{
+                    let context=$crate::agent::tool::ToolContext::runtime(self.host.as_ref(),&ctx);
+                    Some($crate::runtime::CommandWork::new(async move{self.router.interpret(cmd,context).await.map_err($crate::agent::AgentWorkError::Tool)}))
                 }
             }
         }

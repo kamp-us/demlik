@@ -71,6 +71,44 @@ impl EmptyRouter {
     pub fn interpreter(&self) -> EmptyInterpreter {
         EmptyInterpreter
     }
+    pub fn for_agent<H>(self: Rc<Self>, host: Rc<H>) -> EmptyAgentTools<H> {
+        EmptyAgentTools { router: self, host }
+    }
+}
+/// Even a zero-tool binding retains its original router and host services.
+pub struct EmptyAgentTools<H> {
+    router: Rc<EmptyRouter>,
+    host: Rc<H>,
+}
+impl<H> AgentToolRoutes<Cmd<RejectedSpec>, (), FailureOf<RejectedSpec>> for EmptyAgentTools<H> {
+    fn settlement_types(&self) -> Vec<String> {
+        self.router.settlement_types()
+    }
+    fn outcome_of(
+        &self,
+        message: &Settled<RejectedSpec>,
+    ) -> Result<Option<ToolSettlement<(), FailureOf<RejectedSpec>>>, CommandContractError> {
+        self.router.outcome_of(message)
+    }
+    fn at(&self, message: &Settled<RejectedSpec>) -> Option<crate::data::NumberOrNull> {
+        message.at()
+    }
+}
+impl<H, M> runtime::Interpreter<Cmd<RejectedSpec>, M> for EmptyAgentTools<H> {
+    type Error = super::super::AgentWorkError<ToolError>;
+    fn interpret<'s>(
+        &'s self,
+        cmd: &'s Cmd<RejectedSpec>,
+        context: runtime::CommandContext<M, Self::Error>,
+    ) -> Option<runtime::CommandWork<'s, command::Completion<RejectedSpec>, Self::Error>> {
+        let _context = ToolContext::runtime(self.host.as_ref(), &context);
+        Some(runtime::CommandWork::new(async move {
+            self.router
+                .interpret(cmd)
+                .await
+                .map_err(super::super::AgentWorkError::Tool)
+        }))
+    }
 }
 pub struct EmptyInterpreter;
 impl runtime::Interpreter<Cmd<RejectedSpec>> for EmptyInterpreter {

@@ -21,7 +21,7 @@ use serde::{Serialize, ser::SerializeMap};
 use std::{convert::Infallible, fmt, marker::PhantomData, rc::Rc};
 mod empty;
 mod router;
-pub use empty::{EmptyInterpreter, EmptyRouter};
+pub use empty::{EmptyAgentTools, EmptyInterpreter, EmptyRouter};
 #[doc(hidden)]
 pub use serde as __serde;
 
@@ -695,6 +695,16 @@ pub fn reject_route<T: ToolDefinition>(
 pub struct ToolSettlement<R, E> {
     pub call_id: JsText,
     pub outcome: ToolOutcome<R, E>,
+}
+/// Read a router's typed outcome and the original settlement time independently.
+/// The binding retains its router; names, schemas and message fields remain there.
+pub trait AgentToolRoutes<C: CommandFamily, R, E> {
+    fn settlement_types(&self) -> Vec<String>;
+    fn outcome_of(
+        &self,
+        message: &C::Msg,
+    ) -> Result<Option<ToolSettlement<R, E>>, CommandContractError>;
+    fn at(&self, message: &C::Msg) -> Option<crate::data::NumberOrNull>;
 }
 pub type FailureOf<D> = FailureView<Failure<<D as CommandSpec>::Error>>;
 pub struct FailureView<E> {
