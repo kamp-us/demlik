@@ -1,0 +1,6 @@
+[
+  {"id":"brain.loader-ready.stop-entry","loader":true,"pending":false,"plain":false,"stopAtEntry":true,"expected":{"loads":1,"invokes":1,"parses":2,"cleanups":1,"state":1,"saves":3,"reports":1,"outcome":"Ok","loadBeforeStop":true,"bindAfterStopCalled":true,"cleanupBeforeBind":true}},
+  {"id":"brain.loader-pending.release-after-stop","loader":true,"pending":true,"plain":false,"stopAtEntry":true,"expected":{"loads":1,"invokes":1,"parses":0,"cleanups":1,"state":1,"saves":3,"reports":1,"outcome":"Err","loadBeforeStop":true,"bindAfterStopReturned":true}},
+  {"id":"brain.no-loader-ready.stop-entry","loader":false,"pending":false,"plain":false,"stopAtEntry":true,"expected":{"loads":0,"invokes":1,"parses":2,"cleanups":1,"state":1,"saves":3,"reports":1,"outcome":"Ok","bindBeforeStop":true}},
+  {"id":"brain.plain-transform-ready","loader":true,"pending":false,"plain":true,"stopAtEntry":false,"expected":{"loads":1,"invokes":1,"parses":2,"cleanups":1,"state":2,"saves":4,"reports":0,"outcome":"Ok","output":19,"hostInvokeBeforeParse":true}}
+]

@@ -12,7 +12,7 @@ use crate::{
     resilience::resilient_call::CallValue,
     retry_backoff::{Budget, CountBound},
 };
-use std::{marker::PhantomData, ops::AsyncFn, rc::Rc};
+use std::{future::Future, marker::PhantomData, ops::AsyncFn, rc::Rc, task::Poll};
 
 /// Borrow a host's messages or retain their original shared collection.
 /// Shared empty collections are fresh for each default invocation too.
@@ -125,7 +125,9 @@ where
         CallValue<S::Error>,
     > {
         Ok(async move |messages: Messages<'_, M>| {
-            schema.parse((self.0)(messages).await?).map(Into::into)
+            schema
+                .parse(await_port((self.0)(messages)).await?)
+                .map(Into::into)
         })
     }
 }
@@ -149,6 +151,10 @@ where
 /// borrow non-Send data. No Send promise is imposed on every loader.
 #[allow(async_fn_in_trait)]
 pub trait MessageLoader<P, I, M, E> {
+    /// The absent default belongs to NoMessages, not generic-type inspection.
+    fn is_configured(&self) -> bool {
+        true
+    }
     async fn load<'a>(
         &'a self,
         call: &'a Rc<Request<P, I>>,
@@ -159,6 +165,9 @@ pub trait MessageLoader<P, I, M, E> {
 pub struct NoMessages;
 static NO_MESSAGES: NoMessages = NoMessages;
 impl<P, I, M, E> MessageLoader<P, I, M, E> for NoMessages {
+    fn is_configured(&self) -> bool {
+        false
+    }
     async fn load<'a>(&'a self, _: &'a Rc<Request<P, I>>) -> Result<Messages<'a, M>, CallValue<E>>
     where
         M: 'a,
@@ -220,30 +229,90 @@ where
     pub fn model_kind(&self) -> ModelKind {
         self.ports.model.kind()
     }
-    /// Missing/Undefined inputs settle with their property-access error before
-    /// model work. Declared port and schema failures retain their own causes.
+    pub fn has_loader(&self) -> bool {
+        <L as MessageLoader<P, I, M, S::Error>>::is_configured(self.ports.load_messages)
+    }
+    /// Starts the request/model and loader call synchronously. The returned
+    /// continuation owns the model and borrows the original request/services.
+    /// An async-fn loader implementation remains lazy; a normal-fn impl can
+    /// expose its actual startup prefix without changing the loader signature.
+    pub fn start(
+        self,
+        cmd: &'a RunCmd<P, I, S::Output, S::Error>,
+    ) -> impl Future<Output = Result<LlmOutcome<P, S::Output, S::Error>, LlmCallError>> + 'a {
+        let llm = self.llm;
+        let model_of = self.ports.model;
+        let loader = self.ports.load_messages;
+        let input = match &cmd.input().input {
+            CallValue::Shared(input) => Some(input),
+            _ => None,
+        };
+        let access = input.is_none().then(|| {
+            crate::js_record::property(&crate::PlainData::Undefined, "model")
+                .expect_err("reading model from undefined is a property error")
+        });
+        let started = input.map(|input| {
+            let model = model_of.model_of(input.model.as_ref())?;
+            let loading = loader.load(input);
+            Ok::<_, CallValue<S::Error>>((input, model, loading))
+        });
+        async move {
+            let Some(started) = started else {
+                return Ok(llm.rejected_access_error(access.expect("missing input cause")));
+            };
+            let answer = async {
+                let (input, model, loading) = started?;
+                let messages = await_port(loading).await?;
+                let schema = llm.schema_of(&input.purpose);
+                let bound = model.with_structured_output(&schema)?;
+                await_port(bound(messages)).await
+            }
+            .await;
+            match answer {
+                Ok(raw) => llm.decode(cmd, raw),
+                Err(cause) => Ok(llm.rejected(cause)),
+            }
+        }
+    }
+    /// Existing callers retain lazy construction. Only the borrowed-reference
+    /// view is rebuilt; model/request/message/cause payloads are never cloned.
     pub async fn handle(
         &self,
         cmd: &RunCmd<P, I, S::Output, S::Error>,
     ) -> Result<LlmOutcome<P, S::Output, S::Error>, LlmCallError> {
-        let CallValue::Shared(input) = &cmd.input().input else {
-            let cause = crate::js_record::property(&crate::PlainData::Undefined, "model")
-                .expect_err("reading model from undefined is a property error");
-            return Ok(self.llm.rejected_access_error(cause));
-        };
-        let answer = async {
-            let model = self.ports.model.model_of(input.model.as_ref())?;
-            let messages = self.ports.load_messages.load(input).await?;
-            let schema = self.llm.schema_of(&input.purpose);
-            let bound = model.with_structured_output(&schema)?;
-            bound(messages).await
-        }
-        .await;
-        match answer {
-            Ok(raw) => self.llm.decode(cmd, raw),
-            Err(cause) => Ok(self.llm.rejected(cause)),
-        }
+        brain_handler::<P, I, M, S, F, L, B>(
+            self.llm,
+            BrainPorts::new(self.ports.model).with_loader(self.ports.load_messages),
+        )
+        .start(cmd)
+        .await
     }
+}
+
+// The three Source awaits are loader, bound invocation, and plain-model fn.
+// An initially-ready port still defers its continuation. Already-pending work
+// resumes on its own wake; no global executor/Promise scheduling is inferred.
+async fn await_port<F: Future>(future: F) -> F::Output {
+    let mut future = std::pin::pin!(future);
+    let mut first = true;
+    let mut ready = None;
+    futures::future::poll_fn(move |cx| {
+        if let Some(value) = ready.take() {
+            return Poll::Ready(value);
+        }
+        let polled = future.as_mut().poll(cx);
+        let defer = first;
+        first = false;
+        match polled {
+            Poll::Ready(value) if defer => {
+                ready = Some(value);
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            result => result,
+        }
+    })
+    .await
 }
 
 /// Source vocabulary only. Native factories return an Llm by type; JavaScript
