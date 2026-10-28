@@ -22,6 +22,15 @@ const suites = [
     traceField: "nativeTrace",
   },
   {
+    name: "report-ordering",
+    driver: "report_ordering_driver",
+    script: "graph-report-ordering-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "smell-ledger",
     driver: "smell_ledger_driver",
     script: "graph-smell-ledger-run.mjs",
