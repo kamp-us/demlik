@@ -1,0 +1,97 @@
+{
+  "status": "Component verified locally; independent final artifact audit pending",
+  "sourceCommit": "7d53dc83396fd73d6d369d9e41bd610edea4e4a1",
+  "base": "8a7c0efea240b6a9ce8df5f9444a028f2a9c881a",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": [
+    "UTF16 Mermaid ID/label sanitizers",
+    "Pure Machine-to-Mermaid rendering from actual reducer/transition owners",
+    "Borrowed samples, original dependency errors and declared-empty metadata"
+  ],
+  "proof": {
+    "sourceViews": 18,
+    "strict": 16,
+    "qualified": 2,
+    "newCombinedCredit": 0,
+    "wholeOutputsErrorsAndCallbackOrderExact": true,
+    "qualifiedIds": [
+      "machine-viz.caught-cell-failure",
+      "machine-viz.init-failure"
+    ],
+    "qualifiedFields": ["nativeStderr"],
+    "qualifiedPanicHookShapeCheckedExactly": true,
+    "oldNativeRegressions": 23,
+    "oldNativeGroups": 6,
+    "publicOpaqueBorrowedExecution": 0,
+    "clippyLibAndBothExamples": 0,
+    "compiledSemanticFaults": 4,
+    "faultFreshLibraryAndDriverCompilations": true,
+    "guardRefusals": 3,
+    "savedAdmissionPositives": 18,
+    "savedAdmissionRefusals": 6,
+    "guardCredit": 0,
+    "typeNegativeCredit": 0
+  },
+  "interface": {
+    "noModelMessageCauseTaggedCloneDebugSerializeSendStaticBounds": true,
+    "modelThreading": "Original borrowed model/message samples; direct stored row cells and state_tag.",
+    "subscriptionMetadata": "Default-false SubscriptionProjection::is_declared_empty; actual SubscriptionEntries owns entries.is_empty. No dependencies execute to discover a known-empty table.",
+    "scalarOwner": "Existing JsText/array_index/trim_js_units, no new string/numeric kernel.",
+    "legacyBehavior": "Other core/runtime apply/subscription algorithms unchanged."
+  },
+  "reports": {
+    "source-freeze.json": "735799d40e2918b5b1f4174683f8f27e58753cc794223ec31bf32ca680be4abd",
+    "source-first.json": "299d5b405816d6b53d65af017e5a16774bff5823ec3c61b8933fc2b0148d6ba1",
+    "source-pins.json": "9de805a6ce76b8f07ae0d7626e8946e910d2f320e3638fa9c0e9d598d541fbc3",
+    "final-v2-comparison.json": "d482ec80c5f357b19ce0141d670b86c7551478da49fcbf72c6c2ab03e647424c",
+    "controls.json": "e6553597500b047b893a62ed8b05c908d51caa6054c0ddbbe8d47b019461e51c",
+    "control-restoration.json": "a2a5a42a9110a7ad322ef48765f27eb21ae7f86e88edfa64ff494b7db2ccbd0b",
+    "source-peer-review.json": "78ecfa5e6feecf9641646b5f89f7e5af45904903cbeb0d1e22e7d294e6734ebe",
+    "saved-admission-review.json": "491e853bdeb4a6e93596c1fae531af3413993194a4da728ac5b2034803c1df7d",
+    "guards.json": "fe4d325e0f769324738ada76aff79426d00a76d2f844d5cc94a5e1c734229dee",
+    "public.json": "773c30437fcee975bf323fa5ace6fe78b0826bdac4008140026b32328d4fb330",
+    "source.tar.gz": "88002c98c52b4d32fcf5e15a239ee19290ce3fd7a8d87be0126b269d5efc029a"
+  },
+  "sourceFiles": {
+    "crates/tea/examples/machine_viz_driver.rs": "476cfaaf1541d43ab67b8ef467253207ab23e4f4093bf8e1610f97bcd3ef05ee",
+    "crates/tea/examples/machine_viz_public.rs": "5a21036320734c86512f8e93cce7cc758804dec56c3a1e32bb13889cf1fbf3ca",
+    "crates/tea/src/core/subscriptions.rs": "fe274f85eaee6b204ce6947a8a28a8aed44693f2198bb0a1d7bd1adcb03c942d",
+    "crates/tea/src/lib.rs": "823d2ddf768bb21962b128721356260a4f29c2285d24c1bd329afa9c2edd1a61",
+    "crates/tea/src/machine_viz.rs": "9748ee31d49f6c193bd008f485151c3894912b7062acec7ea9c8c7ce1b904a36",
+    "verification/parity/machine-viz-cases.json.fixture": "c870c08352593247dfab00c53651ff03ca1ebb870af1612d6142d7c4607fd345",
+    "verification/parity/machine-viz-run.mjs": "dcae4c9e45a5333fac06d5f00333d0831c654a67698b9f350a178955f6eb7d24",
+    "verification/parity/machine-viz-source.mjs": "237b8d17d00cf4c621d31d459b36e5bc9375ce689f781c112150b30343990071"
+  },
+  "producerHistory": [
+    "Cargo1 driver setup E0599 after a duplicated expect on the existing Option<String> serializer; zero semantic credit.",
+    "Cargo2 current-at-that-time source/library/driver passed18, retained before later builds; not final source.",
+    "Cargo3 public setup E0277 used old Tagged raw_reducer constructor; existing owned reducer metadata constructor fixes the consumer, zero negative-type credit.",
+    "Cargo4 selected cached C3 library/driver and fresh public consumer; actual public execution passed.",
+    "Cargo5 refined enum input boundary driver fresh, library/public cached exact earlier source. Final18comparison and same public execution passed.",
+    "Clippy and six scoped test groups passed; all test selections retained.",
+    "Four faults each compiled a changed library/driver with fresh:false, exited0 with valid protocol and semantic mismatch, then original source restored. Last target remains a mutant and was not mislabeled baseline.",
+    "Three guard processes used explicitly retained C5 binary bytes as a review input in the same own target. This was not a Cargo cache or fresh compilation claim."
+  ],
+  "sourceHistory": [
+    "Source18 frozen before Rust projection. Initial defaultNode26/tsx setup failed before Source; canonical explicitNode22/V8 measurement succeeded and was frozen.",
+    "Initial Python str.splitlines split raw legal Unicode NEL/LS/PS inside JSON. Correct single-frame reader reused the saved first sanitizer execution without a rebuild.",
+    "The original pre-format Source worker is retained; subsequent Biome changes only formatting. Canonical whole Source report digest remains299d5b405816d6b53d65af017e5a16774bff5823ec3c61b8933fc2b0148d6ba1."
+  ],
+  "limits": [
+    "Arbitrary JS getters/prototypes/invalid object shapes and raw non-scalar table/tag names remain unproved.",
+    "Opaque projection closures do not expose a declared-empty table; only SubscriptionEntries owns this metadata.",
+    "Native panic hooks are not the JavaScript error/throw channel.",
+    "This module renders text; browser Mermaid rendering and other UI adapters remain unimplemented.",
+    "Selected default native profile only; all-features, MSRV, other targets, abort-mode panics and whole-port acceptance remain open.",
+    "Shared fixtures use native scalar table/sample/tag names; arbitrary JS getters/prototypes/descriptors and mutable callback shapes remain unproved.",
+    "Current scoped consumer is not a native/browser Mermaid renderer or runtime adapter."
+  ],
+  "lifecycle": {
+    "worktree": "/private/tmp/demlik-rust-machine-viz-01a16c9d",
+    "defaultTarget": "/private/tmp/demlik-rust-machine-viz-01a16c9d/target",
+    "targetOverrides": [],
+    "noIcuOrDocker": true,
+    "retirement": "pending; canonical handoff will pin actual removal"
+  },
+  "testAudit": "Required 1:1 full-output/callback/ownership/diagnostic evidence. Faults exercise externally observable behavior, not implementation-structure assertions."
+}
