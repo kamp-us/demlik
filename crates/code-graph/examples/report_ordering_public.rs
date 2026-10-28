@@ -22,13 +22,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Thresholds::default()
     };
     let graph = if args[1] == "cheap" {
-        let loaded = load_cheap_project(root, None)?;
+        let loaded = load_cheap_project(root, None, &collation)?;
         let unit = Rc::clone(&loaded.source_files[0]);
         let graph = assemble_graph(&loaded, thresholds, NodeFields::default(), &collation)?;
         assert!(Rc::ptr_eq(&unit, &loaded.source_files[0]));
         graph
     } else {
-        let loaded = load_edge_project(root, EdgeScope::Deep, root, None)?;
+        let loaded = load_edge_project(root, EdgeScope::Deep, root, None, &collation)?;
         let unit = Rc::clone(&loaded.project.source_files[0]);
         let compiler = TsgoBinary::from_native_preview_manifest(Path::new(&args[3]))?;
         let graph = assemble_graph_with_edges(

@@ -5,12 +5,10 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::LazyLock;
 
 use crate::engine::oxc::{ParseFailure, parse_type_script};
 use crate::syntax::SyntaxFile;
 use crate::text::JsString;
-use icu_collator::{Collator, CollatorBorrowed};
 
 mod collation;
 mod text_paths;
@@ -19,11 +17,6 @@ pub(crate) use text_paths::{
     basename_path_text, dirname_path_text, join_path_text, normalize_path_text, relative_path_text,
     relative_path_text_from, resolve_path_text, resolve_path_text_from,
 };
-
-static FILE_COLLATOR: LazyLock<CollatorBorrowed<'static>> = LazyLock::new(|| {
-    Collator::try_new(Default::default(), Default::default())
-        .expect("compiled root collation is available")
-});
 
 const WALK_PRUNE: &[&str] = &[
     ".claude",

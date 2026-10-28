@@ -1848,7 +1848,7 @@
     "report-ordering-reference.mjs": "a7de28f9f6f33ee69706f425d279e4747feb2b86e40d5d726b8662029f20e31e",
     "report-ordering-source.mjs": "9eca81fc4591c8f498f966c54846aca9baa45eb2ecf07dca18a369bda226eceb"
   },
-  "nativeObserverSha256": "973741e5473cac8a1a504f118eef9a0809d83002f8af4004d8bfde6eb10f0fb8",
+  "nativeObserverSha256": "c930ddeea5b40b4feabb98e97b534ddc2045ec2bc08756d1cbebb6ec4028bcff",
   "scope": "Existing usize/String authored wholeviews only; preexisting smell-array alias/raw/model/CLI gaps remain open. No generic protocol/UTF8 observations.",
   "nativeCompilerManifestSha256": "ed3dc00f87fe557612c7d72eb442322b57fd3e9160889045c84d6a5c91fce06c"
 }

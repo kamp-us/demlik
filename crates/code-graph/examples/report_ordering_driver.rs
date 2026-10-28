@@ -391,8 +391,13 @@ fn execute(request: Request, compiler: &TsgoBinary) -> Result<(Value, Vec<&'stat
         "cheap" | "go" => {
             let deep = text(&input, "mode", "") == "go";
             let g = if deep {
-                let loaded =
-                    load_edge_project(&request.root, EdgeScope::Deep, &request.root, None)?;
+                let loaded = load_edge_project(
+                    &request.root,
+                    EdgeScope::Deep,
+                    &request.root,
+                    None,
+                    &collation,
+                )?;
                 observe!(
                     calls,
                     demlik_code_graph::extract::assemble::assemble_graph_with_edges,
@@ -403,7 +408,7 @@ fn execute(request: Request, compiler: &TsgoBinary) -> Result<(Value, Vec<&'stat
                     &collation
                 )?
             } else {
-                let loaded = load_cheap_project(&request.root, None)?;
+                let loaded = load_cheap_project(&request.root, None, &collation)?;
                 observe!(
                     calls,
                     demlik_code_graph::extract::assemble::assemble_graph,

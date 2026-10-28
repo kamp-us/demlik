@@ -20,7 +20,6 @@ biome_text_edit = "=0.5.7"
 biome_unicode_table = "=0.5.7"
 indexmap.workspace = true
 libm.workspace = true
-icu_collator = "=2.1.1"
 regress = { version = "=0.12.0", features = ["utf16"] }
 ryu-js = "=1.0.3"
 toml = { version = "=1.1.8", default-features = false, features = ["std", "serde", "parse", "preserve_order"] }
