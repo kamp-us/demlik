@@ -141,7 +141,7 @@ export function sharedReachability(report, rawFile, expectedBinarySha256) {
     ...report,
     rejectedInvalidInputRows: 5,
     scope:
-      "Finite ICU77 reach/full-adjacency, guarded BFS and unreachable queries with borrowed original graph/reference owners and explicit checked comparison operands. Source adjacency-before-root-sort, locale ties, membership/BFS order and category/reason priority are preserved. Protocol rows and response guards earn no comparison credit. Remaining66 legacy helper calls+2 direct project sorts, raw/reflection/numeric/host profiles and all53 CLI gaps remain OPEN.",
+      "Finite ICU77 reach/full-adjacency, guarded BFS and unreachable queries with borrowed original graph/reference owners and explicit checked comparison operands. Source adjacency-before-root-sort, locale ties, membership/BFS order and category/reason priority are preserved. Protocol rows and response guards earn no comparison credit. Additional locale-ordering, raw/reflection/numeric/host profiles and all53 CLI gaps remain OPEN; see the current inventory for remaining comparisons.",
     nativeOnlyRecording: {
       rawReport: rawFile,
       ids: [],
