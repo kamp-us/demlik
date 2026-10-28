@@ -170,6 +170,7 @@ export function sharedCensus(raw, rawFile, expectedBinarySHA) {
       id: row.id,
       input: row.input,
       ok: true,
+      passed: true,
       qualifications: [],
       expected: row.source,
       output: row.native,
