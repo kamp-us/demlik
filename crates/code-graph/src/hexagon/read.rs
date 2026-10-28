@@ -1,7 +1,7 @@
 use super::ports::{HexagonBag, HexagonMember, HexagonPort, NotRead, read_ports};
 use crate::{
     engine::oxc::{ParseFailure, parse_type_script},
-    project::{basename_path_text, join_path_text, list_source_files, to_relative},
+    project::{basename_path_text, join_path_text, source_file_candidates, to_relative},
     syntax::{SyntaxFile, file::NodeRef},
     text::JsString,
 };
@@ -246,7 +246,7 @@ pub fn read_hexagon(root: &JsString) -> Result<Hexagon, HexagonReadError> {
     let ports = read_ports(syntax.as_ref(), &mut not_read);
     let native = root.to_lossy();
     let path = Path::new(&native);
-    let mut files: Vec<JsString> = list_source_files(path)
+    let mut files: Vec<JsString> = source_file_candidates(path)
         .iter()
         .map(|file| to_relative(path, file).into())
         .collect();

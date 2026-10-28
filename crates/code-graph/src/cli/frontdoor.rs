@@ -26,7 +26,7 @@ use crate::{
         ConfigResolution, NodeKindConfigError, resolve_collapse_settings, resolve_node_kind_rules,
         resolve_thresholds, with_entry_presets,
     },
-    engine::{oxc::ParseFailure, tsgo::TsgoBinary},
+    engine::tsgo::TsgoBinary,
     env_keys::{EnvKeyError, EnvKeyReport, load_env_key_report, render_env_keys},
     extract::{
         analysis::AnalysisOptions,
@@ -40,7 +40,7 @@ use crate::{
     layers::gate::{LayerGateError, LayerGateResult, LayerGateTextArgs, run_layer_gate_text},
     project::{
         Collation, CollationError, EdgeScope, ProjectLoadError, find_repo_root_text,
-        load_cheap_project, load_edge_project_text, resolve_path_text_from,
+        load_cheap_project_request, load_edge_project_text_request, resolve_path_text_from,
     },
     render::{ReportRenderError, analysis::render_unreachable, json::stable_stringify},
     schema::{Graph, Thresholds},
@@ -191,7 +191,7 @@ pub enum UnreachableDispatch {
 }
 enum ClassifiedGraphFailure {
     LoadRefused(ProjectLoadError),
-    CheapParse(ParseFailure),
+    CheapParse(ProjectLoadError),
     Assembly(AssemblyError),
 }
 #[derive(Debug)]
@@ -255,7 +255,7 @@ pub enum FrontdoorError {
     Collapse(CollapseGateError),
     CollapseEmit(ApiError),
     Assembly(AssemblyError),
-    CheapParse(ParseFailure),
+    CheapParse(ProjectLoadError),
     SmellLedger(SmellLedgerError),
     SmellEmit(ApiError),
     ReportRender(ReportRenderError),
@@ -753,8 +753,15 @@ impl PreparedGatesCli {
             headers: options.headers() == Some(true),
         };
         if !want_edges {
-            let loaded = load_cheap_project(Path::new(&root.to_lossy()), None)
-                .map_err(ClassifiedGraphFailure::CheapParse)?;
+            let loaded = load_cheap_project_request(Path::new(&root.to_lossy()), None, || {
+                prepared_collation(&mut self.collation)
+            })
+            .map_err(|error| match error {
+                ProjectLoadError::Collation(error) => {
+                    ClassifiedGraphFailure::Assembly(AssemblyError::Collation(error))
+                }
+                error => ClassifiedGraphFailure::CheapParse(error),
+            })?;
             let collation = prepared_collation(&mut self.collation).map_err(|error| {
                 ClassifiedGraphFailure::Assembly(AssemblyError::Collation(error))
             })?;
@@ -775,8 +782,15 @@ impl PreparedGatesCli {
         } else {
             EdgeScope::Package
         };
-        let loaded = match load_edge_project_text(root, scope, repo_root, None) {
+        let loaded = match load_edge_project_text_request(root, scope, repo_root, None, || {
+            prepared_collation(&mut self.collation)
+        }) {
             Ok(loaded) => loaded,
+            Err(ProjectLoadError::Collation(error)) => {
+                return Err(ClassifiedGraphFailure::Assembly(AssemblyError::Collation(
+                    error,
+                )));
+            }
             Err(cause) => {
                 let mut message = JsString::from("no tsconfig found for edge pass at ");
                 message.extend(root);

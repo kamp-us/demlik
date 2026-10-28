@@ -37,8 +37,8 @@ use crate::{
     extract::wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog_request},
     kinds::glob::GlobError,
     project::{
-        Collation, CollationError, EdgeScope, RepoListing, join_path_text, list_repo,
-        load_edge_project_text,
+        Collation, CollationError, EdgeScope, ProjectLoadError, RepoListing, join_path_text,
+        list_repo, load_edge_project_text,
     },
     ratchet::scope_count::{ScopeCeilingsResolution, read_scope_ceilings, scope_of, scopes_under},
     syntax::imports::{
@@ -365,8 +365,12 @@ fn analyze_scope(
                 EdgeScope::Package,
                 args.repo_root,
                 listing,
+                collation,
             )
-            .map_err(|error| error.message())?,
+            .map_err(|error| match error {
+                ProjectLoadError::Collation(error) => ScopeFailure::Collation(error),
+                error => ScopeFailure::Refused(error.message()),
+            })?,
         )
     } else {
         None

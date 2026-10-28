@@ -16,7 +16,7 @@ use crate::{
     kinds::rules::NodeKindRules,
     project::{
         Collation, CollationError, EdgeScope, ProjectLoadError, join_path_text,
-        load_edge_project_text,
+        load_edge_project_text_request,
     },
     ratchet::scope_count::{
         ScopeCeilingsResolution, ScopeCount, ScopeCountCeilings, evaluate_scope_ratchet,
@@ -109,6 +109,14 @@ fn measure<'c>(
     let repo_root = Path::new(&repo_native);
     let mut request = Some(request);
     let mut collation = None;
+    let mut request = || {
+        if let Some(collation) = collation {
+            return Ok(collation);
+        }
+        let handle = request.take().expect("one first measurement")()?;
+        collation = Some(handle);
+        Ok(handle)
+    };
     scopes
         .iter()
         .map(|scope| {
@@ -117,17 +125,15 @@ fn measure<'c>(
             } else {
                 join_path_text(args.repo_root, scope)
             };
-            let loaded = load_edge_project_text(&absolute, EdgeScope::Package, repo_root, None)
-                .map_err(CollapseGateError::Load)?;
-            let collation = match collation {
-                Some(collation) => collation,
-                None => {
-                    let handle = request.take().expect("one first measurement")()
-                        .map_err(CollapseGateError::Collation)?;
-                    collation = Some(handle);
-                    handle
-                }
-            };
+            let loaded = load_edge_project_text_request(
+                &absolute,
+                EdgeScope::Package,
+                repo_root,
+                None,
+                || request(),
+            )
+            .map_err(CollapseGateError::Load)?;
+            let collation = request().map_err(CollapseGateError::Collation)?;
             let graph = assemble_graph_with_analysis_text_and_warning(
                 &loaded,
                 args.thresholds.clone(),

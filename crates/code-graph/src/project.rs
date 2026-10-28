@@ -170,8 +170,7 @@ pub fn to_relative(root: &Path, path: &Path) -> String {
     relative.join("/")
 }
 
-/// Existing visible files below a scope. The predicate receives relative POSIX paths.
-pub fn list_visible_files(
+fn visible_file_candidates(
     root: &Path,
     mut keep: impl FnMut(&str) -> bool,
     listing: Option<&RepoListing>,
@@ -193,14 +192,44 @@ pub fn list_visible_files(
         }
     };
     files.retain(|file| keep(file) && normalize_lexical(&root.join(file)).is_file());
-    files.sort_by(|left, right| FILE_COLLATOR.compare(left, right));
     files
+}
+
+/// Existing visible files below a scope. The predicate receives relative POSIX paths.
+pub fn list_visible_files(
+    root: &Path,
+    keep: impl FnMut(&str) -> bool,
+    listing: Option<&RepoListing>,
+    collation: &Collation,
+) -> Result<Vec<String>, CollationError> {
+    list_visible_files_request(root, keep, listing, || Ok(collation))
+}
+
+pub(crate) fn list_visible_files_request<'c>(
+    root: &Path,
+    keep: impl FnMut(&str) -> bool,
+    listing: Option<&RepoListing>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<Vec<String>, CollationError> {
+    let files = visible_file_candidates(root, keep, listing);
+    if files.len() < 2 {
+        return Ok(files);
+    }
+    let collation = request()?;
+    let mut files = files
+        .into_iter()
+        .map(|file| CollationInput::from_text(&file).map(|key| (file, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    files.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    Ok(files.into_iter().map(|(file, _)| file).collect())
 }
 
 /// Package manifest directories under the selected scope, always including the scope itself.
 pub fn discover_package_roots(root: &Path, listing: Option<&RepoListing>) -> Vec<String> {
     let mut roots = vec![String::new()];
-    for file in list_visible_files(
+    // The final UTF16 sort discards intermediate visibility order before any
+    // caller reads a manifest. Keep that order independent of collation.
+    for file in visible_file_candidates(
         root,
         |file| file.rsplit('/').next() == Some("package.json"),
         listing,
@@ -224,8 +253,19 @@ pub fn discover_package_roots(root: &Path, listing: Option<&RepoListing>) -> Vec
 
 /// Existing, Git-visible `.ts` and `.tsx` files, excluding declarations and generated files.
 /// Outside Git, the directory walk prunes build and dependency directories.
-pub fn list_source_files(root: &Path) -> Vec<PathBuf> {
-    list_visible_files(root, source_file, None)
+pub fn list_source_files(
+    root: &Path,
+    collation: &Collation,
+) -> Result<Vec<PathBuf>, CollationError> {
+    Ok(list_visible_files(root, source_file, None, collation)?
+        .into_iter()
+        .map(|file| normalize_lexical(&root.join(file)))
+        .collect())
+}
+
+/// Source candidates for a caller that owns its final non-locale order.
+pub(crate) fn source_file_candidates(root: &Path) -> Vec<PathBuf> {
+    visible_file_candidates(root, source_file, None)
         .into_iter()
         .map(|file| normalize_lexical(&root.join(file)))
         .collect()
@@ -378,10 +418,21 @@ pub struct LoadedProject {
 pub fn load_cheap_project(
     root: &Path,
     listing: Option<&RepoListing>,
-) -> Result<LoadedProject, ParseFailure> {
+    collation: &Collation,
+) -> Result<LoadedProject, ProjectLoadError> {
+    load_cheap_project_request(root, listing, || Ok(collation))
+}
+
+pub(crate) fn load_cheap_project_request<'c>(
+    root: &Path,
+    listing: Option<&RepoListing>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<LoadedProject, ProjectLoadError> {
     let mut source_files = Vec::new();
     let mut parse_failures = Vec::new();
-    for file in list_visible_files(root, source_file, listing) {
+    for file in list_visible_files_request(root, source_file, listing, request)
+        .map_err(ProjectLoadError::Collation)?
+    {
         let absolute_path = normalize_lexical(&root.join(&file));
         let Ok(bytes) = fs::read(&absolute_path) else {
             parse_failures.push(file);
@@ -396,10 +447,11 @@ pub fn load_cheap_project(
                 syntax,
             })),
             Err(ParseFailure::Syntax(_)) => parse_failures.push(file),
-            Err(error) => return Err(error),
+            Err(error) => return Err(ProjectLoadError::Parse(error)),
         }
     }
-    parse_failures.sort_by(|left, right| FILE_COLLATOR.compare(left, right));
+    // Failures are unchanged entries appended synchronously from the already
+    // sorted file vector, including duplicates and locale-equal ties.
     Ok(LoadedProject {
         root_absolute: root.to_path_buf(),
         source_files,
@@ -418,12 +470,14 @@ pub struct LoadedEdgeProject {
 pub enum ProjectLoadError {
     MissingTsConfig(MissingTsConfig),
     Parse(ParseFailure),
+    Collation(CollationError),
 }
 impl ProjectLoadError {
     pub fn message(&self) -> JsString {
         match self {
             Self::MissingTsConfig(error) => error.message().clone(),
             Self::Parse(error) => error.to_string().into(),
+            Self::Collation(error) => error.to_string().into(),
         }
     }
 }
@@ -433,6 +487,7 @@ impl fmt::Display for ProjectLoadError {
         match self {
             Self::MissingTsConfig(error) => error.fmt(formatter),
             Self::Parse(error) => error.fmt(formatter),
+            Self::Collation(error) => error.fmt(formatter),
         }
     }
 }
@@ -441,6 +496,7 @@ impl std::error::Error for ProjectLoadError {
         Some(match self {
             Self::MissingTsConfig(error) => error,
             Self::Parse(error) => error,
+            Self::Collation(error) => error,
         })
     }
 }
@@ -450,8 +506,9 @@ pub fn load_edge_project(
     scope: EdgeScope,
     repo_root: &Path,
     listing: Option<&RepoListing>,
+    collation: &Collation,
 ) -> Result<LoadedEdgeProject, ProjectLoadError> {
-    load_edge_project_in(root, scope, repo_root, listing, None)
+    load_edge_project_in(root, scope, repo_root, listing, None, || Ok(collation))
 }
 
 /// Load a declared JavaScript root, retaining its text in source-owned refusals.
@@ -461,21 +518,33 @@ pub fn load_edge_project_text(
     scope: EdgeScope,
     repo_root: &Path,
     listing: Option<&RepoListing>,
+    collation: &Collation,
 ) -> Result<LoadedEdgeProject, ProjectLoadError> {
-    let native = PathBuf::from(root.to_lossy());
-    load_edge_project_in(&native, scope, repo_root, listing, Some(root))
+    load_edge_project_text_request(root, scope, repo_root, listing, || Ok(collation))
 }
 
-fn load_edge_project_in(
+pub(crate) fn load_edge_project_text_request<'c>(
+    root: &JsString,
+    scope: EdgeScope,
+    repo_root: &Path,
+    listing: Option<&RepoListing>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<LoadedEdgeProject, ProjectLoadError> {
+    let native = PathBuf::from(root.to_lossy());
+    load_edge_project_in(&native, scope, repo_root, listing, Some(root), request)
+}
+
+fn load_edge_project_in<'c>(
     root: &Path,
     scope: EdgeScope,
     repo_root: &Path,
     listing: Option<&RepoListing>,
     root_text: Option<&JsString>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<LoadedEdgeProject, ProjectLoadError> {
     let ts_config_path = resolve_edge_ts_config_in(root, scope, repo_root, root_text)
         .map_err(ProjectLoadError::MissingTsConfig)?;
-    let project = load_cheap_project(root, listing).map_err(ProjectLoadError::Parse)?;
+    let project = load_cheap_project_request(root, listing, request)?;
     Ok(LoadedEdgeProject {
         project,
         ts_config_path,

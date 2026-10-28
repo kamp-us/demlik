@@ -6,7 +6,9 @@ use super::{
 };
 use crate::{
     extract::wrangler_config::{BindingCatalog, load_binding_catalog_request},
-    project::{Collation, CollationError, CollationInput, join_path_text, load_cheap_project},
+    project::{
+        Collation, CollationError, CollationInput, join_path_text, load_cheap_project_request,
+    },
     text::JsString,
 };
 use indexmap::IndexSet;
@@ -209,8 +211,8 @@ pub(crate) fn load_env_key_report<'c>(
         retained = Some(collation);
         Ok(collation)
     };
-    let source =
-        load_cheap_project(Path::new(&root.to_lossy()), None).map_err(EnvKeyError::Project)?;
+    let source = load_cheap_project_request(Path::new(&root.to_lossy()), None, || request())
+        .map_err(EnvKeyError::Project)?;
     let catalog = load_binding_catalog_request(Path::new(&repo.to_lossy()), None, &mut request)
         .map_err(EnvKeyError::Catalog)?;
     let candidates = catalog

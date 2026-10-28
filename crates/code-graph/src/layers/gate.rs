@@ -4,8 +4,7 @@ use super::{
     render::{LayerRenderError, render_layers},
 };
 use crate::{
-    engine::oxc::ParseFailure,
-    project::{Collation, CollationError, load_cheap_project},
+    project::{Collation, CollationError, ProjectLoadError, load_cheap_project_request},
     text::JsString,
 };
 use serde::Serialize;
@@ -28,7 +27,7 @@ pub struct LayerGateResult {
 #[derive(Debug)]
 pub enum LayerGateError {
     Collation(CollationError),
-    Project(ParseFailure),
+    Project(ProjectLoadError),
     Analysis(LayerAnalysisError),
     Render(serde_json::Error),
 }
@@ -99,10 +98,21 @@ fn run<'c>(
             });
         }
     };
-    let loaded = load_cheap_project(args.root_absolute, None).map_err(LayerGateError::Project)?;
+    let mut retained = None;
+    let mut request = Some(request);
+    let mut request = || {
+        if let Some(collation) = retained {
+            return Ok(collation);
+        }
+        let collation = request.take().expect("layers request one borrowed handle")()?;
+        retained = Some(collation);
+        Ok(collation)
+    };
+    let loaded = load_cheap_project_request(args.root_absolute, None, || request())
+        .map_err(LayerGateError::Project)?;
     let measured = match text {
-        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules, request),
-        None => analyze(&loaded, args.repo_root, &rules, None, request),
+        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules, || request()),
+        None => analyze(&loaded, args.repo_root, &rules, None, || request()),
     };
     let (analysis, collation) = match measured {
         Ok(report) => report,

@@ -5,7 +5,8 @@ mod read_site_owner;
 mod render;
 
 use crate::{
-    engine::oxc::ParseFailure, extract::wrangler_config::CatalogError, project::CollationError,
+    extract::wrangler_config::CatalogError,
+    project::{CollationError, ProjectLoadError},
     text::JsString,
 };
 pub(crate) use query::load_env_key_report;
@@ -63,7 +64,7 @@ pub struct EnvKeyReport {
 }
 #[derive(Debug)]
 pub enum EnvKeyError {
-    Project(ParseFailure),
+    Project(ProjectLoadError),
     Catalog(CatalogError),
     Collation(CollationError),
     Render(serde_json::Error),

@@ -1,7 +1,7 @@
 pub(crate) mod document;
 use crate::project::{
-    Collation, CollationError, CollationInput, RepoListing, list_visible_files, normalize_lexical,
-    relative_path_text, resolve_path_text, to_relative,
+    Collation, CollationError, CollationInput, RepoListing, list_visible_files_request,
+    normalize_lexical, relative_path_text, resolve_path_text, to_relative,
 };
 use crate::schema::{BindingKind, DataBindingKind};
 use crate::text::JsString;
@@ -96,18 +96,30 @@ impl From<CollationError> for CatalogError {
         Self::Collation(error)
     }
 }
-pub fn find_wrangler_configs(root: &Path, listing: Option<&RepoListing>) -> Vec<PathBuf> {
-    list_visible_files(
+pub fn find_wrangler_configs(
+    root: &Path,
+    listing: Option<&RepoListing>,
+    collation: &Collation,
+) -> Result<Vec<PathBuf>, CollationError> {
+    find_wrangler_configs_request(root, listing, || Ok(collation))
+}
+fn find_wrangler_configs_request<'c>(
+    root: &Path,
+    listing: Option<&RepoListing>,
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<Vec<PathBuf>, CollationError> {
+    Ok(list_visible_files_request(
         root,
         &|file: &str| {
             ["wrangler.json", "wrangler.jsonc", "wrangler.toml"]
                 .contains(&file.rsplit('/').next().unwrap_or(file))
         },
         listing,
-    )
+        request,
+    )?
     .into_iter()
     .map(|file| normalize_lexical(&root.join(file)))
-    .collect()
+    .collect())
 }
 fn sorted_unique<'c>(
     values: impl IntoIterator<Item = JsString>,
@@ -329,7 +341,7 @@ pub(crate) fn load_binding_catalog_request<'c>(
     };
     let mut manifests = Vec::new();
     let mut unparsed_configs = Vec::new();
-    for absolute in find_wrangler_configs(root, listing) {
+    for absolute in find_wrangler_configs_request(root, listing, || request())? {
         let file = to_relative(root, &absolute);
         let document = fs::read(&absolute).ok().and_then(|bytes| {
             let raw = String::from_utf8_lossy(&bytes);

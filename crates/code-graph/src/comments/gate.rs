@@ -1,6 +1,6 @@
 use super::{
     ceilings::{CEILINGS_FILENAME, ceilings_from_census},
-    census::{load_comment_census_unordered, order_census},
+    census::{CommentCensusError, load_comment_census_unordered, order_census},
     config::{CommentConfigResolution, resolve_comment_ceilings, resolve_comment_ceilings_text},
     ratchet::{evaluate_ratchet, render_ratchet},
     render::{CommentRenderError, render_comments},
@@ -45,7 +45,7 @@ pub struct CommentGateResult {
 #[derive(Debug)]
 pub enum CommentGateError {
     Collation(CollationError),
-    Census(ParseFailure),
+    Census(CommentCensusError),
     Json(serde_json::Error),
     Record(RecordTypeError),
     Write { file: PathBuf, source: io::Error },
@@ -92,6 +92,11 @@ impl std::error::Error for CommentGateError {
 }
 impl From<ParseFailure> for CommentGateError {
     fn from(error: ParseFailure) -> Self {
+        Self::Census(CommentCensusError::Parse(error))
+    }
+}
+impl From<CommentCensusError> for CommentGateError {
+    fn from(error: CommentCensusError) -> Self {
         Self::Census(error)
     }
 }
@@ -135,8 +140,20 @@ fn run<'c>(
     logical_repo: Option<&JsString>,
     request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<CommentGateResult, CommentGateError> {
+    let mut retained = None;
+    let mut request = Some(request);
+    let mut request = || {
+        if let Some(collation) = retained {
+            return Ok(collation);
+        }
+        let collation = request
+            .take()
+            .expect("comments request one borrowed handle")()?;
+        retained = Some(collation);
+        Ok(collation)
+    };
     if !args.ci && !args.write_ceilings {
-        let census = load_comment_census_unordered(args.root_absolute)?;
+        let census = load_comment_census_unordered(args.root_absolute, || request())?;
         let collation = request().map_err(CommentGateError::Collation)?;
         let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
         return Ok(CommentGateResult {
@@ -177,7 +194,7 @@ fn run<'c>(
             });
         }
     };
-    let census = load_comment_census_unordered(args.root_absolute)?;
+    let census = load_comment_census_unordered(args.root_absolute, || request())?;
     let collation = request().map_err(CommentGateError::Collation)?;
     let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
     if args.write_ceilings {

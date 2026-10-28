@@ -11,7 +11,8 @@ use crate::{
         },
     },
     project::{
-        Collation, CollationError, CollationInput, discover_package_roots, load_cheap_project,
+        Collation, CollationError, CollationInput, ProjectLoadError, discover_package_roots,
+        load_cheap_project_request,
     },
     syntax::{file::SyntaxFile, trivia::CommentRange},
 };
@@ -171,16 +172,19 @@ fn scope_of<'a>(roots: &'a [String], file: &str) -> &'a str {
         .max_by_key(|root| root.len())
         .map_or(".", String::as_str)
 }
-pub(super) fn load_comment_census_unordered(
+pub(super) fn load_comment_census_unordered<'c>(
     root_absolute: &Path,
-) -> Result<CommentCensus, ParseFailure> {
-    let loaded = load_cheap_project(root_absolute, None)?;
+    request: impl FnOnce() -> Result<&'c Collation, CollationError>,
+) -> Result<CommentCensus, CommentCensusError> {
+    let loaded = load_cheap_project_request(root_absolute, None, request)
+        .map_err(CommentCensusError::Project)?;
     let package_roots = discover_package_roots(root_absolute, None);
     let rows = loaded
         .source_files
         .iter()
         .map(|unit| census_file(&unit.syntax, &unit.file))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(CommentCensusError::Parse)?;
     let mut totals = CommentTotals {
         files: rows.len(),
         ..CommentTotals::default()
@@ -231,12 +235,14 @@ pub(super) fn load_comment_census_unordered(
 #[derive(Debug)]
 pub enum CommentCensusError {
     Parse(ParseFailure),
+    Project(ProjectLoadError),
     Collation(CollationError),
 }
 impl std::fmt::Display for CommentCensusError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Parse(error) => error.fmt(f),
+            Self::Project(error) => error.fmt(f),
             Self::Collation(error) => error.fmt(f),
         }
     }
@@ -245,6 +251,7 @@ impl std::error::Error for CommentCensusError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(match self {
             Self::Parse(error) => error,
+            Self::Project(error) => error,
             Self::Collation(error) => error,
         })
     }
@@ -285,7 +292,7 @@ pub fn load_comment_census(
     collation: &Collation,
 ) -> Result<CommentCensus, CommentCensusError> {
     order_census(
-        load_comment_census_unordered(root_absolute).map_err(CommentCensusError::Parse)?,
+        load_comment_census_unordered(root_absolute, || Ok(collation))?,
         collation,
     )
     .map_err(CommentCensusError::Collation)
