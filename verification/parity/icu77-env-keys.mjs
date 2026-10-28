@@ -128,6 +128,7 @@ try {
         const args = [
           "--exact",
           "env_keys::query::icu77_probe::paired",
+          "--include-ignored",
           "--nocapture",
           "--test-threads=1",
         ];

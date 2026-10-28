@@ -6,9 +6,7 @@ use super::{
 };
 use crate::{
     extract::wrangler_config::{BindingCatalog, load_binding_catalog_request},
-    project::{
-        Collation, CollationError, join_path_text, load_cheap_project, locale_compare_units,
-    },
+    project::{Collation, CollationError, CollationInput, join_path_text, load_cheap_project},
     text::JsString,
 };
 use indexmap::IndexSet;
@@ -19,11 +17,30 @@ fn dedupe_key(first: &JsString, second: &JsString) -> JsString {
     key.extend(second);
     key
 }
-fn by_key_reason(a: &WithheldEnvKey, b: &WithheldEnvKey) -> std::cmp::Ordering {
-    locale_compare_units(a.key.units(), b.key.units())
-        .then_with(|| a.reason.as_str().cmp(b.reason.as_str()))
+fn sort_key_reason<'c>(
+    rows: Vec<WithheldEnvKey>,
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<Vec<WithheldEnvKey>, CollationError> {
+    if rows.len() < 2 {
+        return Ok(rows);
+    }
+    let collation = request()?;
+    let mut keyed = rows
+        .into_iter()
+        .map(|row| CollationInput::from_utf16(row.key.units()).map(|key| (row, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    keyed.sort_by(|(a, ak), (b, bk)| {
+        collation
+            .compare(ak, bk)
+            .then_with(|| a.reason.as_str().cmp(b.reason.as_str()))
+    });
+    Ok(keyed.into_iter().map(|(row, _)| row).collect())
 }
-fn find_env_key_mismatches(catalog: BindingCatalog, scan: EnvKeyScan) -> EnvKeyReport {
+fn find_env_key_mismatches<'c>(
+    catalog: BindingCatalog,
+    scan: EnvKeyScan,
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<EnvKeyReport, CollationError> {
     let read_names: IndexSet<_> = scan.reads.iter().map(|r| &r.name).collect();
     let mut declared_unreferenced = Vec::new();
     let mut declared_withheld = Vec::new();
@@ -38,7 +55,15 @@ fn find_env_key_mismatches(catalog: BindingCatalog, scan: EnvKeyScan) -> EnvKeyR
             .collect::<IndexSet<_>>()
             .into_iter()
             .collect();
-        keys.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
+        if keys.len() > 1 {
+            let collation = request()?;
+            let mut keyed = keys
+                .into_iter()
+                .map(|key| CollationInput::from_utf16(key.units()).map(|input| (key, input)))
+                .collect::<Result<Vec<_>, _>>()?;
+            keyed.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+            keys = keyed.into_iter().map(|(key, _)| key).collect();
+        }
         known.extend(
             manifest
                 .env_keys
@@ -72,11 +97,32 @@ fn find_env_key_mismatches(catalog: BindingCatalog, scan: EnvKeyScan) -> EnvKeyR
             });
         }
     }
-    declared_unreferenced.sort_by(|a, b| {
-        locale_compare_units(a.service.units(), b.service.units())
-            .then_with(|| locale_compare_units(a.key.units(), b.key.units()))
-    });
-    declared_withheld.sort_by(|a, b| locale_compare_units(a.key.units(), b.key.units()));
+    if declared_unreferenced.len() > 1 {
+        let collation = request()?;
+        let mut keyed = declared_unreferenced
+            .into_iter()
+            .map(|row| {
+                let service = CollationInput::from_utf16(row.service.units())?;
+                let key = CollationInput::from_utf16(row.key.units())?;
+                Ok((row, service, key))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        keyed.sort_by(|(_, a, ak), (_, b, bk)| {
+            collation
+                .compare(a, b)
+                .then_with(|| collation.compare(ak, bk))
+        });
+        declared_unreferenced = keyed.into_iter().map(|(row, _, _)| row).collect();
+    }
+    if declared_withheld.len() > 1 {
+        let collation = request()?;
+        let mut keyed = declared_withheld
+            .into_iter()
+            .map(|row| CollationInput::from_utf16(row.key.units()).map(|key| (row, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        keyed.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+        declared_withheld = keyed.into_iter().map(|(row, _)| row).collect();
+    }
     let mut read_not_declared = Vec::new();
     let mut read_withheld = Vec::new();
     let mut seen_withheld = IndexSet::new();
@@ -104,26 +150,38 @@ fn find_env_key_mismatches(catalog: BindingCatalog, scan: EnvKeyScan) -> EnvKeyR
             });
         }
     }
-    read_not_declared.sort_by(|a, b| {
-        locale_compare_units(a.key.units(), b.key.units())
-            .then_with(|| locale_compare_units(a.file.units(), b.file.units()))
-            .then_with(|| {
-                a.line
-                    .partial_cmp(&b.line)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+    if read_not_declared.len() > 1 {
+        let collation = request()?;
+        let mut keyed = read_not_declared
+            .into_iter()
+            .map(|row| {
+                let key = CollationInput::from_utf16(row.key.units())?;
+                let file = CollationInput::from_utf16(row.file.units())?;
+                Ok((row, key, file))
             })
-    });
-    read_withheld.sort_by(by_key_reason);
-    declared_withheld.extend(read_withheld);
-    declared_withheld.sort_by(by_key_reason);
-    EnvKeyReport {
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        keyed.sort_by(|(a, ak, af), (b, bk, bf)| {
+            collation
+                .compare(ak, bk)
+                .then_with(|| collation.compare(af, bf))
+                .then_with(|| {
+                    a.line
+                        .partial_cmp(&b.line)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+        });
+        read_not_declared = keyed.into_iter().map(|(row, _, _)| row).collect();
+    }
+    declared_withheld.extend(sort_key_reason(read_withheld, request)?);
+    declared_withheld = sort_key_reason(declared_withheld, request)?;
+    Ok(EnvKeyReport {
         declared_unreferenced,
         read_not_declared,
         withheld: declared_withheld,
         declared_count: declared_count as f64,
         read_count: scan.reads.len() as f64,
         unparsed_configs: catalog.unparsed_configs,
-    }
+    })
 }
 fn to_repo_relative(repo: &JsString, absolute: JsString) -> JsString {
     let mut prefix = repo.clone();
@@ -139,9 +197,21 @@ pub(crate) fn load_env_key_report<'c>(
     repo: &JsString,
     request: impl FnOnce() -> Result<&'c Collation, CollationError>,
 ) -> Result<EnvKeyReport, EnvKeyError> {
+    let mut retained = None;
+    let mut request = Some(request);
+    let mut request = || {
+        if let Some(collation) = retained {
+            return Ok(collation);
+        }
+        let collation = request
+            .take()
+            .expect("env keys request the same borrowed handle once")()?;
+        retained = Some(collation);
+        Ok(collation)
+    };
     let source =
         load_cheap_project(Path::new(&root.to_lossy()), None).map_err(EnvKeyError::Project)?;
-    let catalog = load_binding_catalog_request(Path::new(&repo.to_lossy()), None, request)
+    let catalog = load_binding_catalog_request(Path::new(&repo.to_lossy()), None, &mut request)
         .map_err(EnvKeyError::Catalog)?;
     let candidates = catalog
         .manifests
@@ -149,11 +219,12 @@ pub(crate) fn load_env_key_report<'c>(
         .flat_map(|m| m.env_keys.iter().chain(&m.dev_vars_keys))
         .cloned()
         .collect();
-    let mut scan = scan_env_keys(&source.source_files, &candidates);
+    let mut scan = scan_env_keys(&source.source_files, &candidates, &mut request)
+        .map_err(EnvKeyError::Collation)?;
     for read in &mut scan.reads {
         read.file = to_repo_relative(repo, join_path_text(root, &read.file));
     }
-    Ok(find_env_key_mismatches(catalog, scan))
+    find_env_key_mismatches(catalog, scan, &mut request).map_err(EnvKeyError::Collation)
 }
 
 #[cfg(test)]

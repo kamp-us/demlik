@@ -1,6 +1,6 @@
 use crate::{
     extract::functions::name_text,
-    project::{SourceUnit, locale_compare_units},
+    project::{Collation, CollationError, CollationInput, SourceUnit},
     syntax::file::NodeRef,
     text::{JsRegex, JsString},
 };
@@ -142,10 +142,11 @@ fn reads_at(node: NodeRef<'_>, env_type: &JsRegex) -> Vec<(JsString, usize, EnvR
     }
     reads
 }
-pub(super) fn scan_env_keys(
+pub(super) fn scan_env_keys<'c>(
     source_files: &[Rc<SourceUnit>],
     candidates: &IndexSet<JsString>,
-) -> EnvKeyScan {
+    request: &mut impl FnMut() -> Result<&'c Collation, CollationError>,
+) -> Result<EnvKeyScan, CollationError> {
     let env_type = JsRegex::new(&JsString::from(r"\bEnv\b")).expect("fixed source regex");
     let mut reads: IndexMap<JsString, EnvRead> = IndexMap::new();
     let mut occurs: IndexMap<JsString, IndexSet<JsString>> = IndexMap::new();
@@ -175,21 +176,53 @@ pub(super) fn scan_env_keys(
         }
     }
     let mut reads: Vec<_> = reads.into_values().collect();
-    reads.sort_by(|a, b| {
-        locale_compare_units(a.name.units(), b.name.units())
-            .then_with(|| locale_compare_units(a.file.units(), b.file.units()))
-            .then_with(|| a.line.cmp(&b.line))
-            .then_with(|| a.via.as_str().cmp(b.via.as_str()))
-    });
+    if reads.len() > 1 {
+        let collation = request()?;
+        let mut keyed = reads
+            .into_iter()
+            .map(|read| {
+                let name = CollationInput::from_utf16(read.name.units())?;
+                let file = CollationInput::from_utf16(read.file.units())?;
+                Ok((read, name, file))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        keyed.sort_by(|(a, an, af), (b, bn, bf)| {
+            collation
+                .compare(an, bn)
+                .then_with(|| collation.compare(af, bf))
+                .then_with(|| a.line.cmp(&b.line))
+                .then_with(|| a.via.as_str().cmp(b.via.as_str()))
+        });
+        reads = keyed.into_iter().map(|(read, _, _)| read).collect();
+    }
     let mut occurs: Vec<_> = occurs.into_iter().collect();
-    occurs.sort_by(|(a, _), (b, _)| locale_compare_units(a.units(), b.units()));
-    let occurs_in = occurs
-        .into_iter()
-        .map(|(name, files)| {
-            let mut files: Vec<_> = files.into_iter().collect();
-            files.sort_by(|a, b| locale_compare_units(a.units(), b.units()));
-            (name, files)
-        })
-        .collect();
-    EnvKeyScan { reads, occurs_in }
+    if occurs.len() > 1 {
+        let collation = request()?;
+        let mut keyed = occurs
+            .into_iter()
+            .map(|(name, files)| {
+                CollationInput::from_utf16(name.units()).map(|key| (name, files, key))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        keyed.sort_by(|(_, _, a), (_, _, b)| collation.compare(a, b));
+        occurs = keyed
+            .into_iter()
+            .map(|(name, files, _)| (name, files))
+            .collect();
+    }
+    let mut occurs_in = IndexMap::new();
+    for (name, files) in occurs {
+        let mut files: Vec<_> = files.into_iter().collect();
+        if files.len() > 1 {
+            let collation = request()?;
+            let mut keyed = files
+                .into_iter()
+                .map(|file| CollationInput::from_utf16(file.units()).map(|key| (file, key)))
+                .collect::<Result<Vec<_>, _>>()?;
+            keyed.sort_by(|(_, a), (_, b)| collation.compare(a, b));
+            files = keyed.into_iter().map(|(file, _)| file).collect();
+        }
+        occurs_in.insert(name, files);
+    }
+    Ok(EnvKeyScan { reads, occurs_in })
 }

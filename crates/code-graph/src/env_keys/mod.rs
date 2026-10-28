@@ -4,7 +4,10 @@ mod query;
 mod read_site_owner;
 mod render;
 
-use crate::{engine::oxc::ParseFailure, extract::wrangler_config::CatalogError, text::JsString};
+use crate::{
+    engine::oxc::ParseFailure, extract::wrangler_config::CatalogError, project::CollationError,
+    text::JsString,
+};
 pub(crate) use query::load_env_key_report;
 pub(crate) use render::render_env_keys;
 use serde::Serialize;
@@ -62,13 +65,14 @@ pub struct EnvKeyReport {
 pub enum EnvKeyError {
     Project(ParseFailure),
     Catalog(CatalogError),
+    Collation(CollationError),
     Render(serde_json::Error),
 }
 impl EnvKeyError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Catalog(error) => error.name(),
-            Self::Project(_) | Self::Render(_) => "Error",
+            Self::Project(_) | Self::Render(_) | Self::Collation(_) => "Error",
         }
     }
     pub fn message(&self) -> JsString {
@@ -76,6 +80,7 @@ impl EnvKeyError {
             Self::Catalog(error) => error.message(),
             Self::Project(error) => error.to_string().into(),
             Self::Render(error) => error.to_string().into(),
+            Self::Collation(error) => error.to_string().into(),
         }
     }
 }
@@ -85,6 +90,7 @@ impl std::fmt::Display for EnvKeyError {
             Self::Project(e) => e.fmt(f),
             Self::Catalog(e) => e.fmt(f),
             Self::Render(e) => e.fmt(f),
+            Self::Collation(e) => e.fmt(f),
         }
     }
 }
@@ -94,6 +100,7 @@ impl std::error::Error for EnvKeyError {
             Self::Project(e) => e,
             Self::Catalog(e) => e,
             Self::Render(e) => e,
+            Self::Collation(e) => e,
         })
     }
 }

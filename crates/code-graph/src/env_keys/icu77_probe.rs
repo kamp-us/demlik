@@ -8,7 +8,12 @@ use crate::{
     text::{JsObject, JsValue},
 };
 use serde::Deserialize;
-use std::{error::Error, fs, path::PathBuf, rc::Rc};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -93,6 +98,7 @@ macro_rules! observe {
     }};
 }
 #[test]
+#[ignore = "paired Source/native fixture supplies request and response paths"]
 fn paired() -> Result<(), Box<dyn Error>> {
     let input = std::env::var_os("DEMLIK_ENV_KEYS_REQUEST").ok_or("request file required")?;
     let output = std::env::var_os("DEMLIK_ENV_KEYS_RESPONSE").ok_or("response file required")?;
@@ -165,8 +171,9 @@ fn paired() -> Result<(), Box<dyn Error>> {
             &mut calls,
             crate::env_keys::extract::scan_env_keys,
             &units,
-            &candidates
-        );
+            &candidates,
+            &mut || Ok(&collation)
+        )?;
         let unchanged = before
             .iter()
             .zip(&units)
@@ -182,8 +189,9 @@ fn paired() -> Result<(), Box<dyn Error>> {
                 &mut calls,
                 crate::env_keys::query::find_env_key_mismatches,
                 catalog,
-                scan
-            );
+                scan,
+                &mut || Ok(&collation)
+            )?;
             Ok(object([
                 ("scan", scan_output),
                 ("identity", identity),
@@ -226,4 +234,159 @@ fn paired() -> Result<(), Box<dyn Error>> {
     };
     fs::write(output, serde_json::to_string(&response)?)?;
     Ok(())
+}
+
+struct Workspace(PathBuf);
+impl Workspace {
+    fn new() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "demlik-env-request-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).unwrap();
+        let workspace = Self(fs::canonicalize(root).unwrap());
+        workspace.put("pnpm-workspace.yaml", "packages: []\n");
+        workspace
+    }
+    fn put(&self, file: &str, text: &str) {
+        let file = self.0.join(file);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, text).unwrap();
+    }
+    fn text(&self) -> JsString {
+        self.0.to_str().unwrap().into()
+    }
+}
+impl Drop for Workspace {
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.0).unwrap();
+    }
+}
+
+#[test]
+fn empty_and_singleton_facts_do_not_request_collation() -> Result<(), Box<dyn Error>> {
+    for text in ["export const note = 1;", "export const read = env.ONLY;"] {
+        let unit = Rc::new(SourceUnit {
+            syntax: parse_type_script(Path::new("only.ts"), text)?,
+            absolute_path: "only.ts".into(),
+            file: "only.ts".into(),
+        });
+        let original = Rc::as_ptr(&unit);
+        let mut request = || panic!("a zero/one-row sort must remain lazy");
+        let scan = scan_env_keys(std::slice::from_ref(&unit), &IndexSet::new(), &mut request)?;
+        let report = find_env_key_mismatches(
+            BindingCatalog {
+                manifests: vec![],
+                unparsed_configs: vec![],
+            },
+            scan,
+            &mut request,
+        )?;
+        assert_eq!(Rc::as_ptr(&unit), original);
+        assert!(report.withheld.len() <= 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn catalog_refusal_precedes_initialization_after_source_parse_failure() {
+    let workspace = Workspace::new();
+    workspace.put("src/index.ts", "export const = ;");
+    workspace.put(
+        "wrangler.jsonc",
+        r#"{"name":"bad","vars":{"constructor":null}}"#,
+    );
+    let root = workspace.text();
+    let error = load_env_key_report(&root, &root, || {
+        panic!("catalog refusal precedes initialization")
+    })
+    .unwrap_err();
+    assert!(matches!(error, EnvKeyError::Catalog(_)));
+    assert_eq!(error.name(), "TypeError");
+    assert_eq!(
+        error.message(),
+        "Cannot read properties of null (reading 'prototype')"
+    );
+}
+
+#[test]
+fn one_borrowed_request_serves_catalog_scan_and_query_then_results_outlive_handle()
+-> Result<(), Box<dyn Error>> {
+    let workspace = Workspace::new();
+    workspace.put("src/index.ts", "export const read = [env.C, env.D];");
+    workspace.put(
+        "wrangler.jsonc",
+        r#"{"name":"worker","vars":{"z":"x","A":"x","b":"x"}}"#,
+    );
+    let root = workspace.text();
+    let calls = std::cell::Cell::new(0);
+    let report = {
+        let collation = Collation::try_node22_en_us()?;
+        load_env_key_report(&root, &root, || {
+            calls.set(calls.get() + 1);
+            workspace.put("src/index.ts", "export const note = 1;");
+            Ok(&collation)
+        })?
+    };
+    assert_eq!(calls.get(), 1);
+    assert_eq!(report.declared_count, 3.0);
+    assert_eq!(report.read_count, 2.0);
+    assert_eq!(
+        report
+            .declared_unreferenced
+            .iter()
+            .map(|row| row.key.to_lossy())
+            .collect::<Vec<_>>(),
+        ["A", "b", "z"]
+    );
+    assert_eq!(
+        report
+            .read_not_declared
+            .iter()
+            .map(|row| row.key.to_lossy())
+            .collect::<Vec<_>>(),
+        ["C", "D"]
+    );
+    Ok(())
+}
+
+#[test]
+fn scan_initialization_failure_keeps_its_typed_original_source() {
+    let workspace = Workspace::new();
+    workspace.put("src/index.ts", "export const read = [env.B, env.A];");
+    let root = workspace.text();
+    let error = load_env_key_report(&root, &root, || {
+        // The real ICU wrapper refuses an embedded NUL before its native call.
+        Err(CollationError::Initialize(
+            rust_icu_ucol::UCollator::try_from("en\0US").unwrap_err(),
+        ))
+    })
+    .unwrap_err();
+    let EnvKeyError::Collation(ref collation) = error else {
+        panic!("lost direct scan error: {error:?}")
+    };
+    assert!(std::ptr::eq(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<CollationError>()
+            .unwrap(),
+        collation
+    ));
+    let CollationError::Initialize(source) = collation else {
+        panic!("lost initializer cause")
+    };
+    assert!(std::ptr::eq(
+        collation
+            .source()
+            .unwrap()
+            .downcast_ref::<rust_icu_common::Error>()
+            .unwrap(),
+        source
+    ));
+    assert_eq!(error.name(), "Error");
+    assert_eq!(error.message(), JsString::from(collation.to_string()));
 }
