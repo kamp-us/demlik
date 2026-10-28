@@ -102,6 +102,14 @@ function backendOffsets(value: unknown): unknown {
     }),
   );
 }
+// Coincident diagnostic offsets do not retire these accepted backend profiles.
+const backendOffsetProfileCases: ReadonlySet<string> = new Set([
+  "raw-high-entry",
+  "raw-low-entry",
+  "two-raw-units-entry",
+  "raw-directory-entry",
+  "opaque-raw-emitted-entry",
+]);
 try {
   const root = path.join(directory, "ascii-package");
   file(
@@ -254,7 +262,9 @@ try {
         contract(expected[index]),
       );
       if (isDeepStrictEqual(answers[index].output, expected[index])) {
-        qualifications[index] = "exact";
+        qualifications[index] = backendOffsetProfileCases.has(row.id)
+          ? "backend-offset"
+          : "exact";
       } else {
         assert.deepEqual(
           backendOffsets(answers[index].output),
