@@ -42,6 +42,10 @@ pub struct SubEvaluation<U, E = Infallible> {
 
 /// Pure declarations retain each dependency projection's owner through a failure.
 pub trait SubscriptionProjection<S, U, E = Infallible> {
+    /// A declaration table can prove absence without executing any dependencies.
+    fn is_declared_empty(&self) -> bool {
+        false
+    }
     fn desired(&self, state: &S) -> Result<Vec<U>, ProjectionError<E>>;
     fn evaluate(&self, state: &S) -> SubEvaluation<U, E> {
         let cause = match std::panic::catch_unwind(AssertUnwindSafe(|| self.desired(state))) {
@@ -126,6 +130,9 @@ impl<'a, S, D, E> SubscriptionEntries<'a, S, D, E> {
     }
 }
 impl<S, D: Serialize, E> SubscriptionProjection<S, Sub<D>, E> for SubscriptionEntries<'_, S, D, E> {
+    fn is_declared_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
     fn desired(&self, state: &S) -> Result<Vec<Sub<D>>, ProjectionError<E>> {
         let mut desired = Vec::new();
         for entry in &self.entries {

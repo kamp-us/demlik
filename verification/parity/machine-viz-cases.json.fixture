@@ -1,0 +1,822 @@
+[
+  {
+    "id": "machine-viz.sanitizers",
+    "kind": "sanitize",
+    "texts": [
+      "",
+      "plain",
+      "0",
+      "123_name",
+      "human:cp-approval",
+      "a--b",
+      "\ud83d\ude00",
+      "a\ud83d\ude00b",
+      "\ud800",
+      "\udc00",
+      "\u00e9\u4e2d",
+      " a\n\"x\"; y:\r ",
+      "\ufeffx\ufeff",
+      "\u0085x\u0085",
+      "\u200bx\u200b",
+      "\u2028x\u2029",
+      "\t x \u00a0",
+      "__proto__",
+      "2.0",
+      "a\u0000b"
+    ]
+  },
+  {
+    "id": "machine-viz.invoice-structural",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.invoice-resolved",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "received",
+        "received"
+      ],
+      [
+        "checked",
+        "checked"
+      ],
+      [
+        "paid",
+        "paid"
+      ],
+      [
+        "rejected",
+        "rejected"
+      ]
+    ],
+    "messages": [
+      [
+        "validate",
+        "validate"
+      ],
+      [
+        "decline",
+        "decline"
+      ],
+      [
+        "pay",
+        "pay"
+      ],
+      [
+        "decline",
+        "decline"
+      ]
+    ],
+    "subs": [],
+    "ctx": true
+  },
+  {
+    "id": "machine-viz.partial-samples",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "received",
+        "received"
+      ]
+    ],
+    "messages": [
+      [
+        "validate",
+        "validate"
+      ]
+    ],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.direct-cell-mismatched-tag",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "received",
+        "checked"
+      ]
+    ],
+    "messages": [
+      [
+        "validate",
+        "pay"
+      ]
+    ],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.caught-cell-failure",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "received",
+        "received"
+      ]
+    ],
+    "messages": [
+      [
+        "validate",
+        "validate"
+      ]
+    ],
+    "subs": [],
+    "throwCell": "received.validate"
+  },
+  {
+    "id": "machine-viz.title-direction",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": [],
+    "direction": "LR",
+    "title": "Invoice: \u201c\u00e9\u201d\nsecond line",
+    "ctx": true
+  },
+  {
+    "id": "machine-viz.surrogate-title",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": [],
+    "title": "A\ud800B"
+  },
+  {
+    "id": "machine-viz.empty-transitions",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [],
+    "states": [],
+    "messages": [],
+    "subs": [],
+    "ctx": true
+  },
+  {
+    "id": "machine-viz.numeric-key-order",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "10",
+        [
+          [
+            "9",
+            "2"
+          ],
+          [
+            "2",
+            "10"
+          ]
+        ]
+      ],
+      [
+        "2",
+        [
+          [
+            "10",
+            "10"
+          ],
+          [
+            "1",
+            "2"
+          ]
+        ]
+      ],
+      [
+        "zero",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "10",
+        "10"
+      ],
+      [
+        "2",
+        "2"
+      ]
+    ],
+    "messages": [
+      [
+        "9",
+        "9"
+      ],
+      [
+        "2",
+        "2"
+      ],
+      [
+        "10",
+        "10"
+      ],
+      [
+        "1",
+        "1"
+      ]
+    ],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.sanitize-identifiers",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "human:approval",
+        [
+          [
+            "say: yes;\n",
+            "done\ud83d\ude00"
+          ]
+        ]
+      ],
+      [
+        "done\ud83d\ude00",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "human:approval",
+        "human:approval"
+      ]
+    ],
+    "messages": [
+      [
+        "say: yes;\n",
+        "say: yes;\n"
+      ]
+    ],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.subscriptions-in-order",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "paid",
+        "paid"
+      ],
+      [
+        "received",
+        "received"
+      ],
+      [
+        "checked",
+        "checked"
+      ]
+    ],
+    "messages": [],
+    "subs": [
+      {
+        "name": "watch:\u00e9",
+        "active": [
+          "received",
+          "checked"
+        ]
+      },
+      {
+        "name": "watch:\u00e9",
+        "active": [
+          "checked"
+        ]
+      },
+      {
+        "name": "tick\n",
+        "active": [
+          "checked"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "machine-viz.subscriptions-without-samples",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": [
+      {
+        "name": "never",
+        "active": [
+          "received"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "machine-viz.subscription-failure",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "received",
+        "received"
+      ],
+      [
+        "checked",
+        "checked"
+      ]
+    ],
+    "messages": [],
+    "subs": [
+      {
+        "name": "first",
+        "active": [
+          "received"
+        ]
+      },
+      {
+        "name": "bad",
+        "active": [
+          "received"
+        ],
+        "throw": true
+      },
+      {
+        "name": "unread",
+        "active": [
+          "received"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "machine-viz.init-failure",
+    "kind": "diagram",
+    "form": "transitions",
+    "rows": [
+      [
+        "received",
+        [
+          [
+            "validate",
+            "checked"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "checked",
+        [
+          [
+            "pay",
+            "paid"
+          ],
+          [
+            "decline",
+            "rejected"
+          ]
+        ]
+      ],
+      [
+        "paid",
+        []
+      ],
+      [
+        "rejected",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": [],
+    "ctx": true,
+    "throwInit": true
+  },
+  {
+    "id": "machine-viz.empty-reducer",
+    "kind": "diagram",
+    "form": "reducer",
+    "rows": [],
+    "states": [],
+    "messages": [],
+    "subs": []
+  },
+  {
+    "id": "machine-viz.reducer-list",
+    "kind": "diagram",
+    "form": "reducer",
+    "rows": [
+      [
+        "10",
+        []
+      ],
+      [
+        "2",
+        []
+      ],
+      [
+        "reset: now",
+        []
+      ]
+    ],
+    "states": [
+      [
+        "other",
+        "received"
+      ]
+    ],
+    "messages": [],
+    "subs": [],
+    "ctx": true
+  },
+  {
+    "id": "machine-viz.no-state-tag-reducer",
+    "kind": "diagram",
+    "form": "reducer",
+    "rows": [
+      [
+        "increment",
+        []
+      ],
+      [
+        "decrement",
+        []
+      ],
+      [
+        "reset",
+        []
+      ]
+    ],
+    "states": [],
+    "messages": [],
+    "subs": [],
+    "title": "Counter"
+  }
+]

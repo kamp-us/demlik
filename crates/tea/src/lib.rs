@@ -14,6 +14,7 @@ pub mod journal;
 mod js_math;
 pub mod js_record;
 pub mod llm_call;
+pub mod machine_viz;
 pub mod paginate;
 pub mod pbt;
 pub mod persistence;
