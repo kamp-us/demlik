@@ -1,9 +1,13 @@
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{DirectoryNode, ModuleNode, Thresholds};
 use crate::smells::evaluate::smells_for_directory;
 use indexmap::IndexMap;
 
-pub fn build_directories(modules: &[ModuleNode], thresholds: &Thresholds) -> Vec<DirectoryNode> {
+pub fn build_directories(
+    modules: &[ModuleNode],
+    thresholds: &Thresholds,
+    collation: &Collation,
+) -> Result<Vec<DirectoryNode>, CollationError> {
     let mut by_dir: IndexMap<&str, (Vec<String>, usize)> = IndexMap::new();
     for module in modules {
         let dir = module
@@ -16,8 +20,16 @@ pub fn build_directories(modules: &[ModuleNode], thresholds: &Thresholds) -> Vec
     }
     let mut directories: Vec<_> = by_dir
         .into_iter()
-        .map(|(dir, (mut files, function_count))| {
-            files.sort_by(|left, right| locale_compare(left, right));
+        .map(|(dir, (files, function_count))| {
+            let mut files = files
+                .into_iter()
+                .map(|file| {
+                    let key = CollationInput::from_text(&file)?;
+                    Ok((file, key))
+                })
+                .collect::<Result<Vec<_>, CollationError>>()?;
+            files.sort_by(|left, right| collation.compare(&left.1, &right.1));
+            let files = files.into_iter().map(|(file, _)| file).collect::<Vec<_>>();
             let mut node = DirectoryNode {
                 dir: dir.into(),
                 file_count: files.len(),
@@ -26,9 +38,10 @@ pub fn build_directories(modules: &[ModuleNode], thresholds: &Thresholds) -> Vec
                 smells: Vec::new(),
             };
             node.smells = smells_for_directory(&node, thresholds);
-            node
+            let key = CollationInput::from_text(&node.dir)?;
+            Ok((node, key))
         })
-        .collect();
-    directories.sort_by(|left, right| locale_compare(&left.dir, &right.dir));
-    directories
+        .collect::<Result<_, CollationError>>()?;
+    directories.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    Ok(directories.into_iter().map(|(node, _)| node).collect())
 }

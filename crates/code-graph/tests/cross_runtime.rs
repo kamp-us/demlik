@@ -112,7 +112,9 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
                     repo_root: &root,
                 },
                 context,
-            )?;
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
             let result = resolve_edges_with_cross_runtime(
                 context,
                 imports,
@@ -121,7 +123,9 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
                 &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
             )
             .unwrap();
-            let measured = resolver.edges();
+            let measured = resolver
+                .edges(&demlik_code_graph::project::Collation::try_node22_en_us().unwrap())
+                .unwrap();
             assert_eq!(measured.len(), 5);
             assert_eq!(
                 measured

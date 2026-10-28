@@ -318,8 +318,10 @@ fn execute(
                     functions: &functions,
                     catalog: &catalog,
                     repo_root: repo
-                }
-            );
+                },
+                &metadata_collation
+            )
+            .map_err(DriverError::backend)?;
             let report = observe!(
                 calls,
                 demlik_code_graph::data::extract::load_data_report,

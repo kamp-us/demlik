@@ -16,8 +16,8 @@ use crate::declarations::uses::resolve_declaration_uses;
 use crate::engine::tsgo::{TsgoBinary, TsgoError};
 use crate::extract::wrangler_config::CatalogError;
 use crate::project::{
-    Collation, CollationError, EdgeScope, LoadedEdgeProject, LoadedProject, discover_package_roots,
-    locale_compare, relative_path_text, resolve_path_text, to_relative,
+    Collation, CollationError, CollationInput, EdgeScope, LoadedEdgeProject, LoadedProject,
+    discover_package_roots, relative_path_text, resolve_path_text, to_relative,
 };
 use crate::schema::{
     Edges, FunctionNode, Graph, ModuleNode, Provenance, Severity, Stats, Summary, ThresholdError,
@@ -389,6 +389,7 @@ fn assemble_graph_with_reports_in(
                             repo_root: options.repo_root,
                         },
                         context,
+                        collation,
                     )
                 })
                 .transpose()?;
@@ -419,7 +420,10 @@ fn assemble_graph_with_reports_in(
                             root_absolute: &loaded.project.root_absolute,
                             context,
                             functions: &functions,
-                            inputs: &analysis_inputs(functions.iter().map(NamedSymbol::from)),
+                            inputs: &analysis_inputs(
+                                functions.iter().map(NamedSymbol::from),
+                                collation,
+                            )?,
                             resolver: resolver.as_ref(),
                         },
                         collation,
@@ -544,11 +548,7 @@ fn build(
     let mut modules: Vec<_> = loaded
         .source_files
         .iter()
-        .map(|unit| -> Result<ModuleNode, CollationError> {
-            let mut function_ids = ids_by_file
-                .shift_remove(unit.file.as_str())
-                .unwrap_or_default();
-            function_ids.sort_by(|left, right| locale_compare(left, right));
+        .map(|unit| -> Result<_, CollationError> {
             let (imports, imported_by, import_edges) = if let Some(bundle) = edges.as_mut() {
                 (
                     bundle
@@ -574,20 +574,36 @@ fn build(
                     Vec::new(),
                 )
             };
-            Ok(ModuleNode {
-                file: unit.file.clone(),
-                loc: module_loc(&unit.syntax),
-                comment_lines: module_comment_lines(&unit.syntax),
-                function_ids,
-                imports,
-                imported_by,
-                import_edges,
-                is_test: is_test_file(&unit.file),
-                smells: Vec::new(),
-            })
+            let mut function_ids = ids_by_file
+                .shift_remove(unit.file.as_str())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|id| {
+                    let key = CollationInput::from_text(&id)?;
+                    Ok((id, key))
+                })
+                .collect::<Result<Vec<_>, CollationError>>()?;
+            function_ids.sort_by(|left, right| collation.compare(&left.1, &right.1));
+            let function_ids = function_ids.into_iter().map(|(id, _)| id).collect();
+            let file_key = CollationInput::from_text(&unit.file)?;
+            Ok((
+                ModuleNode {
+                    file: unit.file.clone(),
+                    loc: module_loc(&unit.syntax),
+                    comment_lines: module_comment_lines(&unit.syntax),
+                    function_ids,
+                    imports,
+                    imported_by,
+                    import_edges,
+                    is_test: is_test_file(&unit.file),
+                    smells: Vec::new(),
+                },
+                file_key,
+            ))
         })
         .collect::<Result<_, _>>()?;
-    modules.sort_by(|left, right| locale_compare(&left.file, &right.file));
+    modules.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    let mut modules: Vec<_> = modules.into_iter().map(|(module, _)| module).collect();
     let coupling = edges.as_ref().map(|_| {
         coupling_by_file(
             &modules,
@@ -601,7 +617,7 @@ fn build(
             coupling.as_ref().and_then(|facts| facts.get(&module.file)),
         );
     }
-    let directories = build_directories(&modules, &thresholds);
+    let directories = build_directories(&modules, &thresholds, collation)?;
     let mut smells: Vec<_> = functions
         .iter()
         .flat_map(|function| &function.smells)

@@ -65,7 +65,9 @@ impl Project {
             functions
                 .iter()
                 .map(demlik_code_graph::extract::analysis::NamedSymbol::from),
-        );
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
         with_type_context(
             &binary,
             TypeContextInput {

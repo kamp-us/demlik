@@ -2,7 +2,7 @@ use super::callee::resolve::ResolvedCallee;
 use super::wrangler_config::{BindingCatalog, BindingDecl, ServiceManifest};
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeNode, TsgoError};
-use crate::project::{locale_compare, locale_compare_units};
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{BindingKind, CrossRuntimeEdge, CrossRuntimeReason};
 use crate::text::JsString;
 use indexmap::{IndexMap, IndexSet};
@@ -161,7 +161,8 @@ pub struct CrossRuntimeResolver<'a> {
 pub fn create_cross_runtime_resolver<'a>(
     input: CrossRuntimeInput<'a>,
     context: &TypeContext<'_, '_>,
-) -> Result<CrossRuntimeResolver<'a>, TsgoError> {
+    collation: &Collation,
+) -> Result<CrossRuntimeResolver<'a>, super::ResolveError> {
     let mut resolver = CrossRuntimeResolver {
         catalog: input.catalog,
         root_posix: input
@@ -207,7 +208,15 @@ pub fn create_cross_runtime_resolver<'a>(
         }
     }
     for bucket in resolver.index.values_mut() {
-        bucket.sort_by(|left, right| locale_compare(left, right));
+        let mut keyed = std::mem::take(bucket)
+            .into_iter()
+            .map(|id| {
+                let key = CollationInput::from_text(&id)?;
+                Ok((id, key))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        keyed.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        *bucket = keyed.into_iter().map(|(id, _)| id).collect();
     }
     for manifest in &input.catalog.manifests {
         if resolver.service_directories.contains_key(&manifest.service) {
@@ -322,9 +331,9 @@ impl CrossRuntimeResolver<'_> {
         };
         Ok(Some(resolved))
     }
-    pub fn edges(&self) -> Vec<CrossRuntimeEdge> {
+    pub fn edges(&self, collation: &Collation) -> Result<Vec<CrossRuntimeEdge>, CollationError> {
         let mut seen = IndexSet::new();
-        let mut edges: Vec<_> = self
+        let edges: Vec<_> = self
             .collected
             .iter()
             .filter(|edge| {
@@ -336,12 +345,22 @@ impl CrossRuntimeResolver<'_> {
             })
             .cloned()
             .collect();
+        let mut edges = edges
+            .into_iter()
+            .map(|edge| {
+                let caller = CollationInput::from_text(&edge.caller_id)?;
+                let binding = CollationInput::from_utf16(edge.binding.units())?;
+                let method = CollationInput::from_text(&edge.method)?;
+                Ok((edge, caller, binding, method))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
         edges.sort_by(|left, right| {
-            locale_compare(&left.caller_id, &right.caller_id)
-                .then_with(|| left.line.cmp(&right.line))
-                .then_with(|| locale_compare_units(left.binding.units(), right.binding.units()))
-                .then_with(|| locale_compare(&left.method, &right.method))
+            collation
+                .compare(&left.1, &right.1)
+                .then_with(|| left.0.line.cmp(&right.0.line))
+                .then_with(|| collation.compare(&left.2, &right.2))
+                .then_with(|| collation.compare(&left.3, &right.3))
         });
-        edges
+        Ok(edges.into_iter().map(|(edge, _, _, _)| edge).collect())
     }
 }

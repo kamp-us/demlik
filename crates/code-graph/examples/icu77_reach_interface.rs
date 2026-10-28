@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .map(|f| f.id.clone())
             .collect::<Vec<_>>();
-        let inputs = analysis_inputs(found.functions.iter().map(NamedSymbol::from));
+        let inputs = analysis_inputs(found.functions.iter().map(NamedSymbol::from), &collation)?;
         let imports = resolve_imports(
             root,
             &loaded.project.source_files,

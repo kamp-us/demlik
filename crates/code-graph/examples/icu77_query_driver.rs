@@ -124,7 +124,7 @@ fn execute(
         let binary = TsgoBinary::from_native_preview_manifest(manifest)?;
         let config = root.join("tsconfig.json");
         let found = discover_functions(&loaded.source_files, &collation)?.functions;
-        let inputs = analysis_inputs(found.iter().map(NamedSymbol::from));
+        let inputs = analysis_inputs(found.iter().map(NamedSymbol::from), &collation)?;
         let imports = resolve_imports(root, &loaded.source_files, &config, &collation)?;
         let ids = found.iter().map(|f| f.id.clone()).collect::<Vec<_>>();
         let (mut edges, refs) = with_type_context(

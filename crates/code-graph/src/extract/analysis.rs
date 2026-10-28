@@ -15,11 +15,8 @@ use crate::kinds::declarations::{
 use crate::kinds::glob::GlobError;
 use crate::kinds::rules::NodeKindRules;
 use crate::kinds::rules::RuleCompileError;
-use crate::project::locale_compare;
-use crate::project::{Collation, CollationError};
-use crate::project::{
-    discover_package_roots, join_path_text, locale_compare_units, relative_path_text,
-};
+use crate::project::{Collation, CollationError, CollationInput};
+use crate::project::{discover_package_roots, join_path_text, relative_path_text};
 use crate::query::{
     clusters::build_cluster_report, interface_width::find_interface_width,
     unguarded::find_unguarded, unreachable::find_unreachable,
@@ -173,7 +170,11 @@ fn binding_key(service: &JsString, binding: &JsString) -> JsString {
     key.extend(binding);
     key
 }
-fn binding_census(catalog: &BindingCatalog, edges: &[CrossRuntimeEdge]) -> Vec<BindingCensusRow> {
+fn binding_census(
+    catalog: &BindingCatalog,
+    edges: &[CrossRuntimeEdge],
+    collation: &Collation,
+) -> Result<Vec<BindingCensusRow>, CollationError> {
     let mut counts: IndexMap<JsString, usize> = IndexMap::new();
     for edge in edges {
         *counts
@@ -196,14 +197,22 @@ fn binding_census(catalog: &BindingCatalog, edges: &[CrossRuntimeEdge]) -> Vec<B
             });
         }
     }
+    let mut rows = rows
+        .into_iter()
+        .map(|row| {
+            let service = CollationInput::from_utf16(row.owner_service.units())?;
+            let binding = CollationInput::from_utf16(row.binding.units())?;
+            let target = CollationInput::from_utf16(row.target_class.units())?;
+            Ok((row, service, binding, target))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     rows.sort_by(|left, right| {
-        locale_compare_units(left.owner_service.units(), right.owner_service.units())
-            .then_with(|| locale_compare_units(left.binding.units(), right.binding.units()))
-            .then_with(|| {
-                locale_compare_units(left.target_class.units(), right.target_class.units())
-            })
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| collation.compare(&left.2, &right.2))
+            .then_with(|| collation.compare(&left.3, &right.3))
     });
-    rows
+    Ok(rows.into_iter().map(|(row, _, _, _)| row).collect())
 }
 pub struct CompleteInput<'a, 'program, 'channel> {
     pub options: &'a AnalysisOptions<'a>,
@@ -242,16 +251,22 @@ pub fn complete_analysis(
     } = input;
     let cross_runtime = match (resolver, prep.catalog.as_ref()) {
         (Some(resolver), Some(catalog)) => {
-            let edges = resolver.edges();
+            let edges = resolver.edges(collation)?;
+            let census = binding_census(catalog, &edges, collation)?;
             let mut config_files = catalog
                 .manifests
                 .iter()
-                .map(|manifest| manifest.config_file.clone())
-                .collect::<Vec<_>>();
-            config_files.sort_by(|left, right| locale_compare(left, right));
+                .map(|manifest| {
+                    Ok((
+                        manifest.config_file.clone(),
+                        CollationInput::from_text(&manifest.config_file)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, CollationError>>()?;
+            config_files.sort_by(|left, right| collation.compare(&left.1, &right.1));
             Some(CrossRuntimeReport {
-                census: binding_census(catalog, &edges),
-                config_files,
+                census,
+                config_files: config_files.into_iter().map(|(file, _)| file).collect(),
                 edges,
                 unparsed_configs: catalog.unparsed_configs.clone(),
             })
@@ -357,8 +372,15 @@ impl AnalysisBundle {
                         mains.insert(relative);
                     }
                 }
-                let mut mains = mains.into_iter().collect::<Vec<_>>();
-                mains.sort_by(|left, right| locale_compare(left, right));
+                let mut mains = mains
+                    .into_iter()
+                    .map(|main| {
+                        let key = CollationInput::from_text(&main)?;
+                        Ok((main, key))
+                    })
+                    .collect::<Result<Vec<_>, CollationError>>()?;
+                mains.sort_by(|left, right| collation.compare(&left.1, &right.1));
+                let mains = mains.into_iter().map(|(main, _)| main).collect::<Vec<_>>();
                 let patterns = public_export_patterns(
                     &self.repo_root,
                     &self.root_absolute,
@@ -436,7 +458,10 @@ pub struct AnalysisInputs {
     pub names: IndexSet<String>,
     pub exports_by_file: IndexMap<String, Vec<String>>,
 }
-pub fn analysis_inputs<'a>(functions: impl IntoIterator<Item = NamedSymbol<'a>>) -> AnalysisInputs {
+pub fn analysis_inputs<'a>(
+    functions: impl IntoIterator<Item = NamedSymbol<'a>>,
+    collation: &Collation,
+) -> Result<AnalysisInputs, CollationError> {
     let mut names = IndexSet::new();
     let mut exports_by_file: IndexMap<String, Vec<String>> = IndexMap::new();
     for node in functions {
@@ -449,10 +474,18 @@ pub fn analysis_inputs<'a>(functions: impl IntoIterator<Item = NamedSymbol<'a>>)
         }
     }
     for exports in exports_by_file.values_mut() {
-        exports.sort_by(|left, right| locale_compare(left, right));
+        let mut keyed = std::mem::take(exports)
+            .into_iter()
+            .map(|id| {
+                let key = CollationInput::from_text(&id)?;
+                Ok((id, key))
+            })
+            .collect::<Result<Vec<_>, CollationError>>()?;
+        keyed.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        *exports = keyed.into_iter().map(|(id, _)| id).collect();
     }
-    AnalysisInputs {
+    Ok(AnalysisInputs {
         names,
         exports_by_file,
-    }
+    })
 }

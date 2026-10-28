@@ -1,0 +1,19 @@
+use demlik_code_graph::{
+ checker::context::{TypeContextInput,with_type_context},engine::tsgo::TsgoBinary,
+ extract::{analysis::{NamedSymbol,analysis_inputs},assemble::{NodeFields,assemble_graph},cross_runtime::{CrossRuntimeInput,create_cross_runtime_resolver},directories::build_directories,edges::resolve_edges_with_cross_runtime,functions::discover_functions,wrangler_config::load_binding_catalog},
+ data::extract::{DataScanInput,scan_data_sites,load_data_report},project::{Collation,EdgeScope,load_cheap_project,load_edge_project},schema::Thresholds,syntax::imports::resolve_imports,
+};
+use std::{rc::Rc,cell::Cell,path::Path};
+fn main()->Result<(),Box<dyn std::error::Error>>{
+ let args:Vec<_>=std::env::args().collect();let root=Path::new(&args[2]);let marker=Rc::new(Cell::new(0usize));let borrowed=&marker;
+ if args[1]=="cheap"{
+  let loaded=load_cheap_project(root,None)?;
+  let(graph,dirs,inputs,scan,report)={let c=Collation::try_node22_en_us()?;let found=discover_functions(&loaded.source_files,&c)?.functions;assert!(found.iter().all(|f|loaded.source_files.iter().any(|u|Rc::ptr_eq(&f.unit,u))));let inputs=analysis_inputs(found.iter().map(NamedSymbol::from),&c)?;let graph=assemble_graph(&loaded,Thresholds::default(),NodeFields::default(),&c)?;let dirs=build_directories(&graph.modules,&graph.thresholds,&c)?;let catalog=load_binding_catalog(root,None,&c)?;let scan=scan_data_sites(DataScanInput{units:&loaded.source_files,functions:&found,catalog:&catalog,repo_root:root},&c)?;let report=load_data_report(&loaded.source_files,&found,root,&c)?;borrowed.set(found.len());(graph,dirs,inputs,scan,report)};
+  assert!(graph.modules.len()>2);assert!(!dirs.is_empty());assert!(!inputs.exports_by_file.is_empty());assert!(!scan.edges.is_empty());assert_eq!(scan.edges.len(),report.edges.len());assert!(marker.get()>2);println!("cheap original Rc/AST inputs; no tsconfig/compiler; returned ordered facts survive Collation drop");return Ok(())
+ }
+ let loaded=load_edge_project(root,EdgeScope::Package,root,None)?;let binary=TsgoBinary::from_native_preview_manifest(Path::new(&args[3]))?;
+ let(found,inputs,cross,scan)={let c=Collation::try_node22_en_us()?;let found=discover_functions(&loaded.project.source_files,&c)?.functions;let input=analysis_inputs(found.iter().map(NamedSymbol::from),&c)?;let catalog=load_binding_catalog(root,None,&c)?;let imports=resolve_imports(root,&loaded.project.source_files,&loaded.ts_config_path,&c)?;let ids=found.iter().map(|f|f.id.clone()).collect::<Vec<_>>();
+ let cross=with_type_context(&binary,TypeContextInput{project:&loaded.project,ts_config_path:&loaded.ts_config_path,functions:&found},|ctx|{for file in &ctx.files{assert!(loaded.project.source_files.iter().any(|u|Rc::ptr_eq(u,&file.unit)));}let(node,id)=ctx.node_to_id.iter().next().map(|(n,id)|(n.clone(),id.clone())).unwrap();assert_eq!(ctx.node_to_id.get(&node.clone()),Some(&id));if let Some(name)=node.node("name")?{assert!(ctx.symbol_of(&name)?==ctx.symbol_of(&name)?);}borrowed.set(ctx.files.len());Ok((||->Result<_,demlik_code_graph::extract::ResolveError>{let mut resolver=create_cross_runtime_resolver(CrossRuntimeInput{catalog:&catalog,root_absolute:root,repo_root:root},ctx,&c)?;let edges=resolve_edges_with_cross_runtime(ctx,imports,&ids,Some(&mut resolver),&c)?;assert!(!edges.calls_by_id.is_empty());Ok(resolver.edges(&c)?)})())})??;
+ let scan=scan_data_sites(DataScanInput{units:&loaded.project.source_files,functions:&found,catalog:&catalog,repo_root:root},&c)?;(found,input,cross,scan)};
+ assert!(found.len()>2);assert!(marker.get()>2);assert!(!inputs.names.is_empty());assert!(!cross.is_empty());assert!(!scan.edges.is_empty());assert!(cross.iter().any(|e|e.callee_id.is_some()));println!("official Go original Rc/NativeNode/symbol cache; borrowed host; owned cross/data/export facts survive Collation drop");Ok(())
+}

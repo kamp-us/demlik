@@ -210,7 +210,8 @@ fn execute(
                         calls,
                         demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
                         input(),
-                        context
+                        context,
+                        &metadata_collation
                     )?;
                     let mut probes = Vec::new();
                     for file in &context.files {
@@ -249,7 +250,8 @@ fn execute(
                         calls,
                         demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
                         input(),
-                        context
+                        context,
+                        &metadata_collation
                     )?;
                     let edges = observe!(
                         calls,
@@ -263,8 +265,9 @@ fn execute(
                     let cross_edges = observe!(
                         calls,
                         demlik_code_graph::extract::cross_runtime::CrossRuntimeResolver::edges,
-                        &resolver
-                    );
+                        &resolver,
+                        &metadata_collation
+                    )?;
                     Ok(Details {
                         methods,
                         probes,

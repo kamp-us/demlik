@@ -253,7 +253,8 @@ fn execute(
     let imports =
         resolve_imports(root, &loaded.source_files, &config, &collation).map_err(Failure::error)?;
     let ids: Vec<_> = found.iter().map(|f| f.id.clone()).collect();
-    let inputs = analysis_inputs(found.iter().map(NamedSymbol::from));
+    let inputs =
+        analysis_inputs(found.iter().map(NamedSymbol::from), &collation).map_err(Failure::error)?;
     let (mut edges, references, base, siblings, types, guards, conventions) = with_type_context(
         &binary,
         TypeContextInput {

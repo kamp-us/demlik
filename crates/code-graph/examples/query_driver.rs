@@ -183,8 +183,10 @@ fn query(
         demlik_code_graph::extract::analysis::analysis_inputs,
         discovered
             .iter()
-            .map(demlik_code_graph::extract::analysis::NamedSymbol::from)
-    );
+            .map(demlik_code_graph::extract::analysis::NamedSymbol::from),
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let references = observe!(
         calls,
         demlik_code_graph::checker::context::with_type_context,

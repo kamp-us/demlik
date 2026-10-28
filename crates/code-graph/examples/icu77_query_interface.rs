@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let found = discover_functions(&loaded.project.source_files, &collation)?;
         assert!(found.functions.len() > 4);
         let ids: Vec<_> = found.functions.iter().map(|f| f.id.clone()).collect();
-        let inputs = analysis_inputs(found.functions.iter().map(NamedSymbol::from));
+        let inputs = analysis_inputs(found.functions.iter().map(NamedSymbol::from), &collation)?;
         let imports = resolve_imports(
             root,
             &loaded.project.source_files,

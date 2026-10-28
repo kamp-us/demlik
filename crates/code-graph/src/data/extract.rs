@@ -5,7 +5,7 @@ use crate::{
         functions::DiscoveredFunction,
         wrangler_config::{BindingCatalog, CatalogError, load_binding_catalog},
     },
-    project::{SourceUnit, locale_compare, locale_compare_units, to_relative},
+    project::{Collation, CollationError, CollationInput, SourceUnit, to_relative},
     schema::{DataEdge, DataReport, DataSite, UnattributedDataSite},
     syntax::file::{NodeIdentity, NodeRef, SyntaxFile},
     text::JsString,
@@ -206,24 +206,12 @@ fn sites_of<'decl, 'holder, D>(
     sites
 }
 
-fn compare_sites(left: &DataSite, right: &DataSite) -> std::cmp::Ordering {
-    left.line
-        .cmp(&right.line)
-        .then_with(|| left.column.cmp(&right.column))
-        .then_with(|| locale_compare_units(left.binding.units(), right.binding.units()))
-        .then_with(|| {
-            locale_compare_units(
-                left.method.as_ref().map_or(&[], JsString::units),
-                right.method.as_ref().map_or(&[], JsString::units),
-            )
-        })
-        .then_with(|| locale_compare(left.access.as_str(), right.access.as_str()))
-}
 fn distinct<T>(
     rows: Vec<T>,
     site: impl Fn(&T) -> &DataSite,
     holder: impl Fn(&T) -> &str,
-) -> Vec<T> {
+    collation: &Collation,
+) -> Result<Vec<T>, CollationError> {
     let mut seen = IndexMap::new();
     for row in rows {
         let fields = site(&row);
@@ -236,12 +224,30 @@ fn distinct<T>(
         );
         seen.insert(key, row);
     }
-    let mut out = seen.into_values().collect::<Vec<_>>();
+    let mut out = seen
+        .into_values()
+        .map(|row| {
+            let fields = site(&row);
+            let holder = CollationInput::from_text(holder(&row))?;
+            let binding = CollationInput::from_utf16(fields.binding.units())?;
+            let method =
+                CollationInput::from_utf16(fields.method.as_ref().map_or(&[], JsString::units))?;
+            let access = CollationInput::from_text(fields.access.as_str())?;
+            Ok((row, holder, binding, method, access))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     out.sort_by(|left, right| {
-        locale_compare(holder(left), holder(right))
-            .then_with(|| compare_sites(site(left), site(right)))
+        let a = site(&left.0);
+        let b = site(&right.0);
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| a.line.cmp(&b.line))
+            .then_with(|| a.column.cmp(&b.column))
+            .then_with(|| collation.compare(&left.2, &right.2))
+            .then_with(|| collation.compare(&left.3, &right.3))
+            .then_with(|| collation.compare(&left.4, &right.4))
     });
-    out
+    Ok(out.into_iter().map(|(row, _, _, _, _)| row).collect())
 }
 #[derive(Debug, Serialize)]
 pub struct DataScan {
@@ -254,7 +260,10 @@ pub struct DataScanInput<'a> {
     pub catalog: &'a BindingCatalog,
     pub repo_root: &'a Path,
 }
-pub fn scan_data_sites(input: DataScanInput<'_>) -> DataScan {
+pub fn scan_data_sites(
+    input: DataScanInput<'_>,
+    collation: &Collation,
+) -> Result<DataScan, CollationError> {
     let holders = input
         .functions
         .iter()
@@ -307,10 +316,15 @@ pub fn scan_data_sites(input: DataScanInput<'_>) -> DataScan {
             }
         }
     }
-    DataScan {
-        edges: distinct(edges, |edge| &edge.site, |edge| &edge.function_id),
-        unattributed: distinct(unattributed, |row| &row.site, |row| &row.file),
-    }
+    Ok(DataScan {
+        edges: distinct(
+            edges,
+            |edge| &edge.site,
+            |edge| &edge.function_id,
+            collation,
+        )?,
+        unattributed: distinct(unattributed, |row| &row.site, |row| &row.file, collation)?,
+    })
 }
 pub fn load_data_report(
     units: &[Rc<SourceUnit>],
@@ -319,18 +333,27 @@ pub fn load_data_report(
     collation: &crate::project::Collation,
 ) -> Result<DataReport, CatalogError> {
     let catalog = load_binding_catalog(repo_root, None, collation)?;
-    let scan = scan_data_sites(DataScanInput {
-        units,
-        functions,
-        catalog: &catalog,
-        repo_root,
-    });
     let mut config_files = catalog
         .manifests
         .iter()
-        .map(|manifest| manifest.config_file.clone())
-        .collect::<Vec<_>>();
-    config_files.sort_by(|left, right| locale_compare(left, right));
+        .map(|manifest| {
+            Ok((
+                manifest.config_file.clone(),
+                CollationInput::from_text(&manifest.config_file)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    config_files.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    let config_files = config_files.into_iter().map(|(file, _)| file).collect();
+    let scan = scan_data_sites(
+        DataScanInput {
+            units,
+            functions,
+            catalog: &catalog,
+            repo_root,
+        },
+        collation,
+    )?;
     Ok(DataReport {
         config_files,
         unparsed_configs: catalog.unparsed_configs,
