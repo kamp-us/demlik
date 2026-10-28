@@ -271,6 +271,15 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-boundary-judgments",
+    driver: "icu77_boundary_driver",
+    script: "icu77-boundary-judgments-run.mjs",
+    args: [],
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
@@ -458,6 +467,7 @@ const checkedUtf8 = new Set([
   "icu77_reach_driver",
   "icu77_graph_pipeline_driver",
   "icu77_coupling_driver",
+  "icu77_boundary_driver",
   "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",

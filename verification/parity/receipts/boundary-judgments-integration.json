@@ -1,0 +1,61 @@
+{
+  "status": "J20 source/artifact/adapter reviewed and integrated; full composed checkpoint pending",
+  "source": "c70f830b3c95e98430f596809e772e2b147b1959",
+  "sourcePick": "4c619a68",
+  "receiptPick": "424df874",
+  "thinSource": "962ccd14e9100d83486771b35098212ee55f274b",
+  "thinPick": "7609a4f8",
+  "componentStrict": 20,
+  "componentQualified": 0,
+  "newCombinedCredit": 0,
+  "scope": "Twelve comparisons in existing boundary judgment and worker topology owners; real nine-action/two-scope filesystem workflow is ONE case.",
+  "remainingOrderingInventory": {
+    "helperCalls": 25,
+    "directProjectSorts": 2,
+    "census8Deferred": true
+  },
+  "sourceRootReview": {
+    "path": "evidence/icu77-group-j-map/source-root-review.json",
+    "sha256": "e36bdcdc75b45bd376c297a0b8e2865cee7f9292327bd0a8a1e55d2cde14a210"
+  },
+  "artifactReview": {
+    "path": "evidence/icu77-group-j-map/final-artifact-root-review.json",
+    "sha256": "08dc42b505033ac1a228189c6a76a66e9c5400e87ca234cc1a3ded0921dcea50"
+  },
+  "thinRootReview": {
+    "path": "evidence/icu77-group-j-map/thin-root-final-review.json",
+    "sha256": "762774fa11b4eda6c8e75a9de96d985bc6dc08d91a78bb4015f02e1073cb8df5"
+  },
+  "selectedEvidence": {
+    "payloads": 387,
+    "payloadBytes": 776055369,
+    "roles": 49,
+    "decodedHashes": 48,
+    "GitSourceFiles": 23,
+    "frozenSourceFiles": 16,
+    "nativeTests": 85,
+    "nativeGroups": 24,
+    "affectedObservations": 1339,
+    "compiledControls": 4,
+    "strictControls": 3,
+    "nativeOnlyControls": 1,
+    "bothOriginalAndThinWorktreesAndTargetsRemoved": true
+  },
+  "producerLimit": "First formatter and first no-run raw logs overwritten; actual retry and final Cargo5 cache selection retained. No reconstruction of the missing first product-producer event, no fresh cold-build claim. All four actual modified fault library+consumer events fresh:false.",
+  "registration": {
+    "suite": "icu77-boundary-judgments",
+    "driver": "icu77_boundary_driver",
+    "script": "icu77-boundary-judgments-run.mjs",
+    "args": [],
+    "format": "process",
+    "traceField": "nativeTrace",
+    "evidenceField": "observedCalls",
+    "checkedUtf8ByActualDriver": true,
+    "runtimeRootNormalization": []
+  },
+  "limits": [
+    "No new extraction credit from supplied aggregate/binding data; real filesystem/syntax modes remain distinct.",
+    "Census identity/NaN ordering, remaining comparison sites, all53 broad CLI gaps, host/raw profiles and full goal remain open.",
+    "Default scoped CG native/static checks only, no whole-workspace/all-feature/MSRV/other-target/cold archive claim."
+  ]
+}

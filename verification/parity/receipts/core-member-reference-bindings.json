@@ -56,9 +56,13 @@
     "contractsSha256": "ea384d9aea1fb5b91348b72f4948cb64f7d7c3cdcb9fe0a9a8e48847d125feeb"
   },
   "limits": [
-    "This resolves repeated references to the same verified Cmd/CmdDef declaration; it does not implement or claim the parent export.",
+    "This resolves repeated references to the same verified core command and runtime declarations; it does not implement or claim the parent export.",
     "Every existing owner profile, measured limitation and case list remains authoritative through resolveContract.",
     "The full checkpoint receipt remains immutable with its original839 mappings; this is a later metadata-only verification.",
     "Missing public bindings, language/host profiles, final independent review and full Rust port remain open."
-  ]
+  ],
+  "independentReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/core-member-references/independent-review.json",
+    "sha256": "1b3d1546b2d80d0ca5a4006a24cdd839e58aae771e8d1209cdcbc5b97f5b18dc"
+  }
 }
