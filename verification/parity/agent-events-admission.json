@@ -1,0 +1,399 @@
+{
+  "lineage": {
+    "originalSource14SHA": "bbd4bd0285954caeb64cdc7ebe9ef0b5a1ced50f75952190323a958c13bba298",
+    "usageSourceSHA": "b62f4418e6e4ebad8f09814cae24738a31c550bc2924e1ae56077b061233706e",
+    "source14Commit": "8e8433f7cb1998a1fd61e92d85cbe237c8228015",
+    "product": "fd11c8faf846377a949a4e9dbe0ec8ef5fd08564",
+    "history": "Source14 typed draft failures and separate usage CmdDef phantom TS2345 are setup0credit; valid14+1 Source measured before Rust, originals remain immutable."
+  },
+  "sourcePins": {
+    "packages/tea/package.json": "5ef725a58af76aadb6ae808c17223dc0e098f3f0944492e7b9933a75128a8cfd",
+    "packages/tea/MAINTAINING.md": "c26674d54600d9be10a8793412bce354f7404af6a7536480cc843ac79c25c675",
+    "packages/tea/src/agent/index.ts": "28edeb15977cf7008576574ee8589715272784f1feef260f36b70242da922d65",
+    "packages/tea/src/agent/machine.ts": "7527c5dc3e03e5a65cd5492a0abd6241e27ef5bb4ea9eb72df4e72fa499fd042",
+    "packages/tea/src/agent/types.ts": "062a8a395670d896d8e1f36087033382051a2e098bfd5d94de90937a6222d540",
+    "packages/tea/src/agent/transcript.ts": "c9294ff5a370f03f4662db4667b56fbaddce877341987b030391a83ae88b80da",
+    "packages/tea/src/agent/tool-resilience.ts": "c75d3eea8092070dd5784d7047c6331fdfcee403ebb3821715f70def1b19e002",
+    "packages/tea/src/agent/agent-events.test.ts": "430fc7a7ed8be9390f925060250c55d090241fd2d3128c0f21d8a6e52ec96d06",
+    "packages/tea/src/internal/engine/builtins.ts": "bf70453ff665295b2c4955b051415aed3c2235740cddff6cb0a04c3886deafb0",
+    "packages/tea/src/internal/engine/loop.ts": "2c79157e26aa4ec7a10012f2108fdb014ee55114513f98305d384f0410d7f56a",
+    "packages/tea/src/promise/run.ts": "dd99ae5de01aeb8fb3e8ea6b878053d35ca07fa359ae35475135233795b2e090",
+    "packages/tea/src/effect/run.ts": "e2e03c3dab24ee5dab249bf473c1f583924327a92e573f2563537bc8dfb286d0",
+    "packages/tea/src/effect/handle.ts": "e1c0c53cf78883771367c3ac14a9b3425c69484a26843dc43be1d91fb4539b9c",
+    "packages/tea/src/runtime-types.ts": "6f1237701b64b3b6a1e36c05daab04e3f370407080ec5b10b6668c7071567ce3"
+  },
+  "fixturePins": {
+    "verification/parity/agent-events-cases.mjs": "e8bcdc68fc0cf7006386991b882e073f390d003c222ab1bded988d7bd8ff5bda",
+    "verification/parity/agent-events-reference.mts": "9555d0707af04de0033e02bbd54025635e6d8926cca2b8d5665f0be046b55539",
+    "verification/parity/agent-events-source-run.mjs": "e925045624ddf9ffaf42218ae9e9e31751738fe613b48013788a0e4e068eeec0",
+    "verification/parity/tsconfig.agent-events.json": "a0c879c6232b39732c5dbd567a45f0b445634c8fbfc03f21281e2c266ddc2bc2",
+    "verification/parity/agent-events-usage-reference.mts": "dbc2ad175cb8de7c6e3f6901599b0665c102afc7aecd62d9c384120f46716a5b",
+    "verification/parity/tsconfig.agent-events-usage.json": "632aef2efeb324c97b67bd53eb77071c3b6d8a9c7d7ba20ee1c785533c852dd2",
+    "verification/parity/agent-events-run.mjs": "6d015359c0642e9328427edc073530074445e30fceb2a9c970bd5687a8eba7fe",
+    "crates/tea/examples/agent_events_driver.rs": "99b4c6dc87df7478f214fc0cd8ef63cf8f4240b0b4023cb2aee7046122e993c6"
+  },
+  "rows": [
+    {
+      "id": "idle-is-silent",
+      "input": {
+        "id": "idle-is-silent",
+        "scenario": "idle",
+        "mode": "pure"
+      },
+      "viewSha256": "7fe202ce7451ed9259c3139499fe21e61f32bb74be20c11f601e3e9b091aed4a",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "outbox-owner-once",
+      "input": {
+        "id": "outbox-owner-once",
+        "scenario": "outbox",
+        "mode": "pure"
+      },
+      "viewSha256": "2d953309c3f4b593829dea0627a698c77350b8cf45629b69318d7df280490efb",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "direct-success-is-not-deduplicated",
+      "input": {
+        "id": "direct-success-is-not-deduplicated",
+        "scenario": "direct",
+        "mode": "pure"
+      },
+      "viewSha256": "dc76acadc81bbfefae671bdd2d718e60735ba033d79231c0b2b63da35aab698c",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "failed-tool-refuses-late-success",
+      "input": {
+        "id": "failed-tool-refuses-late-success",
+        "scenario": "refused",
+        "mode": "pure"
+      },
+      "viewSha256": "10dca9b7c174671c72312f51f2c6f692f047e255c1cd9e33707aa3bedbcbd0f7",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "cancel-ends-once-and-silences-late-success",
+      "input": {
+        "id": "cancel-ends-once-and-silences-late-success",
+        "scenario": "cancel",
+        "mode": "pure"
+      },
+      "viewSha256": "8186b11d855be49bc659f79e2a54ce3bec954e68be3405bb3582edd021d2091c",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "absorbed-retry-has-no-failure-event",
+      "input": {
+        "id": "absorbed-retry-has-no-failure-event",
+        "scenario": "retry",
+        "mode": "pure"
+      },
+      "viewSha256": "c91714250d84d5f6b313bbcbccfcb5af3459f8c0702306c4913801d3d97e3702",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    {
+      "id": "promise-invoice",
+      "input": {
+        "id": "promise-invoice",
+        "scenario": "invoice",
+        "profile": "promise",
+        "mode": "runtime"
+      },
+      "viewSha256": "eaf1b3de73b6cd3d4cdb119d65d797d727f582d522fb087303ddc0fdc4433bc4",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "promise-listener",
+      "input": {
+        "id": "promise-listener",
+        "scenario": "listener",
+        "profile": "promise",
+        "mode": "runtime"
+      },
+      "viewSha256": "838ad87e350b5afac2140c2c727122eca55c6b1afbfec8412819fa6637bc768c",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "promise-save",
+      "input": {
+        "id": "promise-save",
+        "scenario": "save",
+        "profile": "promise",
+        "mode": "runtime"
+      },
+      "viewSha256": "08c3d9458051942e7a0af47b499c423b47b5d7f9414e8de2067714bd355dc873",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch"
+      ]
+    },
+    {
+      "id": "promise-resume",
+      "input": {
+        "id": "promise-resume",
+        "scenario": "resume",
+        "profile": "promise",
+        "mode": "runtime"
+      },
+      "viewSha256": "80869528fece87e67715d7660ccef30a3465b0f4eae8d0ce6dad144875f4ec51",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "effect-invoice",
+      "input": {
+        "id": "effect-invoice",
+        "scenario": "invoice",
+        "profile": "effect",
+        "mode": "runtime"
+      },
+      "viewSha256": "eaf1b3de73b6cd3d4cdb119d65d797d727f582d522fb087303ddc0fdc4433bc4",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "effect-listener",
+      "input": {
+        "id": "effect-listener",
+        "scenario": "listener",
+        "profile": "effect",
+        "mode": "runtime"
+      },
+      "viewSha256": "838ad87e350b5afac2140c2c727122eca55c6b1afbfec8412819fa6637bc768c",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "effect-save",
+      "input": {
+        "id": "effect-save",
+        "scenario": "save",
+        "profile": "effect",
+        "mode": "runtime"
+      },
+      "viewSha256": "934e10971109924f8d0c041367ad3bdd4560c48d0a5897763e46df9582fcc4f6",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch"
+      ]
+    },
+    {
+      "id": "effect-resume",
+      "input": {
+        "id": "effect-resume",
+        "scenario": "resume",
+        "profile": "effect",
+        "mode": "runtime"
+      },
+      "viewSha256": "80869528fece87e67715d7660ccef30a3465b0f4eae8d0ce6dad144875f4ec51",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::runtime::Options::with_checked_events",
+        "demlik_tea::runtime::try_launch",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::AgentEvents::project",
+        "demlik_tea::agent::transcript::Transcript::on_event",
+        "demlik_tea::agent::transcript::Transcript::on_event"
+      ]
+    },
+    {
+      "id": "present-usage-preserves-original-owner",
+      "input": {
+        "id": "present-usage-preserves-original-owner",
+        "runId": "invoice-usage",
+        "startAt": 11,
+        "settledAt": 17,
+        "turn": {
+          "content": "invoice checked",
+          "toolCalls": [],
+          "usage": {
+            "inputTokens": 17,
+            "outputTokens": 5,
+            "reasoningTokens": 2,
+            "cachedInputTokens": 3
+          }
+        }
+      },
+      "viewSha256": "b6ba2aa1991f8ffac7856d7ef6dad2a5bea2f669f8c39c4a0457bb159dae251d",
+      "calls": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    }
+  ]
+}
