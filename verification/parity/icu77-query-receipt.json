@@ -1,0 +1,114 @@
+{
+  "component": "ICU77 Group F pure cluster/interface queries",
+  "sourceCommit": "a04cbdf689c8b737962f2fecd8e2b2506267398f",
+  "base": "5bdf7c7ff8d3ccd599279686bf7a1f00e256f828",
+  "Source": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-icu77-group-f-proof-01a16c9d",
+  "scope": "17 checked comparison calls in query clusters(11),louvain(3),interface_width(3); precise trailing Collation/Result and existing AnalysisBundle.apply/tiny caller lifts. No new Graph/context carrier,algorithms,bounds,fallback,dependencies,Source/Main/contracts edits.",
+  "preserved": [
+    "UTF16 ordinal pair orientation in clusters.bump and louvain.aggregate",
+    "numeric priority and NaN fallback,EPS1e-12,20passes,10levels",
+    "sum and membership/Map insertion order,stable numeric ties,six-digit toFixed rounding",
+    "original borrowed Graph arrays,Rc units,NativeNode/symbol equality and typed causes; returned results usable after Collation drop"
+  ],
+  "legacyTermini": {
+    "helperCallsBefore": 91,
+    "helperCallsAfter": 74,
+    "directProjectSortsRemaining": 2
+  },
+  "construction": {
+    "CargoSelections": 5,
+    "compilerSuccesses": 3,
+    "compilerFailures": 2,
+    "compilerFailureCredit": 0,
+    "nativePreparations": 1,
+    "externalRustcPublicRedGreen": 2,
+    "allTargetCodeGraphClippy": 0,
+    "scopedTSCBoth": 0,
+    "BiomeAndFmt": 0,
+    "fullWorkspaceTeaFeaturesOrColdRebuild": false
+  },
+  "public": {
+    "sameExactRedGreenInput": "borrowed-public.rs",
+    "baselineCodes": {
+      "codes": [
+        "E0061",
+        "E0277",
+        "E0061",
+        "E0277",
+        "E0061",
+        "E0277",
+        "E0308",
+        "E0061",
+        "E0277",
+        "E0061",
+        "E0277",
+        "E0061",
+        "E0277",
+        "E0308"
+      ],
+      "actualSourceSha256": "2d63c0b405f5053b9e160d68d64c66205b7edbba9933d3f69154132b6042ec47",
+      "semanticCredit": 0
+    },
+    "cheapNoConfigNoCompilerExit": 0,
+    "officialGoExit": 0,
+    "twoPackagesEightModules": true,
+    "originalRcAndBorrowedHost": true,
+    "GraphInputsAndResultsUsableAfterCollationDrop": true,
+    "CargoPublicExampleCompiledNotExecuted": true
+  },
+  "comparisons": {
+    "newShared": 19,
+    "strict": 19,
+    "qualified": 0,
+    "protocolRefusals": 5,
+    "responseGuards": 3,
+    "protocolAndSourceFirstExtraCredit": 0,
+    "finalReport": "final-pairs.json",
+    "sourceFirstFrozenCaseDataUnchanged": true,
+    "all19FrozenSourceOutputsEqualFinalExpected": true,
+    "requiredStaticKindFieldRepair": "source-kind-projection-repair.json"
+  },
+  "affected": {
+    "suites": 9,
+    "outcomes": 350,
+    "failures": 0,
+    "newCredit": 0,
+    "allPriorQualifiersRetained": true,
+    "focusedNative": 23,
+    "nativeGroups": 6,
+    "fullCGNativeClaim": false
+  },
+  "controls": {
+    "compiled": 4,
+    "CargoSelections": 4,
+    "strictSourceNamedMismatches": 4,
+    "qualifiedOrNativeOnly": 0,
+    "libraryAndConsumerFreshFalse": true,
+    "effectiveBytesRetained": true,
+    "nativePreparations": 1,
+    "ownersRestored": true,
+    "registeredWorktreeAndDefaultTargetRemoved": true
+  },
+  "retainedHistories": [
+    "Source-only APFS canonical-filename collision corrected before freeze;0credit",
+    "two baseline retention Python setup errors,0extraCargo/credit; exact public red then run",
+    "two local Vec inference compiler failures,0semanticcredit",
+    "first successful pair report overwritten by same-name process metadata; row bytes unavailable; actual stdout/metadata retained0credit and comparer-only recovery,notdoublecounted"
+  ],
+  "artifactScope": {
+    "roles": 18,
+    "uniqueDecodedHashes": 18,
+    "unretainedOldNativeBinaries": 5,
+    "manifest": "effective-artifacts.json",
+    "omissions": "unretained-artifacts.json",
+    "tinySourceOnlyArchive": "source.tar.gz;selectedgzipeffectiveartifactsremainseparate"
+  },
+  "limits": [
+    "74legacy helper calls and2direct project sorts remain",
+    "only finite JSON-wire numeric cases measured; broader raw String/reflection/numeric/host/stdio profiles stayopen",
+    "all53CLI gaps stayopen; no aliases,contracts,registration or globalacceptance claimed",
+    "no wholeworkspace/Tea/features/coldarchive testclaim"
+  ],
+  "retirement": "retirement.json records completed construction removal after preserving selected proof; control lifecycle in controls/icu77-query-controls-worktree.json"
+}
