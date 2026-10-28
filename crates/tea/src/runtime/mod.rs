@@ -16,7 +16,7 @@ pub use drive::{
     DriveCancellation, DriveError, DriveOptions, DriveSignal, DriveStart, DriveTask, drive_to_done,
 };
 pub use engine::{Runtime, launch, run, try_launch, try_run};
-pub use events::{EventProjector, NoEvent};
+pub use events::{CheckedEventProjector, EventProjection, EventProjector, NoEvent};
 pub use listeners::Unsubscribe;
 pub use persistence::Persistence;
 pub use queue::{DispatchRefused, Producer, RuntimeRef};

@@ -1,5 +1,7 @@
 pub mod compaction;
 pub mod content;
+mod events;
+pub use events::{AgentEventProjection, AgentEventReadError, AgentEvents, agent_events};
 pub mod conversation;
 pub mod model;
 mod schema;

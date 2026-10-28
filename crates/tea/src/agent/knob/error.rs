@@ -30,6 +30,7 @@ pub enum AgentError {
     },
     NullUsage,
     MissingBrainOutput,
+    EventRead(super::super::events::AgentEventReadError),
 }
 impl From<LlmCallError> for AgentError {
     fn from(e: LlmCallError) -> Self {
@@ -42,6 +43,7 @@ impl AgentError {
             Self::Compaction(e) => e.name,
             Self::ToolMapping(e) => e.name(),
             Self::MissingCompactionInput => "TypeError",
+            Self::EventRead(_) => "AgentEventReadError",
             Self::Llm(_) => "AgentLlmError",
             Self::TurnRead(_) => "AgentTurnReadError",
             Self::UnsupportedRestoredProfile { .. } => "UnsupportedRestoredAgentProfile",
@@ -57,6 +59,7 @@ impl std::fmt::Display for AgentError {
             Self::ToolMapping(error) => error.fmt(f),
             Self::Compaction(e) => e.fmt(f),
             Self::MissingCompactionInput => f.write_str("compaction command has no request"),
+            Self::EventRead(error) => error.fmt(f),
             Self::Llm(e) => write!(f, "{e:?}"),
             Self::TurnRead(e) => e.fmt(f),
             Self::UnsupportedRestoredProfile { profile, keys } => write!(
@@ -78,8 +81,14 @@ impl std::error::Error for AgentError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ToolMapping(error) => Some(error.as_ref()),
+            Self::EventRead(error) => Some(error),
             _ => None,
         }
+    }
+}
+impl From<super::super::events::AgentEventReadError> for AgentError {
+    fn from(error: super::super::events::AgentEventReadError) -> Self {
+        Self::EventRead(error)
     }
 }
 impl From<std::rc::Rc<super::super::tool::ToolError>> for AgentError {

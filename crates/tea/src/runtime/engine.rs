@@ -97,7 +97,7 @@ struct Core<S, M, SE, HE, E, RE> {
     observers: Rc<Listeners<Observer<S, M>>>,
     boots: Rc<Listeners<Boot<S>>>,
     booted: Cell<bool>,
-    events: Rc<super::events::SemanticEvents<S, M, E>>,
+    events: Rc<super::events::SemanticEvents<S, M, E, RE>>,
     telemetry: Option<Telemetry<HE>>,
     telemetry_seq: Cell<f64>,
     clock: Rc<dyn Fn() -> f64>,
@@ -220,9 +220,17 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
             commit(message.map(Arc::as_ref), state)
         });
         if let Some(message) = message {
-            self.events.committed(message, state, |cause| {
-                self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Event)
-            });
+            self.events.committed(
+                message,
+                state,
+                |error| {
+                    self.report(
+                        Rc::new(RuntimeError::EventProjection(error)),
+                        ErrorPhase::Event,
+                    )
+                },
+                |cause| self.report(Rc::new(RuntimeError::Panic(cause)), ErrorPhase::Event),
+            );
         }
         let waiting = !self.done.borrow().is_empty();
         if waiting && matches!(self.view.borrow().saved, SaveStatus::Saved) && self.holds(state) {

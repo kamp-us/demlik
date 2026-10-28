@@ -9,7 +9,7 @@ use crate::NoCellError;
 use crate::command::CommandContractError;
 use crate::storage::{PanicCause, StoreRefusedError};
 
-use super::{EventProjector, NoEvent, Persistence, Telemetry};
+use super::{EventProjection, NoEvent, Persistence, Telemetry};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Profile {
@@ -47,6 +47,7 @@ pub enum RuntimeError<SE, HE, RE = Infallible> {
     Timer(crate::timing::TimerError),
     NoCell(NoCellError),
     Reduce(RE),
+    EventProjection(RE),
     Restore(StoreRefusedError<SE>),
     Save(SE),
     Handler(HE),
@@ -91,6 +92,7 @@ impl<SE, HE, RE> RuntimeError<SE, HE, RE> {
             Self::IdentityDrop(_) => "IdentityDropNotice",
             Self::NoCell(_) => "NoCellError",
             Self::Reduce(_) => "ReduceError",
+            Self::EventProjection(_) => "EventProjectionError",
             Self::Restore(_) => "StoreRefusedError",
             Self::Save(_) => "StoreFailed",
             Self::Handler(_) => "CellFailure",
@@ -176,7 +178,7 @@ pub enum Supervision<S, M, SE, HE, RE = Infallible> {
     Restart(Rehydrate<S, M, SE, HE, RE>),
 }
 pub struct Options<S, M, SE = Infallible, HE = Infallible, E = NoEvent, RE = Infallible> {
-    pub events: Option<EventProjector<S, M, E>>,
+    pub events: Option<EventProjection<S, M, E, RE>>,
     pub telemetry: Option<Telemetry<HE>>,
     pub timer: Option<super::RuntimeTimer>,
     pub profile: Profile,
@@ -217,6 +219,18 @@ impl<S, M, SE, HE, E, RE> Options<S, M, SE, HE, E, RE> {
         self,
         project: impl Fn(&M, &S) -> Vec<F> + 'static,
     ) -> Options<S, M, SE, HE, F, RE> {
+        self.with_projection(EventProjection::Plain(Rc::new(project)))
+    }
+    pub fn with_checked_events<F: 'static>(
+        self,
+        project: impl Fn(&M, &S) -> Result<Vec<F>, RE> + 'static,
+    ) -> Options<S, M, SE, HE, F, RE> {
+        self.with_projection(EventProjection::Checked(Rc::new(project)))
+    }
+    fn with_projection<F>(
+        self,
+        project: EventProjection<S, M, F, RE>,
+    ) -> Options<S, M, SE, HE, F, RE> {
         Options {
             profile: self.profile,
             store: self.store,
@@ -227,7 +241,7 @@ impl<S, M, SE, HE, E, RE> Options<S, M, SE, HE, E, RE> {
             dispose_timeout: self.dispose_timeout,
             idle_cap: self.idle_cap,
             supervision: self.supervision,
-            events: Some(Rc::new(project)),
+            events: Some(project),
             telemetry: self.telemetry,
             timer: self.timer,
         }

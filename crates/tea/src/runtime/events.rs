@@ -10,13 +10,28 @@ impl Tagged for NoEvent {
     }
 }
 pub type EventProjector<S, M, E> = Rc<dyn Fn(&M, &S) -> Vec<E>>;
+pub type CheckedEventProjector<S, M, E, RE> = Rc<dyn Fn(&M, &S) -> Result<Vec<E>, RE>>;
+/// One selected semantic projection. Checked failures use the runtime's existing
+/// reducer error channel; neither mode delivers a partial event batch.
+pub enum EventProjection<S, M, E, RE> {
+    Plain(EventProjector<S, M, E>),
+    Checked(CheckedEventProjector<S, M, E, RE>),
+}
+impl<S, M, E, RE> Clone for EventProjection<S, M, E, RE> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Plain(project) => Self::Plain(Rc::clone(project)),
+            Self::Checked(project) => Self::Checked(Rc::clone(project)),
+        }
+    }
+}
 type EventListeners<E> = Listeners<dyn Fn(&E)>;
-pub(crate) struct SemanticEvents<S, M, E> {
-    project: Option<EventProjector<S, M, E>>,
+pub(crate) struct SemanticEvents<S, M, E, RE> {
+    project: Option<EventProjection<S, M, E, RE>>,
     handlers: RefCell<IndexMap<JsText, Rc<EventListeners<E>>>>,
 }
-impl<S: 'static, M: 'static, E: Tagged + 'static> SemanticEvents<S, M, E> {
-    pub fn new(project: Option<EventProjector<S, M, E>>) -> Rc<Self> {
+impl<S: 'static, M: 'static, E: Tagged + 'static, RE: 'static> SemanticEvents<S, M, E, RE> {
+    pub fn new(project: Option<EventProjection<S, M, E, RE>>) -> Rc<Self> {
         Rc::new(Self {
             project,
             handlers: RefCell::new(IndexMap::new()),
@@ -48,14 +63,27 @@ impl<S: 'static, M: 'static, E: Tagged + 'static> SemanticEvents<S, M, E> {
             }
         })
     }
-    pub fn committed(&self, msg: &M, state: &S, report: impl Fn(PanicCause)) {
+    pub fn committed(
+        &self,
+        msg: &M,
+        state: &S,
+        rejected: impl Fn(RE),
+        report: impl Fn(PanicCause),
+    ) {
         let Some(project) = &self.project else { return };
         if self.handlers.borrow().is_empty() {
             return;
         }
         let events =
-            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| project(msg, state))) {
-                Ok(events) => events,
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match project {
+                EventProjection::Plain(project) => Ok(project(msg, state)),
+                EventProjection::Checked(project) => project(msg, state),
+            })) {
+                Ok(Ok(events)) => events,
+                Ok(Err(error)) => {
+                    rejected(error);
+                    return;
+                }
                 Err(payload) => {
                     report(PanicCause::new(payload));
                     return;
