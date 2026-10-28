@@ -148,6 +148,47 @@ impl Budget for Unbounded {
 }
 impl ClockFreeBudget for Unbounded {}
 
+/// A heterogeneous policy keeps the three existing budgets and their flat wire
+/// fields. It is configuration; the resilient-call State has no budget type.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(untagged)]
+pub enum RetryBudget {
+    Count(CountBound),
+    Duration(DurationBound),
+    Unbounded(Unbounded),
+}
+impl Budget for RetryBudget {
+    fn max_attempts(&self) -> Option<f64> {
+        match self {
+            Self::Count(value) => value.max_attempts(),
+            Self::Duration(value) => value.max_attempts(),
+            Self::Unbounded(value) => value.max_attempts(),
+        }
+    }
+    fn max_elapsed_ms(&self) -> Option<f64> {
+        match self {
+            Self::Count(value) => value.max_elapsed_ms(),
+            Self::Duration(value) => value.max_elapsed_ms(),
+            Self::Unbounded(value) => value.max_elapsed_ms(),
+        }
+    }
+}
+impl From<CountBound> for RetryBudget {
+    fn from(value: CountBound) -> Self {
+        Self::Count(value)
+    }
+}
+impl From<DurationBound> for RetryBudget {
+    fn from(value: DurationBound) -> Self {
+        Self::Duration(value)
+    }
+}
+impl From<Unbounded> for RetryBudget {
+    fn from(value: Unbounded) -> Self {
+        Self::Unbounded(value)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct RetryPolicy<B = CountBound> {
     #[serde(flatten)]
@@ -157,6 +198,15 @@ pub struct RetryPolicy<B = CountBound> {
 }
 pub type DurationRetryPolicy = RetryPolicy<DurationBound>;
 pub type UnboundedRetryPolicy = RetryPolicy<Unbounded>;
+pub type AnyRetryPolicy = RetryPolicy<RetryBudget>;
+impl<B: Into<RetryBudget>> RetryPolicy<B> {
+    pub fn into_any(self) -> AnyRetryPolicy {
+        RetryPolicy {
+            curve: self.curve,
+            budget: self.budget.into(),
+        }
+    }
+}
 pub const DEFAULT_RETRY_POLICY: RetryPolicy = RetryPolicy {
     curve: BackoffCurve {
         base_ms: 100.0,

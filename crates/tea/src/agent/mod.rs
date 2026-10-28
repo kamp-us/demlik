@@ -18,6 +18,8 @@ mod wire;
 mod state;
 
 pub mod snapshot;
+pub mod tool_resilience;
+pub use tool_resilience::ToolResilience;
 
 mod knob;
 pub use knob::{

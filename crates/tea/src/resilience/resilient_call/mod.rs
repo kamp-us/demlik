@@ -66,6 +66,17 @@ impl<'a, I, R, E, B: Budget, H> ResilientCall<'a, I, R, E, B, H> {
         self.rng = Rc::new(rng);
         self
     }
+    pub(crate) fn retry_sibling_with<J, U, F, SB: Budget>(
+        &self,
+        config: Config<SB>,
+    ) -> ResilientCall<'a, J, U, F, SB> {
+        let mut sibling = ResilientCall::new(config);
+        sibling.rng = Rc::clone(&self.rng);
+        sibling
+    }
+    pub(crate) fn retry_policy(&self) -> Option<&retry_backoff::RetryPolicy<B>> {
+        self.config.retry.as_ref()
+    }
     pub fn with_cache_codec(mut self, codec: RecordCodec<'a, CallValue<R>>) -> Self {
         self.projection = codec;
         self
@@ -601,15 +612,4 @@ pub fn lift_resilience<S, I, R, E, C>(
     replace: impl FnOnce(S, State<I, R, E>) -> S,
 ) -> Step<S, C> {
     crate::compose::lift_slice(state, result, replace)
-}
-
-impl<'a, I, R, E, H> ResilientCall<'a, I, R, E, CountBound, H> {
-    pub(crate) fn retry_sibling<J, U, F>(&self) -> ResilientCall<'a, J, U, F> {
-        let mut sibling = ResilientCall::new(Config {
-            retry: self.config.retry,
-            ..Default::default()
-        });
-        sibling.rng = Rc::clone(&self.rng);
-        sibling
-    }
 }

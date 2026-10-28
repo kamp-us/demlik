@@ -8,6 +8,7 @@ use crate::{
         },
         conversation::shared_no_usage,
         snapshot::{NoSnapshot, SnapshotProfile, WithSnapshot},
+        tool_resilience::ToolResilience,
         turn_view::{
             CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReader, read_native,
             read_plain,
@@ -55,6 +56,7 @@ type MaybeResultOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
 type CommandListOf<P, I, S, C, K, Q> = Vec<CommandOf<P, I, S, C, K, Q>>;
 type StopWhen<'a, Stage, P, I, S, R, TE, A, T, V, K> =
     Option<Box<dyn Fn(&SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> bool + 'a>>;
+type ToolResilienceOf<'a, A, V> = Box<dyn Fn(&Rc<CallOf<A, V>>) -> Option<ToolResilience> + 'a>;
 
 pub type StateOf<Stage, P, I, S, R, TE, A, T, V = NativeCalls, K = NoCompaction> = AgentState<
     Stage,
@@ -122,6 +124,7 @@ pub struct AgentConfig<
     model_id: Option<JsText>,
     deadline_ms: Option<f64>,
     tool_concurrency: f64,
+    tool_resilience_of: Option<ToolResilienceOf<'a, A, V>>,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
     snapshot_every: f64,
@@ -220,6 +223,7 @@ impl<
             model_id: None,
             deadline_ms: None,
             tool_concurrency: 1.0,
+            tool_resilience_of: None,
             max_turns: None,
             max_elapsed_ms: None,
             stop_when: None,
@@ -257,6 +261,35 @@ impl<
     }
     pub fn deadline_ms(mut self, ms: f64) -> Self {
         self.deadline_ms = Some(ms);
+        self
+    }
+}
+
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>> + ?Sized,
+    R,
+    A,
+    T,
+    Provider,
+    C: Tagged,
+    V: CallSource<A>,
+    K: CompactionProfile,
+    Q: SnapshotProfile,
+> AgentConfig<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
+{
+    /// Retains the caller's policy selector without invoking it. This declaration
+    /// currently refuses at behavior admission; it does not enable tool retries.
+    /// The initial enabled family uses PlainData tool failures, like to_machine;
+    /// opaque tool-failure configs without this declaration remain unrestricted.
+    pub fn tool_resilience_of(
+        mut self,
+        select: impl Fn(&Rc<CallOf<A, V>>) -> Option<ToolResilience> + 'a,
+    ) -> Self {
+        self.tool_resilience_of = Some(Box::new(select));
         self
     }
 }
@@ -444,6 +477,11 @@ impl<
         self.compact.init()
     }
     fn supported(&self, s: &StateOf<Stage, P, I, S, R, TE, A, T, V, K>) -> Result<(), AgentError> {
+        if self.config.tool_resilience_of.is_some() {
+            return Err(AgentError::UnsupportedConfiguredProfile {
+                profile: OptionalProfile::ToolResilience,
+            });
+        }
         if !K::ENABLED {
             if matches!(
                 s.conversation.as_ref().map(|c| &c.awaiting),
@@ -1154,6 +1192,7 @@ impl<
             model_id: self.model_id,
             deadline_ms: self.deadline_ms,
             tool_concurrency: self.tool_concurrency,
+            tool_resilience_of: self.tool_resilience_of,
             max_turns: self.max_turns,
             max_elapsed_ms: self.max_elapsed_ms,
             stop_when: None,
@@ -1410,6 +1449,7 @@ impl<
             model_id: self.model_id,
             deadline_ms: self.deadline_ms,
             tool_concurrency: self.tool_concurrency,
+            tool_resilience_of: self.tool_resilience_of,
             max_turns: self.max_turns,
             max_elapsed_ms: self.max_elapsed_ms,
             compaction: self.compaction,

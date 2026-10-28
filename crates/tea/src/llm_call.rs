@@ -449,6 +449,18 @@ pub fn lift_llm_call<S, P, I, O, E, C>(
 
 impl<'a, P, I, S: Schema + ?Sized> LlmCall<'a, P, I, S> {
     pub(crate) fn retry_sibling<J, U, E>(&self) -> rc::ResilientCall<'a, J, U, E> {
-        self.rc.retry_sibling()
+        self.retry_sibling_with(rc::Config {
+            retry: self.rc.retry_policy().copied(),
+            ..Default::default()
+        })
+    }
+    pub(crate) fn retry_sibling_with<J, U, E, B: Budget>(
+        &self,
+        config: rc::Config<B>,
+    ) -> rc::ResilientCall<'a, J, U, E, B> {
+        self.rc.retry_sibling_with(config)
     }
 }
+
+#[cfg(test)]
+mod tool_policy_interface_tests;
