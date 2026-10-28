@@ -1,0 +1,120 @@
+{
+  "sourceCheckpoint": "7dd46469eb52070bca7989f8cfb5e99949c79d29",
+  "base": "313d20196c07722c37a34e18a9720fb45fa8ec71",
+  "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "ICU77 H19 graph extraction, directories, analysis metadata, cross-runtime and data ordering. Existing kernels and caller-borrowed checked Collation. No central registration, new IDs or CLI closure.",
+  "productionOwners": [
+    "crates/code-graph/src/data/extract.rs",
+    "crates/code-graph/src/extract/analysis.rs",
+    "crates/code-graph/src/extract/assemble.rs",
+    "crates/code-graph/src/extract/cross_runtime.rs",
+    "crates/code-graph/src/extract/directories.rs"
+  ],
+  "comparisons": 19,
+  "remainingLegacy": {
+    "helperOccurrences": 47,
+    "directTermini": 2,
+    "noCapabilityProgressPercentage": true
+  },
+  "proofDirectory": "/private/tmp/demlik-icu77-group-h-proof-01a16c9d",
+  "sourceFirst": {
+    "freezeSha256": "3277cb88468397999169d520c01d313bd55328e4a7b5824848cb002a3dec1ab9",
+    "reportSha256": "ccd91c166e72eeb6d08d274330b187085e550c0df60c4ccb92060fda945f0f88",
+    "wholeviews": 18,
+    "successfulViews": 17,
+    "intentionalCatalogTypeError": 1,
+    "filesBeforeAfterExact": true,
+    "beforeNativeProjection": true
+  },
+  "verification": {
+    "sourceNative": {
+      "passed": 18,
+      "strict": 18,
+      "qualified": 0,
+      "protocolRefusals": 5,
+      "responseGuards": 3,
+      "protocolGuardCredit": 0,
+      "reportSha256": "29f5dd0a9b70e3b163eb9ebce2585cdb4ec84873f826175ce1526eec89ca34ef"
+    },
+    "nativeFocused": {
+      "passed": 93,
+      "groups": 22,
+      "newSourceCredit": 0,
+      "reportSha256": "d2a780733f6457c013db4e99e57b596257ebd0aa5e26dd9c0616c2f3dd2f3a18"
+    },
+    "affected": {
+      "passed": 1030,
+      "suites": 22,
+      "qualified": 57,
+      "newSourceCredit": 0,
+      "reportSha256": "e61e9dc06cb7cf2eaa5b4683643a1513b30140e2c9facdc3362b5675cda6950c"
+    },
+    "publicCaller": {
+      "inputSha256": "8bd3ce6ffeca41837736686fecde831f43da347a9a378c2f9f7425fa442caf05",
+      "cheapNoConfigNonexistentCompiler": 0,
+      "officialGo": 0,
+      "originalRcNodeSymbolCache": true,
+      "returnedFactsAfterCollationDrop": true
+    },
+    "statics": {
+      "CodeGraphAllTargetClippy": 0,
+      "rustfmt": 0,
+      "scopedBiome": 0,
+      "parityTypecheck": 0,
+      "nodeSyntax": 0
+    },
+    "controls": {
+      "compiled": 4,
+      "strictNamedSemanticMismatches": 4,
+      "nativeOnly": 0,
+      "compileProtocolFailuresCredited": 0,
+      "reportSha256": "915eaa692111c9da386d647cfde129cd1fd3850dcbe63af5b2ccf46ac78688b7"
+    }
+  },
+  "resources": {
+    "registeredRoots": 1,
+    "defaultTargetOnly": true,
+    "allFourAliasesUnset": true,
+    "ICUPreparations": 1,
+    "constructionCompilerSelections": 4,
+    "controlCompilerSelections": 4,
+    "cacheCopies": 0,
+    "baselineExecutablesRetainedBeforeMutants": true,
+    "sourceRestorePerFaultAndFinally": true,
+    "lastTargetOutputsMutantAndNotReusedAsBaseline": true
+  },
+  "history": [
+    {
+      "stage": "baseline external public interface",
+      "exit": 1,
+      "diagnostics": "E0061 plus dependent cascade diagnostics, not a sole diagnostic claim",
+      "semanticCredit": 0
+    },
+    {
+      "stage": "pre-freeze Source adapter arity",
+      "retained": "source-adapter-arity-history",
+      "semanticCredit": 0
+    },
+    {
+      "stage": "Cargo2 no-run",
+      "exit": 101,
+      "diagnostics": "query_driver macro caller missing Collation plus dependent fields",
+      "repair": "same existing Collation and Result propagation",
+      "semanticCredit": 0
+    }
+  ],
+  "artifactPolicy": {
+    "baselineLibraryCompileRedOnly": true,
+    "executedArtifactBytesSnapshotBeforeTargetReuse": true,
+    "actualCargoEventsRetained": true,
+    "unexecutedCargoProductsNotRetained": true,
+    "noWholeTargetCopies": true
+  },
+  "limits": [
+    "No whole-workspace, Tea, all-feature or archive rebuild; scoped CodeGraph evidence only.",
+    "Raw function/identifier reflection, model String paths and numerical families beyond these actual inputs remain open.",
+    "Existing affected-suite backend, host, filesystem and stdio qualifications remain qualified with no new credit.",
+    "No new Source export aliases, capability mappings or global counts; all53 CLI gaps remain open."
+  ],
+  "handoffRequiresActualRetirement": true
+}
