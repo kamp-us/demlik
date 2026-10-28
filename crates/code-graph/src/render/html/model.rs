@@ -308,6 +308,6 @@ pub fn build_html_model<'g>(
         summary: &graph.summary,
         treemap: treemap(graph, collation)?,
         graph: call_graph(graph, collation)?,
-        plan: rank_plan(&graph.functions, PlanAxis::Rot),
+        plan: rank_plan(&graph.functions, PlanAxis::Rot, collation)?,
     })
 }

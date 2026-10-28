@@ -1409,7 +1409,15 @@ impl PreparedGatesCli {
                     );
                     return Ok(ReportDispatch::Complete);
                 }
-                plan::render_plan(&graph, axis, json, pretty).map_err(ReportRenderError::from)
+                plan::render_plan(
+                    &graph,
+                    axis,
+                    json,
+                    pretty,
+                    self.collation
+                        .as_ref()
+                        .expect("successful assembly retains its collation"),
+                )
             }
             ConsoleOutput::Ci
             | ConsoleOutput::Html

@@ -24,7 +24,7 @@ use crate::schema::{
     Thresholds, UseSite,
 };
 use crate::smells::coupling::coupling_by_file;
-use crate::smells::evaluate::{compare_flat_smells, smells_for_function, smells_for_module};
+use crate::smells::evaluate::{smells_for_function, smells_for_module, sort_flat_smells};
 use crate::smells::health::{HealthInput, health_band};
 use crate::smells::plan::{PlanAxis, rank_plan};
 use crate::syntax::headers::function_header;
@@ -622,20 +622,20 @@ fn build(
         );
     }
     let directories = build_directories(&modules, &thresholds, collation)?;
-    let mut smells: Vec<_> = functions
+    let smells: Vec<_> = functions
         .iter()
         .flat_map(|function| &function.smells)
         .chain(modules.iter().flat_map(|module| &module.smells))
         .chain(directories.iter().flat_map(|directory| &directory.smells))
         .cloned()
         .collect();
-    smells.sort_by(compare_flat_smells);
+    let smells = sort_flat_smells(smells, collation)?;
     let smell_count = smells.len();
     let high_severity_count = smells
         .iter()
         .filter(|smell| smell.severity == Severity::High)
         .count();
-    let top_targets: Vec<_> = rank_plan(&functions, PlanAxis::Rot)
+    let top_targets: Vec<_> = rank_plan(&functions, PlanAxis::Rot, collation)?
         .into_iter()
         .filter(|row| row.components.smells > 0)
         .take(10)

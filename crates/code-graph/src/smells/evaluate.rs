@@ -2,7 +2,7 @@ use super::rules::{
     DirectoryFacts, FunctionFacts, ModuleFacts, RuleContext, evaluate_rule, smell_kinds,
 };
 use crate::extract::edges::distinct_external_callers;
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{
     DirectoryNode, FunctionNode, ModuleNode, Severity, Smell, SmellTarget, Thresholds,
 };
@@ -10,7 +10,9 @@ use std::cmp::Ordering;
 
 pub use super::coupling::CouplingFacts;
 fn compare_smells(left: &Smell, right: &Smell) -> Ordering {
-    locale_compare(left.kind.as_str(), right.kind.as_str())
+    left.kind
+        .as_str()
+        .cmp(right.kind.as_str())
         .then_with(|| {
             if left.severity == right.severity {
                 Ordering::Equal
@@ -102,6 +104,40 @@ fn locator(smell: &Smell) -> String {
         SmellTarget::Directory { dir } => dir.clone(),
     }
 }
-pub fn compare_flat_smells(left: &Smell, right: &Smell) -> Ordering {
-    locale_compare(&locator(left), &locator(right)).then_with(|| compare_smells(left, right))
+fn compare_flat_by_key(
+    left: &Smell,
+    right: &Smell,
+    left_key: &CollationInput,
+    right_key: &CollationInput,
+    collation: &Collation,
+) -> Ordering {
+    collation
+        .compare(left_key, right_key)
+        .then_with(|| compare_smells(left, right))
+}
+
+pub fn compare_flat_smells(
+    left: &Smell,
+    right: &Smell,
+    collation: &Collation,
+) -> Result<Ordering, CollationError> {
+    let left_key = CollationInput::from_text(&locator(left))?;
+    let right_key = CollationInput::from_text(&locator(right))?;
+    Ok(compare_flat_by_key(
+        left, right, &left_key, &right_key, collation,
+    ))
+}
+
+pub(crate) fn sort_flat_smells(
+    smells: Vec<Smell>,
+    collation: &Collation,
+) -> Result<Vec<Smell>, CollationError> {
+    let mut rows = smells
+        .into_iter()
+        .map(|smell| CollationInput::from_text(&locator(&smell)).map(|key| (smell, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    rows.sort_by(|(left, left_key), (right, right_key)| {
+        compare_flat_by_key(left, right, left_key, right_key, collation)
+    });
+    Ok(rows.into_iter().map(|(smell, _)| smell).collect())
 }

@@ -1,5 +1,5 @@
 use crate::extract::edges::distinct_external_callers;
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{FunctionNode, PlanComponents, PlanRow};
 use serde::Deserialize;
 
@@ -50,8 +50,12 @@ fn primary(row: &PlanRow, axis: PlanAxis) -> [usize; 3] {
     }
 }
 
-pub fn rank_plan(functions: &[FunctionNode], axis: PlanAxis) -> Vec<PlanRow> {
-    let mut rows: Vec<_> = functions
+pub fn rank_plan(
+    functions: &[FunctionNode],
+    axis: PlanAxis,
+    collation: &Collation,
+) -> Result<Vec<PlanRow>, CollationError> {
+    let rows: Vec<_> = functions
         .iter()
         .map(|function| {
             let fan_in = function
@@ -85,12 +89,22 @@ pub fn rank_plan(functions: &[FunctionNode], axis: PlanAxis) -> Vec<PlanRow> {
             }
         })
         .collect();
-    rows.sort_by(|left, right| {
-        primary(right, axis)
-            .cmp(&primary(left, axis))
-            .then_with(|| locale_compare(&left.file, &right.file))
-            .then_with(|| left.start_line.cmp(&right.start_line))
-            .then_with(|| locale_compare(&left.id, &right.id))
-    });
-    rows
+    let mut rows = rows
+        .into_iter()
+        .map(|row| {
+            let file = CollationInput::from_text(&row.file)?;
+            let id = CollationInput::from_text(&row.id)?;
+            Ok((row, file, id))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    rows.sort_by(
+        |(left, left_file, left_id), (right, right_file, right_id)| {
+            primary(right, axis)
+                .cmp(&primary(left, axis))
+                .then_with(|| collation.compare(left_file, right_file))
+                .then_with(|| left.start_line.cmp(&right.start_line))
+                .then_with(|| collation.compare(left_id, right_id))
+        },
+    );
+    Ok(rows.into_iter().map(|(row, _, _)| row).collect())
 }

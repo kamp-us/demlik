@@ -25,10 +25,6 @@ static FILE_COLLATOR: LazyLock<CollatorBorrowed<'static>> = LazyLock::new(|| {
         .expect("compiled root collation is available")
 });
 
-pub(crate) fn locale_compare(left: &str, right: &str) -> std::cmp::Ordering {
-    FILE_COLLATOR.compare(left, right)
-}
-
 const WALK_PRUNE: &[&str] = &[
     ".claude",
     ".git",

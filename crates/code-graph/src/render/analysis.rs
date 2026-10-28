@@ -1,5 +1,4 @@
 use crate::{
-    project::locale_compare,
     render::{json::stable_stringify, text::number},
     schema::{Graph, UnreachableSymbol, WithheldSymbol},
     text::JsString,
@@ -384,7 +383,7 @@ pub fn render_unreachable(
         *counts.entry(symbol.reason.as_str()).or_insert(0_usize) += 1;
     }
     let mut counts: Vec<_> = counts.into_iter().collect();
-    counts.sort_by(|a, b| locale_compare(a.0, b.0));
+    counts.sort_by(|a, b| a.0.cmp(b.0));
     lines.extend(
         counts
             .into_iter()

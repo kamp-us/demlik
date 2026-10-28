@@ -1,8 +1,10 @@
 use super::{
+    ReportRenderError,
     json::stable_stringify,
     text::{number, pad_start},
 };
 use crate::{
+    project::Collation,
     schema::Graph,
     smells::plan::{PlanAxis, rank_plan},
     text::JsString,
@@ -12,10 +14,13 @@ pub fn render_plan(
     axis: PlanAxis,
     json: bool,
     pretty: bool,
-) -> Result<JsString, serde_json::Error> {
-    let rows = rank_plan(&graph.functions, axis);
+    collation: &Collation,
+) -> Result<JsString, ReportRenderError> {
+    let rows = rank_plan(&graph.functions, axis, collation)?;
     if json {
-        return stable_stringify(&rows, pretty).map(Into::into);
+        return stable_stringify(&rows, pretty)
+            .map(Into::into)
+            .map_err(Into::into);
     }
     if rows.is_empty() {
         return Ok(format!("No refactor targets (--by {}).", axis.as_str()).into());
