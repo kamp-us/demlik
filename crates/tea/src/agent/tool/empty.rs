@@ -50,6 +50,11 @@ impl EmptyRouter {
     ) -> Result<Option<Parts>, Infallible> {
         Ok(None)
     }
+    /// Rejection remains a normal command family even with no configured tools.
+    pub fn settlement_types(&self) -> Vec<String> {
+        let rejection = CmdDef::<RejectedSpec>::new();
+        vec![rejection.ok_type(), rejection.err_type()]
+    }
     pub fn update<'a, S: Tagged>(
         &self,
         cell: impl Fn(&S, &Settled<RejectedSpec>) -> crate::Step<S, Cmd<RejectedSpec>> + 'a,
@@ -57,12 +62,9 @@ impl EmptyRouter {
         let cell = Rc::new(cell);
         let mut row: crate::core::Row<'a, S, Settled<RejectedSpec>, Cmd<RejectedSpec>> =
             Default::default();
-        for name in ["tool_rejected_ok", "tool_rejected_err"] {
+        for name in self.settlement_types() {
             let cell = Rc::clone(&cell);
-            row.insert(
-                name.into(),
-                Box::new(move |state, message| cell(state, message)),
-            );
+            row.insert(name, Box::new(move |state, message| cell(state, message)));
         }
         crate::Update::raw_reducer(row)
     }

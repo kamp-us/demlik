@@ -93,9 +93,19 @@ macro_rules! tool_router {
                 pub fn parts_of(&self,call:&$crate::agent::types::ToolCall<$first::RawArgs>,outcome:&$crate::agent::types::ToolOutcome<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>)->Result<Option<$crate::agent::content::Parts>,ContentErrors<$first::ContentError,$($tool::ContentError),*>>{
                     let $crate::agent::types::ToolOutcome::Ok(value)=outcome else{return Ok(None)};match value.as_ref(){Results::$first(v) if call.name.as_utf8()==Some(self.$first_field.name())=>self.$first_field.parts(v).map_err(ContentErrors::$first),$(Results::$tool(v) if call.name.as_utf8()==Some(self.$field.name())=>self.$field.parts(v).map_err(ContentErrors::$tool),)*_=>Ok(None)}
                 }
+                /// Settlement names in declaration order, including rejection.
+                pub fn settlement_types(&self)->Vec<String>{
+                    let mut names=Vec::new();
+                    let definition=$crate::command::CmdDef::<SignatureOf<$first>>::named(self.$first_field.name().to_owned());
+                    names.extend([definition.ok_type(),definition.err_type()]);
+                    $(let definition=$crate::command::CmdDef::<SignatureOf<$tool>>::named(self.$field.name().to_owned());names.extend([definition.ok_type(),definition.err_type()]);)*
+                    let rejection=$crate::command::CmdDef::<$crate::agent::tool::RejectedSpec>::new();
+                    names.extend([rejection.ok_type(),rejection.err_type()]);
+                    names
+                }
                 pub fn update<'a,S:$crate::Tagged>(&self,cell:impl Fn(&S,&Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>)->$crate::Step<S,Commands<$first,$($tool),*>>+'a)->$crate::Update<'a,S,Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Commands<$first,$($tool),*>> {
                     let cell=std::rc::Rc::new(cell);let mut row:$crate::core::Row<'a,S,Messages<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Commands<$first,$($tool),*>>=Default::default();
-                    for name in [self.$first_field.name(),$(self.$field.name(),)*$crate::agent::tool::REJECTED_TYPE]{for suffix in ["_ok","_err"]{let cell=std::rc::Rc::clone(&cell);row.insert(format!("{name}{suffix}"),Box::new(move|s,m|cell(s,m)));}}
+                    for name in self.settlement_types(){let cell=std::rc::Rc::clone(&cell);row.insert(name,Box::new(move|s,m|cell(s,m)));}
                     $crate::Update::raw_reducer(row)
                 }
                 pub fn interpreter(self:std::rc::Rc<Self>,host:std::rc::Rc<$first::Host>)->Interpreter<$first,$($tool),*>{Interpreter{router:self,host}}

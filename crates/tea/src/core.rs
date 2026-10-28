@@ -95,6 +95,10 @@ pub enum TryUpdate<'a, S, M, C, E> {
         cell: TryCell<'a, S, M, C, E>,
         accepted_types: &'static [&'static str],
     },
+    FallibleWithTypes {
+        cell: TryCell<'a, S, M, C, E>,
+        accepted_types: Vec<String>,
+    },
 }
 
 /// The existing infallible interface keeps raw-table inference and NoCell results.
@@ -154,12 +158,28 @@ impl<'a, S, M: Message, C, E> TryUpdate<'a, S, M, C, E> {
     }
 }
 
+impl<'a, S, M, C, E> TryUpdate<'a, S, M, C, E> {
+    /// An authored reducer whose message names belong to a configured instance.
+    /// Names retain their order for introspection; the cell handles every apply.
+    pub fn try_reducer_with_types(
+        accepted_types: Vec<String>,
+        cell: impl Fn(&S, &M) -> Result<Step<S, C>, E> + 'a,
+    ) -> Self {
+        Self::FallibleWithTypes {
+            cell: Box::new(cell),
+            accepted_types,
+        }
+    }
+}
+
 impl<S, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
     fn row(&self, state: &S) -> Option<&Row<'_, S, M, C>> {
         match self {
             Self::RawReducer { row, .. } => Some(row),
             Self::RawTransitions { rows, state_tag } => rows.get(state_tag(state)),
-            Self::Exhaustive { .. } | Self::Fallible { .. } => None,
+            Self::Exhaustive { .. } | Self::Fallible { .. } | Self::FallibleWithTypes { .. } => {
+                None
+            }
         }
     }
 
@@ -172,6 +192,9 @@ impl<S, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
         {
             return accepted_types.iter().map(|kind| (*kind).into()).collect();
         }
+        if let Self::FallibleWithTypes { accepted_types, .. } = self {
+            return accepted_types.clone();
+        }
         state
             .and_then(|state| self.row(state))
             .map(|row| row.keys().cloned().collect())
@@ -181,7 +204,7 @@ impl<S, M: Tagged, C, E> TryUpdate<'_, S, M, C, E> {
     pub fn try_apply(&self, state: &S, message: &M) -> Result<Step<S, C>, ApplyError<E>> {
         let state_tag = match self {
             Self::Exhaustive { cell, .. } => return Ok(cell(state, message)),
-            Self::Fallible { cell, .. } => {
+            Self::Fallible { cell, .. } | Self::FallibleWithTypes { cell, .. } => {
                 return cell(state, message).map_err(ApplyError::Reduce);
             }
             Self::RawReducer { state_tag, .. } | Self::RawTransitions { state_tag, .. } => {
