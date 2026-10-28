@@ -1,0 +1,93 @@
+{
+  "status": "verified-component-pending-retirement-review",
+  "sourceCommit": "d3b45ac6a1e68587101c53e800deaf33c29486e4",
+  "reviewedProductCommit": "0a2d845b7d3aca35cb50ffdf5038d99536a62624",
+  "base": "8a756e13eb795fba7dfdb5d8e89cb84af7b74546",
+  "scope": "K8 checked census order + original borrowed SiteRows + one private existing V8 index schedule shared with unchanged ratchet comparator/kernel",
+  "source26": {
+    "exact": 26,
+    "qualified": 0,
+    "original25SourcePreimplementation": true,
+    "directory1SourceFrozenAfterImplementationBeforeNativeProjection": true,
+    "allOriginalReferenceIndicesAndRepeatedReferencesChecked": true,
+    "noGlobalCaseCreditYet": true
+  },
+  "red25": {
+    "valueMatches": 14,
+    "mismatches": 11,
+    "nativePanics": 4,
+    "SourceAndNativeRawReportsPreserved": true
+  },
+  "public": {
+    "borrowedRcAfterCollationDropExit": 0,
+    "rowEscapeSoleError": "E0597",
+    "baselineMissingSignatureErrors": ["E0061", "E0277", "E0599"]
+  },
+  "native": {
+    "tests": 40,
+    "groups": 14,
+    "notFullWorkspaceOrFeaturesOrDocs": true
+  },
+  "oldComparisons": {
+    "passed": 1303,
+    "suites": 8,
+    "newCredit": 0
+  },
+  "controls": {
+    "validCompiledNamed": 4,
+    "firstTwoThenRemainingTwo": true,
+    "actualFaultCompilerCalls": 4,
+    "allModifiedLibraryAndEffectiveConsumerFreshFalse": true
+  },
+  "protocol": {
+    "outOfBandRefusals": 5,
+    "inlineFrames": 0,
+    "caseCredit": 0,
+    "actualStatusesAll1": true
+  },
+  "constructionCargoSelections": 5,
+  "constructionIcuPreparations": 1,
+  "controlIcuPreparations": 2,
+  "allTargetCodeGraphClippy": 0,
+  "parityTypecheck": 0,
+  "remainingInventory": "17 legacy helper calls +2 direct sorts, no completion percentage",
+  "all53CLIGapsOpen": true,
+  "limitations": [
+    "Native library model setup uses existing read_libraries while Source pure fixture directly supplies a model; no extra reader/schema/Go proof is claimed.",
+    "Default local profile only; no Tea/workspace/allfeatures/cold archive acceptance.",
+    "C1 E0277 temporary driver failure, Python artifact-hash setup refusal and third-control precompile occurrence failure remain uncredited history.",
+    "Most C3-compiled unrelated example/test bytes were not copied; only actual selected scoped test/public/library/driver roles are retained.",
+    "Census pointer law is actual nonempty original-row equality, separate from primitive counts/map order/serialization.",
+    "Existing legacy aggregate mutation runners were not run."
+  ],
+  "reports": {
+    "green-native-pairs.json": {
+      "sha256": "d01b27bcfb180caf216a1d1410de7a2665b56f78b5d0a1726452dfa5665a2913",
+      "bytes": 778014
+    },
+    "unchanged-native-pairs.json": {
+      "sha256": "447bb084e5c15ff105740164167033f59daa17e97ccffe898ab6195e61af61ae",
+      "bytes": 632873
+    },
+    "source-checkpoint.json": {
+      "sha256": "1fc7fecc9237ca35debcf8089e10720761b1cf67543a813a77dfed958205be05",
+      "bytes": 4134
+    },
+    "public-and-native.json": {
+      "sha256": "9a16a02909ae6f72103b2baae7081be0d29940b693a1a90adb7350e95d81e192",
+      "bytes": 30946
+    },
+    "affected-comparisons.json": {
+      "sha256": "4d871bb7953f8a321a037b6964598a338f4cb2c6bca148d19d61b92091373d91",
+      "bytes": 24900
+    },
+    "final-four-controls.json": {
+      "sha256": "ba38ed232d12d798680d6770a1e24d8663ca0725a74eaec178ac3b8cc6d380d3",
+      "bytes": 127037
+    },
+    "protocol-refusals/observations.json": {
+      "sha256": "f33c1b028c36c623e4db78e3887584dcd77222926dc8657b3b64430f6b7c3eca",
+      "bytes": 9180
+    }
+  }
+}
