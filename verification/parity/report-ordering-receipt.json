@@ -1,0 +1,91 @@
+{
+  "status": "verified-component-pending-parent-review",
+  "base": "d892b400ee07da9e7dccdb4b12d31c0a44455a78",
+  "implementationSourceCommit": "d5657332f24833171526267711ff4762644bd58e",
+  "scope": "Five report comparisons: measured enum-owned closed kind/reason ordinal2, checked flat locator/plan file/ID3; eight production owners including dead scalar-helper removal. Existing kernels/Collation/typed cause families; no model/context/Graph clones.",
+  "newShared": {
+    "wholeviews": 23,
+    "strict": 23,
+    "qualified": 0,
+    "SourceFrozenBeforeAnyRustProjection": true,
+    "SourcePins": 16,
+    "CLIWorkflowCases": 1,
+    "CLIWorkflowActions": 10,
+    "nativePairedProcesses": 32,
+    "publicExecutions": 2,
+    "caseCreditPendingIntegration": true
+  },
+  "baselineInterface": {
+    "actualLibraryCargoExit": 0,
+    "intendedPublicCargoExit": 101,
+    "diagnosticCodes": ["E0061", "E0277", "E0599"],
+    "fullActualCaller": true,
+    "soleDiagnosticClaim": false,
+    "firstDirectRustcMissingSerdeExtern": "retained setup-only E0433; no credit",
+    "originalLabel": "C2 intended green stayed baseline after checker stopped restoration; preserved as actual interface red."
+  },
+  "native": {
+    "library": 20,
+    "integration": 249,
+    "groups": 71,
+    "TeaFeatureWorkspaceDocClaims": false
+  },
+  "affectedExisting": {
+    "suites": 10,
+    "passed": 347,
+    "strict": 318,
+    "qualified": 29,
+    "newCredit": 0
+  },
+  "controls": {
+    "namedSemantic": 4,
+    "strict": 4,
+    "qualified": 0,
+    "compileExits": [0, 0, 0, 0],
+    "modifiedLibraryFreshFalse": true,
+    "executedDriverFreshFalse": true,
+    "driverProcessExits": [0, 0, 0, 0],
+    "ownedSuiteRemoved": true
+  },
+  "construction": {
+    "compilerSelections": 6,
+    "actualFaultCompilerSelections": 4,
+    "IcuPreparations": 2,
+    "allTargetAliasesUnset": 4,
+    "ownedDefaultTargets": true,
+    "copiedCompiledCaches": false,
+    "ClippyCGAllTargets": 0,
+    "parityTSC": 0,
+    "scopedBiome": 0,
+    "rustfmtAll": 0
+  },
+  "retention": {
+    "proofDirectory": "/private/tmp/demlik-report-ordering-proof-01a16c9d",
+    "artifactBindingsSha256": "10bef3231c7b4c125db0850774854fc9d8b0bd0c899f05c501e336e9f725ca92",
+    "sourceArchive": {
+      "file": "/private/tmp/demlik-report-ordering-proof-01a16c9d/source.tar.gz",
+      "sha256": "ec09cf4bf65c2008d982bf66b5961f06c2ec3b48d776cc2b50d87afec0101fcd",
+      "files": 15
+    },
+    "everySourceComparisonPublicBaselineAndControlArtifactRetained": true,
+    "nativeOnlyOldExecutablesUnretained": 70,
+    "nativeEventsHashesLogsRetained": true,
+    "noReplayOrAllNativeArchiveClaim": true,
+    "duplicateGiantArchive": false
+  },
+  "setupHistory": [
+    "Direct rustc omitted serde_json --extern; retained0 credit. Actual Cargo public signature red follows.",
+    "Task-local affected launcher missed target/parity; retained ENOENT0 credit, remaining6 only resumed after mkdir.",
+    "Wrong supplied compiler manifest path refused before control tree/build; corrected from saved actual selection,0 credit.",
+    "Initial static worker finally/unused-local lint repaired before any fault execution, no product change."
+  ],
+  "limits": [
+    "Only existing usize/String authored model profile; broader nonfinite/huge-number/raw-string/model reflection remain open.",
+    "Preexisting owned PlanRow.smells copies remain, no Source smell-array alias parity claim.",
+    "Closed ordinal choice is exhaustive only for pinned ten SmellKind/three WithheldReason vocabularies; ALL traversal unchanged.",
+    "Root separately removed Commander units helper. Preserve both unit-helper and scalar-helper removals when integrating adjacent project.rs hunks. Direct project sorts remain out of scope.",
+    "All53CLI and bootstrap/distribution/OS/stdio/raw-profile gaps remain open. No new capability aliases/bindings/central registration."
+  ],
+  "constructionRetirementPending": true,
+  "parentReviewPending": true
+}
