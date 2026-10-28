@@ -40,9 +40,9 @@ export const faults = [
   {
     id: "initialize-before-admission",
     owner: "crates/code-graph/src/env_keys/query.rs",
-    needle: "    let source =\n        load_cheap_project",
+    needle: "    let source = load_cheap_project_request(",
     replacement:
-      "    let _ = request().map_err(EnvKeyError::Collation)?;\n    let source =\n        load_cheap_project",
+      "    let _ = request().map_err(EnvKeyError::Collation)?;\n    let source = load_cheap_project_request(",
     witness:
       "env_keys::query::icu77_probe::catalog_refusal_precedes_initialization_after_source_parse_failure",
     nativeOnly: true,

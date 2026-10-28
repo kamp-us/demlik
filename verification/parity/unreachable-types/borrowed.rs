@@ -58,12 +58,13 @@ fn main() {
         std::env::temp_dir().join(format!("demlik-unreachable-public-{}", std::process::id()));
     fs::create_dir(&root).unwrap();
     fs::write(root.join("tsconfig.json"), "{}").unwrap();
-    let loaded = load_cheap_project(&root, None).unwrap();
+    let prepared = collation();
+    let loaded = load_cheap_project(&root, None, &prepared).unwrap();
     let mut graph = assemble_graph(
         &loaded,
         Thresholds::default(),
         NodeFields::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &prepared,
     )
     .unwrap();
     graph.reachability = Some(ReachabilityReport {
