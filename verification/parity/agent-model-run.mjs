@@ -34,11 +34,15 @@ function calls(test, source) {
       ...middle.slice(0, -1),
       ...Array(test.input.repeats ?? 1).fill(fn.invoke),
     ];
+  // observe_async records completion. Later port awaits now outlive launch.
+  const started =
+    test.input.failure === "loader"
+      ? [...middle, "runtime::launch"]
+      : [...middle.slice(0, -1), "runtime::launch", fn.invoke];
   return [
     model,
     "LlmCall::attempt_keyed",
-    ...middle,
-    "runtime::launch",
+    ...started,
     ...(source.phase === "succeeded"
       ? ["LlmCall::succeed"]
       : ["LlmCall::err_of", "LlmCall::fail"]),
@@ -155,12 +159,29 @@ export async function agentModelParity(options = {}) {
       ? all.filter((x) => options.caseIds.includes(x.id))
       : all,
     text = `${cases.map((x) => JSON.stringify(x)).join("\n")}\n`;
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/agent-model.json");
+  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+  const processes = [];
   const run = (program, args, input = text) => {
     const out = spawnSync(program, args, {
       cwd: root,
       input,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
+    });
+    const prefix = `${reportFile}.process-${processes.length}`;
+    fs.writeFileSync(`${prefix}.input`, input);
+    fs.writeFileSync(`${prefix}.stdout`, out.stdout ?? "");
+    fs.writeFileSync(`${prefix}.stderr`, out.stderr ?? "");
+    processes.push({
+      program,
+      args,
+      status: out.status,
+      signal: out.signal,
+      input: { path: `${prefix}.input`, sha256: hash(input) },
+      stdout: { path: `${prefix}.stdout`, sha256: hash(out.stdout ?? "") },
+      stderr: { path: `${prefix}.stderr`, sha256: hash(out.stderr ?? "") },
     });
     assert.equal(out.status, 0, out.stderr);
     assert.equal(out.stderr, "");
@@ -248,6 +269,7 @@ export async function agentModelParity(options = {}) {
       .length,
     protocolRefusals: invalid.length,
     failures,
+    processes,
     nativeEvidence,
     qualifiedObservations,
     caseIds: cases.map((x) => x.id),
@@ -263,9 +285,6 @@ export async function agentModelParity(options = {}) {
     nativeProfile:
       "Explicit native plain/factory kinds and caller-driven local futures with declared Result failures. JS function tags, arity/prototypes/thenables/getters/mutable methods and native panic-vs-Result are separately measured Source-only profiles. No arbitrary Promise scheduling, provider/SDK/streaming host or full-agent claim.",
   };
-  const reportFile =
-    options.reportFile ?? path.join(root, "target/parity/agent-model.json");
-  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   if (!options.quiet)
     console.log(
