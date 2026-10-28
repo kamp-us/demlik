@@ -67,6 +67,7 @@ for (const input of inputs) {
     timeout: 30000,
   });
   fs.writeFileSync(prefix + ".stdin", JSON.stringify(input) + "\n");
+  fs.writeFileSync(prefix + ".request.json", JSON.stringify(input) + "\n");
   fs.writeFileSync(prefix + ".stdout", result.stdout ?? "");
   fs.writeFileSync(prefix + ".stderr", result.stderr ?? "");
   const git = receiptView(receipt);

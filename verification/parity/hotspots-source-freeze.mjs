@@ -19,7 +19,7 @@ assert.equal(process.version, "v22.21.1");
 const proof = process.argv[2];
 assert.ok(proof);
 fs.mkdirSync(proof, { recursive: true });
-const runtime = path.join(proof, "runtime");
+const runtime = process.argv[3] ?? path.join(proof, "runtime");
 const fixture = prepare(runtime);
 fs.writeFileSync(
   path.join(proof, "fixture-setup.json"),
@@ -91,6 +91,7 @@ for (const input of fixture.inputs) {
     },
   );
   fs.writeFileSync(prefix + ".stdin", JSON.stringify(input) + "\n");
+  fs.writeFileSync(prefix + ".request.json", JSON.stringify(input) + "\n");
   fs.writeFileSync(prefix + ".stdout", result.stdout ?? "");
   fs.writeFileSync(prefix + ".stderr", result.stderr ?? "");
   const processes = {

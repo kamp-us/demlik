@@ -15,6 +15,13 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "hotspots",
+    driver: "hotspots_driver",
+    script: "graph-hotspots-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+  },
+  {
     name: "smell-ledger",
     driver: "smell_ledger_driver",
     script: "graph-smell-ledger-run.mjs",

@@ -15,27 +15,31 @@ export function hotspotsParity(
   binary,
   proof,
   output,
-  { supplement = false } = {},
+  { supplement = false, sourceReport, fixtureSetup } = {},
 ) {
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
   binary = path.resolve(binary);
   const binarySHA = hash(fs.readFileSync(binary));
-  const frozen = path.join(
-    proof,
-    supplement ? "source-supplement2.json" : "source-first/source-first.json",
-  );
-  const expectedSHA = supplement
-    ? "4ea31bf8a22283ff27588628bd9b67e522d8e3ffc5f55090c47f6bde6be403c6"
-    : "7ecc56ba559999ffdae8bd5263904245589db49edc33d55ae894164b6eed9f5d";
+  assert.equal(Boolean(sourceReport), Boolean(fixtureSetup));
+  const frozen =
+    sourceReport?.path ??
+    path.join(
+      proof,
+      supplement ? "source-supplement2.json" : "source-first/source-first.json",
+    );
+  const expectedSHA =
+    sourceReport?.sha256 ??
+    (supplement
+      ? "4ea31bf8a22283ff27588628bd9b67e522d8e3ffc5f55090c47f6bde6be403c6"
+      : "7ecc56ba559999ffdae8bd5263904245589db49edc33d55ae894164b6eed9f5d");
   assert.equal(hash(fs.readFileSync(frozen)), expectedSHA);
   const source = JSON.parse(fs.readFileSync(frozen, "utf8"));
-  const fixture = JSON.parse(
-    fs.readFileSync(
-      path.join(proof, "source-first/fixture-setup.json"),
-      "utf8",
-    ),
-  );
+  const fixtureFile =
+    fixtureSetup?.path ?? path.join(proof, "source-first/fixture-setup.json");
+  if (fixtureSetup)
+    assert.equal(hash(fs.readFileSync(fixtureFile)), fixtureSetup.sha256);
+  const fixture = JSON.parse(fs.readFileSync(fixtureFile, "utf8"));
   const directory = path.dirname(output);
   fs.mkdirSync(directory, { recursive: true });
   const rows = [],
@@ -60,6 +64,7 @@ export function hotspotsParity(
     const stdout = result.stdout ?? "",
       stderr = result.stderr ?? "";
     fs.writeFileSync(prefix + ".stdin", input);
+    fs.writeFileSync(prefix + ".request.json", input);
     fs.writeFileSync(prefix + ".stdout", stdout);
     fs.writeFileSync(prefix + ".stderr", stderr);
     const process = {
@@ -112,11 +117,12 @@ export function hotspotsParity(
         stack: error.stack,
       });
     }
+    const after = snapshot(fixture.repo);
     if (protocolValid) {
       for (const [field, actual, expected] of [
         ["output", frame.output, row.frame.output],
         ["Git argument/cwd order", git.attempts, row.gitAttempts],
-        ["repository bytes/modes", snapshot(fixture.repo), before],
+        ["repository bytes/modes", after, before],
         [
           "stderr bytes",
           Buffer.from(stderr).toString("hex"),
@@ -165,6 +171,8 @@ export function hotspotsParity(
       process,
       rawControlledGit: git,
       nativeCaptureFacts,
+      repositoryBefore: before,
+      repositoryAfter: after,
     });
     if (errors.length) failures.push({ id: row.id, errors });
     fs.writeFileSync(
@@ -196,6 +204,10 @@ export function hotspotsParity(
     processes,
     binary: { path: binary, sha256: binarySHA },
     sourceReport: { path: frozen, sha256: expectedSHA },
+    fixtureSetup: {
+      path: fixtureFile,
+      sha256: hash(fs.readFileSync(fixtureFile)),
+    },
     SourcePackageEdits: 0,
     DateOwnerCredit: 0,
     CLICredit: 0,
