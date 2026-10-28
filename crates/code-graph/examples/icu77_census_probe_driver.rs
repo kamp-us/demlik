@@ -1,4 +1,4 @@
-//! Temporary K baseline: invokes the unchanged census owners, not a replacement sort.
+//! K census witness: original row references and the shared pinned sort schedule.
 use demlik_code_graph::{
     boundaries::{
         deployables::{Deployables, census::SiteRow},
@@ -251,6 +251,20 @@ fn library(request: &Request, root: &Path) -> Result<String, Box<dyn std::error:
         ("packages/two", "2"),
     ] {
         rules.libraries.insert(dir.into(), name.into());
+    }
+    if request.id == "library-multiple-directories" {
+        rules.library_types.clear();
+        rules.library_types.insert(
+            "same".into(),
+            LibraryType {
+                imports: vec![],
+                pure: false,
+                imported_from: None,
+            },
+        );
+        for name in rules.libraries.values_mut() {
+            *name = "same".into();
+        }
     }
     let scopes = vec![
         "packages/Z".into(),
