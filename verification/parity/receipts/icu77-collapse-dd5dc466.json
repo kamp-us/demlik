@@ -1,0 +1,117 @@
+{
+  "component": "ICU77 Group C collapse report, partial twins and existing renderer/gate callers",
+  "sourceCommit": "dd5dc4663586989da7637c6b3a40336e27671324",
+  "base": "5c2ac5546d44f02839b7cd6c03f3d340cf220b1e",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-collapse-icu77-proof-01a16c9d",
+  "scope": "Twelve legacy comparator sites; one caller-owned checked Collation, fallible report/partial APIs and existing typed render/gate errors. No Graph clone, public handle lifetime or generic bounds added.",
+  "construction": {
+    "cargoCompilerSelections": 4,
+    "allExit0": true,
+    "nativePreparations": 1,
+    "nativeTests": 260,
+    "nativeGroups": 71,
+    "allTargetClippyExit": 0,
+    "wholeWorkspace": false,
+    "coldArchiveRebuild": false,
+    "examplesBuilt": 58,
+    "examplesSelected": 5,
+    "unusedExamplesExecutionClaimed": false
+  },
+  "publicTypes": {
+    "sameUnchangedConsumer": "actual baseline E0061/E0599 then rustc0/exec0 against Cargo-selected green library",
+    "localOpaqueBorrowedRc": true,
+    "retainedAfterCollationDrop": [
+      "original graph",
+      "settings",
+      "FunctionNode pair",
+      "representative Arc"
+    ],
+    "lifetimeRefusal": "sole E0597",
+    "existingRendererPublicExecution": 0
+  },
+  "comparisons": {
+    "newShared": 7,
+    "strict": 7,
+    "qualified": 0,
+    "oldRegressionsPaired": 320,
+    "oldRegressionsNewCredit": 0,
+    "oldSuites": {
+      "reg-partial": {
+        "paired": 71,
+        "strict": 71,
+        "qualified": 0
+      },
+      "reg-report": {
+        "paired": 99,
+        "strict": 99,
+        "qualified": 0
+      },
+      "reg-render": {
+        "paired": 36,
+        "strict": 36,
+        "qualified": 0
+      },
+      "reg-plain-cli": {
+        "paired": 45,
+        "strict": 35,
+        "qualified": 10
+      },
+      "reg-gate-cli": {
+        "paired": 69,
+        "strict": 48,
+        "qualified": 21
+      }
+    },
+    "independentFrozenSourceAnchors": true,
+    "protocolAndGuardsExtraCredit": 0
+  },
+  "controls": {
+    "named": 4,
+    "compiledExit0": 4,
+    "detectedSemantic": 4,
+    "extraCaseCredit": 0,
+    "nativePreparations": 1,
+    "sequentialRegisteredTrees": 1,
+    "allLibraryAndDriverFreshFalse": true,
+    "all4ModifiedRlibsAndExecutedDriversRetained": true,
+    "controlTreeRemoved": true
+  },
+  "static": {
+    "node": 0,
+    "biome": 0,
+    "typeScript": 0,
+    "rustfmt": 0,
+    "allTargetCodeGraphClippy": 0,
+    "TeaOrFeatureClaimed": false
+  },
+  "qualifications": [
+    "Canonical typed/validated Graph/settings only; existing raw/reflection/prototype/getter and String-only lone-UTF16 fields remain outside this leaf. Raw JsString skipped keys are compared exactly by checked UTF16 operands.",
+    "Inherited31 qualified rows across old plain/gate CLI remain qualified, with original reasons/data. Other Source-only profiles, protocol/refusal/native-only observations receive0new shared credit.",
+    "Pinned local ICU77.1/static source/data on aarch64-apple-darwin is measured; portable release, other hosts and live version-data checks are not proved. Native infrastructure/input-length failures remain typed native causes, not JS exception equivalence.",
+    "All53 broad CLI gaps stay OPEN. No new Source aliases, mappings, central/manifest/dependency/TS product/Graph clone/runtime changes.",
+    "Actual Cargo2 built58 examples. Five selected affected consumers were used (four drivers and the existing public renderer); the other53 are unexecuted/unretained. Native260 execution logs retained; only three directly affected native test binaries retained, others explicitly unretained."
+  ],
+  "recoveries": [
+    "Source-only tsx IPC and root tsx-resolution setup failures retained with0credit; parity-owned loader succeeded.",
+    "First fixture group accidentally included7 old project rows:14matching report retained, wrapper count assertion failed0credit. Selector-only repair yields exact7.",
+    "Raw-key fixture insertion order was strengthened before controls, preserving original7green and frozen Source literal output; final7green retained, no extra credit.",
+    "One cargo-fmt launcher attempt lacked cargo-fmt on PATH (exit101/no codegen/source change); exact toolchain PATH repair yieldedfmt0.",
+    "Git index sandbox refusal before source freeze performed no write; authorized local escalation committed the exact source."
+  ],
+  "reports": {
+    "source-freeze.json": "2a9834b3942130d9d1e21cf0f04635a81e5b43f8afa29d1e015309b5d960e7dc",
+    "selected-green.json": "99d79974b351b7631bb8894bb60cd8511f813fcf0c4c7adc2f5c506507759a95",
+    "native-artifacts.json": "b88db610abcfc624294cc9a14c75255731258311ab94b88d0f55e601974cf09f",
+    "public-proof.json": "746ca7a45965562e052f7e7ec66f9335682866162013279007408391600920a9",
+    "comparison-bindings.json": "5f201cd73564b93b1dcda9e8c2fdeab52503d550d0d6e1294e66ffcbd448f53c",
+    "control-artifact-bindings.json": "b03cc43185d18a50bdf99fc4b52fb8016ca87a83436e9b00b9a721d54dc82d82",
+    "controls/controls.json": "9f3d3181b49397f5c2a5f4dd25c4fa9de7662af46ff3b8722c9b24b41069b266",
+    "controls/icu77-collapse-worktree.json": "4d59e17690e3affa3d1e132fa16c43f61484225ebe692450f82c44c3e7db9562",
+    "source-corpus-freeze.json": "ab11d70d33ed350bb30c5a258dbfc4da65cdcfb715ee9eac7220d1bd61c82ccf",
+    "witness-strengthening.json": "4dbcdf081d76b18d42a73d892617dd6c29efc8411840cb551beb3497a2ac7dae",
+    "statics-first.json": "9c0aac658f9e781edbd2f84744ee1275e9108f045ea784a2b4e2ace36ec917c5",
+    "fmt.json": "ec15210b99ee3dc7307cbe109d300a413add888e95f6e7e4aac95a762bf987c9"
+  },
+  "retirement": "Control tree/default target removed. Construction tree is removed after this receipt commit and compact retention; external retirement/handoff records actual completion."
+}
