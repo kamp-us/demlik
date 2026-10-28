@@ -112,7 +112,37 @@ export function sharedHotspotsWindow(raw, rawFile, expectedBinarySHA) {
     assert.deepEqual(raw.sourcePinsBefore, admission.sourcePins);
     assert.deepEqual(raw.sourcePinsAfter, admission.sourcePins);
     assert.equal(raw.source.length, 3);
-    for (const source of raw.source) {
+    const expectedProfiles = [
+      ["window", "UTC"],
+      ["window", "America/Los_Angeles"],
+      ["parser", "UTC"],
+    ];
+    for (const [position, source] of raw.source.entries()) {
+      assert.deepEqual(
+        [source.profile, source.zone],
+        expectedProfiles[position],
+      );
+      assert.equal(source.report.profile, source.profile);
+      assert.equal(source.report.TZ, source.zone);
+      assert.deepEqual(
+        source.report.rows.map((row) => row.id),
+        inputs
+          .filter(
+            (row) =>
+              row.profile === source.profile && row.input.zone === source.zone,
+          )
+          .map((row) => row.id),
+      );
+      assert.deepEqual(source.process.command, [
+        process.execPath,
+        "--import",
+        createRequire(import.meta.url).resolve("tsx"),
+        fileURLToPath(
+          new URL("./hotspots-window-reference.mjs", import.meta.url),
+        ),
+        source.profile,
+        source.zone,
+      ]);
       assert.equal(source.process.status, 0);
       assert.equal(source.process.signal, null);
       assert.equal(source.process.error, null);
@@ -151,6 +181,13 @@ export function sharedHotspotsWindow(raw, rawFile, expectedBinarySHA) {
     if (row.errors !== undefined) assert.deepEqual(row.errors, []);
     if (row.protocolError !== undefined) assert.equal(row.protocolError, null);
     const original = legacy ? { ...row.sourceRow, id: row.id } : row.source;
+    if (!legacy)
+      assert.deepEqual(
+        original,
+        raw.source
+          .flatMap((entry) => entry.report.rows)
+          .find((entry) => entry.id === row.id),
+      );
     assert.equal(
       windowAnchorDigest(original),
       admission.sourceDigests[input.id],

@@ -250,6 +250,12 @@ export function sharedCliHotspotsWindow(
   }
   assert.equal(source.cleanup.root, admission.fixedOwnedFixture);
   assert.equal(raw.cleanup.root, admission.fixedOwnedFixture);
+  for (const cleanup of [source.cleanup, raw.cleanup]) {
+    if (Object.hasOwn(cleanup, "fixturesRemoved")) {
+      assert.equal(cleanup.fixturesRemoved, true);
+      assert.equal(cleanup.parentRetainedForWrapper, true);
+    } else assert.equal(cleanup.removed, true);
+  }
   assert.deepEqual(
     source.cases.map((row) => row.id),
     admission.caseOrder,
