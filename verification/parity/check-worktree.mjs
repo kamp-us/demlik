@@ -92,18 +92,27 @@ export function createCheckWorktree(sourceRoot, name, evidenceDirectory) {
   const file = path.join(evidence, `${name}-worktree.json`);
   const save = () =>
     fs.writeFileSync(file, `${JSON.stringify(receipt, null, 2)}\n`);
-  let registered = false;
+  const registeredHere = () =>
+    execFileSync("git", ["worktree", "list", "--porcelain", "-z"], {
+      cwd: sourceRoot,
+      encoding: "utf8",
+    })
+      .split("\0")
+      .includes(`worktree ${root}`);
   function remove() {
     try {
-      if (registered) {
+      // A failed add can leave a registry entry even though it did not return.
+      if (registeredHere()) {
         execFileSync("git", ["worktree", "remove", "--force", root], {
           cwd: sourceRoot,
           stdio: "pipe",
         });
-        registered = false;
       }
+      assert.ok(!registeredHere(), "finished check registration must be gone");
+      if (fs.existsSync(root))
+        fs.rmSync(root, { recursive: true, force: true });
       assert.ok(!fs.existsSync(root), "finished check worktree must be gone");
-      fs.rmdirSync(parent);
+      if (fs.existsSync(parent)) fs.rmdirSync(parent);
       receipt.removed = true;
       receipt.finishedAt = new Date().toISOString();
     } catch (error) {
@@ -118,11 +127,18 @@ export function createCheckWorktree(sourceRoot, name, evidenceDirectory) {
       cwd: sourceRoot,
       stdio: "pipe",
     });
-    registered = true;
     save();
     return { root, target, remove };
   } catch (error) {
-    remove();
+    receipt.setupFailure = String(error);
+    try {
+      remove();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "check worktree setup and cleanup failed",
+      );
+    }
     throw error;
   }
 }
