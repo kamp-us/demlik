@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changesetTextCases } from "./api-base-cases.mjs";
+import { buildExample } from "./tea-example.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   here = path.dirname(fileURLToPath(import.meta.url)),
@@ -17,35 +18,24 @@ export async function apiBaseParserParity(options = {}) {
   const cases = changesetTextCases();
   assert.equal(new Set(cases.map((row) => row.id)).size, cases.length);
   const input = cases.map((row) => JSON.stringify(row)).join("\n") + "\n";
-  const binary =
-    options.binary ??
-    path.join(
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-      "debug/examples/api_base_driver",
-    );
-  if (!options.binary)
-    execFileSync(
-      process.env.CARGO ?? "cargo",
-      [
-        "build",
-        "--locked",
-        "-p",
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/api-base-parser.json");
+  const producer = options.binary
+    ? null
+    : buildExample(
+        process.env.CARGO ?? "cargo",
         "demlik-code-graph",
-        "--example",
         "api_base_driver",
-      ],
-      {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
+        reportFile,
+        [],
+        {
           CARGO_PROFILE_DEV_DEBUG: "0",
           CARGO_PROFILE_TEST_DEBUG: "0",
           CARGO_INCREMENTAL: "0",
           CARGO_BUILD_JOBS: "1",
         },
-      },
-    );
+      );
+  const binary = options.binary ?? producer.binary;
   const run = (program, args) =>
     execFileSync(program, args, {
       cwd: root,
@@ -101,6 +91,10 @@ export async function apiBaseParserParity(options = {}) {
     assert.equal(output("two-boms"), null);
   }
   const report = {
+    producer,
+    binarySource: options.binary
+      ? "external override; local Cargo producer unproved"
+      : "actual Cargo JSON selection",
     reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
     scope: "Native changeset text parser only; Git IO layer remains separate",
     node: process.version,
@@ -112,8 +106,6 @@ export async function apiBaseParserParity(options = {}) {
     corpusSha256: hash(input),
     rustBinarySha256: hash(await readFile(binary)),
   };
-  const reportFile =
-    options.reportFile ?? path.join(root, "target/parity/api-base-parser.json");
   await mkdir(path.dirname(reportFile), { recursive: true });
   await writeFile(reportFile, JSON.stringify(report, null, 2) + "\n");
   if (!options.quiet)

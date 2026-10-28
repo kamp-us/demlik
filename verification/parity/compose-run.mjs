@@ -12,13 +12,7 @@ export async function composeCheckpointParity(cargo, options = {}) {
   });
   return {
     ...result,
-    binary: path.resolve(
-      options.binary ??
-        path.join(
-          process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-          "debug/examples/compose_driver",
-        ),
-    ),
+    binary: path.resolve(result.binary),
   };
 }
 if (

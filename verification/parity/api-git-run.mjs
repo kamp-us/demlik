@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gitCases } from "./api-git-cases.mjs";
+import { buildExample } from "./tea-example.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   here = path.dirname(fileURLToPath(import.meta.url)),
@@ -107,35 +108,24 @@ export async function apiGitParity(options = {}) {
     ),
     tempParent = path.join(fixture, "temps");
   fs.mkdirSync(tempParent);
-  const binary =
-    options.binary ??
-    path.join(
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-      "debug/examples/api_git_driver",
-    );
-  if (!options.binary)
-    execFileSync(
-      process.env.CARGO ?? "cargo",
-      [
-        "build",
-        "--locked",
-        "-p",
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/api-git.json");
+  const producer = options.binary
+    ? null
+    : buildExample(
+        process.env.CARGO ?? "cargo",
         "demlik-code-graph",
-        "--example",
         "api_git_driver",
-      ],
-      {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
+        reportFile,
+        [],
+        {
           CARGO_PROFILE_DEV_DEBUG: "0",
           CARGO_PROFILE_TEST_DEBUG: "0",
           CARGO_INCREMENTAL: "0",
           CARGO_BUILD_JOBS: "1",
         },
-      },
-    );
+      );
+  const binary = options.binary ?? producer.binary;
   let report;
   try {
     const { cases, repos, recipes, safety } = gitCases(fixture);
@@ -413,6 +403,10 @@ export async function apiGitParity(options = {}) {
         native: native[cases.indexOf(c)].output,
       }));
     report = {
+      producer,
+      binarySource: options.binary
+        ? "external override; local Cargo producer unproved"
+        : "actual Cargo JSON selection",
       reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
       node: process.version,
       v8: process.versions.v8,
@@ -447,8 +441,6 @@ export async function apiGitParity(options = {}) {
       scope:
         "Blocking native Git base export/read and changeset discovery; backend diagnostics/recursive deletion failure paths and archive argument-index change are separately qualified. Raw option-like archive write behavior deliberately differs and is reproduced in an isolated fixture, not counted as strict parity.",
     };
-    const reportFile =
-      options.reportFile ?? path.join(root, "target/parity/api-git.json");
     fs.mkdirSync(path.dirname(reportFile), { recursive: true });
     fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + "\n");
     if (!options.quiet)

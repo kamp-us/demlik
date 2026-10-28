@@ -1,13 +1,33 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildExample } from "./tea-example.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
+const leanEnvironment = {
+  CARGO_PROFILE_DEV_DEBUG: "0",
+  CARGO_PROFILE_TEST_DEBUG: "0",
+  CARGO_INCREMENTAL: "0",
+  CARGO_BUILD_JOBS: "1",
+};
+const legacyExamples = {
+  "stored-cell": { name: "stored_cell_driver", env: leanEnvironment },
+  timestamps: { name: "timestamp_runtime_driver", env: leanEnvironment },
+  "runtime-deadline": {
+    name: "runtime_deadline_driver",
+    env: leanEnvironment,
+  },
+  "runtime-hooks": { name: "runtime_hooks_driver" },
+  "intake-runtime": {
+    name: "intake_runtime_driver",
+    env: leanEnvironment,
+  },
+};
 
 const reportFormats = {
   trace: {
@@ -49,28 +69,26 @@ export async function compiledTraceParity(cargo, name, options = {}) {
   const formatName = options.format ?? "trace";
   assert.ok(Object.hasOwn(reportFormats, formatName), "unknown report format");
   const format = reportFormats[formatName];
-  let binary = options.binary;
-  if (!binary && options.example) {
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "-p",
-        options.example.package,
-        "--example",
-        options.example.name,
-      ],
-      { cwd: root, stdio: "inherit" },
-    );
-    binary = path.join(
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-      "debug/examples",
-      options.example.name,
-    );
-  }
   const reportFile =
     options.reportFile ?? path.join(root, `target/parity/${name}.json`);
+  let binary = options.binary;
+  let producer = null;
+  const example =
+    options.example ??
+    (Object.hasOwn(legacyExamples, name)
+      ? { package: "demlik-tea", ...legacyExamples[name] }
+      : undefined);
+  if (!binary && example) {
+    producer = buildExample(
+      cargo,
+      example.package,
+      example.name,
+      reportFile,
+      example.features ?? [],
+      example.env ?? {},
+    );
+    binary = producer.binary;
+  }
   await mkdir(path.dirname(reportFile), { recursive: true });
   await rm(reportFile, { force: true });
   const result = spawnSync(
@@ -111,6 +129,11 @@ export async function compiledTraceParity(cargo, name, options = {}) {
   assert.equal(new Set(rows.map((item) => item.id)).size, compared);
   assert.equal(report.passed, rows.filter((item) => item.equal).length);
   assert.equal(result.status, report.failures.length ? 1 : 0);
+  if (producer) {
+    assert.equal(format.binaryHash(report), producer.binarySha256);
+    report.producer = producer;
+    await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+  }
   return {
     cases: compared,
     passed: report.passed,
@@ -127,6 +150,12 @@ export async function compiledTraceParity(cargo, name, options = {}) {
         }),
     ),
     binarySha256: format.binaryHash(report),
+    ...(binary ? { binary } : {}),
+    binarySource: options.binary
+      ? "external override; local Cargo producer unproved"
+      : producer
+        ? "actual Cargo JSON selection"
+        : "delegated verifier",
     producer: report.producer ?? null,
     controls: report.controls,
     scope: report.scope,

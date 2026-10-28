@@ -5,6 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildTeaExample } from "./tea-example.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -54,21 +55,12 @@ const serialTrace = [
 ];
 
 export async function runtimeParity(cargo, options = {}) {
-  if (!options.binary)
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "--package",
-        "demlik-tea",
-        "--example",
-        "runtime_driver",
-      ],
-      { cwd: root, stdio: "inherit" },
-    );
-  const binary =
-    options.binary ?? path.join(root, "target/debug/examples/runtime_driver");
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/runtime.json");
+  const producer = options.binary
+    ? null
+    : buildTeaExample(cargo, "runtime_driver", reportFile);
+  const binary = options.binary ?? producer.binary;
   const input = `${[...cases.map((test) => JSON.stringify(test)), ...invalid].join("\n")}\n`;
   function run(program, args) {
     const output = execFileSync(program, args, {
@@ -222,9 +214,11 @@ export async function runtimeParity(cargo, options = {}) {
       if (language === "Rust") assert.deepEqual(answer.observedCalls, []);
     }
   }
-  const reportFile =
-    options.reportFile ?? path.join(root, "target/parity/runtime.json");
   const report = {
+    producer,
+    binarySource: options.binary
+      ? "external override; local Cargo producer unproved"
+      : "actual Cargo JSON selection",
     passed: cases.length - failures.length,
     failures,
     rejectedInvalidInputs: invalid.length * 2,

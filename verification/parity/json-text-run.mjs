@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildExample } from "./tea-example.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -23,35 +24,23 @@ export async function jsonTextParity(options = {}) {
     "4383a83fdbd6c2ee26a9bd1909e0722898024a26a1cb9be0a8b7868953b34697",
   );
   const probe = JSON.parse(probeBytes);
-  const binary =
-    options.binary ??
-    path.join(
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-      "debug/examples/json_text_driver",
-    );
-  if (!options.binary)
-    execFileSync(
-      process.env.CARGO ?? "cargo",
-      [
-        "build",
-        "--locked",
-        "-p",
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/json-text.json");
+  const producer = options.binary
+    ? null
+    : buildExample(
+        process.env.CARGO ?? "cargo",
         "demlik-tea",
-        "--example",
         "json_text_driver",
-      ],
-      {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
+        reportFile,
+        [],
+        {
           CARGO_PROFILE_DEV_DEBUG: "0",
           CARGO_PROFILE_TEST_DEBUG: "0",
           CARGO_INCREMENTAL: "0",
           CARGO_BUILD_JOBS: "1",
         },
-      },
-    );
+      );
   const cases = probe.cases.map(({ id, units, ok, value }) => ({
     id,
     units,
@@ -153,6 +142,10 @@ export async function jsonTextParity(options = {}) {
     }
   }
   const report = {
+    producer,
+    binarySource: options.binary
+      ? "external override; local Cargo producer unproved"
+      : "actual Cargo JSON selection",
     scope:
       "Canonical JsText JSON decoder; exact accept/reject and decoded value parity",
     node: process.version,
@@ -183,8 +176,6 @@ export async function jsonTextParity(options = {}) {
       "Native syntax diagnostics, including explicit invalid-UTF16-placement errors, retain their actual backend wording/category. They are qualified separately; accepted values and refusal decisions have no tolerance.",
     ],
   };
-  const reportFile =
-    options.reportFile ?? path.join(root, "target/parity/json-text.json");
   await mkdir(path.dirname(reportFile), { recursive: true });
   await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   if (!options.quiet)

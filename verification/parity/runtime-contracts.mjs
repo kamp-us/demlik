@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildTeaExample } from "./tea-example.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -12,6 +13,10 @@ export async function runtimeContractParity(cargo, options = {}) {
   const reportFile =
     options.reportFile ??
     path.join(root, "target/parity/runtime-contract.json");
+  const producer = options.binary
+    ? null
+    : buildTeaExample(cargo, "runtime_contract_driver", reportFile);
+  const binary = options.binary ?? producer.binary;
   await mkdir(path.dirname(reportFile), { recursive: true });
   await rm(reportFile, { force: true });
   const result = spawnSync(
@@ -22,7 +27,8 @@ export async function runtimeContractParity(cargo, options = {}) {
       path.join(here, "runtime-contract.mts"),
       "--report",
       reportFile,
-      ...(options.binary ? ["--native-binary", options.binary] : []),
+      "--native-binary",
+      binary,
       ...(options.mutation ? ["--mutation-check"] : []),
     ],
     {
@@ -49,6 +55,12 @@ export async function runtimeContractParity(cargo, options = {}) {
   assert.equal(report.cases.length, report.comparisonCount);
   assert.equal(report.passed, report.cases.filter((item) => item.equal).length);
   assert.equal(result.status, report.failures.length ? 1 : 0);
+  if (producer) assert.equal(report.binarySha256, producer.binarySha256);
+  report.producer = producer;
+  report.binarySource = options.binary
+    ? "external override; local Cargo producer unproved"
+    : "actual Cargo JSON selection";
+  await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   const nativeEvidence = Object.fromEntries(
     report.cases
       .filter((item) => item.equal)
@@ -66,6 +78,8 @@ export async function runtimeContractParity(cargo, options = {}) {
     failures: report.failures,
     nativeEvidence,
     binarySha256: report.binarySha256,
+    producer,
+    binarySource: report.binarySource,
     scriptStepsPerImplementation: report.scriptStepsPerImplementation,
     appliedTransitionsPerImplementation:
       report.appliedTransitionsPerImplementation,
