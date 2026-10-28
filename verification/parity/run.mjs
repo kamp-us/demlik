@@ -64,6 +64,7 @@ import { subscriptionConformance } from "./subscription-conformance-run.mjs";
 import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
+import { toolParsedInputCheckpointParity } from "./tool-parsed-input-parity.mjs";
 import { toolRouterCheckpointParity } from "./tool-router-parity.mjs";
 import { typedReducerParity } from "./typed-reducer-run.mjs";
 import { workflowParity } from "./workflow-run.mjs";
@@ -1181,6 +1182,12 @@ if (!mutationSuite) {
       operation: "tea.tool-router",
       binaryArgument: "--tool-router-bin",
       run: (options) => toolRouterCheckpointParity(cargo, options),
+    },
+    {
+      name: "toolParsedInput",
+      operation: "tea.tool-parsed-input",
+      binaryArgument: "--tool-parsed-input-bin",
+      run: (options) => toolParsedInputCheckpointParity(cargo, options),
     },
     {
       name: "agentStatus",
