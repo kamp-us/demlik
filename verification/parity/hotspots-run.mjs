@@ -9,6 +9,7 @@ import {
   receiptView,
   snapshot,
 } from "./hotspots-fixtures.mjs";
+
 const root = fileURLToPath(new URL("../..", import.meta.url));
 export function hotspotsParity(
   binary,

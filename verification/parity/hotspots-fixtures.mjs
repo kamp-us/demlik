@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { cases } from "./hotspots-cases.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export function snapshot(root) {

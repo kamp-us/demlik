@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hash, processEnvironment, receiptView } from "./hotspots-fixtures.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url)),
   root = path.resolve(here, "../..");
 const node = "/Users/cansirin/.volta/tools/image/node/22.21.1/bin/node";

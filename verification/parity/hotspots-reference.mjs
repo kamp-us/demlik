@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { assembleGraph } from "../../packages/code-graph/src/extract/assemble.ts";
+import { loadCheapProject } from "../../packages/code-graph/src/extract/project.ts";
 import {
-  loadChurn,
   churnFor,
+  loadChurn,
   resolveHotspotsCliOptions,
 } from "../../packages/code-graph/src/hotspots/churn.ts";
 import {
   computeHotspots,
   renderHotspots,
 } from "../../packages/code-graph/src/hotspots/render.ts";
-import { loadCheapProject } from "../../packages/code-graph/src/extract/project.ts";
-import { assembleGraph } from "../../packages/code-graph/src/extract/assemble.ts";
 import { ThresholdsSchema } from "../../packages/code-graph/src/schema.ts";
+
 assert.equal(process.version, "v22.21.1");
 assert.equal(process.versions.v8, "12.4.254.21-node.33");
 assert.equal(process.versions.icu, "77.1");
