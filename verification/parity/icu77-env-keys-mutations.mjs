@@ -50,6 +50,20 @@ export const faults = [
 ];
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+export function assertRequestMatches(witness, input, directory) {
+  assert.equal(witness.processes.length, 1);
+  const record = witness.processes[0];
+  const bytes = fs.readFileSync(record.input);
+  assert.equal(hash(bytes), record.inputSha256);
+  assert.deepEqual(JSON.parse(bytes), {
+    id: input.id,
+    mode: input.mode,
+    directory,
+    units: input.units,
+    candidates: input.candidates,
+  });
+}
+
 function main() {
   const [
     baselineFixture,
@@ -66,6 +80,17 @@ function main() {
   const root = fs.realpathSync(
     fileURLToPath(new URL("../..", import.meta.url)),
   );
+  const selectedFaults = process.env.DEMLIK_ENV_KEYS_CONTROLS
+    ? faults.filter((fault) =>
+        process.env.DEMLIK_ENV_KEYS_CONTROLS.split(",").includes(fault.id),
+      )
+    : faults;
+  assert.ok(selectedFaults.length > 0);
+  if (process.env.DEMLIK_ENV_KEYS_CONTROLS)
+    assert.deepEqual(
+      selectedFaults.map((fault) => fault.id),
+      process.env.DEMLIK_ENV_KEYS_CONTROLS.split(","),
+    );
   const evidence = path.resolve(output);
   fs.mkdirSync(evidence, { recursive: true });
   assert.ok(fs.statSync(archive).isFile());
@@ -111,7 +136,7 @@ function main() {
     originalSources: Object.fromEntries(
       Object.entries(originals).map(([file, text]) => [file, hash(text)]),
     ),
-    planned: 4,
+    planned: selectedFaults.length,
     cargoSelections: 0,
     nativePreparations: 0,
     controls: [],
@@ -261,7 +286,7 @@ function main() {
       env.DEMLIK_ICU77_PREPARED,
       path.join(evidence, "native-prepared.json"),
     );
-    for (const fault of faults) {
+    for (const fault of selectedFaults) {
       restore();
       const changed = originals[fault.owner].replace(
         fault.needle,
@@ -378,7 +403,12 @@ function main() {
           baseline = trusted.cases.find((row) => row.id === fault.witness);
         assert.equal(witness.passed, false);
         assert.equal(witness.actual.ok, true);
-        assert.deepEqual(witness.input, baseline.input);
+        const frozen = JSON.parse(fs.readFileSync(frozenSource, "utf8"));
+        assertRequestMatches(
+          witness,
+          baseline.input,
+          frozen.observations.find((row) => row.id === fault.witness).directory,
+        );
         assert.deepEqual(witness.expected, baseline.expected);
         assert.notDeepEqual(witness.actual, witness.expected);
         assert.ok(witness.observedCalls.length);
@@ -419,7 +449,7 @@ function main() {
         }),
       );
     }
-    report.complete = report.controls.length === 4;
+    report.complete = report.controls.length === selectedFaults.length;
     save();
   } catch (error) {
     operationError = error;
