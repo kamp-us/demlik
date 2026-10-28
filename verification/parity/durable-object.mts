@@ -29,6 +29,7 @@ import {
   Refusal,
   StoreConflictError,
 } from "../../packages/tea/src/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize } from "./timing-clock.mts";
 
 const data = z.unknown().refine((value) => z.json().safeParse(value).success);
@@ -2048,9 +2049,19 @@ export async function verifyDurableObject(
 ) {
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = durableObjectCases(),
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "durable_object_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = durableObjectCases(),
     source: Awaited<ReturnType<typeof executeDurableObject>>[] = [];
   for (const item of cases)
     source.push(await executeDurableObject(item.script));
@@ -2095,6 +2106,7 @@ export async function verifyDurableObject(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     comparison:
       "actual snapshot/event-store actions, storage ordering and bytes, failures, callbacks, retained models, lazy event ranges and recovery; raw platform syntax diagnostics retained separately",
     qualification:

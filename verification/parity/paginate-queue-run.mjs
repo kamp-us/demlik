@@ -6,6 +6,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { buildParityBinary } from "./tea-example.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
@@ -15,23 +17,12 @@ export async function paginateQueueParity(cargo, options = {}) {
   );
   assert.equal(process.version, scope.referenceEngine.node);
   assert.equal(process.versions.v8, scope.referenceEngine.v8);
-  const binary =
-    options.binary ?? path.join(root, "target/debug/paginate-queue-parity");
   const reportFile =
     options.reportFile ?? path.join(root, "target/parity/paginate-queue.json");
-  if (!options.binary)
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "--package",
-        "demlik-parity",
-        "--bin",
-        "paginate-queue-parity",
-      ],
-      { cwd: root, stdio: "inherit" },
-    );
+  const producer = options.binary
+    ? null
+    : buildParityBinary(cargo, "paginate-queue-parity", reportFile);
+  const binary = options.binary ?? producer.binary;
   const corpus = JSON.parse(
     await readFile(path.join(here, "paginate-queue-cases.json"), "utf8"),
   );
@@ -125,6 +116,7 @@ export async function paginateQueueParity(cargo, options = {}) {
     }
   }
   const report = {
+    producer,
     scope:
       "native paginator/work-queue slice; composed paginated-walk remains open",
     reference: scope.reference,

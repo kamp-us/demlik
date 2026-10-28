@@ -6,6 +6,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { buildParityBinary } from "./tea-example.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
@@ -23,35 +25,14 @@ export async function reconcilerParity(
     const index = args.indexOf(name);
     return index < 0 ? fallback : path.resolve(args[index + 1]);
   };
-  const binary =
-    options.binary ??
-    option("--rust-bin", path.join(root, "target/debug/reconciler-parity"));
   const reportFile =
     options.reportFile ??
     option("--report", path.join(root, "target/parity/reconciler.json"));
-  if (!options.binary && !args.includes("--rust-bin"))
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "--package",
-        "demlik-parity",
-        "--bin",
-        "reconciler-parity",
-      ],
-      {
-        cwd: root,
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          CARGO_PROFILE_DEV_DEBUG: "0",
-          CARGO_PROFILE_TEST_DEBUG: "0",
-          CARGO_INCREMENTAL: "0",
-          CARGO_BUILD_JOBS: "1",
-        },
-      },
-    );
+  const suppliedBinary = options.binary ?? option("--rust-bin", undefined);
+  const producer = suppliedBinary
+    ? null
+    : buildParityBinary(cargo, "reconciler-parity", reportFile);
+  const binary = suppliedBinary ?? producer.binary;
   const corpus = JSON.parse(
     await readFile(path.join(here, "reconciler-cases.json"), "utf8"),
   );
@@ -191,6 +172,7 @@ export async function reconcilerParity(
     }
   }
   const report = {
+    producer,
     scope: "native Reconciler composition; full port remains incomplete",
     reference: scope.reference,
     referenceChanges: execFileSync(

@@ -25,6 +25,7 @@ import {
   type SagaState,
 } from "../../packages/tea/src/flow/index.js";
 import type { Cmd } from "../../packages/tea/src/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize, numeric } from "./timing-clock.mts";
 
 const wireNumber = z.union([
@@ -582,9 +583,19 @@ export function verifySaga(
   binaryOverride?: string,
   mutationCheck = false,
 ) {
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = corpus(),
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "saga_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = corpus(),
     expected = cases.map((item) => executeSaga(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
@@ -639,6 +650,7 @@ export function verifySaga(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     scope:
       "native reversible saga queue composition; full port remains incomplete",
     passed: cases.length - failures.length,

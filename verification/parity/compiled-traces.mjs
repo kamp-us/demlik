@@ -127,6 +127,7 @@ export async function compiledTraceParity(cargo, name, options = {}) {
         }),
     ),
     binarySha256: format.binaryHash(report),
+    producer: report.producer ?? null,
     controls: report.controls,
     scope: report.scope,
     ...(report.profile ? { profile: report.profile } : {}),

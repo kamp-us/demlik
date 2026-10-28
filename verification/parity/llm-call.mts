@@ -22,6 +22,7 @@ import {
   type Machine,
   type Sub,
 } from "../../packages/tea/src/pure/core.ts";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 
 const num = z.union([
@@ -1056,27 +1057,15 @@ export async function llmCallParity(
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
   const root = resolve(dirname(new URL(import.meta.url).pathname), "../.."),
     cargo = options.cargo ?? process.env.CARGO ?? "cargo",
-    target = process.env.CARGO_TARGET_DIR ?? join(root, "target");
-  const binary = options.binary ?? join(target, "debug/llm_call_driver"),
     reportFile =
       options.reportFile ?? join(root, "target/parity/llm-call.json");
-  if (!options.binary) {
-    const build = spawnSync(
-      cargo,
-      ["build", "--locked", "-p", "demlik-parity", "--bin", "llm_call_driver"],
-      {
-        cwd: root,
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          CARGO_PROFILE_DEV_DEBUG: "0",
-          CARGO_PROFILE_TEST_DEBUG: "0",
-          CARGO_INCREMENTAL: "0",
-          CARGO_BUILD_JOBS: "1",
-        },
-      },
-    );
-    assert.equal(build.status, 0);
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let binary: string;
+  if (options.binary) {
+    binary = options.binary;
+  } else {
+    producer = buildParityBinary(cargo, "llm_call_driver", reportFile);
+    binary = options.binary ?? producer.binary;
   }
   const allCases = corpus();
   const cases = options.caseIds
@@ -1188,6 +1177,7 @@ export async function llmCallParity(
   if (!options.caseIds)
     assert(capabilities.every((capability) => capability.caseIds.length > 0));
   const report = {
+    producer,
     version: 1,
     profile: "numeric-and-json-null-settled-timestamps",
     passed: results.length - mismatches.length,

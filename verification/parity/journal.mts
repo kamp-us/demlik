@@ -21,6 +21,7 @@ import {
   memoryJournal,
 } from "../../packages/tea/src/internal/journal/index.js";
 import { fileJournal } from "../../packages/tea/src/node/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize } from "./timing-clock.mts";
 
 const data = z
@@ -905,9 +906,19 @@ export async function verifyJournal(
 ) {
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = journalCases();
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "journal_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = journalCases();
   const source: unknown[] = [];
   for (const item of cases) source.push(await executeJournal(item.script));
   const expected = source.map(
@@ -975,6 +986,7 @@ export async function verifyJournal(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     scope:
       "native ordered memory and file journals; full port remains incomplete",
     comparison:

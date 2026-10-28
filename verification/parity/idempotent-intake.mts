@@ -16,6 +16,7 @@ import {
 import { Outcome } from "../../packages/tea/src/index.js";
 import { queueAdapter } from "../../packages/tea/src/internal/work-queue/adapter.js";
 import { cmdEdgeOver, followUps } from "../../packages/tea/src/pure/core.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 
 const num = z.union([
@@ -818,29 +819,19 @@ export async function intakeParity(
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
   const root = resolve(dirname(new URL(import.meta.url).pathname), "../..");
-  const binary =
-    options.binary ??
-    join(
-      process.env.CARGO_TARGET_DIR ?? join(root, "target"),
-      "debug/intake_driver",
-    );
-  if (!options.binary) {
-    const build = spawnSync(
+  const reportFile =
+    options.reportFile ?? join(root, "target/parity/idempotent-intake.json");
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let binary: string;
+  if (options.binary) {
+    binary = options.binary;
+  } else {
+    producer = buildParityBinary(
       process.env.CARGO ?? "cargo",
-      ["build", "--locked", "-p", "demlik-parity", "--bin", "intake_driver"],
-      {
-        cwd: root,
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          CARGO_PROFILE_DEV_DEBUG: "0",
-          CARGO_PROFILE_TEST_DEBUG: "0",
-          CARGO_INCREMENTAL: "0",
-          CARGO_BUILD_JOBS: "1",
-        },
-      },
+      "intake_driver",
+      reportFile,
     );
-    assert.equal(build.status, 0);
+    binary = options.binary ?? producer.binary;
   }
   const cases = intakeCases().filter(
     (c) => !options.caseIds || options.caseIds.includes(c.id),
@@ -1000,6 +991,7 @@ export async function intakeParity(
   if (!options.caseIds && failures.length === 0)
     assert(mappings.every((m) => m.caseIds.length > 0));
   const report = {
+    producer,
     version: 1,
     passed: results.length - failures.length,
     total: results.length,
@@ -1020,8 +1012,6 @@ export async function intakeParity(
       "Opaque payloads/results have no pure Clone/serde/Send requirement. Actual wire conversion and raw projected result decoding are explicit boundary codecs.",
     ],
   };
-  const reportFile =
-    options.reportFile ?? join(root, "target/parity/idempotent-intake.json");
   mkdirSync(dirname(reportFile), { recursive: true });
   writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   return report;

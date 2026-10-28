@@ -26,6 +26,7 @@ import {
   seen,
 } from "../../packages/tea/src/idempotency/index.js";
 import type { AnyRetryPolicy } from "../../packages/tea/src/retry-backoff/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 
 const num = z.union([
@@ -732,9 +733,19 @@ export function verifyPoller(
   binaryOverride?: string,
   mutationCheck = false,
 ) {
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = corpus(),
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "poller_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = corpus(),
     expected = cases.map((item) => executePoller(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
@@ -820,6 +831,7 @@ export function verifyPoller(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     scope:
       "native poller and idempotency cold restore; full port remains incomplete",
     passed: cases.length - failures.length,

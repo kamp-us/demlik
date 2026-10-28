@@ -6,6 +6,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { buildParityBinary } from "./tea-example.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const require = createRequire(import.meta.url);
@@ -15,23 +17,12 @@ export async function timingParity(cargo, options = {}) {
   );
   assert.equal(process.version, scope.referenceEngine.node);
   assert.equal(process.versions.v8, scope.referenceEngine.v8);
-  const binary =
-    options.binary ?? path.join(root, "target/debug/timing-parity");
   const reportFile =
     options.reportFile ?? path.join(root, "target/parity/timing.json");
-  if (!options.binary)
-    execFileSync(
-      cargo,
-      [
-        "build",
-        "--locked",
-        "--package",
-        "demlik-parity",
-        "--bin",
-        "timing-parity",
-      ],
-      { cwd: root, stdio: "inherit" },
-    );
+  const producer = options.binary
+    ? null
+    : buildParityBinary(cargo, "timing-parity", reportFile);
+  const binary = options.binary ?? producer.binary;
   const corpus = JSON.parse(
     await readFile(path.join(here, "timing-cases.json"), "utf8"),
   );
@@ -112,6 +103,7 @@ export async function timingParity(cargo, options = {}) {
     }
   }
   const report = {
+    producer,
     scope: "native timing/deadline slice; full port remains incomplete",
     reference: scope.reference,
     referenceChanges: execFileSync(

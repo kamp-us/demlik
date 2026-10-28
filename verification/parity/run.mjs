@@ -61,6 +61,7 @@ import { sagaParity } from "./saga-run.mjs";
 import { snapshotInputParity } from "./snapshot-input-run.mjs";
 import { storedCellParity } from "./stored-cell-run.mjs";
 import { subscriptionConformance } from "./subscription-conformance-run.mjs";
+import { buildParityBinary } from "./tea-example.mjs";
 import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { timestampParity } from "./timestamps-run.mjs";
 import { timingParity } from "./timing-run.mjs";
@@ -121,10 +122,9 @@ const reportFile =
   reportArgument === -1
     ? path.join(root, "target/parity/report.json")
     : path.resolve(args[reportArgument + 1]);
-const binary =
-  binaryArgument === -1
-    ? path.join(root, "target/debug/demlik-parity")
-    : path.resolve(args[binaryArgument + 1]);
+let binary =
+  binaryArgument === -1 ? undefined : path.resolve(args[binaryArgument + 1]);
+let producer = null;
 const require = createRequire(import.meta.url);
 const cargo = process.env.CARGO ?? "cargo";
 const scope = JSON.parse(await readFile(path.join(here, "scope.json"), "utf8"));
@@ -158,10 +158,8 @@ const coverageInventory = args.includes("--complete")
   ? await discoverCoverageInventory()
   : undefined;
 if (binaryArgument === -1) {
-  execFileSync(cargo, ["build", "--locked", "--package", "demlik-parity"], {
-    cwd: root,
-    stdio: "inherit",
-  });
+  producer = buildParityBinary(cargo, "demlik-parity", reportFile);
+  binary = producer.binary;
 }
 const cases = [];
 for (const file of (await readdir(path.join(here, "cases"))).sort()) {
@@ -1263,6 +1261,7 @@ if (!mutationSuite) {
   }
 }
 const report = {
+  producer,
   scope: "implemented operations only; full port is incomplete",
   selection: mutationSuite ? `mutation:${mutationSuite}` : "all",
   reference: scope.reference,

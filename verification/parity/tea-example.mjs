@@ -10,20 +10,57 @@ const hash = (file) =>
   createHash("sha256").update(readFileSync(file)).digest("hex");
 
 export function buildTeaExample(cargo, example, reportFile, features = []) {
-  return buildTeaArtifact(cargo, "example", example, reportFile, features);
+  return buildArtifact(
+    cargo,
+    "demlik-tea",
+    "example",
+    example,
+    reportFile,
+    features,
+  );
 }
 
 export function buildTeaTest(cargo, test, reportFile) {
-  return buildTeaArtifact(cargo, "test", test, reportFile, []);
+  return buildArtifact(cargo, "demlik-tea", "test", test, reportFile, []);
 }
 
-function buildTeaArtifact(cargo, kind, example, reportFile, features) {
+export function buildParityBinary(cargo, name, reportFile) {
+  for (const key of [
+    "CARGO_TARGET_DIR",
+    "DEMLIK_MUTATION_TARGET_DIR",
+    "CARGO_BUILD_TARGET_DIR",
+    "CARGO_BUILD_BUILD_DIR",
+  ]) {
+    assert.equal(
+      process.env[key],
+      undefined,
+      `${key} must be unset for a default-target build`,
+    );
+  }
+  return buildArtifact(
+    cargo,
+    "demlik-parity",
+    "bin",
+    name,
+    path.resolve(reportFile),
+    [],
+  );
+}
+
+function buildArtifact(
+  cargo,
+  packageName,
+  kind,
+  example,
+  reportFile,
+  features,
+) {
   const args = [
     kind === "test" ? "test" : "build",
     "--locked",
     "--offline",
     "-p",
-    "demlik-tea",
+    packageName,
     `--${kind}`,
     example,
     "--message-format=json",
@@ -54,6 +91,11 @@ function buildTeaArtifact(cargo, kind, example, reportFile, features) {
   );
   assert.equal(drivers.length, 1, "one actual Cargo-selected example");
   const driver = drivers[0];
+  const crate = packageName === "demlik-parity" ? "parity" : "tea";
+  assert.equal(
+    driver.manifest_path,
+    path.join(root, "crates", crate, "Cargo.toml"),
+  );
   for (const feature of features) assert.ok(driver.features.includes(feature));
   const binarySha256 = hash(driver.executable);
   const binary = `${reportFile}.${binarySha256}.bin`;
@@ -62,6 +104,7 @@ function buildTeaArtifact(cargo, kind, example, reportFile, features) {
   const libraries = {};
   for (const name of [
     "demlik_tea",
+    ...(packageName === "demlik-parity" ? ["demlik_code_graph"] : []),
     ...(features.includes("pbt") ? ["proptest"] : []),
   ]) {
     const selected = artifacts.filter(
@@ -92,6 +135,10 @@ function buildTeaArtifact(cargo, kind, example, reportFile, features) {
     binary,
     binarySha256,
     libraries,
+    source: {
+      path: driver.target.src_path,
+      sha256: hash(driver.target.src_path),
+    },
   };
   writeFileSync(
     `${reportFile}.artifacts.json`,

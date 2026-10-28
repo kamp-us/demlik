@@ -29,6 +29,7 @@ import {
   timerFor,
 } from "../../packages/tea/src/flow/index.js";
 import { definePort } from "../../packages/tea/src/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 
 const wireNumber = z.union([
   z.number(),
@@ -729,9 +730,19 @@ export function verifyFlow(
   binaryOverride?: string,
   mutationCheck = false,
 ) {
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = corpus(),
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "flow_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = corpus(),
     expected = cases.map((item) => executeFlow(item.script)),
     results = native(cases, executable);
   assert.equal(results.length, cases.length);
@@ -773,6 +784,7 @@ export function verifyFlow(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     runtime: {
       node: process.version,
       v8: process.versions.v8,

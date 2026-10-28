@@ -46,6 +46,7 @@ import {
 } from "../../packages/tea/src/index.js";
 import { memoryStore } from "../../packages/tea/src/mem/index.js";
 import { run as runPromise } from "../../packages/tea/src/promise/index.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 
 const wireNumber = z.union([
@@ -1043,9 +1044,19 @@ export async function verifyWorkflow(
   binaryOverride?: string,
   mutationCheck = false,
 ) {
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = corpus(),
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "workflow_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = corpus(),
     expected = await Promise.all(
       cases.map((item) => executeWorkflow(item.script)),
     ),
@@ -1129,6 +1140,7 @@ export async function verifyWorkflow(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     scope:
       "native durable workflow and pending-effect ledger; full port remains incomplete",
     passed: cases.length - failures.length,

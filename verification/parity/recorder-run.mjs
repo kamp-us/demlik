@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { recorderCases, recorderLiteralChecks } from "./recorder-cases.mjs";
+import { buildParityBinary } from "./tea-example.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   here = path.dirname(fileURLToPath(import.meta.url)),
@@ -33,30 +34,18 @@ export async function recorderParity(options = {}) {
     .split("\n")
     .filter(Boolean);
   assert.deepEqual(referenceChanges, []);
-  const cases = recorderCases(),
-    input = `${cases.map((row) => JSON.stringify(row)).join("\n")}\n`,
-    binary =
-      options.binary ??
-      path.join(
-        process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-        "debug/recorder-parity",
+  const reportFile =
+    options.reportFile ?? path.join(root, "target/parity/recorder.json");
+  const producer = options.binary
+    ? null
+    : buildParityBinary(
+        process.env.CARGO ?? "cargo",
+        "recorder-parity",
+        reportFile,
       );
-  if (!options.binary)
-    execFileSync(
-      process.env.CARGO ?? "cargo",
-      ["build", "--locked", "-p", "demlik-parity", "--bin", "recorder-parity"],
-      {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
-          CARGO_PROFILE_DEV_DEBUG: "0",
-          CARGO_PROFILE_TEST_DEBUG: "0",
-          CARGO_INCREMENTAL: "0",
-          CARGO_BUILD_JOBS: "1",
-        },
-      },
-    );
+  const binary = options.binary ?? producer.binary;
+  const cases = recorderCases(),
+    input = `${cases.map((row) => JSON.stringify(row)).join("\n")}\n`;
   const run = (command, args) =>
     execFileSync(command, args, {
       cwd: root,
@@ -124,6 +113,7 @@ export async function recorderParity(options = {}) {
     "verification/parity/recorder-cases.mjs",
   ];
   const report = {
+    producer,
     scope:
       "Native recorder/JSONL/attachment/breadcrumb/replay/state-walk, exact data and source-owned refusal parity",
     reference: scope.reference,
@@ -169,8 +159,6 @@ export async function recorderParity(options = {}) {
       "Raw structural comparison covers canonical plain data and pristine Object.prototype reads. Opaque native state uses the explicit typed comparison/codec APIs, with borrowed/non-serde witnesses.",
     ],
   };
-  const reportFile =
-    options.reportFile ?? path.join(root, "target/parity/recorder.json");
   await mkdir(path.dirname(reportFile), { recursive: true });
   await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   if (!options.quiet)

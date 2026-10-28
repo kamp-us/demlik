@@ -30,6 +30,7 @@ import {
   type RemoteJournal,
   type SyncClient,
 } from "../../packages/tea/src/internal/journal/remote.js";
+import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize } from "./timing-clock.mts";
 
 const data = z.unknown().refine((value) => z.json().safeParse(value).success);
@@ -1256,9 +1257,19 @@ export async function verifyJournalRemote(
 ) {
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
-  if (!binaryOverride) build();
-  const executable = binaryOverride ?? binary(),
-    cases = journalRemoteCases();
+  let producer: ReturnType<typeof buildParityBinary> | null = null;
+  let executable: string;
+  if (binaryOverride) {
+    executable = binaryOverride;
+  } else {
+    producer = buildParityBinary(
+      process.env.CARGO ?? "cargo",
+      "journal_remote_driver",
+      reportPath,
+    );
+    executable = binaryOverride ?? producer.binary;
+  }
+  const cases = journalRemoteCases();
   const source: Awaited<ReturnType<typeof executeJournalRemote>>[] = [];
   for (const item of cases)
     source.push(await executeJournalRemote(item.script));
@@ -1309,6 +1320,7 @@ export async function verifyJournalRemote(
       process.env.RUSTC ??
       (isAbsolute(cargo) ? join(dirname(cargo), "rustc") : "rustc");
   const report = {
+    producer,
     scope: "native journal sync clients; full port remains incomplete",
     comparison:
       "action-boundary results, exact transport/local/cursor call order and raw failures, typed phases, record/token/entry identity, held writes/reads, restart and racing-sync quirks",
