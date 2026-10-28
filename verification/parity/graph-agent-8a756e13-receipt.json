@@ -115,18 +115,9 @@
     "originalStatusPreserved": "passed-pending-qualification-delta-review",
     "acceptedBySeparateReviews": true,
     "sourceOffsetPairs": {
-      "graph.collapse-partial.graph.raw-source": [
-        167,
-        165
-      ],
-      "graph.text-interface.raw-source.context-text": [
-        165,
-        166
-      ],
-      "graph.text-interface.raw-source.assembly-text": [
-        165,
-        166
-      ]
+      "graph.collapse-partial.graph.raw-source": [167, 165],
+      "graph.text-interface.raw-source.context-text": [165, 166],
+      "graph.text-interface.raw-source.assembly-text": [165, 166]
     },
     "causeResolved": false,
     "permanentQualificationOrExactnessClaimed": false,
