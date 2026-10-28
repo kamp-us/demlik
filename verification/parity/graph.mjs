@@ -193,6 +193,14 @@ const suites = [
     traceField: "nativeTrace",
   },
   {
+    name: "icu77-collapse",
+    driver: "collapse_report_driver",
+    script: "icu77-collapse-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
