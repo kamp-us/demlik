@@ -155,3 +155,7 @@ pub(crate) fn load_env_key_report<'c>(
     }
     Ok(find_env_key_mismatches(catalog, scan))
 }
+
+#[cfg(test)]
+#[path = "icu77_probe.rs"]
+mod icu77_probe;
