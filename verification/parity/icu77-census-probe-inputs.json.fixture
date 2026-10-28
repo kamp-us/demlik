@@ -1,0 +1,341 @@
+[
+  {
+    "id": "pair-ab",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      }
+    ]
+  },
+  {
+    "id": "pair-bc",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      }
+    ]
+  },
+  {
+    "id": "pair-ac",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-1",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-2",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      },
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-3",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      },
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-4",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      },
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      },
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-5",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      },
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      },
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      }
+    ]
+  },
+  {
+    "id": "cycle-permutation-6",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "c",
+        "line": 1,
+        "binding": "a"
+      },
+      {
+        "id": "b",
+        "line": "NaN",
+        "binding": "b"
+      },
+      {
+        "id": "a",
+        "line": 0,
+        "binding": "c"
+      }
+    ]
+  },
+  {
+    "id": "finite-total",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "zero-z",
+        "line": 0,
+        "binding": "Z"
+      },
+      {
+        "id": "two-a",
+        "line": 2,
+        "binding": "a"
+      },
+      {
+        "id": "zero-a",
+        "line": 0,
+        "binding": "a"
+      },
+      {
+        "id": "minus-zero",
+        "line": "-0",
+        "binding": "m"
+      }
+    ]
+  },
+  {
+    "id": "mixed-infinite",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "plus-z",
+        "line": "+Infinity",
+        "binding": "Z"
+      },
+      {
+        "id": "finite",
+        "line": 0,
+        "binding": "m"
+      },
+      {
+        "id": "minus-z",
+        "line": "-Infinity",
+        "binding": "Z"
+      },
+      {
+        "id": "plus-a",
+        "line": "+Infinity",
+        "binding": "a"
+      },
+      {
+        "id": "nan",
+        "line": "NaN",
+        "binding": "2"
+      },
+      {
+        "id": "minus-a",
+        "line": "-Infinity",
+        "binding": "a"
+      }
+    ]
+  },
+  {
+    "id": "all-nan",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "nan-z",
+        "line": "NaN",
+        "binding": "Z"
+      },
+      {
+        "id": "nan-a",
+        "line": "NaN",
+        "binding": "a"
+      },
+      {
+        "id": "nan-m",
+        "line": "NaN",
+        "binding": "m"
+      }
+    ]
+  },
+  {
+    "id": "same-object-and-equal-values",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "same",
+        "line": 2,
+        "binding": "a"
+      },
+      {
+        "id": "equal",
+        "line": 2,
+        "binding": "a"
+      },
+      {
+        "alias": "same"
+      }
+    ]
+  },
+  {
+    "id": "counts-and-owners",
+    "mode": "deployable",
+    "rows": [
+      {
+        "id": "ten",
+        "line": 1,
+        "binding": "10",
+        "file": "workers/Z/src/z.ts"
+      },
+      {
+        "id": "two",
+        "line": 2,
+        "binding": "2",
+        "file": "workers/Z/src/z.ts"
+      },
+      {
+        "id": "proto",
+        "line": 3,
+        "binding": "__proto__",
+        "file": "workers/Z/src/a.ts"
+      },
+      {
+        "id": "raw",
+        "line": 4,
+        "binding": "\ud800",
+        "file": "workers/a/src/a.ts"
+      },
+      {
+        "id": "replacement",
+        "line": 5,
+        "binding": "\ufffd",
+        "file": "workers/a/src/a.ts"
+      },
+      {
+        "id": "nested",
+        "line": 6,
+        "binding": "DB",
+        "file": "workers/Z/deep/src/a.ts"
+      },
+      {
+        "id": "foreign",
+        "line": 7,
+        "binding": "OUT",
+        "file": "outside/x.ts"
+      }
+    ]
+  },
+  {
+    "id": "disabled",
+    "mode": "deployable",
+    "rows": []
+  },
+  {
+    "id": "library-enabled",
+    "mode": "library",
+    "rows": []
+  },
+  {
+    "id": "library-disabled",
+    "mode": "library-disabled",
+    "rows": []
+  }
+]
