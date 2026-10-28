@@ -213,6 +213,10 @@ async function execute(input: any) {
   });
   const wired = knob.toMachine({ toolInterpret: { policy_tool: tool } }),
     store = fileStore<State>(path.join(input.path, "state.json"), (raw) => {
+      if (raw == null) {
+        loaded = raw;
+        return raw;
+      }
       loaded = stateBoundary.parse(raw);
       return loaded;
     });
