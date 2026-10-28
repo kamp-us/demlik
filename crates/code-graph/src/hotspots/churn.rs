@@ -141,6 +141,7 @@ fn run_git(
     cwd: &JsString,
     arguments: Vec<JsString>,
     stage: ChurnStage,
+    diagnostic: &mut impl FnMut(&JsString) -> io::Result<()>,
 ) -> Result<GitReadFailure, ChurnFailure> {
     let mut command = Command::new("git");
     command
@@ -159,8 +160,7 @@ fn run_git(
     // execFileSync with encoding:utf8 forwards stderr before checking the result,
     // even for successful children. Keep original bytes in the native read data.
     if !read.stderr.is_empty()
-        && let Err(source) =
-            io::stderr().write_all(String::from_utf8_lossy(&read.stderr).as_bytes())
+        && let Err(source) = diagnostic(&text(&read.stderr))
     {
         return Err(ChurnFailure::Diagnostic {
             stage,
@@ -220,6 +220,16 @@ pub fn load_churn_blocking(
     root: &JsString,
     window: &ChurnWindow,
 ) -> Result<ChurnData, ChurnFailure> {
+    load_churn_with_diagnostic(root, window, &mut |payload| {
+        io::stderr().write_all(payload.to_lossy().as_bytes())
+    })
+}
+
+pub(crate) fn load_churn_with_diagnostic(
+    root: &JsString,
+    window: &ChurnWindow,
+    diagnostic: &mut impl FnMut(&JsString) -> io::Result<()>,
+) -> Result<ChurnData, ChurnFailure> {
     let real = real_path(root).map_err(|source| ChurnFailure::Io {
         stage: ChurnStage::RealRoot,
         path: root.clone(),
@@ -229,6 +239,7 @@ pub fn load_churn_blocking(
         &real,
         vec!["rev-parse".into(), "--show-toplevel".into()],
         ChurnStage::RepositoryRoot,
+        diagnostic,
     )?;
     let repo_root = text(&top.stdout).trim_js();
     if repo_root.is_empty() {
@@ -241,6 +252,7 @@ pub fn load_churn_blocking(
         &real,
         vec!["rev-parse".into(), "HEAD".into()],
         ChurnStage::Head,
+        diagnostic,
     )?;
     let head_sha = text(&head.stdout).trim_js();
     if head_sha.is_empty() {
@@ -261,7 +273,7 @@ pub fn load_churn_blocking(
     };
     let mut args = vec![JsString::from("ls-files")];
     args.extend(pathspec.iter().cloned());
-    let tracked = run_git(&repo_root, args, ChurnStage::TrackedFiles)?;
+    let tracked = run_git(&repo_root, args, ChurnStage::TrackedFiles, diagnostic)?;
     let mut since = JsString::from("--since=");
     since.extend(&window.since_iso);
     let mut until = JsString::from("--until=");
@@ -274,7 +286,7 @@ pub fn load_churn_blocking(
         "--pretty=format:%x00".into(),
     ];
     args.extend(pathspec);
-    let log = run_git(&repo_root, args, ChurnStage::Log)?;
+    let log = run_git(&repo_root, args, ChurnStage::Log, diagnostic)?;
     Ok(ChurnData {
         repo_root,
         head_sha,

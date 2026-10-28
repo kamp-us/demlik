@@ -486,6 +486,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     return match result {
                         Ok(ReportDispatch::Complete)=>Ok(object([("kind",JsValue::String("reports".into()))])),
                         Ok(ReportDispatch::Refused{cause})=>Ok(object([("kind",JsValue::String("reports-load-refused".into())),("cause",JsValue::String(cause.message()))])),
+                        Ok(ReportDispatch::HotspotsRefused{cause})=>Ok(object([("kind",JsValue::String("reports-hotspots-refused".into())),("cause",JsValue::String(cause.to_string().into())),("stage",JsValue::String(cause.stage().as_str().into()))])),
                         Ok(ReportDispatch::Continue(value))=>Ok(object([
                             ("kind",JsValue::String("continue".into())),
                             ("sameCarrier",JsValue::Bool(std::ptr::eq(before,value.as_ref()))),

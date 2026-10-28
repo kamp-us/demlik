@@ -74,5 +74,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(stamp) = env::var_os("DEMLIK_ICU77_PREPARED") {
         println!("cargo:rerun-if-changed={}", PathBuf::from(stamp).display());
     }
+    // BasicTimeZone's FORMER/FORMER operation is C++ only. Compile this narrow
+    // bridge against the already-verified owning tree's static ICU77 install.
+    let source = manifest.join("src/hotspots/timezone.cc");
+    let libraries = PathBuf::from(
+        env::var_os("RUST_ICU_LINK_SEARCH_DIR").ok_or("missing private ICU77 library directory")?,
+    );
+    let includes = libraries
+        .parent()
+        .ok_or("missing ICU77 install")?
+        .join("include");
+    let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("missing Cargo OUT_DIR")?);
+    let object = output.join("hotspots-timezone77.o");
+    let archive = output.join("libdemlik_hotspots_timezone77.a");
+    let status = Command::new("/usr/bin/clang++")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .env("TMPDIR", root.join("target/tmp"))
+        .args([
+            "-std=c++17",
+            "-O2",
+            "-g0",
+            "-fno-exceptions",
+            "-fno-rtti",
+            "-c",
+        ])
+        .arg(&source)
+        .arg("-I")
+        .arg(includes)
+        .arg("-o")
+        .arg(&object)
+        .status()?;
+    if !status.success() {
+        return Err("ICU77 timezone bridge compilation failed".into());
+    }
+    let status = Command::new("/usr/bin/ar")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .env("TMPDIR", root.join("target/tmp"))
+        .args(["crs"])
+        .arg(&archive)
+        .arg(object)
+        .status()?;
+    if !status.success() {
+        return Err("ICU77 timezone bridge archive failed".into());
+    }
+    println!("cargo:rerun-if-changed={}", source.display());
+    println!("cargo:rustc-link-search=native={}", output.display());
+    println!("cargo:rustc-link-lib=static=demlik_hotspots_timezone77");
+    println!("cargo:rustc-link-lib=c++");
     Ok(())
 }

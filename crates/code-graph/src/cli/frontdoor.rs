@@ -203,7 +203,12 @@ pub enum SmellDispatch {
 #[derive(Debug)]
 pub enum ReportDispatch {
     Complete,
-    Refused { cause: ProjectLoadError },
+    Refused {
+        cause: ProjectLoadError,
+    },
+    HotspotsRefused {
+        cause: crate::hotspots::ChurnFailure,
+    },
     Continue(Box<PreparedGatesCli>),
 }
 enum ConsoleOutput {
@@ -219,6 +224,7 @@ enum ConsoleOutput {
     Kinds,
     CrossRuntime,
     Data,
+    Hotspots,
     Blast,
     Find,
     File,
@@ -260,6 +266,7 @@ pub enum FrontdoorError {
     SmellEmit(ApiError),
     ReportRender(ReportRenderError),
     ReportEmit(ApiError),
+    HotspotsWindow(crate::hotspots::ChurnWindowError),
     CollapseRender(ReportRenderError),
     Unreachable(UnreachableRunError<ApiError>),
     EnvKeys(EnvKeyError),
@@ -292,6 +299,7 @@ impl FrontdoorError {
             Self::SmellLedger(error) => error.name(),
             Self::SmellEmit(error) => error.name(),
             Self::ReportEmit(error) => error.name(),
+            Self::HotspotsWindow(error) => error.name(),
             Self::Unreachable(
                 UnreachableRunError::Emit(error) | UnreachableRunError::Report(error),
             ) => error.name(),
@@ -327,6 +335,7 @@ impl FrontdoorError {
             Self::SmellLedger(error) => error.message(),
             Self::SmellEmit(error) => error.message(),
             Self::ReportEmit(error) => error.message(),
+            Self::HotspotsWindow(error) => error.message(),
             Self::ReportRender(error) => error.to_string().into(),
             Self::CollapseRender(error) => error.to_string().into(),
             Self::Unreachable(error) => match error {
@@ -372,6 +381,7 @@ impl Error for FrontdoorError {
             Self::SmellLedger(error) => error,
             Self::SmellEmit(error) => error,
             Self::ReportEmit(error) => error,
+            Self::HotspotsWindow(error) => error,
             Self::ReportRender(error) => error,
             Self::CollapseRender(error) => error,
             Self::Unreachable(error) => match error {
@@ -1158,8 +1168,8 @@ impl PreparedGatesCli {
         Ok(LayerDispatch::Complete(result))
     }
 
-    /// Run the supported late outputs after early modes and both prepared ledger gates.
-    /// Unsupported higher-priority outputs retain this same allocation before graph or IO work.
+    /// Run late outputs after early modes and both prepared ledger gates.
+    /// Prepared gates retain this allocation before graph or output work.
     pub fn dispatch_reports_blocking(
         self: Box<Self>,
         host: &mut CliIo<'_>,
@@ -1174,10 +1184,27 @@ impl PreparedGatesCli {
 
     /// The host supplies terminal styling; every view uses the same graph/output pipeline.
     pub fn dispatch_reports_with_style_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        binary: &TsgoBinary,
+        tree_style: crate::render::tree::TreeStyle,
+    ) -> Result<ReportDispatch, FrontdoorError> {
+        self.dispatch_reports_with_clock_blocking(
+            host,
+            binary,
+            tree_style,
+            crate::hotspots::system_clock_ms,
+        )
+    }
+
+    /// The clock is requested once only if the selected hotspots route reaches
+    /// window resolution. Captured borrowed/Rc values need no host bounds.
+    pub fn dispatch_reports_with_clock_blocking(
         mut self: Box<Self>,
         host: &mut CliIo<'_>,
         binary: &TsgoBinary,
         tree_style: crate::render::tree::TreeStyle,
+        read_clock: impl FnOnce() -> f64,
     ) -> Result<ReportDispatch, FrontdoorError> {
         use crate::render::{analysis, ci, file, graph as graph_view, plan, smells, summary};
         use crate::smells::plan::PlanAxis;
@@ -1214,7 +1241,7 @@ impl PreparedGatesCli {
         } else if options.data() == Some(true) {
             ConsoleOutput::Data
         } else if options.hotspots() == Some(true) {
-            return Ok(ReportDispatch::Continue(self));
+            ConsoleOutput::Hotspots
         } else if options.blast().is_some() {
             ConsoleOutput::Blast
         } else if options.find().is_some() {
@@ -1277,6 +1304,58 @@ impl PreparedGatesCli {
                 .map_err(FrontdoorError::Collation)?;
             let payload = crate::render::html::render_html(&graph, &collation)
                 .map_err(FrontdoorError::ReportRender)?;
+            output_to(options.out())
+                .emit(host, &payload)
+                .map_err(FrontdoorError::ReportEmit)?;
+            return Ok(ReportDispatch::Complete);
+        }
+        if matches!(output, ConsoleOutput::Hotspots) {
+            let defaults = (JsString::from("90"), JsString::from("20"));
+            let resolved = match crate::hotspots::resolve_hotspots_cli_options(
+                options.hotspots_days().unwrap_or(&defaults.0),
+                options.hotspots_limit().unwrap_or(&defaults.1),
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    clean_exit(host, &error.message());
+                    return Ok(ReportDispatch::Complete);
+                }
+            };
+            let window = crate::hotspots::resolve_churn_window_local(
+                resolved.days,
+                options.hotspots_since(),
+                read_clock,
+            )
+            .map_err(FrontdoorError::HotspotsWindow)?;
+            let churn = match crate::hotspots::load_churn_with_diagnostic(
+                &self.prepared.root_absolute,
+                &window,
+                &mut |payload| {
+                    host.write_stderr(payload);
+                    Ok(())
+                },
+            ) {
+                Ok(value) => value,
+                Err(cause) => {
+                    let mut message = self.prepared.root_absolute.clone();
+                    message.push_str(" is not inside a git repository (or git is unavailable); --hotspots needs git history.");
+                    clean_exit(host, &message);
+                    return Ok(ReportDispatch::HotspotsRefused { cause });
+                }
+            };
+            let mut payload = crate::hotspots::render_hotspots(
+                &graph,
+                &churn,
+                &window,
+                resolved.limit,
+                json,
+                pretty,
+                self.collation
+                    .as_ref()
+                    .expect("successful assembly retains its collation"),
+            )
+            .map_err(FrontdoorError::ReportRender)?;
+            payload.push_str("\n");
             output_to(options.out())
                 .emit(host, &payload)
                 .map_err(FrontdoorError::ReportEmit)?;
@@ -1437,6 +1516,7 @@ impl PreparedGatesCli {
             | ConsoleOutput::Html
             | ConsoleOutput::Collapse
             | ConsoleOutput::Unreachable
+            | ConsoleOutput::Hotspots
             | ConsoleOutput::Blast
             | ConsoleOutput::Find => {
                 unreachable!("delegated output")
