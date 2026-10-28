@@ -13,6 +13,7 @@ pub mod engine;
 pub mod env_keys;
 pub mod extract;
 pub mod hexagon;
+pub mod hotspots;
 pub mod kinds;
 pub mod layers;
 mod number;

@@ -124,6 +124,11 @@ fn terminate(child: &mut std::process::Child, failures: &mut Vec<CaptureFailure>
 /// Stdin, argv validation and domain errors remain caller-owned. The first
 /// overflowing chunk is retained; read-chunk overshoot and exit races are native.
 pub(crate) fn capture(command: &mut Command) -> Captured {
+    capture_with_limit(command, MAX_BUFFER)
+}
+
+/// Caller-selected budget; reader/kill/reap behavior stays with this owner.
+pub(crate) fn capture_with_limit(command: &mut Command, max_buffer: usize) -> Captured {
     let mut result = Captured {
         stdout: vec![],
         stderr: vec![],
@@ -174,9 +179,9 @@ pub(crate) fn capture(command: &mut Command) -> Captured {
             Ok(bytes) if result.failures.is_empty() => {
                 streams[stream.index()].extend(bytes);
                 let captured = streams[0].len() + streams[1].len();
-                if captured > MAX_BUFFER {
+                if captured > max_buffer {
                     result.failures.push(CaptureFailure::OutputLimit {
-                        limit: MAX_BUFFER,
+                        limit: max_buffer,
                         captured,
                     });
                     terminate(&mut child, &mut result.failures);

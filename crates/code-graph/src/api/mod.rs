@@ -1,5 +1,6 @@
 pub mod base;
 mod capture;
+pub(crate) use capture::capture_with_limit;
 pub mod cli;
 pub mod diff;
 pub mod emit;
