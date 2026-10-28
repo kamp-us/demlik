@@ -1,0 +1,241 @@
+{
+  "component": "native hand-wired agent per-tool policies",
+  "status": "component conformance green, independent review and combined acceptance remain parent-owned",
+  "sourceCommit": "1f66b1fe9a27ea54c97f4f6c958dd9803e23f5c8",
+  "interfacePrerequisite": "aa42521b32d005958c5afaa5a75f381ad675a397",
+  "finalSourceHead": "029d461761ad8b17c80c0d17f49376ca776807c1",
+  "raw54VerifierHead": "19aa60492f69fd141a9e74710caeb4ad3e2e1264",
+  "followupCommits": [
+    "c98ac3740338605609dd3ba678ff3280b5deb2c4",
+    "ce21c4f3c7cafb93c5ce5d44f19262d78970c7ce",
+    "19aa60492f69fd141a9e74710caeb4ad3e2e1264",
+    "c5572aae9fc64a8ef597ac919417bb67ecf93301",
+    "029d461761ad8b17c80c0d17f49376ca776807c1"
+  ],
+  "proofDirectory": "/private/tmp/demlik-agent-tool-policy-proof-01a16c9d",
+  "manifest": {
+    "path": "manifest.json",
+    "sha256": "e9eff98aa46849bb9e06489361cfd2626d62a61fb29a062e1d31af9f8385c485",
+    "files": 2294,
+    "logicalBytes": 871909006
+  },
+  "sourceArchive": {
+    "commit": "029d461761ad8b17c80c0d17f49376ca776807c1",
+    "command": [
+      "git",
+      "archive",
+      "--format=tar.gz",
+      "--output=/private/tmp/demlik-agent-tool-policy-proof-01a16c9d/source-029d4617.tar.gz",
+      "029d461761ad8b17c80c0d17f49376ca776807c1",
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/tea",
+      "crates/tea/examples/agent_tool_policy_driver.rs",
+      "crates/tea/examples/agent_tool_policy_interface.rs",
+      "crates/tea/examples/agent_tool_policy_runtime_driver.rs",
+      "crates/tea/src/agent/knob.rs",
+      "crates/tea/src/agent/knob/error.rs",
+      "crates/tea/src/agent/tool_resilience.rs",
+      "crates/tea/src/agent/turn_view.rs",
+      "crates/tea/tests/agent_tool_policy.rs",
+      "crates/tea/tests/agent_tool_policy_interface.rs",
+      "verification/parity/agent-base-cases.mjs",
+      "verification/parity/agent-base-checks-run.mjs",
+      "verification/parity/agent-base-coverage.mjs",
+      "verification/parity/agent-base-mutations.mjs",
+      "verification/parity/agent-tool-policy-cases.mjs",
+      "verification/parity/agent-tool-policy-reference.mts",
+      "verification/parity/agent-tool-policy-run.mjs",
+      "verification/parity/agent-tool-policy-runtime-reference.mts",
+      "verification/parity/tsconfig.agent-tool-policy.json",
+      "LICENSE"
+    ],
+    "path": "source-029d4617.tar.gz",
+    "sha256": "c7d18e6ce1c478219ba39905af021059de995b4bce4b0e255ea279f7ae7385c3",
+    "bytes": 608207,
+    "totalMembers": 361,
+    "fileMembers": 312,
+    "sourceOnly": true,
+    "artifactsAndReportsSeparate": true
+  },
+  "reference": {
+    "git": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "wholeTeaPackageFilesUnchanged": 537,
+    "manifest": "frozen-reference.json"
+  },
+  "newPolicyComparisons": {
+    "report": "final-raw54.json",
+    "sha256": "d19fed139592a9a6a2cebcad71edb368afdac91191464e393fedef66d6eae401",
+    "observations": 54,
+    "strict": 53,
+    "qualified": 1,
+    "pure": {
+      "observations": 40,
+      "strict": 39,
+      "qualified": 1
+    },
+    "runtime": 12,
+    "coldWriterReaderCases": 2,
+    "runtimeIncludedIn54": true,
+    "processRecords": 112,
+    "allProcessExit0AndIdentityTrusted": true,
+    "binaryHashes": {
+      "/private/tmp/demlik-rust-agent-tool-policy-01a16c9d/target/debug/examples/agent_tool_policy_driver": "7a27502fec8ed6417d5ac336feda0bffde0672167aa3d077fa355fc4d1886e6f",
+      "/private/tmp/demlik-rust-agent-tool-policy-01a16c9d/target/debug/examples/agent_tool_policy_runtime_driver": "9830d33883be3712b3f38850e901f44494661d15bd5ae1089b9a13c33e9367d8"
+    },
+    "qualifiedCase": "agent-tool-policy.pure.original-null-reason-field",
+    "qualifiedEvidenceSeparated": true
+  },
+  "newlyStrictExistingBaseCase": {
+    "id": "agent-base.unsupported-tool-ladder",
+    "strictBefore": 43,
+    "strictAfter": 44,
+    "stillOpen": 1,
+    "raw": 45,
+    "actions": 271,
+    "unchangedRawInputSha256": "3965d6915fde84b8bef5425a97c6f7450f7edea8c0f6d0dd40f0a5ee326fa5bc",
+    "originalAndNowEqualFullOutputsRetained": true,
+    "actualCallsValidatedByExistingExpected": true,
+    "noNewCaseOrFakeSourceID": true
+  },
+  "existingRegressionObservations": {
+    "groups": {
+      "base-fixed": {
+        "report": "regressions/base-fixed.json",
+        "sha256": "775c6e42a24d559998e024ddfbb0d1130671d9a902f2f82b86715182282407eb",
+        "cases": 44,
+        "passed": 44,
+        "strictOrQualifiedRules": "preserved in actual owner report, not blanket strict",
+        "qualifiedObservations": 1
+      },
+      "runtime": {
+        "report": "regressions/runtime.json",
+        "sha256": "3eaf870b1147ff560fbcf0d8df14483f1b1d32fdbe76acb3ddd3c4086aef86b6",
+        "cases": 34,
+        "passed": 34,
+        "strictOrQualifiedRules": "preserved in actual owner report, not blanket strict",
+        "qualifiedObservations": 0
+      },
+      "compaction": {
+        "report": "regressions/compaction.json",
+        "sha256": "108be8b054059647ae4f0faad0424f1674115498ba639cb572e25a9c50bf67e8",
+        "cases": 31,
+        "passed": 31,
+        "strictOrQualifiedRules": "preserved in actual owner report, not blanket strict",
+        "qualifiedObservations": 0
+      },
+      "snapshot": {
+        "report": "regressions/snapshot.json",
+        "sha256": "dd14d2f8cb495eb12e05fc810cf7902379f5207caf6f2debd22ab15e87618852",
+        "cases": 18,
+        "passed": 18,
+        "strictOrQualifiedRules": "preserved in actual owner report, not blanket strict",
+        "qualifiedObservations": 0
+      }
+    },
+    "rawOutcomes": 127,
+    "alreadyExistingRegressionCreditOnly": true,
+    "oneExistingBaseCaseNewlyStrict": true,
+    "beforeSourceCaseInputSha256": "3965d6915fde84b8bef5425a97c6f7450f7edea8c0f6d0dd40f0a5ee326fa5bc",
+    "afterSourceCaseInputSha256": "3965d6915fde84b8bef5425a97c6f7450f7edea8c0f6d0dd40f0a5ee326fa5bc",
+    "historicalRawScriptUnchanged": true
+  },
+  "native": {
+    "testsPassed": 423,
+    "harnesses": 118,
+    "failed": 0,
+    "profile": "all-features",
+    "docsExecuted": false,
+    "report": "native-tests.json"
+  },
+  "static": {
+    "allTargetsAllFeaturesClippy": {
+      "selection": 7,
+      "exit": 0
+    },
+    "fmt": {
+      "report": "fmt-result.json",
+      "exit": 0
+    },
+    "sourceFixturesTsc": {
+      "log": "logs/tsc-safeparse-fixed.stdout",
+      "exit": 0,
+      "record": "fixture-static-final.json"
+    },
+    "biome": {
+      "log": "logs/biome-final-all.stdout",
+      "exit": 0,
+      "warnings": 43,
+      "infos": 6,
+      "errors": 0
+    }
+  },
+  "typing": {
+    "report": "type-checks/results.json",
+    "positiveConsumers": 2,
+    "intendedNegativeCodes": [
+      "E0599",
+      "E0277"
+    ],
+    "ordinaryOpaqueEnabledPureOwnershipNativeTestAlsoPassed": true
+  },
+  "controls": {
+    "report": "controls/report.json",
+    "compiled": 4,
+    "detectedNamedStrictWitnesses": 4,
+    "cargoBuildFailures": 0,
+    "protocolFailureCredit": 0,
+    "eachModifiedLibraryAndExecutedConsumerRetained": true,
+    "actualCargoFreshFalse": true,
+    "firstCopyModeFailure": {
+      "report": "controls/first-copy-mode-failure.json",
+      "nativeResponses": 0,
+      "credit": 0,
+      "recovery": "restored executable mode from actual compiler artifact, reran identical first SHA without Cargo"
+    },
+    "originalSourceRestoredBeforeEach": true
+  },
+  "budget": {
+    "constructionCargoAim": 6,
+    "constructionCargoActual": 8,
+    "controlCargoActual": 4,
+    "relatedFailuresRetained": true,
+    "newNativeDependencies": 0,
+    "nativeICUPrepares": 0,
+    "buildingWorktrees": 2,
+    "defaultTargetsOnly": true,
+    "noTargetOrCacheCopies": true
+  },
+  "artifactRetention": {
+    "sidecar": "artifact-retention.json",
+    "historicalCopiedBytes": 1813353168,
+    "removedNeverExecutedCopies": 1140219000,
+    "retainedLogicalCargoBytes": 673134168,
+    "historicalLedgerUnchanged": true,
+    "directDependenciesBytesNotRetainedExplicit": true
+  },
+  "failuresAndRecovery": [
+    "missing tsx path and wrong pure cancel API fixture errors retained uncredited",
+    "baseline-prefix25actualframes:1equal24configured-refusal diffs;15unexecuted after fixture panic, not a full40 baseline",
+    "Cargo1 deadline helper arg/Cargo2 SlicePattern/Cargo4 observer AgentField Serialize were real setup/compiler failures, retained0credit",
+    "first native fresh load null decoder process101:0responses,13unattempted; fixed only test migrator using canonical Fresh",
+    "Cargo6 Clippy recovered using two private aliases and let-chains; product1f then frozen",
+    "Source fixture TSC overload/readonly/phase/timer/message/store/context errors fixed without TS product or blanket suppression",
+    "first finalraw40pure prefix then Source Runtime id:null caused by typed fixture null parse, preserved0Runtimecredit",
+    "safeParse migration contract uses refuse for invalid non-null same-version carrier; throwing emit restored",
+    "stale old qualified tool-ladder expectation removed only after full Source/native equality; same raw inputs and call validation",
+    "control executable EACCES mode setup failure retained0credit; no extra control compilation"
+  ],
+  "limits": [
+    "Enabled runtime tool failure TE is PlainData; other input/result/schema causes and existing opaque no-policy paths remain generic and borrowed",
+    "Raw null-reason row stays qualified outside strict/nativeEvidence",
+    "Eight prior uncoordinated runtime scheduling profiles remain OPEN; no scheduler/kernel change",
+    "Manual missing/null message stamps and malformed original-command errOf/decode profiles remain explicit pre-existing boundaries",
+    "Dense ordinary records only; raw prototypes/getters/mutable function reflection not generalized",
+    "Same-version file-store guard is a fixture carrier boundary, not a general full AgentState codec",
+    "Lifecycle outbox is the event witness; no public agentEvents projector implemented",
+    "No provider/SDK/network/router/children expansion; no broad whole-monorepo, release, cold-archive or deployed claim",
+    "Native typed infrastructure diagnostics/error envelopes retain their explicit Source qualifications"
+  ],
+  "registration": "Root/Minimal own thin admission, actual Source-ID binding and combined verification; no Main/contracts/registry writes by this component"
+}
