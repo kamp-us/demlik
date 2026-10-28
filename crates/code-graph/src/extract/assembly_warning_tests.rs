@@ -56,6 +56,7 @@ fn binary() -> TsgoBinary {
 }
 #[test]
 fn local_warning_consumer_keeps_borrowed_rc_state() {
+    let project_collation = crate::project::Collation::try_node22_en_us().unwrap();
     let fixture = Fixture::new();
     fixture.write(
         "tsconfig.json",
@@ -63,7 +64,14 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
     );
     fixture.write("escaped.ts","export interface \\u0055 { value:number }\nexport const \\u0056=1;\nexport function run(){return 1;}\n");
     let root = JsString::from(fixture.0.to_string_lossy().as_ref());
-    let loaded = load_edge_project_text(&root, EdgeScope::Package, &fixture.0, None).unwrap();
+    let loaded = load_edge_project_text(
+        &root,
+        EdgeScope::Package,
+        &fixture.0,
+        None,
+        &project_collation,
+    )
+    .unwrap();
     let rules = NodeKindRules::default();
     let options = AnalysisOptions {
         cross_runtime: true,
@@ -91,7 +99,7 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
             root: &root,
             warning: &mut warning,
         },
-        &crate::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -104,6 +112,7 @@ fn local_warning_consumer_keeps_borrowed_rc_state() {
 }
 
 fn warning_fixture(fixture: &Fixture) -> (JsString, crate::project::LoadedEdgeProject) {
+    let project_collation = crate::project::Collation::try_node22_en_us().unwrap();
     fixture.write(
         "tsconfig.json",
         r#"{"compilerOptions":{"strict":true,"types":[]}}"#,
@@ -111,7 +120,14 @@ fn warning_fixture(fixture: &Fixture) -> (JsString, crate::project::LoadedEdgePr
     let source = "export interface \\u0055 { value:number }\nexport const \\u0056=1;\nexport function run(){return 1;}\n";
     fixture.write("escaped.ts", source);
     let root = JsString::from(fixture.0.to_string_lossy().as_ref());
-    let loaded = load_edge_project_text(&root, EdgeScope::Package, &fixture.0, None).unwrap();
+    let loaded = load_edge_project_text(
+        &root,
+        EdgeScope::Package,
+        &fixture.0,
+        None,
+        &project_collation,
+    )
+    .unwrap();
     // A loaded syntax snapshot can precede a concurrent edit observed by the compiler.
     fixture.write(
         "escaped.ts",
@@ -303,6 +319,8 @@ struct Observation {
     call: &'static str,
 }
 fn observe(request: Request) -> Result<Observation, String> {
+    let project_collation =
+        crate::project::Collation::try_node22_en_us().map_err(|error| error.to_string())?;
     let rules = NodeKindRules::parse(&request.kind_rules).map_err(|error| error.to_string())?;
     let binary = TsgoBinary::from_native_preview_manifest(std::path::Path::new(
         &request.native_preview_manifest,
@@ -333,7 +351,13 @@ fn observe(request: Request) -> Result<Observation, String> {
         order: Vec::new(),
         call: "demlik_code_graph::project::load_edge_project_text",
     };
-    let loaded = match load_edge_project_text(&request.root, EdgeScope::Package, &repo, None) {
+    let loaded = match load_edge_project_text(
+        &request.root,
+        EdgeScope::Package,
+        &repo,
+        None,
+        &project_collation,
+    ) {
         Ok(loaded) => loaded,
         Err(error) => {
             out.thrown = Some(Thrown {
@@ -377,7 +401,7 @@ fn observe(request: Request) -> Result<Observation, String> {
                     root: &request.root,
                     warning: &mut warning,
                 },
-                &crate::project::Collation::try_node22_en_us().unwrap(),
+                &project_collation,
             )
         }
         Mode::DefaultText => super::assemble_graph_with_analysis_text(
@@ -387,7 +411,7 @@ fn observe(request: Request) -> Result<Observation, String> {
             &binary,
             NodeFields::default(),
             &options,
-            &crate::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         ),
         Mode::DefaultPath => super::assemble_graph_with_analysis(
             &loaded,
@@ -395,7 +419,7 @@ fn observe(request: Request) -> Result<Observation, String> {
             &binary,
             NodeFields::default(),
             &options,
-            &crate::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         ),
     };
     match graph {

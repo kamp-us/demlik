@@ -236,7 +236,8 @@ fn execute(request: Request) -> Result<String, Box<dyn Error>> {
                 &root,
                 EdgeScope::Package,
                 repo,
-                None
+                None,
+                &metadata_collation
             )?;
             let rules = NodeKindRules::default();
             let graph = observe!(

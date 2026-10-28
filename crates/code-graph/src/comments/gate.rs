@@ -153,7 +153,7 @@ fn run<'c>(
         Ok(collation)
     };
     if !args.ci && !args.write_ceilings {
-        let census = load_comment_census_unordered(args.root_absolute, || request())?;
+        let census = load_comment_census_unordered(args.root_absolute, &mut request)?;
         let collation = request().map_err(CommentGateError::Collation)?;
         let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
         return Ok(CommentGateResult {
@@ -194,7 +194,7 @@ fn run<'c>(
             });
         }
     };
-    let census = load_comment_census_unordered(args.root_absolute, || request())?;
+    let census = load_comment_census_unordered(args.root_absolute, &mut request)?;
     let collation = request().map_err(CommentGateError::Collation)?;
     let census = order_census(census, collation).map_err(CommentGateError::Collation)?;
     if args.write_ceilings {

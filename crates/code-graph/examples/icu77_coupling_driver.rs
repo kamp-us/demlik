@@ -238,14 +238,14 @@ fn execute(
             calls,
         );
     };
-    let loaded = load_cheap_project(root, None)?;
+    let loaded = load_cheap_project(root, None, &c)?;
     let t = Thresholds {
         dependency_cycle: 1,
         cross_boundary_imports: 0,
         ..Thresholds::default()
     };
     let mut graph = if matches!(mode, Mode::Workflow) {
-        let loaded = load_edge_project(root, EdgeScope::Package, root, None)?;
+        let loaded = load_edge_project(root, EdgeScope::Package, root, None, &c)?;
         let binary = TsgoBinary::from_native_preview_manifest(manifest)?;
         observe!(
             calls,

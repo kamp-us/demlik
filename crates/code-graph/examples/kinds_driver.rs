@@ -220,7 +220,8 @@ fn execute(
                 &input.root,
                 EdgeScope::Package,
                 input.repo_root.as_deref().unwrap_or(&input.root),
-                None
+                None,
+                &metadata_collation
             )
             .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let discovered = observe!(

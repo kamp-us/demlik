@@ -269,7 +269,8 @@ fn execute(request: Request) -> Result<Response, Box<dyn std::error::Error>> {
                 &input.root,
                 EdgeScope::Package,
                 &repo_root,
-                None
+                None,
+                &metadata_collation
             ) {
                 Err(error) => Err(Failure {
                     stage: "load",

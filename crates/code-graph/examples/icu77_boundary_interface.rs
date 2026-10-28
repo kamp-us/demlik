@@ -32,7 +32,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("valid shape")
     };
     let scope = JsString::from("services/api");
-    let loaded = load_edge_project(&root.join("services/api"), EdgeScope::Package, root, None)?;
+    let loaded = load_edge_project(
+        &root.join("services/api"),
+        EdgeScope::Package,
+        root,
+        None,
+        &c,
+    )?;
     assert!(loaded.project.source_files.len() > 2);
     let original = Rc::clone(&loaded.project.source_files[0]);
     let graph = resolve_imports(

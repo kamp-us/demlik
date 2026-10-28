@@ -37,7 +37,15 @@ impl Project {
         Self(root)
     }
     fn graph(&self) -> Graph {
-        let loaded = load_edge_project(&self.0, EdgeScope::Package, &self.0, None).unwrap();
+        let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
+        let loaded = load_edge_project(
+            &self.0,
+            EdgeScope::Package,
+            &self.0,
+            None,
+            &project_collation,
+        )
+        .unwrap();
         let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
         let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
@@ -46,15 +54,23 @@ impl Project {
             Thresholds::default(),
             &binary,
             NodeFields::default(),
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap()
     }
     fn references(&self) -> ReferenceResult {
-        let loaded = load_edge_project(&self.0, EdgeScope::Package, &self.0, None).unwrap();
+        let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
+        let loaded = load_edge_project(
+            &self.0,
+            EdgeScope::Package,
+            &self.0,
+            None,
+            &project_collation,
+        )
+        .unwrap();
         let functions = demlik_code_graph::extract::functions::discover_functions(
             &loaded.project.source_files,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap()
         .functions;
@@ -65,7 +81,7 @@ impl Project {
             functions
                 .iter()
                 .map(demlik_code_graph::extract::analysis::NamedSymbol::from),
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap();
         with_type_context(
@@ -80,7 +96,7 @@ impl Project {
                     context,
                     &inputs.names,
                     &inputs.exports_by_file,
-                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                    &project_collation,
                 )
                 .unwrap())
             },

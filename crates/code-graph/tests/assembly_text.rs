@@ -87,7 +87,8 @@ fn binary() -> TsgoBinary {
     TsgoBinary::from_native_preview_manifest(&manifest).unwrap()
 }
 fn loaded(root: &JsString, repo: &Path) -> LoadedEdgeProject {
-    load_edge_project_text(root, EdgeScope::Package, repo, None).unwrap()
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
+    load_edge_project_text(root, EdgeScope::Package, repo, None, &project_collation).unwrap()
 }
 fn options<'a>(rules: &'a NodeKindRules, repo: &'a Path) -> AnalysisOptions<'a> {
     AnalysisOptions {

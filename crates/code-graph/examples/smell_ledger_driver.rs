@@ -479,7 +479,8 @@ fn run(
             &input.root,
             EdgeScope::Package,
             Path::new(&physical_repo),
-            None
+            None,
+            &metadata_collation
         )?;
         output.source_files = Some(loaded.project.source_files.len());
         observe!(
@@ -502,7 +503,7 @@ fn run(
             &metadata_collation
         )?
     } else {
-        let loaded = load_cheap_project(Path::new(&physical_root), None)?;
+        let loaded = load_cheap_project(Path::new(&physical_root), None, &metadata_collation)?;
         let mut graph = assemble_graph(
             &loaded,
             input.thresholds,

@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
 
     let root = std::env::args().nth(1).expect("project path");
-    let loaded = load_cheap_project(Path::new(&root), None)?;
+    let loaded = load_cheap_project(Path::new(&root), None, &metadata_collation)?;
     let graph = assemble_graph(
         &loaded,
         Thresholds::default(),

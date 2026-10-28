@@ -341,7 +341,7 @@ pub(crate) fn load_binding_catalog_request<'c>(
     };
     let mut manifests = Vec::new();
     let mut unparsed_configs = Vec::new();
-    for absolute in find_wrangler_configs_request(root, listing, || request())? {
+    for absolute in find_wrangler_configs_request(root, listing, &mut request)? {
         let file = to_relative(root, &absolute);
         let document = fs::read(&absolute).ok().and_then(|bytes| {
             let raw = String::from_utf8_lossy(&bytes);

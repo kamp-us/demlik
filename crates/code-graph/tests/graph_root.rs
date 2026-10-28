@@ -71,6 +71,7 @@ fn root_of(graph: &Graph) -> &JsString {
 
 #[test]
 fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let fixture = Fixture::new();
     let binary = TsgoBinary::from_native_preview_manifest(
         &Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -91,7 +92,14 @@ fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
         let mut raw = JsString::from(fixture.0.to_string_lossy().as_ref());
         raw.push_str("/ignored/raw");
         raw.extend(&JsString::from_units(vec![unit]));
-        let loaded = load_edge_project_text(&raw, EdgeScope::Package, &fixture.0, None).unwrap();
+        let loaded = load_edge_project_text(
+            &raw,
+            EdgeScope::Package,
+            &fixture.0,
+            None,
+            &project_collation,
+        )
+        .unwrap();
         assert!(loaded.project.source_files.is_empty());
         assert!(fixture.0.join("ignored/raw�/sentinel.ts").is_file());
         let graph = assemble_graph_with_analysis_text(
@@ -101,7 +109,7 @@ fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
             &binary,
             NodeFields::default(),
             &options,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap();
         assert_eq!(root_of(&graph).units().last(), Some(&unit));
@@ -123,7 +131,7 @@ fn intentionally_ignored_source_keeps_raw_root_and_explicit_value_boundary() {
             &loaded.project,
             Thresholds::default(),
             NodeFields::default(),
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap();
         assert_eq!(root_of(&legacy).units().last(), Some(&0xfffd));

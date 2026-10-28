@@ -200,16 +200,23 @@ fn execute(request: Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVal
             let input: AnalyzeInput = input(&request.input)?;
             let rules =
                 observe!(calls, LayerRules::parse, &input.rules).map_err(DriverError::input)?;
-            let loaded = observe!(calls, load_cheap_project, Path::new(&input.root), None)
+            let collation = demlik_code_graph::project::Collation::try_node22_en_us()
                 .map_err(DriverError::backend)?;
+            let loaded = observe!(
+                calls,
+                load_cheap_project,
+                Path::new(&input.root),
+                None,
+                &collation
+            )
+            .map_err(DriverError::backend)?;
             match observe!(
                 calls,
                 analyze::analyze_layers,
                 &loaded,
                 Path::new(&input.repo_root),
                 &rules,
-                &demlik_code_graph::project::Collation::try_node22_en_us()
-                    .map_err(DriverError::backend)?
+                &collation
             ) {
                 Ok(report) => json(&report),
                 Err(LayerAnalysisError::Tie(error)) => tie(error),

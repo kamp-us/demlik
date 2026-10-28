@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let churn = demlik_code_graph::hotspots::load_churn_blocking(&root.as_str().into(), &window)?;
     let prepared = Collation::try_node22_en_us()?;
-    let project = load_cheap_project(Path::new(&root), None)?;
+    let project = load_cheap_project(Path::new(&root), None, &prepared)?;
     let graph = assemble_graph(
         &project,
         Thresholds::default(),

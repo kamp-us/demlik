@@ -171,8 +171,8 @@ fn execute(
             to_raw_value(&entries)
         }
         "snapshot" => {
-            let loaded =
-                load_cheap_project(&input.root, None).map_err(|e| Failure::error("project", e))?;
+            let loaded = load_cheap_project(&input.root, None, &collation)
+                .map_err(|e| Failure::error("project", e))?;
             let functions = discover_functions(&loaded.source_files, &collation)
                 .map_err(|error| Failure::error("snapshot", error))?
                 .functions;

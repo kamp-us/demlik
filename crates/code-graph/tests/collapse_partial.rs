@@ -165,6 +165,7 @@ fn literal_space_and_nul_keys_keep_the_source_collision_behavior() {
 
 #[test]
 fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     use demlik_code_graph::{
         engine::tsgo::TsgoBinary,
         extract::{
@@ -239,7 +240,14 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
         repo_root: &fixture.0,
     };
     let measure = |expected: usize| {
-        let loaded = load_edge_project_text(&root, EdgeScope::Package, &fixture.0, None).unwrap();
+        let loaded = load_edge_project_text(
+            &root,
+            EdgeScope::Package,
+            &fixture.0,
+            None,
+            &project_collation,
+        )
+        .unwrap();
         let graph = assemble_graph_with_analysis_text(
             &loaded,
             &root,
@@ -247,7 +255,7 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
             &binary,
             NodeFields::default(),
             &options,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap();
         assert_eq!(graph.modules.len(), 3);
@@ -256,12 +264,7 @@ fn real_three_module_extraction_measures_one_then_three_then_zero_twins() {
             .iter()
             .filter(|node| is_candidate_function(node, &settings))
             .collect::<Vec<_>>();
-        let twins = find_partial_twins(
-            &considered,
-            &settings,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-        )
-        .unwrap();
+        let twins = find_partial_twins(&considered, &settings, &project_collation).unwrap();
         assert_eq!(twins.len(), expected);
         for twin in &twins {
             assert_eq!(twin.shared_constants, ["MAX_ATTEMPTS"]);

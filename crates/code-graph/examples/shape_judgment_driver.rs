@@ -228,7 +228,8 @@ fn execute(request: &Request, calls: &mut Vec<&'static str>) -> Result<Box<RawVa
                 &absolute,
                 EdgeScope::Package,
                 root,
-                None
+                None,
+                &metadata_collation
             )
             .map_err(|error| error.to_string())?;
             let unit = loaded

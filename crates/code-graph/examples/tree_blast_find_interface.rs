@@ -34,7 +34,7 @@ fn main() {
     let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
 
     let root = std::env::args().nth(1).expect("owned cheap fixture");
-    let loaded = load_cheap_project(Path::new(&root), None).unwrap();
+    let loaded = load_cheap_project(Path::new(&root), None, &metadata_collation).unwrap();
     let graph = assemble_graph(
         &loaded,
         Thresholds::default(),

@@ -163,6 +163,7 @@ impl Drop for Project {
 
 #[test]
 fn real_aliased_imports_keep_their_lines_type_only_status_and_missing_local_sites() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new(&[
         (
             "apps/web/tsconfig.json",
@@ -204,14 +205,8 @@ fn real_aliased_imports_keep_their_lines_type_only_status_and_missing_local_site
         .collect(),
         allowed: Vec::new(),
     };
-    let loaded = load_cheap_project(&project.0, None).unwrap();
-    let report = analyze_layers(
-        &loaded,
-        &project.0,
-        &rules,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let loaded = load_cheap_project(&project.0, None, &project_collation).unwrap();
+    let report = analyze_layers(&loaded, &project.0, &rules, &project_collation).unwrap();
     assert_eq!(report.files_scanned, 4);
     assert_eq!(
         (

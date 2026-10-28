@@ -53,6 +53,7 @@ impl Drop for Repo {
 }
 #[test]
 fn real_application_imports_keep_only_the_allowlist_verdicts_and_fold_the_first_edge() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let repo = Repo::new();
     repo.write(
         "tsconfig.json",
@@ -83,12 +84,12 @@ fn real_application_imports_keep_only_the_allowlist_verdicts_and_fold_the_first_
     }"#).unwrap()).unwrap();
     let scope = JsString::from("services/api");
     let absolute = repo.0.join("services/api");
-    let loaded = load_cheap_project(&absolute, None).unwrap();
+    let loaded = load_cheap_project(&absolute, None, &project_collation).unwrap();
     let graph = resolve_imports(
         &absolute,
         &loaded.source_files,
         &repo.0.join("tsconfig.json"),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let edges = &graph.import_edges_by_file[&file.to_utf8().unwrap()];
@@ -102,22 +103,13 @@ fn real_application_imports_keep_only_the_allowlist_verdicts_and_fold_the_first_
         .find(|unit| unit.file == file.to_utf8().unwrap())
         .unwrap();
     let runtime = runtime_specifiers(&unit.syntax);
-    let catalog = load_binding_catalog(
-        &repo.0,
-        None,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let catalog = load_binding_catalog(&repo.0, None, &project_collation).unwrap();
     let ShapeRead::Read(shape) = read_shape(&rules, &catalog).unwrap() else {
         panic!("shape refused")
     };
-    let LibrariesRead::Read(libraries) = read_libraries(
-        &rules,
-        &repo.0,
-        None,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap() else {
+    let LibrariesRead::Read(libraries) =
+        read_libraries(&rules, &repo.0, None, &project_collation).unwrap()
+    else {
         panic!("libraries refused")
     };
     let zoning = scope_zoning(&rules, &scope).unwrap();

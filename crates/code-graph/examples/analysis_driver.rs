@@ -178,7 +178,8 @@ fn execute(
         &case.input.root,
         scope,
         repo,
-        None
+        None,
+        &metadata_collation
     )
     .map_err(DriverError::backend)?;
     let options = AnalysisOptions {

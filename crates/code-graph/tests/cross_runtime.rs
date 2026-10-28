@@ -18,6 +18,7 @@ use std::{
 
 #[test]
 fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_private_methods() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -55,12 +56,7 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
         fs::write(file, text).unwrap();
     }
     let root = fs::canonicalize(root).unwrap();
-    let catalog = load_binding_catalog(
-        &root,
-        None,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let catalog = load_binding_catalog(&root, None, &project_collation).unwrap();
     assert_eq!(
         owner_of(&catalog.manifests, "api/entry.ts")
             .unwrap()
@@ -68,14 +64,11 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
         "api"
     );
     assert!(owner_of(&catalog.manifests, "api-other/entry.ts").is_none());
-    let loaded = load_cheap_project(&root, None).unwrap();
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
     assert!(loaded.parse_failures.is_empty());
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
     let ids = functions
         .iter()
         .map(|node| node.id.clone())
@@ -84,7 +77,7 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
         &root,
         &loaded.source_files,
         &root.join("tsconfig.json"),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -112,7 +105,7 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
                     repo_root: &root,
                 },
                 context,
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                &project_collation,
             )
             .unwrap();
             let result = resolve_edges_with_cross_runtime(
@@ -120,12 +113,10 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
                 imports,
                 &ids,
                 Some(&mut resolver),
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                &project_collation,
             )
             .unwrap();
-            let measured = resolver
-                .edges(&demlik_code_graph::project::Collation::try_node22_en_us().unwrap())
-                .unwrap();
+            let measured = resolver.edges(&project_collation).unwrap();
             assert_eq!(measured.len(), 5);
             assert_eq!(
                 measured

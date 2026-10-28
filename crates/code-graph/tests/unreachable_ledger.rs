@@ -50,12 +50,13 @@ impl Fixture {
         }
     }
     fn graph(&self, symbols: Option<Vec<UnreachableSymbol>>) -> Graph {
-        let loaded = load_cheap_project(&self.0, None).unwrap();
+        let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
+        let loaded = load_cheap_project(&self.0, None, &project_collation).unwrap();
         let mut graph = assemble_graph(
             &loaded,
             Thresholds::default(),
             NodeFields::default(),
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            &project_collation,
         )
         .unwrap();
         graph.reachability = symbols.map(|unreachable| ReachabilityReport {

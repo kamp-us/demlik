@@ -6,6 +6,7 @@ use std::{
 
 #[test]
 fn reads_real_wrangler_groups_legacy_dates_and_dev_vars_with_observable_unparsed_files() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -42,13 +43,13 @@ fn reads_real_wrangler_groups_legacy_dates_and_dev_vars_with_observable_unparsed
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
-    assert_eq!(find_wrangler_configs(&root, None).len(), 5);
-    let catalog = load_binding_catalog(
-        &root,
-        None,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    assert_eq!(
+        find_wrangler_configs(&root, None, &project_collation)
+            .unwrap()
+            .len(),
+        5
+    );
+    let catalog = load_binding_catalog(&root, None, &project_collation).unwrap();
     assert_eq!(catalog.manifests.len(), 2);
     assert_eq!(
         catalog.unparsed_configs,

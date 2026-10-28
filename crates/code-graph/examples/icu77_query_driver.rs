@@ -113,7 +113,7 @@ fn execute(
         })?);
     }
     let root = Path::new(&input.root);
-    let loaded = load_cheap_project(root, None)?;
+    let loaded = load_cheap_project(root, None, &collation)?;
     let mut graph = assemble_graph(
         &loaded,
         Thresholds::default(),

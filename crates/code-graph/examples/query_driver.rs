@@ -167,7 +167,8 @@ fn query(
         &input.root,
         EdgeScope::Package,
         &input.root,
-        None
+        None,
+        metadata_collation
     )
     .map_err(|error| error.to_string())?;
     let discovered = observe!(

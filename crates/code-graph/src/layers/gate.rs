@@ -108,11 +108,11 @@ fn run<'c>(
         retained = Some(collation);
         Ok(collation)
     };
-    let loaded = load_cheap_project_request(args.root_absolute, None, || request())
+    let loaded = load_cheap_project_request(args.root_absolute, None, &mut request)
         .map_err(LayerGateError::Project)?;
     let measured = match text {
-        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules, || request()),
-        None => analyze(&loaded, args.repo_root, &rules, None, || request()),
+        Some((root, repo)) => analyze_layers_text(&loaded, root, repo, &rules, &mut request),
+        None => analyze(&loaded, args.repo_root, &rules, None, request),
     };
     let (analysis, collation) = match measured {
         Ok(report) => report,

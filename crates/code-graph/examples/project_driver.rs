@@ -67,6 +67,8 @@ fn execute(case: &Case, calls: &mut Vec<&'static str>) -> Result<Value, String> 
             let input: ListingInput =
                 serde_json::from_value(case.input.clone()).map_err(|error| error.to_string())?;
             let root = input.scope.as_deref().unwrap_or(&input.root);
+            let collation = demlik_code_graph::project::Collation::try_node22_en_us()
+                .map_err(|error| error.to_string())?;
             let listing = input
                 .shared_listing
                 .then(|| observe!(calls, demlik_code_graph::project::list_repo, &input.root));
@@ -75,9 +77,17 @@ fn execute(case: &Case, calls: &mut Vec<&'static str>) -> Result<Value, String> 
                 demlik_code_graph::project::list_visible_files,
                 root,
                 |_| true,
-                listing.as_ref()
-            );
-            let sources = observe!(calls, demlik_code_graph::project::list_source_files, root);
+                listing.as_ref(),
+                &collation
+            )
+            .map_err(|error| error.to_string())?;
+            let sources = observe!(
+                calls,
+                demlik_code_graph::project::list_source_files,
+                root,
+                &collation
+            )
+            .map_err(|error| error.to_string())?;
             let sources: Vec<_> = sources
                 .iter()
                 .map(|file| observe!(calls, demlik_code_graph::project::to_relative, root, file))

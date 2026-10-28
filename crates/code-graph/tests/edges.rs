@@ -47,6 +47,7 @@ impl Drop for Project {
 
 #[test]
 fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     project.write(
         "tsconfig.json",
@@ -54,13 +55,10 @@ fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
     );
     project.write("origin.ts", "export const TOKEN = 'fixed';\nexport function target(value: string) { return value; }\nexport function recursion(n: number): string { if (n) return recursion(n - 1); return target(TOKEN); }\n");
     project.write("entry.ts", "import { target as renamed, TOKEN, recursion } from './origin';\nfunction factory(config: { handle: () => number }) { return () => config.handle(); }\nconst wrapped = factory({ handle() { return 1; } });\nexport function run() { renamed(TOKEN); renamed(TOKEN); wrapped(); recursion(1); }\n");
-    let loaded = load_cheap_project(&project.0, None).unwrap();
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
+    let loaded = load_cheap_project(&project.0, None, &project_collation).unwrap();
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
     let ids: Vec<_> = functions
         .iter()
         .map(|function| function.id.clone())
@@ -69,7 +67,7 @@ fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
         &project.0,
         &loaded.source_files,
         &project.0.join("tsconfig.json"),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let edges = with_type_context(
@@ -81,13 +79,7 @@ fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
         },
         |context| {
             assert!(context.unjoined.is_empty());
-            Ok(resolve_edges(
-                context,
-                imports,
-                &ids,
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-            )
-            .unwrap())
+            Ok(resolve_edges(context, imports, &ids, &project_collation).unwrap())
         },
     )
     .unwrap();
@@ -115,16 +107,14 @@ fn resolves_real_alias_factory_and_recursive_calls_with_constant_arguments() {
 
 #[test]
 fn preserves_a_valid_external_callee_with_a_lone_surrogate_name() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     project.write("tsconfig.json", r#"{"compilerOptions":{"types":[]}}"#);
     project.write("entry.ts", "declare const effect: Record<string, () => void>;\nexport function run() { effect['\\ud800'](); }\n");
-    let loaded = load_cheap_project(&project.0, None).unwrap();
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
+    let loaded = load_cheap_project(&project.0, None, &project_collation).unwrap();
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
     let ids: Vec<_> = functions
         .iter()
         .map(|function| function.id.clone())
@@ -133,7 +123,7 @@ fn preserves_a_valid_external_callee_with_a_lone_surrogate_name() {
         &project.0,
         &loaded.source_files,
         &project.0.join("tsconfig.json"),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let edges = with_type_context(
@@ -143,15 +133,7 @@ fn preserves_a_valid_external_callee_with_a_lone_surrogate_name() {
             ts_config_path: &project.0.join("tsconfig.json"),
             functions: &functions,
         },
-        |context| {
-            Ok(resolve_edges(
-                context,
-                imports,
-                &ids,
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-            )
-            .unwrap())
-        },
+        |context| Ok(resolve_edges(context, imports, &ids, &project_collation).unwrap()),
     )
     .unwrap();
     let calls = &edges.calls_by_id["entry.ts:run"];
@@ -170,6 +152,7 @@ fn preserves_a_valid_external_callee_with_a_lone_surrogate_name() {
 
 #[test]
 fn measures_alias_type_uses_shorthand_values_callbacks_and_module_roots() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     project.write(
         "tsconfig.json",
@@ -181,18 +164,11 @@ fn measures_alias_type_uses_shorthand_values_callbacks_and_module_roots() {
         "entry.test.ts",
         "import { target } from './types';\ntarget;\n",
     );
-    let loaded = load_cheap_project(&project.0, None).unwrap();
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
-    let declarations = discover_declarations(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let loaded = load_cheap_project(&project.0, None, &project_collation).unwrap();
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
+    let declarations = discover_declarations(&loaded.source_files, &project_collation).unwrap();
     let names: IndexSet<_> = functions
         .iter()
         .map(|function| function.name.clone())
@@ -215,19 +191,8 @@ fn measures_alias_type_uses_shorthand_values_callbacks_and_module_roots() {
         },
         |context| {
             Ok((
-                resolve_declaration_uses(
-                    context,
-                    &declarations,
-                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-                )
-                .unwrap(),
-                resolve_references(
-                    context,
-                    &names,
-                    &exported,
-                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-                )
-                .unwrap(),
+                resolve_declaration_uses(context, &declarations, &project_collation).unwrap(),
+                resolve_references(context, &names, &exported, &project_collation).unwrap(),
             ))
         },
     )

@@ -69,8 +69,13 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, D
         calls,
         demlik_code_graph::extract::wrangler_config::find_wrangler_configs,
         &case.input.root,
-        listing.as_ref()
-    );
+        listing.as_ref(),
+        &metadata_collation
+    )
+    .map_err(|error| DriverError {
+        kind: "backend-error",
+        message: error.to_string(),
+    })?;
     let catalog = observe!(
         calls,
         demlik_code_graph::extract::wrangler_config::load_binding_catalog,

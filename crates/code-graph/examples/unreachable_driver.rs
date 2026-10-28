@@ -133,7 +133,7 @@ fn ordinary_render(
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
     let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()?;
 
-    let loaded = load_cheap_project(Path::new(&input.root), None)?;
+    let loaded = load_cheap_project(Path::new(&input.root), None, &metadata_collation)?;
     let mut graph = assemble_graph(
         &loaded,
         Thresholds::default(),
@@ -463,7 +463,8 @@ fn run(
             &input.root,
             EdgeScope::Package,
             Path::new(&physical_repo),
-            None
+            None,
+            &metadata_collation
         )?;
         output.source_files = Some(loaded.project.source_files.len());
         let rules = NodeKindRules::default();
@@ -487,7 +488,7 @@ fn run(
             &metadata_collation
         )?
     } else {
-        let loaded = load_cheap_project(Path::new(&physical_root), None)?;
+        let loaded = load_cheap_project(Path::new(&physical_root), None, &metadata_collation)?;
         let mut graph = assemble_graph(
             &loaded,
             Thresholds::default(),

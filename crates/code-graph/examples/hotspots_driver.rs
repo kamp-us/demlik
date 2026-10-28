@@ -483,7 +483,11 @@ fn one(input: &Input, directory: &Path) -> Result<JsValue, Box<dyn Error>> {
             };
             let graph = if input.real_graph {
                 let root = input.root.as_ref().ok_or("root required")?.to_lossy();
-                let project = load_cheap_project(Path::new(&root), None)?;
+                let project = load_cheap_project(
+                    Path::new(&root),
+                    None,
+                    collation.as_ref().ok_or("collation required")?,
+                )?;
                 Some(assemble_graph(
                     &project,
                     Thresholds::default(),

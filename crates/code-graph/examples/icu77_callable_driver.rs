@@ -174,7 +174,7 @@ fn execute(
         return Err(Failure::error("unknown operation"));
     }
     let root = Path::new(&input.root);
-    let loaded = load_cheap_project(root, None).map_err(Failure::error)?;
+    let loaded = load_cheap_project(root, None, &collation).map_err(Failure::error)?;
     let found = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,

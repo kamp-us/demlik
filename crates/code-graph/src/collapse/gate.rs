@@ -130,7 +130,7 @@ fn measure<'c>(
                 EdgeScope::Package,
                 repo_root,
                 None,
-                || request(),
+                &mut request,
             )
             .map_err(CollapseGateError::Load)?;
             let collation = request().map_err(CollapseGateError::Collation)?;

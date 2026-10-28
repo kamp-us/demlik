@@ -18,11 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let calls = Rc::new(Cell::new(0usize));
     let borrowed = &calls;
     if args[1] == "cheap" {
-        let loaded = load_cheap_project(root, None)?;
-        let found = {
-            let collation = Collation::try_node22_en_us()?;
-            discover_functions(&loaded.source_files, &collation)?
-        };
+        let collation = Collation::try_node22_en_us()?;
+        let loaded = load_cheap_project(root, None, &collation)?;
+        let found = { discover_functions(&loaded.source_files, &collation)? };
+        drop(collation);
         assert_eq!(found.functions.len(), 2);
         assert!(
             found
@@ -33,10 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("syntax-only original Rc facts survive Collation; no compiler/config accessed");
         return Ok(());
     }
-    let loaded = load_edge_project(root, EdgeScope::Package, root, None)?;
+    let collation = Collation::try_node22_en_us()?;
+    let loaded = load_edge_project(root, EdgeScope::Package, root, None, &collation)?;
     let binary = TsgoBinary::from_native_preview_manifest(Path::new(&args[3]))?;
     let (edges, references) = {
-        let collation = Collation::try_node22_en_us()?;
         let found = discover_functions(&loaded.project.source_files, &collation)?;
         assert!(found.functions.len() > 4);
         let ids: Vec<_> = found.functions.iter().map(|f| f.id.clone()).collect();
@@ -84,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         (edges?, references?)
     };
+    drop(collation);
     assert!(calls.get() > 2);
     assert!(
         edges

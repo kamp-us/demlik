@@ -108,7 +108,8 @@ fn execute(
         &case.input.root,
         scope,
         repo_root,
-        None
+        None,
+        &metadata_collation
     )
     .map_err(|error| error.to_string())?;
     let functions = observe!(

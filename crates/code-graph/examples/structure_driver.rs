@@ -78,7 +78,8 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Box<RawValue>, S
         calls,
         demlik_code_graph::project::load_cheap_project,
         &case.input.root,
-        None
+        None,
+        &metadata_collation
     )
     .map_err(|error| error.to_string())?;
     let graph = observe!(

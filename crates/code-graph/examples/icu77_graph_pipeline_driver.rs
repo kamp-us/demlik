@@ -103,13 +103,18 @@ fn execute(
 ) -> Result<Box<RawValue>, Failure> {
     let collation = Collation::try_node22_en_us().map_err(Failure::error)?;
     let root = input.root.as_path();
-    let loaded =
-        demlik_code_graph::project::load_cheap_project(root, None).map_err(Failure::error)?;
+    let loaded = demlik_code_graph::project::load_cheap_project(root, None, &collation)
+        .map_err(Failure::error)?;
     let thresholds = Thresholds::default();
     if matches!(input.mode, Mode::Workflow) {
-        let edge =
-            demlik_code_graph::project::load_edge_project(root, EdgeScope::Package, root, None)
-                .map_err(Failure::error)?;
+        let edge = demlik_code_graph::project::load_edge_project(
+            root,
+            EdgeScope::Package,
+            root,
+            None,
+            &collation,
+        )
+        .map_err(Failure::error)?;
         let binary = TsgoBinary::from_native_preview_manifest(manifest).map_err(Failure::error)?;
         let a = &input.analysis;
         let options = AnalysisOptions {

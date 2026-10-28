@@ -211,7 +211,7 @@ pub(crate) fn load_env_key_report<'c>(
         retained = Some(collation);
         Ok(collation)
     };
-    let source = load_cheap_project_request(Path::new(&root.to_lossy()), None, || request())
+    let source = load_cheap_project_request(Path::new(&root.to_lossy()), None, &mut request)
         .map_err(EnvKeyError::Project)?;
     let catalog = load_binding_catalog_request(Path::new(&repo.to_lossy()), None, &mut request)
         .map_err(EnvKeyError::Catalog)?;

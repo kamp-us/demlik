@@ -8,6 +8,7 @@ use demlik_code_graph::schema::{Health, Thresholds};
 
 #[test]
 fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -22,7 +23,7 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
     )
     .unwrap();
     fs::write(root.join("bad.ts"), "export function broken( {").unwrap();
-    let loaded = load_cheap_project(&root, None).unwrap();
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
     let thresholds = Thresholds {
         long_function_loc: 2,
         deep_nesting: 0,
@@ -35,7 +36,7 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
         &loaded,
         thresholds,
         NodeFields { headers: true },
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 1);
@@ -62,7 +63,7 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
         &loaded,
         Thresholds::default(),
         NodeFields::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert!(
@@ -75,12 +76,7 @@ fn assembles_a_real_cheap_graph_with_measured_smells_and_unknown_edge_facts() {
         ..Thresholds::default()
     };
     assert!(matches!(
-        assemble_graph(
-            &loaded,
-            invalid,
-            NodeFields::default(),
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
-        ),
+        assemble_graph(&loaded, invalid, NodeFields::default(), &project_collation),
         Err(demlik_code_graph::extract::assemble::AssemblyError::Threshold(_))
     ));
     fs::remove_dir_all(root).unwrap();
@@ -127,6 +123,7 @@ fn round_trips_javascript_strings_without_losing_unpaired_code_units() {
 
 #[test]
 fn assembles_real_measured_edges_uses_and_package_coupling_facts() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -150,7 +147,8 @@ fn assembles_real_measured_edges_uses_and_package_coupling_facts() {
         "import { leaf, UNUSED } from '../a/entry';\nexport function other() { return leaf(); }\n",
     )
     .unwrap();
-    let loaded = load_edge_project(&root, EdgeScope::Package, &root, None).unwrap();
+    let loaded =
+        load_edge_project(&root, EdgeScope::Package, &root, None, &project_collation).unwrap();
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
@@ -159,7 +157,7 @@ fn assembles_real_measured_edges_uses_and_package_coupling_facts() {
         Thresholds::default(),
         &binary,
         NodeFields::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 3);

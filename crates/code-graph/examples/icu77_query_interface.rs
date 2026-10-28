@@ -26,9 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let calls = Rc::new(Cell::new(0usize));
     let borrowed = &calls;
     if args[1] == "cheap" {
-        let loaded = load_cheap_project(root, None)?;
+        let collation = Collation::try_node22_en_us()?;
+        let loaded = load_cheap_project(root, None, &collation)?;
         let (graph, report, width, part) = {
-            let collation = Collation::try_node22_en_us()?;
             let graph = assemble_graph(
                 &loaded,
                 Thresholds::default(),
@@ -68,6 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             assert_eq!(original, graph.functions.as_ptr());
             (graph, report, width, part)
         };
+        drop(collation);
         assert!(graph.functions.len() > 4);
         assert_eq!(report.cluster_count, 0);
         assert_eq!(width.len(), 2);
@@ -79,10 +80,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
-    let loaded = load_edge_project(root, EdgeScope::Package, root, None)?;
+    let collation = Collation::try_node22_en_us()?;
+    let loaded = load_edge_project(root, EdgeScope::Package, root, None, &collation)?;
     let binary = TsgoBinary::from_native_preview_manifest(Path::new(&args[3]))?;
     let (graph, report, width, part) = {
-        let collation = Collation::try_node22_en_us()?;
         let found = discover_functions(&loaded.project.source_files, &collation)?;
         assert!(found.functions.len() > 4);
         let ids: Vec<_> = found.functions.iter().map(|f| f.id.clone()).collect();
@@ -175,6 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(original, graph.functions.as_ptr());
         (graph, report, width, part)
     };
+    drop(collation);
     assert!(calls.get() > 2);
     assert!(graph.functions.len() > 4);
     assert_eq!(report.cluster_count, 3);

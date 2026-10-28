@@ -298,6 +298,8 @@ fn run(
     .map_err(Failure::Compiler)?;
     let root_native = PathBuf::from(project.root.to_lossy());
     let repo_native = PathBuf::from(project.repo_root.to_lossy());
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| Failure::Assembly(AssemblyError::Collation(error)))?;
     let loaded = if text {
         observe!(
             calls,
@@ -305,7 +307,8 @@ fn run(
             &project.root,
             EdgeScope::Package,
             &repo_native,
-            None
+            None,
+            &metadata_collation
         )
     } else {
         observe!(
@@ -314,12 +317,11 @@ fn run(
             &root_native,
             EdgeScope::Package,
             &repo_native,
-            None
+            None,
+            &metadata_collation
         )
     }
     .map_err(Failure::Project)?;
-    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
-        .map_err(|error| Failure::Assembly(AssemblyError::Collation(error)))?;
 
     if let Some(rules) = rules {
         let options = AnalysisOptions {

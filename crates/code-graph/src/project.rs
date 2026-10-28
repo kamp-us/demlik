@@ -551,3 +551,7 @@ fn load_edge_project_in<'c>(
         scope,
     })
 }
+
+#[cfg(test)]
+#[path = "project_ordering_tests.rs"]
+mod ordering_tests;

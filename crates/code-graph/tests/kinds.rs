@@ -11,6 +11,7 @@ use std::{
 
 #[test]
 fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -18,48 +19,29 @@ fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels(
     let root = std::env::temp_dir().join(format!("demlik-kind-{}-{unique}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("entry.ts"), "export function fetch() {} export function requireAuth() {} export function plain() {} export function custom() {} ").unwrap();
-    let loaded = load_cheap_project(&root, None).unwrap();
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
     let graph = assemble_graph(
         &loaded,
         Thresholds::default(),
         NodeFields::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let rules =
         NodeKindRules::parse(&JsValue::parse(r#"{"entryNames":{"\ud800":["^custom$"]}}"#).unwrap())
             .unwrap();
-    let custom = compile_kind_rules(
-        &rules,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
-    let defaults = compile_kind_rules(
-        &NodeKindRules::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let custom = compile_kind_rules(&rules, &project_collation).unwrap();
+    let defaults = compile_kind_rules(&NodeKindRules::default(), &project_collation).unwrap();
     let context = ClassifyContext::default();
     for function in &graph.functions {
-        let kind = classify_function(
-            function,
-            &defaults,
-            &context,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-        )
-        .unwrap();
+        let kind = classify_function(function, &defaults, &context, &project_collation).unwrap();
         match function.name.as_str() {
             "fetch" => assert!(matches!(kind, NodeKind::Entry { .. })),
             "requireAuth" => assert!(matches!(kind, NodeKind::Auth { .. })),
             "custom" => {
                 assert!(matches!(kind, NodeKind::Plain));
-                let classified = classify_function(
-                    function,
-                    &custom,
-                    &context,
-                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-                )
-                .unwrap();
+                let classified =
+                    classify_function(function, &custom, &context, &project_collation).unwrap();
                 assert_eq!(
                     serde_json::to_string(&classified).unwrap(),
                     r#"{"kind":"entry","evidence":["\ud800"],"guards":[],"reach":"public"}"#
@@ -79,13 +61,7 @@ fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels(
     );
     let invalid =
         NodeKindRules::parse(&JsValue::parse(r#"{"authNames":{"bad":["["]}}"#).unwrap()).unwrap();
-    assert!(
-        compile_kind_rules(
-            &invalid,
-            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap()
-        )
-        .is_err()
-    );
+    assert!(compile_kind_rules(&invalid, &project_collation).is_err());
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -120,6 +96,7 @@ fn compiles_framework_globs_as_ucs2_patterns_with_literal_dynamic_segments() {
 
 #[test]
 fn selects_framework_export_conventions_from_each_functions_actual_owning_package() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     use demlik_code_graph::extract::conventions::{convention_entries, export_names_by_id};
     use demlik_code_graph::extract::functions::discover_functions;
     let unique = SystemTime::now()
@@ -155,29 +132,15 @@ fn selects_framework_export_conventions_from_each_functions_actual_owning_packag
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
-    let loaded = load_cheap_project(&root, None).unwrap();
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
     let rules = NodeKindRules::parse(&JsValue::parse(r#"{"entryExportConventions":{"job-runner":{"files":"jobs/*.ts","exports":["execute"]}}}"#).unwrap()).unwrap();
-    let names = export_names_by_id(
-        &functions,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let names = export_names_by_id(&functions, &project_collation).unwrap();
     assert_eq!(names["apps/web/app/[slug]/page.tsx:Home"], ["default"]);
     assert_eq!(names["apps/jobs/jobs/run.ts:run"], ["execute"]);
-    let entries = convention_entries(
-        &functions,
-        &rules,
-        &root,
-        &root,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let entries = convention_entries(&functions, &rules, &root, &root, &project_collation).unwrap();
     assert_eq!(entries.len(), 3);
     assert_eq!(
         entries["apps/web/app/[slug]/page.tsx:Home"],
@@ -194,6 +157,7 @@ fn selects_framework_export_conventions_from_each_functions_actual_owning_packag
 
 #[test]
 fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_declarations() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     use demlik_code_graph::checker::context::{TypeContextInput, with_type_context};
     use demlik_code_graph::engine::tsgo::TsgoBinary;
     use demlik_code_graph::extract::functions::discover_functions;
@@ -212,21 +176,14 @@ fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_dec
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("tsconfig.json"), "{}").unwrap();
     fs::write(root.join("entry.ts"), "declare class WorkerEntrypoint<E> {}\nclass Worker extends WorkerEntrypoint<unknown> { public call() {} private hidden() {} protected family() {} static build() {} #secret() {} get value() { return 1; } }\ndeclare const builder: any;\nconst Project = builder.objectRef('Project');\nProject.implement({ authScopes: { user: true }, fields: (t: any) => ({ one: t.field({ resolve: () => 101 }) }) });\nbuilder.objectField(Project, 'more', (t: any) => t.field({ resolve: () => 102 }));\nbuilder.objectField(Project, 'skip', (t: any) => t.field({ skipTypeScopes: true, resolve: () => 103 }));\nconst direct = { authScopes: { user: true }, resolve() { return 104; } };\nconst quoted = { 'authScopes': true, resolve() { return 105; } };\n").unwrap();
-    let loaded = load_cheap_project(&root, None).unwrap();
-    let functions = discover_functions(
-        &loaded.source_files,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap()
-    .functions;
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
+    let functions = discover_functions(&loaded.source_files, &project_collation)
+        .unwrap()
+        .functions;
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
-    let rules = compile_kind_rules(
-        &NodeKindRules::default(),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-    )
-    .unwrap();
+    let rules = compile_kind_rules(&NodeKindRules::default(), &project_collation).unwrap();
     with_type_context(
         &binary,
         TypeContextInput {
@@ -238,23 +195,13 @@ fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_dec
             let base = public_method_rules_by_base_class(context, &rules.entry_base_classes)?;
             assert_eq!(base.len(), 1);
             assert!(base.contains_key("entry.ts:call"));
-            let siblings = sibling_property_rules(
-                context,
-                &rules.entry_guard_properties,
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-            )
-            .unwrap();
-            let scopes = type_scope_rules(
-                context,
-                &rules.entry_guard_properties,
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-            )
-            .unwrap();
-            let guards = merge_rule_maps(
-                [&siblings, &scopes],
-                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
-            )
-            .unwrap();
+            let siblings =
+                sibling_property_rules(context, &rules.entry_guard_properties, &project_collation)
+                    .unwrap();
+            let scopes =
+                type_scope_rules(context, &rules.entry_guard_properties, &project_collation)
+                    .unwrap();
+            let guards = merge_rule_maps([&siblings, &scopes], &project_collation).unwrap();
             for function in functions
                 .iter()
                 .filter(|function| function.name == "resolve")

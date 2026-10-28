@@ -156,7 +156,7 @@ fn execute(
 ) -> Result<Box<RawValue>, Box<dyn std::error::Error>> {
     let collation = Collation::try_node22_en_us()?;
     let root = Path::new(&input.root);
-    let loaded = load_cheap_project(root, None)?;
+    let loaded = load_cheap_project(root, None, &collation)?;
     let mut graph = assemble_graph(
         &loaded,
         Thresholds::default(),

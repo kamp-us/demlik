@@ -111,6 +111,7 @@ fn reads_package_entry_targets_with_root_assignment_semantics_and_lossless_path_
 
 #[test]
 fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_surfaces() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     for (file, text) in [
         (
@@ -148,7 +149,14 @@ fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_sur
     ] {
         project.write(file, text);
     }
-    let loaded = load_edge_project(&project.0, EdgeScope::Package, &project.0, None).unwrap();
+    let loaded = load_edge_project(
+        &project.0,
+        EdgeScope::Package,
+        &project.0,
+        None,
+        &project_collation,
+    )
+    .unwrap();
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
@@ -168,7 +176,7 @@ fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_sur
         &binary,
         NodeFields { headers: true },
         &options,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert_eq!(graph.functions.len(), 4);
@@ -247,7 +255,7 @@ fn assembles_requested_analysis_reports_from_real_compiler_edges_and_package_sur
         &binary,
         NodeFields::default(),
         &none,
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     assert!(

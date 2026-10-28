@@ -9,12 +9,12 @@ use std::{cell::Cell, path::Path, rc::Rc};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
     let root = Path::new(&args[1]);
-    let loaded = load_edge_project(root, EdgeScope::Package, root, None)?;
+    let collation = Collation::try_node22_en_us()?;
+    let loaded = load_edge_project(root, EdgeScope::Package, root, None, &collation)?;
     let binary = TsgoBinary::from_native_preview_manifest(Path::new(&args[2]))?;
     let observed = Rc::new(Cell::new(0usize));
     let borrowed_host = &observed;
     let declarations = {
-        let collation = Collation::try_node22_en_us()?;
         let declarations = discover_declarations(&loaded.project.source_files, &collation)?;
         let file_count = with_type_context(
             &binary,
@@ -41,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert!(file_count > 1);
         declarations
     };
+    drop(collation);
     assert!(observed.get() > 0);
     assert!(
         declarations

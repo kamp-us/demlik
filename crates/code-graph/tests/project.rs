@@ -67,6 +67,7 @@ impl Drop for Project {
 
 #[test]
 fn discovers_visible_typescript_sources_in_a_real_git_project() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     project.git(&["init", "-q"]);
     for file in [
@@ -90,14 +91,19 @@ fn discovers_visible_typescript_sources_in_a_real_git_project() {
     project.write(".gitignore", "ignored/\n");
     project.git(&["add", "src/main.ts"]);
     assert_eq!(
-        project.relative(&list_source_files(&project.0)),
+        project.relative(&list_source_files(&project.0, &project_collation).unwrap()),
         ["packages/lib/src/lib.ts", "src/main.ts", "src/view.tsx"]
     );
-    assert!(list_source_files(&project.0.join("missing")).is_empty());
+    assert!(
+        list_source_files(&project.0.join("missing"), &project_collation)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
 fn reuses_one_repo_listing_for_a_package_and_filters_deleted_files() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     for file in [
         "package.json",
@@ -113,7 +119,13 @@ fn reuses_one_repo_listing_for_a_package_and_filters_deleted_files() {
     fs::remove_file(project.0.join("packages/app/src/a.ts")).unwrap();
     project.write("packages/app/src/later.ts", "export {};");
     assert_eq!(
-        list_visible_files(&project.0.join("packages/app"), |_| true, Some(&listing)),
+        list_visible_files(
+            &project.0.join("packages/app"),
+            |_| true,
+            Some(&listing),
+            &project_collation
+        )
+        .unwrap(),
         ["package.json"]
     );
     assert_eq!(
@@ -141,12 +153,13 @@ fn reuses_one_repo_listing_for_a_package_and_filters_deleted_files() {
 
 #[test]
 fn orders_visible_names_like_the_reference_locale_compare() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     for file in ["z.ts", "B.ts", "a.ts", "é.ts", "e.ts", "_a.ts", "-a.ts"] {
         project.write(file, "export {};");
     }
     assert_eq!(
-        list_visible_files(&project.0, |_| true, None),
+        list_visible_files(&project.0, |_| true, None, &project_collation).unwrap(),
         ["_a.ts", "-a.ts", "a.ts", "B.ts", "e.ts", "é.ts", "z.ts"]
     );
 }
@@ -154,6 +167,7 @@ fn orders_visible_names_like_the_reference_locale_compare() {
 #[cfg(unix)]
 #[test]
 fn lists_the_supplied_directory_but_normalizes_joined_file_paths_before_stat() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let project = Project::new();
     project.write("holder/shared.ts", "export const lexical = true;");
     project.write("holder/lexical-only.ts", "export {};");
@@ -166,9 +180,12 @@ fn lists_the_supplied_directory_but_normalizes_joined_file_paths_before_stat() {
     )
     .unwrap();
     let supplied = project.0.join("holder/link/..");
-    assert_eq!(list_visible_files(&supplied, |_| true, None), ["shared.ts"]);
     assert_eq!(
-        list_source_files(&supplied),
+        list_visible_files(&supplied, |_| true, None, &project_collation).unwrap(),
+        ["shared.ts"]
+    );
+    assert_eq!(
+        list_source_files(&supplied, &project_collation).unwrap(),
         [project.0.join("holder/shared.ts")]
     );
 }
@@ -211,6 +228,7 @@ fn selects_the_package_or_workspace_tsconfig_and_reports_missing_configuration()
 
 #[test]
 fn missing_configuration_retains_the_declared_root_after_the_input_is_dropped() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     use demlik_code_graph::{
         project::{ProjectLoadError, load_edge_project_text},
         text::JsString,
@@ -219,7 +237,14 @@ fn missing_configuration_retains_the_declared_root_after_the_input_is_dropped() 
     let error = {
         let mut root = JsString::from(format!("{}/services/", project.0.display()));
         root.extend(&JsString::from_units(vec![0xd800]));
-        load_edge_project_text(&root, EdgeScope::Package, &project.0, None).unwrap_err()
+        load_edge_project_text(
+            &root,
+            EdgeScope::Package,
+            &project.0,
+            None,
+            &project_collation,
+        )
+        .unwrap_err()
     };
     assert!(std::error::Error::source(&error).is_some());
     assert!(error.message().units().contains(&0xd800));
@@ -240,6 +265,7 @@ fn missing_configuration_retains_the_declared_root_after_the_input_is_dropped() 
 #[cfg(unix)]
 #[test]
 fn native_project_paths_keep_their_original_os_bytes_for_lookup_and_refusal() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     use demlik_code_graph::project::{ProjectLoadError, load_edge_project};
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     let project = Project::new();
@@ -250,17 +276,36 @@ fn native_project_paths_keep_their_original_os_bytes_for_lookup_and_refusal() {
     fs::write(shadow.join("tsconfig.json"), "{}").unwrap();
     fs::write(shadow.join("src/main.ts"), "export const shadow = true;").unwrap();
     // A lossy Path conversion would incorrectly load this real replacement-name scope.
-    let loaded = load_edge_project(&root, EdgeScope::Package, &project.0, None).unwrap();
+    let loaded = load_edge_project(
+        &root,
+        EdgeScope::Package,
+        &project.0,
+        None,
+        &project_collation,
+    )
+    .unwrap();
     assert_eq!(loaded.project.root_absolute, root);
     assert_eq!(loaded.ts_config_path, project.0.join("tsconfig.json"));
     assert!(loaded.project.source_files.is_empty());
-    let visible = load_edge_project(&shadow, EdgeScope::Package, &project.0, None).unwrap();
+    let visible = load_edge_project(
+        &shadow,
+        EdgeScope::Package,
+        &project.0,
+        None,
+        &project_collation,
+    )
+    .unwrap();
     assert_eq!(visible.ts_config_path, shadow.join("tsconfig.json"));
     assert_eq!(visible.project.source_files.len(), 1);
     fs::remove_file(project.0.join("tsconfig.json")).unwrap();
-    let ProjectLoadError::MissingTsConfig(error) =
-        load_edge_project(&root, EdgeScope::Package, &project.0, None).unwrap_err()
-    else {
+    let ProjectLoadError::MissingTsConfig(error) = load_edge_project(
+        &root,
+        EdgeScope::Package,
+        &project.0,
+        None,
+        &project_collation,
+    )
+    .unwrap_err() else {
         panic!("the native refusal keeps its typed path");
     };
     assert_eq!(error.start, root);

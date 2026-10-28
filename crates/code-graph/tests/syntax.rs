@@ -50,6 +50,7 @@ fn parses_tsx_modules_with_utf16_spans_comments_and_observable_syntax_errors() {
 
 #[test]
 fn loads_real_projects_removing_bom_and_retaining_parse_failures() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -72,12 +73,19 @@ fn loads_real_projects_removing_bom_and_retaining_parse_failures() {
     )
     .unwrap();
     let listing = list_repo(&root);
-    let loaded = load_cheap_project(&root, Some(&listing)).unwrap();
+    let loaded = load_cheap_project(&root, Some(&listing), &project_collation).unwrap();
     assert_eq!(loaded.parse_failures, ["bad.ts"]);
     assert_eq!(loaded.source_files.len(), 1);
     assert_eq!(loaded.source_files[0].file, "good.ts");
     assert!(loaded.source_files[0].syntax.text().starts_with("export"));
-    let edged = load_edge_project(&root, EdgeScope::Package, &root, Some(&listing)).unwrap();
+    let edged = load_edge_project(
+        &root,
+        EdgeScope::Package,
+        &root,
+        Some(&listing),
+        &project_collation,
+    )
+    .unwrap();
     assert_eq!(edged.ts_config_path, root.join("tsconfig.json"));
     assert_eq!(edged.project.parse_failures, ["bad.ts"]);
     fs::remove_dir_all(root).unwrap();
@@ -378,6 +386,7 @@ fn classifies_import_reach_names_ambient_modules_and_dynamic_literals() {
 
 #[test]
 fn resolves_import_targets_only_for_loaded_external_modules() {
+    let project_collation = demlik_code_graph::project::Collation::try_node22_en_us().unwrap();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -393,12 +402,12 @@ fn resolves_import_targets_only_for_loaded_external_modules() {
     fs::write(root.join("value.ts"), "export const value = 1;").unwrap();
     fs::write(root.join("script.ts"), "const globalValue = 2;").unwrap();
     fs::write(root.join("meta.ts"), "const url = import.meta.url;").unwrap();
-    let loaded = load_cheap_project(&root, None).unwrap();
+    let loaded = load_cheap_project(&root, None, &project_collation).unwrap();
     let graph = resolve_imports(
         &root,
         &loaded.source_files,
         &root.join("tsconfig.json"),
-        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        &project_collation,
     )
     .unwrap();
     let edges = &graph.import_edges_by_file["entry.ts"];

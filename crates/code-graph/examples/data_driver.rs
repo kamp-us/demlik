@@ -196,7 +196,8 @@ fn execute(
                         calls,
                         demlik_code_graph::project::load_cheap_project,
                         &input.root,
-                        None
+                        None,
+                        &metadata_collation
                     )
                     .map_err(DriverError::backend)?;
                     match data {
@@ -238,7 +239,8 @@ fn execute(
                         &input.root,
                         scope,
                         repo,
-                        None
+                        None,
+                        &metadata_collation
                     )
                     .map_err(DriverError::backend)?;
                     let rules = NodeKindRules::default();
@@ -272,7 +274,8 @@ fn execute(
                 calls,
                 demlik_code_graph::project::load_cheap_project,
                 &input.root,
-                None
+                None,
+                &metadata_collation
             )
             .map_err(DriverError::backend)?;
             let foreign = input
@@ -282,7 +285,8 @@ fn execute(
                         calls,
                         demlik_code_graph::project::load_cheap_project,
                         &input.root,
-                        None
+                        None,
+                        &metadata_collation
                     )
                 })
                 .transpose()

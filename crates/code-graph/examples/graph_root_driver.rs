@@ -56,7 +56,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
             calls,
             demlik_code_graph::project::load_cheap_project,
             &root,
-            None
+            None,
+            &metadata_collation
         )?;
         let count = loaded.source_files.len();
         let graph = observe!(
@@ -81,7 +82,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
                 &input.root,
                 EdgeScope::Package,
                 &repo,
-                None
+                None,
+                &metadata_collation
             ),
             Mode::Path => observe!(
                 calls,
@@ -89,7 +91,8 @@ fn run(input: Request) -> Result<Output, Box<dyn std::error::Error>> {
                 &root,
                 EdgeScope::Package,
                 &repo,
-                None
+                None,
+                &metadata_collation
             ),
             Mode::Cheap => unreachable!(),
         }?;

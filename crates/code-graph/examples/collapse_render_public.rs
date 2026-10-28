@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .join(format!("collapse-render-borrowed-{}", std::process::id())),
     );
     fs::create_dir_all(&scratch.0)?;
-    let loaded = load_cheap_project(&scratch.0, None)?;
+    let loaded = load_cheap_project(&scratch.0, None, &metadata_collation)?;
     let graph = assemble_graph(
         &loaded,
         Thresholds::default(),
