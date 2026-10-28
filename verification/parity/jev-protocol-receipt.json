@@ -1,0 +1,118 @@
+{
+  "sourceCheckpoint": "281ad484750203c34097aea1db6a8a1f89363db8",
+  "base": "8a7c0efea240b6a9ce8df5f9444a028f2a9c881a",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Pure Jev question-driven protocol parsing, HTTP reply outcome and tag/transience facts only. No HTTP/SDK, ask factory, resilient state/retry/batch/fallback/foreign unwrap, actor or registry changes.",
+  "publicInterface": {
+    "modelOwner": "jev::{JevText,JevState,ScoreCriteria,NoulCriteria,Question,Questions,JevRequest}",
+    "protocol": "jev::protocol::{JevErr,JevUsage,Answer,Answers,ParsedAnswers,HttpStatus,parse_answers,classify_status,is_jev_err}",
+    "reply": "jev::reply::{HttpReply,JevAskErr,JevFailureDetails,JevRejected,AnswerSource,JevOk,decode_reply,is_transient_ask_err}",
+    "ownership": "Borrow requests/questions/PlainData, retain original Rc questions/error, return owned precise answer/error data. Concrete JevRejected holds only existing RunError<JevFailureDetails>; tag delegates and the concrete wire view orders _tag before jev. No caller model Clone/Debug/serde/Send/static bounds.",
+    "wireOrderWitness": "24 complete Source/native outcomes include exact JSON.stringify bytes; public literal rejection bytes and original Rc assertions pass."
+  },
+  "verification": {
+    "wholeViews": 24,
+    "strict": 24,
+    "qualified": 0,
+    "failures": 0,
+    "report": "final24.json",
+    "reportSha256": "d5fa64773cd6ca7769bc3031b430b93c00af331abffb355e05918fc93fe7c3bd",
+    "actualNativeResponses": 24,
+    "nativeProcesses": 1,
+    "SourceNode": "v22.21.1",
+    "SourceV8": "12.4.254.21-node.33",
+    "librarySha256": "68a7da0a8fa05c4ce9c56b1b8eae3742cd8d462ce1054d1445076d1e1a8e7c6e",
+    "driverSha256": "4f3a32447c9e8a3b80a1df53260ee5b6d70cf0ed5f7573ad7ed8f7f9ac0d004a",
+    "publicExit": 0,
+    "oldNativePassed": 36,
+    "oldNativeExecutables": 7,
+    "newPublicOpaqueBoundary": "An invoice containing borrowed non-Clone/non-Debug/non-Serde/non-Send state owns the precise wire request. Only its borrowed request crosses the helper; arbitrary opaque nested JevText values are not claimed.",
+    "roundtrip": "Owned response is canonically serialized, decoded by the existing JSON owner and reparsed through protocol; failure data has canonical JSON roundtrip. No typed error Deserialize or full-state cold codec claim.",
+    "types": [
+      "sole E0433 baseline missing module -> same tiny file compile0, not whole public source red-green",
+      "sole E0308 wrong raw-body type after a retained fixture-import failure",
+      "sole E0061 score criteria fewer than two constructor inputs"
+    ],
+    "scopedClippy": {
+      "selection": "cargo6-clippy",
+      "exit": 0,
+      "scope": "Tea lib/new two examples/seven affected command-resilient tests, default features only"
+    },
+    "statics": {
+      "rustfmt": 0,
+      "diffCheck": 0,
+      "NodeSyntax": 0,
+      "Biome": 0
+    }
+  },
+  "controls": {
+    "count": 4,
+    "allCompileExit": 0,
+    "allLibraryDriverFresh": false,
+    "allNativeProcessesExit": 0,
+    "allNamedStrictSemanticDetections": true,
+    "SourceViewsUnchanged": true,
+    "reportSha256": "a308e991eb4cf9f2bb26e7da469278d834b8461df4bb02c4de0b8dd92d35c0f0",
+    "ids": [
+      "confidence-before-choice",
+      "value-only-probabilities",
+      "reject-unasked-answers",
+      "body-before-status"
+    ],
+    "newComparisonCredit": 0,
+    "unknownAnswerVariant": "Actual control rejects unasked IDs instead of preserving them; this tests the same ignore-extra contract through a credible overstrict-parser regression."
+  },
+  "sourceTiming": {
+    "original24SourceFreezeBeforeRustRetained": true,
+    "original23WholeViewsRemainIdentical": true,
+    "oneCorrectedRow": "jev.protocol.non-object-bodies",
+    "reason": "A fixture helper default parameter replaced explicit Undefined with its normal body. It was fixed after first native23/24, with identical24 encoded requests, unchanged Rust products for that repair, and direct parseAnswers(questions,undefined) anchor. All final24 are not mislabeled pre-Rust.",
+    "originalRawFirst24Retained": true,
+    "finalCurrentInputsFrozenBeforeControls": true
+  },
+  "resources": {
+    "constructionCargoInvocations": 7,
+    "includesFailedRustupSetupBeforeCompilerEvents": 1,
+    "controlCargoInvocations": 4,
+    "constructionRoots": 1,
+    "controlRoots": 1,
+    "defaultTargetsOnly": true,
+    "fourTargetAliasesUnset": true,
+    "ICUPreparations": 0,
+    "compiledCacheCopies": 0,
+    "allSelectedExecutedOrTypeProofLibraryBytesRetainedBeforeOverwrite": true,
+    "artifactRoles": 29,
+    "uniqueDecodedArtifactHashes": 29,
+    "artifactRetentionSha256": "fd9617fbe5466710dabdf3f4ddfc67b52274c7a88ab619fa93eee12cf1dcf6b8",
+    "sourceArchiveMembers": 20,
+    "sourceArchiveSha256": "df3704560b534643962bb5bfab3c2db4770551d4de00dd0d1f60d1afc578eb95"
+  },
+  "history": [
+    "Pre-Source launcher guessed root tsx path; actual parity dependency path located before any Source call.0credit.",
+    "Cargo1 rustup wrapper tried unavailable toolchain update and failed DNS before compiler events; direct pinned toolchain/offline builds then succeeded. No successful download or Jev service call.0credit.",
+    "Cargo3 fixture expected JsText where existing stringify_json returns String; corrected driver/public adapters.0credit.",
+    "Initial first24:23 matches, one Source helper Undefined default bug; preserved and corrected as described.0credit until final complete24.",
+    "Cargo5 caught source range-style lint; equivalent Range::contains and scoped Cargo6 Clippy0. Initial Biome callback-return lint and mechanical formatting fixed before final producer.0credit.",
+    "Initial negative fixture imported Questions from private protocol import; retained E0603+E0308 setup, then exact public root import gives sole E0308.0credit for setup."
+  ],
+  "limits": [
+    "No literal-key dependent question/criteria mapped typing; native enums/maps are runtime checked.",
+    "No inherited/getter/prototype/own __proto__/sparse/manual-iterator/non-wire JavaScript profile equivalence. Source is frozen75de37, not the live external API contract.",
+    "No HTTP, ask/retry/batching/fallback/foreign unwrap/Promise scheduler/new actor execution/full state restore. Existing RC runtime tests are regressions, not Jev runtime proof.",
+    "Canonical JSON owner required for exact JS numeric/UTF16 wire; ordinary serde_json::Value raw-string limits remain.",
+    "No workspace/all-features/MSRV/cold archive/release/deployment/global-goal closure.",
+    "Intermediate unexecuted compiler/Clippy and pre-format source history byte limits are explicit in artifact-retention.json.",
+    "No contracts/registry/Main modifications or invented public Source aliases."
+  ],
+  "candidateExistingFunctionBindings": [
+    "@demlik/tea:./jev#parseAnswers",
+    "@demlik/tea:./jev#classifyStatus",
+    "@demlik/tea:./jev#isJevErr",
+    "@demlik/tea:./jev#decodeJevReply",
+    "@demlik/tea:./jev#isTransientJevAskErr"
+  ],
+  "bindingsApplied": 0,
+  "comparisonRegistrationApplied": false,
+  "proofDirectory": "/private/tmp/demlik-jev-protocol-proof-01a16c9d",
+  "retirementRequiredBeforeHandoff": true
+}
