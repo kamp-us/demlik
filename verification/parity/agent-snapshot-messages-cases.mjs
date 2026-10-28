@@ -31,7 +31,7 @@ export const agentSnapshotMessagesCases = ["promise", "effect"].flatMap(
         compaction: false,
         messageMode: "single",
         expected: {
-          counts: [3, 2, 0, 1],
+          counts: profile === "effect" ? [4, 2, 0, 1] : [3, 2, 0, 1],
           sourceCounts: profile === "effect" ? [4, 2, 0, 1] : [3, 2, 0, 1],
           phase: "running",
           messages: 0,
