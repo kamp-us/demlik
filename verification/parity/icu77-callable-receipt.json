@@ -1,0 +1,99 @@
+{
+  "component": "ICU77 Group E callable graph metadata",
+  "productCommit": "57bc12c578e7b259ab070c2aeed323fbd4e7c446",
+  "verifierCommit": "920a2286d96a8f36cc50cf5371165e1152a335b0",
+  "base": "bfe935dda2b6e501342fefb0437cf0c38b326f43",
+  "Source": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "proofDirectory": "/private/tmp/demlik-icu77-group-e-proof-01a16c9d",
+  "scope": "16 checked comparison calls in eight existing owners plus necessary precise Result/error/caller propagation; one existing Collation owner, no new Graph/context carrier, type session, bounds, fallback or dependencies.",
+  "legacyTermini": {
+    "helperCallsBefore": 107,
+    "helperCallsAfter": 91,
+    "directProjectSortsRemaining": 2
+  },
+  "construction": {
+    "CargoSelections": 7,
+    "compilerSuccesses": 5,
+    "compilerFailures": 2,
+    "compilerFailureCredit": 0,
+    "nativePreparations": 1,
+    "directRustcPublicRedAndGreen": 2,
+    "allTargetCodeGraphClippy": 0,
+    "scopedParityTSC": 0,
+    "scopedCodeGraphTSC": 0,
+    "Biome": 0,
+    "fmt": 0,
+    "wholeWorkspaceOrTeaOrFeaturesRun": false
+  },
+  "public": {
+    "sameExactRedGreenInput": "borrowed-public.rs",
+    "redCodes": {
+      "codes": ["E0061", "E0277", "E0061", "E0277", "E0061", "E0061"],
+      "actualSourceSha256": "4fb41fb6cfe4f815a0458b81c7757940b8c24a02205f0535948ee5ef36440e12",
+      "semanticCredit": 0
+    },
+    "greenCheapAndOfficialGo": true,
+    "originalRcFiles": true,
+    "NativeNodeAndSymbolCacheEquality": true,
+    "borrowedRcHost": true,
+    "returnedFactsUsableAfterCollationDrop": true,
+    "blanketModelBoundsAdded": false
+  },
+  "newComparisons": {
+    "shared": 19,
+    "strict": 19,
+    "qualified": 0,
+    "protocolRefusals": 5,
+    "responseGuards": 3,
+    "protocolGuardAndSourceFirstExtraCredit": 0,
+    "historicalSource16Preserved": true,
+    "supplementalSource3FrozenBeforeNativeProjection": true,
+    "finalReport": "final-pairs.json",
+    "preFormatReplayNotAddedTwice": true
+  },
+  "affected": {
+    "suites": 19,
+    "outcomes": 899,
+    "failures": 0,
+    "newCredit": 0,
+    "inheritedQualifiersRetained": true,
+    "HTML": 34,
+    "focusedNative": 44,
+    "nativeGroups": 12,
+    "zeroTestFilterAttemptCredit": 0,
+    "fullNativeSuiteClaim": false
+  },
+  "controls": {
+    "planned": 4,
+    "CargoSelections": 4,
+    "nativePreparations": 1,
+    "compiledSemanticControls": 4,
+    "strictSourceNamedMismatches": 4,
+    "qualifiedOrNativeOnly": 0,
+    "libraryAndConsumerFreshFalse": true,
+    "effectiveBytesRetained": true,
+    "ownersRestored": true,
+    "worktreeAndDefaultTargetRemoved": true,
+    "preflightNeedleFailure": {
+      "Cargo": 0,
+      "worktreeCreated": false,
+      "semanticCredit": 0
+    }
+  },
+  "limits": [
+    "91 legacy helper calls and two direct project sorts remain",
+    "existing raw identifier/String, backend/host and stdio profiles are unchanged",
+    "all 53 CLI known gaps remain open; no capability mappings or global acceptance claimed",
+    "omitted old native binaries and caches are disclosed in unretained-artifacts.json",
+    "no full workspace, feature-profile or cold archive rebuild claim"
+  ],
+  "orderingAndIdentity": [
+    "numeric line before name/ID ties; stable ICU ties",
+    "duplicate constant-argument union and value-position semantics",
+    "all forwarded factory implementations and original NativeNode cache keys",
+    "outer rule-map insertion order with checked raw UTF16 value ordering",
+    "nonempty base/sibling/type/convention facts from actual Source/Go owners"
+  ],
+  "sourceRetention": "source.tar.gz contains only 34 changed native/verifier files and 14 frozen Source files; selected gzip artifacts remain separate, no giant duplicate archive",
+  "constructionRetirement": "retirement.json is written after preserving the compact proof and removing the owned worktree/default target"
+}
