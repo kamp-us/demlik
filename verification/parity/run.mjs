@@ -10,6 +10,7 @@ import { agentContentParity } from "./agent-content-run.mjs";
 import { agentErrorCheckpointParity } from "./agent-error-parity.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
+import { agentRoutedCheckpointParity } from "./agent-routed-parity.mjs";
 import { runAgentRuntimeConformance } from "./agent-runtime-run.mjs";
 import { agentSnapshotMessagesCheckpointParity } from "./agent-snapshot-messages-parity.mjs";
 import { agentSnapshotCheckpointParity } from "./agent-snapshot-parity.mjs";
@@ -1195,6 +1196,12 @@ if (!mutationSuite) {
       operation: "tea.agent-tool-map",
       binaryArgument: "--agent-tool-map-bin",
       run: (options) => agentToolMapCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentRouted",
+      operation: "tea.agent-routed",
+      binaryArgument: "--agent-routed-bin",
+      run: (options) => agentRoutedCheckpointParity(cargo, options),
     },
     {
       name: "machineViz",

@@ -11710,7 +11710,8 @@
         "demlik_tea::agent::Agent::to_machine",
         "demlik_tea::agent::Agent::to_machine_with_compaction",
         "demlik_tea::agent::Agent::to_machine_with_snapshot",
-        "demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction"
+        "demlik_tea::agent::Agent::to_machine_with_snapshot_and_compaction",
+        "demlik_tea::agent::Agent::to_machine_with_tools"
       ]
     },
     "cases": [
@@ -11841,9 +11842,13 @@
       "agent-snapshot.effect.nominal.on-on",
       "agent-snapshot.effect.held",
       "agent-snapshot.effect.cold.off",
-      "agent-snapshot.effect.cold.on"
+      "agent-snapshot.effect.cold.on",
+      "agent-routed.promise.invoice",
+      "agent-routed.effect.invoice",
+      "agent-routed.promise.declared",
+      "agent-routed.effect.selected-B"
     ],
-    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open.",
+    "nativeProfile": "Canonical owned finite message family, explicit host ports and controlled clock, both runtime profiles; no broad inherited callable aliases. Concrete and default guarded raw-turn views execute real collect/check/summarize IO through the same runtime; original root/call/args, first duplicate, usage presence, supported codecs and explicit Boot are verified. Enabled low-level compaction uses a required caller-owned compact_run handler, independent retry state with the original RNG, summary folding and explicit cold Boot in both profiles. Exact checkpoint bytes and counted original guard/loaded-State owner checks cover the fixed corpus. Select compaction before state-dependent stop_when; incompatible prior OFF predicates visibly refuse and return the original configuration and policy. Low-level snapshots and compaction form four caller-owned handler profiles with the same canonical State. The listed14strict workflows cover dropped progress writes, ordered stage writes with literal undefined payload, held IO and commandless loaded ready followed by explicit Boot, including exact Store/named bytes and retained owners. Four writer/save failure workflows are qualified separately for raw JS versus typed Rust host-report envelopes and are excluded from these strict bindings. Returned writer messages and advanced host/raw profiles remain open. Serial native routed tools now use the same wire through to_machine_with_tools, original Router/Host reader ownership, rich errors/stamps, 16strict and4separate reporter-qualified observations. Pending-only cold codec and owned opaque actors are measured. Optional/concurrent/policy/raw child/provider/full-state-codec grids remain open.",
     "knownGaps": [
       "OPEN measured Source accepts null/omitted at in manual settlements; native wiring refuses them observably (including valid nonfinite\u2192JSON-null restore).",
       "OPEN native panic versus JS catches; native callback throw/error decoration, mutable function/prototype/thenable profiles are not universal JS equivalence.",

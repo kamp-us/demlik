@@ -1,0 +1,57 @@
+{
+  "status": "Reviewed serial routed Agent and adapter integrated; full composed checkpoint pending",
+  "source": "5a4da68fde1b7153ec84948d0232822071c60fe0",
+  "sourcePick": "6e95c3bb",
+  "receiptPick": "857aa5f4",
+  "thinSource": "4b8adeadcc07cdd401dbcb36ff4c11437614bead",
+  "thinPick": "2a79ff7d",
+  "observations": 20,
+  "strict": 16,
+  "qualified": 4,
+  "newCombinedCredit": 0,
+  "existingCallableBindingExtended": "@demlik/tea:./agent#AgentToMachine/member:published:f9abc1f39064748ef307fbbb0755b2a36b0c7f3f58d5f98429c56bb1e13bdda7",
+  "newCapabilityBindings": 0,
+  "existingCasesSymbolsAndGapsPreserved": true,
+  "oneExistingRuntimeWire": true,
+  "sixLegacyHeadersByteIdentical": true,
+  "reviews": {
+    "rootSourceSha256": "2be674d16ad7f8b13e3318b4e49a50e38825c2db0bf20bd45f04cd104c096fd2",
+    "independentSourceSha256": "f202f2a464c7a4e90492f04d741a2e107aa7eb2116a6f200e68b79d3e5aedb2d",
+    "artifactSha256": "2a83de9840d279630d4c357989f9c41ebacbfe6de0e3aa86e756c1cd4a719483",
+    "thinRootSha256": "921ec126e1f19fa627ecf68573cfe60fd42fbb13b375590dde99f5949e4b651b"
+  },
+  "proof": {
+    "retainedRoot": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/agent-routed-runtime-source",
+    "payloads": 767,
+    "payloadBytes": 263401887,
+    "sourceArchiveMembers": 11,
+    "roles": 42,
+    "decodedHashes": 29,
+    "currentNative": 13,
+    "ownedOpaqueActorWorkflows": 4,
+    "compiledControls": 3,
+    "strictControls": 2,
+    "nativeOnlyControls": 1,
+    "allOwnedRootsTargetsRemoved": true,
+    "historicalLimit": "First external-rustc executable overwritten/unretained; no reconstruction, current C13/control bytes retained."
+  },
+  "lineage": [
+    "Node26provisional reports immutable/uncredited. Canonical22 measures after legacy-only C1 compile but before routed projection; all20 Source data unchanged.",
+    "The actual existing ErrorPhase serde owns follow-up spelling. Fixture Debug lowercase correction kept; phases/cause/cardinality stay exact, only typed reporter name/message/Source-only stacks qualified.",
+    "Owned opaque actors execute; local borrowed construction covers stage/model services, not borrowed actor-owned payloads.",
+    "Earlier85 comparison regressions are phase-labeled, zero extra credit.",
+    "Initial registration preparation asserted an already-owned Source member was new; stopped before writing bindings. This receipt accurately extends it and claims0new mappings."
+  ],
+  "registration": {
+    "name": "agentRouted",
+    "operation": "tea.agent-routed",
+    "binaryArgument": "--agent-routed-bin",
+    "example": "agent_routed_driver"
+  },
+  "limits": [
+    "Serial NativeCalls/no-compaction/no-snapshot/no-policy only; pending-only cold codec.",
+    "Raw child args/full generated Deserialize/None normalization/null stamps/optional grids/concurrency/advanced providers remain open.",
+    "Native reporter/JS host/scheduling profiles, all53 CLI gaps, MSRV/features/targets/cold rebuild/full port remain open.",
+    "Last accepted full checkpoint remains16215."
+  ]
+}
