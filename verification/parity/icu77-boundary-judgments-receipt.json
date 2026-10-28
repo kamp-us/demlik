@@ -1,0 +1,159 @@
+{
+  "sourceCheckpoint": "c70f830b3c95e98430f596809e772e2b147b1959",
+  "base": "7c292c04e35543bbf932a7ea74be67762d08e5ea",
+  "frozenSource": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "J12 boundary verdict, impurity, undeclared-library and worker-topology ordering. Existing checked borrowed Collation, existing request slot, original owners and precise existing error families. No registry/CLI closure.",
+  "productionOwners": [
+    "crates/code-graph/src/boundaries/analyze.rs",
+    "crates/code-graph/src/boundaries/deployables/bindings.rs",
+    "crates/code-graph/src/boundaries/deployables/cycles.rs",
+    "crates/code-graph/src/boundaries/deployables/judge.rs",
+    "crates/code-graph/src/boundaries/deployables/model.rs",
+    "crates/code-graph/src/boundaries/gate.rs",
+    "crates/code-graph/src/boundaries/impure_uses.rs",
+    "crates/code-graph/src/boundaries/libraries.rs",
+    "crates/code-graph/src/boundaries/libraries/violations.rs"
+  ],
+  "comparisons": 12,
+  "remainingLegacy": {
+    "helperCalls": 25,
+    "directProjectSorts": 2,
+    "census8Deferred": true,
+    "notCapabilityProgressPercent": true
+  },
+  "proofDirectory": "/private/tmp/demlik-icu77-group-j-proof-01a16c9d",
+  "sourceFirst": {
+    "freezeSha256": "fb134a880b99d0ad6ba711fc25b7f57808af8cfb987009a8943ee1deb634ce0f",
+    "reportSha256": "b45c3a1ea61cfd1b42b7bd92fa1627e7a8c110a69d0d5b72dc5531ecea169940",
+    "wholeviews": 20,
+    "valueViews": 19,
+    "thrownTypeErrorViews": 1,
+    "workflowStepsInOneCase": 9,
+    "actualIndependentBeforeAfterFilesAndModes": true,
+    "beforeNativeProjection": true,
+    "originalInputsRetained": "source-first-files/"
+  },
+  "verification": {
+    "sourceNative": {
+      "passed": 20,
+      "strict": 20,
+      "qualified": 0,
+      "protocolRefusals": 5,
+      "responseGuards": 3,
+      "protocolGuardCredit": 0,
+      "reportSha256": "2f9f7576bc83e1d8a2b9820124d70e1f368dbe4fdf2ab7f2c061229700d59d19",
+      "currentFrozenWorkerReplay": "final-frozen-replay-binding.json"
+    },
+    "nativeFocused": {
+      "passed": 85,
+      "groups": 24,
+      "newSourceCredit": 0,
+      "reportSha256": "bb0e9947033792f38a35a5af7d053f1ebe623b6ad2189009c0735a2476b576db"
+    },
+    "affected": {
+      "passed": 1339,
+      "suites": 13,
+      "knownQualified": 20,
+      "olderReportsWithoutExplicitPartitionPreserved": true,
+      "newSourceCredit": 0,
+      "reportSha256": "54bf9127246dc424f2cb9333e38dde4dc21a278a8782e38fc26a1daccaded529"
+    },
+    "publicCaller": {
+      "frozenInputSha256": "7be700b5100c92a0ce85d5a5a89ef935a77a03305f99fb8c1f181b5c469ef75f",
+      "externalCompileAndExecution": 0,
+      "cargoExampleExecution": 0,
+      "sameConfiguredTwoScopeFixture": true,
+      "originalRcSourceUnitAndManifestIdentity": true,
+      "originalArcWriteSharingPaired": true,
+      "resultsUsableAfterCollationDrop": true,
+      "noGoCompilerWasNeededOrClaimedForBoundarySyntaxLoader": true
+    },
+    "statics": {
+      "CodeGraphAllTargetClippy": 0,
+      "rustfmt": 0,
+      "scopedBiome": 0,
+      "parityTypecheck": 0,
+      "nodeSyntax": 0
+    },
+    "controls": {
+      "compiled": 4,
+      "strictNamedProtocolValidSemanticMismatches": 3,
+      "nativeOnlyLazyInitializerAssertion": 1,
+      "nativeOnlySourceCredit": 0,
+      "compileProtocolFailuresCredited": 0,
+      "reportSha256": "f671f5abe3c0f8943f8e71bf6678d43309a6f8fdebfa7adf9064382020f7c8c3"
+    }
+  },
+  "resources": {
+    "registeredRoots": 1,
+    "defaultTargetOnly": true,
+    "allFourAliasesUnset": true,
+    "ICUPreparations": 1,
+    "constructionCargoSelections": 6,
+    "controlCargoSelections": 4,
+    "externalPublicRustcCalls": 2,
+    "cacheCopies": 0,
+    "baselineBytesRetainedBeforeFaults": true,
+    "restorePerFaultAndFinally": true,
+    "lastTargetOutputsMutantNotBaseline": true
+  },
+  "history": [
+    {
+      "stage": "baseline public input",
+      "diagnostics": "E0061 plus natural Result/type cascades",
+      "semanticCredit": 0,
+      "rawRecordsRetained": true
+    },
+    {
+      "stage": "initial formatting refusal",
+      "diagnostics": "two adapter comma parse errors, no Rust compilation",
+      "semanticCredit": 0,
+      "originalRawFiles": "overwritten by later formatter runs; tool-observed diagnostics and authoring scripts retained, no raw-byte identity claim"
+    },
+    {
+      "stage": "Cargo2 old library-driver closure E0277 pair",
+      "exit": 101,
+      "semanticCredit": 0,
+      "originalRawFiles": "overwritten by accidental unchanged retry; observed codes/owner/lines retained, no raw-byte identity claim"
+    },
+    {
+      "stage": "Cargo3 accidental identical retry",
+      "exit": 101,
+      "semanticCredit": 0,
+      "actualRawFiles": "cargo3-no-run.*"
+    },
+    {
+      "stage": "Cargo4 new driver omitted existing gate Collation argument",
+      "exit": 101,
+      "semanticCredit": 0,
+      "actualRawFiles": "cargo4-no-run.*"
+    },
+    {
+      "stage": "Cargo5 scoped compile +Cargo6 Clippy",
+      "exit": 0,
+      "semanticCredit": 0
+    },
+    {
+      "stage": "Node profile guard",
+      "actualSourceWasAlreadyNode22": true,
+      "finalFrozenWorkerReplayedUsingImmutableRecordedBaseline": true,
+      "newCaseCredit": 0
+    }
+  ],
+  "artifactPolicy": {
+    "actualCargoSelectionEventsAndBytesRetained": true,
+    "baselineLibraryNeverExecutedOrLinked": true,
+    "firstProductProducerEventUnavailableButFinalActualSelectionBound": true,
+    "unitSelfCompilationNotFalseNormalLibraryLink": true,
+    "unexecutedProductsAndCachesNotRetained": true,
+    "noTargetCopies": true
+  },
+  "limits": [
+    "Census8 and mixed-NaN scheduling/retained SiteRow identity remain deferred.",
+    "No whole-workspace, Tea, all-feature or archive rebuild.",
+    "Actual Node22/en-US/ICU77 raw UTF16 inputs only; other String/reflection/numeric/host profiles remain open.",
+    "Existing affected-suite backend/regex/host/filesystem/stdio qualifications retained with zero new credit.",
+    "No new Source aliases, public bindings, central counts or CLI closure; all53 CLI gaps remain open."
+  ],
+  "handoffRequiresActualRetirement": true
+}
