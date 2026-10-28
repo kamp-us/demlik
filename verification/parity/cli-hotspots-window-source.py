@@ -17,7 +17,9 @@ PROOF.mkdir(parents=True, exist_ok=True)
 HERE = Path(__file__).resolve().parent
 MAIN = HERE.parents[1]
 NODE = Path('/Users/cansirin/.volta/tools/image/node/22.21.1/bin/node')
-TSX = Path(subprocess.check_output([str(NODE), '-p', "require.resolve('tsx')"], cwd=MAIN, text=True).strip())
+TSX = Path(subprocess.check_output(
+    [str(NODE), '-p', "require('node:module').createRequire(process.argv[1]).resolve('tsx')",
+     str(HERE / 'package.json')], cwd=MAIN, text=True).strip())
 CASES = json.loads((HERE / 'cli-hotspots-window-cases.json').read_text())
 assert len(CASES['cases']) == 20
 assert len({row['id'] for row in CASES['cases']}) == 20
