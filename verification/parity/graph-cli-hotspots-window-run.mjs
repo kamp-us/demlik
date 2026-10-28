@@ -464,7 +464,9 @@ async function main() {
   fs.mkdirSync(proof, { recursive: true });
   let ownsFixture = false,
     operationError,
-    identityError;
+    retentionError,
+    identityError,
+    cleanupError;
   function launch(name, script, args) {
     const command = [
       "python3",
@@ -548,15 +550,19 @@ async function main() {
     operationError = error;
   } finally {
     const partial = path.join(proof, "cli-pairs-final.json");
-    if (fs.existsSync(partial))
-      receipt.executionSteps.push(
-        ...read(partial).rows.flatMap((row) =>
-          row.steps.map((step) => ({
-            id: `${row.id}--${step.id}`,
-            process: step.native.process,
-          })),
-        ),
-      );
+    try {
+      if (fs.existsSync(partial))
+        receipt.executionSteps.push(
+          ...read(partial).rows.flatMap((row) =>
+            row.steps.map((step) => ({
+              id: `${row.id}--${step.id}`,
+              process: step.native.process,
+            })),
+          ),
+        );
+    } catch (error) {
+      retentionError = error;
+    }
     try {
       if (receipt.producer)
         assert.equal(hash(fs.readFileSync(receipt.producer.binary)), before);
@@ -564,11 +570,15 @@ async function main() {
     } catch (error) {
       identityError = error;
     } finally {
-      if (ownsFixture)
-        fs.rmSync(admission.fixedOwnedFixture, {
-          recursive: true,
-          force: true,
-        });
+      try {
+        if (ownsFixture)
+          fs.rmSync(admission.fixedOwnedFixture, {
+            recursive: true,
+            force: true,
+          });
+      } catch (error) {
+        cleanupError = error;
+      }
       receipt.cleanup = {
         fixture: admission.fixedOwnedFixture,
         owned: ownsFixture,
@@ -577,20 +587,27 @@ async function main() {
           : null,
       };
       receipt.operationError = operationError ? String(operationError) : null;
+      receipt.retentionError = retentionError ? String(retentionError) : null;
       receipt.identityError = identityError ? String(identityError) : null;
+      receipt.cleanupError = cleanupError ? String(cleanupError) : null;
       fs.writeFileSync(
         `${reportFile}.execution.json`,
         `${JSON.stringify(receipt, null, 2)}\n`,
       );
     }
   }
-  if (operationError && identityError)
+  const errors = [
+    operationError,
+    retentionError,
+    identityError,
+    cleanupError,
+  ].filter(Boolean);
+  if (errors.length > 1)
     throw new AggregateError(
-      [operationError, identityError],
-      "Hotspots operation and identity failed",
+      errors,
+      "Hotspots operation/retention/identity/cleanup failed",
     );
-  if (operationError) throw operationError;
-  if (identityError) throw identityError;
+  if (errors.length) throw errors[0];
 }
 if (
   process.argv[1] &&

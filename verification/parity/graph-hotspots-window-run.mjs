@@ -296,7 +296,7 @@ async function main() {
   };
   const producerFile = `${reportFile}.producer.json`,
     rawFile = `${reportFile}.raw.json`;
-  let operationError, identityError;
+  let operationError, retentionError, identityError;
   try {
     receipt.producer = buildExample(
       process.env.CARGO ?? "cargo",
@@ -351,13 +351,17 @@ async function main() {
   } catch (error) {
     operationError = error;
   } finally {
-    if (fs.existsSync(rawFile))
-      receipt.executionSteps.push(
-        ...read(rawFile).rows.map((row) => ({
-          id: row.id,
-          process: row.process,
-        })),
-      );
+    try {
+      if (fs.existsSync(rawFile))
+        receipt.executionSteps.push(
+          ...read(rawFile).rows.map((row) => ({
+            id: row.id,
+            process: row.process,
+          })),
+        );
+    } catch (error) {
+      retentionError = error;
+    }
     try {
       if (receipt.producer)
         assert.equal(hash(fs.readFileSync(receipt.producer.binary)), before);
@@ -366,6 +370,7 @@ async function main() {
       identityError = error;
     } finally {
       receipt.operationError = operationError ? String(operationError) : null;
+      receipt.retentionError = retentionError ? String(retentionError) : null;
       receipt.identityError = identityError ? String(identityError) : null;
       fs.writeFileSync(
         `${reportFile}.execution.json`,
@@ -373,13 +378,15 @@ async function main() {
       );
     }
   }
-  if (operationError && identityError)
+  const errors = [operationError, retentionError, identityError].filter(
+    Boolean,
+  );
+  if (errors.length > 1)
     throw new AggregateError(
-      [operationError, identityError],
-      "Window operation and identity failed",
+      errors,
+      "Window operation/retention/identity failed",
     );
-  if (operationError) throw operationError;
-  if (identityError) throw identityError;
+  if (errors.length) throw errors[0];
 }
 if (
   process.argv[1] &&
