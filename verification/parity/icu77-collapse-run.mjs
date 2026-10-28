@@ -25,6 +25,9 @@ export function sharedIcu77Collapse(report) {
   assert.equal(report.unqualifiedPairs, 7);
   assert.equal(report.qualifiedPairs, 0);
   assert.equal(report.rejectedInvalidInputs, 4);
+  if (report.rejectedInvalidInputRows !== undefined) {
+    assert.equal(report.rejectedInvalidInputRows, 0);
+  }
   assert.equal(report.responseGuards, 3);
   assert.deepEqual(report.failures, []);
   const ids = Object.keys(anchors).sort();
@@ -37,6 +40,9 @@ export function sharedIcu77Collapse(report) {
     assert.equal(row.passed, true);
     assert.notEqual(row.protocol, true);
     assert.notEqual(row.nativeOnly, true);
+    if (row.qualifications !== undefined) {
+      assert.deepEqual(row.qualifications, []);
+    }
     assert.equal(row.native.id, row.id);
     assert.deepEqual(row.native.output.report, row.source);
     assert.deepEqual(row.native.output.numeric, row.sourceNumeric);
@@ -56,6 +62,7 @@ export function sharedIcu77Collapse(report) {
       partials: true,
     });
   }
+  report.rejectedInvalidInputRows = 0;
   report.scope =
     "Seven frozen Source/native ICU77 collapse ordering rows; original graph/settings/pair owners, scalar/raw-unit keys, stable ties and numeric precedence. Existing raw Graph/host/all53CLI gaps remain OPEN.";
   return report;

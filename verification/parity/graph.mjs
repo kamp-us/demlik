@@ -534,10 +534,18 @@ export async function graphParity(cargo) {
       report.passed,
       `${suite.name}: incomplete passing evidence`,
     );
-    assert.equal(
-      report.cases.length,
-      report.passed + report.rejectedInvalidInputs,
+    const rejectedInvalidInputRows =
+      report.rejectedInvalidInputRows === undefined
+        ? report.rejectedInvalidInputs
+        : report.rejectedInvalidInputRows;
+    assert.ok(
+      Number.isSafeInteger(report.rejectedInvalidInputs) &&
+        Number.isSafeInteger(rejectedInvalidInputRows) &&
+        rejectedInvalidInputRows >= 0 &&
+        rejectedInvalidInputRows <= report.rejectedInvalidInputs,
+      `${suite.name}: invalid inline protocol row count`,
     );
+    assert.equal(report.cases.length, report.passed + rejectedInvalidInputRows);
     if (suite.format === "process") {
       assert.deepEqual(report.failures, []);
       assert.equal(report.attempted, report.passed);
@@ -592,6 +600,7 @@ export async function graphParity(cargo) {
       name: suite.name,
       passed: report.passed,
       rejectedInvalidInputs: report.rejectedInvalidInputs,
+      rejectedInvalidInputRows,
       ...(report.responseGuards === undefined
         ? {}
         : { responseGuards: report.responseGuards }),
