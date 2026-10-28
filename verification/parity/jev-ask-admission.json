@@ -1,0 +1,306 @@
+{
+  "production": "c4c1673217e396791d9e70c49185e37b74959464",
+  "fixtureFollowup": "203c025480bfed2e103ec26d22d15101950f1908",
+  "sourcePins": {
+    "packages/tea/src/internal/jev/ask/index.ts": "51d1e0e812ecb11ac6563c0f70796e90deb1f8a03d5cf8c581d86c96b925b379",
+    "packages/tea/src/internal/resilience/resilient-call/index.ts": "a80f9df9663ed5486f9ca68a6d2b2dcebee9b17e36d29e50c69037e89c1cf630",
+    "packages/tea/src/pure/core.ts": "b11c54a5fe51fb6b9a33f575878cf6e04a506edcf7ef455297731dbb6500bf17"
+  },
+  "fixtureHash": "79868fe51aade2e73f00efdff6ac7c6de7b83e57361df0c3c19a113a4f0801f3",
+  "inputsHash": "7b34e849ab43b67babb4adafc5b36355876c3613c7088e21a2ad57251d9be5e7",
+  "driverSha256": "dc3a662d8e0cf78379673cc19a165b32736f608351f7abab08bd7ce6d401d5fe",
+  "qualifications": [
+    "Configured fallback, batching and foreign JevAskErr unwrapping are not implemented by this online profile.",
+    "Scripted local replies use the actual Promise/Effect interpreters. No network, arbitrary scheduler, cancellation, panic or raw-JS claim.",
+    "Wire comparisons use the existing canonical plain_data/stringify_json codec. Typed details can discard unknown fields; arbitrary raw serde_json float formatting and JS object reflection are outside this profile.",
+    "Native generic error records move by value and retain their shared details; Jev errors, requests, content and questions retain their original Rc owners. JSON decoding does not preserve live object identity.",
+    "Missing/manual nonnumeric stamps, literal-key typing, non-wire values and full Jev state Deserialize remain open."
+  ],
+  "lineage": {
+    "canonicalSourceFreeze": "7c944289552b6bdeee26b403ff9425352ddb35abafd2981ea25e94ef36213fe4",
+    "canonicalValuesBeforeFactoryProjection": true,
+    "baselineCargoBeforeCanonicalFreeze": true,
+    "invalidEffectFixtureCredit": 0,
+    "postNativeSourceCaughtThrow": true,
+    "all18ViewsAndEvidenceUnchanged": true,
+    "componentHandoff": "2d52de107bfa1e5b8f8a65fee707cd199e76714c9e718dcb19ed9b27383578f8"
+  },
+  "rows": [
+    {
+      "id": "wire.first",
+      "input": {
+        "id": "wire.first",
+        "kind": "wire",
+        "scenario": "first"
+      },
+      "viewSha256": "46b0b06977787f531e713025ac4b2696348cffae07754d98c021ccba72992752",
+      "callsSha256": "933144b1ed3c2d26a3c93fcfe8912f85317adcf4fd31e574843d73abb2d33515",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "wire.middle",
+      "input": {
+        "id": "wire.middle",
+        "kind": "wire",
+        "scenario": "middle"
+      },
+      "viewSha256": "50a734966c020142926a4fc7021b2cd86cef14750286bdcbb009fa97336c04d7",
+      "callsSha256": "933144b1ed3c2d26a3c93fcfe8912f85317adcf4fd31e574843d73abb2d33515",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "wire.last",
+      "input": {
+        "id": "wire.last",
+        "kind": "wire",
+        "scenario": "last"
+      },
+      "viewSha256": "d4aa10f260086935ad335e3bab5b2ac1edf07161fc129d446ff6a299ce87e057",
+      "callsSha256": "933144b1ed3c2d26a3c93fcfe8912f85317adcf4fd31e574843d73abb2d33515",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "wire.authority",
+      "input": {
+        "id": "wire.authority",
+        "kind": "wire",
+        "scenario": "authority"
+      },
+      "viewSha256": "50a734966c020142926a4fc7021b2cd86cef14750286bdcbb009fa97336c04d7",
+      "callsSha256": "933144b1ed3c2d26a3c93fcfe8912f85317adcf4fd31e574843d73abb2d33515",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "wire.deadline",
+      "input": {
+        "id": "wire.deadline",
+        "kind": "wire",
+        "scenario": "deadline"
+      },
+      "viewSha256": "95466d5cf788732161c32973f4aeb99f8e9d6caed2fb643d378b7f3c2d291a23",
+      "callsSha256": "933144b1ed3c2d26a3c93fcfe8912f85317adcf4fd31e574843d73abb2d33515",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "wire.jev",
+      "input": {
+        "id": "wire.jev",
+        "kind": "wire",
+        "scenario": "jev"
+      },
+      "viewSha256": "d44d584ff16cf0ac0ce548ebba95a9b340c5a6fca788fa9195011ba1e58ca891",
+      "callsSha256": "59d464a2cde0daaa0b469dd3a053716ee4bb89eed031b167741f3fe2cf2e1588",
+      "stampChecks": null,
+      "errorChecks": null
+    },
+    {
+      "id": "promise.retry429",
+      "input": {
+        "id": "promise.retry429",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "retry429",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "dfeb6b903d4da71a92a3a7144fbc8ab06a19ce094009a5174be38484daae2518",
+      "callsSha256": "52da47669eec631f2fed72ebbc59e81cf7d7c01abff5cb9e8fb4756316825347",
+      "stampChecks": 2,
+      "errorChecks": 2
+    },
+    {
+      "id": "promise.terminal401",
+      "input": {
+        "id": "promise.terminal401",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "terminal401",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "75fda2ee1d20ef2967764051ea69518b8afbe3dc7a1596c879bcf1dc508db649",
+      "callsSha256": "a64dce055b86ccae7b478212525d56eba4d2cd315adbcf6e0f6b970510686ded",
+      "stampChecks": 1,
+      "errorChecks": 1
+    },
+    {
+      "id": "promise.exhaust429",
+      "input": {
+        "id": "promise.exhaust429",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "exhaust429",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "2cd447cdc89ea94f04c6156cf1f97b4f8d3eb248161b684494d8dadc2ed0866c",
+      "callsSha256": "eccef338ec424699cfab7bfe1c32395f45e6147eb908d4c92d9579ca961212cc",
+      "stampChecks": 3,
+      "errorChecks": 5
+    },
+    {
+      "id": "promise.thrownRetry",
+      "input": {
+        "id": "promise.thrownRetry",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "thrownRetry",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "b254b4f2a5fec6cc51aef694960d876183a1bf9ba733df5d815ec7ccd4a39733",
+      "callsSha256": "9671d947c0a5d2890a0cd751ecc9767aa32ef871887f04312f3389ea6dcc7aa1",
+      "stampChecks": 2,
+      "errorChecks": 2
+    },
+    {
+      "id": "promise.offline",
+      "input": {
+        "id": "promise.offline",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "offline",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "b499a6e77310b802efb278c53d3cec97d8d91ab83099a300ae0873bae0761f08",
+      "callsSha256": "381e836cf095b178de72ef9281080316c72a2f81b29f186337bb08eb35873366",
+      "stampChecks": 1,
+      "errorChecks": 1
+    },
+    {
+      "id": "promise.named",
+      "input": {
+        "id": "promise.named",
+        "kind": "factory",
+        "profile": "promise",
+        "scenario": "named",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "cfceafb7f8a947d682af344b9f6a05a8d739bc3580faf768862ac19398237c7b",
+      "callsSha256": "254f08b223408c6dc97f9b20709b6dbf35291d681a00c3da9c95342823d35886",
+      "stampChecks": 1,
+      "errorChecks": 0
+    },
+    {
+      "id": "effect.retry429",
+      "input": {
+        "id": "effect.retry429",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "retry429",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "dfeb6b903d4da71a92a3a7144fbc8ab06a19ce094009a5174be38484daae2518",
+      "callsSha256": "52da47669eec631f2fed72ebbc59e81cf7d7c01abff5cb9e8fb4756316825347",
+      "stampChecks": 2,
+      "errorChecks": 2
+    },
+    {
+      "id": "effect.terminal401",
+      "input": {
+        "id": "effect.terminal401",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "terminal401",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "75fda2ee1d20ef2967764051ea69518b8afbe3dc7a1596c879bcf1dc508db649",
+      "callsSha256": "a64dce055b86ccae7b478212525d56eba4d2cd315adbcf6e0f6b970510686ded",
+      "stampChecks": 1,
+      "errorChecks": 1
+    },
+    {
+      "id": "effect.exhaust429",
+      "input": {
+        "id": "effect.exhaust429",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "exhaust429",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "2cd447cdc89ea94f04c6156cf1f97b4f8d3eb248161b684494d8dadc2ed0866c",
+      "callsSha256": "eccef338ec424699cfab7bfe1c32395f45e6147eb908d4c92d9579ca961212cc",
+      "stampChecks": 3,
+      "errorChecks": 5
+    },
+    {
+      "id": "effect.thrownRetry",
+      "input": {
+        "id": "effect.thrownRetry",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "thrownRetry",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "b254b4f2a5fec6cc51aef694960d876183a1bf9ba733df5d815ec7ccd4a39733",
+      "callsSha256": "9671d947c0a5d2890a0cd751ecc9767aa32ef871887f04312f3389ea6dcc7aa1",
+      "stampChecks": 2,
+      "errorChecks": 2
+    },
+    {
+      "id": "effect.offline",
+      "input": {
+        "id": "effect.offline",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "offline",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "b499a6e77310b802efb278c53d3cec97d8d91ab83099a300ae0873bae0761f08",
+      "callsSha256": "381e836cf095b178de72ef9281080316c72a2f81b29f186337bb08eb35873366",
+      "stampChecks": 1,
+      "errorChecks": 1
+    },
+    {
+      "id": "effect.named",
+      "input": {
+        "id": "effect.named",
+        "kind": "factory",
+        "profile": "effect",
+        "scenario": "named",
+        "key": "invoice:104",
+        "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+        "at": 10,
+        "stamp": 42
+      },
+      "viewSha256": "cfceafb7f8a947d682af344b9f6a05a8d739bc3580faf768862ac19398237c7b",
+      "callsSha256": "254f08b223408c6dc97f9b20709b6dbf35291d681a00c3da9c95342823d35886",
+      "stampChecks": 1,
+      "errorChecks": 0
+    }
+  ]
+}
