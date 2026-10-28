@@ -14,6 +14,21 @@ const node22 = "/Users/cansirin/.volta/tools/image/node/22.21.1/bin/node";
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const hashFile = (file) => hash(fs.readFileSync(file));
 const json = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
+function verifySourceSummary(file) {
+  const lines = fs.readFileSync(file, "utf8").trimEnd().split("\n");
+  const summary = lines.pop();
+  assert.deepEqual(
+    lines,
+    projectOrderingCases.map(({ id }) => `${id} PASS`),
+  );
+  assert.ok(summary);
+  assert.deepEqual(JSON.parse(summary), {
+    SourceWholeviews: 20,
+    SourceProcesses: 24,
+    NativeExecutions: 0,
+    newSharedCredit: 0,
+  });
+}
 const record = (file) => ({ path: path.resolve(file), sha256: hashFile(file) });
 const sourcePins = {
   "packages/code-graph/src/extract/project.ts":
@@ -260,12 +275,7 @@ export function normalizeProjectOrderingReport(raw, producers = null) {
           path.join(root, "verification/parity/project-ordering-source.mjs"),
           path.dirname(raw.source.path),
         ]);
-        assert.deepEqual(json(launch.stdout.path), {
-          SourceWholeviews: 20,
-          SourceProcesses: 24,
-          NativeExecutions: 0,
-          newSharedCredit: 0,
-        });
+        verifySourceSummary(launch.stdout.path);
       } else {
         assert.equal(launch.command[1], path.join(root, nativeWorker));
         const response = json(launch.stdout.path);
