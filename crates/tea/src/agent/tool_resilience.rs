@@ -43,11 +43,13 @@ pub enum ToolResilienceError {
     InheritedSlice { key: JsText },
     MissingFailureFamily,
     MissingCallInput,
+    ToolMapping(Rc<super::tool::ToolError>),
 }
 impl ToolResilienceError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Access(e) => e.name,
+            Self::ToolMapping(e) => e.name(),
             Self::InheritedSlice { .. } => "TypeError",
             _ => "AgentToolResilienceError",
         }
@@ -58,6 +60,7 @@ impl fmt::Display for ToolResilienceError {
         match self {
             Self::Resilience(e) => write!(f, "{e:?}"),
             Self::Access(e) => e.fmt(f),
+            Self::ToolMapping(e) => e.fmt(f),
             Self::InheritedSlice { key } => match key.as_utf8() {
                 Some(key) => write!(f, "Cannot read properties of undefined (reading '{key}')"),
                 None => write!(
@@ -79,6 +82,7 @@ impl std::error::Error for ToolResilienceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Access(e) => Some(e),
+            Self::ToolMapping(e) => Some(e.as_ref()),
             _ => None,
         }
     }
@@ -159,7 +163,7 @@ pub(crate) type ToolMap<I, E> = Rc<JsRecord<rc::State<I, (), E>>>;
 pub(crate) type Selector<'a, I> = Box<dyn Fn(&Rc<I>) -> Option<ToolResilience> + 'a>;
 type Family<'a, I, E> = rc::ResilientCall<'a, I, (), E, RetryBudget>;
 type Cache<'a, I, E> = RefCell<IndexMap<JsText, Rc<Family<'a, I, E>>>>;
-type Emit<'a, I, C> = Rc<dyn Fn(&Rc<I>) -> C + 'a>;
+type Emit<'a, I, C> = Rc<dyn Fn(&Rc<I>) -> Result<C, Rc<super::tool::ToolError>> + 'a>;
 type LadderStep<I, E, O> = Result<(ToolMap<I, E>, O), ToolResilienceError>;
 pub(crate) struct SettleOrder<E> {
     pub id: JsText,
@@ -255,7 +259,9 @@ impl<'a, I, C, E> ToolLadder<'a, I, C, E> {
         commands
             .into_iter()
             .map(|cmd| match cmd.into_input().input {
-                rc::CallValue::Shared(call) => Ok((self.emit)(&call)),
+                rc::CallValue::Shared(call) => {
+                    (self.emit)(&call).map_err(ToolResilienceError::ToolMapping)
+                }
                 _ => Err(ToolResilienceError::MissingCallInput),
             })
             .collect()
@@ -270,7 +276,7 @@ impl<'a, I, C, E> ToolLadder<'a, I, C, E> {
         let mut commands = vec![];
         for call in calls {
             let Some(rc) = self.rc_for(call) else {
-                commands.push((self.emit)(call));
+                commands.push((self.emit)(call).map_err(ToolResilienceError::ToolMapping)?);
                 continue;
             };
             let name = (self.name)(call);
@@ -428,7 +434,9 @@ impl<'a, I, C, E> ToolLadder<'a, I, C, E> {
         let mut outcome = TimerOutcome::empty();
         for call in calls {
             let Some(rc) = self.rc_for(call) else {
-                outcome.commands.push((self.emit)(call));
+                outcome
+                    .commands
+                    .push((self.emit)(call).map_err(ToolResilienceError::ToolMapping)?);
                 continue;
             };
             let name = (self.name)(call);

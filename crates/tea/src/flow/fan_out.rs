@@ -8,7 +8,7 @@ use crate::{
     work_queue::{Queue, QueueItemStatus, claim_next_op, enqueue_op},
 };
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, rc::Rc};
+use std::{convert::Infallible, marker::PhantomData, rc::Rc};
 
 #[derive(Debug, Serialize)]
 pub struct FanOutDone<I, R> {
@@ -71,12 +71,14 @@ pub fn init_fan_out<I, R>() -> Rc<FanOutState<I, R>> {
 pub fn is_complete<I, R, E>(state: &FanOutState<I, R, E>) -> bool {
     !state.items.is_empty() && state.pending.is_empty() && state.running.is_empty()
 }
+/// Retained fan-out state and commands; synchronous launch failure is a separate Result channel.
+pub type FanOutStep<I, R, C, E = PlainData> = Step<Rc<FanOutState<I, R, E>>, C>;
 type IdOf<'a, I> = Box<dyn Fn(&I) -> JsText + 'a>;
-type Launch<'a, I, C> = Box<dyn Fn(&Rc<I>) -> C + 'a>;
-pub struct FanOutConfig<'a, I, C> {
+type Launch<'a, I, C, L> = Box<dyn Fn(&Rc<I>) -> Result<C, L> + 'a>;
+pub struct FanOutConfig<'a, I, C, L = Infallible> {
     pub concurrency: f64,
     id_of: IdOf<'a, I>,
-    of: Launch<'a, I, C>,
+    of: Launch<'a, I, C, L>,
 }
 impl<'a, I, C> FanOutConfig<'a, I, C> {
     pub fn new(
@@ -87,13 +89,27 @@ impl<'a, I, C> FanOutConfig<'a, I, C> {
         Self {
             concurrency,
             id_of: Box::new(id_of),
+            of: Box::new(move |input| Ok(of(input))),
+        }
+    }
+}
+impl<'a, I, C, L> FanOutConfig<'a, I, C, L> {
+    /// Store a fallible mapper; configuration itself performs no mapping work.
+    pub fn try_new(
+        concurrency: f64,
+        id_of: impl Fn(&I) -> JsText + 'a,
+        of: impl Fn(&Rc<I>) -> Result<C, L> + 'a,
+    ) -> Self {
+        Self {
+            concurrency,
+            id_of: Box::new(id_of),
             of: Box::new(of),
         }
     }
 }
 type Join<'a, R, C> = Box<dyn Fn(&[Rc<R>]) -> C + 'a>;
-pub struct FanOut<'a, I, R, C, E = PlainData> {
-    config: FanOutConfig<'a, I, C>,
+pub struct FanOut<'a, I, R, C, E = PlainData, L = Infallible> {
+    config: FanOutConfig<'a, I, C, L>,
     join: Option<Join<'a, R, C>>,
     types: PhantomData<fn() -> E>,
 }
@@ -113,8 +129,8 @@ pub(crate) fn slice_start(index: f64, len: usize) -> usize {
 pub fn create_fan_out<I, R, C: Tagged>(config: FanOutConfig<'_, I, C>) -> FanOut<'_, I, R, C> {
     FanOut::new(config)
 }
-impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
-    pub fn new(config: FanOutConfig<'a, I, C>) -> Self {
+impl<'a, I, R, C: Tagged, E, L> FanOut<'a, I, R, C, E, L> {
+    pub fn new(config: FanOutConfig<'a, I, C, L>) -> Self {
         Self {
             config,
             join: None,
@@ -131,11 +147,11 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
     pub fn is_complete(&self, state: &FanOutState<I, R, E>) -> bool {
         is_complete(state)
     }
-    pub fn scatter(
+    pub fn try_scatter(
         &self,
         state: &Rc<FanOutState<I, R, E>>,
         inputs: impl IntoIterator<Item = Rc<I>>,
-    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+    ) -> Result<FanOutStep<I, R, C, E>, L> {
         let mut next = state.as_ref().clone();
         for input in inputs {
             next.items = enqueue_op(
@@ -152,9 +168,9 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
             next.wave_failed_from = state.failed.len() as f64;
             next.joined = false;
         }
-        self.launch(Rc::new(next))
+        self.try_launch(Rc::new(next))
     }
-    fn launch(&self, state: Rc<FanOutState<I, R, E>>) -> Step<Rc<FanOutState<I, R, E>>, C> {
+    fn try_launch(&self, state: Rc<FanOutState<I, R, E>>) -> Result<FanOutStep<I, R, C, E>, L> {
         let budget = if self.config.concurrency < 1.0 {
             1.0
         } else {
@@ -162,7 +178,7 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
         };
         let slots = budget - state.running.len() as f64;
         if slots <= 0.0 || state.pending.is_empty() {
-            return Step::new(state, vec![]);
+            return Ok(Step::new(state, vec![]));
         }
         let count = if slots.is_nan() {
             0
@@ -182,8 +198,8 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
         let commands = launched
             .iter()
             .map(|input| (self.config.of)(input))
-            .collect();
-        Step::new(Rc::new(next), commands)
+            .collect::<Result<Vec<_>, L>>()?;
+        Ok(Step::new(Rc::new(next), commands))
     }
 
     fn settle_one(
@@ -210,41 +226,41 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
         }
         Some(SettledItem { state: next, input })
     }
-    pub fn item_ok(
+    pub fn try_item_ok(
         &self,
         state: &Rc<FanOutState<I, R, E>>,
         id: &JsText,
         result: Rc<R>,
-    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+    ) -> Result<FanOutStep<I, R, C, E>, L> {
         let Some(mut settled) = self.settle_one(state, id, QueueItemStatus::Done) else {
-            return Step::new(Rc::clone(state), vec![]);
+            return Ok(Step::new(Rc::clone(state), vec![]));
         };
         settled.state.done.push(Rc::new(FanOutDone {
             item: settled.input,
             result,
         }));
-        self.finish_or_launch(Rc::new(settled.state))
+        self.try_finish_or_launch(Rc::new(settled.state))
     }
-    pub fn item_err(
+    pub fn try_item_err(
         &self,
         state: &Rc<FanOutState<I, R, E>>,
         id: &JsText,
         error: Rc<E>,
-    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+    ) -> Result<FanOutStep<I, R, C, E>, L> {
         let Some(mut settled) = self.settle_one(state, id, QueueItemStatus::Failed) else {
-            return Step::new(Rc::clone(state), vec![]);
+            return Ok(Step::new(Rc::clone(state), vec![]));
         };
         settled.state.failed.push(Rc::new(FanOutFailed {
             item: settled.input,
             error,
         }));
-        self.finish_or_launch(Rc::new(settled.state))
+        self.try_finish_or_launch(Rc::new(settled.state))
     }
-    fn finish_or_launch(
+    fn try_finish_or_launch(
         &self,
         state: Rc<FanOutState<I, R, E>>,
-    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
-        let mut launched = self.launch(state);
+    ) -> Result<FanOutStep<I, R, C, E>, L> {
+        let mut launched = self.try_launch(state)?;
         if let Some(join) = &self.join
             && !launched.state.joined
             && is_complete(&launched.state)
@@ -259,7 +275,36 @@ impl<'a, I, R, C: Tagged, E> FanOut<'a, I, R, C, E> {
             launched.state = Rc::new(next);
             launched.commands.push(join(&results));
         }
-        launched
+        Ok(launched)
+    }
+}
+
+impl<I, R, C: Tagged, E> FanOut<'_, I, R, C, E> {
+    pub fn scatter(
+        &self,
+        state: &Rc<FanOutState<I, R, E>>,
+        inputs: impl IntoIterator<Item = Rc<I>>,
+    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+        self.try_scatter(state, inputs)
+            .unwrap_or_else(|never| match never {})
+    }
+    pub fn item_ok(
+        &self,
+        state: &Rc<FanOutState<I, R, E>>,
+        id: &JsText,
+        result: Rc<R>,
+    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+        self.try_item_ok(state, id, result)
+            .unwrap_or_else(|never| match never {})
+    }
+    pub fn item_err(
+        &self,
+        state: &Rc<FanOutState<I, R, E>>,
+        id: &JsText,
+        error: Rc<E>,
+    ) -> Step<Rc<FanOutState<I, R, E>>, C> {
+        self.try_item_err(state, id, error)
+            .unwrap_or_else(|never| match never {})
     }
 }
 
@@ -285,7 +330,7 @@ impl<R> FanOutCompletion<R> {
         emit(&self.ports.complete, results);
     }
 }
-impl<I, R, C, E> FanOut<'_, I, R, C, E> {
+impl<I, R, C, E, L> FanOut<'_, I, R, C, E, L> {
     pub fn completion(&self, ports: FanOutPorts<R>) -> FanOutCompletion<R> {
         FanOutCompletion { ports }
     }

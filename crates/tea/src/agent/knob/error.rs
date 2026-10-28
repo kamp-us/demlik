@@ -18,6 +18,7 @@ impl OptionalProfile {
 }
 #[derive(Debug)]
 pub enum AgentError {
+    ToolMapping(std::rc::Rc<super::super::tool::ToolError>),
     ToolResilience(super::super::tool_resilience::ToolResilienceError),
     Compaction(crate::js_record::JsAccessError),
     MissingCompactionInput,
@@ -39,6 +40,7 @@ impl AgentError {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Compaction(e) => e.name,
+            Self::ToolMapping(e) => e.name(),
             Self::MissingCompactionInput => "TypeError",
             Self::Llm(_) => "AgentLlmError",
             Self::TurnRead(_) => "AgentTurnReadError",
@@ -52,6 +54,7 @@ impl std::fmt::Display for AgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ToolResilience(error) => error.fmt(f),
+            Self::ToolMapping(error) => error.fmt(f),
             Self::Compaction(e) => e.fmt(f),
             Self::MissingCompactionInput => f.write_str("compaction command has no request"),
             Self::Llm(e) => write!(f, "{e:?}"),
@@ -71,9 +74,26 @@ impl std::fmt::Display for AgentError {
         }
     }
 }
-impl std::error::Error for AgentError {}
+impl std::error::Error for AgentError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ToolMapping(error) => Some(error.as_ref()),
+            _ => None,
+        }
+    }
+}
+impl From<std::rc::Rc<super::super::tool::ToolError>> for AgentError {
+    fn from(error: std::rc::Rc<super::super::tool::ToolError>) -> Self {
+        Self::ToolMapping(error)
+    }
+}
 impl From<super::super::tool_resilience::ToolResilienceError> for AgentError {
     fn from(error: super::super::tool_resilience::ToolResilienceError) -> Self {
-        Self::ToolResilience(error)
+        match error {
+            super::super::tool_resilience::ToolResilienceError::ToolMapping(error) => {
+                Self::ToolMapping(error)
+            }
+            error => Self::ToolResilience(error),
+        }
     }
 }

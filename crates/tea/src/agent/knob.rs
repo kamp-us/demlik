@@ -8,6 +8,7 @@ use crate::{
         },
         conversation::shared_no_usage,
         snapshot::{NoSnapshot, SnapshotProfile, WithSnapshot},
+        tool::ToolError,
         tool_resilience::{self, FailureRelations, TimerOutcome, ToolLadder, ToolResilience},
         turn_view::{
             CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReader, read_native,
@@ -86,7 +87,9 @@ type StageOf<'s, S> = Option<&'s Rc<S>>;
 type TurnOf<'a, S, P> = Box<dyn Fn(StageOf<'_, S>) -> P + 'a>;
 type PayloadOf<'a, Stage, R, T, TE, A, I, V> =
     Box<dyn Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A, V>>, Option<&JsText>) -> I + 'a>;
-type ToolOf<'a, A, C, V> = Rc<dyn Fn(&Rc<CallOf<A, V>>) -> C + 'a>;
+type ToolOf<'a, A, C, V> = Rc<dyn Fn(&Rc<CallOf<A, V>>) -> Result<C, Rc<ToolError>> + 'a>;
+type ToolFanOut<'a, A, R, TE, C, V> =
+    FanOut<'a, CallOf<A, V>, ToolOutcome<R, TE>, C, TE, Rc<ToolError>>;
 pub type TurnView<T, A, Provider> = for<'t> fn(&'t T) -> &'t AgentTurn<A, Provider>;
 
 type PolicyOf<'a, R, T, TE, A, V, K> = CompactionPolicy<
@@ -157,6 +160,28 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>> + ?Sized, R, TE, A, T, 
             },
         )
     }
+    /// Construct a config whose mapper can refuse synchronously when a verb launches a call.
+    pub fn try_new(
+        llm: Rc<LlmCall<'a, P, I, S>>,
+        stages: Vec<Rc<Stage>>,
+        turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
+        tool_of: impl Fn(&Rc<ToolCall<A>>) -> Result<C, Rc<ToolError>> + 'a,
+        payload_of: impl Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A>>, Option<&JsText>) -> I
+        + 'a,
+        turn_view: TurnView<T, A, Provider>,
+    ) -> Self {
+        Self::from_try_reader(
+            llm,
+            stages,
+            turn_of,
+            tool_of,
+            payload_of,
+            TurnReader {
+                native: Some(turn_view),
+                read: read_native,
+            },
+        )
+    }
 }
 impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<PlainData>> + ?Sized, R, TE, C: Tagged>
     AgentConfig<'a, Stage, P, I, S, R, TE, PlainData, PlainData, PlainData, C, PlainCalls>
@@ -175,6 +200,31 @@ impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<PlainData>> + ?Sized, R, TE
         + 'a,
     ) -> Self {
         Self::from_reader(
+            llm,
+            stages,
+            turn_of,
+            tool_of,
+            payload_of,
+            TurnReader {
+                native: None,
+                read: |value, _| read_plain(value),
+            },
+        )
+    }
+    /// Keep the original guarded plain turn and a fallible, shared mapping callback.
+    pub fn try_from_plain_turns(
+        llm: Rc<LlmCall<'a, P, I, S>>,
+        stages: Vec<Rc<Stage>>,
+        turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
+        tool_of: impl Fn(&Rc<PlainToolCall>) -> Result<C, Rc<ToolError>> + 'a,
+        payload_of: impl Fn(
+            StageOf<'_, Stage>,
+            &Rc<Conversation<R, PlainData, TE, PlainData, PlainCalls>>,
+            Option<&JsText>,
+        ) -> I
+        + 'a,
+    ) -> Self {
+        Self::from_try_reader(
             llm,
             stages,
             turn_of,
@@ -209,6 +259,24 @@ impl<
         stages: Vec<Rc<Stage>>,
         turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
         tool_of: impl Fn(&Rc<CallOf<A, V>>) -> C + 'a,
+        payload_of: impl Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A, V>>, Option<&JsText>) -> I
+        + 'a,
+        turn_view: TurnReader<T, A, Provider, V>,
+    ) -> Self {
+        Self::from_try_reader(
+            llm,
+            stages,
+            turn_of,
+            move |call| Ok(tool_of(call)),
+            payload_of,
+            turn_view,
+        )
+    }
+    fn from_try_reader(
+        llm: Rc<LlmCall<'a, P, I, S>>,
+        stages: Vec<Rc<Stage>>,
+        turn_of: impl Fn(StageOf<'_, Stage>) -> P + 'a,
+        tool_of: impl Fn(&Rc<CallOf<A, V>>) -> Result<C, Rc<ToolError>> + 'a,
         payload_of: impl Fn(StageOf<'_, Stage>, &Rc<Conversation<R, T, TE, A, V>>, Option<&JsText>) -> I
         + 'a,
         turn_view: TurnReader<T, A, Provider, V>,
@@ -319,7 +387,7 @@ pub struct Agent<
     )]
     config: AgentConfig<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>,
     run: MonitoredRun<Stage, PlainData>,
-    fan: FanOut<'a, CallOf<A, V>, ToolOutcome<R, TE>, C, TE>,
+    fan: ToolFanOut<'a, A, R, TE, C, V>,
     compact: CompactCall<'a, K>,
     ladder: ToolLadder<'a, CallOf<A, V>, C, TE>,
 }
@@ -355,7 +423,7 @@ where
         snapshot_every: Q::ENABLED.then_some(config.snapshot_every),
         ..Default::default()
     });
-    let fan = FanOut::new(FanOutConfig::new(
+    let fan = FanOut::new(FanOutConfig::try_new(
         config.tool_concurrency,
         |call: &CallOf<A, V>| V::call_id(call).clone(),
         move |call| tool(call),
@@ -677,7 +745,7 @@ impl<
             return self.advance_stage(&Rc::new(counted), result, at);
         }
         let batch = dedupe_calls(&fields.calls, V::call_id);
-        let scattered = self.fan.scatter(&self.fan.init(), batch);
+        let scattered = self.fan.try_scatter(&self.fan.init(), batch)?;
         // FanOut invokes toolOf for its data commands; Source discards these,
         // then invokes the same callback again for every authorized launch.
         drop(scattered.commands);
@@ -803,9 +871,9 @@ impl<
             return Ok(Step::new(Rc::clone(s), vec![]));
         };
         let settled = match outcome.as_ref() {
-            ToolOutcome::Ok(_) => self.fan.item_ok(&s.tools, id, Rc::clone(&outcome)),
-            ToolOutcome::Error(failure) => self.fan.item_err(&s.tools, id, Rc::clone(failure)),
-        };
+            ToolOutcome::Ok(_) => self.fan.try_item_ok(&s.tools, id, Rc::clone(&outcome)),
+            ToolOutcome::Error(failure) => self.fan.try_item_err(&s.tools, id, Rc::clone(failure)),
+        }?;
         drop(settled.commands);
         let known = s
             .tools
