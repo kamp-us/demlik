@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "status": "ACCEPTED bounded local two-phase checkpoint; complete Rust port remains in progress",
+  "acceptedAt": "2026-10-28T23:04:45.952127+00:00",
+  "verifiedImplementation": "ecc2ab5479b6ff606bdeda7b745d9dd3341f37bd",
+  "TypeScriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Native TEA and code-graph local tested profiles, sweep packages excluded; two actual phases plus saved-data conservative evidence classification, not a single passed all-suite command",
+  "comparison": {
+    "observations": 16580,
+    "passed": 16580,
+    "strict": 16328,
+    "qualified": 252,
+    "failures": 0,
+    "referenceChanges": 0,
+    "graph": 10101,
+    "nonGraph": 6479,
+    "priorStrictFullVectorsExactlyUnchanged": 16206,
+    "priorQualifiedSemanticFieldsAndCallVectorsPreserved": 241,
+    "qualifiedProducerMetadataUpdates": [
+      {
+        "id": "machine-viz.caught-cell-failure",
+        "field": "binarySha256",
+        "previous": "86b3fbc81bd93448ebaed52a70a274f9c07ffb43cae7e350efcbcf575fd5f13e",
+        "current": "a1a421e67d8f69007bae0e17ca539b91503d37e9715dbf5bc3f875605eea308c",
+        "allOtherQualificationAndComparisonDataExact": true,
+        "nativeStderrRemainsRawQualified": true
+      },
+      {
+        "id": "machine-viz.init-failure",
+        "field": "binarySha256",
+        "previous": "86b3fbc81bd93448ebaed52a70a274f9c07ffb43cae7e350efcbcf575fd5f13e",
+        "current": "a1a421e67d8f69007bae0e17ca539b91503d37e9715dbf5bc3f875605eea308c",
+        "allOtherQualificationAndComparisonDataExact": true,
+        "nativeStderrRemainsRawQualified": true
+      }
+    ],
+    "qualificationClassificationDeltasCanonical": 0,
+    "coverage": {
+      "capabilities": 3445,
+      "mapped": 1764,
+      "canonicalReferences": 915,
+      "gapReasonRows": 1963,
+      "capabilitiesWithoutBindings": 1681,
+      "all53BroadCliGapsRemainOpen": true
+    },
+    "countsAreNotCompletionPercentages": true
+  },
+  "newOutcomes": {
+    "strict": 122,
+    "qualified": 11,
+    "total": 133,
+    "AgentEvents": {
+      "strict": 11,
+      "qualified": 4
+    },
+    "HotspotsWindow": {
+      "strict": 80,
+      "qualified": 0
+    },
+    "CliHotspotsWindow": {
+      "strict": 14,
+      "qualified": 6
+    },
+    "RenderPrompt": {
+      "strict": 17,
+      "qualified": 1
+    },
+    "publicNativeTypeCleanupSharedCredit": 0
+  },
+  "native": {
+    "default": {
+      "testsAndDocs": 730,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "features": {
+      "testsAndDocs": 744,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "configurationsOverlap": true,
+    "bothClippyConfigurationsPassed": true,
+    "phase": "actual parent d43; native Rust/Cargo/reference Git objects identical in followup"
+  },
+  "public": {
+    "namedExecutions": 86,
+    "authoredApplyDirectExecutions": 2,
+    "actualPublicExecutionsTotal": 88,
+    "perConfiguration": {
+      "named": 43,
+      "separateAuthoredApply": 1
+    },
+    "sharedCredit": 0
+  },
+  "graph": {
+    "suites": 85,
+    "passed": 10101,
+    "canonicalStrict": 9903,
+    "canonicalQualified": 198,
+    "actualProducerStrict": 9908,
+    "actualProducerQualified": 193,
+    "retainedCanonicalBackendOffsetProfiles": 5,
+    "currentFiveWholeOutputAndContractMatchesVerified": true,
+    "utf8TransportProbes": 42,
+    "invalidInputProbesExcluded": 459,
+    "ProjectSourceDeclaredPaths": 97
+  },
+  "composition": {
+    "kind": "Completed parent native/public/nonGraph phases plus fresh full Graph/Events/Prompt comparisons; original failed statuses retained",
+    "parentSource": "d43b17f9d91e7790955c8e68aedf0f97dd690379",
+    "followupSource": "ecc2ab5479b6ff606bdeda7b745d9dd3341f37bd",
+    "originalParentStatus": "failed",
+    "originalFollowupStatus": "failed",
+    "parentNonGraph": 6446,
+    "followupAffected": 10134,
+    "derivedReport": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-composite-ecc2ab54/report.json",
+      "sha256": "48c9df6f4ab7a3aa454c900a162f62faf9b9a7219a93edf0fefc9024935a32d7"
+    },
+    "derivedComposition": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-composite-ecc2ab54/composition.json",
+      "sha256": "91897244789f66efc7673998fffda66beee8c41711491989263f25fa27c60cea"
+    },
+    "compositor": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/compose-material-evidence.mjs",
+      "sha256": "af5dcfae3769c0d7d8ffea41a64173a60234c384ec74f99c3ad22491c506e84a"
+    },
+    "conservativeAdjudicator": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/adjudicate-followup.mjs",
+      "sha256": "7241fc5bd471311b7db833f1c772d619ddfc12e9af002ffb60c6a2e178ee6deb"
+    },
+    "canonicalAdjudication": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-followup-ecc2ab54-canonical-v2/adjudication.json",
+      "sha256": "8effe1d0004709ee4351f3ff2c2c351e2f14c2f17e702fc20841cdcabc5a2da3"
+    },
+    "equalNativeBuildAndReferenceGitInputs": {
+      "crates": "06070d8c0a611c7a5e758428479195f91bba6632",
+      "Cargo.toml": "a896055a2e20cba88dbc38dc0cae339ccca9322d",
+      "Cargo.lock": "6bce016815247071c23e23ddb7e3329dcefcbeeb",
+      "rust-toolchain.toml": "57ef39fe93d7c441367e8dc3e5d2956d07289a5a",
+      "packages/tea/src": "f53fe0cf3971f5ecdbd20b90aa291c19eeb0ffcc",
+      "packages/code-graph/src": "80a13ee9c4560c1c3d3cfad6a01407dd3bb9f27e",
+      "pnpm-lock.yaml": "9ba4c276e3f2d078e808ecdd39e0fb241db6b4c2"
+    },
+    "compiledCachesCopied": false,
+    "nativePublicAndOldNonGraphReplayed": false
+  },
+  "evidence": {
+    "parent": {
+      "checks": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-d43b17f9-material133/checks.json",
+        "sha256": "b943e7d6e27e31fcf4de29c8cddde605bcf8bd898e75909e2c8df23b002fc1d2"
+      },
+      "report": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-d43b17f9-material133/report.json",
+        "sha256": "b2106afbcc76b85e0b0bc2b918f1d96e4d391eb7a36ae8a0d503866ae60e1c25"
+      },
+      "manifest": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-d43b17f9-material133/proof-files.json",
+        "sha256": "cb206f46d39c6245d2b89ad6144d131b6781150d3288b702b214010933a7da3a"
+      },
+      "payloads": {
+        "files": 3765,
+        "bytes": 2804850636,
+        "allManifestHashesVerified": true
+      },
+      "artifacts": {
+        "unique": 196,
+        "claims": 1323,
+        "completeReportFieldInventory": true,
+        "missingClaims": 0,
+        "nestedLibraries": 73,
+        "retainedNestedLibraries": 73,
+        "pathOnlyRetention": [],
+        "directRustcRoles": 14,
+        "allDependencyOrNativeRegressionBytesClaimed": false
+      },
+      "rawRetention": {
+        "actualDeclaredPaths": 778,
+        "ProjectSourcePaths": 97,
+        "normalizationApplied": false,
+        "newPromptExecutionClaimed": false,
+        "freshUtf8ProbeCredit": 0
+      },
+      "independentPhaseReview": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/independent-completed-phases-read-05-default.json",
+        "sha256": "f807b71db4576d1aa38ed2dbf6220a0af253141bd6f68a934c4cbf948cff16f3"
+      },
+      "phaseScopeClarification": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/independent-completed-phases-peer-default.json",
+        "sha256": "adaf7670cccb5671593ec01c5fd1087cf39e089a241799f0d9946b62f7a38015"
+      }
+    },
+    "followup": {
+      "checks": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-followup-ecc2ab54/checks.json",
+        "sha256": "b8df362403571fca90ace943d218d653b8be8c9f43f4b26531304e574d6aff1a"
+      },
+      "report": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-followup-ecc2ab54/report.json",
+        "sha256": "86fe3c3c201aac9c110af5cf2d6ed917a4a389b5d270f051c1122a6b2b25d4ff"
+      },
+      "manifest": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-followup-ecc2ab54/proof-files.json",
+        "sha256": "2d0c836b21ce744816aa039768e7874d62b10a396f6fd5ad0282b5c44cb7d929"
+      },
+      "payloads": {
+        "files": 2896,
+        "bytes": 1661602829,
+        "allManifestHashesVerified": true
+      },
+      "artifacts": {
+        "unique": 68,
+        "claims": 856,
+        "completeReportFieldInventory": true,
+        "missingClaims": 0,
+        "nestedLibraries": 5,
+        "retainedNestedLibraries": 5,
+        "pathOnlyRetention": [],
+        "directRustcRoles": 0,
+        "allDependencyOrNativeRegressionBytesClaimed": false
+      },
+      "rawRetention": {
+        "actualDeclaredPaths": 1211,
+        "ProjectSourcePaths": 97,
+        "normalizationApplied": false,
+        "actualPromptExecutionsVerified": 18,
+        "actualReturnedUtf8RecordsVerified": 42,
+        "newExecutionCreditFromMetadataRead": 0
+      },
+      "canonicalReport": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/material-followup-ecc2ab54-canonical-v2/report.json",
+        "sha256": "ef0f4ba6bf8f3a04cb7c8264e8f9f345640858654356065284ad2debe18e7636"
+      },
+      "independentPhaseReview": {
+        "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/independent-canonical-followup-peer-v2-default.json",
+        "sha256": "7e36f9392a8dab99ecf08fe824888d4783547004df551e67f08f1a94b32ad06a"
+      }
+    },
+    "artifactIndexCountsAreSeparateNotUniqueUnion": true,
+    "RootReview": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/root-final-material-composite-review.json",
+      "sha256": "602161eb10b11402a83b6bd12841f69fe1660e33a5ea2bfec13a52867f5b3081"
+    },
+    "independentFinalReview": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/independent-final-composite-peer-default.json",
+      "sha256": "9ef3c510741c57f18a4f61dc48af5776c98da54bad03d74f9eb5fc20f50493e9"
+    },
+    "independentDetailedComparison": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-material-combined-map/independent-composite-read-01-default.json",
+      "sha256": "65c2b20409ef7294f9a9aa0498911c63e513e83002143d1b97a9f626bf55a205"
+    }
+  },
+  "cleanup": {
+    "bothActualWorktreesDefaultTargetsAndRegistrationsRemoved": true,
+    "recordedExitCodes": [
+      0,
+      0
+    ],
+    "parent": {
+      "exit": 0,
+      "worktreeRemoved": true,
+      "defaultTargetRemoved": true,
+      "registrationRemoved": true,
+      "stderr": "",
+      "worktreeAddSucceeded": true,
+      "partialUnregisteredDirectoryRemoved": false
+    },
+    "followup": {
+      "exit": 0,
+      "worktreeRemoved": true,
+      "defaultTargetRemoved": true,
+      "registrationRemoved": true,
+      "stderr": "",
+      "worktreeAddSucceeded": true,
+      "partialUnregisteredDirectoryRemoved": false
+    }
+  },
+  "history": {
+    "baselineReceiptCommit": "e1bb157f88d1cf2f494b37fc81d58f6a460c0dc2",
+    "originalHarnessPathAndResolutionFailuresRetained": true,
+    "rawFollowupClassificationGuardFailureRetained": true,
+    "fiveCanonicalRawErrorQualificationsNotPromoted": true,
+    "twoMachineVizProducerDigestUpdatesAreNotBehaviorChanges": true,
+    "earlierMetadataReaderFailuresRetained": true
+  },
+  "limits": [
+    "Full port remains in progress; this checkpoint does not close all public capabilities or53 broad CLI gaps.",
+    "Native actor/Effect/Promise configurations overlap; typed/raw/host profiles keep their recorded qualifications. No broad reflection, scheduler, router, provider, SDK or cold routed-state codec claim.",
+    "Darwin arm64 local ICU77 profile only; no minimum-Rust-version, supported-target, distribution or release acceptance.",
+    "Selected executable/library and raw proof is retained; no complete dependency/native archive or cold-source rebuild claim. Historical f244/15-path-only limits remain separate and unrecovered.",
+    "No PR, push, publication or deployment."
+  ]
+}
