@@ -1,1 +1,1 @@
-{"extends":"./tsconfig.json","include":["brain-start-source.mts"]}
+{ "extends": "./tsconfig.json", "include": ["brain-start-source.mts"] }
