@@ -201,10 +201,7 @@ fn machine(walk: Rc<Walk>) -> Machine<'static, Model, Msg, Command, Sub<TimerDep
                         let error = match error {
                             Failure::Declared(error) => {
                                 failures.push(Rc::clone(&error.details));
-                                CallFailure::Run(Rc::new(RunError {
-                                    kind: error.kind,
-                                    details: Rc::clone(&error.details),
-                                }))
+                                CallFailure::Run(Rc::new(error.clone()))
                             }
                             Failure::Malformed(error) => CallFailure::Malformed(error.clone()),
                         };

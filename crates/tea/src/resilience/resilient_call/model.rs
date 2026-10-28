@@ -192,21 +192,46 @@ impl RunErrorKind {
         }
     }
 }
+/// Construct through the named constructors. Decoding retains the wire tag's
+/// position; `kind` remains its sole value owner. Details codecs own any field loss.
 pub struct RunError<E> {
     pub kind: RunErrorKind,
     pub details: E,
+    tag_position: Option<usize>,
 }
 impl<E> RunError<E> {
     pub fn port_rejected(details: E) -> Self {
         Self {
             kind: RunErrorKind::PortRejected,
             details,
+            tag_position: None,
         }
     }
     pub fn deadline_exceeded(details: E) -> Self {
         Self {
             kind: RunErrorKind::DeadlineExceeded,
             details,
+            tag_position: None,
+        }
+    }
+    pub(crate) fn with_tag_first(mut self) -> Self {
+        self.tag_position = Some(0);
+        self
+    }
+    pub(super) fn from_wire(kind: RunErrorKind, details: E, tag_position: usize) -> Self {
+        Self {
+            kind,
+            details,
+            tag_position: Some(tag_position),
+        }
+    }
+}
+impl<E: Clone> Clone for RunError<E> {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind,
+            details: self.details.clone(),
+            tag_position: self.tag_position,
         }
     }
 }
@@ -225,6 +250,12 @@ impl<E: Serialize> Serialize for RunError<E> {
             ));
         };
         fields.insert("_tag".into(), PlainData::String(self.kind.tag().into()));
+        if let Some(position) = self.tag_position {
+            let index = fields
+                .get_index_of(&crate::data::JsText::from("_tag"))
+                .expect("the authoritative tag was just inserted");
+            fields.move_index(index, position.min(fields.len() - 1));
+        }
         JsonData(&PlainData::Object(fields)).serialize(serializer)
     }
 }

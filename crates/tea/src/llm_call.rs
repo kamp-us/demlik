@@ -335,10 +335,7 @@ impl<'a, P: Purpose, I, S: Schema + ?Sized, B: Budget> LlmCall<'a, P, I, S, B> {
         let error = match failure {
             Failure::Declared(error) => match error.details.cause() {
                 CauseField::AccessError(cause) => LlmCause::AccessError(Rc::clone(cause)),
-                CauseField::Missing => LlmCause::Carrier(Rc::new(RunError {
-                    kind: error.kind,
-                    details: error.details.clone(),
-                })),
+                CauseField::Missing => LlmCause::Carrier(Rc::new(error.clone())),
                 CauseField::Own(cause) | CauseField::Inherited(cause) => match cause {
                     CallValue::Shared(value) => LlmCause::Value(Rc::clone(value)),
                     CallValue::Undefined | CallValue::Missing => LlmCause::Undefined,

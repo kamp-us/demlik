@@ -229,14 +229,7 @@ fn machine(sync: Rc<Sync>) -> Machine<'static, Model, Msg, Command, Sub<TimerDep
                         failures.push(error.details.clone());
                         sync.page_err(
                             &state.rec,
-                            PageErr::new(
-                                key,
-                                CallFailure::Run(Rc::new(RunError {
-                                    kind: error.kind,
-                                    details: error.details.clone(),
-                                })),
-                                at,
-                            ),
+                            PageErr::new(key, CallFailure::Run(Rc::new(error.clone())), at),
                         )
                     }
                     Settlement::Err(Failure::Malformed(error)) => sync.page_err(

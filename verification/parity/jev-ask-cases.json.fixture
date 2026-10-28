@@ -1,0 +1,152 @@
+[
+  {
+    "id": "wire.first",
+    "kind": "wire",
+    "scenario": "first"
+  },
+  {
+    "id": "wire.middle",
+    "kind": "wire",
+    "scenario": "middle"
+  },
+  {
+    "id": "wire.last",
+    "kind": "wire",
+    "scenario": "last"
+  },
+  {
+    "id": "wire.authority",
+    "kind": "wire",
+    "scenario": "authority"
+  },
+  {
+    "id": "wire.deadline",
+    "kind": "wire",
+    "scenario": "deadline"
+  },
+  {
+    "id": "wire.jev",
+    "kind": "wire",
+    "scenario": "jev"
+  },
+  {
+    "id": "promise.retry429",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "retry429",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "promise.terminal401",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "terminal401",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "promise.exhaust429",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "exhaust429",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "promise.thrownRetry",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "thrownRetry",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "promise.offline",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "offline",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "promise.named",
+    "kind": "factory",
+    "profile": "promise",
+    "scenario": "named",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.retry429",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "retry429",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.terminal401",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "terminal401",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.exhaust429",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "exhaust429",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.thrownRetry",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "thrownRetry",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.offline",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "offline",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  },
+  {
+    "id": "effect.named",
+    "kind": "factory",
+    "profile": "effect",
+    "scenario": "named",
+    "key": "invoice:104",
+    "content": "Invoice INV-104, Acme freight, USD340, due Friday",
+    "at": 10,
+    "stamp": 42
+  }
+]

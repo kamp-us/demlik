@@ -37,7 +37,7 @@ const mutations = [
     name: "own-undefined-cause-becomes-carrier",
     before: "CallValue::Undefined | CallValue::Missing => LlmCause::Undefined,",
     after:
-      "CallValue::Undefined | CallValue::Missing => LlmCause::Carrier(Rc::new(RunError {kind:error.kind,details:error.details.clone()})),",
+      "CallValue::Undefined | CallValue::Missing => LlmCause::Carrier(Rc::new(error.clone())),",
   },
   {
     name: "stored-failure-loses-typed-cause",

@@ -62,7 +62,13 @@ impl<'de, E: DeserializeOwned> Deserialize<'de> for RunError<E> {
             _ => return Err(D::Error::custom("undeclared run failure tag")),
         };
         let details = serde_json::from_str(raw.get()).map_err(D::Error::custom)?;
-        Ok(Self { kind, details })
+        // Capture keys without cloning the decoded error or stripping its tag.
+        let keys: indexmap::IndexMap<String, serde::de::IgnoredAny> =
+            serde_json::from_str(raw.get()).map_err(D::Error::custom)?;
+        let position = keys
+            .get_index_of("_tag")
+            .expect("the validated header contains a tag");
+        Ok(Self::from_wire(kind, details, position))
     }
 }
 impl<'de, E: DeserializeOwned> Deserialize<'de> for CallFailure<E> {

@@ -1,4 +1,5 @@
 //! Pure interpretation of the frozen Jev wire contract. The caller owns HTTP.
+pub mod ask;
 pub mod protocol;
 pub mod reply;
 

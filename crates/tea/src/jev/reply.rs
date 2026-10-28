@@ -57,22 +57,25 @@ pub fn is_transient_ask_err(error: &JevAskErr) -> bool {
         JevAskErr::HttpRetry { .. } | JevAskErr::PortThrew { .. }
     )
 }
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct JevFailureDetails {
     pub jev: Rc<JevAskErr>,
 }
-/// The canonical run failure owns its tag and shared error; this wire view keeps Source field order.
+/// The canonical run failure retains Source's tag position and shared error.
 pub struct JevRejected {
     run: RunError<JevFailureDetails>,
 }
 impl JevRejected {
     pub fn new(jev: Rc<JevAskErr>) -> Self {
         Self {
-            run: RunError::port_rejected(JevFailureDetails { jev }),
+            run: RunError::port_rejected(JevFailureDetails { jev }).with_tag_first(),
         }
     }
     pub fn jev(&self) -> &Rc<JevAskErr> {
         &self.run.details.jev
+    }
+    pub fn into_run_error(self) -> RunError<JevFailureDetails> {
+        self.run
     }
 }
 impl Tagged for JevRejected {
@@ -82,10 +85,7 @@ impl Tagged for JevRejected {
 }
 impl Serialize for JevRejected {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut m = s.serialize_map(Some(2))?;
-        m.serialize_entry("_tag", self.run.tag())?;
-        m.serialize_entry("jev", self.jev())?;
-        m.end()
+        self.run.serialize(s)
     }
 }
 #[derive(Serialize)]
