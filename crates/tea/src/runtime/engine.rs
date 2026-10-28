@@ -821,28 +821,7 @@ impl<
                     .unwrap_or_else(|payload| {
                         Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload))))
                     });
-                let mut signals = signals.borrow_mut();
-                let result = if defined {
-                    if let Err(error) = result {
-                        env.core.report(error, ErrorPhase::Interpret);
-                    }
-                    Ok(())
-                } else {
-                    result
-                };
-                if let Some(tx) = signals.parent.take() {
-                    let _ = tx.send(result.clone());
-                } else if let Err(error) = &result {
-                    let phase = if error.discarded() {
-                        ErrorPhase::Discard
-                    } else {
-                        ErrorPhase::FollowUp
-                    };
-                    env.core.report(Rc::clone(error), phase);
-                }
-                if let Some(tx) = signals.barrier.take() {
-                    let _ = tx.send(result);
-                }
+                env.finish_command(&signals, defined, result);
             }
             .boxed_local();
             if call.as_mut().now_or_never().is_none() {
@@ -853,6 +832,35 @@ impl<
             result?;
         }
         Ok(())
+    }
+    fn finish_command(
+        &self,
+        signals: &Rc<RefCell<Signals<SE, HE, RE>>>,
+        defined: bool,
+        result: Answer<SE, HE, RE>,
+    ) {
+        let mut signals = signals.borrow_mut();
+        let result = if defined {
+            if let Err(error) = result {
+                self.core.report(error, ErrorPhase::Interpret);
+            }
+            Ok(())
+        } else {
+            result
+        };
+        if let Some(parent) = signals.parent.take() {
+            let _ = parent.send(result.clone());
+        } else if let Err(error) = &result {
+            let phase = if error.discarded() {
+                ErrorPhase::Discard
+            } else {
+                ErrorPhase::FollowUp
+            };
+            self.core.report(Rc::clone(error), phase);
+        }
+        if let Some(barrier) = signals.barrier.take() {
+            let _ = barrier.send(result);
+        }
     }
     async fn command(
         self: Rc<Self>,
@@ -913,10 +921,21 @@ impl<
             tokio::task::yield_now().await;
             self.in_flight.borrow_mut().shift_remove(&token);
             self.producer.mailbox.changed.notify_waiters();
-            match result {
-                Ok(Ok(value)) => value,
-                Ok(Err(error)) => return Err(work_error(error)),
+            let performed = match result {
+                Ok(value) => value,
                 Err(payload) => return Err(Rc::new(RuntimeError::Panic(PanicCause::new(payload)))),
+            };
+            if let Some(tail) = performed.tail {
+                let logical = performed.result.map(|_| ()).map_err(work_error);
+                self.finish_command(&signals, command.is_defined(), logical);
+                // Keep the same borrowed operation in this owning command frame.
+                // Its late result cannot settle, fold, save, or report a handler error.
+                let _late = AssertUnwindSafe(tail).catch_unwind().await;
+                return Ok(());
+            }
+            match performed.result {
+                Ok(value) => value,
+                Err(error) => return Err(work_error(error)),
             }
         };
         let Some(completed) = completed else {

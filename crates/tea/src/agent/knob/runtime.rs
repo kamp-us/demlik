@@ -28,7 +28,6 @@ use crate::{
     },
     timing::{Timer, TimerError},
 };
-use futures::FutureExt;
 use std::{fmt, marker::PhantomData, rc::Rc};
 
 pub enum AgentToolMsg<R> {
@@ -364,39 +363,15 @@ where
             })),
             AgentCommand::Tool(cmd) => {
                 let work = self.tools.interpret(cmd, context)?;
-                Some(CommandWork {
-                    future: work
-                        .future
-                        .map(|r| r.map(AgentCompletion::Tool))
-                        .boxed_local(),
-                    cleanup: work.cleanup,
-                    detached: work.detached,
-                    uninterruptible: work.uninterruptible,
-                })
+                Some(work.map(AgentCompletion::Tool))
             }
             AgentCommand::Compact(cmd) => {
                 let work = self.compact.interpret(cmd, context)?;
-                Some(CommandWork {
-                    future: work
-                        .future
-                        .map(|r| r.map(AgentCompletion::Compact))
-                        .boxed_local(),
-                    cleanup: work.cleanup,
-                    detached: work.detached,
-                    uninterruptible: work.uninterruptible,
-                })
+                Some(work.map(AgentCompletion::Compact))
             }
             AgentCommand::Snapshot(cmd) => {
                 let work = self.snapshot.interpret(cmd, context)?;
-                Some(CommandWork {
-                    future: work
-                        .future
-                        .map(|r| r.map(AgentCompletion::Snapshot))
-                        .boxed_local(),
-                    cleanup: work.cleanup,
-                    detached: work.detached,
-                    uninterruptible: work.uninterruptible,
-                })
+                Some(work.map(AgentCompletion::Snapshot))
             }
         }
     }

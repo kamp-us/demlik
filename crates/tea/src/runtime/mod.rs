@@ -28,6 +28,6 @@ pub use types::{
     Supervision,
 };
 pub use work::{
-    CommandContext, CommandWork, Interpreter, NoInterpreter, NoSubscriptions, SubscriptionWork,
-    Subscriptions,
+    CommandContext, CommandSignal, CommandWork, Interpreter, NoInterpreter, NoSubscriptions,
+    SubscriptionWork, Subscriptions,
 };

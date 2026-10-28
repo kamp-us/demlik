@@ -1,3 +1,4 @@
+use std::cell::{Cell, RefCell};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -42,19 +43,132 @@ impl Cancel {
     }
 }
 pub(crate) type Cleanup<'a, E> = Box<dyn FnOnce() -> LocalBoxFuture<'a, Result<(), E>> + 'a>;
+/// A local command's cancellation signal. This is not an EventTarget adapter.
+/// A completed operation closes registration even if it was never aborted.
+#[derive(Clone)]
+pub struct CommandSignal<'a> {
+    state: Rc<SignalState<'a>>,
+}
+struct SignalState<'a> {
+    aborted: Cell<bool>,
+    closed: Cell<bool>,
+    listeners: RefCell<Vec<Box<dyn FnOnce() + 'a>>>,
+}
+impl<'a> CommandSignal<'a> {
+    fn new() -> Self {
+        Self {
+            state: Rc::new(SignalState {
+                aborted: Cell::new(false),
+                closed: Cell::new(false),
+                listeners: RefCell::new(Vec::new()),
+            }),
+        }
+    }
+    pub fn aborted(&self) -> bool {
+        self.state.aborted.get()
+    }
+    /// Registers before interruption. Returns false once the operation is closed;
+    /// the rejected capture is dropped without calling it.
+    #[must_use]
+    pub fn on_abort(&self, listener: impl FnOnce() + 'a) -> bool {
+        if self.state.closed.get() {
+            return false;
+        }
+        self.state.listeners.borrow_mut().push(Box::new(listener));
+        true
+    }
+    fn take_listeners(&self) -> Vec<Box<dyn FnOnce() + 'a>> {
+        self.state.closed.set(true);
+        std::mem::take(&mut *self.state.listeners.borrow_mut())
+    }
+}
+// Owned outside the caught operation, so factory unwind and future destruction
+// cannot strand a self-capturing listener cycle.
+struct SignalOwner<'a>(CommandSignal<'a>);
+impl SignalOwner<'_> {
+    fn abort(&self) {
+        self.0.state.aborted.set(true);
+        let listeners = self.0.take_listeners();
+        for listener in listeners {
+            listener();
+        }
+    }
+    fn close(&self) {
+        drop(self.0.take_listeners());
+    }
+}
+impl Drop for SignalOwner<'_> {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+type PromiseFactory<'a, T, E> =
+    Box<dyn FnOnce(CommandSignal<'a>) -> LocalBoxFuture<'a, Result<T, E>> + 'a>;
+enum CommandOperation<'a, T, E> {
+    Native(LocalBoxFuture<'a, Result<T, E>>),
+    Effect(LocalBoxFuture<'a, Result<T, E>>),
+    Promise(PromiseFactory<'a, T, E>),
+}
 pub struct CommandWork<'a, T, E> {
-    pub(crate) future: LocalBoxFuture<'a, Result<T, E>>,
+    operation: CommandOperation<'a, T, E>,
     pub(crate) cleanup: Option<Cleanup<'a, E>>,
     pub(crate) detached: bool,
     pub(crate) uninterruptible: bool,
 }
 impl<'a, T, E> CommandWork<'a, T, E> {
+    /// Native futures retain the existing cancellation-before-poll behavior.
     pub fn new(future: impl Future<Output = Result<T, E>> + 'a) -> Self {
+        Self::operation(CommandOperation::Native(future.boxed_local()))
+    }
+    /// Offers a ready operation before observing Effect-profile cancellation.
+    pub fn effect(future: impl Future<Output = Result<T, E>> + 'a) -> Self {
+        Self::operation(CommandOperation::Effect(future.boxed_local()))
+    }
+    /// Defers the factory until execution inside the cleanup boundary.
+    /// Effect-profile interruption releases the logical waiter after cleanup;
+    /// the original borrowed operation remains owned until its tail finishes.
+    pub fn promise<F, G>(factory: F) -> Self
+    where
+        F: FnOnce(CommandSignal<'a>) -> G + 'a,
+        G: Future<Output = Result<T, E>> + 'a,
+    {
+        Self::operation(CommandOperation::Promise(Box::new(move |signal| {
+            factory(signal).boxed_local()
+        })))
+    }
+    fn operation(operation: CommandOperation<'a, T, E>) -> Self {
         Self {
-            future: future.boxed_local(),
+            operation,
             cleanup: None,
             detached: false,
             uninterruptible: false,
+        }
+    }
+    pub(crate) fn map<O>(self, map: impl FnOnce(T) -> O + 'a) -> CommandWork<'a, O, E>
+    where
+        T: 'a,
+        E: 'a,
+        O: 'a,
+    {
+        let operation = match self.operation {
+            CommandOperation::Native(future) => {
+                CommandOperation::Native(async move { future.await.map(map) }.boxed_local())
+            }
+            CommandOperation::Effect(future) => {
+                CommandOperation::Effect(async move { future.await.map(map) }.boxed_local())
+            }
+            CommandOperation::Promise(factory) => {
+                CommandOperation::Promise(Box::new(move |signal| {
+                    let future = factory(signal);
+                    async move { future.await.map(map) }.boxed_local()
+                }))
+            }
+        };
+        CommandWork {
+            operation,
+            cleanup: self.cleanup,
+            detached: self.detached,
+            uninterruptible: self.uninterruptible,
         }
     }
     pub fn detached(mut self) -> Self {
@@ -213,20 +327,78 @@ pub(crate) enum WorkFailure<E> {
         cause: Box<Self>,
     },
 }
+pub(crate) struct Performed<'a, T, E> {
+    pub result: Result<Option<T>, WorkFailure<E>>,
+    pub tail: Option<LocalBoxFuture<'a, Result<T, E>>>,
+}
 pub(crate) async fn perform<'a, T, E>(
-    mut work: CommandWork<'a, T, E>,
+    work: CommandWork<'a, T, E>,
     cancel: &Arc<Cancel>,
     interrupt: bool,
-) -> Result<Option<T>, WorkFailure<E>> {
-    let result=std::panic::AssertUnwindSafe(async {
-        if interrupt && !work.uninterruptible {
-            tokio::select! {biased; _=cancel.cancelled()=>Ok(None),value=&mut work.future=>value.map(Some)}
-        } else {work.future.await.map(Some)}
-    }).catch_unwind().await;
-    let result = match result {
-        Ok(result) => result.map_err(WorkFailure::Failed),
+) -> Performed<'a, T, E> {
+    let signal_owner = matches!(&work.operation, CommandOperation::Promise(_))
+        .then(|| SignalOwner(CommandSignal::new()));
+    let interrupt = interrupt && !work.uninterruptible;
+    let mut tail = None;
+    let body = std::panic::AssertUnwindSafe(async {
+        match work.operation {
+            CommandOperation::Native(mut future) => {
+                if interrupt {
+                    tokio::select! { biased;
+                        _ = cancel.cancelled() => Ok(None),
+                        value = &mut future => value.map(Some),
+                    }
+                } else {
+                    future.await.map(Some)
+                }
+            }
+            CommandOperation::Effect(mut future) => {
+                if interrupt {
+                    tokio::select! { biased;
+                        value = &mut future => value.map(Some),
+                        _ = cancel.cancelled() => Ok(None),
+                    }
+                } else {
+                    future.await.map(Some)
+                }
+            }
+            CommandOperation::Promise(factory) => {
+                let owner = signal_owner.as_ref().expect("Promise owns its signal");
+                let mut future = factory(owner.0.clone());
+                if interrupt {
+                    tokio::select! { biased;
+                        _ = cancel.cancelled() => {
+                            tail = Some(future);
+                            owner.abort();
+                            Ok(None)
+                        },
+                        value = &mut future => value.map(Some),
+                    }
+                } else {
+                    future.await.map(Some)
+                }
+            }
+        }
+    })
+    .catch_unwind()
+    .await;
+    let mut result = match body {
+        Ok(value) => value.map_err(WorkFailure::Failed),
         Err(payload) => Err(WorkFailure::Panic(crate::storage::PanicCause::new(payload))),
     };
+    // Release captures before user cleanup; keep the guard alive for every exit,
+    // including cancellation by dropping this future.
+    let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if let Some(owner) = &signal_owner {
+            owner.close();
+        }
+    }));
+    if let Err(payload) = closed {
+        result = Err(WorkFailure::Cleanup {
+            prior: result.err().map(Box::new),
+            cause: Box::new(WorkFailure::Panic(crate::storage::PanicCause::new(payload))),
+        });
+    }
     if let Some(cleanup) = work.cleanup {
         let closed = std::panic::AssertUnwindSafe(async { cleanup().await })
             .catch_unwind()
@@ -237,11 +409,11 @@ pub(crate) async fn perform<'a, T, E>(
             Err(payload) => Some(WorkFailure::Panic(crate::storage::PanicCause::new(payload))),
         };
         if let Some(cause) = failure {
-            return Err(WorkFailure::Cleanup {
+            result = Err(WorkFailure::Cleanup {
                 prior: result.err().map(Box::new),
                 cause: Box::new(cause),
             });
         }
     }
-    result
+    Performed { result, tail }
 }
