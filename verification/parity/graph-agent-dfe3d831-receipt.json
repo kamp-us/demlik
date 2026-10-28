@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "status": "ACCEPTED bounded local full checkpoint; complete port remains in progress",
+  "verifiedImplementation": "dfe3d831fdff7ef6efa9fb86b229494d1775fce3",
+  "TypeScriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Local TEA/code-graph native siblings, sweeps excluded; full goal remains in progress.",
+  "comparison": {
+    "observations": 16359,
+    "strict": 16119,
+    "qualified": 240,
+    "reportSha256": "ca2136b8b59a11034da7439bb24f5d8a1a16fca4efe01936a739c38e19b6c56c",
+    "newStrictKeys": [
+      "graph.icu77-census.all-nan",
+      "graph.icu77-census.counts-and-owners",
+      "graph.icu77-census.cycle-permutation-1",
+      "graph.icu77-census.cycle-permutation-2",
+      "graph.icu77-census.cycle-permutation-3",
+      "graph.icu77-census.cycle-permutation-4",
+      "graph.icu77-census.cycle-permutation-5",
+      "graph.icu77-census.cycle-permutation-6",
+      "graph.icu77-census.disabled",
+      "graph.icu77-census.finite-total",
+      "graph.icu77-census.library-disabled",
+      "graph.icu77-census.library-enabled",
+      "graph.icu77-census.library-multiple-directories",
+      "graph.icu77-census.mixed-infinite",
+      "graph.icu77-census.pair-ab",
+      "graph.icu77-census.pair-ac",
+      "graph.icu77-census.pair-bc",
+      "graph.icu77-census.same-object-and-equal-values",
+      "graph.icu77-census.schedule-129-alternating-tile-runs",
+      "graph.icu77-census.schedule-129-staggered-runs",
+      "graph.icu77-census.schedule-63-alternating-tile-runs",
+      "graph.icu77-census.schedule-63-staggered-runs",
+      "graph.icu77-census.schedule-64-alternating-tile-runs",
+      "graph.icu77-census.schedule-64-staggered-runs",
+      "graph.icu77-census.schedule-65-alternating-tile-runs",
+      "graph.icu77-census.schedule-65-staggered-runs",
+      "jev-ask.effect.exhaust429",
+      "jev-ask.effect.named",
+      "jev-ask.effect.offline",
+      "jev-ask.effect.retry429",
+      "jev-ask.effect.terminal401",
+      "jev-ask.effect.thrownRetry",
+      "jev-ask.promise.exhaust429",
+      "jev-ask.promise.named",
+      "jev-ask.promise.offline",
+      "jev-ask.promise.retry429",
+      "jev-ask.promise.terminal401",
+      "jev-ask.promise.thrownRetry",
+      "jev-ask.wire.authority",
+      "jev-ask.wire.deadline",
+      "jev-ask.wire.first",
+      "jev-ask.wire.jev",
+      "jev-ask.wire.last",
+      "jev-ask.wire.middle"
+    ],
+    "newQualifiedKeys": [],
+    "oldStrictNowQualified": [],
+    "oldQualifiedNowStrict": [
+      "graph.collapse-partial.graph.raw-source",
+      "graph.text-interface.raw-source.assembly-text",
+      "graph.text-interface.raw-source.context-text"
+    ],
+    "unchangedPriorGraphQualificationProfiles": 192,
+    "capabilities": 3445,
+    "mapped": 1759,
+    "gapRows": 1954,
+    "all53CliGapsOpen": true,
+    "failures": 0,
+    "referenceChanges": 0,
+    "comparisonExit": 1,
+    "comparisonExitReason": "Open capability ledger only; actual comparisons/reference changes are zero."
+  },
+  "newOutcomes": {
+    "strict": 44,
+    "qualified": 0,
+    "census": 26,
+    "jevAsk": 18,
+    "Core9SharedCredit": 0
+  },
+  "native": {
+    "default": {
+      "testsAndDocs": 722,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "features": {
+      "testsAndDocs": 736,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "overlap": "Do not sum configurations."
+  },
+  "public": {
+    "priorNamedExecutions": 48,
+    "newNamedExecutions": 10,
+    "namedExecutions": 58,
+    "authoredApplyDirectExecutions": 2,
+    "actualPublicExecutionsTotal": 60,
+    "perConfiguration": {
+      "legacyExamples": 22,
+      "legacyGraphExecutions": 2,
+      "CoreExamples": 2,
+      "censusDirect": 1,
+      "jevDirect": 2,
+      "separateAuthoredApply": 1
+    },
+    "qualification": "Per config: prior24 + Core2 + Census1 + JevAsk2 =29. The separate existing authored apply executes once/config and is not hidden in29. All public/native-only checks add zero shared comparison cases."
+  },
+  "transport": {
+    "drivers": 42,
+    "allInvalidUtf8Rejected": true
+  },
+  "graph": {
+    "outcomes": 9914,
+    "suites": 79,
+    "nonGraphOutcomes": 6445
+  },
+  "evidence": {
+    "packet": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-dfe3d831",
+    "checksSha256": "575a4fe33859898ae0f98ae01ddb3db20a4d8f0b0cc43ca92a8a477e6acbdc8c",
+    "reportSha256": "ca2136b8b59a11034da7439bb24f5d8a1a16fca4efe01936a739c38e19b6c56c",
+    "manifestSha256": "c19388b28da07b26018d738c0d7e8ddfb08f307f2c859e77f69757150824f7cf",
+    "bindingsSha256": "887a79a56f2a31f32e2aba7d3f37029c89a38efedb9680eba7139cd680d885f2",
+    "payloads": 2375,
+    "payloadBytes": 2401128624,
+    "artifacts": 173,
+    "actualReportFieldClaims": 1169,
+    "unretainedCurrentClaims": 0,
+    "pathOnlyArtifacts": 0,
+    "nestedLibrarySnapshots": 70,
+    "gitContentFiles": 2843,
+    "decodedArtifactBytesVerified": 4495932296,
+    "artifactForms": {
+      "direct": 53,
+      "gzip": 120
+    },
+    "compilerLogBoundArtifacts": 123,
+    "nestedUniqueDecodedLibraries": 5,
+    "thirdPartySourceScope": "Selected Proptest library bytes retained; its source metadata is producer-declared outside frozen Git workspace. No all-dependency source archive claim."
+  },
+  "cleanup": {
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "registrationRemoved": true,
+    "stderr": "",
+    "worktreeAddSucceeded": true,
+    "partialUnregisteredDirectoryRemoved": false
+  },
+  "RootDeltaReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/qualification-promotions-root-review.json",
+    "sha256": "cedb2cb40430ec51c0bf180a53469c018a16dfb7110d97891192c5683e7faf18"
+  },
+  "independentReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/independent-fullrun-review.json",
+    "sha256": "b2c282e962f0c130d48a91ecd49dad0dc2fa46610fb76055591f64be556d2451",
+    "verdict": "PASS within bounded checkpoint/source/artifact/qualification/lifecycle scope",
+    "reader": {
+      "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/saved-run-peer-reader.py",
+      "sha256": "c6be2ee5daa92f86d888efc992a919a608cd3476525086c400111f80f7efe047",
+      "stdoutSha256": "fcbadeabe629071935749e0bff8dd1d054145aff51208637a2da9be44a116520",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "factsPath": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/saved-run-peer-facts.json",
+      "factsSha256": "c9ade22751999dc0d75976eb9b7652ceebcdd78dd256d99db98dc23340d3f13d",
+      "adjunctFactsPath": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/saved-run-adjunct-facts.json",
+      "adjunctFactsSha256": "6fe5ce770bc5379325f2c9853a336fe70774849c7f603941380fdd413b332f6a",
+      "metadataReaderCorrection": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-lifecycle-combined-map/reader-recovery.json",
+      "correctionSha256": "1f6f64eee247b57b52b3430b9c026311801b97930f59b1743fdf82f2cc39882c"
+    },
+    "findings": []
+  },
+  "limits": [
+    "Three old backend-offset profiles are exact in this run only; no cause/permanent fix or retroactive promotion.",
+    "Historical f24418 executable digests/35claims and old15path-only provenance are not retroactively recovered.",
+    "No all-dependency byte/cold-source/initial-live-mode/cross-platform/release/deployment claim.",
+    "Source4/Core9/native-only observations add no Source comparison credit; Agent adoption remains separate.",
+    "Original held-stop1 and all53CLI broad gaps remain open in this verified product.",
+    "Current coverage1759mappings/915canonicalreferences/1954gap-reason rows do not establish completion percentages."
+  ],
+  "admission": {
+    "newStrictCases": 44,
+    "oldQualifiedNowExactThisRun": [
+      "graph.collapse-partial.graph.raw-source",
+      "graph.text-interface.raw-source.assembly-text",
+      "graph.text-interface.raw-source.context-text"
+    ],
+    "oldStrictLosses": 0,
+    "allOtherPriorGraphQualificationProfilesUnchanged": 192,
+    "originalPendingControllerStatus": "passed-pending-qualification-delta-review",
+    "originalControllerReportsUnchanged": true,
+    "causeOrPermanentOffsetResolutionClaimed": false
+  },
+  "preflightHistory": {
+    "initial872Attempt": "Stopped on historical receipt formatting before any ICU/Cargo build; owned root/target/registration removed0.",
+    "formatOnlyFollowup": "dfe3d831 changes only three JSON array layouts; all receipt values and original c086 bytes remain preserved.",
+    "cleanupRepair": "Partial worktree-add failure cleanup repaired before launch, independently reviewed, six controlled cleanup-branch cases checked.",
+    "artifactReaderCorrection": "Third-party Proptest source explicitly classified; original failed reader preserved, no behavior rerun."
+  }
+}
