@@ -639,15 +639,27 @@ where
         .map_err(AgentMachineError::Agent)
     }
 }
-impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>>, R, TE, A, T, Provider, C>
-    Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, NativeCalls>
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>>,
+    R,
+    TE,
+    A,
+    T,
+    Provider,
+    C,
+    V: CallSource<A>,
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V>
 where
     C: CommandFamily,
     C::Msg: Tagged,
 {
     /// Serial routed tools over the same wire. Loaded init stays commandless;
     /// dispatch Boot explicitly. The timer/actor retain their existing static limits.
-    /// This initial profile uses native calls without compaction, snapshots or tool policies.
+    /// This initial profile has no compaction, snapshots or tool policies.
     /// Missing/null stamps refuse; it does not add a full routed-state persistence codec.
     #[expect(
         clippy::type_complexity,
@@ -660,21 +672,7 @@ where
         tools: TI,
         timer: Rc<TM>,
     ) -> AgentWired<
-        WiredMachine<
-            'a,
-            Stage,
-            P,
-            I,
-            S,
-            R,
-            A,
-            T,
-            C,
-            NativeCalls,
-            NoCompaction,
-            NoSnapshotCommand,
-            TE,
-        >,
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, NoCompaction, NoSnapshotCommand, TE>,
         impl Interpreter<CommandOf<P, I, S, C>, Error = AgentWorkError<ToolError>> + 'a,
         impl Subscriptions<
             DeadlinesSub,
@@ -701,6 +699,7 @@ where
         T: 'a,
         Provider: 'a,
         C: 'a,
+        V: 'a,
     {
         let names = tools.settlement_types();
         self.wire(

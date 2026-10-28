@@ -15,6 +15,17 @@ impl EmptyRouter {
             },
         ))
     }
+    pub fn tool_of_plain(
+        &self,
+        call: &Rc<super::super::PlainToolCall>,
+    ) -> Result<Cmd<RejectedSpec>, ToolError> {
+        Ok(rejected(
+            call.call_id().clone(),
+            ToolRejection::UnknownTool {
+                name: call.name().clone(),
+            },
+        ))
+    }
     pub async fn interpret(
         &self,
         command: &Cmd<RejectedSpec>,
@@ -46,6 +57,13 @@ impl EmptyRouter {
     pub fn parts_of<A, R, E>(
         &self,
         _: &ToolCall<A>,
+        _: &ToolOutcome<R, E>,
+    ) -> Result<Option<Parts>, Infallible> {
+        Ok(None)
+    }
+    pub fn parts_of_plain<R, E>(
+        &self,
+        _: &super::super::PlainToolCall,
         _: &ToolOutcome<R, E>,
     ) -> Result<Option<Parts>, Infallible> {
         Ok(None)

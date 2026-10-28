@@ -2,6 +2,13 @@
 /// result variants all come from these entries; no handler registry is built.
 #[macro_export]
 macro_rules! tool_router {
+    (@route $router:ident, $call:ident, $id:expr, $name:expr, $route:path; $first:ident($first_field:ident) $(, $tool:ident($field:ident))*) => {
+        {
+            if ($name).as_utf8()==Some($router.$first_field.name()){return Ok(match $route(&$router.$first_field,$call)?{Ok(c)=>Commands::$first(c),Err(c)=>Commands::Rejected(c)})}
+            $(if ($name).as_utf8()==Some($router.$field.name()){return Ok(match $route(&$router.$field,$call)?{Ok(c)=>Commands::$tool(c),Err(c)=>Commands::Rejected(c)})})*
+            Ok(Commands::Rejected($crate::agent::tool::rejected(($id).clone(),$crate::agent::tool::ToolRejection::UnknownTool{name:($name).clone()})))
+        }
+    };
     ($vis:vis mod $module:ident {}) => {
         $vis mod $module {
             pub use $crate::agent::tool::{EmptyRouter as Router, EmptyInterpreter as Interpreter, EmptyAgentTools as AgentTools};
@@ -75,9 +82,13 @@ macro_rules! tool_router {
                     let names=[$first_field.name(),$($field.name()),*];let mut seen=std::collections::HashSet::new();for name in names {if !seen.insert(name){return Err($crate::agent::tool::ToolError::Duplicate{name:name.into()})}}Ok(Self{$first_field,$($field),*})
                 }
                 pub fn tool_of(&self,call:&$crate::agent::types::ToolCall<$first::RawArgs>)->Result<Commands<$first,$($tool),*>,$crate::agent::tool::ToolError>{
-                    if call.name.as_utf8()==Some(self.$first_field.name()){return Ok(match $crate::agent::tool::reject_route(&self.$first_field,call)?{Ok(c)=>Commands::$first(c),Err(c)=>Commands::Rejected(c)})}
-                    $(if call.name.as_utf8()==Some(self.$field.name()){return Ok(match $crate::agent::tool::reject_route(&self.$field,call)?{Ok(c)=>Commands::$tool(c),Err(c)=>Commands::Rejected(c)})})*
-                    Ok(Commands::Rejected($crate::agent::tool::rejected(call.call_id.clone(),$crate::agent::tool::ToolRejection::UnknownTool{name:call.name.clone()})))
+                    $crate::tool_router!(@route self,call,&call.call_id,&call.name,$crate::agent::tool::reject_route;$first($first_field)$(,$tool($field))*)
+                }
+                /// Routes the original guarded call through parse_args/from_input.
+                /// Native-shaped custom command overrides belong to tool_of.
+                pub fn tool_of_plain(&self,call:&std::rc::Rc<$crate::agent::PlainToolCall>)->Result<Commands<$first,$($tool),*>,$crate::agent::tool::ToolError>
+                where $first:ToolDefinition<RawArgs=$crate::agent::PlainToolArgs> {
+                    $crate::tool_router!(@route self,call,call.call_id(),call.name(),$crate::agent::tool::reject_plain_route;$first($first_field)$(,$tool($field))*)
                 }
                 pub async fn interpret(&self,cmd:&Commands<$first,$($tool),*>,ctx:$crate::agent::tool::ToolContext<'_,$first::Host>)->Result<Completions<$first,$($tool),*>,$crate::agent::tool::ToolError>{
                     match cmd {Commands::$first(c)=>{if c.tag()!=self.$first_field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$first_field.name()).into())}Ok(Completions::$first($crate::agent::tool::ToolCompletion::new(std::rc::Rc::clone(&self.$first_field),self.$first_field.handle(&c.cmd().input().args,ctx).await?)))},$(Commands::$tool(c)=>{if c.tag()!=self.$field.name(){return Err($crate::command::CommandContractError::mismatched(c.tag(),self.$field.name()).into())}Ok(Completions::$tool($crate::agent::tool::ToolCompletion::new(std::rc::Rc::clone(&self.$field),self.$field.handle(&c.cmd().input().args,ctx).await?)))},)*Commands::Rejected(c)=>{if c.tag()!=$crate::agent::tool::REJECTED_TYPE{return Err($crate::command::CommandContractError::mismatched(c.tag(),$crate::agent::tool::REJECTED_TYPE).into())}Ok(Completions::Rejected(Some($crate::command::Outcome::err(c.input().error.clone()))))}}
@@ -91,7 +102,13 @@ macro_rules! tool_router {
                     };Ok(Some(value))
                 }
                 pub fn parts_of(&self,call:&$crate::agent::types::ToolCall<$first::RawArgs>,outcome:&$crate::agent::types::ToolOutcome<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>)->Result<Option<$crate::agent::content::Parts>,ContentErrors<$first::ContentError,$($tool::ContentError),*>>{
-                    let $crate::agent::types::ToolOutcome::Ok(value)=outcome else{return Ok(None)};match value.as_ref(){Results::$first(v) if call.name.as_utf8()==Some(self.$first_field.name())=>self.$first_field.parts(v).map_err(ContentErrors::$first),$(Results::$tool(v) if call.name.as_utf8()==Some(self.$field.name())=>self.$field.parts(v).map_err(ContentErrors::$tool),)*_=>Ok(None)}
+                    self.parts_by_name(&call.name,outcome)
+                }
+                pub fn parts_of_plain(&self,call:&$crate::agent::PlainToolCall,outcome:&$crate::agent::types::ToolOutcome<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>)->Result<Option<$crate::agent::content::Parts>,ContentErrors<$first::ContentError,$($tool::ContentError),*>>{
+                    self.parts_by_name(call.name(),outcome)
+                }
+                fn parts_by_name(&self,name:&$crate::data::JsText,outcome:&$crate::agent::types::ToolOutcome<Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>,Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>>)->Result<Option<$crate::agent::content::Parts>,ContentErrors<$first::ContentError,$($tool::ContentError),*>>{
+                    let $crate::agent::types::ToolOutcome::Ok(value)=outcome else{return Ok(None)};match value.as_ref(){Results::$first(v) if name.as_utf8()==Some(self.$first_field.name())=>self.$first_field.parts(v).map_err(ContentErrors::$first),$(Results::$tool(v) if name.as_utf8()==Some(self.$field.name())=>self.$field.parts(v).map_err(ContentErrors::$tool),)*_=>Ok(None)}
                 }
                 /// Settlement names in declaration order, including rejection.
                 pub fn settlement_types(&self)->Vec<String>{

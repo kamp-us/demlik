@@ -90,7 +90,24 @@ enum PlainCallOwner {
 pub struct PlainToolCall {
     source: PlainCallOwner,
 }
+/// A retained cursor to a call's original args, not a new PlainData owner.
+pub struct PlainToolArgs {
+    call: Rc<PlainToolCall>,
+}
+impl PlainToolArgs {
+    pub fn call(&self) -> &Rc<PlainToolCall> {
+        &self.call
+    }
+    pub fn value(&self) -> &PlainData {
+        self.call.args()
+    }
+}
 impl PlainToolCall {
+    pub fn args_owner(self: &Rc<Self>) -> Rc<PlainToolArgs> {
+        Rc::new(PlainToolArgs {
+            call: Rc::clone(self),
+        })
+    }
     pub fn owner(&self) -> &Rc<PlainData> {
         match &self.source {
             PlainCallOwner::Turn { owner, .. } | PlainCallOwner::Standalone(owner) => owner,

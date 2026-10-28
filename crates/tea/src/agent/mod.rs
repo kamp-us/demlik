@@ -14,7 +14,8 @@ pub use schema::{GuardedSchema, StructuredOutputError, StructuredOutputRejection
 
 pub mod turn_view;
 pub use turn_view::{
-    CallOf, CallSource, NativeCalls, PlainCalls, PlainToolCall, TurnReadError, TurnReadLocation,
+    CallOf, CallSource, NativeCalls, PlainCalls, PlainToolArgs, PlainToolCall, TurnReadError,
+    TurnReadLocation,
 };
 
 mod wire;

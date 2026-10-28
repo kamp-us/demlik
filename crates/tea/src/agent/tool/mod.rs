@@ -377,27 +377,34 @@ pub trait ToolDefinition: Sized {
         self: &Rc<Self>,
         call: &ToolCall<Self::RawArgs>,
     ) -> Result<ToolCommand<Self>, ToolError> {
-        let args = match self.parse_args(Rc::clone(&call.args)) {
-            Ok(args) => args,
-            Err(ToolError::Schema(SchemaError::Issues(issues))) => {
-                return Err(ToolError::Contract(CommandContractError::Input {
-                    cmd_type: self.name().into(),
-                    issues,
-                }));
-            }
-            Err(ToolError::Schema(SchemaError::Async)) => {
-                return Err(CommandContractError::AsyncSchema {
-                    location: format!("the \"{}\" tool's input schema", self.name()),
-                }
-                .into());
-            }
-            Err(error) => return Err(error),
-        };
-        Ok(self.from_input(ToolInput {
-            call_id: call.call_id.clone(),
-            args,
-        }))
+        command_from_raw(self, &call.call_id, Rc::clone(&call.args))
     }
+}
+fn command_from_raw<T: ToolDefinition>(
+    tool: &Rc<T>,
+    call_id: &JsText,
+    raw: Rc<T::RawArgs>,
+) -> Result<ToolCommand<T>, ToolError> {
+    let args = match tool.parse_args(raw) {
+        Ok(args) => args,
+        Err(ToolError::Schema(SchemaError::Issues(issues))) => {
+            return Err(ToolError::Contract(CommandContractError::Input {
+                cmd_type: tool.name().into(),
+                issues,
+            }));
+        }
+        Err(ToolError::Schema(SchemaError::Async)) => {
+            return Err(CommandContractError::AsyncSchema {
+                location: format!("the \"{}\" tool's input schema", tool.name()),
+            }
+            .into());
+        }
+        Err(error) => return Err(error),
+    };
+    Ok(tool.from_input(ToolInput {
+        call_id: call_id.clone(),
+        args,
+    }))
 }
 impl<R, A, O, IS, OS, E, X, H, C> ToolDefinition for ToolDef<'_, R, A, O, IS, OS, E, X, H, C>
 where
@@ -679,12 +686,30 @@ pub fn reject_route<T: ToolDefinition>(
     tool: &Rc<T>,
     call: &ToolCall<T::RawArgs>,
 ) -> Result<Result<ToolCommand<T>, Cmd<RejectedSpec>>, ToolError> {
-    match tool.command(call) {
+    reject_command(&call.call_id, &call.name, tool.command(call))
+}
+#[doc(hidden)]
+pub fn reject_plain_route<T: ToolDefinition<RawArgs = super::PlainToolArgs>>(
+    tool: &Rc<T>,
+    call: &Rc<super::PlainToolCall>,
+) -> Result<Result<ToolCommand<T>, Cmd<RejectedSpec>>, ToolError> {
+    reject_command(
+        call.call_id(),
+        call.name(),
+        command_from_raw(tool, call.call_id(), call.args_owner()),
+    )
+}
+fn reject_command<T: ToolDefinition>(
+    call_id: &JsText,
+    name: &JsText,
+    command: Result<ToolCommand<T>, ToolError>,
+) -> Result<Result<ToolCommand<T>, Cmd<RejectedSpec>>, ToolError> {
+    match command {
         Ok(cmd) => Ok(Ok(cmd)),
         Err(ToolError::Contract(CommandContractError::Input { issues, .. })) => Ok(Err(rejected(
-            call.call_id.clone(),
+            call_id.clone(),
             ToolRejection::MalformedArgs {
-                name: call.name.clone(),
+                name: name.clone(),
                 issues,
             },
         ))),
