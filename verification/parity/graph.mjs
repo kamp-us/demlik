@@ -226,6 +226,15 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-callable-graph",
+    driver: "icu77_callable_driver",
+    script: "icu77-callable-graph-run.mjs",
+    args: [nativeCompilerManifest],
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
@@ -408,6 +417,7 @@ const checkedUtf8 = new Set([
   "html_driver",
   "graph_root_driver",
   "icu77_metadata_driver",
+  "icu77_callable_driver",
   "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",
