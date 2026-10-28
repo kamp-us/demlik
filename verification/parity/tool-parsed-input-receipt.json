@@ -1,0 +1,92 @@
+{
+  "status": "PASS bounded component; both worktrees and default targets retired",
+  "base": "f2444214455c348948edc2472ca22c01fe67edbf",
+  "sourceCommit": "c6b70f4cac67045c2708672cc8a9a4d6f64de252",
+  "productionOwners": ["crates/tea/src/agent/tool/mod.rs"],
+  "change": "ToolDefinition::from_input preserves typed parsed ToolInput and original descriptor Rc through existing CmdDef::named.from_record. Raw command facade delegates after unchanged parse.",
+  "scope": [
+    "Direct parsed tool construction",
+    "Existing router selected-instance command edge",
+    "Pure borrowed opaque public consumer",
+    "Actual Promise and Effect runtime paths"
+  ],
+  "newComparisons": {
+    "cases": 6,
+    "strict": 6,
+    "qualified": 0,
+    "runtimeRowsIncluded": 2,
+    "report": "green-shared6.json",
+    "sha256": "1931e33ef7c00abf1bf7c3a1db4b8fa97eb045df77d39af4eb9e351a5f19177f",
+    "originalSourceViewsUnchanged": true,
+    "binarySha256": "20db46518b59ee072284306d4e4d16681f92bee1b78c8f897f25b34939a8896d"
+  },
+  "regressions": {
+    "oldShared39": 39,
+    "newCredit": 0,
+    "report": "old39.json",
+    "SourceViewsEqualSealed39": true,
+    "nativeCommandTests": 5,
+    "opaquePublicConsumerExit": 0
+  },
+  "types": {
+    "baselineSoleError": "E0599 missing from_input; unused trait import warning separately retained",
+    "green": "same unchanged public source selected by Cargo2 and executed0",
+    "wrongRawInsteadOfParsedSoleError": "E0308",
+    "opaqueBounds": "No Clone/Debug/serde/Send/static derive/bound on borrowed input/result/cause; original Rc handles asserted."
+  },
+  "static": {
+    "scopedSourceTsc": 0,
+    "biome": 0,
+    "syntax": 0,
+    "rustfmt": 0,
+    "scopedClippy": 0
+  },
+  "constructionCargo": {
+    "selections": 3,
+    "allExits": [0, 0, 0],
+    "baseline": "c1-baseline.process.json",
+    "green": "c2-green.process.json",
+    "clippy": "c3-clippy.process.json"
+  },
+  "semanticControl": {
+    "count": 1,
+    "cargoSelections": 1,
+    "compileExit": 0,
+    "sourceAndNativeProcessExits": [0, 0],
+    "namedWitness": "tool-parsed-input.edge.identity",
+    "mismatchedCases": 6,
+    "onlyDifferences": [
+      "command.callId",
+      "settled.cmd.callId",
+      "outcome.callId"
+    ],
+    "report": "control/result.json",
+    "compilerProtocolFailureCredit": 0,
+    "sourceFramesEqualFinalBaseline": true
+  },
+  "artifactBindings": "Actual Cargo JSON plus process records retain selected Tea rlib/rmeta and each executed example/test binary. Transitive dependency caches are not archived.",
+  "sourceOnlyCommandObjectIdentityNativeCredit": 0,
+  "qualifications": [
+    "Raw Schema Error Issues/Async profile and existing unsupported carriers remain unchanged.",
+    "Typed already-parsed records are trusted; arbitrary JS extras/reflection/sparse inputs are outside this checkpoint.",
+    "No generic actor lifetime or eight scheduling-gap closure; borrowed pure and owned actor profiles are distinct.",
+    "No Agent bridge, optional execution profile, defineAgent/providers/SDK/children, kernel/state/schema/dependency changes.",
+    "No complete workspace/features/release/cold archive build claim.",
+    "The base f2444214 already includes six reviewed partial tool/router bindings from f9ba9c84. This parsed-input component adds zero bindings."
+  ],
+  "history": [
+    "Initial Source fixture tag/Outcome-helper TSC2 errors corrected; first six Source views preserved unchanged.",
+    "One historical TSC run overlapped formatting and is not final proof; frozen final TSC0 retained.",
+    "All three construction Cargo and the one control Cargo succeeded; intended compiler refusals are type evidence, not semantic controls."
+  ],
+  "noMainRegistryRemoteEdits": true,
+  "sourceIntegrity": "source-integrity.json",
+  "retirement": "retirement.json",
+  "sealedReceiptErratum": {
+    "original": "/private/tmp/demlik-tool-parsed-input-proof-01a16c9d/receipt.json",
+    "originalSha256": "92498212bce142fd744beefb246593c6a6362ad8247e1a4f60b82bf69a4053ed",
+    "sealedManifestUntouched": true,
+    "correction": "Original knownLimits sentence incorrectly said existing six bindings were unapplied; base already contains them. No native/Source observation changed.",
+    "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/tool-parsed-input-source/artifact-parent-review.json"
+  }
+}
