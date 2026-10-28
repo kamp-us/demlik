@@ -1,0 +1,278 @@
+{
+  "component": "ICU77 Group G8 reachability queries",
+  "base": "1684592233c2b0ffbbe87f7e96d8f76750884a05",
+  "sourceCommit": "e913a12075d45426ced09e740413c34223076511",
+  "scope": {
+    "checkedComparisons": 8,
+    "queryOwners": [
+      "query/reach.rs",
+      "query/unguarded.rs",
+      "query/unreachable.rs"
+    ],
+    "existingCallerPropagation": [
+      "extract/analysis.rs",
+      "collapse/cost.rs::CostContext::new",
+      "collapse/candidates.rs::find_collapse_candidates"
+    ],
+    "legacyRemaining": {
+      "helperCalls": 66,
+      "directProjectSorts": 2
+    },
+    "SourceProductionChanges": 0,
+    "dependenciesChanged": false,
+    "MainOrCentralChanges": false
+  },
+  "sourceFirst": {
+    "freeze": "source-first-freeze.json",
+    "freezeSha256": "4c6c145db50e9ea3c04783949fdcc8cb2309bffff249e3bb78394c3e7220c540",
+    "report": "source-first.json",
+    "reportSha256": "705ee345e071649f20639a74b0d01e9756cf42111832800cab75280b653ad511",
+    "wholeviews": 18,
+    "SourceVersion": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+    "nativeProjectionAfterFreeze": true,
+    "originalFiveInputsRetained": true,
+    "actualSourcePins": 15,
+    "beforeAfterFileBytesAndModesEqual": true,
+    "extraCredit": 0
+  },
+  "newComparison": {
+    "report": "final-pairs.json",
+    "sha256": "723fc55ae1851432ae4275381d142288f342d7f4d7c8128494bbc8ac9b0d3e17",
+    "passed": 18,
+    "strict": 18,
+    "qualified": 0,
+    "protocolRefusals": 5,
+    "responseGuards": 3,
+    "wholeSourceViewsEqualPreProductFreeze": true,
+    "oneRealTwoPackageWorkflowCountsAsOneCase": true,
+    "centralRegistrationOrGlobalAcceptanceClaim": false
+  },
+  "publicConsumer": {
+    "input": "borrowed-public.rs",
+    "inputSha256": "ac7349450c0e3ac9aca871994fd56f85cdca7e39f73ecb4b7b1b420a537a35cc",
+    "sameBaselineRedAndGreenInput": true,
+    "baselineDiagnostics": [
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0308",
+      "E0658",
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0061",
+      "E0277",
+      "E0308"
+    ],
+    "baselineLibraryRetained": true,
+    "compileExit": 0,
+    "cheapExit": 0,
+    "GoExit": 0,
+    "cheapNoTsconfigAndNonexistentCompiler": true,
+    "originalRcNativeNodeSymbolCacheAndBorrowedRcCellHost": true,
+    "resultsUsableAfterCollationDrop": true,
+    "executableSha256": "4b90e18cd27c3305a1cb5cd8cab7b0a704d8e7ed6e836eedfb24d0aaaefa3fd6",
+    "librarySha256": "03c9488df437758ef0a32e006512c75914502b44a6871a9fd00b692037197b85",
+    "extraSourceCredit": 0
+  },
+  "gates": {
+    "focusedNative": {
+      "passed": 49,
+      "groups": 12,
+      "report": "native-focused.json",
+      "newSourceCredit": 0
+    },
+    "affectedComparisons": {
+      "passed": 661,
+      "strict": 604,
+      "qualified": 57,
+      "suites": 15,
+      "report": "affected.json",
+      "newCredit": 0
+    },
+    "static": {
+      "node-check-icu77-reach-cases": 0,
+      "node-check-icu77-reach-reference": 0,
+      "node-check-icu77-reachability": 0,
+      "node-check-icu77-reachability-mutations": 0,
+      "biome": 0,
+      "parity-tsc": 0,
+      "codegraph-tsc": 0,
+      "fmt-check": 0,
+      "git-diff-check": 0
+    },
+    "allTargetCodeGraphClippyExit": 0,
+    "noWholeTeaWorkspaceFeatureOrArchiveBuild": true
+  },
+  "compilerAccounting": {
+    "constructionCargoSelections": 5,
+    "controlCargoSelections": 4,
+    "total": 9,
+    "constructionSelections": [
+      {
+        "name": "baseline-cargo",
+        "argv": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+          "build",
+          "-p",
+          "demlik-code-graph",
+          "--lib",
+          "--locked",
+          "--offline",
+          "--message-format=json"
+        ],
+        "cwd": "/private/tmp/demlik-check-icu77-group-g-01a16c9d/repo",
+        "exit": 0,
+        "seconds": 68.83976574998815,
+        "targetAliasesUnset": true
+      },
+      {
+        "name": "callers2-cargo",
+        "argv": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+          "test",
+          "-p",
+          "demlik-code-graph",
+          "--no-run",
+          "--locked",
+          "--offline",
+          "--message-format=json"
+        ],
+        "cwd": "/private/tmp/demlik-check-icu77-group-g-01a16c9d/repo",
+        "exit": 0,
+        "seconds": 104.39903583296109,
+        "targetAliasesUnset": true
+      },
+      {
+        "name": "callers3-cargo",
+        "argv": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+          "test",
+          "-p",
+          "demlik-code-graph",
+          "--no-run",
+          "--locked",
+          "--offline",
+          "--message-format=json"
+        ],
+        "cwd": "/private/tmp/demlik-check-icu77-group-g-01a16c9d/repo",
+        "exit": 0,
+        "seconds": 112.36312595900381,
+        "targetAliasesUnset": true
+      },
+      {
+        "name": "callers4-cargo",
+        "argv": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+          "test",
+          "-p",
+          "demlik-code-graph",
+          "--no-run",
+          "--locked",
+          "--offline",
+          "--message-format=json"
+        ],
+        "cwd": "/private/tmp/demlik-check-icu77-group-g-01a16c9d/repo",
+        "exit": 0,
+        "seconds": 112.99952958297217,
+        "targetAliasesUnset": true
+      },
+      {
+        "name": "clippy5-cargo",
+        "argv": [
+          "/private/tmp/demlik-rust-toolchain-01a16c9d/cargo/bin/cargo",
+          "clippy",
+          "-p",
+          "demlik-code-graph",
+          "--all-targets",
+          "--locked",
+          "--offline",
+          "--message-format=json",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "cwd": "/private/tmp/demlik-check-icu77-group-g-01a16c9d/repo",
+        "exit": 0,
+        "seconds": 54.784778417029884,
+        "targetAliasesUnset": true
+      }
+    ],
+    "constructionNativePreparations": 1,
+    "controlNativePreparations": 1,
+    "externalRustcLogs": [
+      "borrowed-public-red.json",
+      "first-public-green/borrowed-public-green-compile.json",
+      "borrowed-public-green-compile.json"
+    ],
+    "allFourTargetAliasesUnset": true,
+    "oneOwnedDefaultTargetPerBuildingTree": true,
+    "noTargetOrDependencyCacheCopies": true
+  },
+  "semanticControls": {
+    "report": "controls/controls.json",
+    "planned": 4,
+    "validStrict": 4,
+    "qualified": 0,
+    "nativeOnly": 0,
+    "allCompile0FreshFalseLibraryAndConsumerProtocolValidNamedMismatch": true,
+    "ids": [
+      "ordinal-adjacency-targets",
+      "reverse-entry-seed-order",
+      "id-before-unreachable-category",
+      "id-before-withheld-reason"
+    ],
+    "baselineUnchanged": true,
+    "ownersRestoredPerFaultAndFinally": true,
+    "checkAndDefaultTargetRemoved": true,
+    "extraPairCredit": 0
+  },
+  "retention": {
+    "sourceFreeze": "source-freeze.json",
+    "tinySourceArchive": "source.tar.gz",
+    "effectiveArtifacts": "effective-artifacts.json",
+    "retainedRoles": 21,
+    "unretainedNativeConsumers": "unretained-native-consumers.json",
+    "unretainedFocusedIntegrationExecutables": 11,
+    "allRetainedGzipDecodedHashesVerified": true,
+    "historicalInitialPublicGreenExecutableAndLibraryBytesNotSeparatelyRetained": true,
+    "historicalInitialGuardDriverBytesRetained": true,
+    "actualCompiledSourceRelation": "Final Cargo4 working-tree bytes were subsequently committed unchanged as sourceCommit; Git/live/tiny archive14 exact pins retain that relation, not a claim Cargo ran at that already-created HEAD."
+  },
+  "historicalFailuresZeroCredit": [
+    {
+      "record": "formatter-setup-failure.json",
+      "rawDiagnostic": "formatter-setup-failure.stderr",
+      "meaning": "Missing stable toolchain env triggered unavailable rustup metadata lookup; isolated exit was not captured, original inferred exit annotation retained/corrected; canonical offline formatter later0."
+    },
+    {
+      "record": "driver-guard-transport-red/final-pairs.json",
+      "meaning": "Initial17/18 run refused nonempty guards in the new driver internally tagged serde adapter before any query call; zero new credit. Finite UTF8 guard String conversion once into existing JsString fixes only driver transport, Source inputs unchanged."
+    },
+    {
+      "record": "public-final-tail-setup-failure.json",
+      "meaning": "Existing owned public-cheap directory stopped final tail after actual rustc0; runtime/pairs resumed in a fresh fixture with same selected executable, no rebuild."
+    },
+    {
+      "record": "lint-annotation-trim.json",
+      "meaning": "Unneeded provisional lint exemption removed before final exact-source Cargo4; no product semantics changed."
+    }
+  ],
+  "limits": [
+    "Finite measured native String/UTF8 model profile only. Raw Graph identifiers, arbitrary JS reflection/numeric facts and internally tagged RawValue/JsString transport remain OPEN.",
+    "No Graph/context carrier, state/model bounds, default collation construction, shared fallback, new algorithm or new dependency.",
+    "Remaining66 legacy helper calls plus2 direct project sorts remain OPEN.",
+    "All53 CLI known gaps remain OPEN; no contracts, central registration, helper aliases or global capability closure.",
+    "Actual paired18/public/native/affected/control observations are component proof. No standalone/bootstrap/TTY/browser/platform/distribution or full-goal equivalence claim.",
+    "Historical failures remain distinct from final successful phases; affected661, native49, protocol5/guards3 and controls4 add no new shared cases beyond final18."
+  ],
+  "retirement": "retirement.json records actual post-seal construction/check/default-target removal; branch refs retained."
+}
