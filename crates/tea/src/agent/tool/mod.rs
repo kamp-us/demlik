@@ -366,6 +366,13 @@ pub trait ToolDefinition: Sized {
     ) -> LocalBoxFuture<'s, Result<command::Completion<SignatureOf<Self>>, ToolError>>;
     fn parts(&self, result: &Rc<Self::Ok>) -> Result<Option<Parts>, Self::ContentError>;
     fn resilience(&self) -> Option<&ToolResilience>;
+    /// Build a command from already-parsed arguments without running the input schema.
+    fn from_input(self: &Rc<Self>, input: ToolInput<Self::Args>) -> ToolCommand<Self> {
+        ToolCommand {
+            command: CmdDef::<SignatureOf<Self>>::named(self.name()).from_record(input),
+            tool: Rc::clone(self),
+        }
+    }
     fn command(
         self: &Rc<Self>,
         call: &ToolCall<Self::RawArgs>,
@@ -386,13 +393,10 @@ pub trait ToolDefinition: Sized {
             }
             Err(error) => return Err(error),
         };
-        Ok(ToolCommand {
-            command: CmdDef::<SignatureOf<Self>>::named(self.name()).from_record(ToolInput {
-                call_id: call.call_id.clone(),
-                args,
-            }),
-            tool: Rc::clone(self),
-        })
+        Ok(self.from_input(ToolInput {
+            call_id: call.call_id.clone(),
+            args,
+        }))
     }
 }
 impl<R, A, O, IS, OS, E, X, H, C> ToolDefinition for ToolDef<'_, R, A, O, IS, OS, E, X, H, C>
