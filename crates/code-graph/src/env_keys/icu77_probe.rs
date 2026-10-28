@@ -3,7 +3,6 @@ use super::*;
 use crate::{
     engine::oxc::parse_type_script,
     env_keys::{extract::EnvKeyScan, render::render_env_keys},
-    extract::wrangler_config::load_binding_catalog,
     project::SourceUnit,
     text::{JsObject, JsValue},
 };
