@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "agent-tool-policy-reference.mts",
+    "agent-tool-policy-runtime-reference.mts"
+  ]
+}
