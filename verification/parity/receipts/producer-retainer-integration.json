@@ -1,0 +1,99 @@
+{
+  "status": "Reviewed local integration; material full-check admission pending",
+  "integrationCommit": "02bcdbe958a3de8594e1fb65e3146dcaf7bada19",
+  "sourceChain": [
+    "0dcdf8e64e9d2f7f32dd3350f2f93469fb2427da",
+    "4424a6fb9b33bc6419752b1b75222f01a6b2cd78",
+    "5956ee68e4c9055069f60750b81ef1e2628d5261",
+    "4796ad1eaceffefbf9a7d257a1bfc82974c8a084"
+  ],
+  "integratedFiles": [
+    {
+      "path": "verification/parity/api-base-run.mjs",
+      "sha256": "2fba5e28c521f88b81c7f41864bb0509e60b4579945e3f158de32f367f1ce94e"
+    },
+    {
+      "path": "verification/parity/api-git-run.mjs",
+      "sha256": "679c1cb737305acfcc899660a5ba6e7d11ecb116d4f65902524e77913d746b58"
+    },
+    {
+      "path": "verification/parity/compiled-traces.mjs",
+      "sha256": "b9a78156c4a6f4cb115bb1f3c50e978abf697ffc49b8fa08089aaf5b4d87881c"
+    },
+    {
+      "path": "verification/parity/compose-run.mjs",
+      "sha256": "6d5b62bcf17c4430830303379f809bc9c15c290b75184b3b42839351a71d774e"
+    },
+    {
+      "path": "verification/parity/json-text-run.mjs",
+      "sha256": "7887d5a0f5c777f27f7f41086ef5d6e83ef343f0aa77fdb4718eba6d2d7a636d"
+    },
+    {
+      "path": "verification/parity/legacy-producer-selection-receipt.json",
+      "sha256": "d5d0efcfcb515f3532130dcfd4d8380351b096bb90870c8512044800f7a271cc"
+    },
+    {
+      "path": "verification/parity/retained-artifacts-test.py",
+      "sha256": "123e40dbe11c31339d64f7c823fb84b92289cc252a673098d45a59a6730ebd82"
+    },
+    {
+      "path": "verification/parity/retained_artifacts.py",
+      "sha256": "0178e1ed563bdd661d7b35b1608dae7792508495092e98a44ff0f3d858d57dd2"
+    },
+    {
+      "path": "verification/parity/runtime-contracts.mjs",
+      "sha256": "04c49b12314f4f654cb3efdb30d71a1f03a8bcca0d4ca2efdc48a851f3d6ff5b"
+    },
+    {
+      "path": "verification/parity/runtime.mjs",
+      "sha256": "d3c68805cd9124117cf63de98e1605a06b20a17b9310d26b267472850be91b01"
+    },
+    {
+      "path": "verification/parity/tea-example.d.mts",
+      "sha256": "56b7d960b7b20e723f1506ba143b74415dcc35a1d419a3cb6d18fb51623c4918"
+    },
+    {
+      "path": "verification/parity/tea-example.mjs",
+      "sha256": "45f5c012068c9e587158ae70eb9cbe65f4bbe01489e2cab045c1477b3601306b"
+    },
+    {
+      "path": "verification/parity/tea-example.test.mjs",
+      "sha256": "c46ae22e5b6f51647e364c7d6a56a79aa9e57b9da99aed4988037f66bd766557"
+    }
+  ],
+  "retainedPackets": [
+    {
+      "source": "/private/tmp/demlik-producer-selection-proof-01a16c9d",
+      "retained": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/producer-selection-source",
+      "handoffSha256": "83a0e770176f14df80eb0555ede53b6d5ff6b539c18762dc6d389e5ebc1e4e7d",
+      "manifestSha256": "ec71225ae955fee4539de60759721d5f5b2736ca80185301c8e3b19861b81b0c"
+    },
+    {
+      "source": "/private/tmp/demlik-retained-producer-compat-proof-01a16c9d",
+      "retained": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/retained-producer-compat-source",
+      "handoffSha256": "baf4a058db77334c3b4bef93d005b3a96edc8da13b3a08146a29d9a0a0d54663",
+      "manifestSha256": "966443ecd2a2bb4f8ca08d21afde9d3d39db6fda56b45bb48386307e9c37ea3b"
+    }
+  ],
+  "rootReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/producer-selection-map/root-retainer-review.json",
+  "rootReviewSha256": "64edd188ffce0c7e1d709ccfc78e215cbcbff2a2767c7e116d8045d74962acec",
+  "existingComparisons": 678,
+  "newCaseCredit": 0,
+  "actualCargoSelections": 4,
+  "sourceNativeCargoIcuExecutionsByReviewer": 0,
+  "nativeAndTsProductChanged": false,
+  "fullCheckpointUnchanged": {
+    "implementation": "8a756e13eb795fba7dfdb5d8e89cb84af7b74546",
+    "receipt": "21680376b78c5a235fd7b20b5e810a873531a4a3",
+    "comparisons": 16315
+  },
+  "limits": [
+    "Eleven remaining migrated producer consumers await next combined execution.",
+    "Old fifteen path-only producer limits are not retroactively repaired.",
+    "Historical f24418 executable hashes and 35 claims remain unrecovered.",
+    "Actual Cargo selection is not original code generation or all dependency linkage proof.",
+    "Original JSON runner failure and separate one-line correction remain immutable.",
+    "Nested library snapshots preserve gzip bytes and separately verify decoded sha256."
+  ],
+  "cleanup": "Building and never-building owned worktrees/default targets/parents/registrations removed; selected proof hardlinked only, no compiled cache copied."
+}
