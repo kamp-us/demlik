@@ -29,10 +29,6 @@ pub(crate) fn locale_compare(left: &str, right: &str) -> std::cmp::Ordering {
     FILE_COLLATOR.compare(left, right)
 }
 
-pub(crate) fn locale_compare_units(left: &[u16], right: &[u16]) -> std::cmp::Ordering {
-    FILE_COLLATOR.compare_utf16(left, right)
-}
-
 const WALK_PRUNE: &[&str] = &[
     ".claude",
     ".git",
