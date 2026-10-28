@@ -440,7 +440,7 @@ async function main() {
         command,
         status: child.status,
         signal: child.signal,
-        error: child.error?.message,
+        ...(child.error ? { error: child.error.message } : {}),
         requestSha256: hash(fs.readFileSync(packet)),
         stdoutSha256: hash(child.stdout ?? ""),
         stderrSha256: hash(child.stderr ?? ""),
