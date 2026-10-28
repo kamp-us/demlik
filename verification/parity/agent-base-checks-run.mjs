@@ -8,7 +8,7 @@ import { agentBaseTypes } from "./agent-base-types.mjs";
 import { agentBaseCheckpointParity } from "./agent-state-parity.mjs";
 
 const baseline = await agentBaseCheckpointParity(process.env.CARGO ?? "cargo");
-assert.equal(baseline.cases, 43);
+assert.equal(baseline.cases, 44);
 assert.deepEqual(baseline.failures, []);
 agentBaseTypes(baseline.cargoArtifacts.libraries.demlik_tea);
 execFileSync(

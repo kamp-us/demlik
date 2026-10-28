@@ -22,10 +22,10 @@ export function agentBaseCoverage(options = {}) {
     baseline = JSON.parse(fs.readFileSync(baselineFile)),
     capabilities = new Map(inventory.capabilities.map((c) => [c.id, c])),
     evidence = new Map(Object.entries(baseline.nativeEvidence));
-  assert.equal(baseline.cases, 43);
-  assert.equal(baseline.passed, 43);
+  assert.equal(baseline.cases, 44);
+  assert.equal(baseline.passed, 44);
   assert.deepEqual(baseline.failures, []);
-  assert.equal(evidence.size, 43);
+  assert.equal(evidence.size, 44);
   for (const row of baseline.qualifiedObservations)
     assert.ok(!evidence.has(row.id));
   const mappings = [];

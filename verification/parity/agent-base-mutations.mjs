@@ -234,10 +234,10 @@ export function agentBaseMutations(options = {}) {
       "target/parity/agent-base-mutation-baseline.json",
     ),
   });
-  assert.equal(baseline.cases, 43);
-  assert.equal(baseline.passed, 43);
+  assert.equal(baseline.cases, 44);
+  assert.equal(baseline.passed, 44);
   assert.equal(baseline.protocolRefusals, 8);
-  assert.equal(baseline.qualifiedObservations.length, 2);
+  assert.equal(baseline.qualifiedObservations.length, 1);
   const directory = fs.realpathSync(
       fs.mkdtempSync(path.join(os.tmpdir(), "demlik-agent-base-faults-")),
     ),
@@ -338,10 +338,10 @@ export function agentBaseMutations(options = {}) {
       assert.equal(hash(fs.readFileSync(f)), s, f);
     const report = {
         baseline: {
-          strict: 43,
-          actions: 268,
+          strict: 44,
+          actions: 271,
           protocolRefusals: 8,
-          qualifiedExcluded: 2,
+          qualifiedExcluded: 1,
         },
         detected: detected.length,
         escaped: 0,
