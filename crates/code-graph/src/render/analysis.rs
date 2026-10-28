@@ -300,13 +300,14 @@ pub fn render_cycles(
     graph: &Graph,
     json: bool,
     pretty: bool,
+    collation: &crate::project::Collation,
 ) -> Result<JsString, super::ReportRenderError> {
     if !matches!(graph.provenance, crate::schema::Provenance::Edges { .. }) {
         return Ok(
             "cycles: pass did not run — add --edges (the import graph needs the edge pass).".into(),
         );
     }
-    let analysis = super::smells::coupling_of_graph(graph)?;
+    let analysis = super::smells::coupling_of_graph(graph, collation)?;
     if json {
         return Ok(stable_stringify(&analysis.cycles, pretty)?.into());
     }

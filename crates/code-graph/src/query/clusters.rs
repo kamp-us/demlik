@@ -61,7 +61,7 @@ fn build_edges(
     collation: &Collation,
 ) -> Result<Vec<Edge>, CollationError> {
     let mut weights = IndexMap::new();
-    for edge in value_edges_of(modules.iter().copied()) {
+    for edge in value_edges_of(modules.iter().copied(), collation)? {
         if nodes.contains(edge.from.as_str()) && nodes.contains(edge.to.as_str()) {
             bump(&mut weights, &edge.from, &edge.to);
         }

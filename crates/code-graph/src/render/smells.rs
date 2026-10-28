@@ -4,19 +4,22 @@ use super::{
     text::{join, number},
 };
 use crate::{
-    project::{discover_package_roots, resolve_path_text_from},
+    project::{Collation, discover_package_roots, resolve_path_text_from},
     schema::{Graph, Severity, SmellTarget},
     smells::coupling::{CouplingAnalysis, analyze_coupling},
     text::JsString,
 };
 use std::{collections::HashMap, path::Path};
-pub(crate) fn coupling_of_graph(graph: &Graph) -> Result<CouplingAnalysis, std::io::Error> {
+pub(crate) fn coupling_of_graph(
+    graph: &Graph,
+    collation: &Collation,
+) -> Result<CouplingAnalysis, ReportRenderError> {
     let root = resolve_path_text_from(&JsString::default(), &graph.root)?;
     let roots = discover_package_roots(Path::new(&root.to_lossy()), None);
-    Ok(analyze_coupling(&graph.modules, &roots))
+    Ok(analyze_coupling(&graph.modules, &roots, collation)?)
 }
-fn render_coupling(graph: &Graph) -> Result<JsString, std::io::Error> {
-    let analysis = coupling_of_graph(graph)?;
+fn render_coupling(graph: &Graph, collation: &Collation) -> Result<JsString, ReportRenderError> {
+    let analysis = coupling_of_graph(graph, collation)?;
     let cross_out: HashMap<_, _> = analysis
         .ranked
         .iter()
@@ -104,11 +107,12 @@ pub fn render_smells(
     graph: &Graph,
     json: bool,
     pretty: bool,
+    collation: &Collation,
 ) -> Result<JsString, ReportRenderError> {
     if json {
         return Ok(stable_stringify(&graph.smells, pretty)?.into());
     }
-    let coupling = render_coupling(graph)?;
+    let coupling = render_coupling(graph, collation)?;
     if graph.smells.is_empty() {
         return Ok(if coupling.is_empty() {
             "No smells found.".into()

@@ -604,12 +604,16 @@ fn build(
         .collect::<Result<_, _>>()?;
     modules.sort_by(|left, right| collation.compare(&left.1, &right.1));
     let mut modules: Vec<_> = modules.into_iter().map(|(module, _)| module).collect();
-    let coupling = edges.as_ref().map(|_| {
-        coupling_by_file(
-            &modules,
-            &discover_package_roots(&loaded.root_absolute, None),
-        )
-    });
+    let coupling = edges
+        .as_ref()
+        .map(|_| {
+            coupling_by_file(
+                &modules,
+                &discover_package_roots(&loaded.root_absolute, None),
+                collation,
+            )
+        })
+        .transpose()?;
     for module in &mut modules {
         module.smells = smells_for_module(
             module,

@@ -1329,7 +1329,14 @@ impl PreparedGatesCli {
             }
             ConsoleOutput::InterfaceWidth => analysis::render_interface_width(&graph, json, pretty)
                 .map_err(ReportRenderError::from),
-            ConsoleOutput::Cycles => analysis::render_cycles(&graph, json, pretty),
+            ConsoleOutput::Cycles => analysis::render_cycles(
+                &graph,
+                json,
+                pretty,
+                self.collation
+                    .as_ref()
+                    .expect("successful assembly retains its collation"),
+            ),
             ConsoleOutput::Kinds => {
                 analysis::render_kinds(&graph, json, pretty).map_err(ReportRenderError::from)
             }
@@ -1337,7 +1344,14 @@ impl PreparedGatesCli {
                 .map_err(ReportRenderError::from),
             ConsoleOutput::Data => crate::data::render::render_data(&graph, json, pretty)
                 .map_err(ReportRenderError::from),
-            ConsoleOutput::Smells => smells::render_smells(&graph, json, pretty),
+            ConsoleOutput::Smells => smells::render_smells(
+                &graph,
+                json,
+                pretty,
+                self.collation
+                    .as_ref()
+                    .expect("successful assembly retains its collation"),
+            ),
             ConsoleOutput::Tree => {
                 if json {
                     graph_view::render_graph(&graph, pretty).map_err(ReportRenderError::from)
