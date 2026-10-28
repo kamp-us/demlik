@@ -896,6 +896,7 @@ impl<
                 return Ok(());
             };
             let detached = work.detached;
+            let promise = work.is_promise();
             let mut running = Box::pin(
                 AssertUnwindSafe(perform(work, &self.cancel, self.profile == Profile::Effect))
                     .catch_unwind(),
@@ -916,7 +917,12 @@ impl<
             }
             let result = match first {
                 std::task::Poll::Ready(result) => result,
-                std::task::Poll::Pending => running.await,
+                std::task::Poll::Pending => {
+                    if promise {
+                        tokio::task::yield_now().await;
+                    }
+                    running.await
+                }
             };
             tokio::task::yield_now().await;
             self.in_flight.borrow_mut().shift_remove(&token);

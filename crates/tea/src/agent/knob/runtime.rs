@@ -350,17 +350,33 @@ where
         >,
     > {
         match command {
-            AgentCommand::Brain(cmd) => Some(CommandWork::new(async move {
+            AgentCommand::Brain(cmd) => {
                 let handler = brain_handler(
                     self.llm.as_ref(),
                     BrainPorts::new(&self.model).with_loader(&self.loader),
                 );
-                handler
-                    .handle(cmd)
-                    .await
-                    .map(|v| AgentCompletion::Brain(Some(v)))
-                    .map_err(AgentWorkError::Brain)
-            })),
+                if handler.has_loader() {
+                    Some(CommandWork::promise(move |_signal| {
+                        let operation = handler.start(cmd);
+                        async move {
+                            operation
+                                .await
+                                .map(|value| AgentCompletion::Brain(Some(value)))
+                                .map_err(AgentWorkError::Brain)
+                        }
+                    }))
+                } else {
+                    // NoMessages is not the configured-loader startup profile.
+                    Some(CommandWork::new(async move {
+                        handler
+                            .handle(cmd)
+                            .await
+                            .map(|value| AgentCompletion::Brain(Some(value)))
+                            .map_err(AgentWorkError::Brain)
+                    }))
+                }
+            }
+
             AgentCommand::Tool(cmd) => {
                 let work = self.tools.interpret(cmd, context)?;
                 Some(work.map(AgentCompletion::Tool))

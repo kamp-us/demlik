@@ -116,6 +116,9 @@ pub struct CommandWork<'a, T, E> {
     pub(crate) uninterruptible: bool,
 }
 impl<'a, T, E> CommandWork<'a, T, E> {
+    pub(super) fn is_promise(&self) -> bool {
+        matches!(&self.operation, CommandOperation::Promise(_))
+    }
     /// Native futures retain the existing cancellation-before-poll behavior.
     pub fn new(future: impl Future<Output = Result<T, E>> + 'a) -> Self {
         Self::operation(CommandOperation::Native(future.boxed_local()))

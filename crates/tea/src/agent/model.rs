@@ -289,27 +289,23 @@ where
     }
 }
 
-// The three Source awaits are loader, bound invocation, and plain-model fn.
-// An initially-ready port still defers its continuation. Already-pending work
-// resumes on its own wake; no global executor/Promise scheduling is inferred.
+// These are the Source loader, bound-invocation, and plain-model awaits.
+// Each completion defers its continuation, including a previously-pending
+// invocation. The nested plain-model observer measures that second boundary.
 async fn await_port<F: Future>(future: F) -> F::Output {
     let mut future = std::pin::pin!(future);
-    let mut first = true;
     let mut ready = None;
     futures::future::poll_fn(move |cx| {
         if let Some(value) = ready.take() {
             return Poll::Ready(value);
         }
-        let polled = future.as_mut().poll(cx);
-        let defer = first;
-        first = false;
-        match polled {
-            Poll::Ready(value) if defer => {
+        match future.as_mut().poll(cx) {
+            Poll::Ready(value) => {
                 ready = Some(value);
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }
-            result => result,
+            Poll::Pending => Poll::Pending,
         }
     })
     .await
