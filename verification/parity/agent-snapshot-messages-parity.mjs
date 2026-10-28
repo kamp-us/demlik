@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { snapshotMessagesOpenId } from "./agent-snapshot-messages-cases.mjs";
+import {
+  assertSnapshotMessagesLiterals,
+  assertSnapshotViewsEqual,
+  hostEnvelopeQualification,
+} from "./agent-snapshot-grid-run.mjs";
+import { snapshotMessagesAdmissionData } from "./agent-snapshot-messages-admission-data.mjs";
+import {
+  agentSnapshotMessagesCases,
+  snapshotMessagesOpenId,
+  snapshotMessagesQualification,
+} from "./agent-snapshot-messages-cases.mjs";
 import { agentSnapshotMessagesParity } from "./agent-snapshot-messages-run.mjs";
 import { assertCheckPath } from "./check-worktree.mjs";
 import { buildTeaExample } from "./tea-example.mjs";
@@ -43,36 +54,106 @@ export function agentSnapshotMessagesCheckpointParity(cargo, options = {}) {
 }
 
 export function normalizeAgentSnapshotMessagesReport(raw, producer = null) {
+  assert.equal(raw.suite, "agent-snapshot-messages");
+  assert.equal(raw.sourceOnly, false);
+  assert.equal(raw.sourceUnchanged, true);
   assert.equal(raw.cases, 10);
-  assert.equal(raw.passed, 9);
+  assert.equal(raw.passed, 10);
+  assert.equal(raw.qualifiedPassed, 10);
   assert.equal(raw.strictTypedParityCredit, 0);
-  assert.equal(raw.openCases, 1);
-  assert.equal(raw.observations.length, 10);
-  assert.equal(new Set(raw.observations.map((row) => row.id)).size, 10);
+  assert.equal(raw.openCases, 0);
   assert.deepEqual(raw.nativeEvidence, {});
+  assert.deepEqual(raw.failures, []);
   assert.deepEqual(raw.literalFailures, []);
-  const credited = raw.observations.filter((row) => row.equal === true);
-  const open = raw.observations.filter((row) => row.equal === false);
-  assert.equal(credited.length, 9);
-  assert.equal(open.length, 1);
-  assert.equal(open[0].id, snapshotMessagesOpenId);
-  assert.equal(open[0].open, true);
+  const ids = agentSnapshotMessagesCases.map((row) => row.id);
   assert.deepEqual(
-    raw.failures.map((row) => row.id),
-    [snapshotMessagesOpenId],
+    raw.observations.map((row) => row.id),
+    ids,
   );
-  assert.deepEqual(
-    Object.keys(raw.qualifiedNativeEvidence),
-    credited.map((row) => row.id),
+  assert.deepEqual(Object.keys(raw.qualifiedNativeEvidence), ids);
+  assert.match(raw.binary?.sha256, /^[a-f0-9]{64}$/);
+  if (producer) assert.equal(raw.binary.sha256, producer.binarySha256);
+  assert.ok(
+    !raw.openGaps.some(
+      (gap) => typeof gap === "object" && gap.id === snapshotMessagesOpenId,
+    ),
   );
-  for (const row of credited) {
+  assert.equal(raw.processes.length, 24);
+  const processKeys = new Set();
+  for (const record of raw.processes) {
+    assert.ok(record.kind === "source" || record.kind === "native");
+    const expected = agentSnapshotMessagesCases.find(
+      (row) => row.id === record.input.id,
+    );
+    assert.ok(expected);
+    assert.ok(
+      (expected.cold ? ["writer", "reader"] : ["main"]).includes(record.phase),
+    );
+    const { path: ownedPath, ...input } = record.input;
+    assert.equal(typeof ownedPath, "string");
+    assert.ok(ownedPath.length);
+    assert.deepEqual(input, {
+      id: expected.id,
+      ...expected.input,
+      mode: expected.cold ? record.phase : expected.input.mode,
+    });
+    assert.equal(record.status, 0);
+    assert.equal(record.signal, null);
+    assert.equal(record.error, null);
+    assert.equal(
+      record.binarySha256,
+      record.kind === "native" ? raw.binary.sha256 : null,
+    );
+    const key = [record.input.id, record.kind, record.phase].join("|");
+    assert.equal(processKeys.has(key), false);
+    processKeys.add(key);
+  }
+  for (const [index, row] of raw.observations.entries()) {
+    const expected = agentSnapshotMessagesCases[index];
+    assert.deepEqual(row.input, expected.input);
+    assert.deepEqual(row.expected, expected.expected);
+    assert.equal(row.equal, true);
+    assert.equal(row.difference, null);
     assert.equal(row.open, false);
-    assert.ok(row.qualification.includes("TS2322"));
-    assert.ok(row.qualification.includes("Reflect"));
-    assert.equal(row.literals.source.passed, true);
-    assert.equal(row.literals.native.passed, true);
+    assert.equal(
+      row.qualification,
+      [
+        snapshotMessagesQualification,
+        ...(expected.hostEnvelope ? [hostEnvelopeQualification] : []),
+      ].join(" "),
+    );
+    assert.deepEqual(row.literals, {
+      source: { passed: true },
+      native: { passed: true },
+    });
+    assertSnapshotMessagesLiterals(row.source, expected, "source");
+    assertSnapshotMessagesLiterals(row.native, expected, "native");
+    assert.deepEqual(
+      row.wireChecks,
+      assertSnapshotViewsEqual(row.source, row.native, expected.cold),
+    );
+    assert.equal(row.source.id, row.id);
     assert.equal(row.native.id, row.id);
-    assert.ok(row.native.observedCalls.length);
+    const wire = (expected.cold ? ["writer", "reader"] : ["main"]).map(
+      (phase) => {
+        const frame = expected.cold ? row.source.raw[phase] : row.source;
+        return {
+          phase,
+          storeBytes: frame.storeBytes,
+          namedBytes: frame.namedBytes,
+        };
+      },
+    );
+    const digest = createHash("sha256")
+      .update(JSON.stringify({ view: row.source.view, wire }))
+      .digest("hex");
+    const frozen = snapshotMessagesAdmissionData[row.id];
+    assert.equal(
+      digest,
+      frozen.sourceViewSHA256,
+      `${row.id}: frozen whole Source comparison view`,
+    );
+    assert.deepEqual(row.native.observedCalls, frozen.nativeCalls);
     assert.deepEqual(
       raw.qualifiedNativeEvidence[row.id],
       row.native.observedCalls,
@@ -80,15 +161,15 @@ export function normalizeAgentSnapshotMessagesReport(raw, producer = null) {
   }
   return {
     ...raw,
-    cases: credited.length,
-    observations: credited.length,
-    // run.mjs adds these two fields. Every admitted row is qualified.
+    cases: 10,
+    observations: 10,
+    // Every admitted runtime-only row is qualified.
     passed: 0,
-    qualifiedPassed: credited.length,
+    qualifiedPassed: 10,
     failures: [],
-    creditedCaseIds: credited.map((row) => row.id),
-    openObservations: open,
-    comparisonFailures: raw.failures,
+    creditedCaseIds: ids,
+    openObservations: [],
+    comparisonFailures: [],
     raw,
     producer,
   };

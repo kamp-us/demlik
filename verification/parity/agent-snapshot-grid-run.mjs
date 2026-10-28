@@ -13,7 +13,6 @@ import {
 import {
   agentSnapshotMessagesCases,
   snapshotMessagesAuthoringGate,
-  snapshotMessagesOpenId,
   snapshotMessagesQualification,
 } from "./agent-snapshot-messages-cases.mjs";
 
@@ -29,7 +28,7 @@ const hostEnvelopeQualified = new Set([
   "agent-snapshot.effect.writer-fail",
   "agent-snapshot.effect.save-fail",
 ]);
-const hostEnvelopeQualification =
+export const hostEnvelopeQualification =
   "Original application cause, identity, follow-up phase/cardinality, initial dispatch receipt, state and wires match. Raw Source reporter error/context/display versus typed native Handler/Save Debug envelope remains different and retained outside the comparison view.";
 function hashes() {
   const files = execFileSync(
@@ -196,6 +195,22 @@ function messagesLiteral(row, c, kind) {
     );
   }
 }
+export { messagesLiteral as assertSnapshotMessagesLiterals };
+
+export function assertSnapshotViewsEqual(source, native, cold = false) {
+  const wireChecks = [];
+  assert.deepEqual(native.view, source.view);
+  for (const phase of cold ? ["writer", "reader"] : ["main"]) {
+    const n = cold ? native.raw[phase] : native,
+      s = cold ? source.raw[phase] : source;
+    for (const field of ["storeBytes", "namedBytes"]) {
+      assert.equal(n[field], s[field], `${phase} ${field}`);
+      wireChecks.push({ phase, field, present: s[field] !== null });
+    }
+  }
+  return wireChecks;
+}
+
 export function agentSnapshotGridParity(options = {}) {
   assert.equal(process.version, engine.node);
   assert.equal(process.versions.v8, engine.v8);
@@ -340,15 +355,9 @@ export function agentSnapshotGridParity(options = {}) {
       const wireChecks = [];
       if (outputs.native) {
         try {
-          assert.deepEqual(outputs.native.view, outputs.source.view);
-          for (const phase of c.cold ? ["writer", "reader"] : ["main"]) {
-            const n = c.cold ? outputs.native.raw[phase] : outputs.native,
-              s = c.cold ? outputs.source.raw[phase] : outputs.source;
-            for (const field of ["storeBytes", "namedBytes"]) {
-              assert.equal(n[field], s[field], `${phase} ${field}`);
-              wireChecks.push({ phase, field, present: s[field] !== null });
-            }
-          }
+          wireChecks.push(
+            ...assertSnapshotViewsEqual(outputs.source, outputs.native, c.cold),
+          );
           equal = true;
         } catch (error) {
           equal = false;
@@ -438,11 +447,6 @@ export function agentSnapshotGridParity(options = {}) {
       openGaps: [
         ...(options.messages
           ? [
-              {
-                id: snapshotMessagesOpenId,
-                reason:
-                  "Original Effect held-stop Source invokes one extra load/model prefix after writer cleanup; native does not. State, exact wires and late-message rejection match, but whole counts/trace differ. OPEN with zero comparison credit; eager Promise versus lazy future is a hypothesis, not an engine repair.",
-              },
               "Published TypeScript snapshot handler refuses Msg/list returns (TS2322); raw JavaScript inputs/live returned arrays and general host cancellation ordering remain OPEN.",
             ]
           : [
@@ -462,12 +466,7 @@ export function agentSnapshotGridParity(options = {}) {
     };
     fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
     if (!options.allowFailures) {
-      assert.equal(
-        failures.filter(
-          (r) => !options.messages || r.id !== snapshotMessagesOpenId,
-        ).length,
-        0,
-      );
+      assert.equal(failures.length, 0);
       assert.equal(literalFailures.length, 0);
     }
     return report;

@@ -40,12 +40,9 @@ export async function runSnapshotMessagesControls(options = {}) {
   );
   const baseline = JSON.parse(fs.readFileSync(options.baselineReport, "utf8"));
   assert.equal(baseline.cases, 10);
-  assert.equal(baseline.passed, 9);
-  assert.equal(baseline.openCases, 1);
-  assert.deepEqual(
-    baseline.failures.map((r) => r.id),
-    ["agent-snapshot-messages.effect.held-stop"],
-  );
+  assert.equal(baseline.passed, 10);
+  assert.equal(baseline.openCases, 0);
+  assert.deepEqual(baseline.failures, []);
   assert.deepEqual(baseline.literalFailures, []);
   for (const fault of faults) {
     const normal = baseline.observations.find(

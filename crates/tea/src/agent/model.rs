@@ -1,6 +1,6 @@
-//! Typed model ports and the brain call handler. Ports return native futures
-//! and explicit Result failures. Calling a handler creates a lazy future;
-//! polling it performs factory, loader, binding, invocation, then decoding.
+//! Typed model ports and the brain call handler. Ports return native futures.
+//! `handle` is lazy; `start` calls the factory and loader function immediately.
+//! Polling continues the explicit Result path through binding, invocation and decoding.
 //!
 //! Native callers select plain_model or model_factory explicitly. JavaScript
 //! function tags, arity, thenables, prototypes and thrown getters are not

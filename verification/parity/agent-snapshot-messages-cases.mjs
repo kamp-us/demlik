@@ -65,7 +65,7 @@ export const agentSnapshotMessagesCases = ["promise", "effect"].flatMap(
       },
       expected: c.expected,
       hostEnvelope: ["held-stop", "writer-fail"].includes(c.suffix),
-      open: profile === "effect" && c.suffix === "held-stop",
+      open: false,
     })),
 );
 
