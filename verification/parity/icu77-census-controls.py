@@ -6,21 +6,31 @@ P = Path(sys.argv[1]).resolve()
 source = Path(__file__).resolve().parents[2]
 head = subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()
 assert not subprocess.check_output(['git','status','--porcelain'],cwd=source,text=True)
-parent = Path(tempfile.mkdtemp(prefix='demlik-check-icu77-census-controls-01a16c9d-',dir='/private/tmp')).resolve()
-root = parent/'repo'
-runtime = parent/'runtime'
-evidence = P/'controls'
-evidence.mkdir()
 hash_file = lambda file: hashlib.sha256(Path(file).read_bytes()).hexdigest()
-env = dict(os.environ)
-for key in ['CARGO_TARGET_DIR','DEMLIK_MUTATION_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR']: env.pop(key,None)
-env.update(TMPDIR='/private/tmp',CARGO_NET_OFFLINE='true',CARGO_BUILD_JOBS='1',CARGO_INCREMENTAL='0',CARGO_PROFILE_DEV_DEBUG='0',CARGO_PROFILE_TEST_DEBUG='0',DEMLIK_ICU77_PYTHON=sys.executable,DEMLIK_ICU77_PREPARED=str(root/'target/icu77/prepared.json'),RUST_ICU_MAJOR_VERSION_NUMBER='77',RUST_ICU_LINK_SEARCH_DIR=str(root/'target/icu77/install/lib'))
 mutations = [
  ('library-directory-order','crates/code-graph/src/boundaries/libraries/census.rs','dirs.sort_by(|a, b| collation.compare(&a.1, &b.1));','dirs.sort_by(|a, b| collation.compare(&b.1, &a.1));',['library-multiple-directories']),
  ('worker-order','crates/code-graph/src/boundaries/deployables/census.rs','by_worker.sort_by(|a, b| collation.compare(&a.2, &b.2));','by_worker.sort_by(|a, b| collation.compare(&b.2, &a.2));',['counts-and-owners']),
  ('linear-insertion-schedule','crates/code-graph/src/text/v8_sort.rs','let middle = left + (right - left) / 2;','let middle = right - 1;',['schedule-63-alternating-tile-runs','schedule-64-staggered-runs','schedule-129-staggered-runs']),
  ('equal-reference-substitution','crates/code-graph/src/boundaries/deployables/census.rs','.map(|index| rows[index])','.map(|index| rows.iter().copied().find(|candidate| candidate.file == rows[index].file && candidate.line.to_bits() == rows[index].line.to_bits() && candidate.binding == rows[index].binding).unwrap())',['same-object-and-equal-values']),
 ]
+preflight = []
+for name,file,before,after,_ in mutations:
+    text = (source/file).read_text()
+    assert text.count(before) == 1, (name, 'needle count', text.count(before))
+    assert after not in text, (name, 'replacement already present')
+    mutated = text.replace(before,after,1)
+    assert mutated.replace(after,before,1) == text
+    assert len(mutated)-len(text) == len(after)-len(before)
+    preflight.append({'name':name,'file':file,'needleCount':1,'singleReplacementReversible':True,'lengthDelta':len(after)-len(before),'originalSha256':hash_file(source/file),'mutantSha256':hashlib.sha256(mutated.encode()).hexdigest()})
+(P/'control-needle-preflight.json').write_text(json.dumps(preflight,indent=2)+'\n')
+evidence = P/'controls'
+evidence.mkdir()
+parent = Path(tempfile.mkdtemp(prefix='demlik-check-icu77-census-controls-01a16c9d-',dir='/private/tmp')).resolve()
+root = parent/'repo'
+runtime = parent/'runtime'
+env = dict(os.environ)
+for key in ['CARGO_TARGET_DIR','DEMLIK_MUTATION_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR']: env.pop(key,None)
+env.update(TMPDIR='/private/tmp',CARGO_NET_OFFLINE='true',CARGO_BUILD_JOBS='1',CARGO_INCREMENTAL='0',CARGO_PROFILE_DEV_DEBUG='0',CARGO_PROFILE_TEST_DEBUG='0',DEMLIK_ICU77_PYTHON=sys.executable,DEMLIK_ICU77_PREPARED=str(root/'target/icu77/prepared.json'),RUST_ICU_MAJOR_VERSION_NUMBER='77',RUST_ICU_LINK_SEARCH_DIR=str(root/'target/icu77/install/lib'))
 report = {'sourceCommit':head,'worktree':str(root),'defaultTarget':str(root/'target'),'controls':[],'registered':False,'newSourceExecutions':0,'semanticDetections':0}
 original = {}
 registered = False
@@ -95,7 +105,7 @@ try:
     for name,file,before,after,candidates in mutations:
         for target,body in original.items(): (root/target).write_bytes(body)
         text = original[file].decode()
-        expected_occurrences = 2 if name == 'linear-insertion-schedule' else 1
+        expected_occurrences = 1
         assert text.count(before) == expected_occurrences,(name,text.count(before))
         (root/file).write_text(text.replace(before,after,1))
         row = {'name':name,'file':file,'before':before,'after':after,'originalSha256':hashlib.sha256(original[file]).hexdigest(),'mutantSha256':hash_file(root/file),'candidates':candidates}
