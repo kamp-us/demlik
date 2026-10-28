@@ -41,6 +41,7 @@ export async function jsonTextParity(options = {}) {
           CARGO_BUILD_JOBS: "1",
         },
       );
+  const binary = options.binary ?? producer.binary;
   const cases = probe.cases.map(({ id, units, ok, value }) => ({
     id,
     units,
