@@ -449,6 +449,18 @@ export function normalizeRenderPromptReport(raw, producer = null) {
   };
 }
 
+function workingDirectory() {
+  const target = path.join(root, "target");
+  if (!fs.existsSync(target)) fs.mkdirSync(target);
+  assertCheckPath(target, root);
+  const parent = path.join(target, "parity");
+  if (!fs.existsSync(parent)) fs.mkdirSync(parent);
+  assertCheckPath(parent, target);
+  const folder = fs.mkdtempSync(path.join(parent, "render-prompt-"));
+  assertCheckPath(folder, target);
+  return folder;
+}
+
 export function renderPromptCheckpointParity(cargo, options = {}) {
   noTargetOverrides();
   assert.equal(fs.realpathSync(process.execPath), fs.realpathSync(node22));
@@ -464,10 +476,7 @@ export function renderPromptCheckpointParity(cargo, options = {}) {
   const reportFile = path.resolve(
     options.reportFile ?? path.join(root, "target/parity/render-prompt.json"),
   );
-  assertCheckPath(reportFile, path.join(root, "target"));
-  const folder = `${reportFile}.captures`;
-  assert.ok(!fs.existsSync(folder));
-  fs.mkdirSync(folder, { recursive: true });
+  const folder = workingDirectory();
   const executionSteps = [];
   const before = pins(),
     freezeFile = path.join(folder, "source-input-freeze.json");
@@ -534,7 +543,7 @@ export function renderPromptCheckpointParity(cargo, options = {}) {
     producer = buildTeaExample(
       cargo,
       "render_prompt_driver",
-      `${reportFile}.producer`,
+      path.join(folder, "producer"),
     );
     binary = producer.binary;
   }
@@ -566,10 +575,11 @@ export function renderPromptCheckpointParity(cargo, options = {}) {
     executionSteps,
   };
   fs.writeFileSync(
-    `${reportFile}.raw.json`,
+    path.join(folder, "raw.json"),
     `${JSON.stringify(raw, null, 2)}\n`,
   );
   const result = normalizeRenderPromptReport(raw, producer);
+  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, `${JSON.stringify(result, null, 2)}\n`);
   return result;
 }

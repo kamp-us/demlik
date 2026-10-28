@@ -289,24 +289,24 @@ export function normalizeAgentEventsReport(envelope, producer = null) {
   };
 }
 
+function workingDirectory() {
+  const target = path.join(root, "target");
+  if (!fs.existsSync(target)) fs.mkdirSync(target);
+  assertCheckPath(target, root);
+  const parent = path.join(target, "parity");
+  if (!fs.existsSync(parent)) fs.mkdirSync(parent);
+  assertCheckPath(parent, target);
+  const folder = fs.mkdtempSync(path.join(parent, "agent-events-"));
+  assertCheckPath(folder, target);
+  return folder;
+}
+
 export function agentEventsCheckpointParity(cargo, options = {}) {
   guards();
   const reportFile = path.resolve(
     options.reportFile ?? path.join(root, "target/parity/agent-events.json"),
   );
-  const relative = path.relative(path.join(root, "target"), reportFile);
-  assert.ok(
-    relative &&
-      relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative),
-    "report must belong to the worktree default target",
-  );
-  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
-  const proof = `${reportFile}.proof`;
-  assert.ok(!fs.existsSync(proof));
-  fs.mkdirSync(proof);
-  assertCheckPath(proof, path.join(root, "target"));
+  const proof = workingDirectory();
   function launch(name, args) {
     const run = spawnSync(node, args, {
       cwd: root,
@@ -362,7 +362,11 @@ export function agentEventsCheckpointParity(cargo, options = {}) {
         binary: path.resolve(options.binary),
         binarySha256: hashFile(path.resolve(options.binary)),
       }
-    : buildTeaExample(cargo, "agent_events_driver", reportFile);
+    : buildTeaExample(
+        cargo,
+        "agent_events_driver",
+        path.join(proof, "producer"),
+      );
   const before = hashFile(producer.binary),
     workerFile = path.join(proof, "native", "raw.json");
   let workerError, hashError;
@@ -395,10 +399,11 @@ export function agentEventsCheckpointParity(cargo, options = {}) {
     binaryCheck: record(`${workerFile}.binary-check.json`),
   };
   fs.writeFileSync(
-    `${reportFile}.envelope.json`,
+    path.join(proof, "envelope.json"),
     `${JSON.stringify(envelope, null, 2)}\n`,
   );
   const report = normalizeAgentEventsReport(envelope, producer);
+  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
   return report;
 }
