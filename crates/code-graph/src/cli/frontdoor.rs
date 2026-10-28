@@ -211,6 +211,21 @@ pub enum ReportDispatch {
     },
     Continue(Box<PreparedGatesCli>),
 }
+/// Terminal results retain original reported refusals and any owned API failure.
+#[derive(Debug)]
+pub enum RunCompletion {
+    Complete,
+    Api(ApiRunOutcome),
+    Hexagon(HexagonRunOutcome),
+    GateRefused(GatePreflightRefusal),
+    LoadRefused {
+        cause: ProjectLoadError,
+    },
+    HotspotsRefused {
+        cause: crate::hotspots::ChurnFailure,
+    },
+    Continue(Box<PreparedGatesCli>),
+}
 enum ConsoleOutput {
     Ci,
     Html,
@@ -510,6 +525,66 @@ pub fn prepare_cli(
     })))
 }
 impl PreparedCli {
+    /// Execute the public CLI precedence through the existing stage owners.
+    pub fn run_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        compiler: &TsgoBinary,
+    ) -> Result<RunCompletion, FrontdoorError> {
+        let prepared = match self.dispatch_api_blocking(compiler, host)? {
+            ApiDispatch::Complete(outcome) => return Ok(RunCompletion::Api(outcome)),
+            ApiDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_hexagon(host)? {
+            HexagonDispatch::Complete(outcome) => return Ok(RunCompletion::Hexagon(outcome)),
+            HexagonDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.prepare_gates(host)? {
+            GatePreflightDispatch::Stopped(refusal) => {
+                return Ok(RunCompletion::GateRefused(refusal));
+            }
+            GatePreflightDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_layers(host)? {
+            LayerDispatch::Complete(_) => return Ok(RunCompletion::Complete),
+            LayerDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_boundaries(host)? {
+            BoundaryDispatch::Complete(_) => return Ok(RunCompletion::Complete),
+            BoundaryDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_env_keys(host)? {
+            EnvKeyDispatch::Complete(_) => return Ok(RunCompletion::Complete),
+            EnvKeyDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_comments(host)? {
+            CommentDispatch::Complete(_) => return Ok(RunCompletion::Complete),
+            CommentDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_collapse_gate(host, compiler)? {
+            CollapseDispatch::Complete(_) => return Ok(RunCompletion::Complete),
+            CollapseDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_unreachable_blocking(host, compiler)? {
+            UnreachableDispatch::Complete => return Ok(RunCompletion::Complete),
+            UnreachableDispatch::Refused { cause } => {
+                return Ok(RunCompletion::LoadRefused { cause });
+            }
+            UnreachableDispatch::Continue(value) => value,
+        };
+        let prepared = match prepared.dispatch_smell_ledger_blocking(host, compiler)? {
+            SmellDispatch::Complete => return Ok(RunCompletion::Complete),
+            SmellDispatch::Refused { cause } => return Ok(RunCompletion::LoadRefused { cause }),
+            SmellDispatch::Continue(value) => value,
+        };
+        Ok(match prepared.dispatch_reports_blocking(host, compiler)? {
+            ReportDispatch::Complete => RunCompletion::Complete,
+            ReportDispatch::Refused { cause } => RunCompletion::LoadRefused { cause },
+            ReportDispatch::HotspotsRefused { cause } => RunCompletion::HotspotsRefused { cause },
+            ReportDispatch::Continue(value) => RunCompletion::Continue(value),
+        })
+    }
+
     /// Resolve both ledgers after HexagonDispatch::Continue, before dispatching a later mode.
     pub fn prepare_gates(
         self: Box<Self>,
