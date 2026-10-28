@@ -341,7 +341,8 @@ impl AnalysisBundle {
         }
         graph.clusters = self
             .clusters
-            .then(|| build_cluster_report(&graph.functions, &graph.modules));
+            .then(|| build_cluster_report(&graph.functions, &graph.modules, collation))
+            .transpose()?;
         graph.reachability = None;
         graph.interface_width = None;
         if let Some(refs) = &self.references {
@@ -390,7 +391,8 @@ impl AnalysisBundle {
                     &graph.functions,
                     refs,
                     &discover_package_roots(&self.root_absolute, None),
-                );
+                    collation,
+                )?;
                 graph.interface_width = Some(InterfaceWidthReport {
                     total_exports: packages.iter().map(|row| row.export_count).sum(),
                     total_zero_consumer: packages.iter().map(|row| row.zero_consumer_count).sum(),

@@ -171,7 +171,9 @@ fn distinguishes_dead_test_only_public_and_callback_exports_across_real_packages
         &graph.functions,
         &refs,
         &["packages/a".into(), "packages/b".into()],
-    );
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(width.len(), 1);
     assert_eq!(width[0].export_count, 6);
     assert_eq!(width[0].zero_consumer_count, 4);
@@ -243,8 +245,12 @@ fn clusters_real_call_triangles_and_excludes_isolated_and_test_modules() {
         ),
     ]);
     let graph = project.graph();
-    let report =
-        demlik_code_graph::query::clusters::build_cluster_report(&graph.functions, &graph.modules);
+    let report = demlik_code_graph::query::clusters::build_cluster_report(
+        &graph.functions,
+        &graph.modules,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(report.modularity, 0.5);
     assert_eq!(report.cluster_count, 2);
     assert_eq!(report.clustered_file_count, 6);
@@ -268,8 +274,12 @@ fn clusters_real_call_triangles_and_excludes_isolated_and_test_modules() {
         b: "y".into(),
         weight: 2.0,
     }];
-    let partition =
-        demlik_code_graph::query::louvain::louvain(&["x".into(), "y".into(), "z".into()], &edges);
+    let partition = demlik_code_graph::query::louvain::louvain(
+        &["x".into(), "y".into(), "z".into()],
+        &edges,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     assert_eq!(partition.membership["x"], partition.membership["y"]);
     assert_ne!(partition.membership["x"], partition.membership["z"]);
     assert_eq!(partition.modularity, 0.0);

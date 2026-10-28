@@ -1,5 +1,5 @@
 use crate::extract::references::ReferenceResult;
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{ExportWidth, FunctionNode, PackageWidth};
 use indexmap::IndexMap;
 
@@ -22,14 +22,15 @@ pub fn find_interface_width(
     functions: &[FunctionNode],
     refs: &ReferenceResult,
     package_dirs: &[String],
-) -> Vec<PackageWidth> {
+    collation: &Collation,
+) -> Result<Vec<PackageWidth>, CollationError> {
     let mut by_package: IndexMap<String, Vec<ExportWidth>> = IndexMap::new();
     for node in functions {
         if !node.is_exported || node.is_test {
             continue;
         }
         let package = package_of(&node.file, package_dirs);
-        let mut external_consumers: Vec<_> = refs
+        let external_consumers: Vec<_> = refs
             .identifier_files
             .get(&node.name)
             .into_iter()
@@ -37,7 +38,15 @@ pub fn find_interface_width(
             .filter(|file| **file != node.file && package_of(file, package_dirs) != package)
             .cloned()
             .collect();
-        external_consumers.sort_by(|left, right| locale_compare(left, right));
+        let mut external_consumers = external_consumers
+            .into_iter()
+            .map(|file| CollationInput::from_text(&file).map(|key| (file, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        external_consumers.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        let external_consumers = external_consumers
+            .into_iter()
+            .map(|(file, _)| file)
+            .collect();
         by_package
             .entry(package.into())
             .or_default()
@@ -49,11 +58,16 @@ pub fn find_interface_width(
                 external_consumers,
             });
     }
-    let mut packages: Vec<_> = by_package
+    let packages: Vec<_> = by_package
         .into_iter()
-        .map(|(package, mut exports)| {
-            exports.sort_by(|left, right| locale_compare(&left.id, &right.id));
-            PackageWidth {
+        .map(|(package, exports)| {
+            let mut exports = exports
+                .into_iter()
+                .map(|row| CollationInput::from_text(&row.id).map(|key| (row, key)))
+                .collect::<Result<Vec<_>, _>>()?;
+            exports.sort_by(|left, right| collation.compare(&left.1, &right.1));
+            let exports: Vec<_> = exports.into_iter().map(|(row, _)| row).collect();
+            Ok(PackageWidth {
                 package,
                 export_count: exports.len(),
                 zero_consumer_count: exports
@@ -61,14 +75,19 @@ pub fn find_interface_width(
                     .filter(|row| row.external_consumers.is_empty())
                     .count(),
                 exports,
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, CollationError>>()?;
+    let mut packages = packages
+        .into_iter()
+        .map(|row| CollationInput::from_text(&row.package).map(|key| (row, key)))
+        .collect::<Result<Vec<_>, _>>()?;
     packages.sort_by(|left, right| {
         right
+            .0
             .export_count
-            .cmp(&left.export_count)
-            .then_with(|| locale_compare(&left.package, &right.package))
+            .cmp(&left.0.export_count)
+            .then_with(|| collation.compare(&left.1, &right.1))
     });
-    packages
+    Ok(packages.into_iter().map(|(row, _)| row).collect())
 }

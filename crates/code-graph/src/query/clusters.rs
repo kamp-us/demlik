@@ -1,5 +1,5 @@
 use super::louvain::{Edge, louvain};
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{
     ClusterAlgorithm, ClusterFileGroup, ClusterReport, DirectoryClusterGroup, FunctionNode,
     ModuleNode, ScatteredCluster, SplitDirectory,
@@ -32,6 +32,17 @@ fn group_by_dir(files: &[String]) -> IndexMap<String, Vec<String>> {
     }
     groups
 }
+fn sorted_strings(
+    values: Vec<String>,
+    collation: &Collation,
+) -> Result<Vec<String>, CollationError> {
+    let mut values = values
+        .into_iter()
+        .map(|value| CollationInput::from_text(&value).map(|key| (value, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(values.into_iter().map(|(value, _)| value).collect())
+}
 fn bump(weights: &mut IndexMap<String, f64>, from: &str, to: &str) {
     if from == to {
         return;
@@ -47,7 +58,8 @@ fn build_edges(
     functions: &[&FunctionNode],
     modules: &[&ModuleNode],
     nodes: &IndexSet<&str>,
-) -> Vec<Edge> {
+    collation: &Collation,
+) -> Result<Vec<Edge>, CollationError> {
     let mut weights = IndexMap::new();
     for edge in value_edges_of(modules.iter().copied()) {
         if nodes.contains(edge.from.as_str()) && nodes.contains(edge.to.as_str()) {
@@ -87,10 +99,20 @@ fn build_edges(
             });
         }
     }
+    let mut edges = edges
+        .into_iter()
+        .map(|edge| {
+            let a = CollationInput::from_text(&edge.a)?;
+            let b = CollationInput::from_text(&edge.b)?;
+            Ok((edge, a, b))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     edges.sort_by(|left, right| {
-        locale_compare(&left.a, &right.a).then_with(|| locale_compare(&left.b, &right.b))
+        collation
+            .compare(&left.1, &right.1)
+            .then_with(|| collation.compare(&left.2, &right.2))
     });
-    edges
+    Ok(edges.into_iter().map(|(edge, _, _)| edge).collect())
 }
 fn round_modularity(value: f64) -> f64 {
     ryu_js::Buffer::new()
@@ -99,19 +121,22 @@ fn round_modularity(value: f64) -> f64 {
         .expect("ECMAScript toFixed produces numeric text")
 }
 
-pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) -> ClusterReport {
+pub fn build_cluster_report(
+    functions: &[FunctionNode],
+    modules: &[ModuleNode],
+    collation: &Collation,
+) -> Result<ClusterReport, CollationError> {
     let production: Vec<_> = modules.iter().filter(|node| !node.is_test).collect();
     let node_set: IndexSet<_> = production.iter().map(|node| node.file.as_str()).collect();
     let functions: Vec<_> = functions.iter().filter(|node| !node.is_test).collect();
-    let edges = build_edges(&functions, &production, &node_set);
+    let edges = build_edges(&functions, &production, &node_set, collation)?;
     let mut nodes = IndexSet::new();
     for edge in &edges {
         nodes.insert(edge.a.clone());
         nodes.insert(edge.b.clone());
     }
-    let mut nodes: Vec<_> = nodes.into_iter().collect();
-    nodes.sort_by(|left, right| locale_compare(left, right));
-    let partition = louvain(&nodes, &edges);
+    let nodes = sorted_strings(nodes.into_iter().collect(), collation)?;
+    let partition = louvain(&nodes, &edges, collation)?;
     let mut groups: IndexMap<String, Vec<String>> = IndexMap::new();
     for (file, community) in &partition.membership {
         groups
@@ -120,22 +145,27 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
             .push(file.clone());
     }
     for files in groups.values_mut() {
-        files.sort_by(|left, right| locale_compare(left, right));
+        *files = sorted_strings(std::mem::take(files), collation)?;
     }
-    let mut ordered: Vec<_> = groups.iter().collect();
-    ordered.sort_by(|left, right| {
-        right.1.len().cmp(&left.1.len()).then_with(|| {
-            locale_compare(
-                left.1.first().map(String::as_str).unwrap_or(""),
-                right.1.first().map(String::as_str).unwrap_or(""),
-            )
+    let mut ordered = groups
+        .iter()
+        .map(|(community, files)| {
+            CollationInput::from_text(files.first().map(String::as_str).unwrap_or(""))
+                .map(|key| (community, files, key))
         })
+        .collect::<Result<Vec<_>, _>>()?;
+    ordered.sort_by(|left, right| {
+        right
+            .1
+            .len()
+            .cmp(&left.1.len())
+            .then_with(|| collation.compare(&left.2, &right.2))
     });
     let width = ordered.len().to_string().len();
     let names: IndexMap<_, _> = ordered
         .into_iter()
         .enumerate()
-        .map(|(index, (community, _))| (community.clone(), format!("c{:0width$}", index + 1)))
+        .map(|(index, (community, _, _))| (community.clone(), format!("c{:0width$}", index + 1)))
         .collect();
     let cluster_of: IndexMap<_, _> = partition
         .membership
@@ -153,17 +183,23 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
         if by_dir.len() < 2 {
             continue;
         }
-        let mut dirs: Vec<_> = by_dir
+        let dirs: Vec<_> = by_dir
             .into_iter()
             .map(|(dir, files)| ClusterFileGroup { dir, files })
             .collect();
+        let mut dirs = dirs
+            .into_iter()
+            .map(|row| CollationInput::from_text(&row.dir).map(|key| (row, key)))
+            .collect::<Result<Vec<_>, _>>()?;
         dirs.sort_by(|left, right| {
             right
+                .0
                 .files
                 .len()
-                .cmp(&left.files.len())
-                .then_with(|| locale_compare(&left.dir, &right.dir))
+                .cmp(&left.0.files.len())
+                .then_with(|| collation.compare(&left.1, &right.1))
         });
+        let dirs: Vec<_> = dirs.into_iter().map(|(row, _)| row).collect();
         scattered_clusters.push(ScatteredCluster {
             id: names.get(community).unwrap_or(community).clone(),
             size: files.len(),
@@ -171,18 +207,26 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
             dirs,
         });
     }
+    let mut scattered_clusters = scattered_clusters
+        .into_iter()
+        .map(|row| CollationInput::from_text(&row.id).map(|key| (row, key)))
+        .collect::<Result<Vec<_>, _>>()?;
     scattered_clusters.sort_by(|left, right| {
         right
+            .0
             .dir_count
-            .cmp(&left.dir_count)
-            .then_with(|| right.size.cmp(&left.size))
-            .then_with(|| locale_compare(&left.id, &right.id))
+            .cmp(&left.0.dir_count)
+            .then_with(|| right.0.size.cmp(&left.0.size))
+            .then_with(|| collation.compare(&left.1, &right.1))
     });
-    let mut all_files: Vec<_> = production.iter().map(|node| node.file.clone()).collect();
-    all_files.sort_by(|left, right| locale_compare(left, right));
+    let scattered_clusters: Vec<_> = scattered_clusters.into_iter().map(|(row, _)| row).collect();
+    let all_files = sorted_strings(
+        production.iter().map(|node| node.file.clone()).collect(),
+        collation,
+    )?;
     let mut split_directories = Vec::new();
-    for (dir, mut files) in group_by_dir(&all_files) {
-        files.sort_by(|left, right| locale_compare(left, right));
+    for (dir, files) in group_by_dir(&all_files) {
+        let files = sorted_strings(files, collation)?;
         let mut grouped: IndexMap<String, Vec<String>> = IndexMap::new();
         let mut isolated_files = Vec::new();
         for file in &files {
@@ -195,17 +239,23 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
         if grouped.len() < 2 {
             continue;
         }
-        let mut clusters: Vec<_> = grouped
+        let clusters: Vec<_> = grouped
             .into_iter()
             .map(|(cluster_id, files)| DirectoryClusterGroup { cluster_id, files })
             .collect();
+        let mut clusters = clusters
+            .into_iter()
+            .map(|row| CollationInput::from_text(&row.cluster_id).map(|key| (row, key)))
+            .collect::<Result<Vec<_>, _>>()?;
         clusters.sort_by(|left, right| {
             right
+                .0
                 .files
                 .len()
-                .cmp(&left.files.len())
-                .then_with(|| locale_compare(&left.cluster_id, &right.cluster_id))
+                .cmp(&left.0.files.len())
+                .then_with(|| collation.compare(&left.1, &right.1))
         });
+        let clusters: Vec<_> = clusters.into_iter().map(|(row, _)| row).collect();
         split_directories.push(SplitDirectory {
             dir,
             file_count: files.len(),
@@ -214,14 +264,20 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
             isolated_files,
         });
     }
+    let mut split_directories = split_directories
+        .into_iter()
+        .map(|row| CollationInput::from_text(&row.dir).map(|key| (row, key)))
+        .collect::<Result<Vec<_>, _>>()?;
     split_directories.sort_by(|left, right| {
         right
+            .0
             .cluster_count
-            .cmp(&left.cluster_count)
-            .then_with(|| right.file_count.cmp(&left.file_count))
-            .then_with(|| locale_compare(&left.dir, &right.dir))
+            .cmp(&left.0.cluster_count)
+            .then_with(|| right.0.file_count.cmp(&left.0.file_count))
+            .then_with(|| collation.compare(&left.1, &right.1))
     });
-    ClusterReport {
+    let split_directories: Vec<_> = split_directories.into_iter().map(|(row, _)| row).collect();
+    Ok(ClusterReport {
         algorithm: ClusterAlgorithm::LouvainDeterministic,
         modularity: round_modularity(partition.modularity),
         cluster_count: groups.len(),
@@ -230,5 +286,5 @@ pub fn build_cluster_report(functions: &[FunctionNode], modules: &[ModuleNode]) 
         excluded_test_file_count: modules.len() - production.len(),
         scattered_clusters,
         split_directories,
-    }
+    })
 }

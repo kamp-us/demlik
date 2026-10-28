@@ -1,4 +1,4 @@
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use indexmap::IndexMap;
 use serde::Serialize;
 
@@ -23,7 +23,11 @@ fn add_weight(adjacency: &mut IndexMap<String, Weights>, from: &str, to: &str, w
         .entry(to.into())
         .or_default() += weight;
 }
-fn make_level(adjacency: IndexMap<String, Weights>, own: Weights) -> Level {
+fn make_level(
+    adjacency: IndexMap<String, Weights>,
+    own: Weights,
+    collation: &Collation,
+) -> Result<Level, CollationError> {
     let mut strength = Weights::new();
     let mut m2 = 0.0;
     for (node, bucket) in &adjacency {
@@ -34,22 +38,29 @@ fn make_level(adjacency: IndexMap<String, Weights>, own: Weights) -> Level {
         strength.insert(node.clone(), value);
         m2 += value;
     }
-    let mut order: Vec<_> = adjacency.keys().cloned().collect();
+    let mut order = adjacency
+        .keys()
+        .map(|node| CollationInput::from_text(node).map(|key| (node.clone(), key)))
+        .collect::<Result<Vec<_>, _>>()?;
     order.sort_by(|left, right| {
-        strength[right]
-            .partial_cmp(&strength[left])
+        strength[&right.0]
+            .partial_cmp(&strength[&left.0])
             .filter(|order| !order.is_eq())
-            .unwrap_or_else(|| locale_compare(left, right))
+            .unwrap_or_else(|| collation.compare(&left.1, &right.1))
     });
-    Level {
-        order,
+    Ok(Level {
+        order: order.into_iter().map(|(node, _)| node).collect(),
         adjacency,
         own,
         strength,
         m2,
-    }
+    })
 }
-fn initial_level(nodes: &[String], edges: &[Edge]) -> Level {
+fn initial_level(
+    nodes: &[String],
+    edges: &[Edge],
+    collation: &Collation,
+) -> Result<Level, CollationError> {
     let mut adjacency: IndexMap<_, _> = nodes
         .iter()
         .map(|node| (node.clone(), Weights::new()))
@@ -62,7 +73,7 @@ fn initial_level(nodes: &[String], edges: &[Edge]) -> Level {
         add_weight(&mut adjacency, &edge.a, &edge.b, edge.weight);
         add_weight(&mut adjacency, &edge.b, &edge.a, edge.weight);
     }
-    make_level(adjacency, Weights::new())
+    make_level(adjacency, Weights::new(), collation)
 }
 fn community_links(level: &Level, node: &str, communities: &IndexMap<String, String>) -> Weights {
     let mut links = Weights::new();
@@ -79,27 +90,34 @@ fn best_community(
     strength: f64,
     m2: f64,
     current: &str,
-) -> String {
+    collation: &Collation,
+) -> Result<String, CollationError> {
     let score = |community: &str| {
         links.get(community).copied().unwrap_or(0.0)
             - total.get(community).copied().unwrap_or(0.0) * strength / m2
     };
     let mut best = current;
     let mut best_score = score(current);
-    let mut candidates: Vec<_> = links.keys().map(String::as_str).collect();
-    candidates.sort_by(|left, right| locale_compare(left, right));
-    for community in candidates {
+    let mut candidates = links
+        .keys()
+        .map(|value| CollationInput::from_text(value).map(|key| (value.as_str(), key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    candidates.sort_by(|left, right| collation.compare(&left.1, &right.1));
+    for (community, _) in candidates {
         let candidate_score = score(community);
         if candidate_score > best_score + 1e-12 {
             best = community;
             best_score = candidate_score;
         }
     }
-    best.into()
+    Ok(best.into())
 }
-fn optimize_level(level: &Level) -> Option<IndexMap<String, String>> {
+fn optimize_level(
+    level: &Level,
+    collation: &Collation,
+) -> Result<Option<IndexMap<String, String>>, CollationError> {
     if level.m2 == 0.0 {
-        return None;
+        return Ok(None);
     }
     let mut communities: IndexMap<_, _> = level
         .order
@@ -124,7 +142,8 @@ fn optimize_level(level: &Level) -> Option<IndexMap<String, String>> {
                 strength,
                 level.m2,
                 &current,
-            );
+                collation,
+            )?;
             *total.entry(best.clone()).or_default() += strength;
             if best != current {
                 communities.insert(node.clone(), best);
@@ -136,9 +155,13 @@ fn optimize_level(level: &Level) -> Option<IndexMap<String, String>> {
         }
         moved = true;
     }
-    moved.then_some(communities)
+    Ok(moved.then_some(communities))
 }
-fn aggregate(level: &Level, communities: &IndexMap<String, String>) -> Level {
+fn aggregate(
+    level: &Level,
+    communities: &IndexMap<String, String>,
+    collation: &Collation,
+) -> Result<Level, CollationError> {
     let mut adjacency = IndexMap::new();
     let mut own = Weights::new();
     for node in &level.order {
@@ -163,11 +186,15 @@ fn aggregate(level: &Level, communities: &IndexMap<String, String>) -> Level {
             }
         }
     }
-    make_level(adjacency, own)
+    make_level(adjacency, own, collation)
 }
-fn modularity_of(level: &Level, membership: &IndexMap<String, String>) -> f64 {
+fn modularity_of(
+    level: &Level,
+    membership: &IndexMap<String, String>,
+    collation: &Collation,
+) -> Result<f64, CollationError> {
     if level.m2 == 0.0 {
-        return 0.0;
+        return Ok(0.0);
     }
     let mut inside = Weights::new();
     let mut total = Weights::new();
@@ -182,22 +209,29 @@ fn modularity_of(level: &Level, membership: &IndexMap<String, String>) -> f64 {
         }
         *inside.entry(community.clone()).or_default() += internal;
     }
-    let mut keys: Vec<_> = total.keys().collect();
-    keys.sort_by(|left, right| locale_compare(left, right));
+    let mut keys = total
+        .keys()
+        .map(|key| CollationInput::from_text(key).map(|operand| (key, operand)))
+        .collect::<Result<Vec<_>, _>>()?;
+    keys.sort_by(|left, right| collation.compare(&left.1, &right.1));
     let mut result = 0.0;
-    for community in keys {
+    for (community, _) in keys {
         result += inside.get(community).copied().unwrap_or(0.0) / level.m2
             - (total[community] / level.m2).powi(2);
     }
-    result
+    Ok(result)
 }
 #[derive(Debug, Serialize)]
 pub struct Partition {
     pub membership: IndexMap<String, String>,
     pub modularity: f64,
 }
-pub fn louvain(nodes: &[String], edges: &[Edge]) -> Partition {
-    let base = initial_level(nodes, edges);
+pub fn louvain(
+    nodes: &[String],
+    edges: &[Edge],
+    collation: &Collation,
+) -> Result<Partition, CollationError> {
+    let base = initial_level(nodes, edges, collation)?;
     let mut membership: IndexMap<_, _> = nodes
         .iter()
         .map(|node| (node.clone(), node.clone()))
@@ -205,7 +239,7 @@ pub fn louvain(nodes: &[String], edges: &[Edge]) -> Partition {
     let mut level = None;
     for _ in 0..10 {
         let current = level.as_ref().unwrap_or(&base);
-        let Some(communities) = optimize_level(current) else {
+        let Some(communities) = optimize_level(current, collation)? else {
             break;
         };
         for community in membership.values_mut() {
@@ -213,10 +247,10 @@ pub fn louvain(nodes: &[String], edges: &[Edge]) -> Partition {
                 *community = next.clone();
             }
         }
-        level = Some(aggregate(current, &communities));
+        level = Some(aggregate(current, &communities, collation)?);
     }
-    Partition {
-        modularity: modularity_of(&base, &membership),
+    Ok(Partition {
+        modularity: modularity_of(&base, &membership, collation)?,
         membership,
-    }
+    })
 }

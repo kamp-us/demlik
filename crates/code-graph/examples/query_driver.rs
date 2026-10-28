@@ -267,8 +267,10 @@ fn query(
         demlik_code_graph::query::interface_width::find_interface_width,
         &graph.functions,
         &references,
-        &input.package_dirs
-    );
+        &input.package_dirs,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let packages: Vec<_> = graph
         .modules
         .iter()
@@ -285,8 +287,10 @@ fn query(
         calls,
         demlik_code_graph::query::clusters::build_cluster_report,
         &graph.functions,
-        &graph.modules
-    );
+        &graph.modules,
+        metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     to_raw_value(&serde_json::json!({ "functionCount": graph.functions.len(), "invoked": invoked, "full": full, "reachable": reachable.into_iter().collect::<Vec<_>>(), "surface": surface.into_iter().collect::<Vec<_>>(), "unreachable": unreachable, "unguarded": unguarded, "width": width, "packages": packages, "clusters": clusters, "references": references })).map_err(|error| error.to_string())
 }
 fn execute(
@@ -320,8 +324,10 @@ fn execute(
                 calls,
                 demlik_code_graph::query::louvain::louvain,
                 &input.nodes,
-                &edges
-            );
+                &edges,
+                &metadata_collation
+            )
+            .map_err(|error| error.to_string())?;
             let membership: Vec<_> = output.membership.iter().collect();
             to_raw_value(&serde_json::json!({ "membership": output.membership, "membershipEntries": membership, "modularity": output.modularity })).map_err(|error| error.to_string())
         }
