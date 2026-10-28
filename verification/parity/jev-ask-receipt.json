@@ -1,0 +1,110 @@
+{
+  "base": "8a756e13eb795fba7dfdb5d8e89cb84af7b74546",
+  "reference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "productionCommit": "c4c1673217e396791d9e70c49185e37b74959464",
+  "controlWorkerCommit": "225dcfa0563e0f4bb6db6eeb5241c3dbfe8aa10e",
+  "sourceFixtureFollowup": "203c025480bfed2e103ec26d22d15101950f1908",
+  "scope": "Bounded online JevAsk composition and canonical RunError tag-position repair; no central registration",
+  "counts": {
+    "newShared": 18,
+    "strict": 18,
+    "qualified": 0,
+    "wire": 6,
+    "runtime": 12,
+    "existingRC": 59,
+    "existingLLM": 91,
+    "existingJev": 24,
+    "existingComparisonCredit": 0,
+    "focusedNative": 49,
+    "nativeHarnesses": 13,
+    "publicFinalExecutions": 2,
+    "intendedNativeTypeRefusals": 4,
+    "newCompiledControls": 4
+  },
+  "canonicalErrorOwner": "Private optional tag ordinal, legacy constructors retain existing insert order; cloned shared payloads retain ordinal; incoming whole RawValue still decodes E. JevRejected delegates and consumes same canonical RunError. External struct literals are intentionally no longer supported; public kind/details readers unchanged.",
+  "producerFile": "/private/tmp/demlik-jev-ask-proof-01a16c9d/final-producer.json",
+  "report": "/private/tmp/demlik-jev-ask-proof-01a16c9d/actual-throw-final18.json",
+  "sourceLineage": "/private/tmp/demlik-jev-ask-proof-01a16c9d/source-lineage.json",
+  "baselineWireRed": "/private/tmp/demlik-jev-ask-proof-01a16c9d/baseline-wire-red.json",
+  "nativeAndRegressionPhase": "49 native tests and174 regression pairs ran after implementation bodies were complete but before the additive JevFailureDetails Rc Clone derive and doc/observer changes. Final Cargo8 paired18 exercises that clone; final2public+4type probes use Cargo8. No full-workspace/feature/cold-state claim.",
+  "clippy": "Scoped Tea all-target default Clippy7 passed; subsequent Rust changes were documentation only. Final Cargo8 linked library/example retained.",
+  "constructionCargo": [
+    {
+      "label": "01-baseline",
+      "exit": 0
+    },
+    {
+      "label": "02-interface",
+      "exit": 0
+    },
+    {
+      "label": "03-driver",
+      "exit": 101
+    },
+    {
+      "label": "04-driver",
+      "exit": 0
+    },
+    {
+      "label": "05-focused-native",
+      "exit": 0
+    },
+    {
+      "label": "06-clippy",
+      "exit": 101
+    },
+    {
+      "label": "07-clippy",
+      "exit": 0
+    },
+    {
+      "label": "08-final-driver",
+      "exit": 0
+    }
+  ],
+  "types": "Final sole E0308/E0451/E0599/E0597, plus unchanged public accessor/factory red-to-green; Source typed Effect adapter TSC0 with retained initial misplaced-diagnostic failure.",
+  "controlReport": "/private/tmp/demlik-jev-ask-proof-01a16c9d/controls/controls.json",
+  "controlClaim": "All4compile0/currentmodifiedlibrary+driverfresh:false/protocol0/strictnamed witnesses. Terminal fault is independently detected at first401 transition before subsequent scripted-port continuation.",
+  "retainedMutantLibraries": 4,
+  "retainedMutantDrivers": 4,
+  "sourcePackageChanges": [],
+  "dependenciesChanged": false,
+  "sourceRefusalNewCredit": 0,
+  "openGaps": [
+    "Configured fallback ownership and classify batching",
+    "Foreign/unclassified error unwrapping and arbitrary raw/non-wire JS shapes/prototypes/reflection",
+    "Dropped/added fields from arbitrary caller details codecs; full state/request/result Deserialize",
+    "Manual missing/nonnumeric stamps, literal-key typing and generic JS alias identity",
+    "Network/global scheduler/cancellation/panic/unwinding and arbitrary raw serde_json float-byte equivalence"
+  ],
+  "lifecycleFile": "/private/tmp/demlik-jev-ask-proof-01a16c9d/retirement.json",
+  "proofDirectory": "/private/tmp/demlik-jev-ask-proof-01a16c9d",
+  "mainChanged": false,
+  "registryChanged": false,
+  "productionFiles": [
+    {
+      "path": "crates/tea/src/resilience/resilient_call/model.rs",
+      "sha256": "430858ae99cac9025a398346e6ef4f34247dd4c73497c7bd21e2aaf72b5ae722"
+    },
+    {
+      "path": "crates/tea/src/resilience/resilient_call/decode.rs",
+      "sha256": "a28330168b8be0cf6b4cf8373f5e3fee8474feeb156feb30879b86941e00aaaa"
+    },
+    {
+      "path": "crates/tea/src/llm_call.rs",
+      "sha256": "4a05c0b02ff046685f963833f6992200a43886e3c215a6692b4e6052ad90f8d2"
+    },
+    {
+      "path": "crates/tea/src/jev/mod.rs",
+      "sha256": "dfa01389dc2b94e25d2c5c26205b13f3f3562c30d88e6ad42200449034daaa04"
+    },
+    {
+      "path": "crates/tea/src/jev/reply.rs",
+      "sha256": "75302f0ecada5ef129a1fa9545625f12ba571f586b99b18d26078b98d113c0d8"
+    },
+    {
+      "path": "crates/tea/src/jev/ask.rs",
+      "sha256": "8b5433ae9d93ddf63b2762ba28ee540146ece4128626b822f4f5c014c65ac96a"
+    }
+  ]
+}
