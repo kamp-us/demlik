@@ -1,0 +1,153 @@
+{
+  "status": "bounded-verification-passed",
+  "scope": "Future executable retention only; no Rust product/corpus/qualification/source-package/dependency/registry change",
+  "source": {
+    "base": "77bd9e5afb15226c6ec1e2b3b8c4e4746b6401a1",
+    "commit": "18305a422d0fc51a29cd79cd5adc36052372dbfb",
+    "branch": "can/rust-parity-retained-drivers-01a16c9d",
+    "changedFiles": 23,
+    "modified": 20,
+    "added": 3,
+    "sourceSha256": "6dcdf15f81efd0975a9aced62cecc9cf2c3400bc95f783388ec3c5b79a61d37f",
+    "archive": {
+      "path": "/private/tmp/demlik-parity-retained-drivers-proof-01a16c9d/source-18305a42.tar.gz",
+      "sha256": "36589921593b10df67598cc0980d3d8c26c332765aba0f0b6f47fc2608ee40e8",
+      "fileMembers": 23,
+      "scope": "Only the 23 changed verification sources, not a whole-repository or compiled-cache archive."
+    },
+    "sameBytesForAllChecks": true
+  },
+  "implementation": {
+    "canonicalWriter": "verification/parity/tea-example.mjs::buildParityBinary via existing buildArtifact",
+    "migratedDefaultBuilders": {
+      "javascript": 7,
+      "typescript": 10,
+      "main": 1,
+      "total": 18
+    },
+    "compiledTraceProducerForwarding": true,
+    "actualJsonFieldPathsRequired": true,
+    "scans": [
+      "declared embedded producer sidecars",
+      "evidence sidecars",
+      "own target/parity sidecars"
+    ],
+    "originalExecutableRequired": false,
+    "targetAliasesRefused": 4,
+    "canonicalProfileEnvironmentScopedToCheck": true
+  },
+  "checks": {
+    "constructionCargo": {
+      "count": 2,
+      "exits": [0, 0],
+      "bins": ["command-families-parity", "demlik-parity"]
+    },
+    "nativePreparation": {
+      "count": 1,
+      "exit": 0,
+      "host": "aarch64-apple-darwin",
+      "sourceArchiveReadOnly": true
+    },
+    "realNativeResponses": 2,
+    "realProducerDigests": 2,
+    "defaultTargetSnapshotCopyWitness": true,
+    "missingOriginalWitness": true,
+    "overwrittenOriginalWitness": true,
+    "existingExternalSnapshotReuseWitness": true,
+    "metadataGuardTests": {
+      "tests": 10,
+      "exit": 0
+    },
+    "metadataReaderFault": {
+      "tests": 10,
+      "intendedFailures": 2,
+      "errors": 0,
+      "exit": 1,
+      "detection": "actual report field/path checks removed; only their two refusal tests fail",
+      "compiledRustCredit": 0
+    },
+    "aliasRefusals": {
+      "count": 4,
+      "cargoInvocations": 0
+    },
+    "fullParityTsc": {
+      "exit": 0,
+      "record": "tsc-recovery.json"
+    },
+    "biome": {
+      "exit": 0,
+      "record": "biome-check.json"
+    },
+    "nodeSyntax": {
+      "files": 10,
+      "exit": 0
+    },
+    "pythonSyntax": {
+      "files": 3,
+      "exit": 0,
+      "controllerExecuted": false
+    },
+    "gitDiffCheck": 0,
+    "newSharedComparisons": 0,
+    "newNativeSourceParityCredit": 0
+  },
+  "history": {
+    "formatFirst": "Initial formatting found10 noAssignInExpressions diagnostics, recovered explicitly with final same-byte checks. Original logs retained.",
+    "tscFirst": "Initial TS7016 imports refused, precise tea-example.d.mts added; original exit2 and final0 logs retained.",
+    "cargoFailures": 0,
+    "operational": "operational-recovery.json"
+  },
+  "evidence": {
+    "artifactInventory": "artifact-inventory.json",
+    "actualAdmission": "actual-retention-admission.json",
+    "preservedCargoSelectedExecutables": 2,
+    "preservedSelectedLibraryDigests": 2,
+    "actualCargoEventStreams": 2,
+    "sourceExecutions": 0,
+    "oldHistoricalProducerGuardOnly": true,
+    "controller": "controller.json"
+  },
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-rust-parity-retained-drivers-01a16c9d"
+    ],
+    "exit": 0,
+    "seconds": 0.8401599999633618,
+    "source": "18305a422d0fc51a29cd79cd5adc36052372dbfb",
+    "branch": "can/rust-parity-retained-drivers-01a16c9d",
+    "cleanBeforeRemoval": true,
+    "activeCargoMarkerAbsent": true,
+    "allOwnedBuildAndRuntimeChildrenAlreadyWaited": true,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "registrationRemoved": true,
+    "noExternalTargetsCreated": true
+  },
+  "knownLimits": [
+    "All18 full comparison bodies and new combined controller remain unexecuted in this component; Root owns the next coherent batch.",
+    "Legacy explicit (cwd,target) mutation builders are unchanged, UNEXECUTED and known unsafe under the current disk rule.",
+    "Historical f24435 unretained claims/18 overwritten executable digests are not retrospectively recovered.",
+    "Only selected executables/libraries, source and metadata are retained; dependency caches/native build objects/default target are removed.",
+    "Explicit binary overrides have no invented producer. Captured Cargo events establish actual selection; no blanket cold/release/full-native claim.",
+    "All53 CLI gaps and unrelated port qualifications remain unchanged.",
+    "New controller is deliberately the fixed base+24 version; H/Mini require a separately reviewed successor."
+  ],
+  "integration": [
+    "Cherry-pick only18305a422d0fc51a29cd79cd5adc36052372dbfb.",
+    "Union current Main run.mjs registrations when resolving its import/report/default-build hunk; do not replace current central metadata.",
+    "Use external new-controller version only after Root chooses exact next registered source/counts; old f244 controller/proof are immutable."
+  ],
+  "rootIntegration": {
+    "sourcePick": "675c9d7f",
+    "rootReview": ".fabrika/rust-port-goal-01a16c9d/evidence/retained-drivers-root-review.json",
+    "rootReviewSha256": "e208fe263cc54a24e3304558b0818bb2e14fb3e1bd8e78f4e9c007ed3ecd681e",
+    "sealedReceiptSha256": "c6fa7ccfd7d7579e8cbb85d9976bfca8740723d83c329faf6e4519a244972e69",
+    "retainedPayloadCopy": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/retained-drivers-source",
+    "retainedCopyPolicy": "All103 sealed payloads byte-identical; original absolute proof paths remain immutable and can be resolved relative to this retained root.",
+    "combinedAcceptance": "pending;0newsharedcredit"
+  }
+}
