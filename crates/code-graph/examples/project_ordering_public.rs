@@ -9,14 +9,22 @@ struct Observer<'a> {
     label: &'a str,
     visits: Rc<Cell<usize>>,
 }
+impl Observer<'_> {
+    fn accept(&self, file: &str) -> bool {
+        assert!(!self.label.is_empty());
+        self.visits.set(self.visits.get() + 1);
+        !file.is_empty()
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arguments: Vec<_> = std::env::args().collect();
     let root = Path::new(&arguments[1]);
     let label = String::from("borrowed project predicate");
+    let visits = Rc::new(Cell::new(0));
     let observer = Observer {
         label: &label,
-        visits: Rc::new(Cell::new(0)),
+        visits: Rc::clone(&visits),
     };
     let listing = list_repo(root);
     let owner = listing.files.as_ptr();
@@ -25,11 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let collation = Collation::try_node22_en_us()?;
         let files = list_visible_files(
             root,
-            |file| {
-                assert!(!observer.label.is_empty());
-                observer.visits.set(observer.visits.get() + 1);
-                !file.is_empty()
-            },
+            move |file| observer.accept(file),
             Some(&listing),
             &collation,
         )?;
@@ -43,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?;
         (files, loaded, first, graph)
     };
-    assert!(observer.visits.get() > 0);
+    assert!(visits.get() > 0);
     assert!(!files.is_empty());
     assert_eq!(listing.files.as_ptr(), owner);
     assert_eq!(serde_json::to_vec(&listing.files)?, before);
