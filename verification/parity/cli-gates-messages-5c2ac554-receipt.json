@@ -1,0 +1,116 @@
+{
+  "scope": "Local implementation checkpoint for admitted profiles; full monorepo Rust port remains incomplete.",
+  "status": "accepted local implementation checkpoint",
+  "verifiedImplementation": "5c2ac5546d44f02839b7cd6c03f3d340cf220b1e",
+  "previousAcceptedReceipt": "9efb48bf76255174b6282f9ab8c0e8de6e9a0c25",
+  "comparedAt": "2026-10-28T00:18:20.574210+00:00",
+  "outcomes": {
+    "admitted": 15964,
+    "strict": 15738,
+    "qualified": 226,
+    "comparisonFailures": 0,
+    "referenceChanges": 0,
+    "addedOutcomes": 72,
+    "addedStrict": 59,
+    "previousStrictNowQualified": []
+  },
+  "nativeAndDocs": {
+    "default": {
+      "testsAndDocs": 694,
+      "resultGroups": 211,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "allFeatures": {
+      "testsAndDocs": 708,
+      "resultGroups": 211,
+      "overlap": "default and feature totals overlap, never sum"
+    },
+    "countsOverlap": true
+  },
+  "publicExampleExecutions": 22,
+  "staticChecks": "Both all-target compiler configurations, full TypeScript/Biome/fmt and early inventory passed.",
+  "coverage": {
+    "total": 3445,
+    "mapped": 832,
+    "unmapped": 2613,
+    "gapRows": 2793,
+    "all53CliGapsOpen": true,
+    "completeFlagExit": 1,
+    "completeFlagExitMeaning": "Known full-coverage gaps remain; admitted comparisons passed.",
+    "notCompletionPercentage": true
+  },
+  "newSlices": {
+    "treeBlastFind": {
+      "shared": 32,
+      "strict": 28,
+      "qualified": 4
+    },
+    "persistedGatesIcu": {
+      "shared": 31,
+      "strict": 31,
+      "qualified": 0
+    },
+    "agentSnapshotMessages": {
+      "shared": 9,
+      "strict": 0,
+      "qualified": 9,
+      "rawCases": 10,
+      "openUncredited": 1
+    },
+    "newSharedOutcomes": 72,
+    "baselineAccepted": "9efb48bf76255174b6282f9ab8c0e8de6e9a0c25",
+    "strictQualificationPolicy": "Derive actual backend offset qualifications from retained reports, preserve raw errors and original unmatched snapshot row."
+  },
+  "uncreditedOpenCases": ["agent-snapshot-messages.effect.held-stop"],
+  "snapshotMessageBoundary": "Nine runtime-only qualified matches; published TypeScript return typing differs. Original10-row corpus/one full-trace mismatch remain retained; no strict typed parity or unmatched-case credit.",
+  "artifactBindings": 65,
+  "actualGraphComparisonHashes": 20,
+  "graphRetainedRoles": 13,
+  "sourceFilesByteVerified": 2640,
+  "controls": "Reviewed source-bound component controls inherited; no new unsafe/global mutation sweep claimed.",
+  "proof": {
+    "status": "passed",
+    "sourceCommit": "5c2ac5546d44f02839b7cd6c03f3d340cf220b1e",
+    "archive": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/5c2ac554-cli-gates-messages-checkpoint-proof.tar.gz",
+    "archiveSha256": "3475bde2b2fdf25e9e92aabb60352a5b28942d312538a29b14a3d519d131ae88",
+    "archiveBytes": 618591536,
+    "members": 1656,
+    "inventory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-gates-messages-checkpoint-5c2ac554/archive-inventory.json",
+    "inventorySha256": "3252a18a5050b1454c4d4e6c0595b8090509cf3e8889cc6d1494a59db90966a2",
+    "parentAudit": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/cli-gates-messages-checkpoint-5c2ac554/parent-audit.json",
+    "parentAuditSha256": "f7eb9c9d35c2a72e045d2da08253561d0c19ab43a6f448cc5ec673a1053ec71d",
+    "checkedOutcomes": 15964,
+    "strict": 15738,
+    "qualified": 226,
+    "nativeArtifactBindings": 65,
+    "coldSourceArchiveRebuild": false
+  },
+  "sourceAndParentProof": "Current source archive and prior accepted proof lineage retained; no cold rebuild or release claim.",
+  "cleanup": {
+    "command": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/tmp/demlik-cli-gates-messages-combined-check-5c2ac554-01a16c9d"
+    ],
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "stderr": ""
+  },
+  "independentFinalReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/demlik-cli-gates-messages-final-peer-review-01a16c9d.json",
+    "sha256": "cb89a754cd9be8c7aa3c536db8141d4026bc0e42ed313a513e8a05239e560d28",
+    "verdict": "PASS, no material findings; exact source, archive, counts, qualifications, actual artifacts and retirement independently verified"
+  },
+  "blindSpots": [
+    "Full monorepo goal incomplete; advanced agents/providers/hosts/remainingCLI/packaging/raw profiles and all53CLI gaps remain open.",
+    "Snapshot-message addition admits nine runtime-only qualified matches and preserves the original Effect held-stop mismatch outside parity credit; full typed/runtime equivalence is not claimed.",
+    "ICU production now also covers persisted gates;140legacy helper calls and2directsorts remain. Darwinarm64 proof only.",
+    "Selected actual artifacts are retained; historical component retention limitations are preserved in linked receipts.",
+    "Legacy unsafe aggregate mutation runner was not used; remaining workers/packaging/targets still need migration.",
+    "No cold archive rebuild, release, publication, deployment or whole-runtime equivalence claim."
+  ],
+  "acceptanceRecordedAt": "2026-10-28T00:31:56.470318+00:00"
+}
