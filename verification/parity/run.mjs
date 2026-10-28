@@ -21,6 +21,7 @@ import {
   agentStatePrerequisiteParity,
   agentStatusCheckpointParity,
 } from "./agent-state-parity.mjs";
+import { agentToolPolicyCheckpointParity } from "./agent-tool-policy-parity.mjs";
 import { runAgentTurnConformance } from "./agent-turn-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
@@ -1158,6 +1159,21 @@ if (!mutationSuite) {
       operation: "tea.agent-snapshot-messages",
       binaryArgument: "--agent-snapshot-messages-bin",
       run: (options) => agentSnapshotMessagesCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentToolPolicy",
+      operation: "tea.agent-tool-policy",
+      binaryArgument: "--agent-tool-policy-bin",
+      run: (options) => {
+        const runtimeArgument = args.indexOf("--agent-tool-policy-runtime-bin");
+        return agentToolPolicyCheckpointParity(cargo, {
+          ...options,
+          runtimeBinary:
+            runtimeArgument === -1
+              ? undefined
+              : path.resolve(args[runtimeArgument + 1]),
+        });
+      },
     },
     {
       name: "agentStatus",
