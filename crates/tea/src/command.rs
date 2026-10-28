@@ -97,6 +97,26 @@ pub struct Cmd<D: CommandSpec> {
     declaration: PhantomData<fn() -> D>,
 }
 impl<D: CommandSpec> Cmd<D> {
+    /// Supply this execution's output parser and failure view. The typed Cmd
+    /// remains replay data; callback/tag values may own or borrow their services.
+    pub fn with_contract_view<P, T, F>(
+        self,
+        output: P,
+        tags: T,
+        failure: F,
+    ) -> ContractCmd<D, P, T, F>
+    where
+        P: Fn(D::RawOutput) -> Result<Result<D::Output, SchemaError>, CommandContractError>,
+        T: AsRef<[String]>,
+        F: Fn(&D::Error) -> Result<PlainData, CommandContractError>,
+    {
+        ContractCmd {
+            command: self,
+            output,
+            tags,
+            failure,
+        }
+    }
     pub fn input(&self) -> &D::Input {
         &self.input
     }
@@ -512,15 +532,25 @@ impl<D: CommandSpec> CmdDef<D> {
     where
         D::Error: Serialize,
     {
-        self.settle_over(cmd, completion, at, |error| {
-            plain_data(error).map_err(CommandContractError::serialization)
-        })
+        self.settle_over(
+            cmd,
+            completion,
+            at,
+            |raw| Ok(D::parse_output(raw)),
+            D::ERROR_TAGS,
+            |error| plain_data(error).map_err(CommandContractError::serialization),
+        )
     }
-    fn settle_over(
+    fn settle_over<T: AsRef<str>>(
         &self,
         cmd: Cmd<D>,
         completion: Completion<D>,
         at: f64,
+        parse_output: impl FnOnce(
+            D::RawOutput,
+        )
+            -> Result<Result<D::Output, SchemaError>, CommandContractError>,
+        tags: &[T],
         classify_error: impl FnOnce(&D::Error) -> Result<PlainData, CommandContractError>,
     ) -> Result<Option<Settled<D>>, CommandContractError> {
         let Some(completion) = completion else {
@@ -532,17 +562,17 @@ impl<D: CommandSpec> CmdDef<D> {
                 let failure = classify_error(&error)?;
                 if !failure_tag(&failure)
                     .and_then(crate::data::JsText::as_utf8)
-                    .is_some_and(|tag| D::ERROR_TAGS.contains(&tag))
+                    .is_some_and(|tag| tags.iter().any(|declared| declared.as_ref() == tag))
                 {
                     return Err(CommandContractError::UndeclaredFailure {
                         cmd_type: definition.cmd_type().into(),
                         failure,
-                        declared: D::ERROR_TAGS.iter().map(|tag| (*tag).into()).collect(),
+                        declared: tags.iter().map(|tag| tag.as_ref().to_owned()).collect(),
                     });
                 }
                 definition.err(cmd, error, Some(at))
             }
-            Outcome::Ok { value } => match D::parse_output(value) {
+            Outcome::Ok { value } => match parse_output(value)? {
                 Ok(value) => definition.ok(cmd, value, Some(at)),
                 Err(SchemaError::Issues(issues)) => Settled {
                     kind: definition.err_type(),
@@ -568,22 +598,33 @@ impl<D: CommandSpec> CmdDef<D> {
     where
         D::Error: Serialize,
     {
-        self.settle_in_over(cmd, completion, edge, |error| {
-            plain_data(error).map_err(CommandContractError::serialization)
-        })
+        self.settle_in_over(
+            cmd,
+            completion,
+            edge,
+            |raw| Ok(D::parse_output(raw)),
+            D::ERROR_TAGS,
+            |error| plain_data(error).map_err(CommandContractError::serialization),
+        )
     }
-    fn settle_in_over(
+    fn settle_in_over<T: AsRef<str>>(
         &self,
         cmd: Cmd<D>,
         completion: Completion<D>,
         edge: &CommandEdge,
+        parse_output: impl FnOnce(
+            D::RawOutput,
+        )
+            -> Result<Result<D::Output, SchemaError>, CommandContractError>,
+        tags: &[T],
         classify_error: impl FnOnce(&D::Error) -> Result<PlainData, CommandContractError>,
     ) -> Result<Option<Settled<D>>, CommandContractError> {
         if completion.is_none() {
             return Ok(None);
         }
         let at = (edge.clock)();
-        let mut settled = self.settle_over(cmd, completion, at, classify_error)?;
+        let mut settled =
+            self.settle_over(cmd, completion, at, parse_output, tags, classify_error)?;
         if let Some(settled) = &mut settled {
             settled.engine_stamp = Some(EngineStamp {
                 edge: Arc::clone(&edge.identity),
@@ -624,6 +665,86 @@ where
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.cmd.serialize(serializer)
+    }
+}
+
+/// An opt-in execution view; restoring plain Cmd data requires attaching its
+/// actual instance contract again, just as an opaque failure classifier does.
+pub struct ContractCmd<D: CommandSpec, P, T, F> {
+    command: Cmd<D>,
+    output: P,
+    tags: T,
+    failure: F,
+}
+impl<D: CommandSpec, P, T, F> ContractCmd<D, P, T, F> {
+    pub fn cmd(&self) -> &Cmd<D> {
+        &self.command
+    }
+    pub fn into_cmd(self) -> Cmd<D> {
+        self.command
+    }
+}
+impl<D: CommandSpec, P, T, F> Tagged for ContractCmd<D, P, T, F> {
+    fn tag(&self) -> &str {
+        self.command.tag()
+    }
+}
+impl<D: CommandSpec, P, T, F> Serialize for ContractCmd<D, P, T, F>
+where
+    D::Input: Serialize,
+{
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.command.serialize(serializer)
+    }
+}
+impl<D, P, T, F> CommandFamily for ContractCmd<D, P, T, F>
+where
+    D: CommandSpec,
+    P: Fn(D::RawOutput) -> Result<Result<D::Output, SchemaError>, CommandContractError>,
+    T: AsRef<[String]>,
+    F: Fn(&D::Error) -> Result<PlainData, CommandContractError>,
+{
+    type Msg = Settled<D>;
+    type Completion = Completion<D>;
+    fn is_defined(&self) -> bool {
+        true
+    }
+    fn engine_stamp(message: &Self::Msg) -> Option<&EngineStamp> {
+        message.engine_stamp()
+    }
+    fn settle(
+        self,
+        completion: Self::Completion,
+        at: f64,
+    ) -> Result<Vec<Self::Msg>, CommandContractError> {
+        self.command
+            .definition()
+            .settle_over(
+                self.command,
+                completion,
+                at,
+                self.output,
+                self.tags.as_ref(),
+                self.failure,
+            )
+            .map(|message| message.into_iter().collect())
+    }
+    fn settle_in(
+        self,
+        completion: Self::Completion,
+        edge: &CommandEdge,
+    ) -> Result<Vec<Self::Msg>, CommandContractError> {
+        self.command
+            .definition()
+            .settle_in_over(
+                self.command,
+                completion,
+                edge,
+                self.output,
+                self.tags.as_ref(),
+                self.failure,
+            )
+            .map(|message| message.into_iter().collect())
     }
 }
 
@@ -778,7 +899,14 @@ impl<D: CommandSpec> CommandFamily for ClassifiedCmd<D> {
         Ok(self
             .cmd
             .definition()
-            .settle_over(self.cmd, completion, at, self.classify_error)?
+            .settle_over(
+                self.cmd,
+                completion,
+                at,
+                |raw| Ok(D::parse_output(raw)),
+                D::ERROR_TAGS,
+                self.classify_error,
+            )?
             .into_iter()
             .collect())
     }
@@ -790,7 +918,14 @@ impl<D: CommandSpec> CommandFamily for ClassifiedCmd<D> {
         Ok(self
             .cmd
             .definition()
-            .settle_in_over(self.cmd, completion, edge, self.classify_error)?
+            .settle_in_over(
+                self.cmd,
+                completion,
+                edge,
+                |raw| Ok(D::parse_output(raw)),
+                D::ERROR_TAGS,
+                self.classify_error,
+            )?
             .into_iter()
             .collect())
     }
@@ -855,7 +990,7 @@ impl CommandContractError {
         units.extend(format!(", which its Cmd.define does not declare (declared: {declared}). An undeclared failure goes to the error sink, never to \"{cmd_type}_err\".").encode_utf16());
         crate::data::JsText::from_units(units)
     }
-    fn serialization(error: impl fmt::Display) -> Self {
+    pub(crate) fn serialization(error: impl fmt::Display) -> Self {
         Self::Serialization {
             message: error.to_string(),
         }

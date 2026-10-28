@@ -4,6 +4,7 @@ mod events;
 pub(crate) mod listeners;
 mod persistence;
 mod ports;
+pub(crate) use ports::PortEmitter;
 mod queue;
 mod scope;
 mod telemetry;

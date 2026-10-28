@@ -18,6 +18,7 @@ mod wire;
 mod state;
 
 pub mod snapshot;
+pub mod tool;
 pub mod tool_resilience;
 pub use tool_resilience::ToolResilience;
 
