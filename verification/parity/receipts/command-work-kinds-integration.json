@@ -1,0 +1,50 @@
+{
+  "status": "Bounded native work kinds integrated; no Source parity credit or Agent kind adoption",
+  "sourceCommit": "5d0e76dc97565fd5ed1edc7fb873bc09b81b5ea3",
+  "integrationCommit": "2f8deb117b40bd9be354baa58231256497f179c2",
+  "sourcePins": {
+    "crates/tea/src/runtime/work.rs": "7c577edd7899c11c0d4b7851eea8de4fdcffd3ca656f14b84e78f8f5664f4f8e",
+    "crates/tea/src/runtime/engine.rs": "2887338fbf02180528d9986284507e93e282669f1f8db453f02b4ba6d910bd5f",
+    "crates/tea/src/runtime/mod.rs": "aee739b4829f93cec3cd31778c84878006ba083b8d4d1f68c1a0a95039a1360c",
+    "crates/tea/src/agent/knob/runtime.rs": "a8ab5936aaa71b02e74ef80f307e1a0bd149c32e82d1384ddae090c3abcc35af"
+  },
+  "parentSourceReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/held-stop-next-map/root-candidate-source-review-5d0e76dc.json",
+  "parentSourceReviewSha256": "395ebb64e022443b3ae36f4336f00a34f93c2a36c0746f28fbc32c8f6df78900",
+  "independentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/command-work-kinds-candidate-independent-review.json",
+  "independentReviewSha256": "aa3f9676efb9cd2180128f203908ea60e92b75f6f58aa3f8427b20cbbb1e3637",
+  "boundedEvidence": {
+    "nativeLifecycleChecks": 5,
+    "oldShutdownChecks": 11,
+    "compiledControls": 4,
+    "artifactRoles": 23,
+    "decodedHashes": 19,
+    "opaqueBorrowedAssertions": 4,
+    "lifetimeRefusal": "E0597 only",
+    "listenerCycle": "same public source red Drop0/Weaktrue -> green Drop1/Weakfalse"
+  },
+  "SourceObservations": {
+    "observedObligations": 9,
+    "sharedParityCredit": 0,
+    "wholeviewMatch": false,
+    "exactGapMap": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/command-work-kinds-candidate-independent-review.json",
+    "limits": "Source-only catch/controller/report payloads, omitted native observations and trace encodings remain explicit; no matching normalization."
+  },
+  "formatEvidence": {
+    "originalCandidateFmtClaim": "Unbound: no retained formatter stream; independentSEV4 limitation preserved",
+    "currentIntegration": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/command-work-kinds-integration-format.json",
+    "currentIntegrationSha256": "5853c97dc83f8863e5e8b3b766d91e6b4b7b7cd409cb92f6802b1da7ee8194ab"
+  },
+  "retirement": "Both candidate and control owned worktrees/defaulttargets removed; original proof immutable",
+  "compatibility": [
+    "CommandWork::new retains old native cancellation-before-poll behavior",
+    "New explicit effect/promise constructors and per-operation closed cancellation signal add no model/error Clone/Send/static bounds",
+    "Three Agent forwarding arms mechanically preserve kinds; Brain remains CommandWork::new",
+    "Public actor diagnostic requirements remain; prototype uses a caller-owned opaque diagnostic adapter"
+  ],
+  "open": [
+    "Configured-loader synchronous start/deferred continuation experiment is separate; no-loader unresolved",
+    "SourceEventTarget/late/reentrant/panickinglisteners/scheduling cross product unproved",
+    "Native task destruction releases listeners, not asynchronous cleanup-on-Drop",
+    "Latestfullcheckpoint16315/verified8a unchanged; nextcombinedverificationpending"
+  ]
+}
