@@ -173,10 +173,7 @@
   "typing": {
     "report": "type-checks/results.json",
     "positiveConsumers": 2,
-    "intendedNegativeCodes": [
-      "E0599",
-      "E0277"
-    ],
+    "intendedNegativeCodes": ["E0599", "E0277"],
     "ordinaryOpaqueEnabledPureOwnershipNativeTestAlsoPassed": true
   },
   "controls": {
