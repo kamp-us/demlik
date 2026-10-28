@@ -38,6 +38,7 @@ import { checkGraphContract, generatedCases } from "./generated.mjs";
 import { graphParity } from "./graph.mjs";
 import { intakeParity } from "./intake-run.mjs";
 import { intakeRuntimeParity } from "./intake-runtime-run.mjs";
+import { jevAskCheckpointParity } from "./jev-ask-parity.mjs";
 import { jevProtocolCheckpointParity } from "./jev-protocol-parity.mjs";
 import { journalRemoteParity } from "./journal-remote-run.mjs";
 import { journalParity } from "./journal-run.mjs";
@@ -1208,6 +1209,12 @@ if (!mutationSuite) {
       operation: "tea.machine-viz",
       binaryArgument: "--machine-viz-bin",
       run: (options) => machineVizCheckpointParity(cargo, options),
+    },
+    {
+      name: "jevAsk",
+      operation: "tea.jev-ask",
+      binaryArgument: "--jev-ask-bin",
+      run: (options) => jevAskCheckpointParity(cargo, options),
     },
     {
       name: "jevProtocol",

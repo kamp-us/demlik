@@ -280,6 +280,15 @@ const suites = [
     evidenceField: "observedCalls",
   },
   {
+    name: "icu77-census",
+    driver: "icu77_census_probe_driver",
+    script: "icu77-census-run.mjs",
+    args: [root],
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "cli-plain-collapse",
     driver: "collapse_cli_driver",
     script: "graph-cli-plain-collapse-run.mjs",
@@ -468,6 +477,7 @@ const checkedUtf8 = new Set([
   "icu77_graph_pipeline_driver",
   "icu77_coupling_driver",
   "icu77_boundary_driver",
+  "icu77_census_probe_driver",
   "collapse_partial_driver",
   "layer_cli_driver",
   "gate_preflight_driver",

@@ -1,0 +1,87 @@
+{
+  "status": "Reviewed components integrated and registered; next full combined checkpoint pending",
+  "integratedProductTrees": {
+    "codeGraph": "30b96a30d4906326bba9e540b99f34a1056d2864",
+    "tea": "8f41951f826c4efd3da34e6baecbf04a884c3d01"
+  },
+  "components": [
+    {
+      "name": "icu77-group-k",
+      "sourceCommit": "d3b45ac6a1e68587101c53e800deaf33c29486e4",
+      "thinSourceCommit": "cac0b63d2001f20cea0dd1df701f32375f302b88",
+      "sourceReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-k-map/root-source-review-0a2d845b.json",
+      "sourceReviewSha256": "df3a1a80343a9c1cb2222081f0c7a5a6347aadfd6306b66b71152c3c5b4365cd",
+      "artifactReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-k-map/root-artifact-review.json",
+      "artifactReviewSha256": "cd0bb04a478f799d4031189650606386c1548a68bfef51db791a0476a5ee32ba",
+      "retainedPacket": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/icu77-group-k-source",
+      "strictComponentViews": 26,
+      "qualified": 0
+    },
+    {
+      "name": "jev-ask",
+      "sourceCommit": "c4c1673217e396791d9e70c49185e37b74959464",
+      "thinSourceCommit": "0e8a84a253848d83d6cb65cc1587de8b8eae7004",
+      "sourceReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/jev-ask-map/root-source-review-c4c16732.json",
+      "sourceReviewSha256": "a96e9b97bf21d9bd2d6d74a21c52958ed23fe7a6c58b73e9a8d80e5acce04444",
+      "artifactReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/jev-ask-map/root-artifact-review.json",
+      "artifactReviewSha256": "319ff176193090274d87cfbedb45bc71c0059db921b4c794945eb6bf27d7b70b",
+      "retainedPacket": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/jev-ask-source",
+      "strictComponentViews": 18,
+      "qualified": 0
+    }
+  ],
+  "registrations": {
+    "graph": {
+      "name": "icu77-census",
+      "driver": "icu77_census_probe_driver",
+      "script": "icu77-census-run.mjs",
+      "args": "[root], decoder-only UTF8 argv; semantic worker owns neutral fixture",
+      "format": "process",
+      "traceField": "nativeTrace",
+      "evidenceField": "observedCalls",
+      "strict": 26,
+      "qualified": 0,
+      "rejectedInvalidInputs": 5,
+      "rejectedInvalidInputRows": 0,
+      "responseGuards": 3
+    },
+    "sibling": {
+      "name": "jevAsk",
+      "operation": "tea.jev-ask",
+      "binaryArgument": "--jev-ask-bin",
+      "strict": 18,
+      "qualified": 0
+    }
+  },
+  "thinReview": {
+    "allSourceRead": true,
+    "savedCensus26ActualGraphPassingPredicate": true,
+    "savedJev18Normalizer": true,
+    "newSourceNativeCargoExecutions": 0,
+    "staticNodeBiomeDiffChecks": 0,
+    "censusRowShapeCorrection": "Original7736 lacks row.passed; separatecac0 adds passed:true. Original failed consumer proof and corrected consumer evidence are retained, no behavior rewrite."
+  },
+  "metadataErratum": {
+    "severity": "SEV4",
+    "component": "JevAsk",
+    "field": "source-artifact-audit.json/files[].gitMode",
+    "actualMeaning": "TarInfo archive permissions0o664; actual Git tree mode100644, all18 archivecontents matchGit",
+    "originalProofUnchanged": true
+  },
+  "acceptedFullCheckpointUnchanged": {
+    "implementation": "8a756e13eb795fba7dfdb5d8e89cb84af7b74546",
+    "receiptCommit": "21680376b78c5a235fd7b20b5e810a873531a4a3",
+    "outcomes": 16315,
+    "strict": 16072,
+    "qualified": 243
+  },
+  "newViewsAwaitingCombinedRun": 44,
+  "coverageBindings": "No new binding invented for internal census helpers; real published Jev bindings are being inspected separately. Existing metadata remains unchanged here.",
+  "openLimits": [
+    "Census original25 Source preimplementation, directory supplement afterimplementation/beforecaseprojection; Native library initialization earns no extra Source reader credit",
+    "Jev initial Effect fixture uncredited; actualSourceJSthrow followup ispostnative with unchanged18views/evidence",
+    "Native49/old174 Jev phase predates additive clone/observer changes; final18 and public consumers usefinalCargo8; nextfullbatchrequired",
+    "Configured fallback/batch/foreignunwrap/fullstatecodecs, remaining17ICUhelper+2sorts,53CLIgaps,host/raw/adapters/target/MSRV/package scope remainopen",
+    "CommandWork kinds/lifecycle candidate and held-stop are separate and unaccepted; no whole-port/remote/release claim"
+  ]
+}
