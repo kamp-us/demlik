@@ -1,0 +1,135 @@
+{
+  "status": "Accepted bounded local checkpoint; full Rust port remains in progress",
+  "verifiedImplementation": "8a756e13eb795fba7dfdb5d8e89cb84af7b74546",
+  "previousAcceptedReceipt": {
+    "implementation": "a1a3fa10cade07ecb933ff3d540193cf53d193c6",
+    "receiptCommit": "82fb302c",
+    "receiptSha256": "8b2d38d515c1e1750194fd0feedb05b28ea4dc2a4871f77309b24039a4c95bb6"
+  },
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": [
+    "Full local combined checkpoint after coupling, typed tool binding, machine diagrams, boundary judgments, serial routed Agent and pure Jev integration",
+    "Both sweep packages excluded; new native Rust API beside frozen TypeScript",
+    "Component semantic controls are inherited from their sealed packets, not a rerun of unsafe legacy aggregate mutations"
+  ],
+  "outcomes": {
+    "admitted": 16315,
+    "strict": 16072,
+    "qualified": 243,
+    "failures": 0,
+    "referenceChanges": 0,
+    "newOutcomes": 100,
+    "newStrictKeys": 94,
+    "newQualifiedKeys": 6,
+    "priorStrictNowQualified": [
+      "graph.collapse-partial.graph.raw-source",
+      "graph.text-interface.raw-source.assembly-text",
+      "graph.text-interface.raw-source.context-text"
+    ],
+    "priorQualifiedPromoted": [],
+    "priorGraphQualificationReasonsProfilesUnchanged": 192,
+    "deltaQualification": "Only terminal backend offset numbers differ in the three preregistered rows. No exact-match credit or cause-resolution claim."
+  },
+  "freshVerification": {
+    "graphObservations": 9888,
+    "graphSuites": 78,
+    "nonGraphObservations": 6427,
+    "checkedUtf8Drivers": 41,
+    "nativeDefault": 714,
+    "nativeAllFeatures": 728,
+    "nativeResultGroupsEach": 215,
+    "nativeTotalsOverlap": true,
+    "bothClippyConfigurations": 0,
+    "bothTypeConfigurations": "passed",
+    "actualNamedPublicRustExecutions": 48,
+    "authoredApplyTypePositiveExecutionsSeparate": 2,
+    "oneOwnedIcuPreparation": true,
+    "allOwnedWorktreeAndDefaultTargetRemoved": true
+  },
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 1748,
+    "canonicalReferences": 915,
+    "unmapped": 1697,
+    "gapRows": 1907,
+    "all53CliGapsOpen": true,
+    "isCompletionPercentage": false
+  },
+  "retention": {
+    "sourceFiles": 2810,
+    "sourceGitContentsIndependentVerification": "PASS",
+    "initialLiveSourceModeSnapshotRetained": false,
+    "manifestPayloads": 2217,
+    "manifestPayloadLogicalBytes": 5680563751,
+    "actualArtifactHashes": 161,
+    "reportDigestClaims": 1061,
+    "unretainedClaims": 0,
+    "allNativeTestExecutablesRetained": false,
+    "allThirdPartyDependencyBytesClaimed": false,
+    "historicalLimit": "Earlier f24418 distinct ordinary executable digests (35 report claims) remain unrecovered. Current retention does not repair historical bytes.",
+    "sourceGitFileContentsIndependentlyVerified": 2810,
+    "gitSourceModesAvailable": {
+      "100644": 2808,
+      "100755": 2
+    },
+    "decodedArtifactBytesVerified": 4360000880,
+    "artifactFormats": {
+      "direct": 75,
+      "gzip": 86
+    },
+    "compilerLogBoundArtifacts": 106,
+    "pathOnlyProducerLimits": 15,
+    "pathOnlyQualification": "These retained bytes match report hashes but carry no invented Cargo producer, execution or linkage claims. See the independent review for all 15 path/hash records."
+  },
+  "proof": {
+    "directory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-graph-agent-combined-8a756e13",
+    "originalChecksSha256": "5e7a291748156b48be112a4c171f46ab9eb0a5467572436412e2d3879a09add2",
+    "reportSha256": "bcaafd5e83aa1d0e4205b16a429e5636c9f5039efe39c3a0852c580de32fe6e2",
+    "manifestSha256": "041e1f2a5dc8b76908fdc8413582eb2da6beb11676a6925bec830c7875d8d06c",
+    "sourceManifestSha256": "067045002ee231736f040a5d79008884310ae467a59d28cc052b7049f9cb2011",
+    "controllerSha256": "b41429433d65aec6716b87bb41e9e0d461d4a0a3afe3ef7e9d3b04adbb8fd32c",
+    "actualArtifactBindingsSha256": "3c57951ddaab87bffb0b3162910d3164bd657d789b17380882bb3eea75f90107",
+    "parentQualificationReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-combined-100-map/qualification-delta-root-review.json",
+    "parentQualificationReviewSha256": "a9ebd9c03ae8d03e1b3aaf953d5ff3ca99638967e4630da72fc17a5ecf81f7e9",
+    "independentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-combined-100-map/final-saved-run-peer-review-flexible.json",
+    "independentReviewSha256": "2486411f3903755fcbf978051da8e0f01c6c9f7b30d94a490ea24b4387e95feb",
+    "independentReaderSha256": "5b87396b02f4f9ceeef158985a695930b1de1ef78c3763fd94691d77c915a988",
+    "independentFactsSha256": "6fc35a0abc5435fa7e48d8117a19880734d3b514ce5969ca43b6194d194a9077"
+  },
+  "openBoundaries": [
+    "agent-snapshot-messages.effect.held-stop remains uncredited; new Source lifetime probes do not close it",
+    "Nine returned-message snapshots retain their published TypeScript typing qualification",
+    "Measured census NaN/order/identity corrections and JevAsk are being built separately, outside this checkpoint",
+    "Raw reflection/string/numeric/error/host, scheduling and backend offset profiles remain open",
+    "Advanced Agent providers/SDK/streaming/children/policies and remaining CLI, composition/testing/PBT/devtools/telemetry/adapters/public bindings remain open",
+    "Supported target/MSRV/feature/packaging grid, realistic complete consumers and cold dependency/source rebuild remain unverified",
+    "No whole-port completion, cross-platform release, PR, push, publication, deployment or remote-write claim",
+    "15 current path-only artifact records retain bytes but lack compiler producer/execution/linkage claims; initial live modes and complete dependent library bytes are not claimed."
+  ],
+  "laterUnacceptedWork": [
+    "can/rust-icu77-census-01a16c9d",
+    "can/rust-jev-ask-01a16c9d",
+    "held-stop-next-map Source-only lifetime evidence"
+  ],
+  "qualificationReview": {
+    "originalStatusPreserved": "passed-pending-qualification-delta-review",
+    "acceptedBySeparateReviews": true,
+    "sourceOffsetPairs": {
+      "graph.collapse-partial.graph.raw-source": [
+        167,
+        165
+      ],
+      "graph.text-interface.raw-source.context-text": [
+        165,
+        166
+      ],
+      "graph.text-interface.raw-source.assembly-text": [
+        165,
+        166
+      ]
+    },
+    "causeResolved": false,
+    "permanentQualificationOrExactnessClaimed": false,
+    "rawReportsControllerAndManifestUnchanged": true
+  }
+}
