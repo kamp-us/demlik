@@ -1,0 +1,99 @@
+{
+  "status": "Accepted bounded local checkpoint; full Rust port remains in progress",
+  "verifiedImplementation": "f2444214455c348948edc2472ca22c01fe67edbf",
+  "previousAcceptedReceipt": "1bb83519a9e5e24179e0c4910aa760af2863626e",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": [
+    "D import/declaration/catalog checked ordering",
+    "E callable graph/kind-evidence checked ordering",
+    "F cluster/Louvain/interface checked ordering",
+    "Public typed tool declarations and finite router, including empty and selected same-name contracts"
+  ],
+  "outcomes": {
+    "admitted": 16161,
+    "strict": 15929,
+    "qualified": 232,
+    "failures": 0,
+    "referenceChanges": 0,
+    "newOutcomes": 101,
+    "newStrictKeys": 100,
+    "newQualifiedKeys": 1,
+    "priorStrictLost": [],
+    "priorQualifiedExactThisRun": ["graph.collapse-partial.graph.raw-source"]
+  },
+  "freshVerification": {
+    "graphObservations": 9814,
+    "graphSuites": 74,
+    "nonGraphObservations": 6347,
+    "checkedUtf8Drivers": 37,
+    "nativeDefault": 708,
+    "nativeAllFeatures": 722,
+    "nativeResultGroupsEach": 214,
+    "nativeTotalsOverlap": true,
+    "bothClippyConfigurations": 0,
+    "bothSubscriptionAuthoredAndCompactionTypeConfigurations": "passed",
+    "actualPublicRustExecutions": 28,
+    "oneOwnedIcuPreparation": true,
+    "allOwnedWorktreeAndDefaultTargetRemoved": true
+  },
+  "coverage": {
+    "capabilities": 3445,
+    "mapped": 838,
+    "unmapped": 2607,
+    "gapRows": 2806,
+    "all53CliGapsOpen": true,
+    "newPartialToolBindings": 6,
+    "isCompletionPercentage": false
+  },
+  "rawDiagnosticBoundary": {
+    "id": "graph.collapse-partial.graph.raw-source",
+    "previousOffsets": [165, 166],
+    "currentOffsets": [167, 167],
+    "sameFourSnapshotsOf20FilesBytesAndModes": true,
+    "sameSettingsAndNativeCalls": true,
+    "onlyFixtureInputDifference": "neutral temporary root token",
+    "currentRunExact": true,
+    "intermittentExactDiagnosticGap": "OPEN",
+    "cause": "Unproven",
+    "noMatcherRelaxation": true
+  },
+  "retention": {
+    "sourceGitFilesIndependentlyVerified": 2716,
+    "manifestPayloads": 1826,
+    "actualArtifactHashes": 117,
+    "gzipArtifacts": 93,
+    "directArtifacts": 24,
+    "reportDigestClaims": 901,
+    "boundClaims": 866,
+    "unretainedClaimRows": 35,
+    "unretainedDistinctEarlierNonGraphExecutables": 18,
+    "all74GraphPrimaryComparedBytesRetained": true,
+    "limitation": "Earlier ordinary nonGraph driver executable bytes were overwritten before final harvest. Actual source/report/process/hash records remain; no fabricated artifact bindings or repeat builds for retention alone."
+  },
+  "proof": {
+    "directory": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-combined-f2444214",
+    "originalChecks": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-combined-f2444214/checks.json",
+    "originalChecksSha256": "4ce1e4f7d68ee5db18d6fcb197797466d932482e9f83b6da8161a9616c0c119f",
+    "originalCheckStatusPreserved": "passed-pending-qualification-delta-review",
+    "report": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-combined-f2444214/report.json",
+    "reportSha256": "e48d81e2fb0efc3a7598a50c4ad8413ed092ed14cd4f21f5e1df9121aae92cbb",
+    "manifest": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-combined-f2444214/proof-files.json",
+    "manifestSha256": "3bf0fa8224b0721672dec52aaf5072e195d58c466367e99259f108e99a10f518",
+    "parentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-parent-review-f2444214.json",
+    "parentReviewSha256": "fde3a0ef5a2e1d24b7e9a2c94fba89ca05a21ecfc774040a4a3b37ad50eba7d3",
+    "independentReview": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/graph-query-tool-combined-f2444214/independent-final-review.json",
+    "independentReviewSha256": "3e19865d7f20b2c710914b1b80d46a2118b1038d16ea0323695b27d20b5bf909"
+  },
+  "openBoundaries": [
+    "agent-snapshot-messages.effect.held-stop remains uncredited",
+    "Raw reflection/string/numeric/error/host and eight scheduling profiles remain open",
+    "Complete Agent tool bridge/providers/SDK/streaming/children remain open",
+    "Remaining ICU ordering, CLI, adapters, public bindings, targets/MSRV/features/packaging and realistic complete workflows remain open",
+    "No whole-port, cold source archive, release, remote write, PR, publication or deployment claim"
+  ],
+  "laterUnacceptedWork": [
+    "G8 reachability component e913a120, reviewed separately",
+    "Parsed tool constructor c6b70f4c, reviewed separately",
+    "Owned authored-update metadata 57b7324f, native interface prerequisite only"
+  ]
+}
