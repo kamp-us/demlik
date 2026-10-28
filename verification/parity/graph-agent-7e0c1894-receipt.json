@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "status": "ACCEPTED bounded local full checkpoint; complete port remains in progress",
+  "verifiedImplementation": "7e0c1894ca5f443315fd5b5b7d64872622ef1d71",
+  "TypeScriptReference": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "scope": "Local TEA/code-graph native siblings, sweeps excluded; full goal remains in progress.",
+  "comparison": {
+    "observations": 16404,
+    "strict": 16163,
+    "qualified": 241,
+    "reportSha256": "39936873da9eabab40a838077a95280b421bce88736b7f3d4b95b45aded98a64",
+    "newStrictKeys": [
+      "graph.hotspots.git-buffer-2mib",
+      "graph.hotspots.git-buffer-65mib",
+      "graph.hotspots.git-duplicates-raw-paths",
+      "graph.hotspots.git-fail-head",
+      "graph.hotspots.git-fail-log",
+      "graph.hotspots.git-fail-top",
+      "graph.hotspots.git-fail-tracked",
+      "graph.hotspots.git-stderr-invalid",
+      "graph.hotspots.git-stderr-text",
+      "graph.hotspots.missing-root",
+      "graph.hotspots.no-head",
+      "graph.hotspots.nonrepo-root",
+      "graph.hotspots.options-refusal-order",
+      "graph.hotspots.options-valid",
+      "graph.hotspots.pure-duplicates-utf16",
+      "graph.hotspots.pure-empty",
+      "graph.hotspots.pure-no-history",
+      "graph.hotspots.pure-numbers",
+      "graph.hotspots.pure-order-owners",
+      "graph.hotspots.repo-subdir",
+      "graph.hotspots.repo-symlink",
+      "graph.hotspots.repo-wide",
+      "graph.hotspots.repo-window-repeat",
+      "graph.hotspots.sort-63",
+      "graph.hotspots.sort-64",
+      "graph.hotspots.sort-65",
+      "graph.icu77-env-keys.cli-nine-actions",
+      "graph.icu77-env-keys.load-catalog-type-error",
+      "graph.icu77-env-keys.load-empty",
+      "graph.icu77-env-keys.load-three-workers",
+      "graph.icu77-env-keys.query-declared-union",
+      "graph.icu77-env-keys.query-equal-and-alias",
+      "graph.icu77-env-keys.query-known-process-bindings",
+      "graph.icu77-env-keys.query-owner-precedence",
+      "graph.icu77-env-keys.query-service-raw-order",
+      "graph.icu77-env-keys.query-withheld-merge",
+      "graph.icu77-env-keys.scan-empty",
+      "graph.icu77-env-keys.scan-forms",
+      "graph.icu77-env-keys.scan-lines-and-via",
+      "graph.icu77-env-keys.scan-name-file-order",
+      "graph.icu77-env-keys.scan-occurrence-entries",
+      "graph.icu77-env-keys.scan-raw-name-order",
+      "graph.icu77-env-keys.scan-singleton",
+      "graph.icu77-env-keys.scan-tab-collision-first"
+    ],
+    "newQualifiedKeys": ["agent-snapshot-messages.effect.held-stop"],
+    "oldStrictNowQualified": [],
+    "oldQualifiedNowStrict": [],
+    "unchangedPriorGraphQualificationProfiles": 192,
+    "capabilities": 3445,
+    "mapped": 1759,
+    "gapRows": 1954,
+    "all53CliGapsOpen": true,
+    "failures": 0,
+    "referenceChanges": 0,
+    "comparisonExit": 1,
+    "comparisonExitReason": "Open capability ledger only; actual comparisons/reference changes are zero."
+  },
+  "newOutcomes": {
+    "strict": 44,
+    "qualified": 1,
+    "Env": 18,
+    "hotspots": 26,
+    "heldStopRuntimeQualified": 1,
+    "Source4SharedCredit": 0,
+    "Core9SharedCredit": 0,
+    "CommanderClosedMatrixNewCredit": 0
+  },
+  "native": {
+    "default": {
+      "testsAndDocs": 726,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "features": {
+      "testsAndDocs": 740,
+      "resultGroups": 217,
+      "overlap": "Do not sum default and features."
+    },
+    "overlap": "Do not sum configurations."
+  },
+  "public": {
+    "priorNamedExecutions": 58,
+    "newNamedExecutions": 8,
+    "namedExecutions": 66,
+    "authoredApplyDirectExecutions": 2,
+    "actualPublicExecutionsTotal": 68,
+    "perConfiguration": {
+      "named": 33,
+      "separateAuthoredApply": 1
+    },
+    "qualification": "Previous29 plus Env/Hotspots/Brain start/loader interface4 per configuration. Public/native-only checks add zero shared outcomes."
+  },
+  "transport": {
+    "drivers": 42,
+    "qualification": "Env private test harness and Hotspots file-protocol driver add zero generic UTF8, inline protocol or response guard credit."
+  },
+  "graph": {
+    "outcomes": 9958,
+    "suites": 81,
+    "nonGraphOutcomes": 6446,
+    "qualification": "graph.passed includes strict+qualified comparisons. Out-of-band invalid-input probes are not additional accepted outcomes."
+  },
+  "evidence": {
+    "packet": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-7e0c1894",
+    "checksSha256": "4f19a83d582cb587974730d603bb5cac15070b7fcb16caf398bc570872e00547",
+    "reportSha256": "39936873da9eabab40a838077a95280b421bce88736b7f3d4b95b45aded98a64",
+    "manifestSha256": "1756879c8795c91feeb71b8a1253af082a5b02e0866002cd6e6553dc2d6cd7ff",
+    "bindingsSha256": "03323e6b7862b865d7a456e6def37c933814e340d8c8a6a6f7d6eef30fd129cb",
+    "payloads": 2794,
+    "artifacts": 180,
+    "actualReportFieldClaims": 1208,
+    "unretainedCurrentClaims": 0,
+    "nestedLibrarySnapshots": 71,
+    "gitContentFiles": 2875,
+    "thirdPartySourceScope": "Selected Proptest source metadata is producer-declared outside frozen Git workspace; no complete dependency archive claim.",
+    "payloadBytes": 2613453270,
+    "pathOnlyArtifacts": 0,
+    "decodedArtifactBytesVerified": 4677879832,
+    "artifactForms": {
+      "direct": 54,
+      "gzip": 126
+    },
+    "compilerLogBoundArtifacts": 124,
+    "nestedUniqueDecodedLibraries": 5
+  },
+  "cleanup": {
+    "exit": 0,
+    "worktreeRemoved": true,
+    "defaultTargetRemoved": true,
+    "registrationRemoved": true,
+    "stderr": "",
+    "worktreeAddSucceeded": true,
+    "partialUnregisteredDirectoryRemoved": false
+  },
+  "RootDeltaReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/root-completed-review.json",
+    "sha256": "b5876c0b6ac33e7eacd8310c386d914d6860125b23d6a4c13de48a2dab427fe5"
+  },
+  "independentReview": {
+    "path": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/independent-fullrun-review.json",
+    "sha256": "384a68a5877195597c2e67a3647ce01cc5c32c359fec0b1ac5382730cfe0cdea",
+    "verdict": "PASS",
+    "findings": [],
+    "reader": {
+      "file": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/saved-run-peer-reader.py",
+      "sha256": "cfc76d4e5d0f800441b9a16da0a773800c815fa37c7f0da6aa64d9e368acb06a",
+      "factsFile": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/saved-run-peer-facts.json",
+      "factsSha256": "c8bd04b6719a3e90e78f37e3644a05f81710138b4bb8799bafb703d710abd5aa",
+      "executionRecord": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/saved-run-peer-reader-terminal7e-final.process.json",
+      "executionRecordSha256": "83d8fa7ee748274d5a77d9bcca7360556f1c5a791b8594bf2bd64246977c3db1",
+      "exit": 0
+    }
+  },
+  "admission": {
+    "newStrictCases": 44,
+    "newRuntimeQualifiedCases": ["agent-snapshot-messages.effect.held-stop"],
+    "oldStrictIdLosses": 0,
+    "all240PriorQualificationProfilesUnchanged": true,
+    "nativeModelCompletionTraceDelta": "Exactly30 runtime-model rows swap adjacent handle/launch completion records; other16089 strict native arrays unchanged. Application outputs still match frozen Source.",
+    "originalPendingControllerStatus": "passed-pending-review",
+    "originalControllerReportsUnchanged": true,
+    "causeOrPermanentOffsetResolutionClaimed": false,
+    "baselineFullRunModelRawFramesRetained": false
+  },
+  "preflightHistory": {
+    "e0Attempt": "Biome formatting/import ordering stopped before Rust/ICU; root/target/registration removed0.",
+    "9caAttempt": "After formatting-only equivalence proof, Clippy exposed unused private locale_compare_units; root/target/registration removed0.",
+    "7eFix": "Remove only unused four-line private helper, preserve Clippy -D warnings.",
+    "RootReaderCorrections": "Native completion arrays and intended caught Hotspot fault diagnostics explicitly checked; original readers/errors retained, no behavioral rerun.",
+    "independentReaderCorrection": "/Users/cansirin/Documents/development/demlik/.fabrika/rust-port-goal-01a16c9d/evidence/next-components-combined-map/saved-run-peer-reader-model-trace-recovery.json"
+  },
+  "limits": [
+    "All53 broad CLI gaps, outer-root ready Promise ordering, no-loader startup and other host/raw profiles remain open.",
+    "Held-stop is runtime-only qualified with TypeScript TS2322 and raw reporter differences; no published typed handler parity claim.",
+    "Historical f24418 executable digests/35claims and old15path-only provenance remain unrecovered.",
+    "No all-dependency byte/cold-source/initial-live-mode/cross-platform/release/deployment claim.",
+    "Current mappings1759/references915/gap-reason rows1954 do not establish completion percentages."
+  ]
+}
