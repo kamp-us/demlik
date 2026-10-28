@@ -8,6 +8,7 @@ use crate::agent::snapshot::{
     AgentSnapshotMessages, AgentSnapshotWrite, NoSnapshotCommand, NoSnapshotMessage,
     SnapshotProfile, WithSnapshot,
 };
+use crate::agent::tool::{AgentToolRoutes, ToolError};
 use crate::agent::turn_view::{CallSource, NativeCalls};
 use crate::{
     Machine, PlainData, Step, Tagged, TryUpdate,
@@ -234,6 +235,7 @@ impl<H> fmt::Debug for AgentWorkError<H> {
 #[derive(Debug)]
 pub enum AgentMachineError {
     Agent(AgentError),
+    ToolContract(CommandContractError),
     /// Direct missing/null restored message stamps are an OPEN compatibility profile.
     /// Refuse observably rather than inventing a timestamp for existing numeric verbs.
     UnsupportedStamp {
@@ -251,14 +253,15 @@ pub struct AgentWired<M, I, S> {
     pub subscribe: S,
 }
 
-type HostMsg<P, I, S, R, K = NoCompaction> = AgentMachineMsg<
+type ToolHostMsg<P, I, S, TM, K = NoCompaction> = AgentMachineMsg<
     P,
     I,
     <S as Schema>::Output,
     <S as Schema>::Error,
-    AgentToolMsg<R>,
+    TM,
     <<K as CompactionProfile>::Command as CommandFamily>::Msg,
 >;
+type HostMsg<P, I, S, R, K = NoCompaction> = ToolHostMsg<P, I, S, AgentToolMsg<R>, K>;
 type WiredCommand<P, I, S, C, K, SC> = AgentCommand<
     P,
     I,
@@ -281,21 +284,25 @@ type WiredMachine<
     V = NativeCalls,
     K = NoCompaction,
     SC = NoSnapshotCommand,
+    TE = PlainData,
 > = Machine<
     'a,
-    SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V, K>,
-    HostMsg<P, I, S, R, K>,
+    SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
+    ToolHostMsg<P, I, S, <C as CommandFamily>::Msg, K>,
     WiredCommand<P, I, S, C, K, SC>,
     DeadlinesSub,
     (),
     AgentMachineError,
 >;
 
+type ToolFoldResult<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
+    Result<super::StepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>, AgentMachineError>;
+
 struct AgentInterpreter<'a, P, I, S: Schema, F, L, TI, CI, SI, M, H> {
     llm: Rc<LlmCall<'a, P, I, S>>,
     model: F,
     loader: L,
-    tools: TI,
+    tools: Rc<TI>,
     compact: CI,
     snapshot: SI,
     marker: PhantomData<fn() -> (M, H)>,
@@ -434,6 +441,7 @@ impl<
     I,
     S: Schema<Output = Rc<T>>,
     R,
+    TE,
     A,
     T,
     Provider,
@@ -441,9 +449,10 @@ impl<
     V: CallSource<A>,
     K: CompactionProfile,
     Q: SnapshotProfile,
-> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
+> Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, V, K, Q>
 where
-    C: CommandFamily<Msg = AgentToolMsg<R>>,
+    C: CommandFamily,
+    C::Msg: Tagged,
     <K::Command as CommandFamily>::Msg: Tagged,
 {
     /// Owns the host ports beside a pure base-agent machine. Loaded init emits no
@@ -455,9 +464,10 @@ where
     /// borrowed payload/cause interface.
     #[expect(
         clippy::type_complexity,
-        reason = "The inferred machine, interpreter and subscription runner retain independent concrete owners."
+        clippy::too_many_arguments,
+        reason = "The one wire retains independent host services and its tool fold/metadata without another runtime."
     )]
-    fn wire<F, L, TI, CI, SI, SC, M, H, TM>(
+    fn wire<F, L, TI, CI, SI, SC, M, H, TM, TF>(
         self: Rc<Self>,
         model: F,
         loader: L,
@@ -465,28 +475,39 @@ where
         compact: CI,
         snapshot: SI,
         timer: Rc<TM>,
+        routed_types: Vec<String>,
+        fold_tool: TF,
     ) -> AgentWired<
-        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, K, SC>,
+        WiredMachine<'a, Stage, P, I, S, R, A, T, C, V, K, SC, TE>,
         impl Interpreter<WiredCommand<P, I, S, C, K, SC>, Error = AgentWorkError<H>> + 'a,
-        impl Subscriptions<DeadlinesSub, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>>,
+        impl Subscriptions<DeadlinesSub, ToolHostMsg<P, I, S, C::Msg, K>, Error = AgentWorkError<H>>,
     >
     where
+        TF: Fn(
+                &Self,
+                &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>,
+                &C::Msg,
+                &TI,
+            ) -> ToolFoldResult<Stage, P, I, S, R, TE, A, T, C, V, K, Q>
+            + 'a,
         F: ModelFactory<M, S> + 'a,
         L: MessageLoader<P, I, M, S::Error> + 'a,
-        TI: Interpreter<C, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
-        CI: Interpreter<K::Command, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
-        SI: Interpreter<SC, HostMsg<P, I, S, R, K>, Error = AgentWorkError<H>> + 'a,
+        TI: Interpreter<C, ToolHostMsg<P, I, S, C::Msg, K>, Error = AgentWorkError<H>> + 'a,
+        CI: Interpreter<K::Command, ToolHostMsg<P, I, S, C::Msg, K>, Error = AgentWorkError<H>>
+            + 'a,
+        SI: Interpreter<SC, ToolHostMsg<P, I, S, C::Msg, K>, Error = AgentWorkError<H>> + 'a,
         SC: CommandFamily + From<Q::Command> + 'a,
-        SC::Msg: Into<HostMsg<P, I, S, R, K>>,
+        SC::Msg: Into<ToolHostMsg<P, I, S, C::Msg, K>>,
         TM: Timer + 'static,
         H: 'static,
         M: 'a,
-        HostMsg<P, I, S, R, K>: 'static,
+        ToolHostMsg<P, I, S, C::Msg, K>: 'static,
         Stage: 'a,
         P: 'a,
         I: 'a,
         S: 'a,
         R: 'a,
+        TE: 'a,
         A: 'a,
         T: 'a,
         Provider: 'a,
@@ -497,6 +518,13 @@ where
         Q: 'a,
         Q::Command: 'a,
     {
+        let mut accepted_types = <HostMsg<P, I, S, R, K> as Message>::TYPES
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        accepted_types.extend(routed_types);
+        let tools = Rc::new(tools);
+        let tool_reader = Rc::clone(&tools);
         let init = Rc::clone(&self);
         let reduce = Rc::clone(&self);
         let project = Rc::clone(&self);
@@ -504,40 +532,47 @@ where
             init: Box::new(move |loaded, _| {
                 Step::new(loaded.unwrap_or_else(|| init.init()), vec![])
             }),
-            update: TryUpdate::try_reducer(move |state, message| {
+            update: TryUpdate::try_reducer_with_types(accepted_types, move |state, message| {
                 let step = match message {
-                    AgentMachineMsg::Start { run_id, at } => reduce.start(state, run_id, *at),
-                    AgentMachineMsg::Tool(AgentToolMsg::Ok {
-                        call_id,
-                        result,
-                        at,
-                    }) => reduce.tool_ok(state, call_id, Rc::clone(result), *at),
-                    AgentMachineMsg::Tool(AgentToolMsg::Err {
-                        call_id,
-                        reason,
-                        at,
-                    }) => reduce.tool_err_reason(state, call_id, reason, *at),
+                    AgentMachineMsg::Start { run_id, at } => reduce
+                        .start(state, run_id, *at)
+                        .map_err(AgentMachineError::Agent),
+                    AgentMachineMsg::Tool(msg) => {
+                        fold_tool(reduce.as_ref(), state, msg, tool_reader.as_ref())
+                    }
                     AgentMachineMsg::Brain(msg) => {
                         let at = msg
                             .at()
                             .and_then(NumberOrNull::number)
                             .ok_or(AgentMachineError::UnsupportedStamp { at: msg.at() })?;
                         match msg.outcome() {
-                            Settlement::Ok(_) => reduce.succeed(state, msg, at),
-                            Settlement::Err(_) => reduce.fail(state, msg, at),
+                            Settlement::Ok(_) => reduce
+                                .succeed(state, msg, at)
+                                .map_err(AgentMachineError::Agent),
+                            Settlement::Err(_) => reduce
+                                .fail(state, msg, at)
+                                .map_err(AgentMachineError::Agent),
                         }
                     }
                     AgentMachineMsg::Compact(msg) => match K::message(msg) {
-                        CompactMessage::Ok(msg) => reduce.compact_ok(state, &msg.key, msg, msg.at),
-                        CompactMessage::Err(msg) => {
-                            reduce.compact_err(state, &msg.key, msg, msg.at)
-                        }
+                        CompactMessage::Ok(msg) => reduce
+                            .compact_ok(state, &msg.key, msg, msg.at)
+                            .map_err(AgentMachineError::Agent),
+                        CompactMessage::Err(msg) => reduce
+                            .compact_err(state, &msg.key, msg, msg.at)
+                            .map_err(AgentMachineError::Agent),
                     },
-                    AgentMachineMsg::Deadline(msg) => reduce.on_timer(state, msg),
-                    AgentMachineMsg::Boot { at } => reduce.boot(state, *at),
-                    AgentMachineMsg::Cancel { at } => reduce.cancel(state, *at),
+                    AgentMachineMsg::Deadline(msg) => reduce
+                        .on_timer(state, msg)
+                        .map_err(AgentMachineError::Agent),
+                    AgentMachineMsg::Boot { at } => {
+                        reduce.boot(state, *at).map_err(AgentMachineError::Agent)
+                    }
+                    AgentMachineMsg::Cancel { at } => {
+                        reduce.cancel(state, *at).map_err(AgentMachineError::Agent)
+                    }
                 };
-                step.map_err(AgentMachineError::Agent).map(|step| {
+                step.map(|step| {
                     step.map(std::convert::identity, |command| {
                         command.map_snapshot(SC::from)
                     })
@@ -545,7 +580,7 @@ where
             }),
             subscriptions: Box::new(SubscriptionEntries::new(vec![SubEntry::try_new(
                 "deadline",
-                move |state: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V, K>| {
+                move |state: &SharedStateOf<Stage, P, I, S, R, TE, A, T, V, K>| {
                     project
                         .subs(state)
                         .map(|list| (!list.is_empty()).then_some(list))
@@ -570,6 +605,147 @@ where
                 marker: PhantomData,
             },
         }
+    }
+}
+
+impl<
+    'a,
+    Stage,
+    P: Purpose,
+    I,
+    S: Schema<Output = Rc<T>>,
+    R,
+    A,
+    T,
+    Provider,
+    C,
+    V: CallSource<A>,
+    K: CompactionProfile,
+    Q: SnapshotProfile,
+> Agent<'a, Stage, P, I, S, R, PlainData, A, T, Provider, C, V, K, Q>
+where
+    C: CommandFamily<Msg = AgentToolMsg<R>>,
+    <K::Command as CommandFamily>::Msg: Tagged,
+{
+    fn fold_legacy_tool<TI>(
+        &self,
+        state: &SharedStateOf<Stage, P, I, S, R, PlainData, A, T, V, K>,
+        message: &AgentToolMsg<R>,
+        _: &TI,
+    ) -> ToolFoldResult<Stage, P, I, S, R, PlainData, A, T, C, V, K, Q> {
+        match message {
+            AgentToolMsg::Ok {
+                call_id,
+                result,
+                at,
+            } => self.tool_ok(state, call_id, Rc::clone(result), *at),
+            AgentToolMsg::Err {
+                call_id,
+                reason,
+                at,
+            } => self.tool_err_reason(state, call_id, reason, *at),
+        }
+        .map_err(AgentMachineError::Agent)
+    }
+}
+impl<'a, Stage, P: Purpose, I, S: Schema<Output = Rc<T>>, R, TE, A, T, Provider, C>
+    Agent<'a, Stage, P, I, S, R, TE, A, T, Provider, C, NativeCalls>
+where
+    C: CommandFamily,
+    C::Msg: Tagged,
+{
+    /// Serial routed tools over the same wire. Loaded init stays commandless;
+    /// dispatch Boot explicitly. The timer/actor retain their existing static limits.
+    /// This initial profile uses native calls without compaction, snapshots or tool policies.
+    /// Missing/null stamps refuse; it does not add a full routed-state persistence codec.
+    #[expect(
+        clippy::type_complexity,
+        reason = "Machine, model, original tool families and host ports retain their independent inferred owners."
+    )]
+    pub fn to_machine_with_tools<F, L, TI, M, TM>(
+        self: Rc<Self>,
+        model: F,
+        loader: L,
+        tools: TI,
+        timer: Rc<TM>,
+    ) -> AgentWired<
+        WiredMachine<
+            'a,
+            Stage,
+            P,
+            I,
+            S,
+            R,
+            A,
+            T,
+            C,
+            NativeCalls,
+            NoCompaction,
+            NoSnapshotCommand,
+            TE,
+        >,
+        impl Interpreter<CommandOf<P, I, S, C>, Error = AgentWorkError<ToolError>> + 'a,
+        impl Subscriptions<
+            DeadlinesSub,
+            ToolHostMsg<P, I, S, C::Msg>,
+            Error = AgentWorkError<ToolError>,
+        >,
+    >
+    where
+        F: ModelFactory<M, S> + 'a,
+        L: MessageLoader<P, I, M, S::Error> + 'a,
+        TI: Interpreter<C, ToolHostMsg<P, I, S, C::Msg>, Error = AgentWorkError<ToolError>>
+            + AgentToolRoutes<C, R, TE>
+            + 'a,
+        TM: Timer + 'static,
+        ToolHostMsg<P, I, S, C::Msg>: 'static,
+        M: 'a,
+        Stage: 'a,
+        P: 'a,
+        I: 'a,
+        S: 'a,
+        R: 'a,
+        TE: 'a,
+        A: 'a,
+        T: 'a,
+        Provider: 'a,
+        C: 'a,
+    {
+        let names = tools.settlement_types();
+        self.wire(
+            model,
+            loader,
+            tools,
+            NoCompactInterpreter(PhantomData),
+            NoSnapshotInterpreter(PhantomData),
+            timer,
+            names,
+            |agent, state, message, tools| {
+                let first_at = tools.at(message);
+                first_at
+                    .and_then(NumberOrNull::number)
+                    .ok_or(AgentMachineError::UnsupportedStamp { at: first_at })?;
+                let Some(settled) = tools
+                    .outcome_of(message)
+                    .map_err(AgentMachineError::ToolContract)?
+                else {
+                    return Ok(Step::new(Rc::clone(state), vec![]));
+                };
+                let at = tools.at(message);
+                let time = at
+                    .and_then(NumberOrNull::number)
+                    .ok_or(AgentMachineError::UnsupportedStamp { at })?;
+                match settled.outcome {
+                    crate::agent::types::ToolOutcome::Ok(result) => {
+                        agent.tool_ok(state, settled.call_id, result, time)
+                    }
+                    crate::agent::types::ToolOutcome::Error(error) => {
+                        agent.tool_err(state, settled.call_id, error, time)
+                    }
+                }
+                .map_err(AgentMachineError::Agent)
+            },
+        )
     }
 }
 
@@ -633,6 +809,8 @@ where
             NoCompactInterpreter(PhantomData),
             NoSnapshotInterpreter(PhantomData),
             timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
         )
     }
 }
@@ -716,6 +894,8 @@ where
             compact,
             NoSnapshotInterpreter(PhantomData),
             timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
         )
     }
 }
@@ -787,6 +967,8 @@ where
             NoCompactInterpreter(PhantomData),
             snapshot,
             timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
         )
     }
 }
@@ -901,7 +1083,16 @@ where
         CO: 'a,
         CE: 'a,
     {
-        self.wire(model, loader, tools, compact, snapshot, timer)
+        self.wire(
+            model,
+            loader,
+            tools,
+            compact,
+            snapshot,
+            timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
+        )
     }
 }
 
@@ -983,6 +1174,8 @@ where
             NoCompactInterpreter(PhantomData),
             snapshot,
             timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
         )
     }
 }
@@ -1105,6 +1298,15 @@ where
         CO: 'a,
         CE: 'a,
     {
-        self.wire(model, loader, tools, compact, snapshot, timer)
+        self.wire(
+            model,
+            loader,
+            tools,
+            compact,
+            snapshot,
+            timer,
+            Vec::new(),
+            Self::fold_legacy_tool::<TI>,
+        )
     }
 }
