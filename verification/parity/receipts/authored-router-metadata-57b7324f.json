@@ -1,0 +1,58 @@
+{
+  "kind": "native authored router metadata interface prerequisite",
+  "sourceCommit": "57b7324f8af4456c57ede8aa75ef2bb937574e30",
+  "baseCommit": "f2444214455c348948edc2472ca22c01fe67edbf",
+  "sourceFiles": 8,
+  "productionOwners": [
+    "crates/tea/src/core.rs",
+    "crates/tea/src/agent/tool/router.rs",
+    "crates/tea/src/agent/tool/empty.rs"
+  ],
+  "newSharedCases": 0,
+  "native": {
+    "tests": 16,
+    "newTests": 3,
+    "oldTests": 13,
+    "executedPublicConsumers": 2,
+    "newPublicConsumers": 1,
+    "typeRefusals": ["E0308", "E0308", "E0597"],
+    "publicBaselineCodes": ["E0599"],
+    "unchangedFinalConsumerSourceSha256": "ac05191d845c29c1ec7cb33ab3a9efad48805d0f6f2143a687fe4cdbd5d81507"
+  },
+  "cargo": {
+    "constructionSelections": 5,
+    "constructionExits": [101, 0, 101, 0, 0],
+    "singleFaultSelections": 1,
+    "singleFaultCompileExit": 0,
+    "singleFaultPublicExit": 101,
+    "allTargetAllFeatureClippyExit": 0
+  },
+  "control": {
+    "name": "owned-message-metadata-reversed",
+    "detected": true,
+    "sharedCredit": 0
+  },
+  "library": {
+    "successfulSelectionFresh": true,
+    "firstModifiedBuildFresh": false,
+    "firstModifiedBatchExit": 101,
+    "selectedSha256": "c1cdac803cb69cbaa4b97a67319c600194baae7eecbee7c09fb8cf137ca0475f"
+  },
+  "proof": {
+    "directory": "/private/tmp/demlik-authored-router-metadata-proof-01a16c9d",
+    "sourceArchive": "/private/tmp/demlik-authored-router-metadata-proof-01a16c9d/source.tar.gz",
+    "sourceArchiveSha256": "358c6d890dea251de468b25dca88c5b22e4a07cc4244eb307918c1faa3ebd2f3",
+    "retainedArtifactRoles": 12,
+    "retirementRecord": "/private/tmp/demlik-authored-router-metadata-proof-01a16c9d/retirement.json"
+  },
+  "qualifications": [
+    "Native interface/ownership proof only; no new TypeScript shared case or coverage binding.",
+    "No full Agent bridge, runtime dispatch, tool ladder, Store, schema or codec change/execution.",
+    "Reducer metadata is introspection; the authored callback remains authoritative for every application.",
+    "Existing Message constructors and static accepted_types fields remain unchanged; downstream exhaustive matches on the public TryUpdate enum must account for the new variant.",
+    "The callback uses borrowed router.outcome_of(message) to anchor its generated family; an earlier unanchored consumer E0282 is retained.",
+    "Default focused tests/examples executed; optional-feature code received all-target all-feature Clippy/type checking, not an additional feature runtime run.",
+    "Baseline library is compile-red-only. Rebuildable dependency caches and Clippy metadata are not retained; executed selected binaries and required libraries are retained.",
+    "Environment-only Cargo101 and two external-rustc link setup failures are historical zero-credit records."
+  ]
+}
