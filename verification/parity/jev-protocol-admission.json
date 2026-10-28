@@ -1,0 +1,170 @@
+{
+  "sourceCommit": "281ad484750203c34097aea1db6a8a1f89363db8",
+  "scope": "Pure Jev protocol and decoded reply only; saved expected digests, never Rust fixture answers.",
+  "sourceHashes": {
+    "packages/tea/src/internal/jev/protocol/index.ts": "164d0db0876141f339008b328035586da8c09bd28486d81837fd1514e8c2dfbc",
+    "packages/tea/src/internal/jev/ask/index.ts": "51d1e0e812ecb11ac6563c0f70796e90deb1f8a03d5cf8c581d86c96b925b379",
+    "verification/parity/jev-protocol-cases.json.fixture": "935e978d08c5eb43c3a784dbc67b58eb90db65a548903dcdeac4b84085825a70",
+    "verification/parity/jev-protocol-reference.mjs": "903d6179ebf524d6bc19e7c376244598b8a9c03724c118799bc0015b86e18b69"
+  },
+  "driverSha256": "e2fc3a45661337e9bd7ee0508c41a258df24789b0e2dcd90eb877df21e4d5073",
+  "lineage": {
+    "originalSourceBeforeRustSha256": "2394c36363e08574980e625be8636d705475019e466e0c235266f98cff0526f5",
+    "correctedSourceSha256": "ab3e06f24ab2d609924be6c37e4d0663e2f4c9b952b821f688a9a940ab1ffa58",
+    "postNativeCorrectedRow": "jev.protocol.non-object-bodies",
+    "originalOtherViewsUnchanged": 23,
+    "all24InputsIdentical": true,
+    "fullyUnchangedPreNative24Claim": false
+  },
+  "rows": [
+    {
+      "id": "jev.protocol.invoice-200",
+      "inputSha256": "22346fcd5df26f1c922a283061f0d88e322c36c7b5068b6e58a0b30b8d4b09af",
+      "viewSha256": "e2d75b23062c5088e78074f5de5069237d144c00822f4ea8e8ad970848191d79",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.http-429",
+      "inputSha256": "0281e9ce8b152295dd07cf58378a0dfdbdfffecc3c2d9256fd95f6a7dea29df9",
+      "viewSha256": "85ad38ac8fc0ab2fe6dd46c8e549b6cd9b45a4e672082ff0df1a21e5b82bb984",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.http-401",
+      "inputSha256": "d157db5f19bdf241bf8ee530817d80bca4106117aa5a0a881f23fc0a43ef369a",
+      "viewSha256": "91186ab1de0dd4dd4bc978aff775bcf855549cf714428e3f9c9a6e6be6d5e0da",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.http-529",
+      "inputSha256": "6bde6af0fe3b9cba6f7fe2696e9040b7394f2d1a575bfd004fdabdb7caa2b6cb",
+      "viewSha256": "9172737910deed5fa6b51bbdbbde927ca009488f50e8f0c4c8498592df8f3ab5",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.status-number-family",
+      "inputSha256": "2674f5a0b91939bb79c083406b4002c8151cf680b1790f93dda9872b66d1d9e3",
+      "viewSha256": "0bd5fbf7aafafb439dcc56bc9226224143700269653ad9bedc68f617e24da8d7",
+      "callsSha256": "8690dd8ab894f0e60c79a595f8e7b48414dcf3fad1c5ecc5d466a677df8fada2"
+    },
+    {
+      "id": "jev.protocol.choice-first-fault",
+      "inputSha256": "9dd1025868f1383d894b9073f2d96c413838e89463f89fbb792d271c581fcd95",
+      "viewSha256": "c414b8d9cebd2a9fdd83bd69f2f2d18f04684bd51ba94848c30ce371b9cd0836",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.probability-bad-value",
+      "inputSha256": "3c8e534516ad0b42793770f6e779ff9371304f99ca94ce48a011fabbdf99e521",
+      "viewSha256": "a02711dc99f3cfe32c9ece8bd82d262b6d0326e02ebcb51475f0338e7f74e148",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.probability-missing-extra",
+      "inputSha256": "2e1a386462ac165e5d0d114a7eda51f6339b5397e0b77a2ca3d1b3b128e76eef",
+      "viewSha256": "cb45c18c8310feb083217953d4ec7541c0f0a174e402bdab64880e3ed60f35e4",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.probability-key-order",
+      "inputSha256": "1c4b41e601d2d8ea95e0abf691ce4a4995190c4fd828fc3b5f41f5323585e5fb",
+      "viewSha256": "dc2e974268448ea848efb4f48888eced0c9b170c6210dd9336eb3e8c3d5c571a",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.score-confidence-first",
+      "inputSha256": "2560cfaef59df7d8e2db7fdf568d96c033704a903603afb35973b04dca48f305",
+      "viewSha256": "8c92beb29b0bad48c5f9473838a2a434320ea5561459681068bbd89cecc84170",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.score-legend-first",
+      "inputSha256": "a23139c9b721b64e1bc7d5a1cd07a9c3a9b263c9c6106c1c5ae5bdbc77b754a2",
+      "viewSha256": "a6810b50eac924b5dee0fba259746822dbd11a6df559cdf100d934661edd552e",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.noul-nonfinite",
+      "inputSha256": "0f3a8b541162c8e3f4bd024d1098e2a56f0657f348a368fd07d9b93f3636e919",
+      "viewSha256": "02d8379f8116975967f2243f0b783f520b0b1a618dd7d127ef9696b735658f0c",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.finite-unbounded-signed-zero",
+      "inputSha256": "399f6cfce8d941b62439a27082f98ab89a0ca905e24e590e341e4e6b41777426",
+      "viewSha256": "47dfc96e9d19ff457e8fbe36e1eabf09cbb3fe981fc386a5dc082be0568cb162",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.missing-answer",
+      "inputSha256": "cfbd4a2c56db862b05d629ef4f71d31f15c4b83f2edf75013d8caf96683a5e5f",
+      "viewSha256": "abf65baaba54faf9f64cc0938bb94261ca7d1d6c803e8c1caf8cee0ef2e4cd46",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.type-mismatch",
+      "inputSha256": "ee680269843ebab9a078e301e881dfd560ea72518fde55381a19d6f84165725c",
+      "viewSha256": "36c2b3160d7e9c3cbe9b425123dcba75b313a1b3484f3976d20a04cf697a5f37",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.envelope-first-fault",
+      "inputSha256": "de039980eff6ad5290e7ccd47f7f4d8a2dd60924ee1adc95288615def05a64de",
+      "viewSha256": "98bb8772a0a187441af68ef9915f5ee9d2ff0991ffd0a5c44f9bcae6fc8699c1",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.non-object-bodies",
+      "inputSha256": "485fba1a933ffb17c5dd24be464134d78328421f6004805aa100036634d1b612",
+      "viewSha256": "bafac40afaf06a1bf7cb962134be09f2f356f830a380eff8f45da26dff740754",
+      "callsSha256": "0b0ccd5c344585c2ef6f05bef2d40bce10aa74eb43b515901244f5ee2bf053af"
+    },
+    {
+      "id": "jev.protocol.integer-key-order",
+      "inputSha256": "c4535e78b8ac9e6ffed273b908877fb26ab03c999d51542fed8f66f592277d4e",
+      "viewSha256": "9d7c95a1b5e6805477ffe5494d07ba0ce81ab75144b19680aa9ef2207a916ee8",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.own-tag-and-extra",
+      "inputSha256": "12411ff9247e88f08f032629a16d65fe369b83c76a244e4c886a3371e1fbbd4f",
+      "viewSha256": "b47776d26b819c7ba1df8da396058671171babf9c7c885112c8a8bb5434c6a1f",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.utf16",
+      "inputSha256": "2ab012209c2e242e38f68227a8e76d48c568764a3a148ba028f68145a12b3b8c",
+      "viewSha256": "0a63a99cacdd1bf2d072bf08c130c56888634c222afd257ea443db06c8061cc8",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.fresh-output",
+      "inputSha256": "bd67ded2cd52f5caac51900602bac0571c1916b4eb1b6f745bebafc0974f2b5d",
+      "viewSha256": "fd264ceabc3376eb7da9ecaad58e47e3189b4d0052588a66177f3e07422cdec3",
+      "callsSha256": "b4a2a6c0f4e99e7bb16bc296d1a68b18f68825b2952e9a0c75f80ed18ab952e1"
+    },
+    {
+      "id": "jev.protocol.score-loose-maps",
+      "inputSha256": "c2f846b3dc6a493b235772c5f78e9f8f01a89b963217e4bccb3ccdb2d49acd4d",
+      "viewSha256": "f2ae370d7a9d8c97041f0eac4f02dc0a208009b3e8695d4997edcfd8df798d1e",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    },
+    {
+      "id": "jev.protocol.tag-guards",
+      "inputSha256": "0bae9baabac550766fb1591c82f1b2b18d4f93ab14c9ea6e947af483428dc0bc",
+      "viewSha256": "15f51c4b29efcfc7f5cee3b48424ed22d822eb9c35a245635e4a629ccce7c107",
+      "callsSha256": "2998a5c4e126d336076809967c88ce334d74259e784c1269653abd1dc25476da"
+    },
+    {
+      "id": "jev.protocol.empty-questions",
+      "inputSha256": "22b5a49ee8cf514015df924ced7e43058507174284a1a610dc5db9f4b97f77e7",
+      "viewSha256": "7b47f02d59bc781be59c7abc8102c395dfa28d4af78d0626043228b1a04ecd06",
+      "callsSha256": "408b9e1216aef04badae2263dcf41f45642874bce854530af8ff008106f1e8d2"
+    }
+  ],
+  "limits": [
+    "PlainData wire values and valid typed dense question maps; raw getters/prototypes/own __proto__/non-wire values unproved.",
+    "Literal-key TypeScript mapped typing remains open; native answers are checked enums/maps.",
+    "No HTTP, ask/retry/batching, fallback/foreign-unwrapping, actor/scheduler or full-state codec proof."
+  ]
+}
