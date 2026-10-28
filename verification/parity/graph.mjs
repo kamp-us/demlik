@@ -15,6 +15,14 @@ const nativeCompilerManifest = require.resolve(
 );
 const suites = [
   {
+    name: "project-ordering",
+    driver: "project_ordering_driver",
+    script: "graph-project-ordering-run.mjs",
+    format: "process",
+    traceField: "nativeTrace",
+    evidenceField: "observedCalls",
+  },
+  {
     name: "hotspots",
     driver: "hotspots_driver",
     script: "graph-hotspots-run.mjs",

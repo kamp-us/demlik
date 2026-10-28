@@ -72,12 +72,18 @@ def main():
   else:
    request={'input':row['input'],'directory':str(directory)};argv=[binaries['project']['path'],str(folder/'request.json')];stdin=None;response=folder/'response.json'
   write(folder/'request.json',request)
+  stdin_record = {}
+  if stdin is not None:
+   stdin_file = folder/'native.stdin.request.json'
+   stdin_file.write_bytes(stdin)
+   stdin_record = {'stdin':str(stdin_file),'stdinSha256':sha(stdin),'stdinBytes':len(stdin)}
+  write(folder/'input-receipt.json',{'request':str(folder/'request.json'),'requestSha256':digest(folder/'request.json'),**stdin_record})
   started=time.time()
   try:p=subprocess.run(argv,cwd=directory,input=stdin,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=120)
-  except subprocess.TimeoutExpired as e:
-   (folder/'native.stdout').write_bytes(e.stdout or b'');(folder/'native.stderr').write_bytes(e.stderr or b'');write(folder/'failure.json',{'kind':'timeout','seconds':120});raise
+  except (subprocess.TimeoutExpired,OSError) as e:
+   (folder/'native.stdout').write_bytes(getattr(e,'stdout',None) or b'');(folder/'native.stderr').write_bytes(getattr(e,'stderr',None) or b'');write(folder/'failure.json',{'kind':'timeout' if isinstance(e,subprocess.TimeoutExpired) else 'spawn','message':str(e),'seconds':120,**stdin_record});raise
   (folder/'native.stdout').write_bytes(p.stdout);(folder/'native.stderr').write_bytes(p.stderr)
-  process={'id':ident,'argv':argv,'cwd':str(directory),'status':p.returncode,'request':str(folder/'request.json'),'requestSha256':digest(folder/'request.json'),'stdout':str(folder/'native.stdout'),'stdoutSha256':sha(p.stdout),'stderr':str(folder/'native.stderr'),'stderrSha256':sha(p.stderr),'seconds':time.time()-started,'binarySha256':binaries['cli' if action else 'project']['sha256']}
+  process={'id':ident,'argv':argv,'cwd':str(directory),'status':p.returncode,'request':str(folder/'request.json'),'requestSha256':digest(folder/'request.json'),'stdout':str(folder/'native.stdout'),'stdoutSha256':sha(p.stdout),'stderr':str(folder/'native.stderr'),'stderrSha256':sha(p.stderr),'seconds':time.time()-started,'binarySha256':binaries['cli' if action else 'project']['sha256'],**stdin_record}
   if not action:response.write_bytes(p.stdout)
   write(folder/'process.json',process);report['processes'].append(process)
   body=json.loads(response.read_bytes());process['response']=str(response);process['responseSha256']=digest(response);write(folder/'process.json',process)
