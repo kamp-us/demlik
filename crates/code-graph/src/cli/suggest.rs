@@ -1,5 +1,5 @@
 use super::OPTION_SPECS;
-use crate::{project::locale_compare_units, text::JsString};
+use crate::text::JsString;
 
 // Commander 11.1.0 lib/suggestSimilar.js, adapted only for this command's
 // visible long options. Its optimal-string-alignment distance operates on
@@ -34,7 +34,7 @@ pub(super) fn similar(flag: &JsString) -> String {
             }
         }
     }
-    similar.sort_by(|left, right| locale_compare_units(&left.1, &right.1));
+    similar.sort_by(|left, right| left.1.cmp(&right.1));
     let names = similar.iter().map(|(name, _)| *name).collect::<Vec<_>>();
     match names.as_slice() {
         [] => String::new(),
