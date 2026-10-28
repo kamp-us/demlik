@@ -342,7 +342,7 @@ fn assemble_graph_with_reports_in(
 ) -> Result<Graph, AssemblyError> {
     let root_text = text.as_ref().map(|text| text.root);
     thresholds.validate().map_err(AssemblyError::Threshold)?;
-    let functions = discover_functions(&loaded.project.source_files).functions;
+    let functions = discover_functions(&loaded.project.source_files, collation)?.functions;
     let ids: Vec<_> = functions
         .iter()
         .map(|function| function.id.clone())
@@ -392,8 +392,13 @@ fn assemble_graph_with_reports_in(
                     )
                 })
                 .transpose()?;
-            let result =
-                resolve_edges_with_cross_runtime(context, imports, &ids, resolver.as_mut())?;
+            let result = resolve_edges_with_cross_runtime(
+                context,
+                imports,
+                &ids,
+                resolver.as_mut(),
+                collation,
+            )?;
             let uses = resolve_declaration_uses(
                 context,
                 &discover_declarations(&loaded.project.source_files, collation)?,
@@ -481,8 +486,10 @@ fn build(
         }
         None => to_relative(&cwd, &loaded.root_absolute).into(),
     };
-    let discovered =
-        discovered.unwrap_or_else(|| discover_functions(&loaded.source_files).functions);
+    let discovered = match discovered {
+        Some(found) => found,
+        None => discover_functions(&loaded.source_files, collation)?.functions,
+    };
     let functions: Vec<_> = discovered
         .iter()
         .map(|discovered| {
@@ -683,7 +690,9 @@ fn build(
         stats,
     };
     if let Some(analysis) = analysis {
-        analysis.apply(&mut graph).map_err(AssemblyError::from)?;
+        analysis
+            .apply(&mut graph, collation)
+            .map_err(AssemblyError::from)?;
     }
     graph.data = data
         .map(|options| {

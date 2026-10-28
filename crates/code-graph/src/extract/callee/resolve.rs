@@ -1,6 +1,8 @@
 use super::factory::FactoryResolver;
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{LibraryKind, NativeNode, TsgoError};
+use crate::extract::ResolveError;
+use crate::project::Collation;
 use crate::text::JsString;
 use indexmap::IndexMap;
 
@@ -229,8 +231,9 @@ pub fn resolve_callees(
     context: &mut TypeContext<'_, '_>,
     call: &NativeNode,
     factories: &mut FactoryResolver,
-) -> Result<Vec<ResolvedCallee>, TsgoError> {
-    let forwarded = factories.resolve(context, call)?;
+    collation: &Collation,
+) -> Result<Vec<ResolvedCallee>, ResolveError> {
+    let forwarded = factories.resolve(context, call, collation)?;
     if forwarded.is_empty() {
         return Ok(vec![resolve_callee(context, call)?]);
     }

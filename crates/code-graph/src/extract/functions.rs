@@ -4,7 +4,7 @@ use std::rc::Rc;
 use indexmap::IndexSet;
 use serde::Serialize;
 
-use crate::project::{SourceUnit, locale_compare};
+use crate::project::{Collation, CollationError, CollationInput, SourceUnit};
 use crate::syntax::file::{NodeRef, SyntaxFile, is_accessor_kind, is_method_value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -275,7 +275,10 @@ fn callable_exported(node: NodeRef<'_>, kind: FunctionKind, exported: &IndexSet<
     }
 }
 
-pub fn discover_functions(source_files: &[Rc<SourceUnit>]) -> FunctionDiscovery {
+pub fn discover_functions(
+    source_files: &[Rc<SourceUnit>],
+    collation: &Collation,
+) -> Result<FunctionDiscovery, CollationError> {
     let mut functions = Vec::new();
     for unit in source_files {
         let mut pending: Vec<_> = unit.syntax.root().children().into_iter().rev().collect();
@@ -316,11 +319,23 @@ pub fn discover_functions(source_files: &[Rc<SourceUnit>]) -> FunctionDiscovery 
             });
         }
     }
+    let mut functions = functions
+        .into_iter()
+        .map(|row| {
+            let file = CollationInput::from_text(&row.file)?;
+            let name = CollationInput::from_text(&row.name)?;
+            let id = CollationInput::from_text(&row.id)?;
+            Ok((row, file, name, id))
+        })
+        .collect::<Result<Vec<_>, CollationError>>()?;
     functions.sort_by(|left, right| {
-        locale_compare(&left.file, &right.file)
-            .then(left.start_line.cmp(&right.start_line))
-            .then_with(|| locale_compare(&left.name, &right.name))
-            .then_with(|| locale_compare(&left.id, &right.id))
+        collation
+            .compare(&left.1, &right.1)
+            .then(left.0.start_line.cmp(&right.0.start_line))
+            .then_with(|| collation.compare(&left.2, &right.2))
+            .then_with(|| collation.compare(&left.3, &right.3))
     });
-    FunctionDiscovery { functions }
+    Ok(FunctionDiscovery {
+        functions: functions.into_iter().map(|(row, _, _, _)| row).collect(),
+    })
 }

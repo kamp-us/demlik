@@ -52,9 +52,12 @@ impl Project {
     }
     fn references(&self) -> ReferenceResult {
         let loaded = load_edge_project(&self.0, EdgeScope::Package, &self.0, None).unwrap();
-        let functions =
-            demlik_code_graph::extract::functions::discover_functions(&loaded.project.source_files)
-                .functions;
+        let functions = demlik_code_graph::extract::functions::discover_functions(
+            &loaded.project.source_files,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap()
+        .functions;
         let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
         let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
@@ -70,7 +73,15 @@ impl Project {
                 ts_config_path: &loaded.ts_config_path,
                 functions: &functions,
             },
-            |context| resolve_references(context, &inputs.names, &inputs.exports_by_file),
+            |context| {
+                Ok(resolve_references(
+                    context,
+                    &inputs.names,
+                    &inputs.exports_by_file,
+                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                )
+                .unwrap())
+            },
         )
         .unwrap()
     }

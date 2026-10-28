@@ -163,8 +163,10 @@ fn execute(
     let functions = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,
-        &loaded.project.source_files
+        &loaded.project.source_files,
+        &metadata_collation
     )
+    .map_err(DriverError::backend)?
     .functions;
     let ids = functions
         .iter()
@@ -194,35 +196,37 @@ fn execute(
             functions: &functions
         },
         |context| {
-            let methods = observe!(
-                calls,
-                demlik_code_graph::extract::cross_runtime::method_ids_of_classes,
-                context,
-                &case.input.classes
-            )?
-            .into_iter()
-            .collect();
-            let mut probe_resolver = observe!(
-                calls,
-                demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
-                input(),
-                context
-            )?;
-            let mut probes = Vec::new();
-            for file in &context.files {
-                for node in file.source.root().descendants()? {
-                    if !node.is_kind("CallExpression") {
-                        continue;
-                    }
-                    let Some(caller_id) =
-                        demlik_code_graph::extract::callee::resolve::enclosing_id(
-                            &node,
-                            &context.node_to_id,
-                        )?
-                    else {
-                        continue;
-                    };
-                    let resolved = observe!(
+            Ok(
+                (|| -> Result<_, demlik_code_graph::extract::ResolveError> {
+                    let methods = observe!(
+                        calls,
+                        demlik_code_graph::extract::cross_runtime::method_ids_of_classes,
+                        context,
+                        &case.input.classes
+                    )?
+                    .into_iter()
+                    .collect();
+                    let mut probe_resolver = observe!(
+                        calls,
+                        demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
+                        input(),
+                        context
+                    )?;
+                    let mut probes = Vec::new();
+                    for file in &context.files {
+                        for node in file.source.root().descendants()? {
+                            if !node.is_kind("CallExpression") {
+                                continue;
+                            }
+                            let Some(caller_id) =
+                                demlik_code_graph::extract::callee::resolve::enclosing_id(
+                                    &node,
+                                    &context.node_to_id,
+                                )?
+                            else {
+                                continue;
+                            };
+                            let resolved = observe!(
                         calls,
                         demlik_code_graph::extract::cross_runtime::CrossRuntimeResolver::resolve,
                         &mut probe_resolver,
@@ -231,44 +235,48 @@ fn execute(
                         &caller_id,
                         &context.relative_path(&node.source_file())
                     )?;
-                    probes.push(Probe {
-                        caller_id,
-                        line: context.start_line(&node)?,
-                        callee: resolved.map(|callee| Callee {
-                            callee_id: callee.callee_id,
-                            declaration: callee.declaration,
-                        }),
-                    });
-                }
-            }
-            let mut resolver = observe!(
-                calls,
-                demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
-                input(),
-                context
-            )?;
-            let edges = observe!(
-                calls,
-                demlik_code_graph::extract::edges::resolve_edges_with_cross_runtime,
-                context,
-                imports,
-                &ids,
-                Some(&mut resolver)
-            )?;
-            let cross_edges = observe!(
-                calls,
-                demlik_code_graph::extract::cross_runtime::CrossRuntimeResolver::edges,
-                &resolver
-            );
-            Ok(Details {
-                methods,
-                probes,
-                edges,
-                cross_edges,
-                unjoined: context.unjoined.clone(),
-            })
+                            probes.push(Probe {
+                                caller_id,
+                                line: context.start_line(&node)?,
+                                callee: resolved.map(|callee| Callee {
+                                    callee_id: callee.callee_id,
+                                    declaration: callee.declaration,
+                                }),
+                            });
+                        }
+                    }
+                    let mut resolver = observe!(
+                        calls,
+                        demlik_code_graph::extract::cross_runtime::create_cross_runtime_resolver,
+                        input(),
+                        context
+                    )?;
+                    let edges = observe!(
+                        calls,
+                        demlik_code_graph::extract::edges::resolve_edges_with_cross_runtime,
+                        context,
+                        imports,
+                        &ids,
+                        Some(&mut resolver),
+                        &metadata_collation
+                    )?;
+                    let cross_edges = observe!(
+                        calls,
+                        demlik_code_graph::extract::cross_runtime::CrossRuntimeResolver::edges,
+                        &resolver
+                    );
+                    Ok(Details {
+                        methods,
+                        probes,
+                        edges,
+                        cross_edges,
+                        unjoined: context.unjoined.clone(),
+                    })
+                })(),
+            )
         }
     )
+    .map_err(DriverError::backend)?
     .map_err(DriverError::backend)?;
     to_raw_value(&Output {
         catalog,

@@ -47,11 +47,15 @@ fn execute(case: Case, calls: &mut Vec<&'static str>) -> Result<Value, String> {
         listing.as_ref()
     )
     .map_err(|error| error.to_string())?;
+    let metadata_collation = demlik_code_graph::project::Collation::try_node22_en_us()
+        .map_err(|error| error.to_string())?;
     let discovered = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,
-        &project.source_files
-    );
+        &project.source_files,
+        &metadata_collation
+    )
+    .map_err(|error| error.to_string())?;
     let functions: Vec<_> = discovered
         .functions
         .iter()

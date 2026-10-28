@@ -99,7 +99,11 @@ fn discovers_named_callables_preserving_ordinals_kinds_and_export_status() {
         file: "fixture.test.ts".into(),
         syntax: parse_type_script(Path::new("fixture.test.ts"), text).unwrap(),
     });
-    let found = discover_functions(&[unit]);
+    let found = discover_functions(
+        &[unit],
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let names: Vec<_> = found
         .functions
         .iter()
@@ -145,7 +149,11 @@ fn computes_body_metrics_without_charging_named_nested_functions_to_the_parent()
         file: "metrics.ts".into(),
         syntax: parse_type_script(Path::new("metrics.ts"), text).unwrap(),
     });
-    let discovered = discover_functions(std::slice::from_ref(&unit));
+    let discovered = discover_functions(
+        std::slice::from_ref(&unit),
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let parent = discovered
         .functions
         .iter()
@@ -186,7 +194,11 @@ fn keeps_verbatim_headers_and_only_contiguous_matching_overloads() {
         file: "headers.ts".into(),
         syntax: parse_type_script(Path::new("headers.ts"), text).unwrap(),
     });
-    let discovered = discover_functions(&[unit]);
+    let discovered = discover_functions(
+        &[unit],
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap();
     let pick = discovered
         .functions
         .iter()

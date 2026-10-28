@@ -1,9 +1,10 @@
+use super::ResolveError;
 use super::callee::factory::FactoryResolver;
 use super::callee::resolve::resolve_callees;
 use super::chain_depth::compute_chain_depths;
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeFile, NativeNode, TsgoError, native_flag};
-use crate::project::{locale_compare, locale_compare_units};
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::CallSite;
 use crate::schema::CallerSite;
 use crate::syntax::imports::{ImportEdge, ImportGraph};
@@ -145,7 +146,8 @@ fn constant_arguments(
     context: &TypeContext<'_, '_>,
     call: &NativeNode,
     constants: &IndexSet<String>,
-) -> Result<Vec<String>, TsgoError> {
+    collation: &Collation,
+) -> Result<Vec<String>, ResolveError> {
     if constants.is_empty() {
         return Ok(Vec::new());
     }
@@ -167,35 +169,48 @@ fn constant_arguments(
             }
         }
     }
-    let mut names: Vec<_> = found.into_iter().collect();
-    names.sort_by(|left, right| locale_compare(left, right));
-    Ok(names)
+    Ok(sorted_constants(found, collation)?)
 }
-fn dedup_calls(sites: Vec<CallSite>) -> Vec<CallSite> {
+fn sorted_constants(
+    values: IndexSet<String>,
+    collation: &Collation,
+) -> Result<Vec<String>, CollationError> {
+    let mut values = values
+        .into_iter()
+        .map(|value| CollationInput::from_text(&value).map(|key| (value, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(values.into_iter().map(|(value, _)| value).collect())
+}
+fn dedup_calls(
+    sites: Vec<CallSite>,
+    collation: &Collation,
+) -> Result<Vec<CallSite>, CollationError> {
     let mut merged: IndexMap<(usize, crate::text::JsString), CallSite> = IndexMap::new();
     for site in sites {
         let key = (site.line, site.callee_id.clone());
         if let Some(held) = merged.get_mut(&key) {
-            let mut names: Vec<_> = held
+            let names = held
                 .const_args
                 .drain(..)
                 .chain(site.const_args)
-                .collect::<IndexSet<_>>()
-                .into_iter()
-                .collect();
-            names.sort_by(|left, right| locale_compare(left, right));
-            held.const_args = names;
+                .collect::<IndexSet<_>>();
+            held.const_args = sorted_constants(names, collation)?;
         } else {
             merged.insert(key, site);
         }
     }
-    let mut sites: Vec<_> = merged.into_values().collect();
+    let mut sites = merged
+        .into_values()
+        .map(|site| CollationInput::from_utf16(site.callee_id.units()).map(|key| (site, key)))
+        .collect::<Result<Vec<_>, _>>()?;
     sites.sort_by(|left, right| {
-        left.line
-            .cmp(&right.line)
-            .then_with(|| locale_compare_units(left.callee_id.units(), right.callee_id.units()))
+        left.0
+            .line
+            .cmp(&right.0.line)
+            .then_with(|| collation.compare(&left.1, &right.1))
     });
-    sites
+    Ok(sites.into_iter().map(|(site, _)| site).collect())
 }
 fn own_calls(
     root: &NativeNode,
@@ -219,8 +234,9 @@ pub fn resolve_edges(
     context: &mut TypeContext<'_, '_>,
     imports: ImportGraph,
     ids: &[String],
-) -> Result<EdgeResult, TsgoError> {
-    resolve_edges_with_cross_runtime(context, imports, ids, None)
+    collation: &Collation,
+) -> Result<EdgeResult, ResolveError> {
+    resolve_edges_with_cross_runtime(context, imports, ids, None, collation)
 }
 
 pub fn resolve_edges_with_cross_runtime(
@@ -228,7 +244,8 @@ pub fn resolve_edges_with_cross_runtime(
     imports: ImportGraph,
     ids: &[String],
     mut cross_runtime: Option<&mut super::cross_runtime::CrossRuntimeResolver<'_>>,
-) -> Result<EdgeResult, TsgoError> {
+    collation: &Collation,
+) -> Result<EdgeResult, ResolveError> {
     let mut calls_by_id: IndexMap<String, Vec<CallSite>> =
         ids.iter().map(|id| (id.clone(), Vec::new())).collect();
     let sources: Vec<_> = context
@@ -274,21 +291,21 @@ pub fn resolve_edges_with_cross_runtime(
                 .flatten();
             let callees = match cross {
                 Some(callee) => vec![callee],
-                None => resolve_callees(context, call, &mut factories)?,
+                None => resolve_callees(context, call, &mut factories, collation)?,
             };
             for callee in callees {
                 sites.push(CallSite {
                     callee_id: callee.callee_id,
                     declaration: callee.declaration,
                     line: context.start_line(call)?,
-                    const_args: constant_arguments(context, call, constants)?,
+                    const_args: constant_arguments(context, call, constants, collation)?,
                 });
             }
         }
         let held = calls_by_id.entry(id).or_default();
         let mut accumulated = std::mem::take(held);
         accumulated.extend(sites);
-        *held = dedup_calls(accumulated);
+        *held = dedup_calls(accumulated, collation)?;
     }
     let mut called_by_id: IndexMap<String, Vec<CallerSite>> =
         ids.iter().map(|id| (id.clone(), Vec::new())).collect();
@@ -307,11 +324,17 @@ pub fn resolve_edges_with_cross_runtime(
     for callers in called_by_id.values_mut() {
         let mut seen = HashSet::new();
         callers.retain(|site| seen.insert((site.line, site.caller_id.clone())));
-        callers.sort_by(|left, right| {
-            left.line
-                .cmp(&right.line)
-                .then_with(|| locale_compare(&left.caller_id, &right.caller_id))
+        let mut keyed = std::mem::take(callers)
+            .into_iter()
+            .map(|site| CollationInput::from_text(&site.caller_id).map(|key| (site, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        keyed.sort_by(|left, right| {
+            left.0
+                .line
+                .cmp(&right.0.line)
+                .then_with(|| collation.compare(&left.1, &right.1))
         });
+        *callers = keyed.into_iter().map(|(site, _)| site).collect();
     }
     let chain_depth_by_id = compute_chain_depths(ids, &calls_by_id);
     Ok(EdgeResult {

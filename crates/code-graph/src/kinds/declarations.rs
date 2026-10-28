@@ -1,7 +1,8 @@
 use super::rules::{CompiledRule, matching_rules};
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeNode, TsgoError};
-use crate::project::locale_compare_units;
+use crate::extract::ResolveError;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::text::JsString;
 use indexmap::{IndexMap, IndexSet};
 
@@ -78,7 +79,8 @@ fn guard_keys(
     context: &TypeContext<'_, '_>,
     literal: &NativeNode,
     rules: &[CompiledRule],
-) -> Result<Vec<JsString>, TsgoError> {
+    collation: &Collation,
+) -> Result<Vec<JsString>, ResolveError> {
     let mut keys = IndexSet::new();
     for property in literal.nodes("properties")? {
         if property.is_kind("PropertyAssignment")
@@ -91,18 +93,22 @@ fn guard_keys(
             ));
         }
     }
-    let mut keys: Vec<_> = keys.into_iter().collect();
-    keys.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-    Ok(keys)
+    let mut keys = keys
+        .into_iter()
+        .map(|value| CollationInput::from_utf16(value.units()).map(|key| (value, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    keys.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(keys.into_iter().map(|(value, _)| value).collect())
 }
 pub fn sibling_property_rules(
     context: &TypeContext<'_, '_>,
     rules: &[CompiledRule],
-) -> Result<RuleMap, TsgoError> {
+    collation: &Collation,
+) -> Result<RuleMap, ResolveError> {
     let mut out = RuleMap::new();
     for (node, id) in &context.node_to_id {
         if let Some(literal) = owning_object_literal(node)? {
-            let keys = guard_keys(context, &literal, rules)?;
+            let keys = guard_keys(context, &literal, rules, collation)?;
             if !keys.is_empty() {
                 out.insert(id.clone(), keys);
             }
@@ -184,7 +190,8 @@ fn type_config_owning(
 fn scoped_type_refs(
     context: &mut TypeContext<'_, '_>,
     rules: &[CompiledRule],
-) -> Result<IndexMap<NativeNode, Vec<JsString>>, TsgoError> {
+    collation: &Collation,
+) -> Result<IndexMap<NativeNode, Vec<JsString>>, ResolveError> {
     let mut files = IndexMap::new();
     for node in context.node_to_id.keys() {
         let file = node.source_file();
@@ -201,7 +208,7 @@ fn scoped_type_refs(
             if property_named(context, &literal, "fields")?.is_none() {
                 continue;
             }
-            let keys = guard_keys(context, &literal, rules)?;
+            let keys = guard_keys(context, &literal, rules, collation)?;
             if keys.is_empty() {
                 continue;
             }
@@ -227,11 +234,12 @@ fn type_guard_of(
     node: &NativeNode,
     scoped: &IndexMap<NativeNode, Vec<JsString>>,
     rules: &[CompiledRule],
-) -> Result<Vec<JsString>, TsgoError> {
+    collation: &Collation,
+) -> Result<Vec<JsString>, ResolveError> {
     let mut ancestor = node.parent()?;
     while let Some(at) = ancestor {
         if let Some(config) = type_config_owning(context, &at)? {
-            return guard_keys(context, &config, rules);
+            return guard_keys(context, &config, rules, collation);
         }
         if at.is_kind("CallExpression") {
             let callee = at.required_node("expression")?;
@@ -259,8 +267,9 @@ fn type_guard_of(
 pub fn type_scope_rules(
     context: &mut TypeContext<'_, '_>,
     rules: &[CompiledRule],
-) -> Result<RuleMap, TsgoError> {
-    let scoped = scoped_type_refs(context, rules)?;
+    collation: &Collation,
+) -> Result<RuleMap, ResolveError> {
+    let scoped = scoped_type_refs(context, rules, collation)?;
     let nodes: Vec<_> = context
         .node_to_id
         .iter()
@@ -269,7 +278,7 @@ pub fn type_scope_rules(
     let mut out = RuleMap::new();
     for (node, id) in nodes {
         if !skips_type_scopes(context, &node)? {
-            let keys = type_guard_of(context, &node, &scoped, rules)?;
+            let keys = type_guard_of(context, &node, &scoped, rules, collation)?;
             if !keys.is_empty() {
                 out.insert(id, keys);
             }
@@ -277,7 +286,10 @@ pub fn type_scope_rules(
     }
     Ok(out)
 }
-pub fn merge_rule_maps<'a>(maps: impl IntoIterator<Item = &'a RuleMap>) -> RuleMap {
+pub fn merge_rule_maps<'a>(
+    maps: impl IntoIterator<Item = &'a RuleMap>,
+    collation: &Collation,
+) -> Result<RuleMap, CollationError> {
     let mut merged: IndexMap<String, IndexSet<JsString>> = IndexMap::new();
     for map in maps {
         for (id, keys) in map {
@@ -290,9 +302,12 @@ pub fn merge_rule_maps<'a>(maps: impl IntoIterator<Item = &'a RuleMap>) -> RuleM
     merged
         .into_iter()
         .map(|(id, keys)| {
-            let mut keys: Vec<_> = keys.into_iter().collect();
-            keys.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-            (id, keys)
+            let mut keys = keys
+                .into_iter()
+                .map(|value| CollationInput::from_utf16(value.units()).map(|key| (value, key)))
+                .collect::<Result<Vec<_>, _>>()?;
+            keys.sort_by(|a, b| collation.compare(&a.1, &b.1));
+            Ok((id, keys.into_iter().map(|(value, _)| value).collect()))
         })
         .collect()
 }

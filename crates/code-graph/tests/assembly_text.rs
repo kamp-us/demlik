@@ -133,7 +133,12 @@ fn public_text_context_keeps_borrowed_rc_state_and_real_semantic_facts() {
     let native = project.populate("ordinary", true);
     let root = JsString::from(native.to_string_lossy().as_ref());
     let loaded = loaded(&root, &project.0);
-    let functions = discover_functions(&loaded.project.source_files).functions;
+    let functions = discover_functions(
+        &loaded.project.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let visits = Rc::new(Cell::new(0));
     let borrowed = String::from("run");
     let count = with_type_context_text(
@@ -222,7 +227,12 @@ fn raw_config_text_reaches_real_go_while_replacement_and_native_paths_stay_valid
     let native = project.populate("raw\u{fffd}", true);
     let root = project.raw_child();
     let loaded = loaded(&root, &project.0);
-    let functions = discover_functions(&loaded.project.source_files).functions;
+    let functions = discover_functions(
+        &loaded.project.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let context = with_type_context_text(
         &binary(),
         TypeContextInput {
@@ -288,7 +298,12 @@ fn raw_source_lookup_survives_an_ascii_ancestor_config() {
     let native = project.populate("raw\u{fffd}", false);
     let root = project.raw_child();
     let loaded = loaded(&root, &project.0);
-    let functions = discover_functions(&loaded.project.source_files).functions;
+    let functions = discover_functions(
+        &loaded.project.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let context = with_type_context_text(
         &binary(),
         TypeContextInput {

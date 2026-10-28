@@ -126,6 +126,14 @@ impl From<DeclarationUseError> for AnalysisError {
         }
     }
 }
+impl From<super::ResolveError> for AnalysisError {
+    fn from(error: super::ResolveError) -> Self {
+        match error {
+            super::ResolveError::Compiler(e) => Self::Compiler(e),
+            super::ResolveError::Collation(e) => Self::Collation(e),
+        }
+    }
+}
 impl From<RuleCompileError> for AnalysisError {
     fn from(error: RuleCompileError) -> Self {
         match error {
@@ -272,10 +280,13 @@ pub fn complete_analysis(
             context,
             &compiled.entry_base_classes,
         )?,
-        declared_guards: merge_rule_maps([
-            &sibling_property_rules(context, &compiled.entry_guard_properties)?,
-            &type_scope_rules(context, &compiled.entry_guard_properties)?,
-        ]),
+        declared_guards: merge_rule_maps(
+            [
+                &sibling_property_rules(context, &compiled.entry_guard_properties, collation)?,
+                &type_scope_rules(context, &compiled.entry_guard_properties, collation)?,
+            ],
+            collation,
+        )?,
         convention_entries: if options.kinds {
             super::conventions::convention_entries(
                 functions,
@@ -293,6 +304,7 @@ pub fn complete_analysis(
             context,
             &inputs.names,
             &inputs.exports_by_file,
+            collation,
         )?)
     } else {
         None
@@ -318,11 +330,14 @@ pub fn complete_analysis(
     })
 }
 impl AnalysisBundle {
-    pub fn apply(self, graph: &mut Graph) -> Result<(), AnalysisError> {
+    pub fn apply(self, graph: &mut Graph, collation: &Collation) -> Result<(), AnalysisError> {
         for function in &mut graph.functions {
             function.node_kind = self
                 .kinds
-                .then(|| classify_function(function, &self.compiled, &self.classify_context));
+                .then(|| {
+                    classify_function(function, &self.compiled, &self.classify_context, collation)
+                })
+                .transpose()?;
         }
         graph.clusters = self
             .clusters

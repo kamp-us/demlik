@@ -1,7 +1,8 @@
+use super::ResolveError;
 use super::functions::is_test_file;
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeNode, NativeSymbol, TsgoError};
-use crate::project::locale_compare;
+use crate::project::{Collation, CollationError, CollationInput};
 use indexmap::{IndexMap, IndexSet};
 use serde::Serialize;
 
@@ -118,17 +119,26 @@ fn add(accum: &mut Accum, owner: String, target: String, test: bool) {
         accum.references.entry(owner).or_default().insert(target);
     }
 }
-fn sorted(values: IndexSet<String>) -> Vec<String> {
-    let mut values: Vec<_> = values.into_iter().collect();
-    values.sort_by(|left, right| locale_compare(left, right));
-    values
+fn sorted(values: IndexSet<String>, collation: &Collation) -> Result<Vec<String>, CollationError> {
+    let mut values = values
+        .into_iter()
+        .map(|value| CollationInput::from_text(&value).map(|key| (value, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(values.into_iter().map(|(value, _)| value).collect())
 }
-fn freeze(values: IndexMap<String, IndexSet<String>>) -> IndexMap<String, Vec<String>> {
-    let mut values: Vec<_> = values.into_iter().collect();
-    values.sort_by(|(left, _), (right, _)| locale_compare(left, right));
+fn freeze(
+    values: IndexMap<String, IndexSet<String>>,
+    collation: &Collation,
+) -> Result<IndexMap<String, Vec<String>>, CollationError> {
+    let mut values = values
+        .into_iter()
+        .map(|(id, rows)| CollationInput::from_text(&id).map(|key| (id, rows, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|a, b| collation.compare(&a.2, &b.2));
     values
         .into_iter()
-        .map(|(key, values)| (key, sorted(values)))
+        .map(|(id, rows, _)| Ok((id, sorted(rows, collation)?)))
         .collect()
 }
 
@@ -136,7 +146,8 @@ pub fn resolve_references(
     context: &mut TypeContext<'_, '_>,
     known_names: &IndexSet<String>,
     exports_by_file: &IndexMap<String, Vec<String>>,
-) -> Result<ReferenceResult, TsgoError> {
+    collation: &Collation,
+) -> Result<ReferenceResult, ResolveError> {
     let mut accum = Accum::default();
     let mut methods_by_class: IndexMap<NativeNode, Vec<String>> = IndexMap::new();
     for (node, id) in &context.node_to_id {
@@ -233,9 +244,9 @@ pub fn resolve_references(
         }
     }
     Ok(ReferenceResult {
-        references_by_id: freeze(accum.references),
-        module_scope_roots: sorted(accum.module_roots),
-        test_module_scope_roots: sorted(accum.test_roots),
-        identifier_files: freeze(accum.identifier_files),
+        references_by_id: freeze(accum.references, collation)?,
+        module_scope_roots: sorted(accum.module_roots, collation)?,
+        test_module_scope_roots: sorted(accum.test_roots, collation)?,
+        identifier_files: freeze(accum.identifier_files, collation)?,
     })
 }

@@ -105,7 +105,12 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     let root = fs::canonicalize(root).unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
     assert!(loaded.parse_failures.is_empty());
-    let functions = discover_functions(&loaded.source_files).functions;
+    let functions = discover_functions(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let report = load_data_report(
         &loaded.source_files,
         &functions,
@@ -334,7 +339,12 @@ fn loads_real_worker_reports_with_named_holders_unattributed_handlers_and_distin
     .unwrap();
     let broken = load_cheap_project(&root, None).unwrap();
     assert!(broken.parse_failures.is_empty());
-    let broken_functions = discover_functions(&broken.source_files).functions;
+    let broken_functions = discover_functions(
+        &broken.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let broken_report = load_data_report(
         &broken.source_files,
         &broken_functions,

@@ -1,6 +1,7 @@
 use crate::checker::context::TypeContext;
 use crate::engine::tsgo::{NativeNode, TsgoError};
-use crate::project::locale_compare;
+use crate::extract::ResolveError;
+use crate::project::{Collation, CollationInput};
 use indexmap::IndexSet;
 use std::collections::HashMap;
 
@@ -176,7 +177,8 @@ impl FactoryResolver {
         &mut self,
         context: &mut TypeContext<'_, '_>,
         call: &NativeNode,
-    ) -> Result<Vec<String>, TsgoError> {
+        collation: &Collation,
+    ) -> Result<Vec<String>, ResolveError> {
         let Some(produced) = declaration_of(context, &call.required_node("expression")?)? else {
             return Ok(Vec::new());
         };
@@ -212,8 +214,11 @@ impl FactoryResolver {
                 ids.insert(id.clone());
             }
         }
-        let mut ids: Vec<_> = ids.into_iter().collect();
-        ids.sort_by(|left, right| locale_compare(left, right));
-        Ok(ids)
+        let mut ids = ids
+            .into_iter()
+            .map(|id| CollationInput::from_text(&id).map(|key| (id, key)))
+            .collect::<Result<Vec<_>, _>>()?;
+        ids.sort_by(|left, right| collation.compare(&left.1, &right.1));
+        Ok(ids.into_iter().map(|(id, _)| id).collect())
     }
 }

@@ -41,13 +41,25 @@ fn classifies_real_functions_with_default_rules_and_precise_custom_utf16_labels(
     .unwrap();
     let context = ClassifyContext::default();
     for function in &graph.functions {
-        let kind = classify_function(function, &defaults, &context);
+        let kind = classify_function(
+            function,
+            &defaults,
+            &context,
+            &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+        )
+        .unwrap();
         match function.name.as_str() {
             "fetch" => assert!(matches!(kind, NodeKind::Entry { .. })),
             "requireAuth" => assert!(matches!(kind, NodeKind::Auth { .. })),
             "custom" => {
                 assert!(matches!(kind, NodeKind::Plain));
-                let classified = classify_function(function, &custom, &context);
+                let classified = classify_function(
+                    function,
+                    &custom,
+                    &context,
+                    &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+                )
+                .unwrap();
                 assert_eq!(
                     serde_json::to_string(&classified).unwrap(),
                     r#"{"kind":"entry","evidence":["\ud800"],"guards":[],"reach":"public"}"#
@@ -144,7 +156,12 @@ fn selects_framework_export_conventions_from_each_functions_actual_owning_packag
         fs::write(path, source).unwrap();
     }
     let loaded = load_cheap_project(&root, None).unwrap();
-    let functions = discover_functions(&loaded.source_files).functions;
+    let functions = discover_functions(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let rules = NodeKindRules::parse(&JsValue::parse(r#"{"entryExportConventions":{"job-runner":{"files":"jobs/*.ts","exports":["execute"]}}}"#).unwrap()).unwrap();
     let names = export_names_by_id(
         &functions,
@@ -196,7 +213,12 @@ fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_dec
     fs::write(root.join("tsconfig.json"), "{}").unwrap();
     fs::write(root.join("entry.ts"), "declare class WorkerEntrypoint<E> {}\nclass Worker extends WorkerEntrypoint<unknown> { public call() {} private hidden() {} protected family() {} static build() {} #secret() {} get value() { return 1; } }\ndeclare const builder: any;\nconst Project = builder.objectRef('Project');\nProject.implement({ authScopes: { user: true }, fields: (t: any) => ({ one: t.field({ resolve: () => 101 }) }) });\nbuilder.objectField(Project, 'more', (t: any) => t.field({ resolve: () => 102 }));\nbuilder.objectField(Project, 'skip', (t: any) => t.field({ skipTypeScopes: true, resolve: () => 103 }));\nconst direct = { authScopes: { user: true }, resolve() { return 104; } };\nconst quoted = { 'authScopes': true, resolve() { return 105; } };\n").unwrap();
     let loaded = load_cheap_project(&root, None).unwrap();
-    let functions = discover_functions(&loaded.source_files).functions;
+    let functions = discover_functions(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packages/code-graph/node_modules/@typescript/native-preview/package.json");
     let binary = TsgoBinary::from_native_preview_manifest(&manifest).unwrap();
@@ -216,9 +238,23 @@ fn finds_public_base_class_entries_and_pothos_guards_through_native_compiler_dec
             let base = public_method_rules_by_base_class(context, &rules.entry_base_classes)?;
             assert_eq!(base.len(), 1);
             assert!(base.contains_key("entry.ts:call"));
-            let siblings = sibling_property_rules(context, &rules.entry_guard_properties)?;
-            let scopes = type_scope_rules(context, &rules.entry_guard_properties)?;
-            let guards = merge_rule_maps([&siblings, &scopes]);
+            let siblings = sibling_property_rules(
+                context,
+                &rules.entry_guard_properties,
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
+            let scopes = type_scope_rules(
+                context,
+                &rules.entry_guard_properties,
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
+            let guards = merge_rule_maps(
+                [&siblings, &scopes],
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
             for function in functions
                 .iter()
                 .filter(|function| function.name == "resolve")

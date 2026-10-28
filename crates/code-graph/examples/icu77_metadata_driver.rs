@@ -173,7 +173,9 @@ fn execute(
         "snapshot" => {
             let loaded =
                 load_cheap_project(&input.root, None).map_err(|e| Failure::error("project", e))?;
-            let functions = discover_functions(&loaded.source_files).functions;
+            let functions = discover_functions(&loaded.source_files, &collation)
+                .map_err(|error| Failure::error("snapshot", error))?
+                .functions;
             let declarations = observe!(
                 calls,
                 demlik_code_graph::declarations::discover::discover_declarations,

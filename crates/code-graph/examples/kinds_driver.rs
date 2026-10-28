@@ -226,8 +226,10 @@ fn execute(
             let discovered = observe!(
                 calls,
                 demlik_code_graph::extract::functions::discover_functions,
-                &loaded.project.source_files
+                &loaded.project.source_files,
+                &metadata_collation
             )
+            .map_err(|error| DriverError::new("backend-error", error.to_string()))?
             .functions;
             let export_names = observe!(
                 calls,
@@ -255,33 +257,42 @@ fn execute(
                     functions: &discovered
                 },
                 |context| {
-                    let base = observe!(
+                    Ok(
+                        (|| -> Result<_, demlik_code_graph::extract::ResolveError> {
+                            let base = observe!(
                         calls,
                         demlik_code_graph::kinds::declarations::public_method_rules_by_base_class,
                         context,
                         &compiled.entry_base_classes
                     )?;
-                    let sibling = observe!(
-                        calls,
-                        demlik_code_graph::kinds::declarations::sibling_property_rules,
-                        context,
-                        &compiled.entry_guard_properties
-                    )?;
-                    let scopes = observe!(
-                        calls,
-                        demlik_code_graph::kinds::declarations::type_scope_rules,
-                        context,
-                        &compiled.entry_guard_properties
-                    )?;
-                    Ok((base, sibling, scopes))
+                            let sibling = observe!(
+                                calls,
+                                demlik_code_graph::kinds::declarations::sibling_property_rules,
+                                context,
+                                &compiled.entry_guard_properties,
+                                &metadata_collation
+                            )?;
+                            let scopes = observe!(
+                                calls,
+                                demlik_code_graph::kinds::declarations::type_scope_rules,
+                                context,
+                                &compiled.entry_guard_properties,
+                                &metadata_collation
+                            )?;
+                            Ok((base, sibling, scopes))
+                        })(),
+                    )
                 }
             )
+            .map_err(|error| DriverError::new("backend-error", error.to_string()))?
             .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let merged_guards = observe!(
                 calls,
                 demlik_code_graph::kinds::declarations::merge_rule_maps,
-                [&sibling_guards, &type_guards]
-            );
+                [&sibling_guards, &type_guards],
+                &metadata_collation
+            )
+            .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let context = ClassifyContext {
                 base_class_entries: base_class_entries.clone(),
                 declared_guards: merged_guards.clone(),
@@ -300,13 +311,17 @@ fn execute(
             .map_err(|error| DriverError::new("backend-error", error.to_string()))?;
             let mut simple_callees = Vec::new();
             for node in &mut graph.functions {
-                node.node_kind = Some(observe!(
-                    calls,
-                    demlik_code_graph::kinds::classify::classify_function,
-                    node,
-                    &compiled,
-                    &context
-                ));
+                node.node_kind = Some(
+                    observe!(
+                        calls,
+                        demlik_code_graph::kinds::classify::classify_function,
+                        node,
+                        &compiled,
+                        &context,
+                        &metadata_collation
+                    )
+                    .map_err(|error| DriverError::new("backend-error", error.to_string()))?,
+                );
                 for call in node.edges.iter().flat_map(|edges| &edges.calls) {
                     simple_callees.push(Callee {
                         id: node.id.clone(),

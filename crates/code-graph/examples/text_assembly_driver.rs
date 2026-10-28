@@ -361,8 +361,12 @@ fn run(
     let functions = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,
-        &loaded.project.source_files
+        &loaded.project.source_files,
+        &metadata_collation
     )
+    .map_err(|error| {
+        Failure::Assembly(demlik_code_graph::extract::assemble::AssemblyError::Collation(error))
+    })?
     .functions;
     let input = TypeContextInput {
         project: &loaded.project,

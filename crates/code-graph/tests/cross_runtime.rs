@@ -70,7 +70,12 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
     assert!(owner_of(&catalog.manifests, "api-other/entry.ts").is_none());
     let loaded = load_cheap_project(&root, None).unwrap();
     assert!(loaded.parse_failures.is_empty());
-    let functions = discover_functions(&loaded.source_files).functions;
+    let functions = discover_functions(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     let ids = functions
         .iter()
         .map(|node| node.id.clone())
@@ -108,8 +113,14 @@ fn resolves_real_service_and_workflow_calls_without_losing_missing_targets_or_pr
                 },
                 context,
             )?;
-            let result =
-                resolve_edges_with_cross_runtime(context, imports, &ids, Some(&mut resolver))?;
+            let result = resolve_edges_with_cross_runtime(
+                context,
+                imports,
+                &ids,
+                Some(&mut resolver),
+                &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+            )
+            .unwrap();
             let measured = resolver.edges();
             assert_eq!(measured.len(), 5);
             assert_eq!(

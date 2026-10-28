@@ -43,7 +43,12 @@ fn joins_oxc_callables_to_native_compiler_nodes_and_resolves_their_symbols() {
     project.write("entry.ts", "// 😀\nexport function run() { return 1; }\nconst arrow = () => 2;\nclass Box { get value() { return 1; } method() {} }\ninterface I { get size(): number; }\n");
     project.write("bom.ts", "\u{feff}export function bom() { return 1; }\n");
     let loaded = load_cheap_project(&project.0, None).unwrap();
-    let functions = discover_functions(&loaded.source_files).functions;
+    let functions = discover_functions(
+        &loaded.source_files,
+        &demlik_code_graph::project::Collation::try_node22_en_us().unwrap(),
+    )
+    .unwrap()
+    .functions;
     with_type_context(
         &project.binary(),
         TypeContextInput {

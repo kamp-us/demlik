@@ -114,8 +114,10 @@ fn execute(
     let functions = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,
-        &loaded.project.source_files
+        &loaded.project.source_files,
+        &metadata_collation
     )
+    .map_err(|error| error.to_string())?
     .functions;
     let declarations = observe!(
         calls,
@@ -153,76 +155,80 @@ fn execute(
     for bucket in exported.values_mut() {
         bucket.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
     }
-    let details =
-        observe!(
-            calls,
-            demlik_code_graph::checker::context::with_type_context,
-            &binary,
-            TypeContextInput {
-                project: &loaded.project,
-                ts_config_path: &loaded.ts_config_path,
-                functions: &functions
-            },
-            |context| {
-                Ok((|| -> Result<_, demlik_code_graph::declarations::uses::DeclarationUseError> {
-            let edges = observe!(
-                calls,
-                demlik_code_graph::extract::edges::resolve_edges,
-                context,
-                imports,
-                &ids
-            )?;
-            let uses = observe!(
-                calls,
-                demlik_code_graph::declarations::uses::resolve_declaration_uses,
-                context,
-                &declarations
-            , &metadata_collation)?;
-            let references = observe!(
-                calls,
-                demlik_code_graph::extract::references::resolve_references,
-                context,
-                &names,
-                &exported
-            )?;
-            let mut joined = Vec::new();
-            for (node, id) in &context.node_to_id {
-                joined.push(Joined {
-                    id: id.clone(),
-                    file: context.relative_path(&node.source_file()),
-                    kind: node.kind_name(),
-                    start: observe!(
+    let details = observe!(
+        calls,
+        demlik_code_graph::checker::context::with_type_context,
+        &binary,
+        TypeContextInput {
+            project: &loaded.project,
+            ts_config_path: &loaded.ts_config_path,
+            functions: &functions
+        },
+        |context| {
+            Ok(
+                (|| -> Result<_, demlik_code_graph::extract::analysis::AnalysisError> {
+                    let edges = observe!(
                         calls,
-                        demlik_code_graph::engine::tsgo::NativeNode::start,
-                        node
-                    )?,
-                    line: observe!(
-                        calls,
-                        demlik_code_graph::checker::context::TypeContext::start_line,
+                        demlik_code_graph::extract::edges::resolve_edges,
                         context,
-                        node
-                    )?,
-                });
-            }
-            Ok(Details {
-                context: Context {
-                    files: context
-                        .files
-                        .iter()
-                        .map(|file| file.unit.file.clone())
-                        .collect(),
-                    joined,
-                    unjoined: context.unjoined.clone(),
-                },
-                edges,
-                uses,
-                references,
-            })
-            })())
-            }
-        )
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())?;
+                        imports,
+                        &ids,
+                        &metadata_collation
+                    )?;
+                    let uses = observe!(
+                        calls,
+                        demlik_code_graph::declarations::uses::resolve_declaration_uses,
+                        context,
+                        &declarations,
+                        &metadata_collation
+                    )?;
+                    let references = observe!(
+                        calls,
+                        demlik_code_graph::extract::references::resolve_references,
+                        context,
+                        &names,
+                        &exported,
+                        &metadata_collation
+                    )?;
+                    let mut joined = Vec::new();
+                    for (node, id) in &context.node_to_id {
+                        joined.push(Joined {
+                            id: id.clone(),
+                            file: context.relative_path(&node.source_file()),
+                            kind: node.kind_name(),
+                            start: observe!(
+                                calls,
+                                demlik_code_graph::engine::tsgo::NativeNode::start,
+                                node
+                            )?,
+                            line: observe!(
+                                calls,
+                                demlik_code_graph::checker::context::TypeContext::start_line,
+                                context,
+                                node
+                            )?,
+                        });
+                    }
+                    Ok(Details {
+                        context: Context {
+                            files: context
+                                .files
+                                .iter()
+                                .map(|file| file.unit.file.clone())
+                                .collect(),
+                            joined,
+                            unjoined: context.unjoined.clone(),
+                        },
+                        edges,
+                        uses,
+                        references,
+                    })
+                })(),
+            )
+        }
+    )
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
     let graph = observe!(
         calls,
         demlik_code_graph::extract::assemble::assemble_graph_with_edges,

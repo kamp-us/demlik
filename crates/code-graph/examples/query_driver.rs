@@ -173,8 +173,10 @@ fn query(
     let discovered = observe!(
         calls,
         demlik_code_graph::extract::functions::discover_functions,
-        &loaded.project.source_files
+        &loaded.project.source_files,
+        metadata_collation
     )
+    .map_err(|error| error.to_string())?
     .functions;
     let inputs = observe!(
         calls,
@@ -192,14 +194,16 @@ fn query(
             ts_config_path: &loaded.ts_config_path,
             functions: &discovered
         },
-        |context| observe!(
+        |context| Ok(observe!(
             calls,
             demlik_code_graph::extract::references::resolve_references,
             context,
             &inputs.names,
-            &inputs.exports_by_file
-        )
+            &inputs.exports_by_file,
+            metadata_collation
+        ))
     )
+    .map_err(|error| error.to_string())?
     .map_err(|error| error.to_string())?;
     let mut graph = observe!(
         calls,

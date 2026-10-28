@@ -1,8 +1,7 @@
 use super::rules::{
     CompiledRule, JsRegex, NodeKindRules, RuleCompileError, compile_group, matching_rules,
 };
-use crate::project::Collation;
-use crate::project::locale_compare_units;
+use crate::project::{Collation, CollationError, CollationInput};
 use crate::schema::{EntryReach, FunctionNode, NodeKind};
 use crate::text::JsString;
 use indexmap::{IndexMap, IndexSet};
@@ -66,10 +65,16 @@ pub fn compile_kind_rules(
         ],
     })
 }
-fn sorted(values: IndexSet<JsString>) -> Vec<JsString> {
-    let mut values: Vec<_> = values.into_iter().collect();
-    values.sort_by(|left, right| locale_compare_units(left.units(), right.units()));
-    values
+fn sorted(
+    values: IndexSet<JsString>,
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
+    let mut values = values
+        .into_iter()
+        .map(|value| CollationInput::from_utf16(value.units()).map(|key| (value, key)))
+        .collect::<Result<Vec<_>, _>>()?;
+    values.sort_by(|a, b| collation.compare(&a.1, &b.1));
+    Ok(values.into_iter().map(|(value, _)| value).collect())
 }
 pub fn callee_simple_name(callee: &JsString) -> JsString {
     let units = callee.units();
@@ -97,7 +102,8 @@ fn callee_evidence(
     node: &FunctionNode,
     rules: &[CompiledRule],
     declarations: bool,
-) -> Vec<JsString> {
+    collation: &Collation,
+) -> Result<Vec<JsString>, CollationError> {
     let mut out = IndexSet::new();
     for call in node.edges.iter().flat_map(|edges| &edges.calls) {
         let name = if declarations {
@@ -110,13 +116,14 @@ fn callee_evidence(
         };
         out.extend(matching_rules(rules, &name));
     }
-    sorted(out)
+    sorted(out, collation)
 }
 pub fn classify_function(
     node: &FunctionNode,
     rules: &CompiledKindRules,
     context: &ClassifyContext,
-) -> NodeKind {
+    collation: &Collation,
+) -> Result<NodeKind, CollationError> {
     let mut entry = IndexSet::new();
     if !node.is_test {
         entry.extend(matching_rules(
@@ -152,7 +159,7 @@ pub fn classify_function(
                 .cloned(),
         );
     }
-    let entry = sorted(entry);
+    let entry = sorted(entry, collation)?;
     if !entry.is_empty() {
         let reaches: Vec<_> = entry
             .iter()
@@ -168,7 +175,7 @@ pub fn classify_function(
             .into_iter()
             .find(|reach| reaches.contains(reach))
             .unwrap_or(EntryReach::Public);
-        return NodeKind::Entry {
+        return Ok(NodeKind::Entry {
             evidence: entry,
             guards: context
                 .declared_guards
@@ -176,21 +183,26 @@ pub fn classify_function(
                 .cloned()
                 .unwrap_or_default(),
             reach,
-        };
+        });
     }
     let mut auth: IndexSet<_> = matching_rules(&rules.auth_names, &node.name.as_str().into())
         .into_iter()
         .collect();
-    auth.extend(callee_evidence(node, &rules.auth_callees, false));
-    let auth = sorted(auth);
+    auth.extend(callee_evidence(
+        node,
+        &rules.auth_callees,
+        false,
+        collation,
+    )?);
+    let auth = sorted(auth, collation)?;
     if !auth.is_empty() {
-        return NodeKind::Auth { evidence: auth };
+        return Ok(NodeKind::Auth { evidence: auth });
     }
-    let effect = callee_evidence(node, &rules.effect_declarations, true);
+    let effect = callee_evidence(node, &rules.effect_declarations, true, collation)?;
     if !effect.is_empty() {
-        return NodeKind::Effect { evidence: effect };
+        return Ok(NodeKind::Effect { evidence: effect });
     }
-    NodeKind::Plain
+    Ok(NodeKind::Plain)
 }
 #[derive(Debug, Default, Serialize)]
 pub struct KindCensus {

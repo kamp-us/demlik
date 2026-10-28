@@ -290,8 +290,10 @@ fn execute(
             let mut functions = observe!(
                 calls,
                 demlik_code_graph::extract::functions::discover_functions,
-                &foreign.as_ref().unwrap_or(&loaded).source_files
+                &foreign.as_ref().unwrap_or(&loaded).source_files,
+                &metadata_collation
             )
+            .map_err(DriverError::backend)?
             .functions;
             if input.omit_functions {
                 functions.clear();
