@@ -186,13 +186,15 @@ async function factoryCase(spec) {
       const status = queue.shift();
       assert.notEqual(status, undefined);
       calls.push(status);
-      outcome =
-        status === "throw"
-          ? ask.rejected(new Error("socket invoice"))
-          : ask.decode(cmd.input, {
-              status,
-              body: status === 200 ? body() : null,
-            });
+      try {
+        if (status === "throw") throw new Error("socket invoice");
+        outcome = ask.decode(cmd.input, {
+          status,
+          body: status === 200 ? body() : null,
+        });
+      } catch (cause) {
+        outcome = ask.rejected(cause);
+      }
     }
     if (outcome._tag === "Err") lastRawError = outcome.error.jev;
     outcomes.push(wire(outcome));
