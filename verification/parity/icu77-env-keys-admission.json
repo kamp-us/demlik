@@ -1,0 +1,238 @@
+{
+  "sourcePins": {
+    "env-keys/extract.ts": "9122d4ea34f39486f66b3485eca93df93369fcdb2901dbe905b29366fcdf700d",
+    "env-keys/query.ts": "30732e2f59b7fcc88b2a3716c6de1f39383691a2238f941094ff02b3997dfe31",
+    "env-keys/read-site-owner.ts": "131feee437abc44cbb6988e559141497cef5c07c987be5f9b6d860450c7e0fd8",
+    "render/analysis.ts": "0dd853e703dd0b0dcd8ce8880b84e5cc01e6122a898767904de5a2ab04eb78d2",
+    "extract/project.ts": "08aa30497ce1dde9d1d8587fc5f17bfd77c47de7206222d12285db5bad5cf69a",
+    "extract/wrangler-config.ts": "2050b3506fc9e8877a94ca4fa8cf6391e9e83f0c40f06d12193ec1e22e7925be",
+    "syntax/file.ts": "c2d723cb783109b30fb504e43da5fc9361a46d387d2c11a6721266b0322a20fa",
+    "engine/oxc.ts": "298285f020ecc50856adc9508b675408e61ab96c844aec46d2d3317f39dc409c",
+    "cli.ts": "128a353027f720b3729b0d1c4c5685088cff042ddaf1a11f923cf0b80d55c2cf",
+    "index.ts": "a57a3ed8c585cafaf0c5667dad942eafd20269ca56f5ed2f305fb6bd593692b1"
+  },
+  "wholeviews": {
+    "scan-empty": "5fa6e99bb187f84f3fb624697e1466f5a9e327c15f4044e074d23da3c180892b",
+    "scan-singleton": "5d68f96f79ad21d647f4818faa8e730338d864bff58d2c668421d116ecf4ad2f",
+    "scan-forms": "37c791231d242ffad6b8b87957597e4f2d86037a243a178474b0fd88bd7884cc",
+    "scan-raw-name-order": "b01776306e4a8bec65489a9c25d3ed918eb26f4f715c360f4ef54a2cad880b4d",
+    "scan-name-file-order": "5f9473abd265662e53c7d7de42734875795d1124dbe5d873c35962fdc4118348",
+    "scan-lines-and-via": "f0add7282de676919abdac2b9510ba82c9aca951480b189480b1cef12bc15e7b",
+    "scan-occurrence-entries": "2eca43509b65658bcb2b8f516b55185977b905bd8ed4ac81e005607e37b3a56f",
+    "scan-tab-collision-first": "112423b4bba61be96429c462b46de47d0a3003c9bece8e224fc6fa036acc47c7",
+    "query-declared-union": "be96392d003a54c1c9303b1326e5802ce873401e71f102c92af3c728de00e19c",
+    "query-service-raw-order": "87188d8d2dced47796312d7898ac5febc0897987c1e1a8892dd9ba4bde09d4da",
+    "query-withheld-merge": "1c00ceb5b81d31447c9f0187b60e7fc1115676ba4957c44519bb6506bdd8fe17",
+    "query-owner-precedence": "63a25bd2abca25bc52467167991d07bb56d087fe9cc418c3ece46c2ae2aa2b47",
+    "query-known-process-bindings": "bdf06d78dfdb6712dd0f692eeb68572dcb11f0eccb176b147ad058f4b3521ebd",
+    "query-equal-and-alias": "b1d25d5dac56fc17f79604e7e3c18e01912021d60514cfcfa59db27537add2fa",
+    "load-empty": "97c53253a79bb3d394723a2c3d8e977bb211c008e92e42c161f54490776d9b49",
+    "load-three-workers": "7005b0bb659ad32ae8311a1f8b56ada4068f168eccbd0b147bd83e4347a69bcc",
+    "load-catalog-type-error": "93b129c25d227af1bb7558fb7abcd895dfda30ddaacb07978ceedcb01fb55dde",
+    "cli-nine-actions": "051265344b1c84fb05f664789f7ce30f273880873e21d7556932fc6e2c4f5783"
+  },
+  "observedCalls": {
+    "scan-empty": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-singleton": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-forms": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-raw-name-order": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-name-file-order": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-lines-and-via": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-occurrence-entries": ["crate::env_keys::extract::scan_env_keys"],
+    "scan-tab-collision-first": ["crate::env_keys::extract::scan_env_keys"],
+    "query-declared-union": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "query-service-raw-order": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "query-withheld-merge": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "query-owner-precedence": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "query-known-process-bindings": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "query-equal-and-alias": [
+      "crate::extract::wrangler_config::load_binding_catalog",
+      "crate::env_keys::extract::scan_env_keys",
+      "crate::env_keys::query::find_env_key_mismatches"
+    ],
+    "load-empty": ["crate::env_keys::query::load_env_key_report"],
+    "load-three-workers": ["crate::env_keys::query::load_env_key_report"],
+    "load-catalog-type-error": ["crate::env_keys::query::load_env_key_report"],
+    "cli-nine-actions": [
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::prepare_gates",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_layers",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_boundaries",
+      "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_env_keys",
+      "demlik_code_graph::cli::frontdoor::prepare_cli",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_api_blocking",
+      "demlik_code_graph::cli::frontdoor::PreparedCli::dispatch_hexagon"
+    ]
+  },
+  "SourceOnly": {
+    "closed": {
+      "via": [
+        {
+          "a": "env",
+          "b": "env",
+          "locale": 0,
+          "ordinal": 0
+        },
+        {
+          "a": "env",
+          "b": "process-env",
+          "locale": -1,
+          "ordinal": -1
+        },
+        {
+          "a": "process-env",
+          "b": "env",
+          "locale": 1,
+          "ordinal": 1
+        },
+        {
+          "a": "process-env",
+          "b": "process-env",
+          "locale": 0,
+          "ordinal": 0
+        }
+      ],
+      "reasons": [
+        {
+          "a": "occurs-elsewhere-in-source",
+          "b": "occurs-elsewhere-in-source",
+          "locale": 0,
+          "ordinal": 0
+        },
+        {
+          "a": "occurs-elsewhere-in-source",
+          "b": "read-site-owner-unknown",
+          "locale": -1,
+          "ordinal": -1
+        },
+        {
+          "a": "occurs-elsewhere-in-source",
+          "b": "read-site-owner-unparsed",
+          "locale": -1,
+          "ordinal": -1
+        },
+        {
+          "a": "read-site-owner-unknown",
+          "b": "occurs-elsewhere-in-source",
+          "locale": 1,
+          "ordinal": 1
+        },
+        {
+          "a": "read-site-owner-unknown",
+          "b": "read-site-owner-unknown",
+          "locale": 0,
+          "ordinal": 0
+        },
+        {
+          "a": "read-site-owner-unknown",
+          "b": "read-site-owner-unparsed",
+          "locale": -1,
+          "ordinal": -1
+        },
+        {
+          "a": "read-site-owner-unparsed",
+          "b": "occurs-elsewhere-in-source",
+          "locale": 1,
+          "ordinal": 1
+        },
+        {
+          "a": "read-site-owner-unparsed",
+          "b": "read-site-owner-unknown",
+          "locale": 1,
+          "ordinal": 1
+        },
+        {
+          "a": "read-site-owner-unparsed",
+          "b": "read-site-owner-unparsed",
+          "locale": 0,
+          "ordinal": 0
+        }
+      ]
+    },
+    "rawNumbers": {
+      "input": ["NaN", "Infinity", "-Infinity", "-0", "1"],
+      "output": ["NaN", "-Infinity", "-0", "1", "Infinity"],
+      "NativePaired": false
+    },
+    "malformed": {
+      "name": "TypeError",
+      "message": "Cannot read properties of null (reading 'map')",
+      "NativePaired": false
+    },
+    "NativeCredit": 0
+  },
+  "frozenSourceReportSha256": "36147d7d936a2dc02c32744babe23377859094b9b64d0f5304050d0e6defaeeb",
+  "frozenGreenReportSha256": "78a7a31654bffccb6d9ba4bc83d7387d8bb4497e0c5a2f59f1f49177488069bf",
+  "anchorRule": "Only Source cli-nine-actions/earlier-hexagon.process.stderr, after validating the entire exact ports diagnostic against row.directory, is root-tokenized for the frozen anchor. Source/native raw comparison, diagnostics, bytes, modes and values are untouched."
+}
