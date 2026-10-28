@@ -1,0 +1,98 @@
+[
+  {
+    "id": "jev.protocol.invoice-200",
+    "scenario": "invoice-200"
+  },
+  {
+    "id": "jev.protocol.http-429",
+    "scenario": "http-429"
+  },
+  {
+    "id": "jev.protocol.http-401",
+    "scenario": "http-401"
+  },
+  {
+    "id": "jev.protocol.http-529",
+    "scenario": "http-529"
+  },
+  {
+    "id": "jev.protocol.status-number-family",
+    "scenario": "status-number-family"
+  },
+  {
+    "id": "jev.protocol.choice-first-fault",
+    "scenario": "choice-first-fault"
+  },
+  {
+    "id": "jev.protocol.probability-bad-value",
+    "scenario": "probability-bad-value"
+  },
+  {
+    "id": "jev.protocol.probability-missing-extra",
+    "scenario": "probability-missing-extra"
+  },
+  {
+    "id": "jev.protocol.probability-key-order",
+    "scenario": "probability-key-order"
+  },
+  {
+    "id": "jev.protocol.score-confidence-first",
+    "scenario": "score-confidence-first"
+  },
+  {
+    "id": "jev.protocol.score-legend-first",
+    "scenario": "score-legend-first"
+  },
+  {
+    "id": "jev.protocol.noul-nonfinite",
+    "scenario": "noul-nonfinite"
+  },
+  {
+    "id": "jev.protocol.finite-unbounded-signed-zero",
+    "scenario": "finite-unbounded-signed-zero"
+  },
+  {
+    "id": "jev.protocol.missing-answer",
+    "scenario": "missing-answer"
+  },
+  {
+    "id": "jev.protocol.type-mismatch",
+    "scenario": "type-mismatch"
+  },
+  {
+    "id": "jev.protocol.envelope-first-fault",
+    "scenario": "envelope-first-fault"
+  },
+  {
+    "id": "jev.protocol.non-object-bodies",
+    "scenario": "non-object-bodies"
+  },
+  {
+    "id": "jev.protocol.integer-key-order",
+    "scenario": "integer-key-order"
+  },
+  {
+    "id": "jev.protocol.own-tag-and-extra",
+    "scenario": "own-tag-and-extra"
+  },
+  {
+    "id": "jev.protocol.utf16",
+    "scenario": "utf16"
+  },
+  {
+    "id": "jev.protocol.fresh-output",
+    "scenario": "fresh-output"
+  },
+  {
+    "id": "jev.protocol.score-loose-maps",
+    "scenario": "score-loose-maps"
+  },
+  {
+    "id": "jev.protocol.tag-guards",
+    "scenario": "tag-guards"
+  },
+  {
+    "id": "jev.protocol.empty-questions",
+    "scenario": "empty-questions"
+  }
+]

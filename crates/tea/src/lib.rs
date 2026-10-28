@@ -10,6 +10,7 @@ pub mod durable_object;
 pub mod file_store;
 pub mod flow;
 pub mod idempotency;
+pub mod jev;
 pub mod journal;
 mod js_math;
 pub mod js_record;
