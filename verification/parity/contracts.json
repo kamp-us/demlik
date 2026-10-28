@@ -16201,5 +16201,58 @@
       "The 18 cases use attempt at10 and original engine stamp42. Manual missing/null/nonfinite/nonnumeric stamp and broader restored-message profiles remain OPEN for this JevAsk slice; existing shared timestamp owners/bindings are unchanged.",
       "Only actual engine-minted declared JevRejected carriers with known typed Jev errors are covered: native err_of takes the whole typed Settled receipt and returns the original Rc. Source unknown/raw errors, absent/inherited jev, getters, arbitrary inner tags, outer-tag-independent foreign carriers and describeError fallback are NOT implemented by this reader."
     ]
+  },
+  "@demlik/tea:./agent#agentEvents": {
+    "signature": "c45b998af30f06c683fb0e69956bf3de97d52862ccc5553343df2618eeb21b37",
+    "rust": {
+      "file": "crates/tea/src/agent/events.rs",
+      "symbols": [
+        "demlik_tea::agent::agent_events",
+        "demlik_tea::agent::AgentEvents::project"
+      ]
+    },
+    "cases": [
+      "agent-events.idle-is-silent",
+      "agent-events.outbox-owner-once",
+      "agent-events.direct-success-is-not-deduplicated",
+      "agent-events.failed-tool-refuses-late-success",
+      "agent-events.cancel-ends-once-and-silences-late-success",
+      "agent-events.absorbed-retry-has-no-failure-event",
+      "agent-events.promise-invoice",
+      "agent-events.promise-resume",
+      "agent-events.effect-invoice",
+      "agent-events.effect-resume",
+      "agent-events.present-usage-preserves-original-owner"
+    ],
+    "nativeProfile": "Canonical NativeCalls and bare AgentToolMsg over caller-chosen Rc payload, turn and result owners. The eleven strict whole views retain original numeric stamps, state/event/transcript order, outbox identity and full actual function-call vectors. Pure borrowed AgentEvents::project adds no Clone/Debug/serde/Send/static bounds; conversion to a runtime event callback retains the existing actor static boundary. Four exact callback/store HOST-ENVELOPE whole views stay qualified and are excluded from these bindings.",
+    "knownGaps": [
+      "OPEN broader agentEvents profiles: by-value/PlainCalls/routed tool payloads, optional feature grids, SDK/provider/children and arbitrary raw JavaScript/getter/prototype/reflection are outside the canonical NativeCalls/Rc profile.",
+      "OPEN raw host error representation: JavaScript Error names/messages/stacks and native callback Panic/store wrappers have four measured exact qualifications, not general equivalence. Missing/null original event numbers and payloads remain typed native refusals, with zero paired Source credit."
+    ]
+  },
+  "@demlik/tea:./agent#agentEvents/member:published:b220977f4f818c37136264373f7b8db89240af2c785fa40011efbe7fade807ee": {
+    "signature": "b220977f4f818c37136264373f7b8db89240af2c785fa40011efbe7fade807ee",
+    "rust": {
+      "file": "crates/tea/src/agent/events.rs",
+      "symbols": ["demlik_tea::agent::AgentEvents::project"]
+    },
+    "cases": [
+      "agent-events.idle-is-silent",
+      "agent-events.outbox-owner-once",
+      "agent-events.direct-success-is-not-deduplicated",
+      "agent-events.failed-tool-refuses-late-success",
+      "agent-events.cancel-ends-once-and-silences-late-success",
+      "agent-events.absorbed-retry-has-no-failure-event",
+      "agent-events.promise-invoice",
+      "agent-events.promise-resume",
+      "agent-events.effect-invoice",
+      "agent-events.effect-resume",
+      "agent-events.present-usage-preserves-original-owner"
+    ],
+    "nativeProfile": "Canonical NativeCalls and bare AgentToolMsg over caller-chosen Rc payload, turn and result owners. The eleven strict whole views retain original numeric stamps, state/event/transcript order, outbox identity and full actual function-call vectors. Pure borrowed AgentEvents::project adds no Clone/Debug/serde/Send/static bounds; conversion to a runtime event callback retains the existing actor static boundary. Four exact callback/store HOST-ENVELOPE whole views stay qualified and are excluded from these bindings.",
+    "knownGaps": [
+      "OPEN broader agentEvents profiles: by-value/PlainCalls/routed tool payloads, optional feature grids, SDK/provider/children and arbitrary raw JavaScript/getter/prototype/reflection are outside the canonical NativeCalls/Rc profile.",
+      "OPEN raw host error representation: JavaScript Error names/messages/stacks and native callback Panic/store wrappers have four measured exact qualifications, not general equivalence. Missing/null original event numbers and payloads remain typed native refusals, with zero paired Source credit."
+    ]
   }
 }

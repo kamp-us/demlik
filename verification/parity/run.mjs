@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { agentCompactionCheckpointParity } from "./agent-compaction-parity.mjs";
 import { agentContentParity } from "./agent-content-run.mjs";
 import { agentErrorCheckpointParity } from "./agent-error-parity.mjs";
+import { agentEventsCheckpointParity } from "./agent-events-parity.mjs";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
 import { agentModelParity } from "./agent-model-run.mjs";
 import { agentRoutedCheckpointParity } from "./agent-routed-parity.mjs";
@@ -1203,6 +1204,12 @@ if (!mutationSuite) {
       operation: "tea.agent-routed",
       binaryArgument: "--agent-routed-bin",
       run: (options) => agentRoutedCheckpointParity(cargo, options),
+    },
+    {
+      name: "agentEvents",
+      operation: "tea.agent-events",
+      binaryArgument: "--agent-events-bin",
+      run: (options) => agentEventsCheckpointParity(cargo, options),
     },
     {
       name: "machineViz",
