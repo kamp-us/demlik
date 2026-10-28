@@ -49,8 +49,8 @@ const faults = [
   {
     id: "lossy-classification-evidence-key",
     owner: "crates/code-graph/src/kinds/classify.rs",
-    needle: "CollationInput::from_utf16(value.units())?",
-    fault: "CollationInput::from_text(&value.to_lossy())?",
+    needle: "CollationInput::from_utf16(value.units())",
+    fault: "CollationInput::from_text(&value.to_lossy())",
     witness: "classify-entry-raw-context",
   },
 ];
