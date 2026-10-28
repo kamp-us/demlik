@@ -8044,16 +8044,34 @@
   "@demlik/code-graph:cli:option:--html": {
     "signature": "c733e003bd5e690ca8cea7efa6cba4beb3954208154d49bbe40c1ad98d183854",
     "rust": {
-      "file": "crates/code-graph/src/cli.rs",
-      "symbols": ["demlik_code_graph::cli::parse"]
+      "file": "crates/code-graph/src/cli/frontdoor.rs",
+      "symbols": [
+        "demlik_code_graph::cli::parse",
+        "demlik_code_graph::cli::frontdoor::PreparedGatesCli::dispatch_reports_blocking"
+      ]
     },
     "cases": [
       "graph.cli-parser.option.html.before",
       "graph.cli-parser.option.html.after",
       "graph.cli-parser.option.html.equal-is-unknown",
-      "graph.cli-parser.option.html.negated-is-unknown"
+      "graph.cli-parser.option.html.negated-is-unknown",
+      "graph.cli-html.html-real-hub",
+      "graph.cli-html.html-json-pretty-ignored",
+      "graph.cli-html.html-wins-late-modes",
+      "graph.cli-html.html-by-warning",
+      "graph.cli-html.html-losing-plan-suppresses-warning",
+      "graph.cli-html.html-losing-collapse-analysis",
+      "graph.cli-html.html-data-and-kinds",
+      "graph.cli-html.html-deep-package-visible-scope",
+      "graph.cli-html.html-deep-two-packages",
+      "graph.cli-html.html-empty-project",
+      "graph.cli-html.html-real-file-overwrite-workflow",
+      "graph.cli-html.html-initial-exit-preserved",
+      "graph.cli-html.html-load-refusal-before-output",
+      "graph.cli-html.ci-wins-html-edge-pass"
     ],
-    "scope": "argv parsing/value-source/target contract only; this leaf does not execute graph or mode effects",
+    "scope": "Existing argv parser witnesses plus the listed strict prepared HTML process cases. The actual report dispatcher preserves mode priority, frozen Source page bytes, warning and file output order, overwrite behavior and existing exit state. Earlier comments/smell winners remain global strict evidence but do not call this dispatcher.",
+    "nativeProfile": "Prepared canonical graph and host IO only. Browser/CDN execution, standalone argv/bootstrap/distribution, automatic browser/TTY/OS behavior and general rawGraph/String/numeric profiles remain open. Four controlled backend/stdio HTML comparisons are qualified and excluded from this binding.",
     "knownGaps": [
       "Full global CLI and mode parity remains incomplete. Parser, configuration, frontdoor, API/hexagon dispatch, ordered gate preparation and actual layers/boundaries/environment-key/comments dispatch have bounded native proof; remaining modes, standalone bootstrap, host/distribution and cross-mode paths still require end-to-end coverage."
     ]
