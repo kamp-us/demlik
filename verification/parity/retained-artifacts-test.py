@@ -41,6 +41,13 @@ class SnapshotAdmission(unittest.TestCase):
         self.proof["binary"] = str(self.snapshot)
         self.proof["cargoJson"] = str(self.evidence / "helper.cargo.jsonl")
         pathlib.Path(self.proof["cargoJson"]).write_bytes(self.cargo_bytes)
+        # Rebase only saved metadata and immutable byte copies, never Cargo events.
+        for name, library in self.proof["libraries"].items():
+            if "retainedPath" in library:
+                copied = self.evidence / "libraries" / (name + ".rlib.gz")
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(library["retainedPath"], copied)
+                library["retainedPath"] = str(copied)
         self.sidecar = self.evidence / "helper.artifacts.json"
         self.report = self.evidence / "comparison.json"
 
@@ -62,6 +69,45 @@ class SnapshotAdmission(unittest.TestCase):
         records = self.admit(self.write())
         self.assertEqual(list(records), [self.original["binarySha256"]])
         self.assertEqual(records[self.original["binarySha256"]]["preserved"], str(self.snapshot))
+        for name, library in self.proof["libraries"].items():
+            selected = records[self.original["binarySha256"]]["librarySnapshots"][name]
+            self.assertEqual(selected["bytesRetained"], "retainedPath" in library)
+            if selected["bytesRetained"]:
+                self.assertEqual(selected["compilerArtifact"], library["artifact"])
+                self.assertEqual(selected["preservedSha256"], library["retainedSha256"])
+
+    def test_legacy_metadata_never_claims_missing_library_bytes(self):
+        """Old sidecars stay useful without inventing snapshots they never made."""
+        for library in self.proof["libraries"].values():
+            for key in ("artifact", "retainedPath", "retainedSha256", "retainedEncoding", "source", "manifest"):
+                library.pop(key, None)
+        record = next(iter(self.admit(self.write()).values()))
+        self.assertFalse(record["allDeclaredLibraryBytesRetained"])
+        self.assertTrue(all(not item["bytesRetained"] for item in record["librarySnapshots"].values()))
+
+    def selected_library(self):
+        library = next(iter(self.proof["libraries"].values()))
+        if "retainedPath" not in library:
+            self.skipTest("Legacy input has no immediate library snapshot")
+        return library
+
+    def test_decoded_library_bytes_must_match_selected_digest(self):
+        library = self.selected_library()
+        library["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "decoded library snapshot differs"):
+            self.admit(self.write())
+
+    def test_full_library_event_must_be_original(self):
+        library = self.selected_library()
+        library["artifact"]["fresh"] = not library["artifact"]["fresh"]
+        with self.assertRaisesRegex(ValueError, "declared library event differs"):
+            self.admit(self.write())
+
+    def test_library_source_must_match_frozen_workspace(self):
+        library = self.selected_library()
+        library["source"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "library source digest differs"):
+            self.admit(self.write())
 
     def test_snapshot_digest_refuses_changed_bytes(self):
         """A producer's digest cannot bless different actual snapshot bytes."""
