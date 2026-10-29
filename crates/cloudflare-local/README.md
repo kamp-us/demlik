@@ -32,12 +32,30 @@ Inspect `result.json`, `requests.jsonl`, and the three `wrangler-*.log` files.
 `/repeat` is a local proof endpoint calling the same timer path, not a forced SDK
 redelivery. The real callbacks appear as `origin: "alarm"` in the logs.
 
-This is a private snapshot adapter. It stores JSON **strings**, retains UTF-16
-string cell units, preserves SDK error values, and distinguishes missing cells
-from failed reads. It explicitly rejects non-UTF-8 keys and non-string cells.
-The example uses only the fixed `@@state` key. Its unused transaction operation
-returns typed `UnsupportedTransaction`; fenced stores and event sourcing are
-outside this binding. It supplies no transaction simulation.
+This private SDK adapter supports UTF-8 keys and scalar cells (undefined,
+null, booleans, numbers and UTF-16 strings), including the numeric fence cells
+used by `do_store_with(...).fenced()`. `list(prefix)` queries the SDK with a
+prefix. Array/object cells and other structured-clone profiles, non-UTF-8 keys,
+and nested transactions return explicit typed refusals. It preserves original
+SDK errors and distinguishes missing cells from failed reads.
+
+Transactions use real SDK `Storage.transaction`. Worker 0.8.7 requires its
+callback/future to be static and return unit; TEA allows borrowed arbitrary body
+results and errors. Owned one-shot channels lend the real transaction handle to
+the caller's future, which polls its borrowed body locally and retains its result
+until SDK settlement. No `static`, `Send`, `Sync`, `Clone`, `Debug` or serialization
+bound is added to the generic library contract. A body error requests rollback;
+early SDK and commit errors return `TransactionError::Storage`, retaining the
+original SDK value. A body error returns `TransactionError::Body` after a
+successful rollback. If rollback itself fails, the SDK failure takes precedence.
+
+Dropping the native future before its commit decision closes the owned channel
+and requests SDK rollback. The detached SDK future retains its callback until
+settlement and never captures borrowed domain data. Once the commit decision has
+been sent, dropping the awaiting caller cannot revoke that decision. This is
+native cancellation behavior; dropping an eager JavaScript Promise does not
+cancel its transaction. The existing SQLite-backed class is unchanged. These
+checks exercise its asynchronous key-value transaction API, not SQL statements.
 
 The high-level Agent `.run` remains native-only because it uses Tokio's LocalSet
 and timer. Portable Agent `.machine` remains available for custom Wasm hosts;
@@ -90,8 +108,8 @@ The evidence directory must be fresh. It retains both executable artifacts,
 producer inputs and hashes, Source bundle metadata, raw request/response streams,
 logs, lifecycle records, the shared schedule, results and port cleanup receipts.
 `source/` and `rust/` each own isolated persistent state. The runner never deploys,
-logs in, or uses remote bindings. The snapshot adapter and Wasm Agent limitations
-described above still apply.
+logs in, or uses remote bindings. The scalar storage profile and Wasm Agent
+limitations described above still apply.
 
 `POST /seed` accepts `{ "jobs": [epochMs1, epochMs2, epochMs3] }`: three strictly
 increasing future integer millisecond deadlines in the JavaScript Date range.
@@ -105,3 +123,43 @@ pnpm exec biome check crates/cloudflare-local/source.ts
 pnpm exec tsc -p crates/cloudflare-local/tsconfig.source.json
 python3 -m py_compile crates/cloudflare-local/prove-paired.py
 ```
+
+## Verify borrowed transactions and fenced snapshots
+
+After the same build, run the fast actual-SDK gate:
+
+```sh
+WRANGLER_SEND_METRICS=false python3 prove-transactions.py --evidence ../../target/cloudflare-transactions-proof
+```
+
+`transactions.ts` uses the frozen Source library's `doStore` with fencing and the
+real JavaScript `Storage.transaction`. The Rust consumer uses the unchanged
+native `DurableObjectStorage` and `Fencing` interfaces. The gate compares exact
+cells and results across commit, a two-write/delete rollback, an original rich
+borrowed body error, a borrowed result, a real SDK error after rollback, and a
+stale fenced writer. It also checks transactional prefix queries, scalar types
+including a lone UTF-16 surrogate, deletion, invalid commands, persistent process
+restart, and repeat-body health. Rust-only probes check explicit unsupported
+profiles and safe cancellation before the SDK callback and during the body.
+
+Two local fault controls exercise SDK error forwarding: `sdk-reject` rejects the
+SDK transaction method before the callback, and `commit-reject` wraps the real
+method and throws after the body succeeds, causing the real backend to roll back.
+They verify original error identity and whether the body ran. They model those
+failure locations; they do not simulate a remote disk failure. Real runtime errors
+fail the gate even when state comparisons pass. A 2049-character key was accepted
+by local workerd, so this proof does not claim remote key-size-limit enforcement.
+
+Use `--source-only` to verify the Source reference before a Rust change,
+`--source-freeze /path/to/manifest.json` to enforce previously frozen consumer
+hashes, or `--stop-after rollback` (also `commit-reject`, `cancel`, etc.) for a
+focused regression. The full gate takes seconds and has no alarm wait. Producer
+inputs, executable Source/Wasm, hashes, HTTP records, logs, runtime checks and
+owned-port cleanup are retained in each fresh evidence directory. An initial
+unsupported-adapter red and targeted transaction-fault mutations establish that
+the gate detects the missing capability and rollback/settlement regressions.
+
+The checks are local to Wrangler 4.155.0, worker 0.8.7 and SQLite-backed workerd.
+They establish this fenced snapshot workflow. They do not establish arbitrary
+structured-clone storage, event-sourced runtime acceptance, KV-backend retries,
+remote failure recovery or deployed behavior.

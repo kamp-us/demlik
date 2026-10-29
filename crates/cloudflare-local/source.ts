@@ -7,6 +7,7 @@ import {
   Refusal,
   refuse,
 } from "../../packages/tea/src/index";
+import { transactions } from "./transactions";
 
 const deadline = z.number().int().min(0).max(8.64e15);
 const seedSchema = z.strictObject({
@@ -97,6 +98,8 @@ export class SourceJobs {
   }
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (request.method === "POST" && path === "/transactions")
+      return transactions(this.state.storage, request);
     if (request.method === "POST" && path === "/seed") {
       let raw: unknown;
       try {

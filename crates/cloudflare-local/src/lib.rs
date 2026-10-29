@@ -1,135 +1,22 @@
 //! Local SDK consumer of the existing borrowed scheduled-job Machine.
 use demlik_tea::{
     PlainData,
-    data::{JsText, plain_data},
+    data::plain_data,
     durable_object::{
-        AlarmStorage, DoStoreError, DoStoreOptions, DurableObjectStorage, DurableTimerError,
-        TransactionError, do_store_with, durable_timer,
+        DoStoreError, DoStoreOptions, DurableTimerError, do_store_with, durable_timer,
     },
-    storage::{Migrated, Store, StoredCell},
+    storage::{Migrated, Store},
 };
-use std::{cell::RefCell, future::Future, rc::Rc};
-use worker::{durable_object, event, js_sys, wasm_bindgen::JsValue, *};
+use std::{cell::RefCell, rc::Rc};
+use worker::{durable_object, event, js_sys, *};
 #[path = "../../tea/examples/support/scheduled_jobs.rs"]
 mod scheduled_jobs;
+mod transactions;
 use scheduled_jobs::{Fire, Model, machine, view};
 
-#[derive(Debug)]
-enum BindingError {
-    Sdk(worker::Error),
-    UnsupportedTransaction,
-    UnsupportedKeyUtf16,
-    UnsupportedSnapshotCell,
-    InvalidDeadline,
-}
-impl std::fmt::Display for BindingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Sdk(e) => e.fmt(f),
-            Self::UnsupportedTransaction => {
-                f.write_str("snapshot-only adapter: transactions unsupported")
-            }
-            Self::UnsupportedKeyUtf16 => {
-                f.write_str("snapshot-only adapter requires UTF-8 storage keys")
-            }
-            Self::UnsupportedSnapshotCell => {
-                f.write_str("snapshot-only adapter requires JSON string cells")
-            }
-            Self::InvalidDeadline => f.write_str("invalid absolute epoch-ms deadline"),
-        }
-    }
-}
-impl From<worker::Error> for BindingError {
-    fn from(e: worker::Error) -> Self {
-        Self::Sdk(e)
-    }
-}
-// Private and unfenced: do_store only uses get/put at the fixed @@state key.
-struct SnapshotStorage(worker::Storage);
-fn key_text(key: &JsText) -> std::result::Result<&str, BindingError> {
-    key.as_utf8().ok_or(BindingError::UnsupportedKeyUtf16)
-}
-fn from_js(value: JsValue) -> std::result::Result<StoredCell, BindingError> {
-    if value.is_undefined() {
-        return Ok(StoredCell::Undefined);
-    }
-    if !value.is_string() {
-        return Err(BindingError::UnsupportedSnapshotCell);
-    }
-    let text = js_sys::JsString::from(value);
-    Ok(StoredCell::String(JsText::from_units(
-        text.iter().collect(),
-    )))
-}
-impl DurableObjectStorage for SnapshotStorage {
-    type Error = BindingError;
-    async fn get(&self, key: JsText) -> std::result::Result<StoredCell, BindingError> {
-        let key = key_text(&key)?;
-        let map = self.0.get_multiple(vec![key]).await?;
-        from_js(map.get(&JsValue::from_str(key)))
-    }
-    async fn put(&self, key: JsText, value: StoredCell) -> std::result::Result<(), BindingError> {
-        let StoredCell::String(value) = value else {
-            return Err(BindingError::UnsupportedSnapshotCell);
-        };
-        self.0
-            .put_raw(
-                key_text(&key)?,
-                js_sys::JsString::from_char_code(value.as_units()),
-            )
-            .await?;
-        Ok(())
-    }
-    async fn delete(&self, keys: Vec<JsText>) -> std::result::Result<(), BindingError> {
-        let keys = keys
-            .iter()
-            .map(key_text)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        self.0.delete_multiple(keys).await?;
-        Ok(())
-    }
-    async fn list(
-        &self,
-        prefix: JsText,
-    ) -> std::result::Result<Vec<(JsText, StoredCell)>, BindingError> {
-        let map = self.0.list().await?;
-        let mut cells = vec![];
-        for entry in map.entries().into_iter() {
-            let entry = js_sys::Array::from(&entry.map_err(worker::Error::from)?);
-            let key = JsText::from_units(js_sys::JsString::from(entry.get(0)).iter().collect());
-            if key.as_units().starts_with(prefix.as_units()) {
-                cells.push((key, from_js(entry.get(1))?));
-            }
-        }
-        Ok(cells)
-    }
-    async fn transaction<A, E, F>(
-        &self,
-        _: impl FnOnce(Self) -> F,
-    ) -> std::result::Result<A, TransactionError<BindingError, E>>
-    where
-        F: Future<Output = std::result::Result<A, E>>,
-    {
-        Err(TransactionError::Storage(
-            BindingError::UnsupportedTransaction,
-        ))
-    }
-}
-impl AlarmStorage for SnapshotStorage {
-    type Error = BindingError;
-    async fn set_alarm(&self, at_ms: f64) -> std::result::Result<(), BindingError> {
-        if !at_ms.is_finite() || !(0.0..=8.64e15).contains(&at_ms) {
-            return Err(BindingError::InvalidDeadline);
-        }
-        self.0
-            .set_alarm(ScheduledTime::new(js_sys::Date::new(&JsValue::from_f64(
-                at_ms,
-            ))))
-            .await?;
-        console_log!("{}", serde_json::json!({"event":"set_alarm", "at":at_ms}));
-        Ok(())
-    }
-}
+mod sdk_fault;
+mod sdk_storage;
+use sdk_storage::{BindingError, SdkStorage};
 fn binding_error(error: BindingError) -> worker::Error {
     match error {
         BindingError::Sdk(error) => error,
@@ -163,7 +50,7 @@ pub struct Jobs {
 impl Jobs {
     async fn callback(&self, action: &str, schedule: Option<[f64; 3]>) -> worker::Result<Response> {
         let owner = Rc::new(());
-        let storage = Rc::new(SnapshotStorage(self.state.storage()));
+        let storage = Rc::new(SdkStorage::new(self.state.storage()));
         let parse = |raw: PlainData| {
             let value = serde_json::to_value(raw).expect("plain JSON data");
             Migrated::State(Model {
@@ -264,9 +151,9 @@ impl Jobs {
             }
             _ => {}
         }
-        storage.0.sync().await?;
-        let alarm = storage.0.get_alarm().await?;
-        let stored_json = storage.0.get::<String>("@@state").await?;
+        storage.storage.sync().await?;
+        let alarm = storage.storage.get_alarm().await?;
+        let stored_json = storage.storage.get::<String>("@@state").await?;
         Response::from_json(
             &serde_json::json!({"model":view(&model.borrow()), "alarm":alarm, "stored_json":stored_json}),
         )
@@ -282,6 +169,13 @@ impl DurableObject for Jobs {
     }
     async fn fetch(&self, mut request: Request) -> worker::Result<Response> {
         match (request.method(), request.path().as_str()) {
+            (Method::Get, "/adapter-profile") => {
+                transactions::profile(SdkStorage::new(self.state.storage())).await
+            }
+            (Method::Post, "/transactions") => {
+                let body = request.text().await?;
+                transactions::command(SdkStorage::new(self.state.storage()), &body).await
+            }
             (Method::Post, "/seed") => {
                 let body = request.text().await?;
                 let schedule = if body.is_empty() {

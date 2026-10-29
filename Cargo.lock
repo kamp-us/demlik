@@ -385,7 +385,9 @@ name = "demlik-cloudflare-local"
 version = "0.1.0"
 dependencies = [
  "demlik-tea",
+ "futures",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "worker",
 ]
