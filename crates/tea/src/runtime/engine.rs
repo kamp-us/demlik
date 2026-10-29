@@ -1380,6 +1380,7 @@ pub fn try_launch<
         guard: None,
     };
     let edge = CommandEdge::new(move || clock());
+    #[cfg(not(target_arch = "wasm32"))]
     let timer = timer.unwrap_or_else(|| {
         let owner = Rc::clone(&core);
         let clock = Rc::clone(&core.clock);
@@ -1388,6 +1389,8 @@ pub fn try_launch<
             move |error| owner.report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Sub),
         )))
     });
+    #[cfg(target_arch = "wasm32")]
+    let timer = timer.expect("Wasm runtime hosts must provide Options.timer");
     let env = Rc::new(Env {
         machine,
         identity,

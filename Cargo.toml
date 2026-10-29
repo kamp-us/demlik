@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tea", "crates/code-graph", "crates/parity"]
+members = ["crates/tea", "crates/code-graph", "crates/parity", "crates/cay-ocagi-web"]
 resolver = "3"
 
 [workspace.package]

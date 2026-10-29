@@ -87,7 +87,8 @@ export CARGO_HOME=/private/tmp/demlik-pbt-cargo-home-01a16c9d
 Main files:
 
 - `cay_ocagi.rs`: loopback HTTP adapter, real bounded inbox, native runtime wiring, source extraction.
-- `cay_ocagi/domain.rs`: Model, Msg, Cmd, pure update, timer interpreter, focused transition tests.
+- `cay_ocagi/domain.rs`: Model, Msg, Cmd, pure update, focused transition tests.
+- `cay_ocagi/native.rs`: native Tokio timer interpreter and host view types.
 - `cay_ocagi/index.html`, `style.css`, `app.js`: illustrated scene and renderer.
 - `cay_ocagi/smoke.py`: real API journey on a separate test instance.
 

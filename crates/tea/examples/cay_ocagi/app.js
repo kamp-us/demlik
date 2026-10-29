@@ -2,21 +2,36 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const people = ['','Kemal amca','Elif','Deniz'];
+async function fetchJson(path, options) {
+ const response = await fetch(path, options);
+ const value = await response.json();
+ if (!response.ok) throw new Error(value.error || 'İşlem başarısız.');
+ return value;
+}
+const transport = window.teaTransport || {
+ profile: 'native', ready: Promise.resolve(),
+ action: value => fetchJson('/api/action', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}),
+ state: () => fetchJson('/api/state'), source: () => fetchJson('/api/source')
+};
+const isBrowser = transport.profile === 'browser-wasm';
 const phases = {cold:'Semaver soğuk',heating:'Su ısınıyor',hot:'Su kaynadı',brewing:'Çay demleniyor',ready:'Çaylar hazır'};
 const concepts = {
  model:'<b>Model = ocağın durumu.</b> Su, çay, siparişler. Rust’ın <code>struct</code> kelimesi bu bilgileri tek bir defterde toplar.',
  messages:'<b>Msg = olan bir şey.</b> Sipariş geldi, su kaynadı. <b>Cmd = yapılacak iş.</b> Rust’ın <code>enum</code> kelimesi olasılıkları adlandırır.',
  update:'<b>update = kural defteri.</b> Mevcut durumu ve mesajı alır; yeni durum + yapılacak işleri döndürür. Çay yapmaz, karar verir.',
  effects:'<b>Interpreter = işi yapan.</b> Cmd’yi alır, bir timer task başlatır ve sonucu aynı inbox’a Msg olarak yollar. <code>async / await</code> beklerken başka işlere yer açar.',
+ runtime:'<b>Host = makineyi çalıştıran.</b> Model + update aynı kalır. Native host Tokio kullanır; tarayıcı host’u Wasm içindeki Machine ve kendi saatini sürer.',
  channel:'<b>Channel = mesaj kutusu.</b> <code>tx</code> gönderir, <code>rx</code> alır. Sipariş defterinden ayrı: burada işlenmeyi bekleyen mesajlar var.'
 };
+if (isBrowser) concepts.effects = '<b>Effect = yapılacak iş.</b> Rust işi kendi saatine kaydeder. Tarayıcı yalnızca geçen süreyi bildirir; tamamlanma kararını Rust verir ve Msg inbox’a döner.';
 let state, sources = {}, tab = 'model', follow = true, quantity = 2, selectedTable = 1, lastEvent = 0, lastModel = '', lastPending = '', lastOrders = '', lastEffects = '', sourceKey = '', selectedEvent = null, tour = false, connected = false;
 let lastReceivedAt = performance.now();
 const escape = (value) => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const time = (seconds) => `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
 function toast(message) { $('#toast').textContent = message; $('#toast').hidden = false; clearTimeout(toast.timeout); toast.timeout = setTimeout(()=>$('#toast').hidden=true,4500); }
+window.addEventListener('tea-host-error', event => toast(`Rust host durdu: ${event.detail}`));
 async function action(action, data = {}) {
- try { const response = await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...data})}); const value = await response.json(); if(!response.ok)throw new Error(value.error || 'İşlem başarısız.'); await poll(); return true; }
+ try { await transport.ready; await transport.action({action,...data}); await poll(); return true; }
  catch(error) { toast(`Rust’a ulaşılamadı: ${error.message}`); return false; }
 }
 function selectTab(name, manual = true, event = null) {
@@ -46,7 +61,7 @@ function renderSource(event) {
    return `<span class="source-line${focus?' focus-line':''}" data-line="${data.start+i}"><span class="line-number" aria-hidden="true">${data.start+i}</span>${highlight(line)}</span>`;
   }).join('');
  }).join('<span class="source-line"><span class="line-number">·</span></span>');
- $('#code-file').textContent = sources[section].file === 'domain.rs' ? 'cay_ocagi/domain.rs' : 'cay_ocagi.rs';
+ $('#code-file').textContent = sources[section].path || (sources[section].file === 'domain.rs' ? 'cay_ocagi/domain.rs' : sources[section].file);
  $('#code-caption').textContent = event ? `${event.name} · çalışan kaynak kodu` : 'Bu, uygulamanın derlenen kaynak kodu.';
  if(focused){const line=$('.focus-line');$('#source-wrap').scrollTop=line.offsetTop-$('#source').offsetTop-55;}else $('#source-wrap').scrollTop=0;
 }
@@ -84,7 +99,7 @@ function renderOrders() {
 }
 function render() {
  const m=state.model; connected=true; lastReceivedAt=performance.now();
- $('#connection').classList.remove('offline');$('#connection span').textContent='Native Rust · bağlı';
+ $('#connection').classList.remove('offline');$('#connection span').textContent=isBrowser?'Rust / Wasm · bu sekmede':'Native Rust · bağlı';
  $('#clock').textContent=time(state.now);$('#pause').textContent=state.paused?'▶':'Ⅱ';$('#pause').setAttribute('aria-label',state.paused?'Simülasyonu sürdür':'Simülasyonu duraklat');$('#speed').value=state.speed;
  $('#scene').classList.toggle('is-paused',state.paused);
  $('#inbox-count').textContent=`${state.pending.length} bekliyor`;$('#active-count').textContent=`${state.effects.length} çalışıyor`;
@@ -121,7 +136,7 @@ function animate() {
 let polling=false;
 async function poll() {
  if(polling)return;polling=true;
- try{const response=await fetch('/api/state');if(!response.ok)throw new Error('offline');state=await response.json();render();}
+ try{await transport.ready; state=await transport.state();render();}
  catch(error){connected=false;$('#connection').classList.add('offline');$('#connection span').textContent='Rust bağlantısı yok';}
  finally{polling=false;}
 }
@@ -133,9 +148,9 @@ function renderTour(){
  if(m.served>0){step=4;description='Afiyet olsun! Aynı döngü: Msg → update → Cmd → Msg. Şimdi duraklatıp kutuya birkaç mesaj bırakabilirsin.';label='Anladım ✓';act=()=>{tour=false;$('#tour').hidden=true;};}
  else if(!m.orders.some(o=>o.status==='waiting'||o.status==='serving')){step=1;description='Bir sipariş fişi gönder. Channel bu mesajı Rust’a taşıyacak.';label='İki çay söyle';act=()=>action('order',{table:1,glasses:2});}
  else if(m.phase==='cold'){step=2;description='Sipariş defterde. Şimdi semaveri yak: update bir HeatWater komutu çıkaracak.';label='Ateşi yak';act=()=>action('heat');}
- else if(m.phase==='heating'){step=2;description='Interpreter suyu ısıtıyor. Tamamlanınca HeatFinished mesajı update’e geri gelecek.';label='Isınıyor…';}
+ else if(m.phase==='heating'){step=2;description=isBrowser?'Rust effect adapter suyu ısıtıyor. Tamamlanınca HeatFinished inbox’a geri gelecek.':'Interpreter suyu ısıtıyor. Tamamlanınca HeatFinished mesajı update’e geri gelecek.';label='Isınıyor…';}
  else if(m.phase==='hot'){step=3;description='Su kaynadı. Çayı demle; beklemek interpreter’ın işi.';label='Çayı demle';act=()=>action('brew');}
- else if(m.phase==='brewing'){step=3;description='Çay demlenirken Rust yeni siparişleri almaya devam edebilir. async / await bunu sağlar.';label='Demleniyor…';}
+ else if(m.phase==='brewing'){step=3;description='Çay demlenirken Rust yeni siparişleri almaya devam edebilir. Bekleyen iş ile karar veren update ayrıdır.';label='Demleniyor…';}
  else {step=4;description='Çay hazır. Servis bir komut, tepsinin masaya varışı yeni bir mesaj.';label='Servis et';const order=m.orders.find(o=>o.status==='waiting');act=order?()=>action('serve',{id:order.id}):undefined;if(!order)label='Tepsi yolda…';}
  $('#tour-step').textContent=`0${step} / 04`;$('#tour-text').textContent=description;$('#tour-action').textContent=label;$('#tour-action').disabled=!act;$('#tour-action').onclick=act;
 }
@@ -153,10 +168,10 @@ $('#pause').onclick=()=>action('pause',{paused:!state?.paused});$('#step').oncli
 $('#reset').onclick=async()=>{await action('reset');toast('Yeni vardiya mesajı kuyruğa girdi.');};
 $('#experiment').onclick=()=>{if(state?.model.phase!=='cold'){toast('Önce “Yeni vardiya” ile semaveri soğut. Sonra bu deneyi aç.');return;} action('empty_water').then(ok=>{if(ok)toast('Su boşalınca ateşi yak. HeatFinished → Err göreceksin. Sonra SU + ile doldur, tekrar dene.');});};
 $('#orders').onclick=e=>{const serve=e.target.closest('[data-serve]'),cancel=e.target.closest('[data-cancel]');if(serve)action('serve',{id:Number(serve.dataset.serve)});if(cancel)action('cancel',{id:Number(cancel.dataset.cancel)});};
-$('#events').onclick=e=>{const button=e.target.closest('[data-event]');if(!button)return;const event=state.events.find(e=>e.seq===Number(button.dataset.event));if(!event)return;selectedEvent=event;selectTab(event.kind==='channel'?'channel':event.kind==='effect'?'effects':'update',true,event);showDetail(event.name,`${time(event.at)} · ${event.kind==='channel'?'Gerçek Rust inbox’a gönderilen mesaj':event.kind==='effect'?'Native interpreter tarafından başlatılan komut':'Native update sonrası sonuç'}`,JSON.stringify({payload:event.payload,...(event.model?{model:event.model}:{})},null,2));};
-$('#model-open').onclick=()=>showDetail('Ocağın durumu','Bu JSON, Rust runtime’ın gerçek Model değeridir. Tarayıcı kendi simülasyonunu çalıştırmaz.',JSON.stringify(state?.model,null,2));
+$('#events').onclick=e=>{const button=e.target.closest('[data-event]');if(!button)return;const event=state.events.find(e=>e.seq===Number(button.dataset.event));if(!event)return;selectedEvent=event;selectTab(event.kind==='channel'?'channel':event.kind==='effect'?'effects':'update',true,event);showDetail(event.name,`${time(event.at)} · ${event.kind==='channel'?'Gerçek Rust inbox’a gönderilen mesaj':event.kind==='effect'?'Rust effect adapter tarafından başlatılan komut':'Rust update sonrası sonuç'}`,JSON.stringify({payload:event.payload,...(event.model?{model:event.model}:{})},null,2));};
+$('#model-open').onclick=()=>showDetail('Ocağın durumu','Bu JSON, Rust makinesinin gerçek Model değeridir. JavaScript yalnızca görüntüyü çizer.',JSON.stringify(state?.model,null,2));
 $('#expand-source').onclick=()=>{const names=tab==='channel'?['channel_create','channel_send','channel_receive']: [tab];showDetail(`${tab} · derlenen Rust kodu`,'Buradaki satırlar çalışan binary içine include_str! ile gömülen gerçek kaynaktan gelir.',names.map(n=>sources[n]?.code||'').join('\n\n'));};
 $('#follow').onclick=()=>{follow=!follow;$('#follow').setAttribute('aria-pressed',String(follow));if(follow){lastEvent=0;renderEvents();}};
 // Native tab keys remain usable, with arrow navigation between Rust concepts.
 $('.code-tabs').onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const buttons=$$('.code-tabs button');const index=buttons.indexOf(document.activeElement);const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();selectTab(buttons[next].dataset.tab);};
-(async()=>{try{sources=await(await fetch('/api/source')).json();selectTab('model',false);}catch(e){toast('Rust kaynak kodu yüklenemedi.');}await poll();setInterval(poll,180);requestAnimationFrame(animate);})();
+(async()=>{try{await transport.ready; sources=await transport.source();selectTab('model',false);}catch(e){toast('Rust kaynak kodu yüklenemedi.');}await poll();setInterval(poll,180);requestAnimationFrame(animate);})();

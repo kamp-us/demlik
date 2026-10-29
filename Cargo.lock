@@ -284,6 +284,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cay-ocagi-web"
+version = "0.1.0"
+dependencies = [
+ "demlik-tea",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

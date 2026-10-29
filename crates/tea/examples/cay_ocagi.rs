@@ -2,9 +2,12 @@
 //! cargo run -p demlik-tea --example cay_ocagi
 #[path = "cay_ocagi/domain.rs"]
 mod domain;
+#[path = "cay_ocagi/native.rs"]
+mod native;
 use demlik_tea::runtime::{NoSubscriptions, Options, Profile, launch};
 use demlik_tea::{Machine, Step, Sub, Tagged, Update};
 use domain::*;
+use native::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -147,6 +150,7 @@ fn enqueue(
 fn source() -> Value {
     let files = [
         ("domain.rs", include_str!("cay_ocagi/domain.rs")),
+        ("native.rs", include_str!("cay_ocagi/native.rs")),
         ("cay_ocagi.rs", include_str!("cay_ocagi.rs")),
     ];
     let mut sections = serde_json::Map::new();
