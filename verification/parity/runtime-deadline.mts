@@ -263,7 +263,9 @@ function control(
       reconcilerCompanion = "crates/tea/src/flow/reconciler.rs",
       reconcilerCompanionBefore = digest(reconcilerCompanion),
       llmCompanion = "crates/tea/src/llm_call.rs",
-      llmCompanionBefore = digest(llmCompanion);
+      llmCompanionBefore = digest(llmCompanion),
+      jevCompanion = "crates/tea/src/jev/ask.rs",
+      jevCompanionBefore = digest(jevCompanion);
     try {
       const source = join(temporary, file),
         text = readFileSync(source, "utf8"),
@@ -323,6 +325,17 @@ function control(
           "Option<crate::resilience::deadline::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>",
         ),
       );
+      const jevSource = join(temporary, jevCompanion),
+        jevText = readFileSync(jevSource, "utf8");
+      assert.equal(digest(jevSource), jevCompanionBefore);
+      assert.equal(jevText.split(walkNeedle).length, 2);
+      writeFileSync(
+        jevSource,
+        jevText.replace(
+          walkNeedle,
+          "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
+        ),
+      );
       const target = mutationCheck.target;
       assert.notEqual(
         target,
@@ -361,6 +374,7 @@ function control(
       assert.equal(digest(walkCompanion), walkCompanionBefore);
       assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
       assert.equal(digest(llmCompanion), llmCompanionBefore);
+      assert.equal(digest(jevCompanion), jevCompanionBefore);
       return {
         id: "separate-deadline-timer-type",
         isolation: "registered-worktree-default-target",
@@ -375,6 +389,8 @@ function control(
         reconcilerMutantSourceSha256: digest(reconcilerSource),
         llmSourceBeforeSha256: llmCompanionBefore,
         llmMutantSourceSha256: digest(llmSource),
+        jevSourceBeforeSha256: jevCompanionBefore,
+        jevMutantSourceSha256: digest(jevSource),
         nativeBinarySha256: digest(executable),
         detectedIds,
       };
@@ -384,6 +400,7 @@ function control(
       assert.equal(digest(walkCompanion), walkCompanionBefore);
       assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
       assert.equal(digest(llmCompanion), llmCompanionBefore);
+      assert.equal(digest(jevCompanion), jevCompanionBefore);
     }
   } catch (error) {
     mutationFailure = error;
