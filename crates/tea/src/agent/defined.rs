@@ -262,6 +262,7 @@ pub struct DefineAgentConfig<F, R: DefinedAgentTools, P = NoProviderError> {
     instructions: JsText,
     on_tool_error: Option<ToolErrorHook<R>>,
     deadline_ms: Option<f64>,
+    tool_concurrency: Option<f64>,
     retry: Option<crate::retry_backoff::AnyRetryPolicy>,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
@@ -276,6 +277,7 @@ impl<F, R: DefinedAgentTools, P> DefineAgentConfig<F, R, P> {
             instructions: instructions.into(),
             on_tool_error: None,
             deadline_ms: None,
+            tool_concurrency: None,
             retry: None,
             max_turns: None,
             max_elapsed_ms: None,
@@ -290,6 +292,12 @@ impl<F, R: DefinedAgentTools, P> DefineAgentConfig<F, R, P> {
         describe: impl Fn(&P) -> Result<JsText, crate::js_record::JsAccessError> + 'static,
     ) -> Self {
         self.describe_provider_error = Rc::new(describe);
+        self
+    }
+    /// Launches up to this many calls together, settling in emission order.
+    /// Omitted or one retains serial tool execution.
+    pub fn tool_concurrency(mut self, value: f64) -> Self {
+        self.tool_concurrency = Some(value);
         self
     }
     /// Restarts the existing run watchdog on progress. Omitted means no watchdog.
@@ -556,6 +564,9 @@ where
             },
         )
         .instructions(self.config.instructions.clone());
+        if let Some(limit) = self.config.tool_concurrency {
+            config = config.tool_concurrency(limit);
+        }
         if let Some(deadline) = self.config.deadline_ms {
             config = config.deadline_ms(deadline);
         }

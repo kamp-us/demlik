@@ -298,6 +298,7 @@ type ToolFoldResult<Stage, P, I, S, R, TE, A, T, C, V, K, Q> =
     Result<super::StepOf<Stage, P, I, S, R, TE, A, T, C, V, K, Q>, AgentMachineError>;
 
 struct AgentInterpreter<'a, P, I, S: Schema, F, L, TI, CI, SI, M, H> {
+    tool_settlements: Option<crate::runtime::SettlementChain>,
     llm: Rc<LlmCall<'a, P, I, S>>,
     model: F,
     loader: L,
@@ -379,6 +380,10 @@ where
 
             AgentCommand::Tool(cmd) => {
                 let work = self.tools.interpret(cmd, context)?;
+                let work = match &self.tool_settlements {
+                    Some(chain) => work.ordered_detached(chain),
+                    None => work,
+                };
                 Some(work.map(AgentCompletion::Tool))
             }
             AgentCommand::Compact(cmd) => {
@@ -582,6 +587,7 @@ where
         AgentWired {
             machine,
             interpret: AgentInterpreter {
+                tool_settlements: (self.config.tool_concurrency > 1.0).then(Default::default),
                 llm: Rc::clone(&self.config.llm),
                 model,
                 loader,

@@ -109,10 +109,35 @@ enum CommandOperation<'a, T, E> {
     Effect(LocalBoxFuture<'a, Result<T, E>>),
     Promise(PromiseFactory<'a, T, E>),
 }
+/// A release chain orders detached settlements without changing their operations.
+#[derive(Default)]
+pub(crate) struct SettlementChain(std::cell::RefCell<Option<tokio::sync::oneshot::Receiver<()>>>);
+pub(crate) struct SettlementOrder {
+    prior: Option<tokio::sync::oneshot::Receiver<()>>,
+    // Dropping the sender releases the next edge on success, error, or cancellation.
+    _release: tokio::sync::oneshot::Sender<()>,
+}
+impl SettlementOrder {
+    pub(crate) async fn wait(&mut self) {
+        if let Some(prior) = self.prior.take() {
+            let _ = prior.await;
+        }
+    }
+}
+impl SettlementChain {
+    fn next(&self) -> SettlementOrder {
+        let (release, next) = tokio::sync::oneshot::channel();
+        SettlementOrder {
+            prior: self.0.replace(Some(next)),
+            _release: release,
+        }
+    }
+}
 pub struct CommandWork<'a, T, E> {
     operation: CommandOperation<'a, T, E>,
     pub(crate) cleanup: Option<Cleanup<'a, E>>,
     pub(crate) detached: bool,
+    pub(crate) settlement_order: Option<SettlementOrder>,
     pub(crate) uninterruptible: bool,
 }
 impl<'a, T, E> CommandWork<'a, T, E> {
@@ -144,6 +169,7 @@ impl<'a, T, E> CommandWork<'a, T, E> {
             operation,
             cleanup: None,
             detached: false,
+            settlement_order: None,
             uninterruptible: false,
         }
     }
@@ -171,8 +197,14 @@ impl<'a, T, E> CommandWork<'a, T, E> {
             operation,
             cleanup: self.cleanup,
             detached: self.detached,
+            settlement_order: self.settlement_order,
             uninterruptible: self.uninterruptible,
         }
+    }
+    pub(crate) fn ordered_detached(mut self, chain: &SettlementChain) -> Self {
+        self.detached = true;
+        self.settlement_order = Some(chain.next());
+        self
     }
     pub fn detached(mut self) -> Self {
         self.detached = true;
@@ -203,6 +235,7 @@ impl<'a, T, E> CommandWork<'a, T, E> {
             operation,
             cleanup: self.cleanup,
             detached: self.detached,
+            settlement_order: self.settlement_order,
             uninterruptible: self.uninterruptible,
         }
     }

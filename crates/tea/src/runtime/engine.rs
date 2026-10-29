@@ -899,10 +899,12 @@ impl<
             }),
             detach: Rc::new(move |work| detached.extra(work)),
         };
+        let mut settlement_order;
         let completed = {
-            let Some(work) = self.interpreter.interpret(&command, context) else {
+            let Some(mut work) = self.interpreter.interpret(&command, context) else {
                 return Ok(());
             };
+            settlement_order = work.settlement_order.take();
             let detached = work.detached;
             let promise = work.is_promise();
             let mut running = Box::pin(
@@ -933,6 +935,14 @@ impl<
                 }
             };
             tokio::task::yield_now().await;
+            // Detached followers stay owned and counted while waiting to cross the edge.
+            if result
+                .as_ref()
+                .is_ok_and(|performed| matches!(performed.result, Ok(Some(_))))
+                && let Some(order) = &mut settlement_order
+            {
+                order.wait().await;
+            }
             self.in_flight.borrow_mut().shift_remove(&token);
             self.producer.mailbox.changed.notify_waiters();
             let performed = match result {

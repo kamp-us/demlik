@@ -11,6 +11,7 @@ mod telemetry;
 mod timer;
 mod types;
 mod work;
+pub(crate) use work::SettlementChain;
 
 pub use drive::{
     DriveCancellation, DriveError, DriveOptions, DriveSignal, DriveStart, DriveTask, drive_to_done,
