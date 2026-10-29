@@ -47,3 +47,47 @@ The resulting proof covers local process restart, workerd alarms and persisted
 storage. It does not establish cloud scheduling, forced alarm retry timing,
 automatic idle eviction, a paired TypeScript SDK host, or broad cross-cloud
 parity. No account, deployment or remote binding is required.
+
+## Compare the frozen Source and Rust hosts
+
+After the same build, run the paired gate from this folder:
+
+```sh
+WRANGLER_SEND_METRICS=false python3 prove-paired.py --evidence ../../target/cloudflare-paired-proof
+```
+
+The workspace dependencies must also be installed (`pnpm install --frozen-lockfile`
+from the repository root). `source.ts` imports the unchanged TypeScript TEA library,
+guarded against reference `75de37ea01a81cd7949e6275b7ee9cfdeb4e312d`. Its
+scheduled-job reducer has the same transitions as the generic durable-alarm
+fixture. Both hosts use actual SDK storage and alarms, in separate local workerd
+servers using the same pinned Wrangler installation. No in-memory storage or
+timer substitute participates.
+
+The gate persists one explicit three-job absolute schedule in both objects,
+rejects invalid schedules without changing storage, recovers before the first
+deadline, and compares every settled model, exact JSON string cell, and chosen
+absolute alarm. It observes three real alarm callbacks in each host, checks their
+ordering and deadline lower bounds, repeats the timer path, and restarts again
+with an empty schedule. Callback arrival times remain separate measurements;
+the gate does not claim equal clocks or scheduling latency.
+
+The evidence directory must be fresh. It retains both executable artifacts,
+producer inputs and hashes, Source bundle metadata, raw request/response streams,
+logs, lifecycle records, the shared schedule, results and port cleanup receipts.
+`source/` and `rust/` each own isolated persistent state. The runner never deploys,
+logs in, or uses remote bindings. The snapshot adapter and Wasm Agent limitations
+described above still apply.
+
+`POST /seed` accepts `{ "jobs": [epochMs1, epochMs2, epochMs3] }`: three strictly
+increasing future integer millisecond deadlines in the JavaScript Date range.
+Rust also retains its original empty-body seed for `prove-local.py`.
+
+Focused static checks from the repository root:
+
+```sh
+cargo fmt --check -p demlik-cloudflare-local
+pnpm exec biome check crates/cloudflare-local/source.ts
+pnpm exec tsc -p crates/cloudflare-local/tsconfig.source.json
+python3 -m py_compile crates/cloudflare-local/prove-paired.py
+```

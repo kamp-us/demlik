@@ -161,7 +161,7 @@ pub struct Jobs {
     state: State,
 }
 impl Jobs {
-    async fn callback(&self, action: &str) -> worker::Result<Response> {
+    async fn callback(&self, action: &str, schedule: Option<[f64; 3]>) -> worker::Result<Response> {
         let owner = Rc::new(());
         let storage = Rc::new(SnapshotStorage(self.state.storage()));
         let parse = |raw: PlainData| {
@@ -248,7 +248,9 @@ impl Jobs {
                     return Response::error("already seeded", 409);
                 }
                 let now = js_sys::Date::now();
-                model.borrow_mut().pending = vec![now + 20_000.0, now + 40_000.0, now + 60_000.0];
+                model.borrow_mut().pending = schedule
+                    .unwrap_or([now + 20_000.0, now + 40_000.0, now + 60_000.0])
+                    .to_vec();
                 let snapshot = model.borrow().clone();
                 store.save(&snapshot).await.map_err(snapshot_error)?;
                 timer.rearm().await.map_err(timer_error)?;
@@ -278,16 +280,39 @@ impl DurableObject for Jobs {
         );
         Self { state }
     }
-    async fn fetch(&self, request: Request) -> worker::Result<Response> {
+    async fn fetch(&self, mut request: Request) -> worker::Result<Response> {
         match (request.method(), request.path().as_str()) {
-            (Method::Post, "/seed") => self.callback("seed").await,
-            (Method::Post, "/repeat") => self.callback("repeat").await,
-            (Method::Get, "/state") => self.callback("state").await,
+            (Method::Post, "/seed") => {
+                let body = request.text().await?;
+                let schedule = if body.is_empty() {
+                    None
+                } else {
+                    #[derive(serde::Deserialize)]
+                    #[serde(deny_unknown_fields)]
+                    struct Seed {
+                        jobs: [f64; 3],
+                    }
+                    let Ok(seed) = serde_json::from_str::<Seed>(&body) else {
+                        return Response::error("invalid schedule JSON", 400);
+                    };
+                    if seed.jobs.iter().any(|at| {
+                        !at.is_finite() || at.fract() != 0.0 || !(0.0..=8.64e15).contains(at)
+                    }) || seed.jobs[0] <= js_sys::Date::now()
+                        || !seed.jobs.windows(2).all(|pair| pair[0] < pair[1])
+                    {
+                        return Response::error("invalid future schedule", 400);
+                    }
+                    Some(seed.jobs)
+                };
+                self.callback("seed", schedule).await
+            }
+            (Method::Post, "/repeat") => self.callback("repeat", None).await,
+            (Method::Get, "/state") => self.callback("state", None).await,
             _ => Response::error("not found", 404),
         }
     }
     async fn alarm(&self) -> worker::Result<Response> {
-        self.callback("alarm").await
+        self.callback("alarm", None).await
     }
 }
 #[event(fetch)]
