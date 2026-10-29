@@ -83,11 +83,18 @@ function faultDigest(source) {
     source,
     (n) =>
       ts.isPropertyAssignment(n) &&
-      /^(witness|needle|fault|before|after|edits)$/.test(
+      /^(witness|needle|fault|before|after|replacement|edits|ids|id|name)$/.test(
         n.name.getText(source),
       ),
   ).map(semantic);
-  return sha(JSON.stringify([tables, fields]));
+  const markers = nodes(
+    source,
+    (n) =>
+      ts.isVariableDeclaration(n) &&
+      /^(before|needle|replacement|fault)$/.test(n.name.getText(source)) &&
+      n.initializer,
+  ).map((n) => semantic(n.initializer));
+  return sha(JSON.stringify([tables, fields, markers]));
 }
 for (const file of fs
   .readdirSync(directory)
@@ -361,12 +368,6 @@ for (const file of fs
     true,
     file.endsWith(".mts") ? ts.ScriptKind.TS : ts.ScriptKind.JS,
   );
-  if (updated.parseDiagnostics.length) {
-    fs.writeFileSync("/private/tmp/migration-debug.mjs", result);
-    console.error(
-      updated.parseDiagnostics.map((d) => [d.start, d.messageText]),
-    );
-  }
   assert.equal(
     updated.parseDiagnostics.length,
     0,

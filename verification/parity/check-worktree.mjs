@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -209,6 +210,28 @@ function retainCheckFiles(root, evidence, name) {
     }
   }
   copy(path.join(root, "target/parity"), "target/parity");
+  copy(path.join(root, "target/icu77/logs"), "target/icu77/logs");
+  for (const stamp of [
+    "prepared.json",
+    "attempt.json",
+    "metadata.stdout",
+    "metadata.stderr",
+  ]) {
+    const file = path.join(root, "target/icu77", stamp);
+    if (!fs.existsSync(file)) continue;
+    const destination = path.join(
+      evidence,
+      `${name}-reports/target/icu77`,
+      stamp,
+    );
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(file, destination);
+    mapping.push({
+      original: file,
+      retained: destination,
+      sha256: sha(fs.readFileSync(file)),
+    });
+  }
   for (const rootFile of fs.readdirSync(root)) {
     if (!/\.(json|jsonl|log|stdout|stderr)$/.test(rootFile)) continue;
     const file = path.join(root, rootFile);
@@ -401,11 +424,14 @@ export function checkedSpawnSync(program, args = [], options = {}) {
       RUST_ICU_MAJOR_VERSION_NUMBER: "77",
     });
   const command = [...args];
-  if (
-    (args[0] === "build" || args.includes("--no-run")) &&
-    !args.some((arg) => arg.startsWith("--message-format"))
-  )
-    command.push("--message-format=json");
+  if (!args.some((arg) => arg.startsWith("--message-format"))) {
+    const separator = command.indexOf("--");
+    command.splice(
+      separator < 0 ? command.length : separator,
+      0,
+      "--message-format=json",
+    );
+  }
   const result = spawnSync(program, command, {
     ...options,
     stdio: "pipe",
@@ -531,10 +557,18 @@ if (
   let failed;
   try {
     prepareCheckWorktree(check, script === "mutations.mjs");
+    const parityRequire = createRequire(
+      path.join(check.root, "verification/parity/package.json"),
+    );
+    const resolvedNodeArgs = nodeArgs.map((arg, index) =>
+      index % 2 === 0 || /^(file:|data:|node:)/.test(arg)
+        ? arg
+        : pathToFileURL(parityRequire.resolve(arg)).href,
+    );
     const result = spawnSync(
       process.execPath,
       [
-        ...nodeArgs,
+        ...resolvedNodeArgs,
         path.join(check.root, "verification/parity", script),
         ...argv,
       ],
@@ -555,6 +589,12 @@ if (
       JSON.stringify(
         {
           argv: [process.execPath, ...nodeArgs, script, ...argv],
+          executedArgv: [
+            process.execPath,
+            ...resolvedNodeArgs,
+            path.join(check.root, "verification/parity", script),
+            ...argv,
+          ],
           cwd: check.root,
           status: result.status,
           signal: result.signal,
