@@ -1164,7 +1164,8 @@ const mutations = [
   {
     id: "snapshot-stale-ack-regresses",
     file: "crates/tea/src/persistence/snapshot.rs",
-    needle: "if state.last_saved_seq.is_some_and(|last| input.seq <= last)",
+    needle:
+      "if state\n            .last_saved_seq\n            .is_some_and(|last| input.seq.number_or_zero() <= last)",
     replacement: "if false",
   },
 ];

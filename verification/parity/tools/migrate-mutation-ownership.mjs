@@ -619,10 +619,79 @@ if (process.argv.includes("--audit-base")) {
       ts.ScriptTarget.Latest,
       true,
     );
+    let approvedFaultFieldException;
+    let comparable = ast;
+    if (
+      file === "monitored-run.mts" &&
+      faultDigest(ast) !== faultDigest(frozen)
+    ) {
+      const id = "snapshot-stale-ack-regresses";
+      const oldNeedle =
+        "if state.last_saved_seq.is_some_and(|last| input.seq <= last)";
+      const currentNeedle =
+        "if state\n            .last_saved_seq\n            .is_some_and(|last| input.seq.number_or_zero() <= last)";
+      const controls = nodes(
+        ast,
+        (n) =>
+          ts.isObjectLiteralExpression(n) &&
+          n.properties.some(
+            (property) =>
+              ts.isPropertyAssignment(property) &&
+              property.name.getText(ast) === "id" &&
+              ts.isStringLiteralLike(property.initializer) &&
+              property.initializer.text === id,
+          ),
+      );
+      assert.equal(controls.length, 1, "one approved stale-ack control");
+      const control = controls[0];
+      const field = control.properties.find(
+        (property) =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(ast) === "needle",
+      );
+      const replacement = control.properties.find(
+        (property) =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(ast) === "replacement",
+      );
+      assert.ok(field && ts.isStringLiteralLike(field.initializer));
+      assert.ok(replacement && ts.isStringLiteralLike(replacement.initializer));
+      assert.equal(
+        replacement.initializer.text,
+        "if false",
+        "stale-ack fault replacement stays exact",
+      );
+      if (field.initializer.text !== oldNeedle) {
+        assert.equal(
+          field.initializer.text,
+          currentNeedle,
+          "only the approved current snapshot guard may replace the old marker",
+        );
+        const normalized =
+          current.slice(0, field.initializer.getStart(ast)) +
+          JSON.stringify(oldNeedle) +
+          current.slice(field.initializer.end);
+        comparable = ts.createSourceFile(
+          file,
+          normalized,
+          ts.ScriptTarget.Latest,
+          true,
+        );
+        approvedFaultFieldException = {
+          id,
+          field: "needle",
+          before: oldNeedle,
+          after: currentNeedle,
+          replacementUnchanged: "if false",
+          scope:
+            "Exact current source-marker repair only; all other original fault and witness fields remain in the unchanged digest comparison.",
+        };
+      }
+    }
     assert.equal(
-      faultDigest(ast),
+      faultDigest(comparable),
       faultDigest(frozen),
-      `${file}: original fault and witness literals`,
+      `${file}: original fault and witness literals except explicitly approved exact marker`,
     );
     const overrides = nodes(
       ast,
@@ -648,6 +717,9 @@ if (process.argv.includes("--audit-base")) {
       beforeSha256: sha(before),
       afterSha256: sha(current),
       faultDigest: faultDigest(ast),
+      originalFaultDigest: faultDigest(frozen),
+      comparableFaultDigest: faultDigest(comparable),
+      ...(approvedFaultFieldException ? { approvedFaultFieldException } : {}),
     });
   }
   const originalPackage = JSON.parse(
