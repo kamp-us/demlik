@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+
+[package]
+name = "cay-ocagi-gpui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cay-ocagi-web = { path = "../cay-ocagi-web" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "02d47bf64fcece0edc5b849d25e3a60a67d01c83", default-features = false }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "02d47bf64fcece0edc5b849d25e3a60a67d01c83", default-features = false }
+wasm-bindgen = "=0.2.129"
+web-sys = { version = "=0.3.106", features = ["Window", "Document", "Element", "HtmlElement", "Performance", "console"] }
+serde_json = "1.0"

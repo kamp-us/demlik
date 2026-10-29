@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::sync::mpsc;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
     Order { table: u8, glasses: u8 },
@@ -297,6 +297,10 @@ impl BrowserHost {
             self.next_input = self.now + 0.45;
         }
         Ok(())
+    }
+
+    pub fn model(&self) -> &Model {
+        &self.model
     }
 
     pub fn state(&self) -> Value {
