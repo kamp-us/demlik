@@ -17,6 +17,12 @@ import urllib.request
 REFERENCE = '75de37ea01a81cd7949e6275b7ee9cfdeb4e312d'
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
+RUNTIME_ERRORS = ("Can't read from request stream after response has been sent",
+                  "Uncaught ", "The Workers runtime crashed unexpectedly")
+
+
+def runtime_errors(text):
+    return [line for line in text.splitlines() if any(signal in line for signal in RUNTIME_ERRORS)]
 
 
 def digest(file):
@@ -42,6 +48,7 @@ class Host:
         self.process = None
         self.log = None
         self.lifecycle = []
+        self.runtime_checks = []
         self.requests = (self.directory / 'requests.jsonl').open('w')
         config = self.directory / 'wrangler.json'
         write(config, {
@@ -79,7 +86,8 @@ class Host:
             self.requests.flush()
 
     def start(self, number):
-        self.log = (self.directory / f'wrangler-{number}.log').open('w')
+        self.log_path = self.directory / f'wrangler-{number}.log'
+        self.log = self.log_path.open('w')
         env = dict(os.environ, WRANGLER_SEND_METRICS='false', CI='1',
                    WRANGLER_LOG_PATH=str(self.directory / 'debug-logs'))
         self.process = subprocess.Popen(self.command, cwd=ROOT, env=env, stdout=self.log,
@@ -99,9 +107,19 @@ class Host:
             time.sleep(.2)
         raise RuntimeError(f'{self.name} did not become ready')
 
+    def check_runtime(self):
+        # The live health request completes before this bounded diagnostic flush.
+        time.sleep(.3)
+        errors = runtime_errors(self.log_path.read_text())
+        assert self.process.poll() is None, f'{self.name} exited before stop'
+        assert not errors, (self.name, errors)
+
     def stop(self):
         if self.process is None:
             return
+        pre_stop = self.log_path.read_text()
+        self.runtime_checks.append({'log': self.log_path.name,
+                                    'pre_stop_errors': runtime_errors(pre_stop)})
         if self.process.poll() is None:
             os.killpg(self.process.pid, signal.SIGINT)
             try:
@@ -112,6 +130,8 @@ class Host:
         self.lifecycle.append({'event': 'stop', 'pid': self.process.pid,
                                'code': self.process.returncode, 'at_ms': time.time_ns() // 1_000_000})
         self.log.close()
+        after_stop = self.log_path.read_text()[len(pre_stop):]
+        self.runtime_checks[-1]['during_stop_diagnostics'] = runtime_errors(after_stop)
         self.process = None
 
     def close(self):
@@ -120,6 +140,7 @@ class Host:
         with socket.socket() as sock:
             closed = sock.connect_ex(('127.0.0.1', self.port)) != 0
         write(self.directory / 'lifecycle.json', self.lifecycle)
+        write(self.directory / 'runtime-checks.json', self.runtime_checks)
         write(self.directory / 'cleanup.json', {'port': self.port, 'closed': closed})
         assert closed, f'owned port {self.port} still open'
 
@@ -141,6 +162,7 @@ def events(host, event):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--repeat-only', action='store_true', help='Fast actual HTTP unread-body regression, no alarms')
     args = parser.parse_args()
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=False)
@@ -170,7 +192,8 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(file, target)
         source_hashes[relative] = digest(file)
-    for relative in ['crates/cloudflare-local/source.ts', 'crates/cloudflare-local/src/lib.rs',
+    for relative in ['crates/cloudflare-local/source.ts', 'crates/cloudflare-local/prove-paired.py',
+                     'crates/cloudflare-local/src/lib.rs',
                      'crates/tea/examples/support/scheduled_jobs.rs', 'Cargo.lock',
                      'crates/cloudflare-local/package-lock.json']:
         file = REPO / relative
@@ -186,6 +209,17 @@ def main():
     try:
         initial = {h.name: h.start(1) for h in hosts}
         assert initial['source'] == initial['rust'] == {'model': {'pending': [], 'done': []}, 'alarm': None, 'stored_json': None}
+        if args.repeat_only:
+            for host in hosts:
+                for _ in range(3):
+                    status, repeated = host.request('/repeat', {})
+                    assert status == 200 and repeated == initial[host.name]
+                    status, health = host.request('/state')
+                    assert status == 200 and health == initial[host.name]
+                    host.check_runtime()
+            result.update(passed=True, mode='repeat-only', initial=initial)
+            print('PASS: three body-bearing repeat POSTs per host and live health, no pre-stop runtime errors', flush=True)
+            return
         future = time.time_ns() // 1_000_000 + 20000
         jobs = [future, future + 20000, future + 40000]
         write(evidence / 'schedule.json', {'jobs': jobs})
@@ -246,11 +280,18 @@ def main():
         for host in hosts:
             status, repeated[host.name] = host.request('/repeat', {})
             assert status == 200 and repeated[host.name] == observed[host.name][-1]
+            status, health = host.request('/state')
+            assert status == 200 and health == repeated[host.name]
+            host.check_runtime()
             host.stop()
         restarted = {h.name: h.start(3) for h in hosts}
         assert restarted == repeated
         for host in hosts:
             assert host.request('/seed', {'jobs': [jobs[-1] + 120000 + n * 10000 for n in range(3)]})[0] == 409
+        for host in hosts:
+            host.check_runtime()
+            host.stop()
+            assert all(not check['pre_stop_errors'] for check in host.runtime_checks), host.runtime_checks
         assert hashes == {str(file.relative_to(artifacts)): digest(file) for file in artifacts.rglob('*') if file.is_file()}, 'executed artifacts changed'
         result.update(passed=True, jobs=jobs, initial=initial, seeded=seeded, recovered=recovered,
                       observed=observed, callbacks=callbacks, transitions=transitions,
@@ -267,6 +308,7 @@ def main():
     finally:
         for host in hosts:
             host.close()
+        result['runtime_checks'] = {h.name: h.runtime_checks for h in hosts}
         write(evidence / 'result.json', result)
 
 

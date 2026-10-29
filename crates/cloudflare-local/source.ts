@@ -109,8 +109,10 @@ export class SourceJobs {
         return new Response("invalid future schedule", { status: 400 });
       return this.callback({ type: "seed", jobs: checked.data.jobs });
     }
-    if (request.method === "POST" && path === "/repeat")
+    if (request.method === "POST" && path === "/repeat") {
+      await request.arrayBuffer();
       return this.callback({ type: "repeat" });
+    }
     if (request.method === "GET" && path === "/state")
       return this.callback({ type: "state" });
     return new Response("not found", { status: 404 });

@@ -67,10 +67,24 @@ timer substitute participates.
 The gate persists one explicit three-job absolute schedule in both objects,
 rejects invalid schedules without changing storage, recovers before the first
 deadline, and compares every settled model, exact JSON string cell, and chosen
-absolute alarm. It observes three real alarm callbacks in each host, checks their
+absolute alarm. Body-bearing repeat requests are followed by a live health
+request and checked for uncaught runtime errors before shutdown. It observes
+three real alarm callbacks in each host, checks their
 ordering and deadline lower bounds, repeats the timer path, and restarts again
 with an empty schedule. Callback arrival times remain separate measurements;
 the gate does not claim equal clocks or scheduling latency.
+
+For the fast real-HTTP repeat regression without waiting for alarms:
+
+```sh
+WRANGLER_SEND_METRICS=false python3 prove-paired.py --repeat-only --evidence ../../target/cloudflare-repeat-proof
+```
+
+This sends three JSON-body repeat POSTs per host and checks live health and the
+specific unread-request-stream exception. Both consumers drain the ignored
+repeat body before returning a response. Runtime diagnostics captured before
+stop are separate from diagnostics emitted during stop; the normal owned
+SIGINT shutdown exit code is 130. Inspect each host's `runtime-checks.json`.
 
 The evidence directory must be fresh. It retains both executable artifacts,
 producer inputs and hashes, Source bundle metadata, raw request/response streams,

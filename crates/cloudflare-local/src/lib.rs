@@ -306,7 +306,10 @@ impl DurableObject for Jobs {
                 };
                 self.callback("seed", schedule).await
             }
-            (Method::Post, "/repeat") => self.callback("repeat", None).await,
+            (Method::Post, "/repeat") => {
+                request.bytes().await?;
+                self.callback("repeat", None).await
+            }
             (Method::Get, "/state") => self.callback("state", None).await,
             _ => Response::error("not found", 404),
         }
