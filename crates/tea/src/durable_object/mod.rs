@@ -16,6 +16,21 @@ pub use event_sourced::{
     do_event_sourced_store,
 };
 
+mod timer;
+pub use timer::{DurableTimer, DurableTimerError, durable_timer};
+
+/// Minimal alarm carrier shared by durable-object host adapters.
+pub trait AlarmStorage {
+    type Error;
+    fn set_alarm(&self, at_ms: f64) -> impl Future<Output = Result<(), Self::Error>>;
+}
+impl<A: AlarmStorage + ?Sized> AlarmStorage for &A {
+    type Error = A::Error;
+    async fn set_alarm(&self, at_ms: f64) -> Result<(), Self::Error> {
+        (**self).set_alarm(at_ms).await
+    }
+}
+
 #[derive(Debug)]
 pub enum TransactionError<S, E> {
     Storage(S),
