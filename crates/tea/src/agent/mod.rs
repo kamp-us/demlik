@@ -4,7 +4,7 @@ pub mod defined;
 pub use defined::{
     DefineAgentConfig, DefinedAgent, DefinedAgentModelError, DefinedAgentMsg,
     DefinedAgentRunOptions, DefinedAgentState, DefinedAgentTools, DefinedPrompt, DefinedTurnSchema,
-    define_agent,
+    NoProviderError, define_agent,
 };
 mod events;
 pub use events::{

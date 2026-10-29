@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["defined-agent-provider-errors-source.mts"]
+}

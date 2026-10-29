@@ -102,31 +102,43 @@ pub trait DefinedAgentTools: Sized + 'static {
     ) -> Result<Option<DefinedToolFailure<Self::Error>>, ToolError>;
 }
 
-pub enum DefinedAgentModelError<E> {
+/// No provider failures are declared by an existing caller.
+/// Unlike the standard library's Infallible, this empty type supports wire consumers.
+#[derive(Serialize)]
+pub enum NoProviderError {}
+
+pub enum DefinedAgentModelError<E, P = NoProviderError> {
+    /// A model adapter failure, retained independently of parser and content failures.
+    Provider(P),
     Guard(Rc<StructuredOutputError>),
     Content(E),
 }
-impl<E> DefinedAgentModelError<E> {
-    fn describe(&self) -> Result<JsText, crate::js_record::JsAccessError> {
+impl<E, P> DefinedAgentModelError<E, P> {
+    fn describe(
+        &self,
+        provider: &ProviderDescription<P>,
+    ) -> Result<JsText, crate::js_record::JsAccessError> {
         match self {
+            Self::Provider(error) => provider(error),
             Self::Guard(error) => error.describe(),
             Self::Content(_) => Ok("tool content callback failed".into()),
         }
     }
 }
-impl<E> Serialize for DefinedAgentModelError<E> {
+impl<E, P: Serialize> Serialize for DefinedAgentModelError<E, P> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
+            Self::Provider(error) => error.serialize(serializer),
             Self::Guard(error) => error.serialize(serializer),
             Self::Content(_) => serializer.serialize_map(Some(0))?.end(),
         }
     }
 }
-pub struct DefinedTurnSchema<E>(PhantomData<fn() -> E>);
-impl<E> Schema for DefinedTurnSchema<E> {
+pub struct DefinedTurnSchema<E, P = NoProviderError>(PhantomData<fn() -> (E, P)>);
+impl<E, P> Schema for DefinedTurnSchema<E, P> {
     type Raw = Rc<PlainData>;
     type Output = Rc<PlainData>;
-    type Error = DefinedAgentModelError<E>;
+    type Error = DefinedAgentModelError<E, P>;
     fn parse(&self, raw: Self::Raw) -> Result<Self::Output, CallValue<Self::Error>> {
         AGENT_TURN_SCHEMA.parse(raw).map_err(|cause| match cause {
             CallValue::Shared(error) => CallValue::value(DefinedAgentModelError::Guard(error)),
@@ -160,29 +172,29 @@ where
         map.end()
     }
 }
-pub type DefinedAgentState<R> = StateOf<
+pub type DefinedAgentState<R, P = NoProviderError> = StateOf<
     JsText,
     JsText,
     Rc<DefinedPrompt<R>>,
-    DefinedTurnSchema<<R as DefinedAgentTools>::ContentError>,
+    DefinedTurnSchema<<R as DefinedAgentTools>::ContentError, P>,
     <R as DefinedAgentTools>::Result,
     <R as DefinedAgentTools>::Error,
     PlainData,
     PlainData,
     PlainCalls,
 >;
-pub type DefinedAgentMsg<R> = AgentMachineMsg<
+pub type DefinedAgentMsg<R, P = NoProviderError> = AgentMachineMsg<
     JsText,
     Rc<DefinedPrompt<R>>,
     Rc<PlainData>,
-    DefinedAgentModelError<<R as DefinedAgentTools>::ContentError>,
+    DefinedAgentModelError<<R as DefinedAgentTools>::ContentError, P>,
     <<R as DefinedAgentTools>::Command as CommandFamily>::Msg,
 >;
-pub type DefinedAgentCommand<R> = super::AgentCommand<
+pub type DefinedAgentCommand<R, P = NoProviderError> = super::AgentCommand<
     JsText,
     Rc<DefinedPrompt<R>>,
     Rc<PlainData>,
-    DefinedAgentModelError<<R as DefinedAgentTools>::ContentError>,
+    DefinedAgentModelError<<R as DefinedAgentTools>::ContentError, P>,
     <R as DefinedAgentTools>::Command,
 >;
 pub type DefinedAgentMessage<R> = AgentMessage<
@@ -192,16 +204,16 @@ pub type DefinedAgentMessage<R> = AgentMessage<
     PlainData,
     PlainCalls,
 >;
-pub type DefinedAgentMachine<R> = Machine<
+pub type DefinedAgentMachine<R, P = NoProviderError> = Machine<
     'static,
-    Rc<DefinedAgentState<R>>,
-    DefinedAgentMsg<R>,
-    DefinedAgentCommand<R>,
+    Rc<DefinedAgentState<R, P>>,
+    DefinedAgentMsg<R, P>,
+    DefinedAgentCommand<R, P>,
     DeadlinesSub,
     (),
     AgentMachineError,
 >;
-pub type DefinedAgentEvent<R> = super::types::AgentEvent<
+pub type DefinedAgentEvent<R, P = NoProviderError> = super::types::AgentEvent<
     <R as DefinedAgentTools>::Result,
     PlainData,
     super::types::AgentTerminalFailure<
@@ -209,18 +221,19 @@ pub type DefinedAgentEvent<R> = super::types::AgentEvent<
         PlainData,
         crate::llm_call::LlmErr<
             JsText,
-            DefinedAgentModelError<<R as DefinedAgentTools>::ContentError>,
+            DefinedAgentModelError<<R as DefinedAgentTools>::ContentError, P>,
         >,
     >,
     DefinedPrompt<R>,
     super::PlainToolArgs,
     <R as DefinedAgentTools>::Error,
 >;
-pub type DefinedAgentRunError<R, SE> =
-    DriveError<Rc<DefinedAgentState<R>>, SE, AgentWorkError<ToolError>, AgentMachineError>;
-pub type DefinedAgentResult<R, SE> = Result<Rc<DefinedAgentState<R>>, DefinedAgentRunError<R, SE>>;
-type StopPredicate<R> = Rc<dyn Fn(&Rc<DefinedAgentState<R>>) -> bool>;
-type EventSink<R> = Rc<dyn Fn(&DefinedAgentEvent<R>)>;
+pub type DefinedAgentRunError<R, SE, P = NoProviderError> =
+    DriveError<Rc<DefinedAgentState<R, P>>, SE, AgentWorkError<ToolError>, AgentMachineError>;
+pub type DefinedAgentResult<R, SE, P = NoProviderError> =
+    Result<Rc<DefinedAgentState<R, P>>, DefinedAgentRunError<R, SE, P>>;
+type StopPredicate<R, P> = Rc<dyn Fn(&Rc<DefinedAgentState<R, P>>) -> bool>;
+type EventSink<R, P> = Rc<dyn Fn(&DefinedAgentEvent<R, P>)>;
 #[cfg(not(target_arch = "wasm32"))]
 fn new_run_id() -> JsText {
     let mut bytes = [0_u8; 16];
@@ -241,16 +254,19 @@ fn new_run_id() -> JsText {
     .into()
 }
 
-pub struct DefineAgentConfig<F, R: DefinedAgentTools> {
+type ProviderDescription<P> = dyn Fn(&P) -> Result<JsText, crate::js_record::JsAccessError>;
+
+pub struct DefineAgentConfig<F, R: DefinedAgentTools, P = NoProviderError> {
     model: Rc<F>,
     tools: Rc<R>,
     instructions: JsText,
     on_tool_error: Option<ToolErrorHook<R>>,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
-    stop_when: Option<StopPredicate<R>>,
+    stop_when: Option<StopPredicate<R, P>>,
+    describe_provider_error: Rc<ProviderDescription<P>>,
 }
-impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
+impl<F, R: DefinedAgentTools, P> DefineAgentConfig<F, R, P> {
     pub fn new(model: F, tools: Rc<R>, instructions: impl Into<JsText>) -> Self {
         Self {
             model: Rc::new(model),
@@ -260,7 +276,17 @@ impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
             max_turns: None,
             max_elapsed_ms: None,
             stop_when: None,
+            describe_provider_error: Rc::new(|_| Ok("model provider failed".into())),
         }
+    }
+    /// Renders a provider failure's reason without imposing traits on its owned payload.
+    /// The default native reason is `model provider failed`.
+    pub fn describe_provider_error(
+        mut self,
+        describe: impl Fn(&P) -> Result<JsText, crate::js_record::JsAccessError> + 'static,
+    ) -> Self {
+        self.describe_provider_error = Rc::new(describe);
+        self
     }
     /// Bounds completed model round-trips at the existing reducer turn boundary.
     pub fn max_turns(mut self, value: f64) -> Self {
@@ -276,7 +302,7 @@ impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
     /// A resumed run uses the predicate supplied to this boot.
     pub fn stop_when(
         mut self,
-        predicate: impl Fn(&Rc<DefinedAgentState<R>>) -> bool + 'static,
+        predicate: impl Fn(&Rc<DefinedAgentState<R, P>>) -> bool + 'static,
     ) -> Self {
         self.stop_when = Some(Rc::new(predicate));
         self
@@ -289,12 +315,12 @@ impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
         self
     }
 }
-pub struct DefinedAgent<F, R: DefinedAgentTools> {
-    config: DefineAgentConfig<F, R>,
+pub struct DefinedAgent<F, R: DefinedAgentTools, P = NoProviderError> {
+    config: DefineAgentConfig<F, R, P>,
 }
-pub fn define_agent<F, R: DefinedAgentTools>(
-    config: DefineAgentConfig<F, R>,
-) -> DefinedAgent<F, R> {
+pub fn define_agent<F, R: DefinedAgentTools, P>(
+    config: DefineAgentConfig<F, R, P>,
+) -> DefinedAgent<F, R, P> {
     DefinedAgent { config }
 }
 struct SharedModel<F>(Rc<F>);
@@ -307,12 +333,12 @@ impl<M, S: Schema, F: ModelFactory<M, S>> ModelFactory<M, S> for SharedModel<F> 
     }
 }
 struct PromptLoader<R>(Rc<R>);
-impl<R: DefinedAgentTools>
+impl<R: DefinedAgentTools, P>
     MessageLoader<
         JsText,
         Rc<DefinedPrompt<R>>,
         DefinedAgentMessage<R>,
-        DefinedAgentModelError<R::ContentError>,
+        DefinedAgentModelError<R::ContentError, P>,
     > for PromptLoader<R>
 {
     async fn load<'a>(
@@ -320,7 +346,7 @@ impl<R: DefinedAgentTools>
         call: &'a Rc<Request<JsText, Rc<DefinedPrompt<R>>>>,
     ) -> Result<
         Messages<'a, DefinedAgentMessage<R>>,
-        CallValue<DefinedAgentModelError<R::ContentError>>,
+        CallValue<DefinedAgentModelError<R::ContentError, P>>,
     >
     where
         DefinedAgentMessage<R>: 'a,
@@ -361,12 +387,15 @@ impl<R: DefinedAgentTools> AgentToolRoutes<R::Command, R::Result, R::Error> for 
         self.tools.at(message)
     }
 }
-impl<R: DefinedAgentTools> Interpreter<R::Command, DefinedAgentMsg<R>> for HookedTools<R> {
+impl<R: DefinedAgentTools, P> Interpreter<R::Command, DefinedAgentMsg<R, P>> for HookedTools<R>
+where
+    R::Bound: Interpreter<R::Command, DefinedAgentMsg<R, P>, Error = AgentWorkError<ToolError>>,
+{
     type Error = AgentWorkError<ToolError>;
     fn interpret<'a>(
         &'a self,
         command: &'a R::Command,
-        context: runtime::CommandContext<DefinedAgentMsg<R>, Self::Error>,
+        context: runtime::CommandContext<DefinedAgentMsg<R, P>, Self::Error>,
     ) -> Option<runtime::CommandWork<'a, <R::Command as CommandFamily>::Completion, Self::Error>>
     {
         let work = self.tools.interpret(command, context)?;
@@ -395,14 +424,14 @@ impl<R: DefinedAgentTools> Interpreter<R::Command, DefinedAgentMsg<R>> for Hooke
     }
 }
 
-pub struct DefinedAgentRunOptions<R: DefinedAgentTools, SE = Infallible> {
+pub struct DefinedAgentRunOptions<R: DefinedAgentTools, SE = Infallible, P = NoProviderError> {
     pub host: Rc<R::Host>,
-    pub store: Option<Persistence<Rc<DefinedAgentState<R>>, SE>>,
+    pub store: Option<Persistence<Rc<DefinedAgentState<R, P>>, SE>>,
     pub run_id: Option<JsText>,
     pub clock: Rc<dyn Fn() -> f64>,
-    pub on_event: Option<EventSink<R>>,
+    pub on_event: Option<EventSink<R, P>>,
 }
-impl<R: DefinedAgentTools> DefinedAgentRunOptions<R> {
+impl<R: DefinedAgentTools, P> DefinedAgentRunOptions<R, Infallible, P> {
     pub fn new(host: Rc<R::Host>) -> Self {
         Self {
             host,
@@ -413,7 +442,7 @@ impl<R: DefinedAgentTools> DefinedAgentRunOptions<R> {
         }
     }
 }
-impl<R: DefinedAgentTools, SE> DefinedAgentRunOptions<R, SE> {
+impl<R: DefinedAgentTools, SE, P: 'static> DefinedAgentRunOptions<R, SE, P> {
     pub fn run_id(mut self, id: impl Into<JsText>) -> Self {
         self.run_id = Some(id.into());
         self
@@ -422,17 +451,17 @@ impl<R: DefinedAgentTools, SE> DefinedAgentRunOptions<R, SE> {
         self.clock = Rc::new(clock);
         self
     }
-    pub fn on_event(mut self, handler: impl Fn(&DefinedAgentEvent<R>) + 'static) -> Self {
+    pub fn on_event(mut self, handler: impl Fn(&DefinedAgentEvent<R, P>) + 'static) -> Self {
         self.on_event = Some(Rc::new(handler));
         self
     }
     pub fn store<
         E: fmt::Display + 'static,
-        P: Store<Rc<DefinedAgentState<R>>, Error = E> + 'static,
+        ST: Store<Rc<DefinedAgentState<R, P>>, Error = E> + 'static,
     >(
         self,
-        store: P,
-    ) -> DefinedAgentRunOptions<R, E> {
+        store: ST,
+    ) -> DefinedAgentRunOptions<R, E, P> {
         DefinedAgentRunOptions {
             host: self.host,
             store: Some(Persistence::new(store)),
@@ -442,9 +471,10 @@ impl<R: DefinedAgentTools, SE> DefinedAgentRunOptions<R, SE> {
         }
     }
 }
-impl<F: 'static, R: DefinedAgentTools> DefinedAgent<F, R>
+impl<F: 'static, R: DefinedAgentTools, P: 'static> DefinedAgent<F, R, P>
 where
-    F: ModelFactory<DefinedAgentMessage<R>, DefinedTurnSchema<R::ContentError>>,
+    F: ModelFactory<DefinedAgentMessage<R>, DefinedTurnSchema<R::ContentError, P>>,
+    R::Bound: Interpreter<R::Command, DefinedAgentMsg<R, P>, Error = AgentWorkError<ToolError>>,
 {
     #[expect(
         clippy::type_complexity,
@@ -456,10 +486,11 @@ where
         host: Rc<R::Host>,
         timer: Rc<TM>,
     ) -> AgentWired<
-        DefinedAgentMachine<R>,
-        impl Interpreter<DefinedAgentCommand<R>, Error = AgentWorkError<ToolError>> + use<F, R, TM>,
-        impl Subscriptions<DeadlinesSub, DefinedAgentMsg<R>, Error = AgentWorkError<ToolError>>
-        + use<F, R, TM>,
+        DefinedAgentMachine<R, P>,
+        impl Interpreter<DefinedAgentCommand<R, P>, Error = AgentWorkError<ToolError>>
+        + use<F, R, P, TM>,
+        impl Subscriptions<DeadlinesSub, DefinedAgentMsg<R, P>, Error = AgentWorkError<ToolError>>
+        + use<F, R, P, TM>,
     > {
         self.wire(
             input,
@@ -477,15 +508,19 @@ where
         bound: Rc<R::Bound>,
         timer: Rc<TM>,
     ) -> AgentWired<
-        DefinedAgentMachine<R>,
-        impl Interpreter<DefinedAgentCommand<R>, Error = AgentWorkError<ToolError>> + use<F, R, TM>,
-        impl Subscriptions<DeadlinesSub, DefinedAgentMsg<R>, Error = AgentWorkError<ToolError>>
-        + use<F, R, TM>,
+        DefinedAgentMachine<R, P>,
+        impl Interpreter<DefinedAgentCommand<R, P>, Error = AgentWorkError<ToolError>>
+        + use<F, R, P, TM>,
+        impl Subscriptions<DeadlinesSub, DefinedAgentMsg<R, P>, Error = AgentWorkError<ToolError>>
+        + use<F, R, P, TM>,
     > {
         let tools = Rc::clone(&self.config.tools);
+        let describe = Rc::clone(&self.config.describe_provider_error);
         let llm = Rc::new(LlmCall::new(
             llm_call::Config::new(|_: &JsText| Rc::new(DefinedTurnSchema(PhantomData))),
-            DefinedAgentModelError::describe,
+            move |error: &DefinedAgentModelError<R::ContentError, P>| {
+                error.describe(describe.as_ref())
+            },
         ));
         let mut config = AgentConfig::try_from_plain_turns(
             llm,
@@ -530,8 +565,8 @@ where
     pub fn run<SE: fmt::Debug + fmt::Display + 'static, I: Into<JsText>>(
         &self,
         input: I,
-        options: DefinedAgentRunOptions<R, SE>,
-    ) -> impl Future<Output = DefinedAgentResult<R, SE>> + 'static + use<F, R, SE, I> {
+        options: DefinedAgentRunOptions<R, SE, P>,
+    ) -> impl Future<Output = DefinedAgentResult<R, SE, P>> + 'static + use<F, R, P, SE, I> {
         let clock = Rc::clone(&options.clock);
         let projector = options
             .on_event
@@ -547,10 +582,10 @@ where
         let mut runtime_options = Options::new(Profile::Promise);
         runtime_options.clock = Rc::clone(&clock);
         runtime_options.store = options.store;
-        runtime_options.terminal = Some(Rc::new(|s: &Rc<DefinedAgentState<R>>| s.is_settled()));
+        runtime_options.terminal = Some(Rc::new(|s: &Rc<DefinedAgentState<R, P>>| s.is_settled()));
         let runtime_options = runtime_options.with_checked_events(move |message, state| {
             let Some(projector) = &projector else {
-                return Ok(Vec::<DefinedAgentEvent<R>>::new());
+                return Ok(Vec::<DefinedAgentEvent<R, P>>::new());
             };
             projector
                 .project_routed::<_, _, _, _, _, _, _, _, _, _, _, R::Command, _>(
@@ -578,7 +613,7 @@ where
             .map(|(kind, handler)| runtime.on(kind, handler))
             .collect();
         let run_id = options.run_id;
-        let start = DriveStart::select(move |state: &Rc<DefinedAgentState<R>>| {
+        let start = DriveStart::select(move |state: &Rc<DefinedAgentState<R, P>>| {
             let at = clock();
             if matches!(
                 state.run.phase,
@@ -593,7 +628,7 @@ where
             }
         });
         let drive = DriveOptions {
-            failed: Some(Rc::new(|state: &Rc<DefinedAgentState<R>>| {
+            failed: Some(Rc::new(|state: &Rc<DefinedAgentState<R, P>>| {
                 matches!(state.run.phase, RunPhase::Failed { .. })
                     || !matches!(state.failure, AgentField::Value(None))
             })),
