@@ -30,6 +30,7 @@ function run(command, args, input, prefix) {
   assert.equal(processResult.error, null);
   assert.equal(r.signal, null);
   assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "", "unexpected process stderr");
   return {
     view: JSON.parse(r.stdout),
     process: processResult,
@@ -75,10 +76,13 @@ export async function durableAlarmParity(cargo = "cargo", options = {}) {
       "frozen before-edit Source unchanged",
     );
   const producer = buildTeaExample(cargo, "durable_alarm_driver", reportFile);
-  const before = hash(producer.binary);
+  const binary = options.binary
+    ? path.resolve(options.binary)
+    : producer.binary;
+  const before = hash(binary);
   assert.equal(before, producer.binarySha256);
-  const nativeRun = run(producer.binary, [], input, `${reportFile}.native`);
-  const after = hash(producer.binary);
+  const nativeRun = run(binary, [], input, `${reportFile}.native`);
+  const after = hash(binary);
   assert.equal(after, before, "executed binary bytes unchanged");
   const native = nativeRun.view.map(({ publicCalls, ...view }) => view);
   assert.deepEqual(native, source, "complete observable Source/native views");
@@ -91,7 +95,7 @@ export async function durableAlarmParity(cargo = "cargo", options = {}) {
   const nativeEvidence = Object.fromEntries(
     nativeRun.view.map((row) => {
       assert.ok(row.publicCalls.length > 0);
-      return [row.name, row.publicCalls];
+      return [`tea.durable-alarm.${row.name}`, row.publicCalls];
     }),
   );
   const report = {
@@ -102,12 +106,16 @@ export async function durableAlarmParity(cargo = "cargo", options = {}) {
     cases: source.length,
     passed: source.length,
     qualifiedPassed: 0,
-    rows: source,
+    rows: source.map((row) => ({
+      ...row,
+      id: `tea.durable-alarm.${row.name}`,
+      passed: true,
+    })),
     failures: [],
     nativeEvidence,
     producer,
     processes: { source: sourceRun, native: nativeRun },
-    binary: { path: producer.binary, sha256Before: before, sha256After: after },
+    binary: { path: binary, sha256Before: before, sha256After: after },
     sourceHashes: Object.fromEntries(
       [
         "packages/tea/src/do/durable-timer.ts",
