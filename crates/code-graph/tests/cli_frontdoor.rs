@@ -10,6 +10,43 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 static ORDINAL: AtomicU64 = AtomicU64::new(0);
+
+#[test]
+fn public_coordinator_keeps_default_plain_and_propagates_explicit_tree_style() {
+    use demlik_code_graph::{engine::tsgo::TsgoBinary, render::tree::TreeStyle};
+    let fixture = Fixture::new();
+    fs::write(
+        fixture.0.join("a.ts"),
+        "export function greet() { return true; }\n",
+    )
+    .unwrap();
+    for style in [None, Some(TreeStyle::Ansi), Some(TreeStyle::Plain)] {
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let mut host = CliIo::new(&mut stdout, &mut stderr, None);
+        let Preparation::Prepared(prepared) =
+            prepare_cli(&[fixture.text(), "--tree".into()], None, &mut host).unwrap()
+        else {
+            panic!("tree refused")
+        };
+        let compiler = TsgoBinary::pinned("/unused/compiler");
+        match style {
+            None => prepared.run_blocking(&mut host, &compiler),
+            Some(style) => prepared.run_with_style_blocking(&mut host, &compiler, style),
+        }
+        .unwrap();
+        assert_eq!(host.normal_exit_code(), 0);
+        assert!(stderr.is_empty());
+        let text = String::from_utf8(stdout).unwrap();
+        let header = if style == Some(TreeStyle::Ansi) {
+            "\x1b[36ma.ts  (loc 2, 1 fns)\x1b[39m"
+        } else {
+            "a.ts"
+        };
+        assert!(text.starts_with(header), "{text:?}");
+        assert_eq!(text.contains('\x1b'), style == Some(TreeStyle::Ansi));
+        assert!(text.contains("greet"));
+    }
+}
 struct Fixture(std::path::PathBuf);
 impl Fixture {
     fn new() -> Self {

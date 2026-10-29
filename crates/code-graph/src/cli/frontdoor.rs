@@ -531,6 +531,16 @@ impl PreparedCli {
         host: &mut CliIo<'_>,
         compiler: &TsgoBinary,
     ) -> Result<RunCompletion, FrontdoorError> {
+        self.run_with_style_blocking(host, compiler, crate::render::tree::TreeStyle::Plain)
+    }
+
+    /// Execute the same stage chain with the stdout style selected by the host.
+    pub fn run_with_style_blocking(
+        self: Box<Self>,
+        host: &mut CliIo<'_>,
+        compiler: &TsgoBinary,
+        style: crate::render::tree::TreeStyle,
+    ) -> Result<RunCompletion, FrontdoorError> {
         let prepared = match self.dispatch_api_blocking(compiler, host)? {
             ApiDispatch::Complete(outcome) => return Ok(RunCompletion::Api(outcome)),
             ApiDispatch::Continue(value) => value,
@@ -577,12 +587,16 @@ impl PreparedCli {
             SmellDispatch::Refused { cause } => return Ok(RunCompletion::LoadRefused { cause }),
             SmellDispatch::Continue(value) => value,
         };
-        Ok(match prepared.dispatch_reports_blocking(host, compiler)? {
-            ReportDispatch::Complete => RunCompletion::Complete,
-            ReportDispatch::Refused { cause } => RunCompletion::LoadRefused { cause },
-            ReportDispatch::HotspotsRefused { cause } => RunCompletion::HotspotsRefused { cause },
-            ReportDispatch::Continue(value) => RunCompletion::Continue(value),
-        })
+        Ok(
+            match prepared.dispatch_reports_with_style_blocking(host, compiler, style)? {
+                ReportDispatch::Complete => RunCompletion::Complete,
+                ReportDispatch::Refused { cause } => RunCompletion::LoadRefused { cause },
+                ReportDispatch::HotspotsRefused { cause } => {
+                    RunCompletion::HotspotsRefused { cause }
+                }
+                ReportDispatch::Continue(value) => RunCompletion::Continue(value),
+            },
+        )
     }
 
     /// Resolve both ledgers after HexagonDispatch::Continue, before dispatching a later mode.

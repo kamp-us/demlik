@@ -1,11 +1,17 @@
-use std::{io, path::Path, process::ExitCode};
+use std::{
+    io::{self, IsTerminal},
+    path::Path,
+    process::ExitCode,
+};
 
 use demlik_code_graph::{
     cli::{
         frontdoor::{Preparation, RunCompletion, prepare_cli},
         io::{CliIo, exit_with},
+        terminal::TerminalFacts,
     },
     engine::tsgo::TsgoBinary,
+    render::tree::TreeStyle,
     text::JsString,
 };
 
@@ -16,7 +22,7 @@ fn failure(host: &mut CliIo<'_>, message: &str) {
     }
 }
 
-fn run(host: &mut CliIo<'_>) -> i32 {
+fn run(host: &mut CliIo<'_>, style: TreeStyle) -> i32 {
     let arguments = match std::env::args_os()
         .skip(1)
         .map(|value| value.into_string().map(JsString::from))
@@ -53,7 +59,7 @@ fn run(host: &mut CliIo<'_>) -> i32 {
             return host.normal_exit_code();
         }
     };
-    match prepared.run_blocking(host, &compiler) {
+    match prepared.run_with_style_blocking(host, &compiler, style) {
         Ok(RunCompletion::Continue(_carrier)) => {
             failure(
                 host,
@@ -72,9 +78,10 @@ fn run(host: &mut CliIo<'_>) -> i32 {
 fn main() -> ExitCode {
     let stdout = io::stdout();
     let stderr = io::stderr();
+    let style = TerminalFacts::snapshot(stdout.is_terminal()).tree_style();
     let mut out = stdout.lock();
     let mut err = stderr.lock();
     let mut host = CliIo::new(&mut out, &mut err, None);
-    let code = run(&mut host);
+    let code = run(&mut host, style);
     ExitCode::from(u8::try_from(code).unwrap_or(1))
 }

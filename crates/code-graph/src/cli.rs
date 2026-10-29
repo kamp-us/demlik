@@ -5,6 +5,7 @@
 pub mod frontdoor;
 mod help;
 pub mod io;
+pub mod terminal;
 mod options;
 mod suggest;
 use crate::text::JsString;
