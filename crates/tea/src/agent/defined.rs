@@ -214,6 +214,7 @@ pub type DefinedAgentEvent<R> = super::types::AgentEvent<
 pub type DefinedAgentRunError<R, SE> =
     DriveError<Rc<DefinedAgentState<R>>, SE, AgentWorkError<ToolError>, AgentMachineError>;
 pub type DefinedAgentResult<R, SE> = Result<Rc<DefinedAgentState<R>>, DefinedAgentRunError<R, SE>>;
+type StopPredicate<R> = Rc<dyn Fn(&Rc<DefinedAgentState<R>>) -> bool>;
 type EventSink<R> = Rc<dyn Fn(&DefinedAgentEvent<R>)>;
 fn new_run_id() -> JsText {
     let mut bytes = [0_u8; 16];
@@ -239,6 +240,9 @@ pub struct DefineAgentConfig<F, R: DefinedAgentTools> {
     tools: Rc<R>,
     instructions: JsText,
     on_tool_error: Option<ToolErrorHook<R>>,
+    max_turns: Option<f64>,
+    max_elapsed_ms: Option<f64>,
+    stop_when: Option<StopPredicate<R>>,
 }
 impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
     pub fn new(model: F, tools: Rc<R>, instructions: impl Into<JsText>) -> Self {
@@ -247,7 +251,29 @@ impl<F, R: DefinedAgentTools> DefineAgentConfig<F, R> {
             tools,
             instructions: instructions.into(),
             on_tool_error: None,
+            max_turns: None,
+            max_elapsed_ms: None,
+            stop_when: None,
         }
+    }
+    /// Bounds completed model round-trips at the existing reducer turn boundary.
+    pub fn max_turns(mut self, value: f64) -> Self {
+        self.max_turns = Some(value);
+        self
+    }
+    /// Bounds elapsed time from the durable run's original start.
+    pub fn max_elapsed_ms(mut self, value: f64) -> Self {
+        self.max_elapsed_ms = Some(value);
+        self
+    }
+    /// A pure predicate that cancels at a turn boundary after quantity guards pass.
+    /// A resumed run uses the predicate supplied to this boot.
+    pub fn stop_when(
+        mut self,
+        predicate: impl Fn(&Rc<DefinedAgentState<R>>) -> bool + 'static,
+    ) -> Self {
+        self.stop_when = Some(Rc::new(predicate));
+        self
     }
     pub fn on_tool_error(
         mut self,
@@ -455,22 +481,30 @@ where
             llm_call::Config::new(|_: &JsText| Rc::new(DefinedTurnSchema(PhantomData))),
             DefinedAgentModelError::describe,
         ));
-        let agent = Rc::new(create_agent(
-            AgentConfig::try_from_plain_turns(
-                llm,
-                vec![Rc::new(input)],
-                |_| JsText::from("act"),
-                move |call| tools.route(call).map_err(Rc::new),
-                |stage, conversation, instructions| {
-                    Rc::new(DefinedPrompt {
-                        instructions: instructions.cloned(),
-                        input: stage.map(|value| value.as_ref().clone()),
-                        conversation: Rc::clone(conversation),
-                    })
-                },
-            )
-            .instructions(self.config.instructions.clone()),
-        ));
+        let mut config = AgentConfig::try_from_plain_turns(
+            llm,
+            vec![Rc::new(input)],
+            |_| JsText::from("act"),
+            move |call| tools.route(call).map_err(Rc::new),
+            |stage, conversation, instructions| {
+                Rc::new(DefinedPrompt {
+                    instructions: instructions.cloned(),
+                    input: stage.map(|value| value.as_ref().clone()),
+                    conversation: Rc::clone(conversation),
+                })
+            },
+        )
+        .instructions(self.config.instructions.clone());
+        if let Some(limit) = self.config.max_turns {
+            config = config.max_turns(limit);
+        }
+        if let Some(limit) = self.config.max_elapsed_ms {
+            config = config.max_elapsed_ms(limit);
+        }
+        if let Some(predicate) = self.config.stop_when.clone() {
+            config = config.stop_when(move |state| predicate(state));
+        }
+        let agent = Rc::new(create_agent(config));
         let tools = HookedTools {
             tools: bound,
             router: Rc::clone(&self.config.tools),
