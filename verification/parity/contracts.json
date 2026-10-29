@@ -16395,14 +16395,27 @@
       "tea.defined-agent-concurrency.two",
       "tea.defined-agent-concurrency.waves",
       "tea.defined-agent-concurrency.failure",
-      "tea.defined-agent-concurrency.raw"
+      "tea.defined-agent-concurrency.raw",
+      "tea.defined-agent-tool-policy.free-serial",
+      "tea.defined-agent-tool-policy.free-concurrent",
+      "tea.defined-agent-tool-policy.retry-recover",
+      "tea.defined-agent-tool-policy.retry-exhaust",
+      "tea.defined-agent-tool-policy.malformed-retry",
+      "tea.defined-agent-tool-policy.bare-failure",
+      "tea.defined-agent-tool-policy.timeout-late",
+      "tea.defined-agent-tool-policy.timeout-serial",
+      "tea.defined-agent-tool-policy.timeout-retries",
+      "tea.defined-agent-tool-policy.mixed",
+      "tea.defined-agent-tool-policy.resume",
+      "tea.defined-agent-tool-policy.resume-exhaust"
     ],
     "knownGaps": [
-      "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference.",
-      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference. Twelve whole per-tool retry/timeout jobs also cover absorbed attempts, final hook timing, malformed-call hook duplication and retained-state resume.",
+      "Remaining optional configuration, cancellation, streaming, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
       "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer.",
       "Watchdog/brain-retry rows retain explicit Tokio wake-time and untyped Source duration/unbounded-budget qualifications; live native custom-budget behavior is verified separately without shared credit.",
-      "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim."
+      "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim.",
+      "Per-tool rows remain qualified for enumerated numeric timer-wake and remaining-budget differences. Exact Source wire order and formatting are required after only those numeric projections; overall timeout targets and failure reasons remain exact. Final ladder hooks are intentionally not awaited, and decoded cold replay remains unverified."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:a2313470d0ef05cd116ebcbc769579cab6418ff9445e7de3e2170552aebdd99d": {
@@ -16437,14 +16450,27 @@
       "tea.defined-agent-concurrency.one",
       "tea.defined-agent-concurrency.two",
       "tea.defined-agent-concurrency.waves",
-      "tea.defined-agent-concurrency.failure"
+      "tea.defined-agent-concurrency.failure",
+      "tea.defined-agent-tool-policy.free-serial",
+      "tea.defined-agent-tool-policy.free-concurrent",
+      "tea.defined-agent-tool-policy.retry-recover",
+      "tea.defined-agent-tool-policy.retry-exhaust",
+      "tea.defined-agent-tool-policy.malformed-retry",
+      "tea.defined-agent-tool-policy.bare-failure",
+      "tea.defined-agent-tool-policy.timeout-late",
+      "tea.defined-agent-tool-policy.timeout-serial",
+      "tea.defined-agent-tool-policy.timeout-retries",
+      "tea.defined-agent-tool-policy.mixed",
+      "tea.defined-agent-tool-policy.resume",
+      "tea.defined-agent-tool-policy.resume-exhaust"
     ],
     "knownGaps": [
-      "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference.",
-      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference. Twelve whole per-tool retry/timeout jobs also cover absorbed attempts, final hook timing, malformed-call hook duplication and retained-state resume.",
+      "Remaining optional configuration, cancellation, streaming, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
       "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer.",
       "Watchdog/brain-retry rows retain explicit Tokio wake-time and untyped Source duration/unbounded-budget qualifications; live native custom-budget behavior is verified separately without shared credit.",
-      "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim."
+      "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim.",
+      "Per-tool rows remain qualified for enumerated numeric timer-wake and remaining-budget differences. Exact Source wire order and formatting are required after only those numeric projections; overall timeout targets and failure reasons remain exact. Final ladder hooks are intentionally not awaited, and decoded cold replay remains unverified."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:8b4061dc5aff1897e9ce6ee13a4e76ae4c73585d4c83c5e748cea82e1a2beed5": {

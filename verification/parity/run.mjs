@@ -39,6 +39,7 @@ import { definedAgentGuardsParity } from "./defined-agent-guards-parity.mjs";
 import { definedAgentCheckpointParity } from "./defined-agent-parity.mjs";
 import { definedAgentProviderErrorsParity } from "./defined-agent-provider-errors-parity.mjs";
 import { definedAgentResilienceParity } from "./defined-agent-resilience-parity.mjs";
+import { definedAgentToolPolicyParity } from "./defined-agent-tool-policy-parity.mjs";
 import { durableAlarmParity } from "./durable-alarm-run.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
@@ -1267,6 +1268,11 @@ if (!mutationSuite) {
       name: "definedAgentConcurrency",
       operation: "tea.defined-agent-concurrency",
       run: (options) => definedAgentConcurrencyParity(cargo, options),
+    },
+    {
+      name: "definedAgentToolPolicy",
+      operation: "tea.defined-agent-tool-policy",
+      run: (options) => definedAgentToolPolicyParity(cargo, options),
     },
     {
       name: "jevAsk",
