@@ -34,6 +34,7 @@ import { commandFamiliesParity } from "./command-families-run.mjs";
 import { commandInputParity } from "./command-input-run.mjs";
 import { composeCheckpointParity } from "./compose-run.mjs";
 import { checkCoverage, discoverCoverageInventory } from "./coverage.mjs";
+import { definedAgentCancellationParity } from "./defined-agent-cancellation-parity.mjs";
 import { definedAgentConcurrencyParity } from "./defined-agent-concurrency-parity.mjs";
 import { definedAgentGuardsParity } from "./defined-agent-guards-parity.mjs";
 import { definedAgentCheckpointParity } from "./defined-agent-parity.mjs";
@@ -1279,6 +1280,11 @@ if (!mutationSuite) {
       name: "definedAgentStreaming",
       operation: "tea.defined-agent-streaming",
       run: (options) => definedAgentStreamingParity(cargo, options),
+    },
+    {
+      name: "definedAgentCancellation",
+      operation: "tea.defined-agent-cancellation",
+      run: (options) => definedAgentCancellationParity(cargo, options),
     },
     {
       name: "jevAsk",

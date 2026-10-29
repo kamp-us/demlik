@@ -16416,16 +16416,26 @@
       "tea.defined-agent-streaming.isolation",
       "tea.defined-agent-streaming.resume",
       "tea.defined-agent-streaming.provider-failure",
-      "tea.defined-agent-streaming.throwing"
+      "tea.defined-agent-streaming.throwing",
+      "tea.defined-agent-cancellation.preabort",
+      "tea.defined-agent-cancellation.provider",
+      "tea.defined-agent-cancellation.serial-ok",
+      "tea.defined-agent-cancellation.serial-typed",
+      "tea.defined-agent-cancellation.concurrent-ok",
+      "tea.defined-agent-cancellation.concurrent-typed",
+      "tea.defined-agent-cancellation.concurrent-thrown",
+      "tea.defined-agent-cancellation.done",
+      "tea.defined-agent-cancellation.omitted"
     ],
     "knownGaps": [
       "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference. Twelve whole per-tool retry/timeout jobs also cover absorbed attempts, final hook timing, malformed-call hook duplication and retained-state resume. Controlled streaming and nonstreaming jobs also prove per-run chunk sinks, late callback delivery, contained listener failures and unchanged durable wires.",
-      "Remaining optional configuration, cancellation, unmeasured streaming/provider profiles, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Remaining optional configuration, unmeasured cancellation races, unmeasured streaming/provider profiles, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
       "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer.",
       "Watchdog/brain-retry rows retain explicit Tokio wake-time and untyped Source duration/unbounded-budget qualifications; live native custom-budget behavior is verified separately without shared credit.",
       "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim.",
       "Per-tool rows remain qualified for enumerated numeric timer-wake and remaining-budget differences. Exact Source wire order and formatting are required after only those numeric projections; overall timeout targets and failure reasons remain exact. Final ladder hooks are intentionally not awaited, and decoded cold replay remains unverified.",
-      "Streaming rows preserve146durablewirestrings and fullnonstreamcontrols. The throwing-listener row retains explicit native panic-hook versus Source console diagnostics. No JavaScript arity/prototype reflection, Wasm listener-unwind execution, cancellation or decoded cold replay claim."
+      "Streaming rows preserve146durablewirestrings and fullnonstreamcontrols. The throwing-listener row retains explicit native panic-hook versus Source console diagnostics. No JavaScript arity/prototype reflection, Wasm listener-unwind execution, cancellation or decoded cold replay claim.",
+      "Nine controlled cancellation workflows match complete Source/native views and72save/18finalstrings without an extra native scheduling yield. Abort requests queue behind owned work; hooks before the cancelled fold and unchanged late cancelled saves remain observable. Resume is in-process; arbitrary simultaneous races and decoded cold restart remain outside this binding."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:a2313470d0ef05cd116ebcbc769579cab6418ff9445e7de3e2170552aebdd99d": {
@@ -16480,16 +16490,26 @@
       "tea.defined-agent-streaming.isolation",
       "tea.defined-agent-streaming.resume",
       "tea.defined-agent-streaming.provider-failure",
-      "tea.defined-agent-streaming.throwing"
+      "tea.defined-agent-streaming.throwing",
+      "tea.defined-agent-cancellation.preabort",
+      "tea.defined-agent-cancellation.provider",
+      "tea.defined-agent-cancellation.serial-ok",
+      "tea.defined-agent-cancellation.serial-typed",
+      "tea.defined-agent-cancellation.concurrent-ok",
+      "tea.defined-agent-cancellation.concurrent-typed",
+      "tea.defined-agent-cancellation.concurrent-thrown",
+      "tea.defined-agent-cancellation.done",
+      "tea.defined-agent-cancellation.omitted"
     ],
     "knownGaps": [
       "Measured invoice, controlled model/provider/schema/content errors, watchdog/brain-retry and ordered concurrent-tool jobs. Invoice retains ToolContext.host identity qualification; error rows retain typed native error-owner classification and the existing content wire/reason difference. Twelve whole per-tool retry/timeout jobs also cover absorbed attempts, final hook timing, malformed-call hook duplication and retained-state resume. Controlled streaming and nonstreaming jobs also prove per-run chunk sinks, late callback delivery, contained listener failures and unchanged durable wires.",
-      "Remaining optional configuration, cancellation, unmeasured streaming/provider profiles, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Remaining optional configuration, unmeasured cancellation races, unmeasured streaming/provider profiles, overlays, unmeasured policy configurations, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
       "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer.",
       "Watchdog/brain-retry rows retain explicit Tokio wake-time and untyped Source duration/unbounded-budget qualifications; live native custom-budget behavior is verified separately without shared credit.",
       "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim.",
       "Per-tool rows remain qualified for enumerated numeric timer-wake and remaining-budget differences. Exact Source wire order and formatting are required after only those numeric projections; overall timeout targets and failure reasons remain exact. Final ladder hooks are intentionally not awaited, and decoded cold replay remains unverified.",
-      "Streaming rows preserve146durablewirestrings and fullnonstreamcontrols. The throwing-listener row retains explicit native panic-hook versus Source console diagnostics. No JavaScript arity/prototype reflection, Wasm listener-unwind execution, cancellation or decoded cold replay claim."
+      "Streaming rows preserve146durablewirestrings and fullnonstreamcontrols. The throwing-listener row retains explicit native panic-hook versus Source console diagnostics. No JavaScript arity/prototype reflection, Wasm listener-unwind execution, cancellation or decoded cold replay claim.",
+      "Nine controlled cancellation workflows match complete Source/native views and72save/18finalstrings without an extra native scheduling yield. Abort requests queue behind owned work; hooks before the cancelled fold and unchanged late cancelled saves remain observable. Resume is in-process; arbitrary simultaneous races and decoded cold restart remain outside this binding."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:8b4061dc5aff1897e9ce6ee13a4e76ae4c73585d4c83c5e748cea82e1a2beed5": {
@@ -16508,6 +16528,30 @@
       "Remaining optional configuration, cancellation, unmeasured streaming/provider profiles, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding.",
       "Concurrent-tool rows prove bounded overlap and command-emission settlement order with a fixed logical clock. Native stop is separate lifecycle evidence; per-machine isolation and runtime error/drop release were structurally reviewed, not separately executed. No latency or decoded cold-restart claim.",
       "Streaming rows preserve146durablewirestrings and fullnonstreamcontrols. The throwing-listener row retains explicit native panic-hook versus Source console diagnostics. No JavaScript arity/prototype reflection, Wasm listener-unwind execution, cancellation or decoded cold replay claim."
+    ]
+  },
+  "@demlik/tea:./agent#DefinedAgentRunOptions": {
+    "signature": "1fc63f23f86690022b194b51e7d3eff115361e5a73956e23127a90f3573e7be1",
+    "rust": {
+      "file": "crates/tea/src/agent/defined.rs",
+      "symbols": [
+        "demlik_tea::agent::DefinedAgentRunOptions::signal",
+        "demlik_tea::agent::DefinedAgentRunOptions::store"
+      ]
+    },
+    "cases": [
+      "tea.defined-agent-cancellation.preabort",
+      "tea.defined-agent-cancellation.provider",
+      "tea.defined-agent-cancellation.serial-ok",
+      "tea.defined-agent-cancellation.serial-typed",
+      "tea.defined-agent-cancellation.concurrent-ok",
+      "tea.defined-agent-cancellation.concurrent-typed",
+      "tea.defined-agent-cancellation.concurrent-thrown",
+      "tea.defined-agent-cancellation.done",
+      "tea.defined-agent-cancellation.omitted"
+    ],
+    "knownGaps": [
+      "The options owner is exercised through real compiled signal/store builders and high-level run, with typed host, caller clock, IDs, event and chunk callbacks. These nine cancellation profiles do not establish every optional host/configuration field, callback-panic behavior, arbitrary race, Wasm high-level run or decoded cold Store replay. Direct native struct literals now require signal, while constructor defaults remain unchanged."
     ]
   }
 }
