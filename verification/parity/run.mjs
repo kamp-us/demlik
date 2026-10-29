@@ -34,6 +34,7 @@ import { commandInputParity } from "./command-input-run.mjs";
 import { composeCheckpointParity } from "./compose-run.mjs";
 import { checkCoverage, discoverCoverageInventory } from "./coverage.mjs";
 import { definedAgentCheckpointParity } from "./defined-agent-parity.mjs";
+import { durableAlarmParity } from "./durable-alarm-run.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
 import { checkGraphContract, generatedCases } from "./generated.mjs";
@@ -1224,6 +1225,12 @@ if (!mutationSuite) {
       operation: "tea.machine-viz",
       binaryArgument: "--machine-viz-bin",
       run: (options) => machineVizCheckpointParity(cargo, options),
+    },
+    {
+      name: "durableAlarm",
+      operation: "tea.durable-alarm",
+      binaryArgument: "--durable-alarm-bin",
+      run: (options) => durableAlarmParity(cargo, options),
     },
     {
       name: "definedAgent",
