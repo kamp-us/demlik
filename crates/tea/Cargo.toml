@@ -43,3 +43,6 @@ required-features = ["pbt"]
 [[example]]
 name = "pbt_constructors_driver"
 required-features = ["pbt"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

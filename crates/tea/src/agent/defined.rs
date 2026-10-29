@@ -261,6 +261,8 @@ pub struct DefineAgentConfig<F, R: DefinedAgentTools, P = NoProviderError> {
     tools: Rc<R>,
     instructions: JsText,
     on_tool_error: Option<ToolErrorHook<R>>,
+    deadline_ms: Option<f64>,
+    retry: Option<crate::retry_backoff::AnyRetryPolicy>,
     max_turns: Option<f64>,
     max_elapsed_ms: Option<f64>,
     stop_when: Option<StopPredicate<R, P>>,
@@ -273,6 +275,8 @@ impl<F, R: DefinedAgentTools, P> DefineAgentConfig<F, R, P> {
             tools,
             instructions: instructions.into(),
             on_tool_error: None,
+            deadline_ms: None,
+            retry: None,
             max_turns: None,
             max_elapsed_ms: None,
             stop_when: None,
@@ -286,6 +290,19 @@ impl<F, R: DefinedAgentTools, P> DefineAgentConfig<F, R, P> {
         describe: impl Fn(&P) -> Result<JsText, crate::js_record::JsAccessError> + 'static,
     ) -> Self {
         self.describe_provider_error = Rc::new(describe);
+        self
+    }
+    /// Restarts the existing run watchdog on progress. Omitted means no watchdog.
+    pub fn deadline_ms(mut self, value: f64) -> Self {
+        self.deadline_ms = Some(value);
+        self
+    }
+    /// Uses the existing durable brain-call backoff ladder. Omitted means one attempt.
+    pub fn retry<B: Into<crate::retry_backoff::RetryBudget>>(
+        mut self,
+        policy: crate::retry_backoff::RetryPolicy<B>,
+    ) -> Self {
+        self.retry = Some(policy.into_any());
         self
     }
     /// Bounds completed model round-trips at the existing reducer turn boundary.
@@ -516,14 +533,17 @@ where
     > {
         let tools = Rc::clone(&self.config.tools);
         let describe = Rc::clone(&self.config.describe_provider_error);
-        let llm = Rc::new(LlmCall::new(
+        let mut llm = LlmCall::new(
             llm_call::Config::new(|_: &JsText| Rc::new(DefinedTurnSchema(PhantomData))),
             move |error: &DefinedAgentModelError<R::ContentError, P>| {
                 error.describe(describe.as_ref())
             },
-        ));
+        );
+        if let Some(retry) = self.config.retry {
+            llm = llm.with_retry(retry);
+        }
         let mut config = AgentConfig::try_from_plain_turns(
-            llm,
+            Rc::new(llm),
             vec![Rc::new(input)],
             |_| JsText::from("act"),
             move |call| tools.route(call).map_err(Rc::new),
@@ -536,6 +556,9 @@ where
             },
         )
         .instructions(self.config.instructions.clone());
+        if let Some(deadline) = self.config.deadline_ms {
+            config = config.deadline_ms(deadline);
+        }
         if let Some(limit) = self.config.max_turns {
             config = config.max_turns(limit);
         }

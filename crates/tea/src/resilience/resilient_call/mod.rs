@@ -62,6 +62,10 @@ impl<'a, I, R, E, B: Budget, H> ResilientCall<'a, I, R, E, B, H> {
             rng: Rc::new(fastrand::f64),
         }
     }
+    pub(crate) fn with_retry(mut self, retry: retry_backoff::RetryPolicy<B>) -> Self {
+        self.config.retry = Some(retry);
+        self
+    }
     pub fn with_rng(mut self, rng: impl Fn() -> f64 + 'a) -> Self {
         self.rng = Rc::new(rng);
         self

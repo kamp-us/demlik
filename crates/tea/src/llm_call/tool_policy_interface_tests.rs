@@ -54,8 +54,13 @@ fn configured_tool_and_old_compaction_share_the_brains_original_rng() {
         draws.set(index + 1);
         values[index]
     });
-    let compact: rc::ResilientCall<'_, Payload<'_>, ResultValue<'_>, Cause<'_>> =
-        brain.retry_sibling();
+    let compact: rc::ResilientCall<
+        '_,
+        Payload<'_>,
+        ResultValue<'_>,
+        Cause<'_>,
+        crate::retry_backoff::RetryBudget,
+    > = brain.retry_sibling();
     let tool: rc::ResilientCall<
         '_,
         Payload<'_>,
@@ -219,4 +224,83 @@ fn configured_tool_and_old_compaction_share_the_brains_original_rng() {
     assert_eq!(draws.get(), 4);
     let output = ResultValue(borrowed);
     assert_eq!(output.0, borrowed);
+}
+
+// The public generic constructor has a distinct boundary from DefinedAgent's
+// optional policy forwarding: neither bound may disappear when B is erased.
+#[test]
+fn generic_constructor_preserves_count_duration_secondary_count_and_unbounded_budgets() {
+    fn exercise<B: Budget>(budget: B, expected: &[bool]) {
+        let selected = Cell::new(0);
+        let llm: LlmCall<'_, &str, Payload<'_>, Parser<'_>, B> = LlmCall::new(
+            Config::new(|_: &&str| {
+                selected.set(selected.get() + 1);
+                Rc::new(Parser(std::marker::PhantomData))
+            })
+            .with_retry(RetryPolicy {
+                curve: BackoffCurve {
+                    base_ms: 5.0,
+                    factor: 1.0,
+                    cap_ms: 5.0,
+                    jitter: Jitter::None,
+                },
+                budget,
+            }),
+            |cause: &Cause<'_>| Ok(cause.0.into()),
+        );
+        assert_eq!(selected.get(), 0);
+        let request = Rc::new(Request::new("invoice", None, Payload("input")));
+        let cause = Rc::new(Cause("offline", Rc::new(Cell::new(7))));
+        let mut step = llm.attempt(&llm.init(), Rc::clone(&request), 0.0).unwrap();
+        for (index, retries) in expected.iter().enumerate() {
+            let command = step
+                .commands
+                .pop()
+                .expect("original or retried provider command");
+            assert!(
+                matches!(&command.input().input,CallValue::Shared(input) if Rc::ptr_eq(input,&request))
+            );
+            let crate::command::Outcome::Err { error } =
+                llm.rejected(CallValue::Shared(Rc::clone(&cause)))
+            else {
+                panic!("real provider rejection")
+            };
+            let at = [0.0, 11.0, 22.0][index];
+            let message = llm.run().err(command, error, Some(at));
+            step = llm.fail(&step.state, &message).unwrap();
+            assert_eq!(llm.timer(&step.state).is_some(), *retries);
+            if *retries {
+                let timer = llm.timer(&step.state).unwrap();
+                step = llm.on_timer(&step.state, &timer.msg).unwrap();
+            }
+        }
+        assert_eq!(
+            selected.get(),
+            0,
+            "failure never selects or substitutes a schema"
+        );
+    }
+    exercise(CountBound { max_attempts: 3.0 }, &[true, true, false]);
+    exercise(
+        DurationBound {
+            max_elapsed_ms: 10.0,
+            max_attempts: None,
+        },
+        &[true, false],
+    );
+    exercise(
+        DurationBound {
+            max_elapsed_ms: 10.0,
+            max_attempts: Some(4.0),
+        },
+        &[true, false],
+    );
+    exercise(
+        DurationBound {
+            max_elapsed_ms: 100.0,
+            max_attempts: Some(2.0),
+        },
+        &[true, false],
+    );
+    exercise(Unbounded, &[true, true, true]);
 }

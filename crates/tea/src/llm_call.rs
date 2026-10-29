@@ -7,7 +7,7 @@ use crate::{
     data::JsText,
     js_record::JsAccessError,
     resilience::resilient_call::{self as rc, CallValue, RunError},
-    retry_backoff::{Budget, CountBound, RetryPolicy},
+    retry_backoff::{Budget, CountBound, DurationBound, RetryBudget, RetryPolicy, Unbounded},
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -188,8 +188,8 @@ pub type LlmOutcome<P, O, E> = Outcome<CallValue<LlmOk<P, O>>, RunError<Rejected
 pub type LlmMsg<P, I, O, E> = Settled<RunSpec<P, I, O, E>>;
 type Description<'a, E> = dyn Fn(&E) -> Result<JsText, JsAccessError> + 'a;
 type Selector<'a, P, S> = dyn Fn(&P) -> Rc<S> + 'a;
-type Inner<'a, P, I, O, E, B> =
-    rc::ResilientCall<'a, Request<P, I>, LlmOk<P, O>, LlmErr<P, E>, B, Rejected<E>>;
+type Inner<'a, P, I, O, E> =
+    rc::ResilientCall<'a, Request<P, I>, LlmOk<P, O>, LlmErr<P, E>, RetryBudget, Rejected<E>>;
 
 pub struct Config<'a, P, S: Schema + ?Sized, B = CountBound> {
     schemas: Box<Selector<'a, P, S>>,
@@ -234,7 +234,8 @@ impl From<JsAccessError> for LlmCallError {
     }
 }
 pub struct LlmCall<'a, P, I, S: Schema + ?Sized, B = CountBound> {
-    rc: Inner<'a, P, I, S::Output, S::Error, B>,
+    rc: Inner<'a, P, I, S::Output, S::Error>,
+    budget: std::marker::PhantomData<fn() -> B>,
     schemas: Box<Selector<'a, P, S>>,
     describe: Box<Description<'a, S::Error>>,
 }
@@ -245,12 +246,32 @@ impl<'a, P: Purpose, I, S: Schema + ?Sized, B: Budget> LlmCall<'a, P, I, S, B> {
     ) -> Self {
         Self {
             rc: rc::ResilientCall::new(rc::Config {
-                retry: config.retry,
+                retry: config.retry.map(|policy| RetryPolicy {
+                    curve: policy.curve,
+                    budget: match (policy.budget.max_elapsed_ms(), policy.budget.max_attempts()) {
+                        (Some(max_elapsed_ms), max_attempts) => {
+                            RetryBudget::Duration(DurationBound {
+                                max_elapsed_ms,
+                                max_attempts,
+                            })
+                        }
+                        (None, Some(max_attempts)) => {
+                            RetryBudget::Count(CountBound { max_attempts })
+                        }
+                        (None, None) => RetryBudget::Unbounded(Unbounded),
+                    },
+                }),
                 ..rc::Config::default()
             }),
+            budget: std::marker::PhantomData,
             schemas: config.schemas,
             describe: Box::new(describe),
         }
+    }
+    /// Selects a brain-call retry policy without changing its durable state type.
+    pub(crate) fn with_retry(mut self, retry: crate::retry_backoff::AnyRetryPolicy) -> Self {
+        self.rc = self.rc.with_retry(retry);
+        self
     }
     pub fn with_rng(mut self, rng: impl Fn() -> f64 + 'a) -> Self {
         self.rc = self.rc.with_rng(rng);
@@ -445,7 +466,7 @@ pub fn lift_llm_call<S, P, I, O, E, C>(
 }
 
 impl<'a, P, I, S: Schema + ?Sized> LlmCall<'a, P, I, S> {
-    pub(crate) fn retry_sibling<J, U, E>(&self) -> rc::ResilientCall<'a, J, U, E> {
+    pub(crate) fn retry_sibling<J, U, E>(&self) -> rc::ResilientCall<'a, J, U, E, RetryBudget> {
         self.retry_sibling_with(rc::Config {
             retry: self.rc.retry_policy().copied(),
             ..Default::default()
