@@ -330,8 +330,6 @@ where
         assert_eq!(c.completed.get(), 0);
         c.trace.borrow_mut().push("abort".into());
         signal.abort();
-        // Yield once so the owning drive can enqueue its cancellation, as JS's sync listener does.
-        tokio::task::yield_now().await;
         if c.id == "provider" {
             c.provider.notify_one();
         } else {
