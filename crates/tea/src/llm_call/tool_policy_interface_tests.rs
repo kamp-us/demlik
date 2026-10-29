@@ -59,7 +59,7 @@ fn configured_tool_and_old_compaction_share_the_brains_original_rng() {
         Payload<'_>,
         ResultValue<'_>,
         Cause<'_>,
-        crate::retry_backoff::RetryBudget,
+        PolicyBudget<CountBound>,
     > = brain.retry_sibling();
     let tool: rc::ResilientCall<
         '_,
@@ -227,7 +227,7 @@ fn configured_tool_and_old_compaction_share_the_brains_original_rng() {
 }
 
 // The public generic constructor has a distinct boundary from DefinedAgent's
-// optional policy forwarding: neither bound may disappear when B is erased.
+// optional policy forwarding: neither bound may disappear behind the budget view.
 #[test]
 fn generic_constructor_preserves_count_duration_secondary_count_and_unbounded_budgets() {
     fn exercise<B: Budget>(budget: B, expected: &[bool]) {

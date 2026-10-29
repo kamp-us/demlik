@@ -533,7 +533,7 @@ type CompactCall<'a, K> = ResilientCall<
     Request<CompactionPurpose, <K as CompactionProfile>::Input>,
     LlmOk<CompactionPurpose, <K as CompactionProfile>::Output>,
     LlmErr<CompactionPurpose, <K as CompactionProfile>::Error>,
-    crate::retry_backoff::RetryBudget,
+    llm_call::PolicyBudget<crate::retry_backoff::CountBound>,
 >;
 type CompactCommand<K> = crate::resilience::resilient_call::RunCommand<
     Request<CompactionPurpose, <K as CompactionProfile>::Input>,

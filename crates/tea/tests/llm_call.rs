@@ -327,3 +327,111 @@ fn restored_payload_and_output_absence_uses_the_owned_decoder_without_default_bo
             .is_err()
     );
 }
+
+#[test]
+fn caller_owned_live_retry_budget_is_retained_and_read_only_when_provider_fails() {
+    use demlik_tea::retry_backoff::Budget;
+    use std::cell::RefCell;
+    struct LiveBudget<'a> {
+        attempts: Rc<Cell<f64>>,
+        elapsed: &'a Cell<Option<f64>>,
+        reads: &'a RefCell<Vec<&'static str>>,
+    }
+    impl Budget for LiveBudget<'_> {
+        fn max_attempts(&self) -> Option<f64> {
+            self.reads.borrow_mut().push("attempts");
+            Some(self.attempts.get())
+        }
+        fn max_elapsed_ms(&self) -> Option<f64> {
+            self.reads.borrow_mut().push("elapsed");
+            self.elapsed.get()
+        }
+    }
+    for change_attempts in [true, false] {
+        let attempts = Rc::new(Cell::new(3.0));
+        let elapsed = Cell::new(Some(100.0));
+        let reads = RefCell::new(Vec::new());
+        let selections = Cell::new(0);
+        let failure = Rc::new(ParseFailure {
+            message: "provider unavailable".into(),
+            local: Rc::new(()),
+        });
+        let schema = Rc::new(PlanSchema {
+            visits: Cell::new(0),
+            metadata: Rc::new(()),
+            failure: Rc::clone(&failure),
+        });
+        let llm: LlmCall<'_, Purpose, Prompt, PlanSchema, LiveBudget<'_>> = LlmCall::new(
+            Config::new(|_| {
+                selections.set(selections.get() + 1);
+                Rc::clone(&schema)
+            })
+            .with_retry(RetryPolicy {
+                curve: BackoffCurve {
+                    base_ms: 5.0,
+                    factor: 1.0,
+                    cap_ms: 5.0,
+                    jitter: Jitter::None,
+                },
+                budget: LiveBudget {
+                    attempts: Rc::clone(&attempts),
+                    elapsed: &elapsed,
+                    reads: &reads,
+                },
+            }),
+            describe,
+        );
+        let construction_reads = reads.borrow().clone();
+        if change_attempts {
+            attempts.set(1.0);
+        } else {
+            elapsed.set(Some(0.0));
+        }
+        let input = Rc::new(Request::new(
+            Purpose::Plan,
+            None,
+            Prompt {
+                local: Rc::new(()),
+                text: "plan",
+            },
+        ));
+        let mut started = llm.attempt(&llm.init(), Rc::clone(&input), 50.0).unwrap();
+        let Outcome::Err { error } = llm.rejected(CallValue::Shared(Rc::clone(&failure))) else {
+            panic!("provider rejection")
+        };
+        let message = llm
+            .run()
+            .err(started.commands.pop().unwrap(), error, Some(50.0));
+        let failed = llm.fail(&started.state, &message).unwrap();
+        assert!(
+            llm.timer(&failed.state).is_none(),
+            "the caller's changed live bound must stop the first rejection"
+        );
+        assert!(matches!(
+            failed.state.call("plan"),
+            Some(CallPhase::Failed { .. })
+        ));
+        assert!(
+            construction_reads.is_empty(),
+            "construction must not read either bound"
+        );
+        assert_eq!(
+            Rc::strong_count(&attempts),
+            2,
+            "LlmCall retains the original budget owner"
+        );
+        assert_eq!(selections.get(), 0);
+        assert_eq!(schema.visits.get(), 0);
+        assert_eq!(
+            &*reads.borrow(),
+            if change_attempts {
+                &["attempts"][..]
+            } else {
+                &["attempts", "elapsed"][..]
+            },
+            "getters keep their original failure-time short-circuit order"
+        );
+        drop(llm);
+        assert_eq!(Rc::strong_count(&attempts), 1);
+    }
+}
