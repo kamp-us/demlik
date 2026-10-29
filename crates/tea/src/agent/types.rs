@@ -251,6 +251,77 @@ pub const AGENT_EVENT_TYPES: [&str; 6] = [
     "ToolFailed",
     "RunDone",
 ];
+impl<R: Serialize, T: Serialize, F: Serialize, P: Serialize, A: Serialize, E: Serialize> Serialize
+    for AgentEvent<R, T, F, P, A, E>
+{
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let head = match self {
+            Self::BrainStarted { head, .. }
+            | Self::TurnSettled { head, .. }
+            | Self::ToolStarted { head, .. }
+            | Self::ToolSettled { head, .. }
+            | Self::ToolFailed { head, .. }
+            | Self::RunDone { head, .. } => head,
+        };
+        let mut fields = vec![
+            ("type", PlainData::String(crate::Tagged::tag(self).into())),
+            ("runId", PlainData::String(head.run_id.clone())),
+            ("at", PlainData::Number(head.at)),
+        ];
+        match self {
+            Self::BrainStarted {
+                turn,
+                purpose,
+                model,
+                payload,
+                ..
+            } => {
+                fields.extend([
+                    ("turn", field::<S, _>(turn)?),
+                    ("purpose", field::<S, _>(purpose)?),
+                    ("model", field::<S, _>(model)?),
+                    ("payload", field::<S, _>(payload)?),
+                ]);
+            }
+            Self::TurnSettled { turn, usage, .. } => {
+                fields.push(("turn", field::<S, _>(turn)?));
+                match usage {
+                    AgentField::Value(usage) => fields.push(("usage", field::<S, _>(usage)?)),
+                    AgentField::Undefined => fields.push(("usage", PlainData::Undefined)),
+                    AgentField::Absent => {}
+                }
+            }
+            Self::ToolStarted {
+                call_id,
+                name,
+                args,
+                ..
+            } => fields.extend([
+                ("callId", field::<S, _>(call_id)?),
+                ("name", field::<S, _>(name)?),
+                ("args", field::<S, _>(args)?),
+            ]),
+            Self::ToolSettled {
+                call_id, result, ..
+            } => fields.extend([
+                ("callId", field::<S, _>(call_id)?),
+                ("result", field::<S, _>(result)?),
+            ]),
+            Self::ToolFailed {
+                call_id,
+                name,
+                failure,
+                ..
+            } => fields.extend([
+                ("callId", field::<S, _>(call_id)?),
+                ("name", field::<S, _>(name)?),
+                ("failure", field::<S, _>(failure)?),
+            ]),
+            Self::RunDone { status, .. } => fields.push(("status", field::<S, _>(status)?)),
+        }
+        JsonData(&object(fields)).serialize(serializer)
+    }
+}
 impl<R, T, F, P, A, E> Tagged for AgentEvent<R, T, F, P, A, E> {
     fn tag(&self) -> &str {
         match self {

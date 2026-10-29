@@ -16360,5 +16360,62 @@
       "OPEN complete AgentMessage authoring/wire surface: renderPrompt emits string user heads, so user ContentPart-array authoring is not established by these seventeen rows. Native enum variants expose original owners, and the caller/provider adapter selects Source fields without automatically serializing arbitrary T or turn usage/extras.",
       "OPEN Source assistant-object allocation/identity and arbitrary field mutation/reflection. The actual measured identities are nested toolCalls/provider/call/outcome/result/parts and the fresh returned message batch."
     ]
+  },
+  "@demlik/tea:./agent#defineAgent": {
+    "signature": "c621b049c74015533098539215be9916028f37452b44d134ff88c0d527ca16c4",
+    "rust": {
+      "file": "crates/tea/src/agent/defined.rs",
+      "symbols": [
+        "demlik_tea::agent::define_agent"
+      ]
+    },
+    "cases": [
+      "tea.defined-agent.invoice.run-complete",
+      "tea.defined-agent.invoice.machine-complete",
+      "tea.defined-agent.invoice.resume-awaiting-brain",
+      "tea.defined-agent.invoice.resume-awaiting-tool",
+      "tea.defined-agent.invoice.terminal-no-work",
+      "tea.defined-agent.invoice.declared-tool-failure-recovery"
+    ],
+    "knownGaps": [
+      "Serial controlled-PlainModel invoice profile only; these cases remain qualified for explicit ToolContext.host versus TypeScript context-wrapper identity.",
+      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding."
+    ]
+  },
+  "@demlik/tea:./agent#DefinedAgent/member:published:a2313470d0ef05cd116ebcbc769579cab6418ff9445e7de3e2170552aebdd99d": {
+    "signature": "a2313470d0ef05cd116ebcbc769579cab6418ff9445e7de3e2170552aebdd99d",
+    "rust": {
+      "file": "crates/tea/src/agent/defined.rs",
+      "symbols": [
+        "demlik_tea::agent::DefinedAgent::run"
+      ]
+    },
+    "cases": [
+      "tea.defined-agent.invoice.run-complete",
+      "tea.defined-agent.invoice.resume-awaiting-brain",
+      "tea.defined-agent.invoice.resume-awaiting-tool",
+      "tea.defined-agent.invoice.terminal-no-work",
+      "tea.defined-agent.invoice.declared-tool-failure-recovery"
+    ],
+    "knownGaps": [
+      "Serial controlled-PlainModel invoice profile only; these cases remain qualified for explicit ToolContext.host versus TypeScript context-wrapper identity.",
+      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding."
+    ]
+  },
+  "@demlik/tea:./agent#DefinedAgent/member:published:8b4061dc5aff1897e9ce6ee13a4e76ae4c73585d4c83c5e748cea82e1a2beed5": {
+    "signature": "8b4061dc5aff1897e9ce6ee13a4e76ae4c73585d4c83c5e748cea82e1a2beed5",
+    "rust": {
+      "file": "crates/tea/src/agent/defined.rs",
+      "symbols": [
+        "demlik_tea::agent::DefinedAgent::machine"
+      ]
+    },
+    "cases": [
+      "tea.defined-agent.invoice.machine-complete"
+    ],
+    "knownGaps": [
+      "Serial controlled-PlainModel invoice profile only; these cases remain qualified for explicit ToolContext.host versus TypeScript context-wrapper identity.",
+      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding."
+    ]
   }
 }

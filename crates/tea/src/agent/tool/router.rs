@@ -128,6 +128,30 @@ macro_rules! tool_router {
                 pub fn interpreter(self:std::rc::Rc<Self>,host:std::rc::Rc<$first::Host>)->Interpreter<$first,$($tool),*>{Interpreter{router:self,host}}
                 pub fn for_agent(self:std::rc::Rc<Self>,host:std::rc::Rc<$first::Host>)->AgentTools<$first,$($tool),*>{AgentTools{router:self,host}}
             }
+            impl<$first:ToolDefinition<RawArgs=$crate::agent::PlainToolArgs>+'static,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$crate::agent::PlainToolArgs>+'static),*> $crate::agent::DefinedAgentTools for Router<$first,$($tool),*>
+            where $first::Host:'static {
+                type Host=$first::Host;
+                type Result=Results<SignatureOf<$first>,$(SignatureOf<$tool>),*>;
+                type Error=Errors<SignatureOf<$first>,$(SignatureOf<$tool>),*>;
+                type ContentError=ContentErrors<$first::ContentError,$($tool::ContentError),*>;
+                type Command=Commands<$first,$($tool),*>;
+                type Bound=AgentTools<$first,$($tool),*>;
+                fn route(&self,call:&std::rc::Rc<$crate::agent::PlainToolCall>)->Result<Self::Command,$crate::agent::tool::ToolError>{self.tool_of_plain(call)}
+                fn parts(&self,call:&$crate::agent::PlainToolCall,outcome:&$crate::agent::types::ToolOutcome<Self::Result,Self::Error>)->Result<Option<$crate::agent::content::Parts>,Self::ContentError>{self.parts_of_plain(call,outcome)}
+                fn bind(self:std::rc::Rc<Self>,host:std::rc::Rc<Self::Host>)->Self::Bound{self.for_agent(host)}
+                fn failure(&self,command:&Self::Command,completion:&<Self::Command as $crate::command::CommandFamily>::Completion)->Result<Option<$crate::agent::defined::DefinedToolFailure<Self::Error>>,$crate::agent::tool::ToolError>{
+                    match(command,completion){
+                        (Commands::$first(command),Completions::$first(completion))=>{
+                            if let Some($crate::command::Outcome::Err{error})=completion.outcome(){Ok(Some($crate::agent::defined::DefinedToolFailure{context:$crate::agent::defined::ToolErrorContext{call_id:command.cmd().input().call_id.clone(),name:command.tool().name().into()},outcome:std::rc::Rc::new(Errors::$first($crate::agent::tool::snapshot_error(completion.tool().as_ref(),&$crate::command::Failure::Declared(error.clone()))?))}))}else{Ok(None)}
+                        },
+                        $((Commands::$tool(command),Completions::$tool(completion))=>{
+                            if let Some($crate::command::Outcome::Err{error})=completion.outcome(){Ok(Some($crate::agent::defined::DefinedToolFailure{context:$crate::agent::defined::ToolErrorContext{call_id:command.cmd().input().call_id.clone(),name:command.tool().name().into()},outcome:std::rc::Rc::new(Errors::$tool($crate::agent::tool::snapshot_error(completion.tool().as_ref(),&$crate::command::Failure::Declared(error.clone()))?))}))}else{Ok(None)}
+                        },)*
+                        (Commands::Rejected(command),Completions::Rejected(completion))=>Ok($crate::agent::defined::rejected_tool_failure(command,completion)?.map(|(context,outcome)|$crate::agent::defined::DefinedToolFailure{context,outcome:std::rc::Rc::new(Errors::Rejected(outcome))})),
+                        _=>Ok(None),
+                    }
+                }
+            }
             pub struct Interpreter<$first:ToolDefinition,$($tool:ToolDefinition),*>{router:std::rc::Rc<Router<$first,$($tool),*>>,host:std::rc::Rc<$first::Host>}
             impl<$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> $crate::runtime::Interpreter<Commands<$first,$($tool),*>> for Interpreter<$first,$($tool),*> {
                 type Error=$crate::agent::tool::ToolError;

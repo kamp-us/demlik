@@ -1,0 +1,38 @@
+[
+  {
+    "id": "invoice.run-complete",
+    "route": "defineAgent.run",
+    "expectedToolCounts": [1, 1, 1],
+    "expectedPrompts": 4
+  },
+  {
+    "id": "invoice.machine-complete",
+    "route": "defineAgent.machine + Promise run + driveToDone",
+    "expectedToolCounts": [1, 1, 1],
+    "expectedPrompts": 4
+  },
+  {
+    "id": "invoice.resume-awaiting-brain",
+    "route": "defineAgent.run twice, retained Store checkpoint",
+    "secondToolCounts": [0, 1, 1],
+    "secondPrompts": 3
+  },
+  {
+    "id": "invoice.resume-awaiting-tool",
+    "route": "defineAgent.run twice, retained Store checkpoint",
+    "secondToolCounts": [1, 1, 1],
+    "secondPrompts": 3
+  },
+  {
+    "id": "invoice.terminal-no-work",
+    "route": "defineAgent.run twice, completed Store",
+    "secondToolCounts": [0, 0, 0],
+    "secondPrompts": 0
+  },
+  {
+    "id": "invoice.declared-tool-failure-recovery",
+    "route": "defineAgent.run, declared invalid_invoice",
+    "expectedToolCounts": [1, 1, 0],
+    "expectedPrompts": 3
+  }
+]

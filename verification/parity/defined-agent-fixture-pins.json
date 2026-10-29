@@ -1,0 +1,9 @@
+{
+  "origin": "0e7f6b564eace18ceb54afe85b069bdc0153068d",
+  "frozenTypeScript": "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+  "files": {
+    "verification/parity/define-agent-source.mts": "39f77ce93cb57e4bf6f43099577222db28d268676eaf8f7440188f5f27bf4a62",
+    "verification/parity/define-agent-source-cases.json": "841619fadc3d16c5164fca267c9edda5c3514aabfe59214bfa59b2882b598ab7",
+    "verification/parity/tsconfig.define-agent-source.json": "1be62e935c6fbebcfe1318de61926ba44439b556c3ecef5d87b992671a11a443"
+  }
+}

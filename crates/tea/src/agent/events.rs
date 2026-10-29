@@ -1,13 +1,14 @@
-//! Semantic Agent events over the canonical NativeCalls owners.
+//! Semantic Agent events over canonical native and guarded plain owners.
 //! The projector owns weak outbox identities, not event or payload history.
 
 use super::{
-    AgentError, AgentMachineMsg, AgentToolMsg,
+    AgentError, AgentMachineMsg, AgentToolMsg, PlainCalls, PlainToolArgs,
     knob::TurnView,
     status,
+    turn_view::{CallOf, CallSource, NativeCalls, read_plain},
     types::{
         AgentEvent, AgentEventHead, AgentField, AgentLifecycleNote, AgentState, AgentStatus,
-        AgentTerminalFailure, AgentTurn,
+        AgentTerminalFailure, AgentTurn, ToolOutcome, TurnUsage,
     },
 };
 use crate::{
@@ -48,23 +49,66 @@ impl fmt::Display for AgentEventReadError {
 }
 impl std::error::Error for AgentEventReadError {}
 
-type Outbox<A, E> = Vec<Rc<AgentLifecycleNote<A, E>>>;
+type Outbox<A, E, V> = Vec<Rc<AgentLifecycleNote<A, E, V>>>;
+type UsageReader<T, A, Provider> =
+    fn(&Rc<T>, Option<TurnView<T, A, Provider>>) -> Result<AgentField<Rc<TurnUsage>>, AgentError>;
 pub type AgentEventProjection<Stage, R, T, Payload, A, TE, SE, FE> =
     Result<Vec<AgentEvent<R, T, AgentTerminalFailure<Stage, SE, FE>, Payload, A, TE>>, AgentError>;
 
-/// Original request payloads are caller-chosen Rc values. By-value payloads,
-/// routed tools and manual null/missing event fields are separate profiles.
+/// Original request payloads are caller-chosen Rc values. By-value payloads
+/// and manual null/missing event fields remain separate profiles.
 /// Borrowed domain values need no Clone/Debug/Send/serde/static bounds here;
 /// converting this projector to a runtime callback has the runtime's static limit.
-pub struct AgentEvents<T = AgentTurn, A = PlainData, Provider = PlainData, TE = PlainData> {
-    view: TurnView<T, A, Provider>,
-    projected: RefCell<Vec<Weak<Outbox<A, TE>>>>,
+pub struct AgentEvents<
+    T = AgentTurn,
+    A = PlainData,
+    Provider = PlainData,
+    TE = PlainData,
+    V: CallSource<A> = NativeCalls,
+    EA = A,
+> {
+    view: Option<TurnView<T, A, Provider>>,
+    usage: UsageReader<T, A, Provider>,
+    args: fn(&Rc<CallOf<A, V>>) -> Rc<EA>,
+    projected: RefCell<Vec<Weak<Outbox<A, TE, V>>>>,
 }
 pub fn agent_events<T, A, Provider, TE>(
     view: TurnView<T, A, Provider>,
 ) -> AgentEvents<T, A, Provider, TE> {
     AgentEvents {
-        view,
+        view: Some(view),
+        usage: |turn, view| {
+            Ok(match &view.expect("native event view")(turn).usage {
+                AgentField::Value(value) => AgentField::Value(Rc::clone(value)),
+                AgentField::Absent => AgentField::Absent,
+                AgentField::Undefined => AgentField::Undefined,
+            })
+        },
+        args: |call| Rc::clone(&call.args),
+        projected: RefCell::new(Vec::new()),
+    }
+}
+
+/// Retains the original raw turn and args cursor. Present usage is a typed
+/// value view; raw usage identity is not part of the verified invoice profile.
+pub fn plain_agent_events<TE>()
+-> AgentEvents<PlainData, PlainData, PlainData, TE, PlainCalls, PlainToolArgs> {
+    AgentEvents {
+        view: None,
+        usage: |turn, _| {
+            let read = read_plain(turn).map_err(AgentError::TurnRead)?;
+            Ok(match turn.as_ref() {
+                PlainData::Object(fields)
+                    if matches!(fields.get("usage"), Some(PlainData::Undefined)) =>
+                {
+                    AgentField::Undefined
+                }
+                _ => read.usage.map_or(AgentField::Absent, |usage| {
+                    AgentField::Value(Rc::new(usage))
+                }),
+            })
+        },
+        args: |call| call.args_owner(),
         projected: RefCell::new(Vec::new()),
     }
 }
@@ -84,6 +128,71 @@ impl<T, A, Provider, TE> AgentEvents<T, A, Provider, TE> {
         message: &AgentMachineMsg<P, Rc<Payload>, Rc<T>, LE, AgentToolMsg<R>, CM>,
         state: &AgentState<Stage, P, Rc<T>, R, Rc<Payload>, LE, TE, SE, A, T, CI, CO, CE, FE>,
     ) -> AgentEventProjection<Stage, R, T, Payload, A, TE, SE, FE> {
+        self.project_inner(
+            message,
+            state,
+            || {
+                Ok(match message {
+                    AgentMachineMsg::Tool(AgentToolMsg::Ok {
+                        call_id, result, ..
+                    }) => Some((call_id.clone(), Rc::clone(result))),
+                    _ => None,
+                })
+            },
+            || match message {
+                AgentMachineMsg::Tool(AgentToolMsg::Ok { at, .. }) => Ok(*at),
+                _ => unreachable!("only a successful tool settlement reads its time"),
+            },
+        )
+    }
+}
+impl<T, A, Provider, TE, V: CallSource<A>, EA> AgentEvents<T, A, Provider, TE, V, EA> {
+    #[expect(
+        clippy::type_complexity,
+        reason = "The routed event view retains the canonical state's original independently typed owners."
+    )]
+    pub fn project_routed<Stage, P, Payload, R, LE, SE, CI, CO, CE, FE, CM, C, TI>(
+        &self,
+        message: &AgentMachineMsg<P, Rc<Payload>, Rc<T>, LE, C::Msg, CM>,
+        state: &AgentState<Stage, P, Rc<T>, R, Rc<Payload>, LE, TE, SE, A, T, CI, CO, CE, FE, V>,
+        tools: &TI,
+    ) -> AgentEventProjection<Stage, R, T, Payload, EA, TE, SE, FE>
+    where
+        C: crate::command::CommandFamily,
+        TI: super::tool::AgentToolRoutes<C, R, TE>,
+    {
+        self.project_inner(
+            message,
+            state,
+            || {
+                let AgentMachineMsg::Tool(message) = message else {
+                    return Ok(None);
+                };
+                let settled = tools.outcome_of(message).map_err(|error| {
+                    AgentError::ToolMapping(Rc::new(super::tool::ToolError::Contract(error)))
+                })?;
+                Ok(settled.and_then(|settled| match settled.outcome {
+                    ToolOutcome::Ok(result) => Some((settled.call_id, result)),
+                    ToolOutcome::Error(_) => None,
+                }))
+            },
+            || match message {
+                AgentMachineMsg::Tool(message) => number(tools.at(message), "at"),
+                _ => unreachable!("only a routed tool settlement reads its time"),
+            },
+        )
+    }
+    #[expect(
+        clippy::type_complexity,
+        reason = "Native and routed events share one projection over the canonical state, not a second model."
+    )]
+    fn project_inner<Stage, P, Payload, R, LE, SE, CI, CO, CE, FE, CM, TM>(
+        &self,
+        message: &AgentMachineMsg<P, Rc<Payload>, Rc<T>, LE, TM, CM>,
+        state: &AgentState<Stage, P, Rc<T>, R, Rc<Payload>, LE, TE, SE, A, T, CI, CO, CE, FE, V>,
+        tool: impl FnOnce() -> Result<Option<(JsText, Rc<R>)>, AgentError>,
+        tool_at: impl FnOnce() -> Result<f64, AgentError>,
+    ) -> AgentEventProjection<Stage, R, T, Payload, EA, TE, SE, FE> {
         let run_id = match &state.run.phase {
             RunPhase::Idle | RunPhase::Cancelled { run_id: None, .. } => return Ok(vec![]),
             RunPhase::Running { run_id }
@@ -103,12 +212,7 @@ impl<T, A, Provider, TE> AgentEvents<T, A, Provider, TE> {
                         let CallValue::Shared(value) = value else {
                             return Err(AgentError::MissingBrainOutput);
                         };
-                        let fields = (self.view)(&value.output);
-                        let usage = match &fields.usage {
-                            AgentField::Value(value) => AgentField::Value(Rc::clone(value)),
-                            AgentField::Absent => AgentField::Absent,
-                            AgentField::Undefined => AgentField::Undefined,
-                        };
+                        let usage = (self.usage)(&value.output, self.view)?;
                         events.push(AgentEvent::TurnSettled {
                             head: AgentEventHead {
                                 run_id: run_id.clone(),
@@ -119,28 +223,25 @@ impl<T, A, Provider, TE> AgentEvents<T, A, Provider, TE> {
                         });
                     }
                 }
-                AgentMachineMsg::Tool(AgentToolMsg::Ok {
-                    call_id,
-                    result,
-                    at,
-                }) => {
-                    let refused = state
-                        .refused_calls
-                        .value()
-                        .is_some_and(|ids| ids.contains(call_id));
-                    if !refused {
-                        events.push(AgentEvent::ToolSettled {
-                            head: AgentEventHead {
-                                run_id: run_id.clone(),
-                                at: *at,
-                            },
-                            call_id: call_id.clone(),
-                            result: Rc::clone(result),
-                        });
+                AgentMachineMsg::Tool(_) => {
+                    if let Some((call_id, result)) = tool()? {
+                        let refused = state
+                            .refused_calls
+                            .value()
+                            .is_some_and(|ids| ids.contains(&call_id));
+                        if !refused {
+                            events.push(AgentEvent::ToolSettled {
+                                head: AgentEventHead {
+                                    run_id: run_id.clone(),
+                                    at: tool_at()?,
+                                },
+                                call_id,
+                                result,
+                            });
+                        }
                     }
                 }
-                AgentMachineMsg::Tool(AgentToolMsg::Err { .. })
-                | AgentMachineMsg::Start { .. }
+                AgentMachineMsg::Start { .. }
                 | AgentMachineMsg::Boot { .. }
                 | AgentMachineMsg::Cancel { .. }
                 | AgentMachineMsg::Deadline(_)
@@ -212,9 +313,9 @@ impl<T, A, Provider, TE> AgentEvents<T, A, Provider, TE> {
                             run_id: run_id.clone(),
                             at: number(Some(*at), "at")?,
                         },
-                        call_id: call.call_id.clone(),
-                        name: call.name.clone(),
-                        args: Rc::clone(&call.args),
+                        call_id: V::call_id(call).clone(),
+                        name: V::name(call).clone(),
+                        args: (self.args)(call),
                     })
                 }
                 AgentLifecycleNote::ToolFailed { call, failure, at } => {
@@ -223,8 +324,8 @@ impl<T, A, Provider, TE> AgentEvents<T, A, Provider, TE> {
                             run_id: run_id.clone(),
                             at: number(Some(*at), "at")?,
                         },
-                        call_id: call.call_id.clone(),
-                        name: call.name.clone(),
+                        call_id: V::call_id(call).clone(),
+                        name: V::name(call).clone(),
                         failure: Rc::clone(failure),
                     })
                 }

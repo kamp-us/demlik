@@ -3,6 +3,41 @@ use super::*;
 /// The zero-tool table still owns the router's normal unknown-tool command.
 #[derive(Default)]
 pub struct EmptyRouter;
+impl super::super::DefinedAgentTools for EmptyRouter {
+    type Host = ();
+    type Result = ();
+    type Error = FailureOf<RejectedSpec>;
+    type ContentError = Infallible;
+    type Command = Cmd<RejectedSpec>;
+    type Bound = EmptyAgentTools<()>;
+    fn route(&self, call: &Rc<super::super::PlainToolCall>) -> Result<Self::Command, ToolError> {
+        self.tool_of_plain(call)
+    }
+    fn parts(
+        &self,
+        call: &super::super::PlainToolCall,
+        outcome: &ToolOutcome<Self::Result, Self::Error>,
+    ) -> Result<Option<Parts>, Infallible> {
+        self.parts_of_plain(call, outcome)
+    }
+    fn bind(self: Rc<Self>, host: Rc<()>) -> Self::Bound {
+        self.for_agent(host)
+    }
+    fn failure(
+        &self,
+        command: &Self::Command,
+        completion: &command::Completion<RejectedSpec>,
+    ) -> Result<Option<super::super::defined::DefinedToolFailure<Self::Error>>, ToolError> {
+        Ok(
+            super::super::defined::rejected_tool_failure(command, completion)?.map(
+                |(context, outcome)| super::super::defined::DefinedToolFailure {
+                    context,
+                    outcome: Rc::new(outcome),
+                },
+            ),
+        )
+    }
+}
 impl EmptyRouter {
     pub fn new() -> Result<Self, ToolError> {
         Ok(Self)

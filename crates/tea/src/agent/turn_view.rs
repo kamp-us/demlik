@@ -102,6 +102,11 @@ impl PlainToolArgs {
         self.call.args()
     }
 }
+impl Serialize for PlainToolArgs {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.value().serialize(serializer)
+    }
+}
 impl PlainToolCall {
     pub fn args_owner(self: &Rc<Self>) -> Rc<PlainToolArgs> {
         Rc::new(PlainToolArgs {

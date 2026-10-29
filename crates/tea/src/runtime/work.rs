@@ -178,6 +178,34 @@ impl<'a, T, E> CommandWork<'a, T, E> {
         self.detached = true;
         self
     }
+    pub(crate) fn and_then<F, G>(self, then: F) -> Self
+    where
+        T: 'a,
+        E: 'a,
+        F: FnOnce(T) -> G + 'a,
+        G: Future<Output = Result<T, E>> + 'a,
+    {
+        let operation = match self.operation {
+            CommandOperation::Native(work) => {
+                CommandOperation::Native(async move { then(work.await?).await }.boxed_local())
+            }
+            CommandOperation::Effect(work) => {
+                CommandOperation::Effect(async move { then(work.await?).await }.boxed_local())
+            }
+            CommandOperation::Promise(factory) => {
+                CommandOperation::Promise(Box::new(move |signal| {
+                    let work = factory(signal);
+                    async move { then(work.await?).await }.boxed_local()
+                }))
+            }
+        };
+        Self {
+            operation,
+            cleanup: self.cleanup,
+            detached: self.detached,
+            uninterruptible: self.uninterruptible,
+        }
+    }
     pub fn uninterruptible(mut self) -> Self {
         self.uninterruptible = true;
         self

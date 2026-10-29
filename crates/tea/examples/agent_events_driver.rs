@@ -794,6 +794,124 @@ mod checks {
     };
     use std::convert::Infallible;
 
+    struct RoutedReads {
+        outcomes: Cell<usize>,
+        times: Cell<usize>,
+    }
+    impl demlik_tea::agent::tool::AgentToolRoutes<Tool, PlainData, PlainData> for RoutedReads {
+        fn settlement_types(&self) -> Vec<String> {
+            vec!["agent_tool_ok".into(), "agent_tool_err".into()]
+        }
+        fn outcome_of(
+            &self,
+            message: &AgentToolMsg<PlainData>,
+        ) -> Result<
+            Option<demlik_tea::agent::tool::ToolSettlement<PlainData, PlainData>>,
+            CommandContractError,
+        > {
+            self.outcomes.set(self.outcomes.get() + 1);
+            let (call_id, outcome) = match message {
+                AgentToolMsg::Ok {
+                    call_id, result, ..
+                } => (
+                    call_id,
+                    demlik_tea::agent::types::ToolOutcome::Ok(Rc::clone(result)),
+                ),
+                AgentToolMsg::Err {
+                    call_id, reason, ..
+                } => (
+                    call_id,
+                    demlik_tea::agent::types::ToolOutcome::Error(data(json!({"reason":reason}))),
+                ),
+            };
+            Ok(Some(demlik_tea::agent::tool::ToolSettlement {
+                call_id: call_id.clone(),
+                outcome,
+            }))
+        }
+        fn at(&self, message: &AgentToolMsg<PlainData>) -> Option<demlik_tea::data::NumberOrNull> {
+            self.times.set(self.times.get() + 1);
+            Some(match message {
+                AgentToolMsg::Ok { at, .. } | AgentToolMsg::Err { at, .. } => (*at).into(),
+            })
+        }
+    }
+    #[test]
+    fn routed_late_settlements_use_the_message_owner_and_obey_event_admission() {
+        let fixture = Fixture::new();
+        let agent = fixture.agent(false);
+        let initial = agent.init();
+        let started = agent.start(&initial, "invoice-run", 11.0).unwrap().state;
+        let pending = agent
+            .turn(&started, Rc::clone(&fixture.turns[0]), 13.0)
+            .unwrap()
+            .state;
+        let settled = agent
+            .tool_ok(&pending, "read-17", Rc::clone(&fixture.result), 17.0)
+            .unwrap()
+            .state;
+        let late = data(json!({"late":"actual new result"}));
+        let message = Msg::Tool(AgentToolMsg::Ok {
+            call_id: "read-17".into(),
+            result: Rc::clone(&late),
+            at: 19.0,
+        });
+        let routes = RoutedReads {
+            outcomes: Cell::new(0),
+            times: Cell::new(0),
+        };
+        let projector = agent_events(|turn: &Turn| turn);
+        let events = projector
+            .project_routed::<_, _, _, _, _, _, _, _, _, _, _, Tool, _>(&message, &settled, &routes)
+            .unwrap();
+        assert!(events.iter().any(|event|matches!(event,AgentEvent::ToolSettled{result,..}if Rc::ptr_eq(result,&late))),"late success must expose the actual message result, not the earlier durable receipt");
+        let error = Msg::Tool(AgentToolMsg::Err {
+            call_id: "read-17".into(),
+            reason: "late failure".into(),
+            at: 20.0,
+        });
+        let events = projector
+            .project_routed::<_, _, _, _, _, _, _, _, _, _, _, Tool, _>(&error, &settled, &routes)
+            .unwrap();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, AgentEvent::ToolSettled { .. })),
+            "late failure cannot be turned into a stored success"
+        );
+        let cancelled = agent.cancel(&settled, 21.0).unwrap().state;
+        let before = routes.outcomes.get();
+        projector
+            .project_routed::<_, _, _, _, _, _, _, _, _, _, _, Tool, _>(&message, &initial, &routes)
+            .unwrap();
+        projector
+            .project_routed::<_, _, _, _, _, _, _, _, _, _, _, Tool, _>(
+                &message, &cancelled, &routes,
+            )
+            .unwrap();
+        assert_eq!(
+            routes.outcomes.get(),
+            before,
+            "idle and cancelled event paths must not read the router"
+        );
+        let mut refused = settled.as_ref().clone();
+        refused.refused_calls = AgentField::Value(Rc::new(vec!["read-17".into()]));
+        let time_reads = routes.times.get();
+        let events = projector
+            .project_routed::<_, _, _, _, _, _, _, _, _, _, _, Tool, _>(&message, &refused, &routes)
+            .unwrap();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, AgentEvent::ToolSettled { .. }))
+        );
+        assert_eq!(
+            routes.times.get(),
+            time_reads,
+            "a refused completion must not read the settlement timestamp"
+        );
+    }
+
     enum Signal {
         Reject,
         Publish,

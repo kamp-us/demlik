@@ -1,7 +1,15 @@
 pub mod compaction;
 pub mod content;
+pub mod defined;
+pub use defined::{
+    DefineAgentConfig, DefinedAgent, DefinedAgentModelError, DefinedAgentMsg,
+    DefinedAgentRunOptions, DefinedAgentState, DefinedAgentTools, DefinedPrompt, DefinedTurnSchema,
+    define_agent,
+};
 mod events;
-pub use events::{AgentEventProjection, AgentEventReadError, AgentEvents, agent_events};
+pub use events::{
+    AgentEventProjection, AgentEventReadError, AgentEvents, agent_events, plain_agent_events,
+};
 pub mod conversation;
 pub mod model;
 pub mod prompt;
