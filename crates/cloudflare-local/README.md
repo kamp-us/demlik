@@ -165,3 +165,62 @@ The checks are local to Wrangler 4.155.0, worker 0.8.7 and SQLite-backed workerd
 They establish this fenced snapshot workflow. They do not establish arbitrary
 structured-clone storage, event-sourced runtime acceptance, KV-backend retries,
 remote failure recovery or deployed behavior.
+
+## Verify snapshot and event-tail recovery
+
+After the same build, run the fast event-store gate:
+
+```sh
+WRANGLER_SEND_METRICS=false python3 prove-events.py --source-only --evidence ../../target/events-source
+WRANGLER_SEND_METRICS=false python3 prove-events.py --source-freeze ../../target/events-source/source-fixture-freeze.json --evidence ../../target/events-paired
+```
+
+Run the Source-only baseline before changing Rust semantics. The second command
+checks those consumer hashes and the frozen Source library reference, then
+compares the complete decoded responses and exact JSON string storage cells in
+separate actual SQLite-backed SDK objects. Both consumers drive the established
+cmdless counting Machine: load and migrate, apply the reducer, save the resulting
+state, then append its event. They do not launch Agent `.run` on Wasm.
+
+Inspect `result.json` and each host's request stream, runtime checks, lifecycle
+and cleanup receipts. The gate appends eight ordered events, checks inclusive
+read windows without truncating the log, tests count-based snapshots every three
+events, manual snapshot cadence reset and fresh/current no-ops, then recovers
+snapshot plus tail across a real process restart. Repeated loads keep the
+activation's recovery hook count at one. Because this is a cmdless Machine, this
+is not proof of arbitrary command effect deduplication.
+
+The dropped append and manual-snapshot waiters are discarded before their writes
+finish. The consumer waits for exact cells through independent SDK reads; Rust
+also checks and logs that each discarded receipt first polls Pending. Native
+hosts keep Tokio LocalSet submission; Wasm submits owned journal work through
+`wasm-bindgen-futures`, with the same eager prefix and receipt semantics.
+
+Fault controls deliberately put a wrong snapshot sequence and a stale tail event
+into real SDK cells, and the gate requires the corresponding changed recovery
+results before restoring them. A malformed JSON tail must fail recovery; a
+rejected SDK get must preserve its original error. These controls exercise those
+locations, not remote disk failure or crash atomicity. Invalid commands must
+leave the cells unchanged.
+
+The final cleanup is a consumer-owned namespace operation using SDK/storage
+list and delete, since neither event-store interface has a delete method. It
+removes only the journal's snapshot, meta and event keys, recreates its activation
+handle, preserves a cell seeded only once in the first activation, and proves a fresh append/restart starts at
+sequence one. No generic interface or structured-clone codec is expanded.
+
+Focused checks from the repository root:
+
+```sh
+cargo test --locked -p demlik-tea --test durable_object_events --test journal --test journal_remote --test journal_file --test journal_remote_file --test durable_object_snapshot
+cargo check --locked -p demlik-cloudflare-local
+cargo clippy --locked -p demlik-cloudflare-local --target wasm32-unknown-unknown -- -D warnings
+cargo fmt --check -p demlik-tea -p demlik-cloudflare-local
+pnpm exec biome check crates/cloudflare-local/events.ts crates/cloudflare-local/source.ts
+pnpm exec tsc -p crates/cloudflare-local/tsconfig.source.json
+python3 -m py_compile crates/cloudflare-local/prove-events.py
+```
+
+The host and codec limits above still apply. This gate establishes local SDK
+snapshot-plus-tail recovery for this cmdless workflow, not cloud deployment,
+idle eviction, arbitrary message profiles or full Wasm Agent execution.

@@ -9,6 +9,7 @@ use demlik_tea::{
 };
 use std::{cell::RefCell, rc::Rc};
 use worker::{durable_object, event, js_sys, *};
+mod events;
 #[path = "../../tea/examples/support/scheduled_jobs.rs"]
 mod scheduled_jobs;
 mod transactions;
@@ -46,6 +47,7 @@ fn host_error(error: impl std::fmt::Display) -> worker::Error {
 #[durable_object(alarm)]
 pub struct Jobs {
     state: State,
+    events: events::EventJournal,
 }
 impl Jobs {
     async fn callback(&self, action: &str, schedule: Option<[f64; 3]>) -> worker::Result<Response> {
@@ -165,10 +167,17 @@ impl DurableObject for Jobs {
             "{}",
             serde_json::json!({"event":"constructor", "at":js_sys::Date::now()})
         );
-        Self { state }
+        Self {
+            events: events::EventJournal::new(SdkStorage::new(state.storage())),
+            state,
+        }
     }
     async fn fetch(&self, mut request: Request) -> worker::Result<Response> {
         match (request.method(), request.path().as_str()) {
+            (Method::Post, "/events") => {
+                let body = request.text().await?;
+                self.events.command(&body).await
+            }
             (Method::Get, "/adapter-profile") => {
                 transactions::profile(SdkStorage::new(self.state.storage())).await
             }

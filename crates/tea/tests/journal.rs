@@ -197,3 +197,14 @@ async fn a_detached_listener_respects_a_new_journals_own_lock_refusal() {
         })
         .await;
 }
+
+#[test]
+fn a_missing_native_local_host_returns_a_panicked_receipt_after_its_first_pending_poll() {
+    use demlik_tea::journal::JournalError;
+    let journal = memory_journal::<u32>();
+    let mut receipt = Box::pin(journal.append("s", Rc::new(7)));
+    let mut context = std::task::Context::from_waker(futures::task::noop_waker_ref());
+    assert!(std::future::Future::poll(receipt.as_mut(), &mut context).is_pending());
+    let error = futures::executor::block_on(receipt).unwrap_err();
+    assert!(matches!(error, JournalError::Panic(_)));
+}

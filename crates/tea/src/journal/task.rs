@@ -78,8 +78,7 @@ pub(crate) fn start<T: 'static, E: 'static, F: 'static>(
             .poll(&mut Context::from_waker(noop_waker_ref()))
             .is_ready();
     if !finished
-        && let Err(cause) =
-            std::panic::catch_unwind(AssertUnwindSafe(|| tokio::task::spawn_local(work)))
+        && let Err(cause) = std::panic::catch_unwind(AssertUnwindSafe(|| spawn_owned(work)))
         && let Some(sender) = completion.borrow_mut().take()
     {
         let _ = sender.send(Err(JournalError::Panic(PanicCause::new(cause))));
@@ -88,4 +87,14 @@ pub(crate) fn start<T: 'static, E: 'static, F: 'static>(
         receiver,
         first: true,
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_owned(work: LocalBoxFuture<'static, ()>) {
+    tokio::task::spawn_local(work);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_owned(work: LocalBoxFuture<'static, ()>) {
+    wasm_bindgen_futures::spawn_local(work);
 }

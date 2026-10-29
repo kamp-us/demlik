@@ -453,6 +453,7 @@ dependencies = [
  "serde-value",
  "serde_json",
  "tokio",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

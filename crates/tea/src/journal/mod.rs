@@ -1,6 +1,7 @@
 //! Ordered journals with instance-local changes and call-chain reentrant locks.
 //!
-//! Owned operations submit work to the current Tokio `LocalSet` immediately;
+//! Owned operations submit work to the current Tokio `LocalSet` on native hosts
+//! or the JavaScript microtask queue on Wasm immediately;
 //! dropping a receipt does not cancel it. The host must remain alive until its
 //! submitted work settles. Entry and backend types impose no record codec,
 //! Clone, Send, or static lifetime requirement.

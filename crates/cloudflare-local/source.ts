@@ -7,6 +7,7 @@ import {
   Refusal,
   refuse,
 } from "../../packages/tea/src/index";
+import { EventJournal } from "./events";
 import { transactions } from "./transactions";
 
 const deadline = z.number().int().min(0).max(8.64e15);
@@ -45,8 +46,10 @@ type Action =
 const log = (record: unknown) => console.log(JSON.stringify(record));
 
 export class SourceJobs {
+  private readonly events: EventJournal;
   constructor(private readonly state: DurableObjectState) {
     log({ event: "constructor", at: Date.now() });
+    this.events = new EventJournal(state.storage);
   }
   private async callback(action: Action): Promise<Response> {
     const storage = this.state.storage;
@@ -98,6 +101,8 @@ export class SourceJobs {
   }
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (request.method === "POST" && path === "/events")
+      return this.events.command(request);
     if (request.method === "POST" && path === "/transactions")
       return transactions(this.state.storage, request);
     if (request.method === "POST" && path === "/seed") {
