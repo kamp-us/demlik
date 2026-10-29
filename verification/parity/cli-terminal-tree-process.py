@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import pty
+import shutil
 import subprocess
 import termios
 import threading
@@ -59,13 +60,15 @@ def main():
     parser.add_argument('mode', choices=['source', 'native'])
     parser.add_argument('--label')
     parser.add_argument('evidence', type=Path)
-    parser.add_argument('command', nargs='+')
+    parser.add_argument('command', nargs=argparse.REMAINDER)
     options = parser.parse_args()
     evidence = options.evidence.resolve()
     label = options.label or options.mode
     (evidence / f'{label}-invocation.json').write_text(json.dumps({'command': options.command, 'commandHashes': {item: sha(Path(item).read_bytes()) for item in options.command if Path(item).is_file()}}, indent=2) + '\n')
     fixture = evidence / 'fixture'
     fixture.mkdir(parents=True, exist_ok=True)
+    if not (fixture / '.git').exists():
+        subprocess.run(['/usr/bin/git', 'init', '--quiet', '--initial-branch=main', str(fixture)], check=True, capture_output=True)
     for name, text in {
         'clean.ts': 'export function greet(name: string) { return name; }\nexport function twice(n: number) { return n * 2; }\n',
         'café.ts': 'export function branch(n: number) {\n  if (n > 2) return 1;\n  if (n > 1) return 2;\n  return 3;\n}\n',
@@ -73,10 +76,13 @@ def main():
         'thresholds.json': '{"highComplexity":1,"longFunctionLoc":2}\n',
     }.items():
         (fixture / name).write_text(text)
-    base = {'PATH': '/Users/cansirin/.volta/tools/image/node/22.21.1/bin:/opt/homebrew/bin:/usr/bin:/bin',
+    base = {'PATH': str(Path(shutil.which('node')).parent) + ':/opt/homebrew/bin:/usr/bin:/bin',
             'HOME': os.environ['HOME'], 'LANG': 'en_US.UTF-8', 'TZ': 'UTC', 'TMPDIR': '/private/tmp',
             'TERM': 'xterm-256color', 'COLUMNS': '80',
-            'DEMLIK_CODE_GRAPH_COMPILER_MANIFEST': '/Users/cansirin/Documents/development/demlik/packages/code-graph/node_modules/@typescript/native-preview/package.json'}
+            'DEMLIK_CODE_GRAPH_COMPILER_MANIFEST': os.environ.get('DEMLIK_CODE_GRAPH_COMPILER_MANIFEST', str(Path(__file__).resolve().parents[2] / 'packages/code-graph/node_modules/@typescript/native-preview/package.json'))}
+    source_report = evidence / 'source-processes.json'
+    if source_report.exists():
+        base = json.loads(source_report.read_text())[0]['environment']
     profiles = [
         ('pipe-plain', False, {}, []),
         *[(f'pipe-force-{value}', False, {'FORCE_COLOR': value}, []) for value in ['0', '1', '3', 'false']],

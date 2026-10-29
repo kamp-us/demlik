@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const [directory, label = "native"] = process.argv.slice(2);
+const [directory, label = "native", cargo = "cargo"] = process.argv.slice(2);
 const evidence = path.resolve(directory);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 for (const key of [
@@ -27,7 +27,7 @@ const args = [
   "code-graph",
   "--message-format=json",
 ];
-const result = spawnSync("cargo", args, {
+const result = spawnSync(cargo, args, {
   cwd: root,
   encoding: "utf8",
   maxBuffer: 64 * 1024 * 1024,
@@ -100,7 +100,7 @@ const sources = Object.fromEntries(
 fs.writeFileSync(
   path.join(evidence, `${label}.artifacts.json`),
   `${JSON.stringify(
-    { root, command: ["cargo", ...args], artifacts, sources },
+    { root, command: [cargo, ...args], artifacts, sources },
     null,
     2,
   )}\n`,
