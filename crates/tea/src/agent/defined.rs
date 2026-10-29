@@ -5,7 +5,7 @@ use super::{
     PlainCalls, PlainToolCall, StateOf, StructuredOutputError,
     content::Parts,
     create_agent,
-    model::{Llm, MessageLoader, Messages, ModelFactory},
+    model::{ChunkSink, Llm, MessageLoader, Messages, ModelFactory, ModelStream},
     prompt::{AgentMessage, render_prompt_with},
     tool::{AgentToolRoutes, ToolError},
     types::{AGENT_TURN_SCHEMA, Conversation, ToolOutcome},
@@ -366,13 +366,16 @@ pub fn define_agent<F, R: DefinedAgentTools, P>(
 ) -> DefinedAgent<F, R, P> {
     DefinedAgent { config }
 }
-struct SharedModel<F>(Rc<F>);
+struct SharedModel<F> {
+    model: Rc<F>,
+    stream: ModelStream,
+}
 impl<M, S: Schema, F: ModelFactory<M, S>> ModelFactory<M, S> for SharedModel<F> {
     fn model_of(&self, id: Option<&JsText>) -> Result<impl Llm<M, S>, CallValue<S::Error>> {
-        self.0.model_of(id)
+        self.model.model_of_with_stream(id, self.stream.clone())
     }
     fn kind(&self) -> super::model::ModelKind {
-        self.0.kind()
+        self.model.kind()
     }
 }
 struct PromptLoader<R>(Rc<R>);
@@ -476,6 +479,7 @@ pub struct DefinedAgentRunOptions<R: DefinedAgentTools, SE = Infallible, P = NoP
     pub run_id: Option<JsText>,
     pub clock: Rc<dyn Fn() -> f64>,
     pub on_event: Option<EventSink<R, P>>,
+    pub on_chunk: Option<Rc<ChunkSink>>,
 }
 impl<R: DefinedAgentTools, P> DefinedAgentRunOptions<R, Infallible, P> {
     pub fn new(host: Rc<R::Host>) -> Self {
@@ -485,6 +489,7 @@ impl<R: DefinedAgentTools, P> DefinedAgentRunOptions<R, Infallible, P> {
             run_id: None,
             clock: Options::<(), ()>::new(Profile::Promise).clock,
             on_event: None,
+            on_chunk: None,
         }
     }
 }
@@ -501,6 +506,11 @@ impl<R: DefinedAgentTools, SE, P: 'static> DefinedAgentRunOptions<R, SE, P> {
         self.on_event = Some(Rc::new(handler));
         self
     }
+    /// Receives synchronous progress deltas; listener panics are contained.
+    pub fn on_chunk(mut self, handler: impl Fn(&Rc<super::model::TurnChunk>) + 'static) -> Self {
+        self.on_chunk = Some(Rc::new(handler));
+        self
+    }
     pub fn store<
         E: fmt::Display + 'static,
         ST: Store<Rc<DefinedAgentState<R, P>>, Error = E> + 'static,
@@ -514,6 +524,7 @@ impl<R: DefinedAgentTools, SE, P: 'static> DefinedAgentRunOptions<R, SE, P> {
             run_id: self.run_id,
             clock: self.clock,
             on_event: self.on_event,
+            on_chunk: self.on_chunk,
         }
     }
 }
@@ -542,6 +553,7 @@ where
             input,
             Rc::new(Rc::clone(&self.config.tools).bind(host)),
             timer,
+            ModelStream::default(),
         )
     }
     #[expect(
@@ -553,6 +565,7 @@ where
         input: JsText,
         bound: Rc<R::Bound>,
         timer: Rc<TM>,
+        stream: ModelStream,
     ) -> AgentWired<
         DefinedAgentMachine<R, P>,
         impl Interpreter<DefinedAgentCommand<R, P>, Error = AgentWorkError<ToolError>>
@@ -628,7 +641,10 @@ where
             hook: self.config.on_tool_error.clone(),
         };
         agent.to_machine_with_tools(
-            SharedModel(Rc::clone(&self.config.model)),
+            SharedModel {
+                model: Rc::clone(&self.config.model),
+                stream,
+            },
             PromptLoader(Rc::clone(&self.config.tools)),
             tools,
             timer,
@@ -654,6 +670,10 @@ where
             input.into(),
             Rc::clone(&event_tools),
             Rc::new(TokioTimer::with_clock(move || timer_clock(), |_| {})),
+            options
+                .on_chunk
+                .map(ModelStream::contained)
+                .unwrap_or_default(),
         );
         let mut runtime_options = Options::new(Profile::Promise);
         runtime_options.clock = Rc::clone(&clock);

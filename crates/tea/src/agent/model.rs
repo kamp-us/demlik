@@ -4,7 +4,8 @@
 //!
 //! Native callers select plain_model or model_factory explicitly. JavaScript
 //! function tags, arity, thenables, prototypes and thrown getters are not
-//! reflected here. A Rust panic remains an unwind, rather than a port failure.
+//! reflected here. Model/loader panics remain unwinds; DefinedAgent contains
+//! progress-listener panics at its own sink.
 
 use crate::{
     data::JsText,
@@ -36,6 +37,43 @@ impl<M> From<Vec<M>> for Messages<'_, M> {
 impl<M> From<Rc<Vec<M>>> for Messages<'_, M> {
     fn from(messages: Rc<Vec<M>>) -> Self {
         Self::Shared(messages)
+    }
+}
+
+/// One synchronous progress delta. Only the final model answer enters state.
+#[derive(serde::Serialize)]
+pub struct TurnChunk {
+    pub text: JsText,
+}
+pub type ChunkSink = dyn Fn(&Rc<TurnChunk>);
+
+/// A cloneable handle retains its original run's sink, including after settlement.
+#[derive(Clone)]
+pub struct ModelStream(Rc<ChunkSink>);
+impl ModelStream {
+    /// Direct hosts own containment; DefinedAgent supplies its contained run sink.
+    pub fn new(sink: impl Fn(&Rc<TurnChunk>) + 'static) -> Self {
+        Self(Rc::new(sink))
+    }
+    pub fn on_chunk(&self, chunk: Rc<TurnChunk>) {
+        (self.0)(&chunk);
+    }
+    pub(crate) fn contained(sink: Rc<ChunkSink>) -> Self {
+        Self::new(move |chunk| {
+            if let Err(payload) =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink(chunk)))
+            {
+                eprintln!(
+                    "demlik: on_chunk listener panicked: {}",
+                    crate::storage::PanicCause::new(payload).summary
+                );
+            }
+        })
+    }
+}
+impl Default for ModelStream {
+    fn default() -> Self {
+        Self::new(|_| {})
     }
 }
 
@@ -79,6 +117,7 @@ impl<M, S: Schema + ?Sized, L: Llm<M, S> + ?Sized> Llm<M, S> for Rc<L> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelKind {
+    /// A direct callback, including a streaming callback after adaptation.
     Plain,
     Factory,
 }
@@ -87,6 +126,14 @@ pub enum ModelKind {
 /// variants and their original Rc handles; it need not serialize either cause.
 pub trait ModelFactory<M, S: Schema + ?Sized> {
     fn model_of(&self, model_id: Option<&JsText>) -> Result<impl Llm<M, S>, CallValue<S::Error>>;
+    /// Existing factories ignore a progress sink and keep their original call shape.
+    fn model_of_with_stream(
+        &self,
+        model_id: Option<&JsText>,
+        _stream: ModelStream,
+    ) -> Result<impl Llm<M, S>, CallValue<S::Error>> {
+        self.model_of(model_id)
+    }
     fn kind(&self) -> ModelKind {
         ModelKind::Factory
     }
@@ -139,6 +186,62 @@ where
 {
     fn model_of(&self, _: Option<&JsText>) -> Result<impl Llm<M, S>, CallValue<S::Error>> {
         Ok(PlainLlm(&self.0))
+    }
+    fn kind(&self) -> ModelKind {
+        ModelKind::Plain
+    }
+}
+
+/// Explicitly selects the two-argument streaming callback without runtime reflection.
+pub struct StreamingModel<F>(F);
+pub fn streaming_model<F>(model: F) -> StreamingModel<F> {
+    StreamingModel(model)
+}
+struct StreamingLlm<'a, F> {
+    model: &'a F,
+    stream: ModelStream,
+}
+impl<M, S, F> Llm<M, S> for StreamingLlm<'_, F>
+where
+    S: Schema + ?Sized,
+    S::Output: Into<S::Raw>,
+    F: for<'m> AsyncFn(Messages<'m, M>, ModelStream) -> Result<S::Raw, CallValue<S::Error>>,
+{
+    fn with_structured_output<'a>(
+        &'a self,
+        schema: &'a S,
+    ) -> Result<
+        impl for<'m> AsyncFn(Messages<'m, M>) -> Result<S::Raw, CallValue<S::Error>> + 'a,
+        CallValue<S::Error>,
+    > {
+        Ok(async move |messages: Messages<'_, M>| {
+            schema
+                .parse(await_port((self.model)(messages, self.stream.clone())).await?)
+                .map(Into::into)
+        })
+    }
+}
+impl<M, S, F> ModelFactory<M, S> for StreamingModel<F>
+where
+    S: Schema + ?Sized,
+    S::Output: Into<S::Raw>,
+    F: for<'m> AsyncFn(Messages<'m, M>, ModelStream) -> Result<S::Raw, CallValue<S::Error>>,
+{
+    fn model_of(&self, _: Option<&JsText>) -> Result<impl Llm<M, S>, CallValue<S::Error>> {
+        Ok(StreamingLlm {
+            model: &self.0,
+            stream: ModelStream::default(),
+        })
+    }
+    fn model_of_with_stream(
+        &self,
+        _: Option<&JsText>,
+        stream: ModelStream,
+    ) -> Result<impl Llm<M, S>, CallValue<S::Error>> {
+        Ok(StreamingLlm {
+            model: &self.0,
+            stream,
+        })
     }
     fn kind(&self) -> ModelKind {
         ModelKind::Plain
