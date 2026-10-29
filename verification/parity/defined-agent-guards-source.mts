@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import {
+  AGENT_EVENT_TYPES,
+  type AgentMessage,
+  agentEvents,
+  type DefineAgentConfig,
+  type DefinedAgentState,
   defineAgent,
   status,
-  agentEvents,
   toolRouter,
-  AGENT_EVENT_TYPES,
-  type DefinedAgentState,
-  type AgentMessage,
-  type DefineAgentConfig,
 } from "../../packages/tea/src/agent/index.ts";
 import { memoryStore } from "../../packages/tea/src/mem/index.ts";
-import { run, driveToDone } from "../../packages/tea/src/promise/index.ts";
+import { driveToDone, run } from "../../packages/tea/src/promise/index.ts";
 import { DriveFailedError } from "../../packages/tea/src/runtime-types.ts";
+
 interface Case {
   id?: string;
   maxTurns?: number;
@@ -112,7 +113,7 @@ async function execute(c: Case, seed?: S) {
         h,
         { type: "agent_start", runId: "guard-run", at },
         (s) => status(s).kind === "cancelled" || status(s).kind === "done",
-        { failed: (s) => status(s).kind === "failed" }
+        { failed: (s) => status(s).kind === "failed" },
       );
     } else
       final = await agent.run("Do three rounds.", {
@@ -134,15 +135,15 @@ async function execute(c: Case, seed?: S) {
       (s) =>
         !s.conversation ||
         s.conversation.turns.every((t) =>
-          [...original, ...turns].some((original) => original === t)
-        )
+          [...original, ...turns].some((original) => original === t),
+        ),
     ),
-    "canonical turns retain their owner"
+    "canonical turns retain their owner",
   );
   assert.equal(
     final,
     saves.at(-1),
-    "returned state is the saved canonical owner"
+    "returned state is the saved canonical owner",
   );
   const phase = {
     prompts,

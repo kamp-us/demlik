@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildTeaExample } from "./tea-example.mjs";
+
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const expected = fs
@@ -15,7 +16,7 @@ const expected = fs
 const owner = path.join(root, "crates/tea/src/agent/defined.rs");
 const original = fs.readFileSync(owner, "utf8");
 const proof = fs.mkdtempSync(
-  path.join(root, "target/parity/defined-agent-guards-controls-")
+  path.join(root, "target/parity/defined-agent-guards-controls-"),
 );
 const controls = [
   {
@@ -53,7 +54,7 @@ try {
     const producer = buildTeaExample(
       process.env.CARGO ?? "cargo",
       "defined_agent_guards",
-      path.join(directory, "producer")
+      path.join(directory, "producer"),
     );
     const result = spawnSync(producer.binary, [], {
       cwd: root,
@@ -66,7 +67,7 @@ try {
     assert.equal(
       result.status,
       0,
-      `${control.id} must reach the public behavior comparison, not fail elsewhere`
+      `${control.id} must reach the public behavior comparison, not fail elsewhere`,
     );
     const actual = result.stdout.trim().split("\n").map(JSON.parse);
     const before = expected.find((row) => row.id === control.case);
@@ -80,7 +81,7 @@ try {
     } else
       assert(
         after.phase.calls > before.phase.calls,
-        `${control.id}: omission must allow an extra actual model call`
+        `${control.id}: omission must allow an extra actual model call`,
       );
     results.push({
       id: control.id,
@@ -108,6 +109,6 @@ const receipt = {
 };
 fs.writeFileSync(
   path.join(proof, "report.json"),
-  JSON.stringify(receipt, null, 2) + "\n"
+  JSON.stringify(receipt, null, 2) + "\n",
 );
 console.log(JSON.stringify(receipt));

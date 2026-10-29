@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync, execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildTeaExample } from "./tea-example.mjs";
+
 const root = fileURLToPath(new URL("../..", import.meta.url));
 export function definedAgentGuardsParity(cargo, options = {}) {
   assert.equal(process.version, "v22.21.1");
@@ -26,24 +27,24 @@ export function definedAgentGuardsParity(cargo, options = {}) {
       "packages/tea/src",
       "packages/tea/package.json",
     ],
-    { cwd: root }
+    { cwd: root },
   );
   assert.equal(
     execFileSync(
       "git",
       ["ls-files", "--others", "--exclude-standard", "--", "packages/tea/src"],
-      { cwd: root, encoding: "utf8" }
+      { cwd: root, encoding: "utf8" },
     ),
-    ""
+    "",
   );
   assert.equal(
     options.binary,
     undefined,
-    "this component always executes its Cargo-selected snapshot"
+    "this component always executes its Cargo-selected snapshot",
   );
   fs.mkdirSync(path.join(root, "target/parity"), { recursive: true });
   const proof = fs.mkdtempSync(
-    path.join(root, "target/parity/defined-agent-guards-")
+    path.join(root, "target/parity/defined-agent-guards-"),
   );
   function execute(name, command, args) {
     const result = spawnSync(command, args, {
@@ -65,8 +66,8 @@ export function definedAgentGuardsParity(cargo, options = {}) {
           error: result.error?.message ?? null,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     assert.equal(result.status, 0, `${name}: ${result.stderr}`);
     assert.equal(result.signal, null);
@@ -81,12 +82,13 @@ export function definedAgentGuardsParity(cargo, options = {}) {
   const producer = buildTeaExample(
     cargo,
     "defined_agent_guards",
-    path.join(proof, "producer")
+    path.join(proof, "producer"),
   );
   const native = execute("native", producer.binary, []);
   const rows = (text) => text.trim().split("\n").map(JSON.parse);
   const expected = rows(source),
     actual = rows(native);
+  assert.equal(expected.length, 14);
   assert.equal(actual.length, 14);
   const nativeEvidence = {};
   for (const [index, expectedRow] of expected.entries()) {
@@ -94,13 +96,13 @@ export function definedAgentGuardsParity(cargo, options = {}) {
     assert.equal(candidate.id, expectedRow.id);
     assert.deepEqual(
       Object.keys(candidate.phase).sort(),
-      [...Object.keys(expectedRow.phase), "nativeTrace"].sort()
+      [...Object.keys(expectedRow.phase), "nativeTrace"].sort(),
     );
     for (const [key, value] of Object.entries(expectedRow.phase))
       assert.deepEqual(
         candidate.phase[key],
         value,
-        `${candidate.id}: complete ${key}`
+        `${candidate.id}: complete ${key}`,
       );
     const trace = candidate.phase.nativeTrace;
     assert.deepEqual(trace, [
@@ -122,7 +124,7 @@ export function definedAgentGuardsParity(cargo, options = {}) {
         id.startsWith("elapsed") || id === "resume-elapsed"
           ? "elapsed_limit"
           : "turn_limit",
-        id
+        id,
       );
     if (id === "zero" || id === "one") assert.equal(p.calls, 1, id);
     if (id.startsWith("resume-")) {
@@ -155,14 +157,14 @@ export function definedAgentGuardsParity(cargo, options = {}) {
         "rev-parse",
         "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d:packages/tea/src",
       ],
-      { cwd: root, encoding: "utf8" }
+      { cwd: root, encoding: "utf8" },
     ).trim(),
     authoredSourceSha256: hash(
-      path.join(root, "verification/parity/defined-agent-guards-source.mts")
+      path.join(root, "verification/parity/defined-agent-guards-source.mts"),
     ),
     nativeOwnerSha256: hash(path.join(root, "crates/tea/src/agent/defined.rs")),
     nativeConsumerSha256: hash(
-      path.join(root, "crates/tea/examples/defined_agent_guards.rs")
+      path.join(root, "crates/tea/examples/defined_agent_guards.rs"),
     ),
     cases: 14,
     passed: 14,
@@ -188,12 +190,12 @@ export function definedAgentGuardsParity(cargo, options = {}) {
   };
   fs.writeFileSync(
     path.join(proof, "report.json"),
-    JSON.stringify(report, null, 2) + "\n"
+    `${JSON.stringify(report, null, 2)}\n`,
   );
   if (options.reportFile)
     fs.writeFileSync(
       path.resolve(options.reportFile),
-      JSON.stringify(report, null, 2) + "\n"
+      `${JSON.stringify(report, null, 2)}\n`,
     );
   return report;
 }
@@ -202,5 +204,5 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 )
   console.log(
-    JSON.stringify(definedAgentGuardsParity(process.env.CARGO ?? "cargo"))
+    JSON.stringify(definedAgentGuardsParity(process.env.CARGO ?? "cargo")),
   );
