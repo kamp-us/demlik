@@ -126,6 +126,19 @@ impl TsgoBinary {
         &self.version
     }
 
+    /// Resolve the compiler package from the owning installation, using Node package lookup.
+    pub fn from_installation(directory: &Path) -> Result<Self, TsgoError> {
+        let manifest = super::oxc::create_nearest_tsconfig_resolver()
+            .locate_detailed(directory, "@typescript/native-preview/package.json")
+            .map_err(|error| {
+                TsgoError::Dependency(format!(
+                    "cannot locate installed @typescript/native-preview from {}: {error}",
+                    directory.display()
+                ))
+            })?;
+        Self::from_native_preview_manifest(&manifest)
+    }
+
     /// Locate the platform binary installed with the existing native-preview dependency.
     pub fn from_native_preview_manifest(manifest: &Path) -> Result<Self, TsgoError> {
         let manifest = fs::canonicalize(manifest)?;

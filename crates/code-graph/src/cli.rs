@@ -5,9 +5,9 @@
 pub mod frontdoor;
 mod help;
 pub mod io;
-pub mod terminal;
 mod options;
 mod suggest;
+pub mod terminal;
 use crate::text::JsString;
 pub use options::{
     CliOptions, DefaultValue, Description, OPTION_SPECS, OptionId, OptionSource, OptionSpec,

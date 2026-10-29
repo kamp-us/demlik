@@ -45,14 +45,16 @@ fn run(host: &mut CliIo<'_>, style: TreeStyle) -> i32 {
             return host.normal_exit_code();
         }
     };
-    let manifest = std::env::var_os("DEMLIK_CODE_GRAPH_COMPILER_MANIFEST")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join(
-                "../../packages/code-graph/node_modules/@typescript/native-preview/package.json",
-            )
-        });
-    let compiler = match TsgoBinary::from_native_preview_manifest(&manifest) {
+    let compiler = match std::env::var_os("DEMLIK_CODE_GRAPH_COMPILER_MANIFEST") {
+        Some(manifest) => TsgoBinary::from_native_preview_manifest(Path::new(&manifest)),
+        None => match std::env::current_exe().and_then(std::fs::canonicalize) {
+            Ok(executable) => {
+                TsgoBinary::from_installation(executable.parent().unwrap_or(&executable))
+            }
+            Err(error) => Err(error.into()),
+        },
+    };
+    let compiler = match compiler {
         Ok(compiler) => compiler,
         Err(error) => {
             failure(host, &format!("{error}\n"));
