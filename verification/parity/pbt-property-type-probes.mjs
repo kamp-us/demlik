@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  checkScratchDirectory,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const prelude = `#![allow(dead_code)]
 use demlik_tea::{Machine,Sub,Tagged,pbt::{self,PropertyOptions,SequenceOptions}};
@@ -73,7 +69,7 @@ export function pbtPropertyTypeProbes({
   const compiler =
     process.env.RUSTC ??
     (process.env.CARGO ? join(dirname(process.env.CARGO), "rustc") : "rustc");
-  const dir = mkdtempSync(join(tmpdir(), "demlik-pbt-types-"));
+  const dir = checkScratchDirectory("pbt-property-type-probes-");
   const results = [];
   try {
     for (const p of probes) {

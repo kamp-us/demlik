@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -15,6 +14,7 @@ import {
   assertCheckPath,
   cargoCheckEnvironment,
   compiledCheckLibrary,
+  checkedSpawnSync as spawnSync,
 } from "./check-worktree.mjs";
 
 const owner = "crates/tea/src/compose.rs";

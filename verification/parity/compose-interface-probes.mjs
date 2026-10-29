@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -11,7 +10,11 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { assertCheckPath, cargoCheckEnvironment } from "./check-worktree.mjs";
+import {
+  assertCheckPath,
+  cargoCheckEnvironment,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const sourcePath = "crates/tea/examples/compose_interface.rs";
 const hash = (value) => createHash("sha256").update(value).digest("hex");

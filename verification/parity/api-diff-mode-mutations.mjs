@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
+import {
+  createCheckWorktree,
+  checkedExecFileSync as execFileSync,
+} from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -259,194 +261,200 @@ export async function apiDiffModeMutations(options = {}) {
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
   const baselineTarget =
     process.env.CARGO_TARGET_DIR ?? path.join(root, "target");
-  const target =
-    options.mutationTarget ??
-    path.join(root, "target/reconciler-mutation-build");
-  assert.notEqual(path.resolve(target), path.resolve(baselineTarget));
-  const binary =
-    options.binary ?? path.join(baselineTarget, "debug/api_mode_driver");
-  const artifactHash = hash(fs.readFileSync(binary));
-  const originals = new Map(
-    [published, cli].map((file) => [
-      file,
-      fs.readFileSync(path.join(root, file), "utf8"),
-    ]),
+  const mutationCheck = createCheckWorktree(
+    process.cwd(),
+    "api-diff-mode-mutations",
   );
-  const referenceFiles = [
-    "packages/code-graph/src/api/diff.ts",
-    "packages/code-graph/src/api/cli.ts",
-  ];
-  const referenceHashes = Object.fromEntries(
-    referenceFiles.map((file) => [
-      file,
-      hash(fs.readFileSync(path.join(root, file))),
-    ]),
-  );
-  const directory = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "demlik-api-workflow-faults-")),
-  );
-  const workspace = path.join(directory, "workspace");
-  fs.mkdirSync(workspace);
-  const environment = {
-    ...process.env,
-    CARGO_TARGET_DIR: target,
-    CARGO_PROFILE_DEV_DEBUG: "0",
-    CARGO_PROFILE_TEST_DEBUG: "0",
-    CARGO_INCREMENTAL: "0",
-    CARGO_BUILD_JOBS: "1",
-  };
-  const detected = [];
+  let mutationFailure;
   try {
-    const baseline = await apiDiffModeParity({
-      binary,
-      compiler: options.compiler,
-      quiet: true,
-      reportFile: path.join(
-        root,
-        "target/parity/api-diff-mode-mutation-baseline.json",
-      ),
-    });
-    for (const entry of ["Cargo.toml", "Cargo.lock", "crates"])
-      fs.cpSync(path.join(root, entry), path.join(workspace, entry), {
-        recursive: true,
-      });
-    for (const control of controls.filter(
-      (control) => !options.only || options.only.includes(control.name),
-    )) {
-      for (const [file, source] of originals)
-        fs.writeFileSync(path.join(workspace, file), source);
-      let source = originals.get(control.file);
-      for (const [before, after] of control.edits) {
-        assert.equal(
-          source.split(before).length,
-          2,
-          `unique fault site: ${control.name}`,
-        );
-        source = source.replace(before, after);
-      }
-      fs.writeFileSync(path.join(workspace, control.file), source);
-      execFileSync(
-        process.env.CARGO ?? "cargo",
-        [
-          "build",
-          "--locked",
-          "--offline",
-          "-p",
-          "demlik-parity",
-          "--bin",
-          "api_mode_driver",
-        ],
-        {
-          cwd: workspace,
-          env: environment,
-          stdio: "pipe",
-          maxBuffer: 16 * 1024 * 1024,
-        },
-      );
-      const result = await apiDiffModeParity({
-        binary: path.join(target, "debug/api_mode_driver"),
+    const target = mutationCheck.target;
+    assert.notEqual(path.resolve(target), path.resolve(baselineTarget));
+    const binary =
+      options.binary ?? path.join(baselineTarget, "debug/api_mode_driver");
+    const artifactHash = hash(fs.readFileSync(binary));
+    const originals = new Map(
+      [published, cli].map((file) => [
+        file,
+        fs.readFileSync(path.join(root, file), "utf8"),
+      ]),
+    );
+    const referenceFiles = [
+      "packages/code-graph/src/api/diff.ts",
+      "packages/code-graph/src/api/cli.ts",
+    ];
+    const referenceHashes = Object.fromEntries(
+      referenceFiles.map((file) => [
+        file,
+        hash(fs.readFileSync(path.join(root, file))),
+      ]),
+    );
+    const directory = mutationCheck.root;
+    const workspace = mutationCheck.root;
+
+    const environment = {
+      ...process.env,
+      CARGO_PROFILE_DEV_DEBUG: "0",
+      CARGO_PROFILE_TEST_DEBUG: "0",
+      CARGO_INCREMENTAL: "0",
+      CARGO_BUILD_JOBS: "1",
+    };
+    const detected = [];
+    try {
+      const baseline = await apiDiffModeParity({
+        binary,
         compiler: options.compiler,
         quiet: true,
-        allowFailures: true,
-        caseIds: control.ids.filter(
-          (id) =>
-            ![
-              "api-workflow.temp-lifecycle",
-              "api-workflow.out-file-bytes",
-            ].includes(id),
-        ),
         reportFile: path.join(
           root,
-          `target/parity/api-diff-mode-mutants/${control.name}.json`,
+          "target/parity/api-diff-mode-mutation-baseline.json",
         ),
       });
-      const failing = result.failures.map((failure) => failure.id);
-      assert.ok(failing.length, `${control.name}: escaped`);
-      assert.ok(
-        control.ids.some((id) => failing.includes(id)),
-        `${control.name}: unrelated failure: ${failing.join(",")}`,
-      );
-      for (const id of failing) {
-        assert.ok(
-          !Object.hasOwn(result.nativeEvidence, id),
-          `${control.name}: failed case claimed strict evidence`,
+
+      for (const control of controls.filter(
+        (control) => !options.only || options.only.includes(control.name),
+      )) {
+        for (const [file, source] of originals)
+          fs.writeFileSync(path.join(workspace, file), source);
+        let source = originals.get(control.file);
+        for (const [before, after] of control.edits) {
+          assert.equal(
+            source.split(before).length,
+            2,
+            `unique fault site: ${control.name}`,
+          );
+          source = source.replace(before, after);
+        }
+        fs.writeFileSync(path.join(workspace, control.file), source);
+        execFileSync(
+          process.env.CARGO ?? "cargo",
+          [
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "demlik-parity",
+            "--bin",
+            "api_mode_driver",
+          ],
+          {
+            cwd: workspace,
+            env: environment,
+            stdio: "pipe",
+            maxBuffer: 16 * 1024 * 1024,
+          },
         );
+        const result = await apiDiffModeParity({
+          binary: path.join(target, "debug/api_mode_driver"),
+          compiler: options.compiler,
+          quiet: true,
+          allowFailures: true,
+          caseIds: control.ids.filter(
+            (id) =>
+              ![
+                "api-workflow.temp-lifecycle",
+                "api-workflow.out-file-bytes",
+              ].includes(id),
+          ),
+          reportFile: path.join(
+            root,
+            `target/parity/api-diff-mode-mutants/${control.name}.json`,
+          ),
+        });
+        const failing = result.failures.map((failure) => failure.id);
+        assert.ok(failing.length, `${control.name}: escaped`);
         assert.ok(
-          !Object.hasOwn(result.qualifiedNativeEvidence, id),
-          `${control.name}: failed case claimed qualified evidence`,
+          control.ids.some((id) => failing.includes(id)),
+          `${control.name}: unrelated failure: ${failing.join(",")}`,
         );
+        for (const id of failing) {
+          assert.ok(
+            !Object.hasOwn(result.nativeEvidence, id),
+            `${control.name}: failed case claimed strict evidence`,
+          );
+          assert.ok(
+            !Object.hasOwn(result.qualifiedNativeEvidence, id),
+            `${control.name}: failed case claimed qualified evidence`,
+          );
+        }
+        detected.push({
+          name: control.name,
+          detected: true,
+          compiled: true,
+          file: control.file,
+          originalSha256: hash(originals.get(control.file)),
+          mutantSha256: hash(source),
+          expectedWitnesses: control.ids,
+          observedCases: result.cases,
+          selectedIds: result.selectedIds,
+          detectedWitnesses: failing,
+        });
+        if (!options.quiet)
+          console.log(
+            JSON.stringify({
+              detected: control.name,
+              witnesses: failing.length,
+            }),
+          );
       }
-      detected.push({
-        name: control.name,
-        detected: true,
-        compiled: true,
-        file: control.file,
-        originalSha256: hash(originals.get(control.file)),
-        mutantSha256: hash(source),
-        expectedWitnesses: control.ids,
-        observedCases: result.cases,
-        selectedIds: result.selectedIds,
-        detectedWitnesses: failing,
-      });
+      for (const [file, source] of originals)
+        assert.equal(
+          fs.readFileSync(path.join(root, file), "utf8"),
+          source,
+          "active source unchanged",
+        );
+      for (const file of referenceFiles)
+        assert.equal(
+          hash(fs.readFileSync(path.join(root, file))),
+          referenceHashes[file],
+          "frozen Source unchanged",
+        );
+      assert.equal(
+        hash(fs.readFileSync(binary)),
+        artifactHash,
+        "isolated build preserved baseline artifact",
+      );
+      const report = {
+        reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+        node: process.version,
+        v8: process.versions.v8,
+        detected: detected.length,
+        escaped: 0,
+        baseline: {
+          cases: baseline.cases,
+          strict: baseline.strictCases,
+          qualified: baseline.qualifiedCases,
+          passed: baseline.passed,
+        },
+        build: {
+          baselineTarget,
+          mutationTarget: target,
+          debug: 0,
+          incremental: false,
+          jobs: 1,
+        },
+        activeSourceUnchanged: true,
+        baselineArtifactUnchanged: true,
+        baselineArtifactHash: artifactHash,
+        referenceHashes,
+        controls: detected,
+      };
+      const reportFile =
+        options.reportFile ??
+        path.join(root, "target/parity/api-diff-mode-mutations.json");
+      fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+      fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
       if (!options.quiet)
         console.log(
-          JSON.stringify({ detected: control.name, witnesses: failing.length }),
+          JSON.stringify({ detected: detected.length, escaped: 0, reportFile }),
         );
+      return report;
+    } finally {
     }
-    for (const [file, source] of originals)
-      assert.equal(
-        fs.readFileSync(path.join(root, file), "utf8"),
-        source,
-        "active source unchanged",
-      );
-    for (const file of referenceFiles)
-      assert.equal(
-        hash(fs.readFileSync(path.join(root, file))),
-        referenceHashes[file],
-        "frozen Source unchanged",
-      );
-    assert.equal(
-      hash(fs.readFileSync(binary)),
-      artifactHash,
-      "isolated build preserved baseline artifact",
-    );
-    const report = {
-      reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
-      node: process.version,
-      v8: process.versions.v8,
-      detected: detected.length,
-      escaped: 0,
-      baseline: {
-        cases: baseline.cases,
-        strict: baseline.strictCases,
-        qualified: baseline.qualifiedCases,
-        passed: baseline.passed,
-      },
-      build: {
-        baselineTarget,
-        mutationTarget: target,
-        debug: 0,
-        incremental: false,
-        jobs: 1,
-      },
-      activeSourceUnchanged: true,
-      baselineArtifactUnchanged: true,
-      baselineArtifactHash: artifactHash,
-      referenceHashes,
-      controls: detected,
-    };
-    const reportFile =
-      options.reportFile ??
-      path.join(root, "target/parity/api-diff-mode-mutations.json");
-    fs.mkdirSync(path.dirname(reportFile), { recursive: true });
-    fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
-    if (!options.quiet)
-      console.log(
-        JSON.stringify({ detected: detected.length, escaped: 0, reportFile }),
-      );
-    return report;
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+    mutationCheck.remove(mutationFailure);
   }
 }
 if (

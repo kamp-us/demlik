@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentModelInputMutations } from "./agent-model-input-mutations.mjs";
+import { checkedSpawnSync as spawnSync } from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const directory = path.join(root, "target/parity/model-input-baselines");

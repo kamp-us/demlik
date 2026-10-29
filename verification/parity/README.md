@@ -13,6 +13,34 @@ worktree, restore the baseline source before each fault, and remove the finished
 worktree and its build files with `git worktree remove --force`, including after a
 failed check. Do not copy dependency or target caches into evidence.
 
+For a direct mutation entry, run from `verification/parity`:
+
+```sh
+node check-worktree.mjs entry command-input-checks-run.mjs
+node check-worktree.mjs entry --import tsx timestamp-mutations.mjs
+```
+
+The helper checks the actual Git registration before Cargo runs, clears all four
+aliases, and records Cargo-selected executable/library hashes and diagnostics outside
+the disposable checkout. Reports under `target/parity` and temporary root reports are
+retained there before removal. An entry or cleanup failure remains a failure.
+Graph entries also need `DEMLIK_ICU77_SOURCE_ARCHIVE` naming the official source
+archive pinned by `tools/icu77/inputs.json`, and Python 3.12 or later (select with
+`DEMLIK_ICU77_PYTHON` when needed). Each Graph owner builds its own ICU under its
+default target; no compiled ICU tree is shared.
+
+To replay the structural migration without running builds:
+
+```sh
+node verification/parity/tools/migrate-mutation-ownership.mjs
+```
+
+Use `--write` to apply it. A second pass must report zero changed files. The optional
+`--audit-base <full-commit>` compares original fault/witness AST digests and package
+Node arguments and rejects target-alias assignments or copied crate workspaces in
+the aggregate's static reference closure. This inventory overapproximates reachability;
+it does not prove every fault executes or remains semantically current.
+
 For large local verification runs, use these settings to reduce compiler artifact size:
 
 ```sh
@@ -104,10 +132,10 @@ CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_B
    process restart, dead PID-lock recovery and deletion in both languages.
 3. Mutation checks require a compiled behavioral fault to fail its intended case;
    compiler, protocol and harness errors do not count. Current component runners
-   use `check-worktree.mjs` to own their worktree and default target. The legacy
-   `pnpm parity:mutations` aggregate still includes runners with separate target
-   overrides and unregistered source copies. Migrate those runners before using
-   the aggregate under the disk rule above. Its historical reports include
+   use `check-worktree.mjs` to own their worktree and default target. Package commands
+   in the legacy `pnpm parity:mutations` closure enter a registered baseline owner;
+   source faults use nested registered owners and their default targets. The aggregate
+   has not been rerun as part of this migration. Its historical reports include
    `target/parity/mutations.json`, `timing-mutations.json`, `ledger-mutations.json`, `reconcile-mutations.json`, `runtime-contract-mutation.json`,
    `runtime-hooks-mutation.json`, `runtime-deadline-mutation.json`,
    `paginate-queue-mutations.json`, `zoning-mutations.json` and

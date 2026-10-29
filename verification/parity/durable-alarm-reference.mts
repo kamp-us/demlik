@@ -39,7 +39,7 @@ for (const script of scripts) {
     );
   let model: Model = { pending: script.jobs.slice(), done: [] };
   const machine = defineMachine({
-    init: (loaded: Model) => [loaded, []] as const,
+    init: (loaded: Model | null) => [loaded as Model, []] as const,
     update: {
       fire: (state: Model) =>
         [
@@ -91,7 +91,7 @@ for (const script of scripts) {
   for (const action of script.actions) {
     try {
       if (action === "cold") {
-        model = store().migrate(await store().load());
+        model = store().migrate(await store().load()) as Model;
         host = timer();
       } else if (action === "change") {
         model = { ...model, pending: [777, ...model.pending.slice(1)] };

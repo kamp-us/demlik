@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 import { compiledTraceParity } from "./compiled-traces.mjs";
 import { assertPbtRuntime, buildPbtExample } from "./pbt-property-run.mjs";
 

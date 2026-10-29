@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -14,6 +13,10 @@ import {
   GraphSchema,
   ThresholdsSchema,
 } from "../../packages/code-graph/src/schema.js";
+import {
+  checkedExecFileSync as execFileSync,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 const inputSchema = z.strictObject({

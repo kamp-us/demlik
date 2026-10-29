@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { z } from "zod";
@@ -30,6 +21,7 @@ import {
   type RemoteJournal,
   type SyncClient,
 } from "../../packages/tea/src/internal/journal/remote.js";
+import { createCheckWorktree } from "./check-worktree.mjs";
 import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize } from "./timing-clock.mts";
 
@@ -1124,7 +1116,7 @@ function build(cwd = process.cwd(), target?: string) {
       CARGO_PROFILE_TEST_DEBUG: "0",
       CARGO_INCREMENTAL: "0",
       CARGO_BUILD_JOBS: "1",
-      ...(target ? { CARGO_TARGET_DIR: target } : {}),
+      ...(target ? {} : {}),
     },
   );
 }
@@ -1192,61 +1184,58 @@ const mutations = [
 ];
 function controls(cases: Case[], expected: unknown[]) {
   return mutations.map((mutation) => {
-    const temporary = mkdtempSync(
-        join(tmpdir(), "demlik-journal-remote-control-"),
-      ),
-      file = "crates/tea/src/journal/remote.rs",
-      before = digest(file);
+    const mutationCheck = createCheckWorktree(process.cwd(), "journal-remote");
+    let mutationFailure: unknown;
     try {
-      for (const manifest of ["Cargo.toml", "Cargo.lock"])
-        cpSync(manifest, join(temporary, manifest));
-      cpSync("crates", join(temporary, "crates"), {
-        recursive: true,
-        filter: (path) =>
-          !path
-            .split(sep)
-            .some((part) => ["target", "node_modules", ".git"].includes(part)),
-      });
-      if (existsSync(".cargo"))
-        cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-      const mutant = join(temporary, file),
-        source = readFileSync(mutant, "utf8");
-      assert.equal(digest(mutant), before);
-      assert.equal(source.split(mutation.needle).length, 2, mutation.id);
-      writeFileSync(
-        mutant,
-        source.replace(mutation.needle, mutation.replacement),
-      );
-      const target = join(temporary, "target");
-      process.stderr.write(`Compiling remote-journal control ${mutation.id}\n`);
-      build(temporary, target);
-      const executable = binary(temporary, target),
-        results = native(cases, executable);
-      assert.equal(results.length, cases.length);
-      const detectedIds = cases
-        .filter((_, index) => {
-          try {
-            assert.deepEqual(results[index].comparison, expected[index]);
-            return false;
-          } catch {
-            return true;
-          }
-        })
-        .map((item) => item.id);
-      assert(detectedIds.length, mutation.id);
-      assert.equal(digest(file), before);
-      return {
-        id: mutation.id,
-        isolation: "disposable-source-copy",
-        sourceBeforeSha256: before,
-        mutantSourceSha256: digest(mutant),
-        nativeBinarySha256: digest(executable),
-        activeSourceUnchanged: true,
-        detectedIds,
-      };
+      const temporary = mutationCheck.root,
+        file = "crates/tea/src/journal/remote.rs",
+        before = digest(file);
+      try {
+        const mutant = join(temporary, file),
+          source = readFileSync(mutant, "utf8");
+        assert.equal(digest(mutant), before);
+        assert.equal(source.split(mutation.needle).length, 2, mutation.id);
+        writeFileSync(
+          mutant,
+          source.replace(mutation.needle, mutation.replacement),
+        );
+        const target = join(temporary, "target");
+        process.stderr.write(
+          `Compiling remote-journal control ${mutation.id}\n`,
+        );
+        build(temporary, target);
+        const executable = binary(temporary, target),
+          results = native(cases, executable);
+        assert.equal(results.length, cases.length);
+        const detectedIds = cases
+          .filter((_, index) => {
+            try {
+              assert.deepEqual(results[index].comparison, expected[index]);
+              return false;
+            } catch {
+              return true;
+            }
+          })
+          .map((item) => item.id);
+        assert(detectedIds.length, mutation.id);
+        assert.equal(digest(file), before);
+        return {
+          id: mutation.id,
+          isolation: "registered-worktree-default-target",
+          sourceBeforeSha256: before,
+          mutantSourceSha256: digest(mutant),
+          nativeBinarySha256: digest(executable),
+          activeSourceUnchanged: true,
+          detectedIds,
+        };
+      } finally {
+        assert.equal(digest(file), before);
+      }
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      rmSync(temporary, { recursive: true, force: true });
-      assert.equal(digest(file), before);
+      mutationCheck.remove(mutationFailure);
     }
   });
 }

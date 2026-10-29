@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 import { buildTeaLibrary } from "./tea-library.mjs";
 import { testingHelpersParity } from "./testing-helpers-run.mjs";
 import { testingHelperTypeProbes } from "./testing-helpers-type-probes.mjs";

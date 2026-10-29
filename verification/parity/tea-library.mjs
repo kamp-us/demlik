@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkedSpawnSync as spawnSync } from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 

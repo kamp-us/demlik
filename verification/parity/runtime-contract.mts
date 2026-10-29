@@ -1,17 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Cause, Effect, Exit, Scope } from "effect";
@@ -26,6 +16,10 @@ import {
 import { memoryStore } from "../../packages/tea/src/mem/index.js";
 import { run as runPromise } from "../../packages/tea/src/promise/index.js";
 import type { validateSync } from "../../packages/tea/src/pure/core.js";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const modes = [
   "success",
@@ -477,7 +471,7 @@ function buildRust(cwd = process.cwd(), target?: string) {
   const env = {
     ...process.env,
     CARGO_NET_OFFLINE: "true",
-    ...(target ? { CARGO_TARGET_DIR: target } : {}),
+    ...(target ? {} : {}),
   };
   command(
     cargo(),
@@ -519,80 +513,72 @@ function mutationControl(
   cases: ReturnType<typeof scripts>,
   expected: Executed[],
 ) {
-  const temporary = mkdtempSync(
-    join(tmpdir(), "demlik-runtime-contract-control-"),
-  );
-  const source = "crates/tea/src/runtime/engine.rs",
-    activeDigest = fileDigest(source);
+  const mutationCheck = createCheckWorktree(process.cwd(), "runtime-contract");
+  let mutationFailure: unknown;
   try {
-    for (const file of ["Cargo.toml", "Cargo.lock"])
-      cpSync(file, join(temporary, file));
-    cpSync("crates", join(temporary, "crates"), {
-      recursive: true,
-      filter: (file) =>
-        !file
-          .split(sep)
-          .some(
-            (part) =>
-              part === "target" || part === "node_modules" || part === ".git",
-          ),
-    });
-    if (existsSync(".cargo"))
-      cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-    const copiedSource = join(temporary, source),
-      original = readFileSync(copiedSource, "utf8"),
-      needle = "let result = if defined {";
-    assert.equal(
-      original.split(needle).length,
-      2,
-      "mutation target must be unique",
-    );
-    assert.equal(
-      fileDigest(copiedSource),
-      activeDigest,
-      "disposable source copy matches the tested engine",
-    );
-    writeFileSync(
-      copiedSource,
-      original.replace(needle, "let result = if false && defined {"),
-    );
-    const mutantDigest = fileDigest(copiedSource),
-      target = join(temporary, "target");
-    buildRust(temporary, target);
-    const mutant = native(
-      cases.map((item) => item.script),
-      nativeBinary(temporary, target),
-    );
-    const detected = cases
-      .filter((_, index) => {
-        try {
-          assert.deepEqual(
-            mutant[index].comparison,
-            expected[index].comparison,
-          );
-          return false;
-        } catch {
-          return true;
-        }
-      })
-      .map((item) => item.id);
-    assert.ok(detected.length > 0);
-    assert.equal(
-      fileDigest(source),
-      activeDigest,
-      "active source remains unchanged",
-    );
-    return {
-      name: "defined-handler-failure-propagates",
-      isolation: "disposable-source-copy",
-      source,
-      baselineSourceDigest: activeDigest,
-      mutantSourceDigest: mutantDigest,
-      activeSourceUnchanged: true,
-      detected,
-    };
+    const temporary = mutationCheck.root;
+    const source = "crates/tea/src/runtime/engine.rs",
+      activeDigest = fileDigest(source);
+    try {
+      const copiedSource = join(temporary, source),
+        original = readFileSync(copiedSource, "utf8"),
+        needle = "let result = if defined {";
+      assert.equal(
+        original.split(needle).length,
+        2,
+        "mutation target must be unique",
+      );
+      assert.equal(
+        fileDigest(copiedSource),
+        activeDigest,
+        "disposable source copy matches the tested engine",
+      );
+      writeFileSync(
+        copiedSource,
+        original.replace(needle, "let result = if false && defined {"),
+      );
+      const mutantDigest = fileDigest(copiedSource),
+        target = join(temporary, "target");
+      buildRust(temporary, target);
+      const mutant = native(
+        cases.map((item) => item.script),
+        nativeBinary(temporary, target),
+      );
+      const detected = cases
+        .filter((_, index) => {
+          try {
+            assert.deepEqual(
+              mutant[index].comparison,
+              expected[index].comparison,
+            );
+            return false;
+          } catch {
+            return true;
+          }
+        })
+        .map((item) => item.id);
+      assert.ok(detected.length > 0);
+      assert.equal(
+        fileDigest(source),
+        activeDigest,
+        "active source remains unchanged",
+      );
+      return {
+        name: "defined-handler-failure-propagates",
+        isolation: "registered-worktree-default-target",
+        source,
+        baselineSourceDigest: activeDigest,
+        mutantSourceDigest: mutantDigest,
+        activeSourceUnchanged: true,
+        detected,
+      };
+    } finally {
+    }
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    rmSync(temporary, { recursive: true, force: true });
+    mutationCheck.remove(mutationFailure);
   }
 }
 function scripts() {

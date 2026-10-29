@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -22,6 +21,7 @@ import {
   type Machine,
   type Sub,
 } from "../../packages/tea/src/pure/core.ts";
+import { checkedSpawnSync as spawnSync } from "./check-worktree.mjs";
 import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 

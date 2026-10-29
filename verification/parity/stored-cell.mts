@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Cause, Effect, Exit, Scope } from "effect";
@@ -24,6 +15,7 @@ import {
   StoreConflictError,
 } from "../../packages/tea/src/index.js";
 import { run as promiseRun } from "../../packages/tea/src/promise/index.js";
+import { createCheckWorktree } from "./check-worktree.mjs";
 import { Gate, storageFixture } from "./durable-object.mts";
 import { decode, normalize } from "./timing-clock.mts";
 
@@ -1001,7 +993,7 @@ function build(cwd = process.cwd(), target?: string) {
       CARGO_PROFILE_TEST_DEBUG: "0",
       CARGO_INCREMENTAL: "0",
       CARGO_BUILD_JOBS: "1",
-      ...(target ? { CARGO_TARGET_DIR: target } : {}),
+      ...(target ? {} : {}),
     },
   );
 }
@@ -1074,60 +1066,60 @@ function controls(
   const out = [];
   const baseline = digest(baselineBinary);
   for (const mutation of mutations) {
-    const temporary = mkdtempSync(join(tmpdir(), "demlik-cell-control-"));
+    const mutationCheck = createCheckWorktree(process.cwd(), "stored-cell");
+    let mutationFailure: unknown;
     try {
-      for (const file of ["Cargo.toml", "Cargo.lock"])
-        cpSync(file, join(temporary, file));
-      cpSync("crates", join(temporary, "crates"), {
-        recursive: true,
-        filter: (path) => !path.split(sep).includes("target"),
-      });
-      if (existsSync(".cargo"))
-        cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-      const file = join(temporary, mutation.file),
-        before = readFileSync(file, "utf8"),
-        sourceBeforeSha256 = digest(mutation.file);
-      assert.equal(before.split(mutation.needle).length, 2, mutation.id);
-      writeFileSync(
-        file,
-        before.replace(mutation.needle, mutation.replacement),
-      );
-      process.stderr.write(`Compiling stored-cell control ${mutation.id}\n`);
-      build(temporary, join(temporary, "target"));
-      const executable = binary(temporary, join(temporary, "target")),
-        results = native(cases, executable);
-      const detectedIds = cases.flatMap((c, i) => {
-        try {
-          assert("comparison" in results[i]);
-          assert.deepEqual(results[i].comparison, source[i].comparison);
-          return [];
-        } catch {
-          return [c.id];
-        }
-      });
-      assert(detectedIds.length, mutation.id);
-      assert.equal(digest(mutation.file), sourceBeforeSha256);
-      assert.equal(digest(baselineBinary), baseline);
-      out.push({
-        id: mutation.id,
-        scope: mutation.scope,
-        isolation: "disposable-source-copy",
-        sourceBeforeSha256,
-        mutantSourceSha256: digest(file),
-        nativeBinarySha256: digest(executable),
-        activeSourceUnchanged: true,
-        detectedIds,
-      });
-      mkdirSync("target/parity", { recursive: true });
-      writeFileSync(
-        "target/parity/stored-cell-controls-progress.json",
-        JSON.stringify(out, null, 2),
-      );
-      process.stderr.write(
-        `Detected ${mutation.id}: ${detectedIds.length} cases\n`,
-      );
+      const temporary = mutationCheck.root;
+      try {
+        const file = join(temporary, mutation.file),
+          before = readFileSync(file, "utf8"),
+          sourceBeforeSha256 = digest(mutation.file);
+        assert.equal(before.split(mutation.needle).length, 2, mutation.id);
+        writeFileSync(
+          file,
+          before.replace(mutation.needle, mutation.replacement),
+        );
+        process.stderr.write(`Compiling stored-cell control ${mutation.id}\n`);
+        build(temporary, join(temporary, "target"));
+        const executable = binary(temporary, join(temporary, "target")),
+          results = native(cases, executable);
+        const detectedIds = cases.flatMap((c, i) => {
+          try {
+            assert("comparison" in results[i]);
+            assert.deepEqual(results[i].comparison, source[i].comparison);
+            return [];
+          } catch {
+            return [c.id];
+          }
+        });
+        assert(detectedIds.length, mutation.id);
+        assert.equal(digest(mutation.file), sourceBeforeSha256);
+        assert.equal(digest(baselineBinary), baseline);
+        out.push({
+          id: mutation.id,
+          scope: mutation.scope,
+          isolation: "registered-worktree-default-target",
+          sourceBeforeSha256,
+          mutantSourceSha256: digest(file),
+          nativeBinarySha256: digest(executable),
+          activeSourceUnchanged: true,
+          detectedIds,
+        });
+        mkdirSync("target/parity", { recursive: true });
+        writeFileSync(
+          "target/parity/stored-cell-controls-progress.json",
+          JSON.stringify(out, null, 2),
+        );
+        process.stderr.write(
+          `Detected ${mutation.id}: ${detectedIds.length} cases\n`,
+        );
+      } finally {
+      }
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      rmSync(temporary, { recursive: true, force: true });
+      mutationCheck.remove(mutationFailure);
     }
   }
   return out;

@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const faults = [
   {
@@ -101,62 +101,66 @@ export function commandInputMutations({
   for (const f of faults.filter((f) => !only || only.includes(f.id))) {
     const source = originals.get(f.file);
     assert.equal(source.split(f.needle).length, 2, `${f.id} exact source site`);
-    const temporary = mkdtempSync(
-        join(tmpdir(), "demlik-command-input-mutant-"),
-      ),
-      target = mkdtempSync(
-        join(tmpdir(), "demlik-command-input-mutant-target-"),
-      );
+    const mutationCheck = createCheckWorktree(
+      process.cwd(),
+      "command-input-mutations",
+    );
+    let mutationFailure;
     try {
-      for (const path of ["Cargo.toml", "Cargo.lock", "crates"])
-        cpSync(join(root, path), join(temporary, path), { recursive: true });
-      const changed = source.replace(f.needle, f.fault);
-      writeFileSync(join(temporary, f.file), changed);
-      const build = command(
-        process.env.CARGO ?? "cargo",
-        [
-          "build",
-          "--locked",
-          "-p",
-          "demlik-tea",
-          "--example",
-          "command_input_driver",
-        ],
-        { cwd: temporary, env: { ...process.env, CARGO_TARGET_DIR: target } },
-      );
-      const mutant = join(target, "debug/examples/command_input_driver"),
-        result = parity(root, mutant, join(temporary, "result.json"), 1),
-        detectedIds = result.failures.map((c) => c.id);
-      assert(
-        detectedIds.includes(f.witness),
-        `${f.id} must change its named behavioral witness`,
-      );
-      const saved = resolve(`target/parity/control-binaries/${f.id}`);
-      mkdirSync(dirname(saved), { recursive: true });
-      cpSync(mutant, saved);
-      controls.push({
-        id: f.id,
-        compiled: true,
-        witness: f.witness,
-        detectedIds,
-        source: {
-          path: f.file,
-          originalSha256: digest(source),
-          mutatedSha256: digest(changed),
-        },
-        binary: { path: saved, sha256: digest(readFileSync(mutant)) },
-        build: { exit: build.status, stderr: build.stderr },
-        results: result,
-      });
-      writeFileSync(
-        `${reportFile}.progress.json`,
-        `${JSON.stringify({ baseline: baseline.binary, controls }, null, 2)}\n`,
-      );
+      const temporary = mutationCheck.root,
+        target = mutationCheck.target;
+      try {
+        const changed = source.replace(f.needle, f.fault);
+        writeFileSync(join(temporary, f.file), changed);
+        const build = command(
+          process.env.CARGO ?? "cargo",
+          [
+            "build",
+            "--locked",
+            "-p",
+            "demlik-tea",
+            "--example",
+            "command_input_driver",
+          ],
+          { cwd: temporary, env: { ...process.env } },
+        );
+        const mutant = join(target, "debug/examples/command_input_driver"),
+          result = parity(root, mutant, join(temporary, "result.json"), 1),
+          detectedIds = result.failures.map((c) => c.id);
+        assert(
+          detectedIds.includes(f.witness),
+          `${f.id} must change its named behavioral witness`,
+        );
+        const saved = resolve(`target/parity/control-binaries/${f.id}`);
+        mkdirSync(dirname(saved), { recursive: true });
+        cpSync(mutant, saved);
+        controls.push({
+          id: f.id,
+          compiled: true,
+          witness: f.witness,
+          detectedIds,
+          source: {
+            path: f.file,
+            originalSha256: digest(source),
+            mutatedSha256: digest(changed),
+          },
+          binary: { path: saved, sha256: digest(readFileSync(mutant)) },
+          build: { exit: build.status, stderr: build.stderr },
+          results: result,
+        });
+        writeFileSync(
+          `${reportFile}.progress.json`,
+          `${JSON.stringify({ baseline: baseline.binary, controls }, null, 2)}\n`,
+        );
+      } finally {
+        for (const [file, before] of originals)
+          assert.equal(readFileSync(file, "utf8"), before);
+      }
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      for (const [file, before] of originals)
-        assert.equal(readFileSync(file, "utf8"), before);
-      rmSync(temporary, { recursive: true, force: true });
-      rmSync(target, { recursive: true, force: true });
+      mutationCheck.remove(mutationFailure);
     }
   }
   const report = {

@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -29,6 +20,7 @@ import {
   driveToDone,
   run as runPromise,
 } from "../../packages/tea/src/promise/index.js";
+import { createCheckWorktree } from "./check-worktree.mjs";
 
 const cases = [
   "identity",
@@ -569,103 +561,97 @@ function controls(
   const receipts = [];
   const cargo = process.env.CARGO ?? "cargo";
   for (const specification of specifications) {
-    const temporary = mkdtempSync(
-      join(tmpdir(), "demlik-runtime-hooks-control-"),
-    );
-    const activeHash = digest(specification.file);
+    const mutationCheck = createCheckWorktree(process.cwd(), "runtime-hooks");
+    let mutationFailure: unknown;
     try {
-      for (const file of ["Cargo.toml", "Cargo.lock"])
-        cpSync(file, join(temporary, file));
-      cpSync("crates", join(temporary, "crates"), {
-        recursive: true,
-        filter: (file) =>
-          !file
-            .split(sep)
-            .some((part) => ["target", "node_modules", ".git"].includes(part)),
-      });
-      if (existsSync(".cargo"))
-        cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-      const source = join(temporary, specification.file),
-        original = readFileSync(source, "utf8");
-      assert.equal(digest(source), activeHash);
-      assert.equal(
-        original.split(specification.needle).length,
-        2,
-        "unique source control target",
-      );
-      writeFileSync(
-        source,
-        original.replace(specification.needle, specification.replacement),
-      );
-      const mutantHash = digest(source);
-      const build = spawnSync(
-        cargo,
-        [
-          "build",
-          "--locked",
-          "-p",
-          "demlik-tea",
-          "--example",
-          "runtime_hooks_driver",
-        ],
-        {
-          cwd: temporary,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            CARGO_NET_OFFLINE: "true",
-            CARGO_TARGET_DIR: join(temporary, "target"),
+      const temporary = mutationCheck.root;
+      const activeHash = digest(specification.file);
+      try {
+        const source = join(temporary, specification.file),
+          original = readFileSync(source, "utf8");
+        assert.equal(digest(source), activeHash);
+        assert.equal(
+          original.split(specification.needle).length,
+          2,
+          "unique source control target",
+        );
+        writeFileSync(
+          source,
+          original.replace(specification.needle, specification.replacement),
+        );
+        const mutantHash = digest(source);
+        const build = spawnSync(
+          cargo,
+          [
+            "build",
+            "--locked",
+            "-p",
+            "demlik-tea",
+            "--example",
+            "runtime_hooks_driver",
+          ],
+          {
+            cwd: temporary,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              CARGO_NET_OFFLINE: "true",
+            },
+            maxBuffer: 64 * 1024 * 1024,
           },
-          maxBuffer: 64 * 1024 * 1024,
-        },
-      );
-      if (build.error) throw build.error;
-      assert.equal(build.status, 0, build.stdout + build.stderr);
-      const binary = join(
-          temporary,
-          "target/debug/examples/runtime_hooks_driver",
-        ),
-        actual = command(
-          binary,
-          [],
-          `${corpus.map((item) => JSON.stringify(item.script)).join("\n")}\n`,
-        )
-          .trim()
-          .split("\n")
-          .map((line) => nativeSchema.parse(JSON.parse(line)));
-      assert.equal(actual.length, corpus.length);
-      const detectedIds = corpus
-        .filter((_, index) => {
-          try {
-            assert.deepEqual(actual[index].comparison, expected[index]);
-            return false;
-          } catch {
-            return true;
-          }
-        })
-        .map((item) => item.id);
-      assert(detectedIds.length > 0, `${specification.id} must be observed`);
-      assert.equal(
-        digest(specification.file),
-        activeHash,
-        "active source untouched",
-      );
-      receipts.push({
-        id: specification.id,
-        isolation: "disposable-source-copy",
-        activeSourceUnchanged: true,
-        sourceBeforeSha256: activeHash,
-        mutantSourceSha256: mutantHash,
-        nativeBinarySha256: digest(binary),
-        detectedIds,
-      });
+        );
+        if (build.error) throw build.error;
+        assert.equal(build.status, 0, build.stdout + build.stderr);
+        const binary = join(
+            temporary,
+            "target/debug/examples/runtime_hooks_driver",
+          ),
+          actual = command(
+            binary,
+            [],
+            `${corpus.map((item) => JSON.stringify(item.script)).join("\n")}\n`,
+          )
+            .trim()
+            .split("\n")
+            .map((line) => nativeSchema.parse(JSON.parse(line)));
+        assert.equal(actual.length, corpus.length);
+        const detectedIds = corpus
+          .filter((_, index) => {
+            try {
+              assert.deepEqual(actual[index].comparison, expected[index]);
+              return false;
+            } catch {
+              return true;
+            }
+          })
+          .map((item) => item.id);
+        assert(detectedIds.length > 0, `${specification.id} must be observed`);
+        assert.equal(
+          digest(specification.file),
+          activeHash,
+          "active source untouched",
+        );
+        receipts.push({
+          id: specification.id,
+          isolation: "registered-worktree-default-target",
+          activeSourceUnchanged: true,
+          sourceBeforeSha256: activeHash,
+          mutantSourceSha256: mutantHash,
+          nativeBinarySha256: digest(binary),
+          detectedIds,
+        });
+      } finally {
+        assert.equal(
+          digest(specification.file),
+          activeHash,
+          "control did not edit active source",
+        );
+      }
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      rmSync(temporary, { recursive: true, force: true });
-      assert.equal(
-        digest(specification.file),
-        activeHash,
-        "control did not edit active source",
-      );
+      mutationCheck.remove(mutationFailure);
     }
   }
   return receipts;

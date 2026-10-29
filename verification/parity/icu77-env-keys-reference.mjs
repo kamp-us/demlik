@@ -11,7 +11,6 @@ import {
   findEnvKeyMismatches,
   loadEnvKeyReport,
 } from "../../packages/code-graph/src/env-keys/query.js";
-import { loadCheapProject } from "../../packages/code-graph/src/extract/project.js";
 import { loadBindingCatalog } from "../../packages/code-graph/src/extract/wrangler-config.js";
 import { renderEnvKeys } from "../../packages/code-graph/src/render/analysis.js";
 import { SyntaxFile } from "../../packages/code-graph/src/syntax/file.js";

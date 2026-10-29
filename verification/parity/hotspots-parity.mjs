@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertCheckPath } from "./check-worktree.mjs";
+import {
+  assertCheckPath,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 import { cases } from "./hotspots-cases.mjs";
 import { hash } from "./hotspots-fixtures.mjs";
 import { hotspotsParity } from "./hotspots-run.mjs";

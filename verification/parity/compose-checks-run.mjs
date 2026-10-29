@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +10,8 @@ import {
   checkEvidenceDirectory,
   compiledCheckLibrary,
   createCheckWorktree,
+  checkedExecFileSync as execFileSync,
+  checkedSpawnSync as spawnSync,
 } from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));

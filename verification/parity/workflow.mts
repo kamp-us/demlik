@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Effect, Exit, Scope } from "effect";
@@ -46,6 +37,7 @@ import {
 } from "../../packages/tea/src/index.js";
 import { memoryStore } from "../../packages/tea/src/mem/index.js";
 import { run as runPromise } from "../../packages/tea/src/promise/index.js";
+import { createCheckWorktree } from "./check-worktree.mjs";
 import { buildParityBinary } from "./tea-example.mjs";
 import { decode, errorValue, normalize, numeric } from "./timing-clock.mts";
 
@@ -939,7 +931,7 @@ function build(cwd = process.cwd(), target?: string) {
     {
       ...process.env,
       CARGO_NET_OFFLINE: "true",
-      ...(target ? { CARGO_TARGET_DIR: target } : {}),
+      ...(target ? {} : {}),
     },
   );
 }
@@ -985,57 +977,54 @@ const mutations = [
 ];
 function controls(cases: Case[], expected: unknown[]) {
   return mutations.map((mutation) => {
-    const temporary = mkdtempSync(join(tmpdir(), "demlik-workflow-control-")),
-      before = digest(mutation.file);
+    const mutationCheck = createCheckWorktree(process.cwd(), "workflow");
+    let mutationFailure: unknown;
     try {
-      for (const file of ["Cargo.toml", "Cargo.lock"])
-        cpSync(file, join(temporary, file));
-      cpSync("crates", join(temporary, "crates"), {
-        recursive: true,
-        filter: (file) =>
-          !file
-            .split(sep)
-            .some((part) => ["target", "node_modules", ".git"].includes(part)),
-      });
-      if (existsSync(".cargo"))
-        cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-      const file = join(temporary, mutation.file),
-        source = readFileSync(file, "utf8");
-      assert.equal(digest(file), before);
-      assert.equal(source.split(mutation.needle).length, 2);
-      writeFileSync(
-        file,
-        source.replace(mutation.needle, mutation.replacement),
-      );
-      const target = join(temporary, "target");
-      build(temporary, target);
-      const executable = binary(temporary, target),
-        results = native(cases, executable);
-      assert.equal(results.length, cases.length);
-      const detectedIds = cases
-        .filter((_, index) => {
-          try {
-            assert.deepEqual(results[index].comparison, expected[index]);
-            return false;
-          } catch {
-            return true;
-          }
-        })
-        .map((item) => item.id);
-      assert(detectedIds.length > 0, mutation.id);
-      assert.equal(digest(mutation.file), before);
-      return {
-        id: mutation.id,
-        isolation: "disposable-source-copy",
-        sourceBeforeSha256: before,
-        mutantSourceSha256: digest(file),
-        nativeBinarySha256: digest(executable),
-        activeSourceUnchanged: true,
-        detectedIds,
-      };
+      const temporary = mutationCheck.root,
+        before = digest(mutation.file);
+      try {
+        const file = join(temporary, mutation.file),
+          source = readFileSync(file, "utf8");
+        assert.equal(digest(file), before);
+        assert.equal(source.split(mutation.needle).length, 2);
+        writeFileSync(
+          file,
+          source.replace(mutation.needle, mutation.replacement),
+        );
+        const target = join(temporary, "target");
+        build(temporary, target);
+        const executable = binary(temporary, target),
+          results = native(cases, executable);
+        assert.equal(results.length, cases.length);
+        const detectedIds = cases
+          .filter((_, index) => {
+            try {
+              assert.deepEqual(results[index].comparison, expected[index]);
+              return false;
+            } catch {
+              return true;
+            }
+          })
+          .map((item) => item.id);
+        assert(detectedIds.length > 0, mutation.id);
+        assert.equal(digest(mutation.file), before);
+        return {
+          id: mutation.id,
+          isolation: "registered-worktree-default-target",
+          sourceBeforeSha256: before,
+          mutantSourceSha256: digest(file),
+          nativeBinarySha256: digest(executable),
+          activeSourceUnchanged: true,
+          detectedIds,
+        };
+      } finally {
+        assert.equal(digest(mutation.file), before);
+      }
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      rmSync(temporary, { recursive: true, force: true });
-      assert.equal(digest(mutation.file), before);
+      mutationCheck.remove(mutationFailure);
     }
   });
 }

@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -25,6 +16,7 @@ import {
   deadlineSub,
   nextTimer,
 } from "../../packages/tea/src/resilience/index.js";
+import { createCheckWorktree } from "./check-worktree.mjs";
 export const runtimeDeadlineScript = z
   .object({
     profile: z.enum(["promise", "effect"]),
@@ -235,7 +227,7 @@ function build(cwd = process.cwd(), target?: string) {
       CARGO_PROFILE_TEST_DEBUG: "0",
       CARGO_INCREMENTAL: "0",
       CARGO_BUILD_JOBS: "1",
-      ...(target ? { CARGO_TARGET_DIR: target } : {}),
+      ...(target ? {} : {}),
     },
   );
 }
@@ -256,154 +248,146 @@ function control(
   corpus: { id: string; script: Script }[],
   expected: z.infer<typeof comparisonSchema>[],
 ) {
-  const temporary = mkdtempSync(
-      join(tmpdir(), "demlik-deadline-type-control-"),
-    ),
-    file = "crates/tea/src/resilience/deadline.rs",
-    before = digest(file),
-    companion = "crates/tea/src/flow/monitored_run.rs",
-    companionBefore = digest(companion),
-    walkCompanion = "crates/tea/src/paginate/paginated_walk.rs",
-    walkCompanionBefore = digest(walkCompanion),
-    reconcilerCompanion = "crates/tea/src/flow/reconciler.rs",
-    reconcilerCompanionBefore = digest(reconcilerCompanion),
-    llmCompanion = "crates/tea/src/llm_call.rs",
-    llmCompanionBefore = digest(llmCompanion);
+  const mutationCheck = createCheckWorktree(process.cwd(), "runtime-deadline");
+  let mutationFailure: unknown;
   try {
-    for (const root of ["Cargo.toml", "Cargo.lock"])
-      cpSync(root, join(temporary, root));
-    cpSync("crates", join(temporary, "crates"), {
-      recursive: true,
-      filter: (file) =>
-        !file
-          .split(sep)
-          .some((part) => ["target", "node_modules", ".git"].includes(part)),
-    });
-    if (existsSync(".cargo"))
-      cpSync(".cargo", join(temporary, ".cargo"), { recursive: true });
-    const source = join(temporary, file),
-      text = readFileSync(source, "utf8"),
-      needle = "pub use crate::TimerDeps;";
-    assert.equal(digest(source), before);
-    assert.equal(text.split(needle).length, 2);
-    writeFileSync(
-      source,
-      text.replace(
-        needle,
-        "#[derive(Debug, Deserialize, Serialize)]\npub struct TimerDeps<M> { pub ms: f64, pub msg: M }",
-      ),
-    );
-    const companionSource = join(temporary, companion),
-      companionText = readFileSync(companionSource, "utf8"),
-      companionNeedle = "PlainData, Step, Tagged, TimerDeps,";
-    assert.equal(digest(companionSource), companionBefore);
-    assert.equal(companionText.split(companionNeedle).length, 2);
-    // Keep the composed helper compilable with the intentionally foreign type.
-    writeFileSync(
-      companionSource,
-      `${companionText.replace(companionNeedle, "PlainData, Step, Tagged,")}\nuse crate::resilience::deadline::TimerDeps;\n`,
-    );
-    const walkSource = join(temporary, walkCompanion),
-      walkText = readFileSync(walkSource, "utf8"),
-      walkNeedle = "Option<crate::TimerDeps<DeadlineExceeded>>";
-    assert.equal(digest(walkSource), walkCompanionBefore);
-    assert.equal(walkText.split(walkNeedle).length, 2);
-    writeFileSync(
-      walkSource,
-      walkText.replace(
-        walkNeedle,
-        "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
-      ),
-    );
-    const reconcilerSource = join(temporary, reconcilerCompanion),
-      reconcilerText = readFileSync(reconcilerSource, "utf8");
-    assert.equal(digest(reconcilerSource), reconcilerCompanionBefore);
-    assert.equal(reconcilerText.split(walkNeedle).length, 2);
-    writeFileSync(
-      reconcilerSource,
-      reconcilerText.replace(
-        walkNeedle,
-        "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
-      ),
-    );
-    const llmSource = join(temporary, llmCompanion),
-      llmText = readFileSync(llmSource, "utf8"),
-      llmNeedle =
-        "Option<crate::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>";
-    assert.equal(digest(llmSource), llmCompanionBefore);
-    assert.equal(llmText.split(llmNeedle).length, 2);
-    writeFileSync(
-      llmSource,
-      llmText.replace(
-        llmNeedle,
-        "Option<crate::resilience::deadline::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>",
-      ),
-    );
-    const target = resolve(
-      process.env.DEMLIK_MUTATION_TARGET_DIR ??
-        join(process.cwd(), "target/reconciler-mutation-build"),
-    );
-    assert.notEqual(
-      target,
-      resolve(process.env.CARGO_TARGET_DIR ?? "target"),
-      "baseline and mutant artifacts must be isolated",
-    );
-    build(temporary, target);
-    const executable = binary(temporary, target),
-      mutated = native(
-        corpus.map((item) => item.script),
-        executable,
+    const temporary = mutationCheck.root,
+      file = "crates/tea/src/resilience/deadline.rs",
+      before = digest(file),
+      companion = "crates/tea/src/flow/monitored_run.rs",
+      companionBefore = digest(companion),
+      walkCompanion = "crates/tea/src/paginate/paginated_walk.rs",
+      walkCompanionBefore = digest(walkCompanion),
+      reconcilerCompanion = "crates/tea/src/flow/reconciler.rs",
+      reconcilerCompanionBefore = digest(reconcilerCompanion),
+      llmCompanion = "crates/tea/src/llm_call.rs",
+      llmCompanionBefore = digest(llmCompanion);
+    try {
+      const source = join(temporary, file),
+        text = readFileSync(source, "utf8"),
+        needle = "pub use crate::TimerDeps;";
+      assert.equal(digest(source), before);
+      assert.equal(text.split(needle).length, 2);
+      writeFileSync(
+        source,
+        text.replace(
+          needle,
+          "#[derive(Debug, Deserialize, Serialize)]\npub struct TimerDeps<M> { pub ms: f64, pub msg: M }",
+        ),
       );
-    assert.equal(mutated.length, corpus.length);
-    const detectedIds = corpus
-      .filter((_, index) => {
-        try {
-          assert.deepEqual(mutated[index].comparison, expected[index]);
-          return false;
-        } catch {
-          return true;
-        }
-      })
-      .map((item) => item.id);
-    assert.deepEqual(
-      detectedIds,
-      [
-        "runtime-deadline.promise.fire",
-        "runtime-deadline.promise.stop",
-        "runtime-deadline.effect.fire",
-        "runtime-deadline.effect.stop",
-      ],
-      "both default-runner operations in both profiles detect the foreign timer data type",
-    );
-    assert.equal(digest(file), before);
-    assert.equal(digest(companion), companionBefore);
-    assert.equal(digest(walkCompanion), walkCompanionBefore);
-    assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
-    assert.equal(digest(llmCompanion), llmCompanionBefore);
-    return {
-      id: "separate-deadline-timer-type",
-      isolation: "disposable-source-copy",
-      activeSourceUnchanged: true,
-      sourceBeforeSha256: before,
-      mutantSourceSha256: digest(source),
-      companionSourceBeforeSha256: companionBefore,
-      companionMutantSourceSha256: digest(companionSource),
-      walkSourceBeforeSha256: walkCompanionBefore,
-      walkMutantSourceSha256: digest(walkSource),
-      reconcilerSourceBeforeSha256: reconcilerCompanionBefore,
-      reconcilerMutantSourceSha256: digest(reconcilerSource),
-      llmSourceBeforeSha256: llmCompanionBefore,
-      llmMutantSourceSha256: digest(llmSource),
-      nativeBinarySha256: digest(executable),
-      detectedIds,
-    };
+      const companionSource = join(temporary, companion),
+        companionText = readFileSync(companionSource, "utf8"),
+        companionNeedle = "PlainData, Step, Tagged, TimerDeps,";
+      assert.equal(digest(companionSource), companionBefore);
+      assert.equal(companionText.split(companionNeedle).length, 2);
+      // Keep the composed helper compilable with the intentionally foreign type.
+      writeFileSync(
+        companionSource,
+        `${companionText.replace(companionNeedle, "PlainData, Step, Tagged,")}\nuse crate::resilience::deadline::TimerDeps;\n`,
+      );
+      const walkSource = join(temporary, walkCompanion),
+        walkText = readFileSync(walkSource, "utf8"),
+        walkNeedle = "Option<crate::TimerDeps<DeadlineExceeded>>";
+      assert.equal(digest(walkSource), walkCompanionBefore);
+      assert.equal(walkText.split(walkNeedle).length, 2);
+      writeFileSync(
+        walkSource,
+        walkText.replace(
+          walkNeedle,
+          "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
+        ),
+      );
+      const reconcilerSource = join(temporary, reconcilerCompanion),
+        reconcilerText = readFileSync(reconcilerSource, "utf8");
+      assert.equal(digest(reconcilerSource), reconcilerCompanionBefore);
+      assert.equal(reconcilerText.split(walkNeedle).length, 2);
+      writeFileSync(
+        reconcilerSource,
+        reconcilerText.replace(
+          walkNeedle,
+          "Option<crate::resilience::deadline::TimerDeps<DeadlineExceeded>>",
+        ),
+      );
+      const llmSource = join(temporary, llmCompanion),
+        llmText = readFileSync(llmSource, "utf8"),
+        llmNeedle =
+          "Option<crate::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>";
+      assert.equal(digest(llmSource), llmCompanionBefore);
+      assert.equal(llmText.split(llmNeedle).length, 2);
+      writeFileSync(
+        llmSource,
+        llmText.replace(
+          llmNeedle,
+          "Option<crate::resilience::deadline::TimerDeps<crate::resilience::deadline::DeadlineExceeded>>",
+        ),
+      );
+      const target = mutationCheck.target;
+      assert.notEqual(
+        target,
+        resolve(process.env.CARGO_TARGET_DIR ?? "target"),
+        "baseline and mutant artifacts must be isolated",
+      );
+      build(temporary, target);
+      const executable = binary(temporary, target),
+        mutated = native(
+          corpus.map((item) => item.script),
+          executable,
+        );
+      assert.equal(mutated.length, corpus.length);
+      const detectedIds = corpus
+        .filter((_, index) => {
+          try {
+            assert.deepEqual(mutated[index].comparison, expected[index]);
+            return false;
+          } catch {
+            return true;
+          }
+        })
+        .map((item) => item.id);
+      assert.deepEqual(
+        detectedIds,
+        [
+          "runtime-deadline.promise.fire",
+          "runtime-deadline.promise.stop",
+          "runtime-deadline.effect.fire",
+          "runtime-deadline.effect.stop",
+        ],
+        "both default-runner operations in both profiles detect the foreign timer data type",
+      );
+      assert.equal(digest(file), before);
+      assert.equal(digest(companion), companionBefore);
+      assert.equal(digest(walkCompanion), walkCompanionBefore);
+      assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
+      assert.equal(digest(llmCompanion), llmCompanionBefore);
+      return {
+        id: "separate-deadline-timer-type",
+        isolation: "registered-worktree-default-target",
+        activeSourceUnchanged: true,
+        sourceBeforeSha256: before,
+        mutantSourceSha256: digest(source),
+        companionSourceBeforeSha256: companionBefore,
+        companionMutantSourceSha256: digest(companionSource),
+        walkSourceBeforeSha256: walkCompanionBefore,
+        walkMutantSourceSha256: digest(walkSource),
+        reconcilerSourceBeforeSha256: reconcilerCompanionBefore,
+        reconcilerMutantSourceSha256: digest(reconcilerSource),
+        llmSourceBeforeSha256: llmCompanionBefore,
+        llmMutantSourceSha256: digest(llmSource),
+        nativeBinarySha256: digest(executable),
+        detectedIds,
+      };
+    } finally {
+      assert.equal(digest(file), before);
+      assert.equal(digest(companion), companionBefore);
+      assert.equal(digest(walkCompanion), walkCompanionBefore);
+      assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
+      assert.equal(digest(llmCompanion), llmCompanionBefore);
+    }
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    rmSync(temporary, { recursive: true, force: true });
-    assert.equal(digest(file), before);
-    assert.equal(digest(companion), companionBefore);
-    assert.equal(digest(walkCompanion), walkCompanionBefore);
-    assert.equal(digest(reconcilerCompanion), reconcilerCompanionBefore);
-    assert.equal(digest(llmCompanion), llmCompanionBefore);
+    mutationCheck.remove(mutationFailure);
   }
 }
 export async function verifyRuntimeDeadline(

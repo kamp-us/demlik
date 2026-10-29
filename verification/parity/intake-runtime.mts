@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -24,6 +23,7 @@ import {
   type Sub,
 } from "../../packages/tea/src/index.js";
 import { run as runPromise } from "../../packages/tea/src/promise/index.js";
+import { checkedSpawnSync as spawnSync } from "./check-worktree.mjs";
 import { normalize } from "./timing-clock.mts";
 
 type Hook = { key: string; amount: number };

@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const owner = "crates/tea/src/pbt/proptest.rs";
 const faults = [
@@ -143,135 +138,146 @@ export function pbtPropertyMutations({
       2,
       `${f.id}: exact owner mutation site`,
     );
-    const temporary = mkdtempSync(join(tmpdir(), "demlik-pbt-mutant-")),
-      target = mkdtempSync(join(tmpdir(), "demlik-pbt-mutant-target-"));
+    const mutationCheck = createCheckWorktree(
+      process.cwd(),
+      "pbt-property-mutations",
+    );
+    let mutationFailure;
     try {
-      for (const path of ["Cargo.toml", "Cargo.lock", "crates"])
-        cpSync(join(root, path), join(temporary, path), { recursive: true });
-      const changed = source.replace(f.needle, f.fault);
-      writeFileSync(join(temporary, owner), changed);
-      const env = {
-        ...process.env,
-        CARGO_TARGET_DIR: target,
-        CARGO_PROFILE_DEV_DEBUG: "0",
-        CARGO_PROFILE_TEST_DEBUG: "0",
-        CARGO_INCREMENTAL: "0",
-        CARGO_BUILD_JOBS: "1",
-        CARGO_NET_OFFLINE: "true",
-      };
-      const args = f.native
-        ? [
-            "test",
-            "--no-run",
-            "--message-format=json",
-            "--locked",
-            "--offline",
-            "-p",
-            "demlik-tea",
-            "--features",
-            "pbt",
-            "--test",
-            "pbt_proptest",
-          ]
-        : [
-            "build",
-            "--message-format=json",
-            "--locked",
-            "--offline",
-            "-p",
-            "demlik-tea",
-            "--features",
-            "pbt",
-            "--example",
-            "pbt_property_driver",
-          ];
-      const build = command(process.env.CARGO ?? "cargo", args, {
-        cwd: temporary,
-        env,
-      });
-      assert.equal(
-        build.exit,
-        0,
-        `Compile/setup failure is not a detection: ${f.id}\n${build.stderr}`,
-      );
-      const artifacts = build.stdout
-        .split("\n")
-        .filter(Boolean)
-        .map((l) => JSON.parse(l));
-      const executable = artifacts.find(
-        (a) =>
-          a.reason === "compiler-artifact" &&
-          a.target.name ===
-            (f.native ? "pbt_proptest" : "pbt_property_driver") &&
-          a.executable,
-      )?.executable;
-      assert(executable);
-      let result, detectedIds;
-      if (f.native) {
-        const run = command(executable, [f.witness, "--exact", "--nocapture"], {
+      const temporary = mutationCheck.root,
+        target = mutationCheck.target;
+      try {
+        const changed = source.replace(f.needle, f.fault);
+        writeFileSync(join(temporary, owner), changed);
+        const env = {
+          ...process.env,
+          CARGO_PROFILE_DEV_DEBUG: "0",
+          CARGO_PROFILE_TEST_DEBUG: "0",
+          CARGO_INCREMENTAL: "0",
+          CARGO_BUILD_JOBS: "1",
+          CARGO_NET_OFFLINE: "true",
+        };
+        const args = f.native
+          ? [
+              "test",
+              "--no-run",
+              "--message-format=json",
+              "--locked",
+              "--offline",
+              "-p",
+              "demlik-tea",
+              "--features",
+              "pbt",
+              "--test",
+              "pbt_proptest",
+            ]
+          : [
+              "build",
+              "--message-format=json",
+              "--locked",
+              "--offline",
+              "-p",
+              "demlik-tea",
+              "--features",
+              "pbt",
+              "--example",
+              "pbt_property_driver",
+            ];
+        const build = command(process.env.CARGO ?? "cargo", args, {
           cwd: temporary,
           env,
         });
         assert.equal(
-          run.exit,
-          101,
-          `${f.id}: must fail the named native assertion\n${run.stdout}\n${run.stderr}`,
+          build.exit,
+          0,
+          `Compile/setup failure is not a detection: ${f.id}\n${build.stderr}`,
         );
-        assert(run.stdout.includes(`${f.witness} ... FAILED`));
-        assert(
-          run.stderr.includes(
-            "backend-recreated handles would not have been evaluated",
-          ) || run.stderr.includes("assertion failed: Arc::ptr_eq"),
+        const artifacts = build.stdout
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l));
+        const executable = artifacts.find(
+          (a) =>
+            a.reason === "compiler-artifact" &&
+            a.target.name ===
+              (f.native ? "pbt_proptest" : "pbt_property_driver") &&
+            a.executable,
+        )?.executable;
+        assert(executable);
+        let result, detectedIds;
+        if (f.native) {
+          const run = command(
+            executable,
+            [f.witness, "--exact", "--nocapture"],
+            {
+              cwd: temporary,
+              env,
+            },
+          );
+          assert.equal(
+            run.exit,
+            101,
+            `${f.id}: must fail the named native assertion\n${run.stdout}\n${run.stderr}`,
+          );
+          assert(run.stdout.includes(`${f.witness} ... FAILED`));
+          assert(
+            run.stderr.includes(
+              "backend-recreated handles would not have been evaluated",
+            ) || run.stderr.includes("assertion failed: Arc::ptr_eq"),
+          );
+          result = { run };
+          detectedIds = [f.witness];
+        } else {
+          result = adapter(
+            root,
+            executable,
+            join(temporary, "result.json"),
+            f.witness,
+            f.files,
+          );
+          assert.equal(
+            result.command.exit,
+            1,
+            `${f.id}: named behavioral mismatch expected`,
+          );
+          detectedIds = f.files
+            ? result.report.equal
+              ? []
+              : [result.report.id]
+            : result.report.failures.map((c) => c.id);
+          assert(detectedIds.includes(f.witness));
+        }
+        const saved = resolve(binaryDirectory, f.id);
+        mkdirSync(dirname(saved), { recursive: true });
+        cpSync(executable, saved);
+        controls.push({
+          id: f.id,
+          witness: f.witness,
+          detectedIds,
+          compiled: true,
+          source: {
+            path: owner,
+            originalSha256: digest(source),
+            mutatedSha256: digest(changed),
+            needle: f.needle,
+            fault: f.fault,
+          },
+          binary: { path: saved, sha256: digest(readFileSync(saved)) },
+          build,
+          result,
+        });
+        writeFileSync(
+          `${reportFile}.progress.json`,
+          `${JSON.stringify({ baseline: baseline.report.binary, controls }, null, 2)}\n`,
         );
-        result = { run };
-        detectedIds = [f.witness];
-      } else {
-        result = adapter(
-          root,
-          executable,
-          join(temporary, "result.json"),
-          f.witness,
-          f.files,
-        );
-        assert.equal(
-          result.command.exit,
-          1,
-          `${f.id}: named behavioral mismatch expected`,
-        );
-        detectedIds = f.files
-          ? result.report.equal
-            ? []
-            : [result.report.id]
-          : result.report.failures.map((c) => c.id);
-        assert(detectedIds.includes(f.witness));
+      } finally {
+        assert.equal(readFileSync(owner, "utf8"), source);
       }
-      const saved = resolve(binaryDirectory, f.id);
-      mkdirSync(dirname(saved), { recursive: true });
-      cpSync(executable, saved);
-      controls.push({
-        id: f.id,
-        witness: f.witness,
-        detectedIds,
-        compiled: true,
-        source: {
-          path: owner,
-          originalSha256: digest(source),
-          mutatedSha256: digest(changed),
-          needle: f.needle,
-          fault: f.fault,
-        },
-        binary: { path: saved, sha256: digest(readFileSync(saved)) },
-        build,
-        result,
-      });
-      writeFileSync(
-        `${reportFile}.progress.json`,
-        `${JSON.stringify({ baseline: baseline.report.binary, controls }, null, 2)}\n`,
-      );
+    } catch (error) {
+      mutationFailure = error;
+      throw error;
     } finally {
-      assert.equal(readFileSync(owner, "utf8"), source);
-      rmSync(temporary, { recursive: true, force: true });
-      rmSync(target, { recursive: true, force: true });
+      mutationCheck.remove(mutationFailure);
     }
   }
   const report = {

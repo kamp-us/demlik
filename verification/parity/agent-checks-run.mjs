@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { agentContentMutations } from "./agent-content-mutations.mjs";
 import { agentGuardsMutations } from "./agent-guards-mutations.mjs";
 import { agentModelMutations } from "./agent-model-mutations.mjs";
 import { agentModelTypes } from "./agent-model-types.mjs";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 
 const suites = {
   content: { driver: "agent_content_driver", check: agentContentMutations },

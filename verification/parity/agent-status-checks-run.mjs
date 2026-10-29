@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { agentStatusCheckpointParity } from "./agent-state-parity.mjs";
 import { agentStatusCoverage } from "./agent-status-coverage.mjs";
 import { agentStatusMutations } from "./agent-status-mutations.mjs";
 import { agentStatusTypes } from "./agent-status-types.mjs";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 
 const baseline = await agentStatusCheckpointParity(
   process.env.CARGO ?? "cargo",

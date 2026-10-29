@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { agentStatusParity } from "./agent-status-run.mjs";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   hash = (v) => createHash("sha256").update(v).digest("hex"),
@@ -144,191 +146,193 @@ const controls = [
   ),
 ];
 export function agentStatusMutations(options = {}) {
-  const baselineTarget =
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-    mutationTarget =
-      options.mutationTarget ??
-      path.join(root, "target/parity/agent-status-mutation-build"),
-    binary = options.binary;
-  assert.ok(binary, "An explicit compiled baseline binary is required");
-  assert.ok(
-    options.libraries?.length,
-    "Actual Cargo JSON library artifacts are required",
+  const mutationCheck = createCheckWorktree(
+    process.cwd(),
+    "agent-status-mutations",
   );
-  assert.notEqual(path.resolve(baselineTarget), path.resolve(mutationTarget));
-  const artifacts = [binary, ...options.libraries],
-    artifactHashes = Object.fromEntries(
-      artifacts.map((f) => [f, hash(fs.readFileSync(f))]),
-    ),
-    files = [
-      projection,
-      types,
-      "crates/tea/examples/agent_status_driver.rs",
-      "packages/tea/src/agent/types.ts",
-      "packages/tea/src/agent/internal.ts",
-    ],
-    sourceHashes = Object.fromEntries(
-      files.map((f) => [f, hash(fs.readFileSync(path.join(root, f)))]),
-    );
-  const baseline = agentStatusParity({
-    binary,
-    quiet: true,
-    reportFile: path.join(
-      root,
-      "target/parity/agent-status-mutation-baseline.json",
-    ),
-  });
-  assert.equal(baseline.cases, 64);
-  assert.equal(baseline.passed, 64);
-  assert.equal(baseline.qualifiedObservations.length, 3);
-  assert.equal(baseline.protocolRefusals, 3);
-  const directory = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), "demlik-agent-status-faults-")),
-    ),
-    workspace = path.join(directory, "workspace"),
-    originals = new Map(
-      [projection, types].map((f) => [
-        f,
-        fs.readFileSync(path.join(root, f), "utf8"),
-      ]),
-    ),
-    detected = [];
-  fs.mkdirSync(workspace);
-  const env = {
-    ...process.env,
-    CARGO_TARGET_DIR: mutationTarget,
-    CARGO_NET_OFFLINE: "true",
-    CARGO_PROFILE_DEV_DEBUG: "0",
-    CARGO_PROFILE_TEST_DEBUG: "0",
-    CARGO_INCREMENTAL: "0",
-    CARGO_BUILD_JOBS: "1",
-  };
+  let mutationFailure;
   try {
-    for (const f of ["Cargo.toml", "Cargo.lock", "crates"])
-      fs.cpSync(path.join(root, f), path.join(workspace, f), {
-        recursive: true,
-      });
-    for (const item of controls.filter(
-      (x) => !options.only || options.only.includes(x.name),
-    )) {
-      for (const [f, s] of originals)
-        fs.writeFileSync(path.join(workspace, f), s);
-      const original = originals.get(item.file);
-      assert.equal(
-        original.split(item.before).length,
-        2,
-        `${item.name}: unique site`,
-      );
-      const mutant = original.replace(item.before, item.after);
-      fs.writeFileSync(path.join(workspace, item.file), mutant);
-      const args = [
-          "build",
-          "--locked",
-          "--offline",
-          "-p",
-          "demlik-tea",
-          "--example",
-          "agent_status_driver",
-          "--message-format=json",
-        ],
-        r = spawnSync(process.env.CARGO ?? "cargo", args, {
-          cwd: workspace,
-          env,
-          encoding: "utf8",
-          maxBuffer: 16 * 1024 * 1024,
-        }),
-        log = path.join(
-          root,
-          `target/agent-status-mutant-${item.name}-compile.log`,
-        ),
-        cargoJson = path.join(
-          root,
-          `target/agent-status-mutant-${item.name}-cargo.jsonl`,
-        );
-      fs.writeFileSync(log, r.stderr ?? "");
-      fs.writeFileSync(cargoJson, r.stdout ?? "");
-      if (r.error) throw r.error;
-      assert.equal(r.status, 0, `${item.name}: did not compile; ${log}`);
-      const messages = r.stdout
-          .trim()
-          .split("\n")
-          .map((l) => JSON.parse(l)),
-        actual = messages.findLast(
-          (m) =>
-            m.reason === "compiler-artifact" &&
-            m.target.name === "agent_status_driver" &&
-            m.executable,
-        );
-      assert.ok(actual);
-      const reportFile = path.join(
-          root,
-          `target/parity/agent-status-mutants/${item.name}.json`,
-        ),
-        report = agentStatusParity({
-          binary: actual.executable,
-          caseIds: item.ids,
-          allowFailures: true,
-          quiet: true,
-          reportFile,
-        }),
-        failures = report.failures.map((f) => f.id);
-      assert.ok(
-        item.ids.some((id) => failures.includes(id)),
-        `${item.name}: no declared semantic witness`,
-      );
-      for (const id of failures)
-        assert.ok(!Object.hasOwn(report.nativeEvidence, id));
-      detected.push({
-        name: item.name,
-        file: item.file,
-        compiled: true,
-        detected: true,
-        expected: item.ids,
-        failures,
-        originalSha256: hash(original),
-        mutantSha256: hash(mutant),
-        binarySha256: report.binarySha256,
-        cargoJsonSha256: hash(fs.readFileSync(cargoJson)),
-        reportFile,
-      });
-      fs.writeFileSync(
-        path.join(root, "target/parity/agent-status-mutations-progress.json"),
-        `${JSON.stringify(detected, null, 2)}\n`,
-      );
-      console.log(JSON.stringify({ detected: item.name }));
-    }
-    for (const [f, h] of Object.entries(sourceHashes))
-      assert.equal(hash(fs.readFileSync(path.join(root, f))), h, f);
-    for (const [f, h] of Object.entries(artifactHashes))
-      assert.equal(hash(fs.readFileSync(f)), h, f);
-    const report = {
-        baseline: { strict: 64, qualifiedExcluded: 3, protocolRefusals: 3 },
-        detected: detected.length,
-        escaped: 0,
-        controls: detected,
-        sourceHashes,
-        artifactHashes,
-        activeSourceUnchanged: true,
-        baselineArtifactsUnchanged: true,
-        targets: {
-          baselineTarget,
-          mutationTarget,
-          debug: 0,
-          incremental: false,
-          jobs: 1,
-          cargoHome: env.CARGO_HOME,
-        },
-      },
-      out =
-        options.reportFile ??
-        path.join(root, "target/parity/agent-status-mutations.json");
-    fs.writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
-    console.log(
-      JSON.stringify({ detected: detected.length, escaped: 0, report: out }),
+    const baselineTarget =
+        process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
+      mutationTarget = mutationCheck.target,
+      binary = options.binary;
+    assert.ok(binary, "An explicit compiled baseline binary is required");
+    assert.ok(
+      options.libraries?.length,
+      "Actual Cargo JSON library artifacts are required",
     );
-    return report;
+    assert.notEqual(path.resolve(baselineTarget), path.resolve(mutationTarget));
+    const artifacts = [binary, ...options.libraries],
+      artifactHashes = Object.fromEntries(
+        artifacts.map((f) => [f, hash(fs.readFileSync(f))]),
+      ),
+      files = [
+        projection,
+        types,
+        "crates/tea/examples/agent_status_driver.rs",
+        "packages/tea/src/agent/types.ts",
+        "packages/tea/src/agent/internal.ts",
+      ],
+      sourceHashes = Object.fromEntries(
+        files.map((f) => [f, hash(fs.readFileSync(path.join(root, f)))]),
+      );
+    const baseline = agentStatusParity({
+      binary,
+      quiet: true,
+      reportFile: path.join(
+        root,
+        "target/parity/agent-status-mutation-baseline.json",
+      ),
+    });
+    assert.equal(baseline.cases, 64);
+    assert.equal(baseline.passed, 64);
+    assert.equal(baseline.qualifiedObservations.length, 3);
+    assert.equal(baseline.protocolRefusals, 3);
+    const directory = mutationCheck.root,
+      workspace = mutationCheck.root,
+      originals = new Map(
+        [projection, types].map((f) => [
+          f,
+          fs.readFileSync(path.join(root, f), "utf8"),
+        ]),
+      ),
+      detected = [];
+
+    const env = {
+      ...process.env,
+      CARGO_NET_OFFLINE: "true",
+      CARGO_PROFILE_DEV_DEBUG: "0",
+      CARGO_PROFILE_TEST_DEBUG: "0",
+      CARGO_INCREMENTAL: "0",
+      CARGO_BUILD_JOBS: "1",
+    };
+    try {
+      for (const item of controls.filter(
+        (x) => !options.only || options.only.includes(x.name),
+      )) {
+        for (const [f, s] of originals)
+          fs.writeFileSync(path.join(workspace, f), s);
+        const original = originals.get(item.file);
+        assert.equal(
+          original.split(item.before).length,
+          2,
+          `${item.name}: unique site`,
+        );
+        const mutant = original.replace(item.before, item.after);
+        fs.writeFileSync(path.join(workspace, item.file), mutant);
+        const args = [
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "demlik-tea",
+            "--example",
+            "agent_status_driver",
+            "--message-format=json",
+          ],
+          r = spawnSync(process.env.CARGO ?? "cargo", args, {
+            cwd: workspace,
+            env,
+            encoding: "utf8",
+            maxBuffer: 16 * 1024 * 1024,
+          }),
+          log = path.join(
+            root,
+            `target/agent-status-mutant-${item.name}-compile.log`,
+          ),
+          cargoJson = path.join(
+            root,
+            `target/agent-status-mutant-${item.name}-cargo.jsonl`,
+          );
+        fs.writeFileSync(log, r.stderr ?? "");
+        fs.writeFileSync(cargoJson, r.stdout ?? "");
+        if (r.error) throw r.error;
+        assert.equal(r.status, 0, `${item.name}: did not compile; ${log}`);
+        const messages = r.stdout
+            .trim()
+            .split("\n")
+            .map((l) => JSON.parse(l)),
+          actual = messages.findLast(
+            (m) =>
+              m.reason === "compiler-artifact" &&
+              m.target.name === "agent_status_driver" &&
+              m.executable,
+          );
+        assert.ok(actual);
+        const reportFile = path.join(
+            root,
+            `target/parity/agent-status-mutants/${item.name}.json`,
+          ),
+          report = agentStatusParity({
+            binary: actual.executable,
+            caseIds: item.ids,
+            allowFailures: true,
+            quiet: true,
+            reportFile,
+          }),
+          failures = report.failures.map((f) => f.id);
+        assert.ok(
+          item.ids.some((id) => failures.includes(id)),
+          `${item.name}: no declared semantic witness`,
+        );
+        for (const id of failures)
+          assert.ok(!Object.hasOwn(report.nativeEvidence, id));
+        detected.push({
+          name: item.name,
+          file: item.file,
+          compiled: true,
+          detected: true,
+          expected: item.ids,
+          failures,
+          originalSha256: hash(original),
+          mutantSha256: hash(mutant),
+          binarySha256: report.binarySha256,
+          cargoJsonSha256: hash(fs.readFileSync(cargoJson)),
+          reportFile,
+        });
+        fs.writeFileSync(
+          path.join(root, "target/parity/agent-status-mutations-progress.json"),
+          `${JSON.stringify(detected, null, 2)}\n`,
+        );
+        console.log(JSON.stringify({ detected: item.name }));
+      }
+      for (const [f, h] of Object.entries(sourceHashes))
+        assert.equal(hash(fs.readFileSync(path.join(root, f))), h, f);
+      for (const [f, h] of Object.entries(artifactHashes))
+        assert.equal(hash(fs.readFileSync(f)), h, f);
+      const report = {
+          baseline: { strict: 64, qualifiedExcluded: 3, protocolRefusals: 3 },
+          detected: detected.length,
+          escaped: 0,
+          controls: detected,
+          sourceHashes,
+          artifactHashes,
+          activeSourceUnchanged: true,
+          baselineArtifactsUnchanged: true,
+          targets: {
+            baselineTarget,
+            mutationTarget,
+            debug: 0,
+            incremental: false,
+            jobs: 1,
+            cargoHome: env.CARGO_HOME,
+          },
+        },
+        out =
+          options.reportFile ??
+          path.join(root, "target/parity/agent-status-mutations.json");
+      fs.writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
+      console.log(
+        JSON.stringify({ detected: detected.length, escaped: 0, report: out }),
+      );
+      return report;
+    } finally {
+    }
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+    mutationCheck.remove(mutationFailure);
   }
 }
 if (

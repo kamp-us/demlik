@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 import { recorderCases, recorderLiteralChecks } from "./recorder-cases.mjs";
 import { buildParityBinary } from "./tea-example.mjs";
 

@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  checkedExecFileSync as execFileSync,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 import { cases } from "./report-ordering-cases.mjs";
 import { buildExample } from "./tea-example.mjs";
 

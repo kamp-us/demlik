@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  checkScratchDirectory,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const prelude = `#![allow(dead_code)]
 use demlik_tea::{Machine,Sub,Tagged,testing::{self,BoundMachine,CheckError,ReplayOpts}};
@@ -43,7 +39,7 @@ export function testingHelperTypeProbes({
     (process.env.CARGO?.startsWith("/")
       ? join(dirname(process.env.CARGO), "rustc")
       : "rustc");
-  const temporary = mkdtempSync(join(tmpdir(), "demlik-testing-types-"));
+  const temporary = checkScratchDirectory("testing-helpers-type-probes-");
   const programs = [
     { id: "borrowed-opaque-channels", source: prelude + body, expectedExit: 0 },
     {

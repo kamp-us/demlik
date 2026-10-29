@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkedExecFileSync as execFileSync } from "./check-worktree.mjs";
 import { cases } from "./icu77-env-keys-cases.mjs";
 import { buildExample } from "./tea-example.mjs";
 

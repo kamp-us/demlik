@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 import { intakeParity } from "./idempotent-intake.mts";
 import { intakeRuntimeParity } from "./intake-runtime.mts";
 
@@ -125,180 +120,182 @@ export async function intakeMutations(options = {}) {
     sourceHashes = Object.fromEntries(
       activeFiles.map((f) => [f, hash(readFileSync(join(root, f)))]),
     );
-  const copy = mkdtempSync(join(tmpdir(), "demlik-intake-control-source-")),
-    target = mkdtempSync(join(tmpdir(), "demlik-intake-control-target-"));
-  const command = (args) => {
-    const result = spawnSync(cargo, args, {
-      cwd: copy,
-      env: { ...env, CARGO_TARGET_DIR: target },
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 360000,
-    });
-    assert.equal(result.status, 0, `control must compile: ${result.stderr}`);
-    return result;
-  };
-  const results = [];
+  const mutationCheck = createCheckWorktree(process.cwd(), "intake-mutations");
+  let mutationFailure;
   try {
-    for (const file of [
-      "Cargo.toml",
-      "Cargo.lock",
-      "rust-toolchain.toml",
-      "crates",
-    ])
-      cpSync(join(root, file), join(copy, file), { recursive: true });
-    for (const control of controls) {
-      const file = join(copy, control.file),
-        before = readFileSync(file, "utf8");
-      assert.equal(
-        before.split(control.before).length,
-        (control.sites ?? 1) + 1,
-        `${control.name}: exact source sites`,
-      );
-      const after = before.replaceAll(control.before, control.after);
-      writeFileSync(file, after);
-      const receipt = {
-        name: control.name,
-        sourceHash: hash(before),
-        mutantHash: hash(after),
-        detected: false,
-      };
-      if (control.nativeWitness) {
-        const compiled = command([
-          "test",
-          "--locked",
-          "-p",
-          "demlik-tea",
-          "--test",
-          "idempotent_intake",
-          "--no-run",
-          "--message-format=json",
-        ]);
-        const artifacts = compiled.stdout
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line));
-        const executable = artifacts.find(
-          (a) =>
-            a.reason === "compiler-artifact" &&
-            a.target.name === "idempotent_intake" &&
-            a.executable,
-        )?.executable;
-        assert(executable);
-        const run = spawnSync(
-          executable,
-          ["--exact", control.nativeWitness, "--nocapture"],
-          { cwd: copy, encoding: "utf8", timeout: 30000 },
+    const copy = mutationCheck.root,
+      target = mutationCheck.target;
+    const command = (args) => {
+      const result = spawnSync(cargo, args, {
+        cwd: copy,
+        env: { ...env },
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: 360000,
+      });
+      assert.equal(result.status, 0, `control must compile: ${result.stderr}`);
+      return result;
+    };
+    const results = [];
+    try {
+      for (const control of controls) {
+        const file = join(copy, control.file),
+          before = readFileSync(file, "utf8");
+        assert.equal(
+          before.split(control.before).length,
+          (control.sites ?? 1) + 1,
+          `${control.name}: exact source sites`,
         );
-        assert.equal(run.status, 101);
-        assert(run.stdout.includes(`${control.nativeWitness} ... FAILED`));
-        assert((run.stderr + run.stdout).includes("RefCell already borrowed"));
-        Object.assign(receipt, {
-          detected: true,
-          nativeWitness: control.nativeWitness,
-          binaryHash: hash(readFileSync(executable)),
-          stdout: run.stdout,
-          stderr: run.stderr,
-        });
-      } else {
-        command([
-          "build",
-          "--locked",
-          "-p",
-          "demlik-parity",
-          "--bin",
-          "intake_driver",
-        ]);
-        const reportFile = join(
-          reportDir,
-          `intake-control-${control.name}.json`,
-        );
-        const compared = await intakeParity({
-          binary: join(target, "debug/intake_driver"),
-          reportFile,
-          caseIds: baseline.results.map((r) => r.id),
-        });
-        assert(
-          compared.failures.some((f) => f.id === control.witness),
-          `${control.name}: named actual-output witness`,
-        );
-        Object.assign(receipt, {
-          detected: true,
-          witness: control.witness,
-          binaryHash: compared.binaryHash,
-          detectedIds: compared.failures.map((f) => f.id),
-          report: reportFile,
-        });
-        if (control.runtimeWitness) {
+        const after = before.replaceAll(control.before, control.after);
+        writeFileSync(file, after);
+        const receipt = {
+          name: control.name,
+          sourceHash: hash(before),
+          mutantHash: hash(after),
+          detected: false,
+        };
+        if (control.nativeWitness) {
+          const compiled = command([
+            "test",
+            "--locked",
+            "-p",
+            "demlik-tea",
+            "--test",
+            "idempotent_intake",
+            "--no-run",
+            "--message-format=json",
+          ]);
+          const artifacts = compiled.stdout
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line));
+          const executable = artifacts.find(
+            (a) =>
+              a.reason === "compiler-artifact" &&
+              a.target.name === "idempotent_intake" &&
+              a.executable,
+          )?.executable;
+          assert(executable);
+          const run = spawnSync(
+            executable,
+            ["--exact", control.nativeWitness, "--nocapture"],
+            { cwd: copy, encoding: "utf8", timeout: 30000 },
+          );
+          assert.equal(run.status, 101);
+          assert(run.stdout.includes(`${control.nativeWitness} ... FAILED`));
+          assert(
+            (run.stderr + run.stdout).includes("RefCell already borrowed"),
+          );
+          Object.assign(receipt, {
+            detected: true,
+            nativeWitness: control.nativeWitness,
+            binaryHash: hash(readFileSync(executable)),
+            stdout: run.stdout,
+            stderr: run.stderr,
+          });
+        } else {
           command([
             "build",
             "--locked",
             "-p",
-            "demlik-tea",
-            "--example",
-            "intake_runtime_driver",
+            "demlik-parity",
+            "--bin",
+            "intake_driver",
           ]);
-          const runtimeFile = join(
-              reportDir,
-              `intake-runtime-control-${control.name}.json`,
-            ),
-            comparedRuntime = await intakeRuntimeParity({
-              binary: join(target, "debug/examples/intake_runtime_driver"),
-              reportFile: runtimeFile,
-            });
-          const witness = comparedRuntime.failures.find(
-            (f) => f.id === control.runtimeWitness,
+          const reportFile = join(
+            reportDir,
+            `intake-control-${control.name}.json`,
           );
-          assert(witness);
-          const workerCounts = {
-            reference: witness.reference.snapshots.map((s) => s.workers),
-            rust: witness.rust.snapshots.map((s) => s.workers),
-          };
-          if (control.runtimeWorkers)
-            assert.deepEqual(workerCounts, control.runtimeWorkers);
-          Object.assign(receipt, {
-            runtimeWitness: control.runtimeWitness,
-            runtimeDetectedIds: comparedRuntime.failures.map((f) => f.id),
-            runtimeBinaryHash: comparedRuntime.binaryHash,
-            runtimeReport: runtimeFile,
-            runtimeWorkers: workerCounts,
+          const compared = await intakeParity({
+            binary: join(target, "debug/intake_driver"),
+            reportFile,
+            caseIds: baseline.results.map((r) => r.id),
           });
+          assert(
+            compared.failures.some((f) => f.id === control.witness),
+            `${control.name}: named actual-output witness`,
+          );
+          Object.assign(receipt, {
+            detected: true,
+            witness: control.witness,
+            binaryHash: compared.binaryHash,
+            detectedIds: compared.failures.map((f) => f.id),
+            report: reportFile,
+          });
+          if (control.runtimeWitness) {
+            command([
+              "build",
+              "--locked",
+              "-p",
+              "demlik-tea",
+              "--example",
+              "intake_runtime_driver",
+            ]);
+            const runtimeFile = join(
+                reportDir,
+                `intake-runtime-control-${control.name}.json`,
+              ),
+              comparedRuntime = await intakeRuntimeParity({
+                binary: join(target, "debug/examples/intake_runtime_driver"),
+                reportFile: runtimeFile,
+              });
+            const witness = comparedRuntime.failures.find(
+              (f) => f.id === control.runtimeWitness,
+            );
+            assert(witness);
+            const workerCounts = {
+              reference: witness.reference.snapshots.map((s) => s.workers),
+              rust: witness.rust.snapshots.map((s) => s.workers),
+            };
+            if (control.runtimeWorkers)
+              assert.deepEqual(workerCounts, control.runtimeWorkers);
+            Object.assign(receipt, {
+              runtimeWitness: control.runtimeWitness,
+              runtimeDetectedIds: comparedRuntime.failures.map((f) => f.id),
+              runtimeBinaryHash: comparedRuntime.binaryHash,
+              runtimeReport: runtimeFile,
+              runtimeWorkers: workerCounts,
+            });
+          }
         }
+        results.push(receipt);
+        console.log(
+          JSON.stringify({
+            name: receipt.name,
+            detected: receipt.detected,
+            cases: receipt.detectedIds?.length ?? 1,
+          }),
+        );
+        writeFileSync(file, before);
       }
-      results.push(receipt);
-      console.log(
-        JSON.stringify({
-          name: receipt.name,
-          detected: receipt.detected,
-          cases: receipt.detectedIds?.length ?? 1,
-        }),
-      );
-      writeFileSync(file, before);
+      for (const [file, digest] of Object.entries(sourceHashes))
+        assert.equal(
+          hash(readFileSync(join(root, file))),
+          digest,
+          `active source unchanged: ${file}`,
+        );
+      const report = {
+        version: 1,
+        baseline: {
+          cases: baseline.total,
+          binaryHash: baseline.binaryHash,
+          runtimeCases: runtime.total,
+          runtimeBinaryHash: runtime.binaryHash,
+        },
+        sourceHashes,
+        controls: results,
+      };
+      const reportFile =
+        options.reportFile ?? join(reportDir, "intake-mutations.json");
+      writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+      return report;
+    } finally {
     }
-    for (const [file, digest] of Object.entries(sourceHashes))
-      assert.equal(
-        hash(readFileSync(join(root, file))),
-        digest,
-        `active source unchanged: ${file}`,
-      );
-    const report = {
-      version: 1,
-      baseline: {
-        cases: baseline.total,
-        binaryHash: baseline.binaryHash,
-        runtimeCases: runtime.total,
-        runtimeBinaryHash: runtime.binaryHash,
-      },
-      sourceHashes,
-      controls: results,
-    };
-    const reportFile =
-      options.reportFile ?? join(reportDir, "intake-mutations.json");
-    writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
-    return report;
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    rmSync(copy, { recursive: true, force: true });
-    rmSync(target, { recursive: true, force: true });
+    mutationCheck.remove(mutationFailure);
   }
 }
 if (

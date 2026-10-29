@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { agentGuardsParity } from "./agent-guards-run.mjs";
+import {
+  createCheckWorktree,
+  checkedExecFileSync as execFileSync,
+} from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url)),
   hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -165,162 +167,169 @@ const controls = [
 export { controls as agentGuardControls };
 
 export async function agentGuardsMutations(options = {}) {
-  const baselineTarget =
-      process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
-    target =
-      options.mutationTarget ??
-      path.join(root, "target/agent-content-mutation-build");
-  assert.notEqual(path.resolve(target), path.resolve(baselineTarget));
-  const binary =
-      options.binary ??
-      path.join(baselineTarget, "debug/examples/agent_guards_driver"),
-    binaryHash = hash(fs.readFileSync(binary));
-  const originals = new Map(
-    [types, schema, compaction, conversation, slice].map((file) => [
-      file,
-      fs.readFileSync(path.join(root, file), "utf8"),
-    ]),
+  const mutationCheck = createCheckWorktree(
+    process.cwd(),
+    "agent-guards-mutations",
   );
-  const referenceFiles = [
-      "types.ts",
-      "schema.ts",
-      "compaction.ts",
-      "internal.ts",
-    ],
-    sourceHashes = Object.fromEntries(
-      referenceFiles.map((file) => [
+  let mutationFailure;
+  try {
+    const baselineTarget =
+        process.env.CARGO_TARGET_DIR ?? path.join(root, "target"),
+      target = mutationCheck.target;
+    assert.notEqual(path.resolve(target), path.resolve(baselineTarget));
+    const binary =
+        options.binary ??
+        path.join(baselineTarget, "debug/examples/agent_guards_driver"),
+      binaryHash = hash(fs.readFileSync(binary));
+    const originals = new Map(
+      [types, schema, compaction, conversation, slice].map((file) => [
         file,
-        hash(fs.readFileSync(path.join(root, "packages/tea/src/agent", file))),
+        fs.readFileSync(path.join(root, file), "utf8"),
       ]),
     );
-  const directory = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), "demlik-agent-guards-faults-")),
-    ),
-    workspace = path.join(directory, "workspace");
-  fs.mkdirSync(workspace);
-  const env = {
-      ...process.env,
-      CARGO_TARGET_DIR: target,
-      CARGO_PROFILE_DEV_DEBUG: "0",
-      CARGO_PROFILE_TEST_DEBUG: "0",
-      CARGO_INCREMENTAL: "0",
-      CARGO_BUILD_JOBS: "1",
-    },
-    detected = [];
-  try {
-    const baseline = await agentGuardsParity({
-      binary,
-      quiet: true,
-      reportFile: path.join(
-        root,
-        "target/parity/agent-guards-mutation-baseline.json",
-      ),
-    });
-    assert.equal(baseline.cases, 158);
-    assert.equal(baseline.passed, 158);
-    for (const entry of ["Cargo.toml", "Cargo.lock", "crates"])
-      fs.cpSync(path.join(root, entry), path.join(workspace, entry), {
-        recursive: true,
-      });
-    for (const item of controls.filter(
-      (item) => !options.only || options.only.includes(item.name),
-    )) {
-      for (const [file, original] of originals)
-        fs.writeFileSync(path.join(workspace, file), original);
-      let source = originals.get(item.file);
-      for (const [before, after] of item.edits) {
-        assert.equal(
-          source.split(before).length,
-          2,
-          `unique fault site ${item.name}`,
-        );
-        source = source.replace(before, after);
-      }
-      fs.writeFileSync(path.join(workspace, item.file), source);
-      execFileSync(
-        process.env.CARGO ?? "cargo",
-        [
-          "build",
-          "--locked",
-          "--offline",
-          "-p",
-          "demlik-tea",
-          "--example",
-          "agent_guards_driver",
-        ],
-        { cwd: workspace, env, stdio: "pipe", maxBuffer: 16 * 1024 * 1024 },
+    const referenceFiles = [
+        "types.ts",
+        "schema.ts",
+        "compaction.ts",
+        "internal.ts",
+      ],
+      sourceHashes = Object.fromEntries(
+        referenceFiles.map((file) => [
+          file,
+          hash(
+            fs.readFileSync(path.join(root, "packages/tea/src/agent", file)),
+          ),
+        ]),
       );
-      const result = await agentGuardsParity({
-        binary: path.join(target, "debug/examples/agent_guards_driver"),
-        caseIds: item.ids,
+    const directory = mutationCheck.root,
+      workspace = mutationCheck.root;
+
+    const env = {
+        ...process.env,
+        CARGO_PROFILE_DEV_DEBUG: "0",
+        CARGO_PROFILE_TEST_DEBUG: "0",
+        CARGO_INCREMENTAL: "0",
+        CARGO_BUILD_JOBS: "1",
+      },
+      detected = [];
+    try {
+      const baseline = await agentGuardsParity({
+        binary,
         quiet: true,
-        allowFailures: true,
         reportFile: path.join(
           root,
-          `target/parity/agent-guards-mutants/${item.name}.json`,
+          "target/parity/agent-guards-mutation-baseline.json",
         ),
       });
-      const failures = result.failures.map((failure) => failure.id);
-      assert.ok(
-        item.ids.some((id) => failures.includes(id)),
-        `${item.name} escaped or failed unrelated cases`,
-      );
-      for (const id of failures)
-        assert.ok(!Object.hasOwn(result.nativeEvidence, id));
-      detected.push({
-        name: item.name,
-        file: item.file,
-        compiled: true,
-        detected: true,
-        expected: item.ids,
-        failures,
-        originalSha256: hash(originals.get(item.file)),
-        mutantSha256: hash(source),
-      });
+      assert.equal(baseline.cases, 158);
+      assert.equal(baseline.passed, 158);
+
+      for (const item of controls.filter(
+        (item) => !options.only || options.only.includes(item.name),
+      )) {
+        for (const [file, original] of originals)
+          fs.writeFileSync(path.join(workspace, file), original);
+        let source = originals.get(item.file);
+        for (const [before, after] of item.edits) {
+          assert.equal(
+            source.split(before).length,
+            2,
+            `unique fault site ${item.name}`,
+          );
+          source = source.replace(before, after);
+        }
+        fs.writeFileSync(path.join(workspace, item.file), source);
+        execFileSync(
+          process.env.CARGO ?? "cargo",
+          [
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "demlik-tea",
+            "--example",
+            "agent_guards_driver",
+          ],
+          { cwd: workspace, env, stdio: "pipe", maxBuffer: 16 * 1024 * 1024 },
+        );
+        const result = await agentGuardsParity({
+          binary: path.join(target, "debug/examples/agent_guards_driver"),
+          caseIds: item.ids,
+          quiet: true,
+          allowFailures: true,
+          reportFile: path.join(
+            root,
+            `target/parity/agent-guards-mutants/${item.name}.json`,
+          ),
+        });
+        const failures = result.failures.map((failure) => failure.id);
+        assert.ok(
+          item.ids.some((id) => failures.includes(id)),
+          `${item.name} escaped or failed unrelated cases`,
+        );
+        for (const id of failures)
+          assert.ok(!Object.hasOwn(result.nativeEvidence, id));
+        detected.push({
+          name: item.name,
+          file: item.file,
+          compiled: true,
+          detected: true,
+          expected: item.ids,
+          failures,
+          originalSha256: hash(originals.get(item.file)),
+          mutantSha256: hash(source),
+        });
+        if (!options.quiet)
+          console.log(
+            JSON.stringify({ detected: item.name, witnesses: failures.length }),
+          );
+      }
+      for (const [file, original] of originals)
+        assert.equal(fs.readFileSync(path.join(root, file), "utf8"), original);
+      assert.equal(hash(fs.readFileSync(binary)), binaryHash);
+      for (const file of referenceFiles)
+        assert.equal(
+          hash(
+            fs.readFileSync(path.join(root, "packages/tea/src/agent", file)),
+          ),
+          sourceHashes[file],
+        );
+      const report = {
+        reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
+        node: process.version,
+        v8: process.versions.v8,
+        detected: detected.length,
+        escaped: 0,
+        baseline: { cases: baseline.cases, passed: baseline.passed },
+        controls: detected,
+        sourceHashes,
+        activeSourceUnchanged: true,
+        baselineArtifactUnchanged: true,
+        baselineArtifactSha256: binaryHash,
+        build: {
+          baselineTarget,
+          mutationTarget: target,
+          debug: 0,
+          incremental: false,
+          jobs: 1,
+        },
+      };
+      const reportFile =
+        options.reportFile ??
+        path.join(root, "target/parity/agent-guards-mutations.json");
+      fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
       if (!options.quiet)
         console.log(
-          JSON.stringify({ detected: item.name, witnesses: failures.length }),
+          JSON.stringify({ detected: detected.length, escaped: 0, reportFile }),
         );
+      return report;
+    } finally {
     }
-    for (const [file, original] of originals)
-      assert.equal(fs.readFileSync(path.join(root, file), "utf8"), original);
-    assert.equal(hash(fs.readFileSync(binary)), binaryHash);
-    for (const file of referenceFiles)
-      assert.equal(
-        hash(fs.readFileSync(path.join(root, "packages/tea/src/agent", file))),
-        sourceHashes[file],
-      );
-    const report = {
-      reference: "75de37ea01a81cd7949e6275b7ee9cfdeb4e312d",
-      node: process.version,
-      v8: process.versions.v8,
-      detected: detected.length,
-      escaped: 0,
-      baseline: { cases: baseline.cases, passed: baseline.passed },
-      controls: detected,
-      sourceHashes,
-      activeSourceUnchanged: true,
-      baselineArtifactUnchanged: true,
-      baselineArtifactSha256: binaryHash,
-      build: {
-        baselineTarget,
-        mutationTarget: target,
-        debug: 0,
-        incremental: false,
-        jobs: 1,
-      },
-    };
-    const reportFile =
-      options.reportFile ??
-      path.join(root, "target/parity/agent-guards-mutations.json");
-    fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
-    if (!options.quiet)
-      console.log(
-        JSON.stringify({ detected: detected.length, escaped: 0, reportFile }),
-      );
-    return report;
+  } catch (error) {
+    mutationFailure = error;
+    throw error;
   } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+    mutationCheck.remove(mutationFailure);
   }
 }
 if (

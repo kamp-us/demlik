@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -11,7 +10,11 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { assertCheckPath } from "./check-worktree.mjs";
+import {
+  assertCheckPath,
+  checkedExecFileSync as execFileSync,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const hash = (file) =>
