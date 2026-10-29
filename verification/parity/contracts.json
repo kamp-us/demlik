@@ -16553,5 +16553,116 @@
     "knownGaps": [
       "The options owner is exercised through real compiled signal/store builders and high-level run, with typed host, caller clock, IDs, event and chunk callbacks. These nine cancellation profiles do not establish every optional host/configuration field, callback-panic behavior, arbitrary race, Wasm high-level run or decoded cold Store replay. Direct native struct literals now require signal, while constructor defaults remain unchanged."
     ]
+  },
+  "@demlik/tea:./agent#deadlinesSub": {
+    "signature": "3a2e010b82f9b64826356684c47cd238445b49f04b59d2f96ac6223602458500",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./agent#deadlinesSub/member:published:e6fa02df8695a3cfa5113cf3e05f0c4aa78a93b3f295f971885b3c59cdba652a": {
+    "signature": "e6fa02df8695a3cfa5113cf3e05f0c4aa78a93b3f295f971885b3c59cdba652a",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./agent#deadlinesSub/member:src/pure/core.d.ts#DepKeyedSub:2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80": {
+    "signature": "2c5a064c656512a690d3c74094eb224d27809cf3bf719b79d680291b3ad45d80",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./agent#DeadlinesSub": {
+    "signature": "906df56e6f26c06f2957c33c82686ef237ed2bf2b1344ac8b573773cd0112614",
+    "rust": {
+      "file": "crates/tea/src/resilience/deadline.rs",
+      "symbols": ["demlik_tea::resilience::deadline::deadlines_sub"]
+    },
+    "cases": ["timing.deadline-default"]
+  },
+  "@demlik/tea:./flow#Debounced": {
+    "signature": "7d66c48726d28dec482d7d264d0bf83a6f7aaf1e0201b7411d8909d0923a2097",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": [
+        "demlik_tea::timing::debounce",
+        "demlik_tea::timing::Debounced::invoke",
+        "demlik_tea::timing::Debounced::cancel",
+        "demlik_tea::timing::Debounced::flush"
+      ]
+    },
+    "cases": ["timing.debounce-flush-reopens", "timing.debounce-cancel-reopens"]
+  },
+  "@demlik/tea:./flow#Debounced/member:published:a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e": {
+    "signature": "a09a0c98c6ca39f41db2fe57f56c3e4d35cd9a377d5136c30058210a0f9ff35e",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::invoke"]
+    },
+    "cases": ["timing.debounce-flush-reopens"]
+  },
+  "@demlik/tea:./flow#Debounced/member:published:4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472": {
+    "signature": "4b9f1ca03f2efcc86587e43a113a28ed937503f20b58fc8e4cd76df6c5f18472",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::cancel"]
+    },
+    "cases": ["timing.debounce-cancel-reopens"]
+  },
+  "@demlik/tea:./flow#Debounced/member:published:4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b": {
+    "signature": "4fe93d31cbec856a837685a7346d5bca337103c2f56721c8f20dc10ff9c5830b",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::flush"]
+    },
+    "cases": ["timing.debounce-flush-reopens"]
+  },
+  "@demlik/tea:./flow#debounce": {
+    "signature": "e42c221ac25142f1804813ae8c96d197e9aa01f2e394f0f3ae74a854e45e295b",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::debounce"]
+    },
+    "cases": ["timing.debounce-worked-example"]
+  },
+  "@demlik/tea:./flow#debounce/member:published:7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8": {
+    "signature": "7e9553d938e1eadcdbc5341ea33dae4430fc6649bfeb97a62ea9c3c3b58fe2a8",
+    "rust": {
+      "file": "crates/tea/src/timing/debounce.rs",
+      "symbols": ["demlik_tea::timing::Debounced::invoke"]
+    },
+    "cases": ["timing.debounce-worked-example"]
+  },
+  "@demlik/tea:./flow#EnqueueInput": {
+    "signature": "0adaba76c402b357224f078d80529d7b77b5fb075f45e8d9144f0b7aa29bc68b",
+    "rust": {
+      "file": "crates/tea/src/work_queue/ops.rs",
+      "symbols": ["demlik_tea::work_queue::enqueue_op"]
+    },
+    "cases": ["queue.lifecycle-false"]
+  },
+  "@demlik/tea:./parity#Trace": {
+    "signature": "eca3f9d375cffc897b84be4ca2dbfeb5cfd43edb98a7ce7dcd06c08cac9b9aa7",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": ["demlik_tea::persistence::recorder::Recorder::dump"]
+    },
+    "cases": ["recorder.record.default.true"]
+  },
+  "@demlik/tea:./parity#RecorderOptions": {
+    "signature": "6aa82d581be6a6906e9468777f80d901c71ce19c4f46aeec9b5a97bd1d530550",
+    "rust": {
+      "file": "crates/tea/src/persistence/recorder.rs",
+      "symbols": [
+        "demlik_tea::persistence::recorder::Recorder::with_state_kind"
+      ]
+    },
+    "cases": ["recorder.record.half.true"]
   }
 }
