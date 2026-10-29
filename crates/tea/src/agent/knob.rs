@@ -310,6 +310,15 @@ impl<
         self.model_id = Some(value.into());
         self
     }
+    pub(crate) fn tool_resilience_with(
+        mut self,
+        select: impl Fn(&Rc<CallOf<A, V>>) -> Option<ToolResilience> + 'a,
+        failures: FailureRelations<TE>,
+    ) -> Self {
+        self.tool_resilience_of = Some(Box::new(select));
+        self.tool_failures = Some(failures);
+        self
+    }
     pub fn tool_concurrency(mut self, value: f64) -> Self {
         self.tool_concurrency = value;
         self

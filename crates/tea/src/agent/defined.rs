@@ -88,6 +88,24 @@ pub trait DefinedAgentTools: Sized + 'static {
         + Interpreter<Self::Command, DefinedAgentMsg<Self>, Error = AgentWorkError<ToolError>>
         + 'static;
 
+    /// Omitted policies take the existing bare-tool path.
+    fn resilience_of(
+        &self,
+        _call: &PlainToolCall,
+    ) -> Option<super::tool_resilience::ToolResilience> {
+        None
+    }
+    /// Whether the Source interpret seam recognizes this command as laddered.
+    /// Router rejections stay bare here, even when the original call has a policy.
+    fn command_has_policy(&self, _command: &Self::Command) -> bool {
+        false
+    }
+    /// Custom routers construct their own typed final endings when they opt into policies.
+    fn policy_failure(
+        _ending: super::tool_resilience::ToolPolicyEnding<'_, Self::Error>,
+    ) -> Result<Rc<Self::Error>, super::tool_resilience::ToolResilienceError> {
+        Err(super::tool_resilience::ToolResilienceError::MissingFailureFamily)
+    }
     fn route(&self, call: &Rc<PlainToolCall>) -> Result<Self::Command, ToolError>;
     fn parts(
         &self,
@@ -435,6 +453,9 @@ where
             else {
                 return Ok(completion);
             };
+            if self.router.command_has_policy(command) {
+                return Ok(completion);
+            }
             if let Err(payload) = AssertUnwindSafe(async { hook(&failure).await })
                 .catch_unwind()
                 .await
@@ -564,6 +585,27 @@ where
             },
         )
         .instructions(self.config.instructions.clone());
+        let policy_tools = Rc::clone(&self.config.tools);
+        config = config.tool_resilience_with(
+            move |call| policy_tools.resilience_of(call),
+            super::tool_resilience::FailureRelations {
+                timeout: || R::policy_failure(super::tool_resilience::ToolPolicyEnding::Timeout),
+                exhausted: |attempts, last| {
+                    R::policy_failure(super::tool_resilience::ToolPolicyEnding::RetryExhausted {
+                        attempts,
+                        last,
+                    })
+                },
+                deadline: |error| match error {
+                    crate::resilience::resilient_call::CallFailure::DeadlineExceeded { .. } => true,
+                    crate::resilience::resilient_call::CallFailure::Run(value) => matches!(
+                        value.kind,
+                        crate::resilience::resilient_call::RunErrorKind::DeadlineExceeded
+                    ),
+                    _ => false,
+                },
+            },
+        );
         if let Some(limit) = self.config.tool_concurrency {
             config = config.tool_concurrency(limit);
         }
@@ -636,7 +678,7 @@ where
             wired.subscribe,
             runtime_options,
         );
-        let listeners: Vec<_> = options
+        let mut listeners: Vec<_> = options
             .on_event
             .into_iter()
             .flat_map(|handler| {
@@ -646,6 +688,54 @@ where
             })
             .map(|(kind, handler)| runtime.on(kind, handler))
             .collect();
+        if let Some(hook) = self.config.on_tool_error.clone() {
+            let tools = Rc::clone(&self.config.tools);
+            let fired = std::cell::RefCell::new(std::collections::HashSet::new());
+            listeners.push(runtime.observe(move |message, state| {
+                let seeding = matches!(
+                    message,
+                    AgentMachineMsg::Start { .. } | AgentMachineMsg::Boot { .. }
+                );
+                let Some(conversation) = &state.conversation else {
+                    return;
+                };
+                for record in conversation.tool_records.iter() {
+                    let ToolOutcome::Error(outcome) = record.outcome.as_ref() else {
+                        continue;
+                    };
+                    if !fired.borrow_mut().insert(record.call.call_id().clone())
+                        || seeding
+                        || tools.resilience_of(&record.call).is_none()
+                    {
+                        continue;
+                    }
+                    let failure = DefinedToolFailure {
+                        context: ToolErrorContext {
+                            call_id: record.call.call_id().clone(),
+                            name: record.call.name().clone(),
+                        },
+                        outcome: Rc::clone(outcome),
+                    };
+                    let hook = Rc::clone(&hook);
+                    let mut operation = async move {
+                        if let Err(payload) = AssertUnwindSafe(async { hook(&failure).await })
+                            .catch_unwind()
+                            .await
+                        {
+                            eprintln!(
+                                "demlik: on_tool_error hook panicked: {}",
+                                crate::storage::PanicCause::new(payload).summary
+                            );
+                        }
+                    }
+                    .boxed_local();
+                    // Source invokes an async hook eagerly but does not await ladder endings.
+                    if operation.as_mut().now_or_never().is_none() {
+                        tokio::task::spawn_local(operation);
+                    }
+                }
+            }));
+        }
         let run_id = options.run_id;
         let start = DriveStart::select(move |state: &Rc<DefinedAgentState<R, P>>| {
             let at = clock();

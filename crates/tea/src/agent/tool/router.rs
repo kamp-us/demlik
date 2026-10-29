@@ -37,6 +37,7 @@ macro_rules! tool_router {
                 $first($first::Output),$($tool($tool::Output),)*Rejected(()),
             }
             pub enum Errors<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> {
+                Resilience($crate::agent::tool_resilience::ToolPolicyFailure),
                 $first($crate::agent::tool::FailureView<$crate::command::Failure<$first::Error>>),$($tool($crate::agent::tool::FailureView<$crate::command::Failure<$tool::Error>>),)*
                 Rejected($crate::agent::tool::FailureView<$crate::command::Failure<$crate::agent::tool::ToolRejection>>),
             }
@@ -72,7 +73,7 @@ macro_rules! tool_router {
                 fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
             }
             impl<$first:$crate::command::CommandSpec,$($tool:$crate::command::CommandSpec),*> $crate::agent::tool::__serde::Serialize for Errors<$first,$($tool),*> {
-                fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
+                fn serialize<S:$crate::agent::tool::__serde::Serializer>(&self,s:S)->Result<S::Ok,S::Error>{match self {Self::Resilience(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),Self::$first(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),$(Self::$tool(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s),)*Self::Rejected(v)=>$crate::agent::tool::__serde::Serialize::serialize(v,s)}}
             }
             pub struct Router<$first:ToolDefinition,$($tool:ToolDefinition),*> {$first_field:std::rc::Rc<$first>,$($field:std::rc::Rc<$tool>,)*}
             impl<$first:ToolDefinition,$($tool:ToolDefinition<Host=$first::Host,RawArgs=$first::RawArgs>),*> Router<$first,$($tool),*> {
@@ -136,6 +137,17 @@ macro_rules! tool_router {
                 type ContentError=ContentErrors<$first::ContentError,$($tool::ContentError),*>;
                 type Command=Commands<$first,$($tool),*>;
                 type Bound=AgentTools<$first,$($tool),*>;
+                fn resilience_of(&self,call:&$crate::agent::PlainToolCall)->Option<$crate::agent::tool_resilience::ToolResilience>{let name=call.name();if name.as_utf8()==Some(self.$first_field.name()){return self.$first_field.resilience().copied()}$(if name.as_utf8()==Some(self.$field.name()){return self.$field.resilience().copied()})*None}
+                fn command_has_policy(&self,command:&Self::Command)->bool{match command{Commands::$first(c)=>c.tool().resilience().is_some(),$(Commands::$tool(c)=>c.tool().resilience().is_some(),)*Commands::Rejected(_)=>false}}
+                fn policy_failure(ending:$crate::agent::tool_resilience::ToolPolicyEnding<'_,Self::Error>)->Result<std::rc::Rc<Self::Error>,$crate::agent::tool_resilience::ToolResilienceError>{
+                    let failure=match ending{
+                        $crate::agent::tool_resilience::ToolPolicyEnding::Timeout=>$crate::agent::tool_resilience::ToolPolicyFailure::Timeout,
+                        $crate::agent::tool_resilience::ToolPolicyEnding::RetryExhausted{attempts,last}=>{
+                            let reason=match last.as_ref(){Errors::$first(v)=>v.reason.clone(),$(Errors::$tool(v)=>v.reason.clone(),)*Errors::Rejected(v)=>v.reason.clone(),Errors::Resilience(v)=>v.reason()};
+                            $crate::agent::tool_resilience::ToolPolicyFailure::RetryExhausted{attempts,last:reason}
+                        }
+                    };Ok(std::rc::Rc::new(Errors::Resilience(failure)))
+                }
                 fn route(&self,call:&std::rc::Rc<$crate::agent::PlainToolCall>)->Result<Self::Command,$crate::agent::tool::ToolError>{self.tool_of_plain(call)}
                 fn parts(&self,call:&$crate::agent::PlainToolCall,outcome:&$crate::agent::types::ToolOutcome<Self::Result,Self::Error>)->Result<Option<$crate::agent::content::Parts>,Self::ContentError>{self.parts_of_plain(call,outcome)}
                 fn bind(self:std::rc::Rc<Self>,host:std::rc::Rc<Self::Host>)->Self::Bound{self.for_agent(host)}

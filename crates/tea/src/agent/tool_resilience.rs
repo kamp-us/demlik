@@ -98,17 +98,56 @@ impl From<JsAccessError> for ToolResilienceError {
     }
 }
 
-/// Only the enabled PlainData profile supplies these source-owned endings.
+/// A ladder-authored final failure is separate from a tool's declared payload.
+pub enum ToolPolicyFailure {
+    Timeout,
+    RetryExhausted { attempts: f64, last: JsText },
+}
+impl ToolPolicyFailure {
+    fn view(&self) -> PlainData {
+        match self {
+            Self::Timeout => tagged(TOOL_TIMEOUT_TAG, vec![]),
+            Self::RetryExhausted { attempts, last } => tagged(
+                TOOL_RETRY_EXHAUSTED_TAG,
+                vec![
+                    ("attempts", PlainData::Number(*attempts)),
+                    ("last", PlainData::String(last.clone())),
+                ],
+            ),
+        }
+    }
+    pub fn reason(&self) -> JsText {
+        match self.view() {
+            PlainData::Object(mut fields) => match fields.swap_remove("reason") {
+                Some(PlainData::String(reason)) => reason,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+}
+impl Serialize for ToolPolicyFailure {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.view().serialize(serializer)
+    }
+}
+/// The ending the existing ladder asks a typed router to construct.
+pub enum ToolPolicyEnding<'a, E> {
+    Timeout,
+    RetryExhausted { attempts: f64, last: &'a Rc<E> },
+}
+
+/// The enabled profile supplies its own typed ending constructors.
 /// A no-policy opaque error family never needs conversion or serialization.
 pub(crate) struct FailureRelations<E> {
-    timeout: fn() -> Rc<E>,
-    exhausted: fn(f64, &Rc<E>) -> Result<Rc<E>, JsAccessError>,
-    deadline: fn(&rc::CallFailure<E>) -> bool,
+    pub(crate) timeout: fn() -> Result<Rc<E>, ToolResilienceError>,
+    pub(crate) exhausted: fn(f64, &Rc<E>) -> Result<Rc<E>, ToolResilienceError>,
+    pub(crate) deadline: fn(&rc::CallFailure<E>) -> bool,
 }
 impl FailureRelations<PlainData> {
     pub(crate) fn plain() -> Self {
         Self {
-            timeout: || Rc::new(tagged(TOOL_TIMEOUT_TAG, vec![])),
+            timeout: || Ok(Rc::new(tagged(TOOL_TIMEOUT_TAG, vec![]))),
             exhausted: |attempts, last| {
                 Ok(Rc::new(tagged(
                     TOOL_RETRY_EXHAUSTED_TAG,
@@ -411,7 +450,7 @@ impl<'a, I, C, E> ToolLadder<'a, I, C, E> {
                             .failures
                             .as_ref()
                             .ok_or(ToolResilienceError::MissingFailureFamily)?
-                            .timeout)(),
+                            .timeout)()?,
                     }],
                 },
             ));
@@ -467,7 +506,7 @@ impl<'a, I, C, E> ToolLadder<'a, I, C, E> {
                         .failures
                         .as_ref()
                         .ok_or(ToolResilienceError::MissingFailureFamily)?
-                        .timeout)(),
+                        .timeout)()?,
                 });
                 continue;
             }
