@@ -9,6 +9,40 @@ import { buildTeaExample } from "./tea-example.mjs";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const hash = (file) =>
   createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const temporal =
+  /(?:^|\.)(at|settledAt|clockMs|lastProgressAt|firstFailureAtMs|retryAtMs|chargingSinceMs|remainingMs|enqueuedAt|startedAt|lastRefillMs)$/;
+export function projectToolPolicyComparison(a, b, where, changes) {
+  if (Object.is(a, b) && (a === null || typeof a !== "object")) return a;
+  if (typeof a === "number" && typeof b === "number" && temporal.test(where)) {
+    assert(
+      Math.abs(b - a) <= 5,
+      `${where}: measured Tokio wake offset exceeds five accumulated waits`,
+    );
+    if (!where.endsWith("remainingMs")) assert(b >= a, where);
+    changes.push({ path: where, source: a, native: b });
+    return b;
+  }
+  if (Array.isArray(a)) {
+    assert(Array.isArray(b), where);
+    assert.equal(b.length, a.length, where);
+    return a.map((v, i) =>
+      projectToolPolicyComparison(v, b[i], `${where}[${i}]`, changes),
+    );
+  }
+  if (a && typeof a === "object") {
+    assert(b && typeof b === "object", where);
+    assert.deepEqual(Object.keys(b).sort(), Object.keys(a).sort(), where);
+    return Object.fromEntries(
+      Object.entries(a).map(([k, v]) => [
+        k,
+        projectToolPolicyComparison(v, b[k], `${where}.${k}`, changes),
+      ]),
+    );
+  }
+  assert.deepEqual(b, a, where);
+  return a;
+}
+
 export function definedAgentToolPolicyParity(cargo, options = {}) {
   assert.equal(process.version, "v22.21.1");
   assert.equal(process.versions.v8, "12.4.254.21-node.33");
@@ -100,40 +134,6 @@ export function definedAgentToolPolicyParity(cargo, options = {}) {
     nativeEvidence = {},
     qualifiedNativeEvidence = {},
     qualifications = [];
-  const temporal =
-    /(?:^|\.)(at|settledAt|clockMs|lastProgressAt|firstFailureAtMs|retryAtMs|chargingSinceMs|remainingMs|enqueuedAt|startedAt|lastRefillMs)$/;
-  function compare(a, b, where, changes) {
-    if (Object.is(a, b)) return;
-    if (
-      typeof a === "number" &&
-      typeof b === "number" &&
-      temporal.test(where)
-    ) {
-      assert(
-        Math.abs(b - a) <= 5,
-        `${where}: measured Tokio wake offset exceeds five accumulated waits`,
-      );
-      if (!where.endsWith("remainingMs")) assert(b >= a, where);
-      changes.push({ path: where, source: a, native: b });
-      return;
-    }
-    if (Array.isArray(a)) {
-      assert(Array.isArray(b), where);
-      assert.equal(b.length, a.length, where);
-      a.forEach((v, i) => {
-        compare(v, b[i], `${where}[${i}]`, changes);
-      });
-      return;
-    }
-    if (a && typeof a === "object") {
-      assert(b && typeof b === "object", where);
-      assert.deepEqual(Object.keys(b).sort(), Object.keys(a).sort(), where);
-      for (const [k, v] of Object.entries(a))
-        compare(v, b[k], `${where}.${k}`, changes);
-      return;
-    }
-    assert.deepEqual(b, a, where);
-  }
   for (const [i, row] of expected.entries()) {
     const candidate = actual[i];
     assert.equal(candidate.id, row.id);
@@ -157,22 +157,38 @@ export function definedAgentToolPolicyParity(cargo, options = {}) {
           value.forEach((wire, k) => {
             assert.deepEqual(JSON.parse(wire), source.saves[k]);
             assert.deepEqual(JSON.parse(values.saveWires[k]), values.saves[k]);
-            compare(
+            const projected = projectToolPolicyComparison(
               JSON.parse(wire),
               JSON.parse(values.saveWires[k]),
               `phases[${j}].saveWires[${k}]`,
               changes,
             );
+            assert.equal(
+              values.saveWires[k],
+              JSON.stringify(projected),
+              `phases[${j}].saveWires[${k}]: Source wire order and format`,
+            );
           });
         } else if (key === "finalWire") {
           assert.deepEqual(JSON.parse(values.finalWire), values.final);
-          compare(
+          const projected = projectToolPolicyComparison(
             JSON.parse(value),
             JSON.parse(values.finalWire),
             `phases[${j}].finalWire`,
             changes,
           );
-        } else compare(value, values[key], `phases[${j}].${key}`, changes);
+          assert.equal(
+            values.finalWire,
+            JSON.stringify(projected),
+            `phases[${j}].finalWire: Source wire order and format`,
+          );
+        } else
+          projectToolPolicyComparison(
+            value,
+            values[key],
+            `phases[${j}].${key}`,
+            changes,
+          );
       }
       for (const candidate of [source, values]) {
         const targets = new Map();
