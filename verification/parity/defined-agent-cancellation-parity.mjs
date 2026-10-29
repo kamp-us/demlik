@@ -137,7 +137,7 @@ export function definedAgentCancellationParity(cargo, options = {}) {
     actual = rows(native.stdout);
   const durableWireComparison = compareCancellationRows(expected, actual);
   const results = expected.map((r) => ({
-    id: `defined-agent-cancellation/${r.id}`,
+    id: `tea.defined-agent-cancellation.${r.id}`,
     passed: true,
   }));
   const libraryAfterSha256 = Object.fromEntries(
@@ -173,8 +173,12 @@ export function definedAgentCancellationParity(cargo, options = {}) {
     libraryAfterSha256,
     durableWireComparison,
     nativeEvidence: Object.fromEntries(
-      actual.map((r) => [`defined-agent-cancellation/${r.id}`, r]),
+      actual.map((r) => [
+        `tea.defined-agent-cancellation.${r.id}`,
+        r.nativeTrace,
+      ]),
     ),
+    qualifiedNativeEvidence: {},
     qualifications: [
       "Abort request precedes its queued CANCELLED fold. Existing Source dispatch tail waits for held work; bare typed/thrown hooks run before cancellation folds. Queued settles then save unchanged cancelled states. All those wires are compared byte-exactly, not suppressed.",
       "The streaming callback remains owned by the original sink after abort/run resolution.",
