@@ -16375,11 +16375,16 @@
       "tea.defined-agent.invoice.resume-awaiting-brain",
       "tea.defined-agent.invoice.resume-awaiting-tool",
       "tea.defined-agent.invoice.terminal-no-work",
-      "tea.defined-agent.invoice.declared-tool-failure-recovery"
+      "tea.defined-agent.invoice.declared-tool-failure-recovery",
+      "tea.defined-agent-provider-errors.provider-rich",
+      "tea.defined-agent-provider-errors.provider-error",
+      "tea.defined-agent-provider-errors.schema-guard",
+      "tea.defined-agent-provider-errors.content-error"
     ],
     "knownGaps": [
-      "Serial controlled-PlainModel invoice profile only; these cases remain qualified for explicit ToolContext.host versus TypeScript context-wrapper identity.",
-      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding."
+      "Measured serial invoice and controlled model/provider/schema/content-error jobs only. Invoice cases retain ToolContext.host identity qualification; error cases retain typed native error-owner classification and the existing content wire/reason difference.",
+      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:a2313470d0ef05cd116ebcbc769579cab6418ff9445e7de3e2170552aebdd99d": {
@@ -16395,11 +16400,16 @@
       "tea.defined-agent.invoice.resume-awaiting-brain",
       "tea.defined-agent.invoice.resume-awaiting-tool",
       "tea.defined-agent.invoice.terminal-no-work",
-      "tea.defined-agent.invoice.declared-tool-failure-recovery"
+      "tea.defined-agent.invoice.declared-tool-failure-recovery",
+      "tea.defined-agent-provider-errors.provider-rich",
+      "tea.defined-agent-provider-errors.provider-error",
+      "tea.defined-agent-provider-errors.schema-guard",
+      "tea.defined-agent-provider-errors.content-error"
     ],
     "knownGaps": [
-      "Serial controlled-PlainModel invoice profile only; these cases remain qualified for explicit ToolContext.host versus TypeScript context-wrapper identity.",
-      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, provider failures and decoded cold restart are not covered by this binding."
+      "Measured serial invoice and controlled model/provider/schema/content-error jobs only. Invoice cases retain ToolContext.host identity qualification; error cases retain typed native error-owner classification and the existing content wire/reason difference.",
+      "Remaining optional configuration, cancellation, streaming, overlays, policies, compaction, unmeasured provider/browser profiles and decoded cold restart are outside this binding.",
+      "Opaque native provider ownership is verified separately without extra shared parity credit; exact provider reason/wire rendering is configured by the actual wire consumer."
     ]
   },
   "@demlik/tea:./agent#DefinedAgent/member:published:8b4061dc5aff1897e9ce6ee13a4e76ae4c73585d4c83c5e748cea82e1a2beed5": {

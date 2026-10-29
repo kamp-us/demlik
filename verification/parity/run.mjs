@@ -36,6 +36,7 @@ import { composeCheckpointParity } from "./compose-run.mjs";
 import { checkCoverage, discoverCoverageInventory } from "./coverage.mjs";
 import { definedAgentGuardsParity } from "./defined-agent-guards-parity.mjs";
 import { definedAgentCheckpointParity } from "./defined-agent-parity.mjs";
+import { definedAgentProviderErrorsParity } from "./defined-agent-provider-errors-parity.mjs";
 import { durableAlarmParity } from "./durable-alarm-run.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
 import { flowParity } from "./flow-run.mjs";
@@ -1249,6 +1250,11 @@ if (!mutationSuite) {
       name: "definedAgentGuards",
       operation: "tea.defined-agent-guards",
       run: (options) => definedAgentGuardsParity(cargo, options),
+    },
+    {
+      name: "definedAgentProviderErrors",
+      operation: "tea.defined-agent-provider-errors",
+      run: (options) => definedAgentProviderErrorsParity(cargo, options),
     },
     {
       name: "jevAsk",
