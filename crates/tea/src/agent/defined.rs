@@ -16,7 +16,9 @@ use crate::{
     data::JsText,
     llm_call::{self, LlmCall, Request, Schema},
     resilience::{deadline::DeadlinesSub, resilient_call::CallValue},
-    runtime::{self, DriveError, Interpreter, Options, Persistence, Profile, Subscriptions},
+    runtime::{
+        self, DriveError, DriveSignal, Interpreter, Options, Persistence, Profile, Subscriptions,
+    },
     storage::Store,
     timing::Timer,
 };
@@ -29,7 +31,7 @@ use super::types::AgentField;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::{
     flow::monitored_run::RunPhase,
-    runtime::{DriveOptions, DriveStart},
+    runtime::{DriveCancellation, DriveOptions, DriveStart},
     timing::TokioTimer,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -480,6 +482,8 @@ pub struct DefinedAgentRunOptions<R: DefinedAgentTools, SE = Infallible, P = NoP
     pub clock: Rc<dyn Fn() -> f64>,
     pub on_event: Option<EventSink<R, P>>,
     pub on_chunk: Option<Rc<ChunkSink>>,
+    /// Requests a durable cancelled outcome through the existing dispatch tail.
+    pub signal: Option<DriveSignal>,
 }
 impl<R: DefinedAgentTools, P> DefinedAgentRunOptions<R, Infallible, P> {
     pub fn new(host: Rc<R::Host>) -> Self {
@@ -490,6 +494,7 @@ impl<R: DefinedAgentTools, P> DefinedAgentRunOptions<R, Infallible, P> {
             clock: Options::<(), ()>::new(Profile::Promise).clock,
             on_event: None,
             on_chunk: None,
+            signal: None,
         }
     }
 }
@@ -511,6 +516,11 @@ impl<R: DefinedAgentTools, SE, P: 'static> DefinedAgentRunOptions<R, SE, P> {
         self.on_chunk = Some(Rc::new(handler));
         self
     }
+    /// Stops dispatch through the existing drive; in-flight work keeps its owners.
+    pub fn signal(mut self, signal: DriveSignal) -> Self {
+        self.signal = Some(signal);
+        self
+    }
     pub fn store<
         E: fmt::Display + 'static,
         ST: Store<Rc<DefinedAgentState<R, P>>, Error = E> + 'static,
@@ -525,6 +535,7 @@ impl<R: DefinedAgentTools, SE, P: 'static> DefinedAgentRunOptions<R, SE, P> {
             clock: self.clock,
             on_event: self.on_event,
             on_chunk: self.on_chunk,
+            signal: self.signal,
         }
     }
 }
@@ -756,6 +767,12 @@ where
                 }
             }));
         }
+        let cancel_clock = Rc::clone(&clock);
+        let cancellation = options.signal.map(|signal| {
+            DriveCancellation::new(signal, move |_: &Rc<DefinedAgentState<R, P>>| {
+                AgentMachineMsg::Cancel { at: cancel_clock() }
+            })
+        });
         let run_id = options.run_id;
         let start = DriveStart::select(move |state: &Rc<DefinedAgentState<R, P>>| {
             let at = clock();
@@ -776,7 +793,7 @@ where
                 matches!(state.run.phase, RunPhase::Failed { .. })
                     || !matches!(state.failure, AgentField::Value(None))
             })),
-            cancellation: None,
+            cancellation,
         };
         let task = runtime::drive_to_done(&runtime, start, |state| state.is_settled(), drive);
         async move {
