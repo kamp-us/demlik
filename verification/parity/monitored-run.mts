@@ -1210,6 +1210,10 @@ function controls(cases: Case[], expected: z.infer<typeof comparisonSchema>[]) {
           nativeBinarySha256: digest(executable),
           activeSourceUnchanged: true,
           detectedIds,
+          responseCaseIds: cases.map((item) => item.id),
+          requestedScripts: cases.map((item) => item.script),
+          expectedComparisons: expected,
+          parsedNativeResponses: results,
         };
       } finally {
         assert.equal(digest(mutation.file), before);

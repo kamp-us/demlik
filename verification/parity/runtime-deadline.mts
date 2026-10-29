@@ -393,6 +393,10 @@ function control(
         jevMutantSourceSha256: digest(jevSource),
         nativeBinarySha256: digest(executable),
         detectedIds,
+        responseCaseIds: corpus.map((item) => item.id),
+        requestedScripts: corpus.map((item) => item.script),
+        expectedComparisons: expected,
+        parsedNativeResponses: mutated,
       };
     } finally {
       assert.equal(digest(file), before);
