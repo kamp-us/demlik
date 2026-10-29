@@ -5,7 +5,7 @@ use demlik_tea::{
     durable_object::{
         DoStoreError, DoStoreOptions, DurableObjectStorage, TransactionError, do_store_with,
     },
-    storage::{Fencing, Migrated, Store, StoredCell},
+    storage::{DeletableStore, Fencing, Migrated, Store, StoredCell},
 };
 use futures::{
     channel::oneshot,
@@ -68,6 +68,7 @@ pub(super) async fn command(storage: SdkStorage, body: &str) -> worker::Result<R
         Cancel,
         Fenced,
         Delete,
+        FencedDelete,
         Inspect,
     }
     #[derive(serde::Deserialize)]
@@ -232,7 +233,7 @@ pub(super) async fn command(storage: SdkStorage, body: &str) -> worker::Result<R
                 .map_err(transaction_error)?;
             outcome = serde_json::json!({"kind":"cancelled"});
         }
-        Action::Fenced => {
+        Action::Fenced | Action::FencedDelete => {
             let owner = Rc::new(());
             let store = do_store_with(
                 Rc::clone(&storage),
@@ -252,34 +253,60 @@ pub(super) async fn command(storage: SdkStorage, body: &str) -> worker::Result<R
                 },
             )
             .fenced();
-            let first = store.load_fenced().await.map_err(host_error)?;
-            let stale = store.load_fenced().await.map_err(host_error)?;
-            let version = store
-                .save_fenced(
-                    &Counter {
-                        count: 1,
-                        owner: &owner,
-                    },
-                    first.version,
-                )
-                .await
-                .map_err(host_error)?;
-            outcome = match store
-                .save_fenced(
-                    &Counter {
-                        count: 100,
-                        owner: &owner,
-                    },
-                    stale.version,
-                )
-                .await
-            {
-                Err(DoStoreError::Conflict(error)) => {
-                    serde_json::json!({"kind":"fenced", "version":version.snapshot(), "expected":error.expected_version.snapshot(), "actual":error.actual_version.snapshot(), "state":store.load().await.map_err(host_error)?})
-                }
-                Err(error) => return Err(host_error(error)),
-                Ok(_) => return Err(host_error("stale writer unexpectedly accepted")),
-            };
+            if command.action == Action::FencedDelete {
+                let old_owner = store.load_fenced().await.map_err(host_error)?;
+                store.delete().await.map_err(host_error)?;
+                let deleted = store.load_fenced().await.map_err(host_error)?;
+                outcome = match store
+                    .save_fenced(
+                        &Counter {
+                            count: 200,
+                            owner: &owner,
+                        },
+                        old_owner.version,
+                    )
+                    .await
+                {
+                    Err(DoStoreError::Conflict(error)) => serde_json::json!({
+                        "kind":"fenced-delete", "deleted_version":deleted.version.snapshot(),
+                        "deleted_state":deleted.raw, "expected":error.expected_version.snapshot(),
+                        "actual":error.actual_version.snapshot(), "state":store.load().await.map_err(host_error)?,
+                    }),
+                    Err(error) => return Err(host_error(error)),
+                    Ok(_) => {
+                        return Err(host_error("deleted store unexpectedly accepted old owner"));
+                    }
+                };
+            } else {
+                let first = store.load_fenced().await.map_err(host_error)?;
+                let stale = store.load_fenced().await.map_err(host_error)?;
+                let version = store
+                    .save_fenced(
+                        &Counter {
+                            count: 1,
+                            owner: &owner,
+                        },
+                        first.version,
+                    )
+                    .await
+                    .map_err(host_error)?;
+                outcome = match store
+                    .save_fenced(
+                        &Counter {
+                            count: 100,
+                            owner: &owner,
+                        },
+                        stale.version,
+                    )
+                    .await
+                {
+                    Err(DoStoreError::Conflict(error)) => {
+                        serde_json::json!({"kind":"fenced", "version":version.snapshot(), "expected":error.expected_version.snapshot(), "actual":error.actual_version.snapshot(), "state":store.load().await.map_err(host_error)?})
+                    }
+                    Err(error) => return Err(host_error(error)),
+                    Ok(_) => return Err(host_error("stale writer unexpectedly accepted")),
+                };
+            }
         }
         Action::Delete => {
             storage

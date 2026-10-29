@@ -13,6 +13,7 @@ const command = z.strictObject({
     "cancel",
     "fenced",
     "delete",
+    "fenced-delete",
     "inspect",
   ]),
 });
@@ -144,6 +145,28 @@ export async function transactions(
       outcome = {
         kind: "fenced",
         version,
+        expected: error.expectedVersion,
+        actual: error.actualVersion,
+        state: await store.load(),
+      };
+    }
+  } else if (action === "fenced-delete") {
+    const store = doStore(storage, (raw) => counter.parse(raw), {
+      key: "tx/fenced",
+      fenced: true,
+    });
+    const oldOwner = await store.loadFenced();
+    await store.delete();
+    const deleted = await store.loadFenced();
+    try {
+      await store.saveFenced({ count: 200 }, oldOwner.version);
+      throw new Error("deleted store unexpectedly accepted old owner");
+    } catch (error) {
+      if (!(error instanceof StoreConflictError)) throw error;
+      outcome = {
+        kind: "fenced-delete",
+        deleted_version: deleted.version,
+        deleted_state: deleted.raw,
         expected: error.expectedVersion,
         actual: error.actualVersion,
         state: await store.load(),

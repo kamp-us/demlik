@@ -54,9 +54,12 @@ def check(action, value):
     elif action == 'delete':
         assert outcome == {'kind': 'delete'}
         assert cells == {'tx/fenced': '{"count":1}', 'tx/fenced@@version': 1, 'tx/other': False, 'tx/null': None}
+    elif action == 'fenced-delete':
+        assert outcome == {'kind': 'fenced-delete', 'deleted_version': 0, 'deleted_state': None, 'expected': 1, 'actual': 0, 'state': None}
+        assert cells == {'tx/other': False, 'tx/null': None}
     elif action == 'inspect':
         assert outcome is None
-        assert cells == {'tx/fenced': '{"count":1}', 'tx/fenced@@version': 1, 'tx/other': False, 'tx/null': None}
+        assert cells == {'tx/other': False, 'tx/null': None}
 
 
 def main():
@@ -64,7 +67,7 @@ def main():
     parser.add_argument('--evidence', required=True, type=Path)
     parser.add_argument('--source-only', action='store_true')
     parser.add_argument('--source-freeze', type=Path)
-    parser.add_argument('--stop-after', choices=['commit', 'rollback', 'sdk-error', 'sdk-reject', 'commit-reject', 'cancel', 'fenced', 'delete', 'inspect'], default='inspect')
+    parser.add_argument('--stop-after', choices=['commit', 'rollback', 'sdk-error', 'sdk-reject', 'commit-reject', 'cancel', 'fenced', 'delete', 'fenced-delete', 'inspect'], default='inspect')
     args = parser.parse_args()
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=False)
@@ -103,7 +106,7 @@ def main():
     try:
         for host in hosts:
             host.start(1)
-        for action in ['reset', 'commit', 'rollback', 'sdk-error', 'sdk-reject', 'commit-reject', 'cancel', 'fenced', 'delete', 'inspect']:
+        for action in ['reset', 'commit', 'rollback', 'sdk-error', 'sdk-reject', 'commit-reject', 'cancel', 'fenced', 'delete', 'fenced-delete', 'inspect']:
             observations = {}
             for host in hosts:
                 status, value = host.request('/transactions', {'action': action})

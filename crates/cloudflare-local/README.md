@@ -137,7 +137,9 @@ real JavaScript `Storage.transaction`. The Rust consumer uses the unchanged
 native `DurableObjectStorage` and `Fencing` interfaces. The gate compares exact
 cells and results across commit, a two-write/delete rollback, an original rich
 borrowed body error, a borrowed result, a real SDK error after rollback, and a
-stale fenced writer. It also checks transactional prefix queries, scalar types
+stale fenced writer. The paired fenced-store `delete()` removes its snapshot and
+version cells, resets a fresh read to null/version zero, and refuses the former
+version-one owner. It also checks transactional prefix queries, scalar types
 including a lone UTF-16 surrogate, deletion, invalid commands, persistent process
 restart, and repeat-body health. Rust-only probes check explicit unsupported
 profiles and safe cancellation before the SDK callback and during the body.
