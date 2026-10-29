@@ -268,7 +268,7 @@ impl<S: 'static, M: Tagged + 'static, SE: 'static, HE: 'static, E: Tagged + 'sta
         let mut work = AssertUnwindSafe(work).catch_unwind().boxed_local();
         let first = work.as_mut().now_or_never();
         let core = Rc::clone(self);
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             let settled = match first {
                 Some(settled) => settled,
                 None => work.await,
@@ -833,7 +833,7 @@ impl<
             }
             .boxed_local();
             if call.as_mut().now_or_never().is_none() {
-                tokio::task::spawn_local(call);
+                super::platform::spawn_owned(call);
             }
             let result = rx.await.expect("command task always settles its parent");
             tokio::task::yield_now().await;
@@ -985,7 +985,7 @@ impl<
         let seq = self.producer.mailbox.barrier();
         self.barriers.borrow_mut().insert(seq, rx);
         let env = Rc::clone(self);
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             let result = match first {
                 Some(result) => result,
                 None => work.await,
@@ -1112,7 +1112,7 @@ impl<
             running.source_done = Some(rx);
             let env = Rc::clone(self);
             let sub_id = id.clone();
-            tokio::task::spawn_local(async move {
+            super::platform::spawn_owned(async move {
                 let result = AssertUnwindSafe(async {
                     tokio::select! {biased;_ =cancel.cancelled()=>Ok(()),result=source=>result}
                 })
@@ -1155,7 +1155,7 @@ impl<
             let token = self.token();
             self.disposals.borrow_mut().insert(token, ());
             let env = Rc::clone(self);
-            tokio::task::spawn_local(async move {
+            super::platform::spawn_owned(async move {
                 let result = match first {
                     Some(result) => result,
                     None => cleanup.await,
@@ -1200,27 +1200,40 @@ impl<
             self.cancel.cancel();
         }
         let env = Rc::clone(self);
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             env.teardown(target).await;
         });
     }
     async fn teardown(self: Rc<Self>, target: u64) {
-        if tokio::time::timeout(self.timeout, wait_tail(&self.producer.mailbox, target))
-            .await
-            .is_err()
+        let core = Rc::clone(&self.core);
+        let deadline_report = Rc::new(move |error| {
+            core.report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Discard)
+        });
+        if let Err(error) = super::platform::deadline(
+            &self.timer,
+            self.timeout,
+            wait_tail(&self.producer.mailbox, target),
+            deadline_report,
+        )
+        .await
         {
-            let flight = self.in_flight.borrow();
-            let cmd_types = flight.values().filter_map(Clone::clone).collect();
-            let pending = flight.len();
-            drop(flight);
-            self.core.report(
-                Rc::new(RuntimeError::DrainTimeout {
-                    cmd_types,
-                    pending,
-                    timeout: self.timeout,
-                }),
-                ErrorPhase::Discard,
-            );
+            if let Some(error) = error.into_timer() {
+                self.core
+                    .report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Discard);
+            } else {
+                let flight = self.in_flight.borrow();
+                let cmd_types = flight.values().filter_map(Clone::clone).collect();
+                let pending = flight.len();
+                drop(flight);
+                self.core.report(
+                    Rc::new(RuntimeError::DrainTimeout {
+                        cmd_types,
+                        pending,
+                        timeout: self.timeout,
+                    }),
+                    ErrorPhase::Discard,
+                );
+            }
             self.producer
                 .mailbox
                 .with(|queue| queue.gate = Gate::Abandoned);
@@ -1245,14 +1258,25 @@ impl<
                     changed.await;
                 }
             };
-            if tokio::time::timeout(self.timeout, settled).await.is_err() {
-                self.core.report(
-                    Rc::new(RuntimeError::DisposeTimeout {
-                        pending: outstanding.len(),
-                        timeout: self.timeout,
-                    }),
-                    ErrorPhase::Discard,
-                );
+            let core = Rc::clone(&self.core);
+            let deadline_report = Rc::new(move |error| {
+                core.report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Discard)
+            });
+            if let Err(error) =
+                super::platform::deadline(&self.timer, self.timeout, settled, deadline_report).await
+            {
+                if let Some(error) = error.into_timer() {
+                    self.core
+                        .report(Rc::new(RuntimeError::Timer(error)), ErrorPhase::Discard);
+                } else {
+                    self.core.report(
+                        Rc::new(RuntimeError::DisposeTimeout {
+                            pending: outstanding.len(),
+                            timeout: self.timeout,
+                        }),
+                        ErrorPhase::Discard,
+                    );
+                }
             }
         }
         let boot_failed = self
@@ -1282,7 +1306,8 @@ impl<
     }
 }
 
-/// Eager launch. The host must drive a Tokio LocalSet for the actor's lifetime.
+/// Eager launch. Native hosts drive a Tokio LocalSet; Wasm hosts provide a
+/// JavaScript executor and Options.timer for the actor's lifetime.
 /// Boot's synchronous prefix runs before return; ready futures still yield at
 /// restoration, save, handler completion, and public commit boundaries.
 pub fn launch<
@@ -1435,7 +1460,7 @@ pub fn try_launch<
     let first = boot.as_mut().now_or_never();
     let notice_owner = Rc::downgrade(&core);
     let notice_queue = Arc::clone(&producer.mailbox);
-    tokio::task::spawn_local(async move {
+    super::platform::spawn_owned(async move {
         loop {
             let changed = notice_queue.changed.notified();
             let Some(owner) = notice_owner.upgrade() else {
@@ -1446,7 +1471,7 @@ pub fn try_launch<
             changed.await;
         }
     });
-    tokio::task::spawn_local(async move {
+    super::platform::spawn_owned(async move {
         let boot = match first {
             Some(result) => futures::future::ready(result).boxed_local(),
             None => boot,

@@ -202,12 +202,7 @@ impl<S, M, SE, HE, RE> Options<S, M, SE, HE, NoEvent, RE> {
             terminal: None,
             on_commit: vec![],
             on_error: None,
-            clock: Rc::new(|| {
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as f64
-            }),
+            clock: Rc::new(super::platform::default_clock),
             dispose_timeout: Duration::from_secs(5),
             idle_cap: 100_000,
             supervision: Supervision::Stop,

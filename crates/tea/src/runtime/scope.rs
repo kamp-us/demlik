@@ -66,7 +66,7 @@ struct Scope {
     members: RefCell<Vec<Member>>,
     failure: RefCell<Option<ScopeFailure>>,
 }
-/// An explicit native Effect host owner. `close().await` is the cleanup receipt;
+/// An explicit Effect host owner. `close().await` is the cleanup receipt;
 /// dropping a task requests interruption but does not claim to await finalizers.
 #[derive(Clone)]
 pub struct EffectScope(Rc<Scope>);
@@ -148,7 +148,7 @@ impl EffectScope {
             .rev()
             .collect::<Vec<_>>();
         let owner = self.clone();
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             for member in members {
                 (member.unwatch)();
                 (member.stop)().await;
@@ -176,7 +176,7 @@ impl EffectScope {
             changed.await;
         }
     }
-    /// Eagerly transfers program ownership to the LocalSet. A dropped waiter
+    /// Eagerly transfers program ownership to the local host executor. A dropped waiter
     /// signals cancellation; the retained driver still closes this scope.
     pub fn spawn<T: 'static, E: 'static>(
         &self,
@@ -186,7 +186,7 @@ impl EffectScope {
         let cancel = Arc::new(Cancel::new());
         let signal = Arc::clone(&cancel);
         let scope = self.clone();
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             let result = tokio::select! {biased;
                 _=signal.cancelled()=>ScopeExit::Interrupted,
                 _=scope.closing()=>match scope.failure(){Some(cause)=>ScopeExit::RuntimeFailure(cause),None=>ScopeExit::Interrupted},

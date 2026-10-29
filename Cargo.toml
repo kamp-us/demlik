@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tea", "crates/code-graph", "crates/parity", "crates/cay-ocagi-web", "crates/cloudflare-local"]
+members = ["crates/tea", "crates/code-graph", "crates/parity", "crates/cay-ocagi-web", "crates/cloudflare-local", "crates/wasm-runtime-local"]
 resolver = "3"
 
 [workspace.package]

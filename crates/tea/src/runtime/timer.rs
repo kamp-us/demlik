@@ -119,3 +119,76 @@ impl RuntimeTimer {
         Ok(rx)
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+struct DeadlineCancel {
+    slot: Rc<RefCell<Option<CancelTimer>>>,
+    report: Rc<dyn Fn(TimerError)>,
+}
+#[cfg(target_arch = "wasm32")]
+impl DeadlineCancel {
+    fn cancel(&self) -> Result<(), TimerError> {
+        let cancel = self.slot.borrow_mut().take();
+        if let Some(cancel) = cancel {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(cancel))
+                .map_err(TimerError::callback_panic)?;
+        }
+        Ok(())
+    }
+}
+#[cfg(target_arch = "wasm32")]
+impl Drop for DeadlineCancel {
+    fn drop(&mut self) {
+        if let Err(error) = self.cancel() {
+            (self.report)(error);
+        }
+    }
+}
+#[cfg(target_arch = "wasm32")]
+impl RuntimeTimer {
+    pub(super) async fn deadline<F: std::future::Future>(
+        &self,
+        duration: std::time::Duration,
+        work: F,
+        report: Rc<dyn Fn(TimerError)>,
+    ) -> Result<F::Output, super::platform::DeadlineError> {
+        use super::platform::DeadlineError;
+        use futures::{
+            FutureExt,
+            future::{Either, select},
+        };
+        let mut work = Box::pin(work);
+        if let Some(value) = work.as_mut().now_or_never() {
+            return Ok(value);
+        }
+        let slot = Rc::new(RefCell::new(None));
+        let cancel = DeadlineCancel {
+            slot: Rc::clone(&slot),
+            report,
+        };
+        let elapsed = async {
+            let mut remaining = duration.as_secs_f64() * 1000.0;
+            loop {
+                let wake = self
+                    .arm_chunk(remaining, &slot)
+                    .map_err(DeadlineError::Timer)?;
+                wake.await.map_err(|_| {
+                    DeadlineError::Timer(TimerError::new(
+                        "runtime deadline timer closed before firing",
+                    ))
+                })?;
+                slot.borrow_mut().take();
+                remaining -= remaining.min(2_147_483_647.0);
+                if remaining <= 0.0 {
+                    return Err(DeadlineError::Elapsed);
+                }
+            }
+        };
+        let result = match select(work, Box::pin(elapsed)).await {
+            Either::Left((value, _)) => Ok(value),
+            Either::Right((error, _)) => error,
+        };
+        cancel.cancel().map_err(DeadlineError::Timer)?;
+        result
+    }
+}

@@ -445,6 +445,7 @@ dependencies = [
  "futures",
  "getrandom 0.4.3",
  "indexmap",
+ "js-sys",
  "libc",
  "libm",
  "proptest",
@@ -453,6 +454,19 @@ dependencies = [
  "serde-value",
  "serde_json",
  "tokio",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "demlik-wasm-runtime-local"
+version = "0.1.0"
+dependencies = [
+ "demlik-tea",
+ "futures",
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
 ]
 

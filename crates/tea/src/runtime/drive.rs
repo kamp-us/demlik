@@ -186,7 +186,7 @@ pub fn drive_to_done<
     let is_terminal: Terminal<S> = Rc::new(is_terminal);
     let launch: Starter<S, SE, HE, RE> = Box::new(move || {
         let (tx, rx) = oneshot::channel();
-        tokio::task::spawn_local(async move {
+        super::platform::spawn_owned(async move {
             let detach = Rc::new(RefCell::new(None::<Unsubscribe>));
             let attached = Rc::clone(&detach);
             let work = drive(&runtime, start, is_terminal, options, attached);

@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["../../packages/tea/node_modules/@cloudflare/workers-types", "../../node_modules/.pnpm/@types+node@22.20.1/node_modules/@types/node"]
+  },
+  "include": ["source*.mts"]
+}
