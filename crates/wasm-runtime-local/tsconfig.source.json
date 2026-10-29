@@ -6,6 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["../../packages/tea/node_modules/@cloudflare/workers-types", "../../node_modules/.pnpm/@types+node@22.20.1/node_modules/@types/node"]
   },
   "include": ["source*.mts"]

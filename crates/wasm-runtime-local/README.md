@@ -71,3 +71,6 @@ pnpm exec biome check crates/wasm-runtime-local/source.mts crates/wasm-runtime-l
 pnpm exec tsc -p crates/wasm-runtime-local/tsconfig.source.json
 python3 -m py_compile crates/wasm-runtime-local/prove.py
 ```
+
+For separate actual browser and local Workers acceptance using the same delivered
+raw Wasm product, follow [the host delivery checks](hosts/README.md).
