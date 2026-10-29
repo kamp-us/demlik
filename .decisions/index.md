@@ -32,6 +32,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0028](./0028-restored-init-may-resume.md) | Restored initialization may resume work | Accepted | 2026-10-18 |
 | [0029](./0029-ports-live-at-program-layer.md) | Typed ports live on the program above tea, never on a tea machine | Accepted | 2026-10-18 |
 | [0030](./0030-checked-event-projection.md) | Checked Rust event projection reuses the runtime's typed failure channel | Accepted | 2026-10-28 |
+| [0031](./0031-installed-compiler-ownership.md) | Native code-graph resolves its compiler from the installation | Accepted | 2026-10-29 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
