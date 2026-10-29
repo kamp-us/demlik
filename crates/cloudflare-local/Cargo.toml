@@ -1,0 +1,15 @@
+[package]
+name = "demlik-cloudflare-local"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+demlik-tea.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+worker = "=0.8.7"

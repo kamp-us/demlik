@@ -1,0 +1,8 @@
+{
+  "name": "demlik-cloudflare-local-host",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "4.155.0"
+  }
+}

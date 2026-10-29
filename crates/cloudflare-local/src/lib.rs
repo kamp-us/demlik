@@ -1,0 +1,300 @@
+//! Local SDK consumer of the existing borrowed scheduled-job Machine.
+use demlik_tea::{
+    PlainData,
+    data::{JsText, plain_data},
+    durable_object::{
+        AlarmStorage, DoStoreError, DoStoreOptions, DurableObjectStorage, DurableTimerError,
+        TransactionError, do_store_with, durable_timer,
+    },
+    storage::{Migrated, Store, StoredCell},
+};
+use std::{cell::RefCell, future::Future, rc::Rc};
+use worker::{durable_object, event, js_sys, wasm_bindgen::JsValue, *};
+#[path = "../../tea/examples/support/scheduled_jobs.rs"]
+mod scheduled_jobs;
+use scheduled_jobs::{Fire, Model, machine, view};
+
+#[derive(Debug)]
+enum BindingError {
+    Sdk(worker::Error),
+    UnsupportedTransaction,
+    UnsupportedKeyUtf16,
+    UnsupportedSnapshotCell,
+    InvalidDeadline,
+}
+impl std::fmt::Display for BindingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sdk(e) => e.fmt(f),
+            Self::UnsupportedTransaction => {
+                f.write_str("snapshot-only adapter: transactions unsupported")
+            }
+            Self::UnsupportedKeyUtf16 => {
+                f.write_str("snapshot-only adapter requires UTF-8 storage keys")
+            }
+            Self::UnsupportedSnapshotCell => {
+                f.write_str("snapshot-only adapter requires JSON string cells")
+            }
+            Self::InvalidDeadline => f.write_str("invalid absolute epoch-ms deadline"),
+        }
+    }
+}
+impl From<worker::Error> for BindingError {
+    fn from(e: worker::Error) -> Self {
+        Self::Sdk(e)
+    }
+}
+// Private and unfenced: do_store only uses get/put at the fixed @@state key.
+struct SnapshotStorage(worker::Storage);
+fn key_text(key: &JsText) -> std::result::Result<&str, BindingError> {
+    key.as_utf8().ok_or(BindingError::UnsupportedKeyUtf16)
+}
+fn from_js(value: JsValue) -> std::result::Result<StoredCell, BindingError> {
+    if value.is_undefined() {
+        return Ok(StoredCell::Undefined);
+    }
+    if !value.is_string() {
+        return Err(BindingError::UnsupportedSnapshotCell);
+    }
+    let text = js_sys::JsString::from(value);
+    Ok(StoredCell::String(JsText::from_units(
+        text.iter().collect(),
+    )))
+}
+impl DurableObjectStorage for SnapshotStorage {
+    type Error = BindingError;
+    async fn get(&self, key: JsText) -> std::result::Result<StoredCell, BindingError> {
+        let key = key_text(&key)?;
+        let map = self.0.get_multiple(vec![key]).await?;
+        from_js(map.get(&JsValue::from_str(key)))
+    }
+    async fn put(&self, key: JsText, value: StoredCell) -> std::result::Result<(), BindingError> {
+        let StoredCell::String(value) = value else {
+            return Err(BindingError::UnsupportedSnapshotCell);
+        };
+        self.0
+            .put_raw(
+                key_text(&key)?,
+                js_sys::JsString::from_char_code(value.as_units()),
+            )
+            .await?;
+        Ok(())
+    }
+    async fn delete(&self, keys: Vec<JsText>) -> std::result::Result<(), BindingError> {
+        let keys = keys
+            .iter()
+            .map(key_text)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        self.0.delete_multiple(keys).await?;
+        Ok(())
+    }
+    async fn list(
+        &self,
+        prefix: JsText,
+    ) -> std::result::Result<Vec<(JsText, StoredCell)>, BindingError> {
+        let map = self.0.list().await?;
+        let mut cells = vec![];
+        for entry in map.entries().into_iter() {
+            let entry = js_sys::Array::from(&entry.map_err(worker::Error::from)?);
+            let key = JsText::from_units(js_sys::JsString::from(entry.get(0)).iter().collect());
+            if key.as_units().starts_with(prefix.as_units()) {
+                cells.push((key, from_js(entry.get(1))?));
+            }
+        }
+        Ok(cells)
+    }
+    async fn transaction<A, E, F>(
+        &self,
+        _: impl FnOnce(Self) -> F,
+    ) -> std::result::Result<A, TransactionError<BindingError, E>>
+    where
+        F: Future<Output = std::result::Result<A, E>>,
+    {
+        Err(TransactionError::Storage(
+            BindingError::UnsupportedTransaction,
+        ))
+    }
+}
+impl AlarmStorage for SnapshotStorage {
+    type Error = BindingError;
+    async fn set_alarm(&self, at_ms: f64) -> std::result::Result<(), BindingError> {
+        if !at_ms.is_finite() || !(0.0..=8.64e15).contains(&at_ms) {
+            return Err(BindingError::InvalidDeadline);
+        }
+        self.0
+            .set_alarm(ScheduledTime::new(js_sys::Date::new(&JsValue::from_f64(
+                at_ms,
+            ))))
+            .await?;
+        console_log!("{}", serde_json::json!({"event":"set_alarm", "at":at_ms}));
+        Ok(())
+    }
+}
+fn binding_error(error: BindingError) -> worker::Error {
+    match error {
+        BindingError::Sdk(error) => error,
+        other => host_error(other),
+    }
+}
+fn snapshot_error(
+    error: DoStoreError<BindingError, demlik_tea::data::DependencyError>,
+) -> worker::Error {
+    match error {
+        DoStoreError::Storage { cause, .. } => binding_error(cause),
+        other => host_error(other),
+    }
+}
+fn timer_error(
+    error: DurableTimerError<BindingError, worker::Error, worker::Error>,
+) -> worker::Error {
+    match error {
+        DurableTimerError::Alarm(error) => binding_error(error),
+        DurableTimerError::Deadline(error) | DurableTimerError::Fire(error) => error,
+    }
+}
+fn host_error(error: impl std::fmt::Display) -> worker::Error {
+    worker::Error::RustError(error.to_string())
+}
+
+#[durable_object(alarm)]
+pub struct Jobs {
+    state: State,
+}
+impl Jobs {
+    async fn callback(&self, action: &str) -> worker::Result<Response> {
+        let owner = Rc::new(());
+        let storage = Rc::new(SnapshotStorage(self.state.storage()));
+        let parse = |raw: PlainData| {
+            let value = serde_json::to_value(raw).expect("plain JSON data");
+            Migrated::State(Model {
+                pending: serde_json::from_value(value["pending"].clone())
+                    .expect("validated snapshot"),
+                done: serde_json::from_value(value["done"].clone()).expect("validated snapshot"),
+                owner: &owner,
+            })
+        };
+        let store = do_store_with(
+            storage.clone(),
+            parse,
+            |m: &Model<'_>| plain_data(&view(m)),
+            DoStoreOptions::default(),
+        );
+        let raw = store.load().await.map_err(snapshot_error)?;
+        let raw_value = serde_json::to_value(&raw).map_err(host_error)?;
+        let loaded = if raw_value.is_null() {
+            None
+        } else {
+            // Persisted data is validated before the domain migration boundary.
+            #[derive(serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Snapshot {
+                pending: Vec<f64>,
+                done: Vec<f64>,
+            }
+            let checked: Snapshot = serde_json::from_value(raw_value).map_err(host_error)?;
+            if checked
+                .pending
+                .iter()
+                .chain(&checked.done)
+                .any(|x| !x.is_finite())
+            {
+                return Err(host_error("invalid stored deadline"));
+            }
+            let Migrated::State(model) = store.migrate(raw) else {
+                return Err(host_error("snapshot migration failed"));
+            };
+            Some(model)
+        };
+        let machine = machine();
+        let model = RefCell::new(
+            (machine.init)(
+                Some(loaded.unwrap_or(Model {
+                    pending: vec![],
+                    done: vec![],
+                    owner: &owner,
+                })),
+                &(),
+            )
+            .state,
+        );
+        let timer = durable_timer(
+            storage.as_ref(),
+            || async { Ok::<_, worker::Error>(model.borrow().pending.first().copied()) },
+            || async {
+                let now = js_sys::Date::now();
+                loop {
+                    let due = model.borrow().pending.first().is_some_and(|at| *at <= now);
+                    if !due {
+                        break;
+                    }
+                    let next = machine
+                        .update
+                        .apply(&model.borrow(), &Fire)
+                        .map_err(|e| host_error(format!("transition: {e:?}")))?
+                        .state;
+                    store.save(&next).await.map_err(snapshot_error)?;
+                    console_log!(
+                        "{}",
+                        serde_json::json!({"event":"transition_saved", "model":view(&next)})
+                    );
+                    *model.borrow_mut() = next;
+                }
+                Ok::<_, worker::Error>(())
+            },
+        );
+        match action {
+            "seed" => {
+                if !model.borrow().pending.is_empty() || !model.borrow().done.is_empty() {
+                    return Response::error("already seeded", 409);
+                }
+                let now = js_sys::Date::now();
+                model.borrow_mut().pending = vec![now + 20_000.0, now + 40_000.0, now + 60_000.0];
+                let snapshot = model.borrow().clone();
+                store.save(&snapshot).await.map_err(snapshot_error)?;
+                timer.rearm().await.map_err(timer_error)?;
+            }
+            "alarm" | "repeat" => {
+                console_log!(
+                    "{}",
+                    serde_json::json!({"event":"callback", "origin":action, "at":js_sys::Date::now(), "model":view(&model.borrow())})
+                );
+                timer.on_alarm().await.map_err(timer_error)?;
+            }
+            _ => {}
+        }
+        storage.0.sync().await?;
+        let alarm = storage.0.get_alarm().await?;
+        let stored_json = storage.0.get::<String>("@@state").await?;
+        Response::from_json(
+            &serde_json::json!({"model":view(&model.borrow()), "alarm":alarm, "stored_json":stored_json}),
+        )
+    }
+}
+impl DurableObject for Jobs {
+    fn new(state: State, _: Env) -> Self {
+        console_log!(
+            "{}",
+            serde_json::json!({"event":"constructor", "at":js_sys::Date::now()})
+        );
+        Self { state }
+    }
+    async fn fetch(&self, request: Request) -> worker::Result<Response> {
+        match (request.method(), request.path().as_str()) {
+            (Method::Post, "/seed") => self.callback("seed").await,
+            (Method::Post, "/repeat") => self.callback("repeat").await,
+            (Method::Get, "/state") => self.callback("state").await,
+            _ => Response::error("not found", 404),
+        }
+    }
+    async fn alarm(&self) -> worker::Result<Response> {
+        self.callback("alarm").await
+    }
+}
+#[event(fetch)]
+pub async fn fetch(request: Request, env: Env, _: Context) -> worker::Result<Response> {
+    env.durable_object("JOBS")?
+        .id_from_name("three-jobs")?
+        .get_stub()?
+        .fetch_with_request(request)
+        .await
+}

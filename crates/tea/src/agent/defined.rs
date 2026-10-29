@@ -8,27 +8,32 @@ use super::{
     model::{Llm, MessageLoader, Messages, ModelFactory},
     prompt::{AgentMessage, render_prompt_with},
     tool::{AgentToolRoutes, ToolError},
-    types::{AGENT_TURN_SCHEMA, AgentField, Conversation, ToolOutcome},
+    types::{AGENT_TURN_SCHEMA, Conversation, ToolOutcome},
 };
 use crate::{
     Machine, PlainData,
     command::CommandFamily,
     data::JsText,
-    flow::monitored_run::RunPhase,
     llm_call::{self, LlmCall, Request, Schema},
     resilience::{deadline::DeadlinesSub, resilient_call::CallValue},
-    runtime::{
-        self, DriveError, DriveOptions, DriveStart, Interpreter, Options, Persistence, Profile,
-        Subscriptions,
-    },
+    runtime::{self, DriveError, Interpreter, Options, Persistence, Profile, Subscriptions},
     storage::Store,
-    timing::{Timer, TokioTimer},
+    timing::Timer,
 };
 use futures::{FutureExt, future::LocalBoxFuture};
 use serde::{Serialize, Serializer, ser::SerializeMap};
-use std::{
-    convert::Infallible, fmt, future::Future, marker::PhantomData, panic::AssertUnwindSafe, rc::Rc,
+use std::{convert::Infallible, fmt, marker::PhantomData, panic::AssertUnwindSafe, rc::Rc};
+
+#[cfg(not(target_arch = "wasm32"))]
+use super::types::AgentField;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::{
+    flow::monitored_run::RunPhase,
+    runtime::{DriveOptions, DriveStart},
+    timing::TokioTimer,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use std::future::Future;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -216,6 +221,7 @@ pub type DefinedAgentRunError<R, SE> =
 pub type DefinedAgentResult<R, SE> = Result<Rc<DefinedAgentState<R>>, DefinedAgentRunError<R, SE>>;
 type StopPredicate<R> = Rc<dyn Fn(&Rc<DefinedAgentState<R>>) -> bool>;
 type EventSink<R> = Rc<dyn Fn(&DefinedAgentEvent<R>)>;
+#[cfg(not(target_arch = "wasm32"))]
 fn new_run_id() -> JsText {
     let mut bytes = [0_u8; 16];
     if let Err(error) = getrandom::fill(&mut bytes) {
@@ -517,8 +523,10 @@ where
             timer,
         )
     }
-    /// Starts the Promise-profile drive immediately on the current LocalSet.
+    /// Native-only Promise-profile drive on the current Tokio LocalSet.
+    /// Wasm hosts drive the portable `machine` with their own callbacks.
     /// Dropping the returned waiter leaves the owned drive running to teardown.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn run<SE: fmt::Debug + fmt::Display + 'static, I: Into<JsText>>(
         &self,
         input: I,

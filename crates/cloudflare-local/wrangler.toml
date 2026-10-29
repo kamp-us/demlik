@@ -1,0 +1,14 @@
+name = "demlik-rust-local-alarm"
+main = "build/index.js"
+compatibility_date = "2026-10-28"
+
+[build]
+command = "worker-build --release"
+
+[[durable_objects.bindings]]
+name = "JOBS"
+class_name = "Jobs"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Jobs"]

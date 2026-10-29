@@ -1,5 +1,5 @@
 use demlik_tea::{
-    Machine, PlainData, Step, Sub, Tagged, Update,
+    PlainData,
     data::plain_data,
     durable_object::{
         AlarmStorage, DoStoreOptions, DurableTimerError, do_store_with, durable_timer,
@@ -39,44 +39,9 @@ impl AlarmStorage for Alarm<'_> {
         Ok(())
     }
 }
-#[derive(Clone)]
-struct Model<'a> {
-    pending: Vec<f64>,
-    done: Vec<f64>,
-    owner: &'a Rc<()>,
-}
-fn view(m: &Model<'_>) -> Value {
-    json!({"pending":m.pending,"done":m.done})
-}
-struct Fire;
-impl Tagged for Fire {
-    fn tag(&self) -> &str {
-        "fire"
-    }
-}
-impl demlik_tea::core::Message for Fire {
-    const TYPES: &'static [&'static str] = &["fire"];
-}
-fn machine<'a>() -> Machine<'a, Model<'a>, Fire, (), Sub> {
-    Machine {
-        init: Box::new(|loaded, _| Step::new(loaded.unwrap(), vec![])),
-        update: Update::reducer(|s: &Model<'a>, _: &Fire| {
-            let mut done = s.done.clone();
-            if let Some(at) = s.pending.first() {
-                done.push(*at)
-            }
-            Step::new(
-                Model {
-                    pending: s.pending.iter().skip(1).copied().collect(),
-                    done,
-                    owner: s.owner,
-                },
-                vec![],
-            )
-        }),
-        subscriptions: demlik_tea::core::subscriptions(|_| vec![]),
-    }
-}
+#[path = "support/scheduled_jobs.rs"]
+mod scheduled_jobs;
+use scheduled_jobs::{Fire, Model, machine, view};
 fn calls(storage: &MemoryStorage, trace: &Trace) {
     for call in storage.calls.borrow_mut().drain(..) {
         trace.borrow_mut().push(match call {

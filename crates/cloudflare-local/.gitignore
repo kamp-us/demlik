@@ -1,0 +1,5 @@
+/build/
+/.wrangler/
+/local-proof-state/
+/node_modules/
+/__pycache__/
