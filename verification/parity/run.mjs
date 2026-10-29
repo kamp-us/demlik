@@ -33,6 +33,7 @@ import { commandFamiliesParity } from "./command-families-run.mjs";
 import { commandInputParity } from "./command-input-run.mjs";
 import { composeCheckpointParity } from "./compose-run.mjs";
 import { checkCoverage, discoverCoverageInventory } from "./coverage.mjs";
+import { definedAgentGuardsParity } from "./defined-agent-guards-parity.mjs";
 import { definedAgentCheckpointParity } from "./defined-agent-parity.mjs";
 import { durableAlarmParity } from "./durable-alarm-run.mjs";
 import { durableObjectParity } from "./durable-object-run.mjs";
@@ -1237,6 +1238,11 @@ if (!mutationSuite) {
       operation: "tea.defined-agent",
       binaryArgument: "--defined-agent-bin",
       run: (options) => definedAgentCheckpointParity(cargo, options),
+    },
+    {
+      name: "definedAgentGuards",
+      operation: "tea.defined-agent-guards",
+      run: (options) => definedAgentGuardsParity(cargo, options),
     },
     {
       name: "jevAsk",
