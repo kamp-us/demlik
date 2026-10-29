@@ -21,12 +21,16 @@ type Trace = RefCell<Vec<Value>>;
 struct Failure(Rc<Value>);
 struct Alarm<'a> {
     trace: &'a Trace,
+    public_calls: &'a RefCell<Vec<&'static str>>,
     alarms: &'a RefCell<Vec<f64>>,
     fault: Option<Failure>,
 }
 impl AlarmStorage for Alarm<'_> {
     type Error = Failure;
     async fn set_alarm(&self, at: f64) -> Result<(), Failure> {
+        self.public_calls
+            .borrow_mut()
+            .push("AlarmStorage.set_alarm");
         self.trace.borrow_mut().push(json!(["alarm", at]));
         if let Some(f) = &self.fault {
             return Err(f.clone());
@@ -96,6 +100,7 @@ async fn main() {
         let storage = Rc::new(MemoryStorage::new());
         let trace = Trace::default();
         let alarms = RefCell::new(vec![]);
+        let public_calls = RefCell::new(vec![]);
         let mut results = vec![];
         let parse = |raw: PlainData| {
             let v = serde_json::to_value(raw).unwrap();
@@ -125,6 +130,7 @@ async fn main() {
         let fault = script["fault"].as_str();
         let alarm = Alarm {
             trace: &trace,
+            public_calls: &public_calls,
             alarms: &alarms,
             fault: (fault == Some("alarm")).then(|| failure.clone()),
         };
@@ -132,6 +138,7 @@ async fn main() {
         let gate = tokio::sync::Notify::new();
         let machine = machine();
         let new_host = || {
+            public_calls.borrow_mut().push("durable_timer");
             durable_timer(
                 &alarm,
                 || async {
@@ -181,6 +188,7 @@ async fn main() {
                 }
                 "held" => {
                     *held.borrow_mut() = true;
+                    public_calls.borrow_mut().push("DurableTimer.on_alarm");
                     let pending = host.on_alarm();
                     tokio::pin!(pending);
                     tokio::select! {biased; _=&mut pending=>panic!("fire must wait"),_ = std::future::ready(())=>{}}
@@ -190,8 +198,14 @@ async fn main() {
                     *held.borrow_mut() = false;
                     result
                 }
-                "rearm" => host.rearm().await,
-                _ => host.on_alarm().await,
+                "rearm" => {
+                    public_calls.borrow_mut().push("DurableTimer.rearm");
+                    host.rearm().await
+                }
+                _ => {
+                    public_calls.borrow_mut().push("DurableTimer.on_alarm");
+                    host.on_alarm().await
+                }
             };
             match result {
                 Ok(()) => results.push(json!({"action":action,"ok":true})),
@@ -205,7 +219,7 @@ async fn main() {
                 }
             }
         }
-        out.push(json!({"name":script["name"],"trace":*trace.borrow(),"alarms":*alarms.borrow(),"model":view(&model.borrow()),"cells":cells(&storage),"results":results}));
+        out.push(json!({"name":script["name"],"trace":*trace.borrow(),"alarms":*alarms.borrow(),"model":view(&model.borrow()),"cells":cells(&storage),"results":results,"publicCalls":*public_calls.borrow()}));
     }
     println!("{}", json!(out));
 }

@@ -32,6 +32,8 @@ impl<A: std::error::Error + 'static, D: std::error::Error + 'static, F: std::err
 }
 
 /// Alarm host adapter. The persisted consumer state owns the schedule.
+/// Operations progress when their futures are polled; creating or dropping an
+/// unpolled future does not execute the eager JavaScript Promise workflow.
 pub struct DurableTimer<A, D, F> {
     alarm: A,
     next_deadline: D,
