@@ -27,6 +27,26 @@ pub fn gpui_source() -> String {
     SOURCE.with(|value| value.borrow().clone())
 }
 
+// SVG images have their own font database, supplied through AssetSource.
+// These are the two bundled font paths used by the pinned GPUI SVG renderer.
+struct ShopAssets;
+impl gpui::AssetSource for ShopAssets {
+    fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        Ok(match path {
+            "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => Some(Cow::Borrowed(include_bytes!(
+                "../assets/IBMPlexSans-Regular.ttf"
+            ))),
+            "fonts/lilex/Lilex-Regular.ttf" => {
+                Some(Cow::Borrowed(include_bytes!("../assets/Lilex-Regular.ttf")))
+            }
+            _ => None,
+        })
+    }
+    fn list(&self, _: &str) -> gpui::Result<Vec<SharedString>> {
+        Ok(vec![])
+    }
+}
+
 #[derive(Clone)]
 enum Intent {
     Send(Action),
@@ -284,22 +304,24 @@ impl Render for TeaShop {
 #[wasm_bindgen(start)]
 pub fn start() {
     gpui_platform::web_init();
-    let handle = gpui_platform::single_threaded_web().run_embedded(|cx: &mut App| {
-        cx.text_system()
-            .add_fonts(vec![Cow::Borrowed(include_bytes!(
-                "../assets/IBMPlexSans-Regular.ttf"
-            ))])
-            .expect("bundled font");
-        let bounds = Bounds::centered(None, size(px(760.), px(900.)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |window, cx| cx.new(|cx| TeaShop::new(window, cx)),
-        )
-        .expect("GPUI browser window");
-        cx.activate(true);
-    });
+    let handle = gpui_platform::single_threaded_web()
+        .with_assets(ShopAssets)
+        .run_embedded(|cx: &mut App| {
+            cx.text_system()
+                .add_fonts(vec![Cow::Borrowed(include_bytes!(
+                    "../assets/IBMPlexSans-Regular.ttf"
+                ))])
+                .expect("bundled font");
+            let bounds = Bounds::centered(None, size(px(760.), px(900.)), cx);
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    ..Default::default()
+                },
+                |window, cx| cx.new(|cx| TeaShop::new(window, cx)),
+            )
+            .expect("GPUI browser window");
+            cx.activate(true);
+        });
     APPLICATION.with(|application| *application.borrow_mut() = Some(handle));
 }

@@ -61,6 +61,9 @@ provides semantic controls for screen readers. Phone rendering and input must
 be checked in the target browser. This demo does not promise screen-reader
 support for the GPUI canvas or universal GPU compatibility.
 
-The bundled IBM Plex Sans font and GPUI licenses are in `assets/` and copied
+The bundled IBM Plex Sans, Lilex font and GPUI licenses are in `assets/` and copied
 into the static output. The shop illustration reuses the original tea-house
 artwork; GPUI renders it as an SVG Image and Rust updates its phase/table state.
+
+SVG labels use IBM Plex Sans. `ShopAssets` supplies the pinned GPUI SVG renderer
+with its bundled font slots; this is separate from GPUI’s text-system font registration.
