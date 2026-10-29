@@ -29,6 +29,7 @@ import { runAgentTurnConformance } from "./agent-turn-run.mjs";
 import { apiBaseParserParity } from "./api-base-run.mjs";
 import { apiDiffModeParity } from "./api-diff-mode-run.mjs";
 import { apiGitParity } from "./api-git-run.mjs";
+import { cliTerminalTreeParity } from "./cli-terminal-tree-run.mjs";
 import { commandFamiliesParity } from "./command-families-run.mjs";
 import { commandInputParity } from "./command-input-run.mjs";
 import { composeCheckpointParity } from "./compose-run.mjs";
@@ -1226,6 +1227,11 @@ if (!mutationSuite) {
       operation: "tea.machine-viz",
       binaryArgument: "--machine-viz-bin",
       run: (options) => machineVizCheckpointParity(cargo, options),
+    },
+    {
+      name: "cliTerminalTree",
+      operation: "code_graph.cli-terminal-tree",
+      run: (options) => cliTerminalTreeParity(cargo, options),
     },
     {
       name: "durableAlarm",
