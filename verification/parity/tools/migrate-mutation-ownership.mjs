@@ -23,6 +23,7 @@ const entries = [
   ),
 ].map((m) => m[1]);
 const reachable = new Set();
+const dynamicDispatchEdges = [];
 function follow(file) {
   if (reachable.has(file) || !fs.existsSync(path.join(directory, file))) return;
   reachable.add(file);
@@ -34,6 +35,44 @@ function follow(file) {
   );
   for (const n of nodes(ast, ts.isStringLiteralLike))
     if (/\.(mjs|mts)$/.test(n.text)) follow(path.basename(n.text));
+  if (file === "compiled-traces.mjs") {
+    assert.equal(
+      nodes(
+        ast,
+        (n) =>
+          ts.isTemplateExpression(n) &&
+          n.head.text === "" &&
+          n.templateSpans.length === 1 &&
+          ts.isIdentifier(n.templateSpans[0].expression) &&
+          n.templateSpans[0].expression.text === "name" &&
+          n.templateSpans[0].literal.text === ".mts",
+      ).length,
+      1,
+      "compiled-traces name-to-MTS dispatcher shape must remain explicit",
+    );
+  }
+  // compiled-traces dispatches its second argument as `${name}.mts`.
+  for (const call of nodes(ast, ts.isCallExpression)) {
+    if (
+      !["compiledTraceParity", "compiledTraceMain"].includes(
+        name(call.expression),
+      )
+    )
+      continue;
+    const argument = call.arguments[1];
+    if (!argument || !ts.isStringLiteralLike(argument)) continue;
+    const target = `${argument.text}.mts`;
+    assert.ok(
+      fs.existsSync(path.join(directory, target)),
+      `${file}: missing dynamic dispatcher target ${target}`,
+    );
+    dynamicDispatchEdges.push({
+      caller: file,
+      callee: name(call.expression),
+      target,
+    });
+    follow(target);
+  }
 }
 entries.forEach(follow);
 
@@ -310,7 +349,12 @@ for (const file of fs
   }
   // Intercept Cargo only; subprocess/source execution arguments stay untouched.
   for (const imp of source.statements.filter(ts.isImportDeclaration)) {
-    if (!reachable.has(file) || !/CARGO|cargo/.test(text)) continue;
+    const ownsCheck =
+      groups.size > 0 ||
+      (file.endsWith(".mts") &&
+        calls.some((call) => name(call.expression) === "createCheckWorktree"));
+    if ((!reachable.has(file) && !ownsCheck) || !/CARGO|cargo/.test(text))
+      continue;
     if (
       imp.moduleSpecifier.text !== "node:child_process" ||
       !imp.importClause?.namedBindings ||
@@ -464,6 +508,92 @@ if (!process.argv.includes("--audit-base"))
     ),
   );
 
+const inlineOwnerInventory = fs
+  .readdirSync(directory)
+  .filter((file) => file.endsWith(".mts"))
+  .flatMap((file) => {
+    const text = fs.readFileSync(path.join(directory, file), "utf8");
+    const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    if (
+      !nodes(
+        ast,
+        (call) =>
+          ts.isCallExpression(call) &&
+          name(call.expression) === "createCheckWorktree",
+      ).length
+    )
+      return [];
+    const imports = ast.statements.filter(ts.isImportDeclaration);
+    const raw = imports
+      .filter((imp) => imp.moduleSpecifier.text === "node:child_process")
+      .flatMap((imp) =>
+        imp.importClause?.namedBindings &&
+        ts.isNamedImports(imp.importClause.namedBindings)
+          ? imp.importClause.namedBindings.elements
+              .filter((entry) =>
+                [
+                  "spawn",
+                  "spawnSync",
+                  "execFile",
+                  "execFileSync",
+                  "exec",
+                  "execSync",
+                  "fork",
+                ].includes(entry.propertyName?.text ?? entry.name.text),
+              )
+              .map((entry) => entry.name.text)
+          : ["namespace/default process import"],
+      );
+    const checked = imports
+      .filter((imp) => imp.moduleSpecifier.text === "./check-worktree.mjs")
+      .flatMap((imp) =>
+        imp.importClause?.namedBindings &&
+        ts.isNamedImports(imp.importClause.namedBindings)
+          ? imp.importClause.namedBindings.elements
+              .filter((entry) =>
+                ["checkedSpawnSync", "checkedExecFileSync"].includes(
+                  entry.propertyName?.text ?? entry.name.text,
+                ),
+              )
+              .map((entry) => entry.getText(ast))
+          : [],
+      );
+    // In write mode the import repair above has already been saved; check mode must refuse bypasses.
+    assert.equal(
+      raw.length,
+      0,
+      `${file}: inline Cargo owner must not import raw process operations`,
+    );
+    assert.ok(
+      checked.length,
+      `${file}: inline Cargo owner must use checked process operations`,
+    );
+    assert.ok(
+      reachable.has(file),
+      `${file}: owning inline module must be represented in the dispatcher closure`,
+    );
+    return [
+      {
+        file,
+        cargoPackages: [
+          ...new Set(
+            nodes(ast, ts.isStringLiteralLike)
+              .map((n) => n.text)
+              .filter((value) =>
+                /^demlik-(tea|parity|code-graph)$/.test(value),
+              ),
+          ),
+        ],
+        checkedImports: checked,
+        rawProcessImports: raw,
+        reachable: true,
+        incomingDynamicEdges: dynamicDispatchEdges.filter(
+          (edge) => edge.target === file,
+        ),
+      },
+    ];
+  });
+
 const auditBase = process.argv[process.argv.indexOf("--audit-base") + 1];
 if (process.argv.includes("--audit-base")) {
   assert.match(auditBase, /^[a-f0-9]{40}$/);
@@ -543,6 +673,13 @@ if (process.argv.includes("--audit-base")) {
         staticOverapproximation: true,
         aggregateExecuted: false,
         reachableFiles: checked.length,
+        aggregateEntryCount: entries.length,
+        uniqueAggregateEntrypoints: new Set(entries).size,
+        aggregateEntrypointsOutsideClosure: entries.filter(
+          (file) => !reachable.has(file),
+        ),
+        dynamicDispatchEdges,
+        inlineOwnerInventory,
         checked,
       },
       null,

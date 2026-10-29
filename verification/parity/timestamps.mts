@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -17,6 +16,7 @@ import {
 import type { DeadlineExceeded } from "../../packages/tea/src/internal/resilience/deadline/index.ts";
 import { run as runPromise } from "../../packages/tea/src/promise/index.ts";
 import type { Machine, Sub } from "../../packages/tea/src/pure/core.ts";
+import { checkedSpawnSync as spawnSync } from "./check-worktree.mjs";
 import { normalize, numeric } from "./timing-clock.mts";
 
 const encodedNumber = z.union([

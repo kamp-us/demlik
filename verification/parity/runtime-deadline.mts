@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -16,7 +15,10 @@ import {
   deadlineSub,
   nextTimer,
 } from "../../packages/tea/src/resilience/index.js";
-import { createCheckWorktree } from "./check-worktree.mjs";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 export const runtimeDeadlineScript = z
   .object({
     profile: z.enum(["promise", "effect"]),

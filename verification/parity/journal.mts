@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -19,7 +18,10 @@ import {
   memoryJournal,
 } from "../../packages/tea/src/internal/journal/index.js";
 import { fileJournal } from "../../packages/tea/src/node/index.js";
-import { createCheckWorktree } from "./check-worktree.mjs";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 import { buildParityBinary } from "./tea-example.mjs";
 import { decode, normalize } from "./timing-clock.mts";
 

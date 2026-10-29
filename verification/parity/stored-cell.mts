@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -15,7 +14,10 @@ import {
   StoreConflictError,
 } from "../../packages/tea/src/index.js";
 import { run as promiseRun } from "../../packages/tea/src/promise/index.js";
-import { createCheckWorktree } from "./check-worktree.mjs";
+import {
+  createCheckWorktree,
+  checkedSpawnSync as spawnSync,
+} from "./check-worktree.mjs";
 import { Gate, storageFixture } from "./durable-object.mts";
 import { decode, normalize } from "./timing-clock.mts";
 
