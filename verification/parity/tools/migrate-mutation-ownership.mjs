@@ -451,13 +451,18 @@ if (packageChanged) {
   });
   if (write) fs.writeFileSync(packageFile, JSON.stringify(pkg, null, 2) + "\n");
 }
-console.log(
-  JSON.stringify(
-    { mode: write ? "write" : "check", files: report.length, changes: report },
-    null,
-    2,
-  ),
-);
+if (!process.argv.includes("--audit-base"))
+  console.log(
+    JSON.stringify(
+      {
+        mode: write ? "write" : "check",
+        files: report.length,
+        changes: report,
+      },
+      null,
+      2,
+    ),
+  );
 
 const auditBase = process.argv[process.argv.indexOf("--audit-base") + 1];
 if (process.argv.includes("--audit-base")) {
@@ -531,6 +536,9 @@ if (process.argv.includes("--audit-base")) {
   console.log(
     JSON.stringify(
       {
+        mode: write ? "write" : "check",
+        files: report.length,
+        changes: report,
         auditBase,
         staticOverapproximation: true,
         aggregateExecuted: false,
