@@ -1,5 +1,16 @@
 # @demlik/code-graph
 
+## 0.12.0
+
+### Minor Changes
+
+- 16e368e: `--unreachable` no longer reports a function as dead when its only caller is withheld. A function called only by a withheld function is now withheld as `called-by-withheld`, not reported as `dead` or `only-called-from-tests`. The walk starts from functions withheld as `public-entry-surface` or `referenced-in-non-test-file`, follows calls and references, and wins over `referenced-in-non-test-file`. Test-support functions start no walk, and `reachableCount` is unchanged. `called-by-withheld` is a new value of the `withheld[].reason` field in the JSON output.
+- 75de37e: Add `code-graph <featureDir> --hexagon` to print a deterministic Ports & Adapters inventory from source: commands, external systems, other bags, unbagged ports, use cases and adapters. Use `--json` for data, `--pretty` to indent JSON, and `--out` to save either view.
+
+### Patch Changes
+
+- e72e007: Calls to `const` arrow functions and function expressions now become call edges. A call like `innerArrow(x)` to `export const innerArrow = (x) => …` used to get a `workspace:<file>:<name>` callee id that no node had, so the arrow's `calledBy` stayed empty and `--unreachable` reported it as `dead`. The call now points at the arrow's own node, the same way a call to a `function` declaration does, so `--unreachable` stops reporting these as dead and `calledBy`, `--blast`, `callChainDepth` and fan-in count them. A target that lives in workspace source outside the analyzed folder still gets its `workspace:` id.
+
 ## 0.11.0
 
 ### Minor Changes
