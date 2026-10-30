@@ -2,50 +2,12 @@ exit 0
 {
   "clusters": {
     "algorithm": "louvain-deterministic",
-    "clusterCount": 10,
+    "clusterCount": 11,
     "clusteredFileCount": 48,
     "excludedTestFileCount": 3,
     "isolatedFileCount": 11,
-    "modularity": 0.663305,
+    "modularity": 0.670019,
     "scatteredClusters": [
-      {
-        "dirCount": 4,
-        "dirs": [
-          {
-            "dir": "src/cg/schema",
-            "files": [
-              "src/cg/schema/clusters.ts",
-              "src/cg/schema/core.ts",
-              "src/cg/schema/cross-runtime.ts",
-              "src/cg/schema/graph.ts",
-              "src/cg/schema/interface-width.ts",
-              "src/cg/schema/reachability.ts"
-            ]
-          },
-          {
-            "dir": "src/cg",
-            "files": [
-              "src/cg/config.ts",
-              "src/cg/schema.ts"
-            ]
-          },
-          {
-            "dir": "src/cg/smells",
-            "files": [
-              "src/cg/smells/evaluate.ts",
-              "src/cg/smells/rules.ts"
-            ]
-          },
-          {
-            "dir": "src/cg/collapse",
-            "files": [
-              "src/cg/collapse/settings.ts"
-            ]
-          }
-        ],
-        "id": "c01",
-        "size": 11
-      },
       {
         "dirCount": 3,
         "dirs": [
@@ -75,8 +37,39 @@ exit 0
             ]
           }
         ],
-        "id": "c02",
+        "id": "c01",
         "size": 10
+      },
+      {
+        "dirCount": 3,
+        "dirs": [
+          {
+            "dir": "src/cg/schema",
+            "files": [
+              "src/cg/schema/clusters.ts",
+              "src/cg/schema/core.ts",
+              "src/cg/schema/cross-runtime.ts",
+              "src/cg/schema/graph.ts",
+              "src/cg/schema/interface-width.ts",
+              "src/cg/schema/reachability.ts"
+            ]
+          },
+          {
+            "dir": "src/cg",
+            "files": [
+              "src/cg/config.ts",
+              "src/cg/schema.ts"
+            ]
+          },
+          {
+            "dir": "src/cg/collapse",
+            "files": [
+              "src/cg/collapse/settings.ts"
+            ]
+          }
+        ],
+        "id": "c02",
+        "size": 9
       },
       {
         "dirCount": 2,
@@ -145,7 +138,7 @@ exit 0
             ]
           },
           {
-            "clusterId": "c01",
+            "clusterId": "c02",
             "files": [
               "src/cg/collapse/settings.ts"
             ]
@@ -159,14 +152,14 @@ exit 0
         "clusterCount": 3,
         "clusters": [
           {
-            "clusterId": "c01",
+            "clusterId": "c08",
             "files": [
               "src/cg/smells/evaluate.ts",
               "src/cg/smells/rules.ts"
             ]
           },
           {
-            "clusterId": "c02",
+            "clusterId": "c01",
             "files": [
               "src/cg/smells/coupling.ts"
             ]
@@ -188,7 +181,7 @@ exit 0
         "clusterCount": 2,
         "clusters": [
           {
-            "clusterId": "c02",
+            "clusterId": "c01",
             "files": [
               "src/cg/render/analysis.ts",
               "src/cg/render/blast.ts",
@@ -229,7 +222,7 @@ exit 0
             ]
           },
           {
-            "clusterId": "c02",
+            "clusterId": "c01",
             "files": [
               "src/cg/query/clusters.ts",
               "src/cg/query/louvain.ts"
@@ -12409,21 +12402,13 @@ exit 0
         "callChainDepth": 1,
         "calledBy": [
           {
-            "callerId": "src/cg/query/louvain.ts:bestCommunity",
-            "line": 68
-          },
-          {
-            "callerId": "src/cg/query/louvain.ts:bestCommunity",
-            "line": 70
-          },
-          {
             "callerId": "src/cg/query/louvain.ts:moveNode",
             "line": 89
           }
         ],
         "calls": [
           {
-            "calleeId": "src/cg/query/louvain.ts:bestCommunity",
+            "calleeId": "src/cg/query/louvain.ts:score",
             "constArgs": [],
             "declaration": null,
             "line": 68
@@ -12447,7 +12432,7 @@ exit 0
             "line": 69
           },
           {
-            "calleeId": "src/cg/query/louvain.ts:bestCommunity",
+            "calleeId": "src/cg/query/louvain.ts:score",
             "constArgs": [],
             "declaration": null,
             "line": 70
@@ -12474,7 +12459,16 @@ exit 0
       "complexity": 3,
       "edges": {
         "callChainDepth": 0,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/cg/query/louvain.ts:bestCommunity",
+            "line": 68
+          },
+          {
+            "callerId": "src/cg/query/louvain.ts:bestCommunity",
+            "line": 70
+          }
+        ],
         "calls": [
           {
             "calleeId": "external:get",
@@ -16358,13 +16352,8 @@ exit 0
       "commentLines": 0,
       "complexity": 3,
       "edges": {
-        "callChainDepth": 4,
-        "calledBy": [
-          {
-            "callerId": "src/cg/render/file.ts:renderFile",
-            "line": 32
-          }
-        ],
+        "callChainDepth": 3,
+        "calledBy": [],
         "calls": [
           {
             "calleeId": "src/cg/render/file.ts:normalize",
@@ -16385,7 +16374,7 @@ exit 0
             "line": 32
           },
           {
-            "calleeId": "src/cg/render/file.ts:renderFile",
+            "calleeId": "src/cg/render/file.ts:matches",
             "constArgs": [],
             "declaration": null,
             "line": 32
@@ -16424,7 +16413,12 @@ exit 0
       "complexity": 2,
       "edges": {
         "callChainDepth": 0,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/cg/render/file.ts:renderFile",
+            "line": 32
+          }
+        ],
         "calls": []
       },
       "endLine": 23,
@@ -19332,7 +19326,7 @@ exit 0
       "commentLines": 0,
       "complexity": 3,
       "edges": {
-        "callChainDepth": 1,
+        "callChainDepth": 2,
         "calledBy": [],
         "calls": [
           {
@@ -19342,9 +19336,9 @@ exit 0
             "line": 32
           },
           {
-            "calleeId": "external:evaluate",
+            "calleeId": "src/cg/smells/rules.ts:evaluate#0",
             "constArgs": [],
-            "declaration": "workspace:evaluate",
+            "declaration": null,
             "line": 35
           },
           {
@@ -19408,7 +19402,7 @@ exit 0
       "commentLines": 0,
       "complexity": 3,
       "edges": {
-        "callChainDepth": 1,
+        "callChainDepth": 2,
         "calledBy": [],
         "calls": [
           {
@@ -19418,9 +19412,9 @@ exit 0
             "line": 62
           },
           {
-            "calleeId": "external:evaluate",
+            "calleeId": "src/cg/smells/rules.ts:evaluate#0",
             "constArgs": [],
-            "declaration": "workspace:evaluate",
+            "declaration": null,
             "line": 65
           },
           {
@@ -19456,13 +19450,13 @@ exit 0
       "commentLines": 0,
       "complexity": 3,
       "edges": {
-        "callChainDepth": 0,
+        "callChainDepth": 2,
         "calledBy": [],
         "calls": [
           {
-            "calleeId": "external:evaluate",
+            "calleeId": "src/cg/smells/rules.ts:evaluate#0",
             "constArgs": [],
-            "declaration": "workspace:evaluate",
+            "declaration": null,
             "line": 81
           },
           {
@@ -19645,7 +19639,12 @@ exit 0
       "complexity": 1,
       "edges": {
         "callChainDepth": 0,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/cg/smells/plan.test.ts:withCallers",
+            "line": 29
+          }
+        ],
         "calls": [
           {
             "calleeId": "external:from",
@@ -19674,11 +19673,11 @@ exit 0
       "commentLines": 0,
       "complexity": 1,
       "edges": {
-        "callChainDepth": 0,
+        "callChainDepth": 1,
         "calledBy": [],
         "calls": [
           {
-            "calleeId": "workspace:src/cg/smells/plan.test.ts:callerSites",
+            "calleeId": "src/cg/smells/plan.test.ts:callerSites",
             "constArgs": [],
             "declaration": null,
             "line": 29
@@ -20033,7 +20032,20 @@ exit 0
       "complexity": 3,
       "edges": {
         "callChainDepth": 1,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/cg/smells/evaluate.ts:smellsForFunction",
+            "line": 35
+          },
+          {
+            "callerId": "src/cg/smells/evaluate.ts:smellsForModule",
+            "line": 65
+          },
+          {
+            "callerId": "src/cg/smells/evaluate.ts:smellsForDirectory",
+            "line": 81
+          }
+        ],
         "calls": [
           {
             "calleeId": "src/cg/smells/rules.ts:severity",
@@ -20393,7 +20405,7 @@ exit 0
             "line": 8
           },
           {
-            "calleeId": "workspace:src/misc/shapes.ts:arrow",
+            "calleeId": "src/misc/shapes.ts:arrow",
             "constArgs": [],
             "declaration": null,
             "line": 8
@@ -20520,7 +20532,12 @@ exit 0
       "complexity": 10,
       "edges": {
         "callChainDepth": 0,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/misc/shapes.test.ts:scenario",
+            "line": 8
+          }
+        ],
         "calls": []
       },
       "endLine": 36,
@@ -22560,34 +22577,17 @@ exit 0
       "commentLines": 0,
       "complexity": 1,
       "edges": {
-        "callChainDepth": 1,
-        "calledBy": [
-          {
-            "callerId": "src/rpc/store.ts:inner",
-            "line": 9
-          },
-          {
-            "callerId": "src/rpc/store.ts:inner",
-            "line": 10
-          },
-          {
-            "callerId": "src/rpc/store.ts:inner",
-            "line": 11
-          },
-          {
-            "callerId": "src/rpc/store.ts:inner",
-            "line": 12
-          }
-        ],
+        "callChainDepth": 3,
+        "calledBy": [],
         "calls": [
           {
-            "calleeId": "src/rpc/store.ts:inner",
+            "calleeId": "src/rpc/store.ts:onopen",
             "constArgs": [],
             "declaration": null,
             "line": 9
           },
           {
-            "calleeId": "src/rpc/store.ts:inner",
+            "calleeId": "src/rpc/store.ts:push",
             "constArgs": [],
             "declaration": null,
             "line": 10
@@ -22605,13 +22605,13 @@ exit 0
             "line": 11
           },
           {
-            "calleeId": "src/rpc/store.ts:inner",
+            "calleeId": "src/rpc/store.ts:local",
             "constArgs": [],
             "declaration": null,
             "line": 11
           },
           {
-            "calleeId": "src/rpc/store.ts:inner",
+            "calleeId": "src/rpc/store.ts:named",
             "constArgs": [],
             "declaration": null,
             "line": 12
@@ -22638,7 +22638,12 @@ exit 0
       "complexity": 1,
       "edges": {
         "callChainDepth": 2,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/rpc/store.ts:inner",
+            "line": 11
+          }
+        ],
         "calls": [
           {
             "calleeId": "src/rpc/store.ts:create",
@@ -22668,7 +22673,12 @@ exit 0
       "complexity": 1,
       "edges": {
         "callChainDepth": 2,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/rpc/store.ts:inner",
+            "line": 12
+          }
+        ],
         "calls": [
           {
             "calleeId": "src/rpc/store.ts:viaMethod",
@@ -22698,7 +22708,12 @@ exit 0
       "complexity": 1,
       "edges": {
         "callChainDepth": 1,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/rpc/store.ts:inner",
+            "line": 9
+          }
+        ],
         "calls": [
           {
             "calleeId": "src/rpc/store.ts:viaEager",
@@ -22728,7 +22743,12 @@ exit 0
       "complexity": 1,
       "edges": {
         "callChainDepth": 0,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/rpc/store.ts:inner",
+            "line": 10
+          }
+        ],
         "calls": []
       },
       "endLine": 8,
@@ -22822,14 +22842,6 @@ exit 0
             "line": 675
           },
           {
-            "callerId": "src/tea/agent/define-agent.ts:machine",
-            "line": 773
-          },
-          {
-            "callerId": "src/tea/agent/define-agent.ts:drive",
-            "line": 778
-          },
-          {
             "callerId": "src/tea/agent/define-agent.ts:with",
             "line": 825
           }
@@ -22869,7 +22881,16 @@ exit 0
       "complexity": 4,
       "edges": {
         "callChainDepth": 6,
-        "calledBy": [],
+        "calledBy": [
+          {
+            "callerId": "src/tea/agent/define-agent.ts:machine",
+            "line": 773
+          },
+          {
+            "callerId": "src/tea/agent/define-agent.ts:drive",
+            "line": 778
+          }
+        ],
         "calls": [
           {
             "calleeId": "src/tea/agent/define-agent.ts:brainOf",
@@ -22976,11 +22997,11 @@ exit 0
       "commentLines": 0,
       "complexity": 1,
       "edges": {
-        "callChainDepth": 1,
+        "callChainDepth": 7,
         "calledBy": [],
         "calls": [
           {
-            "calleeId": "src/tea/agent/define-agent.ts:definedAgent",
+            "calleeId": "src/tea/agent/define-agent.ts:machineWith",
             "constArgs": [],
             "declaration": null,
             "line": 773
@@ -22999,14 +23020,27 @@ exit 0
       "nodeKind": {
         "kind": "plain"
       },
-      "smells": [],
+      "smells": [
+        {
+          "kind": "deep-call-chain",
+          "severity": "warn",
+          "target": {
+            "file": "src/tea/agent/define-agent.ts",
+            "id": "src/tea/agent/define-agent.ts:machine",
+            "startLine": 772,
+            "type": "function"
+          },
+          "threshold": 5,
+          "value": 7
+        }
+      ],
       "startLine": 772
     },
     {
       "commentLines": 9,
       "complexity": 6,
       "edges": {
-        "callChainDepth": 3,
+        "callChainDepth": 7,
         "calledBy": [
           {
             "callerId": "src/tea/agent/define-agent.ts:begin",
@@ -23025,7 +23059,7 @@ exit 0
             "line": 774
           },
           {
-            "calleeId": "src/tea/agent/define-agent.ts:definedAgent",
+            "calleeId": "src/tea/agent/define-agent.ts:machineWith",
             "constArgs": [],
             "declaration": null,
             "line": 778
@@ -23092,14 +23126,27 @@ exit 0
       "nodeKind": {
         "kind": "plain"
       },
-      "smells": [],
+      "smells": [
+        {
+          "kind": "deep-call-chain",
+          "severity": "warn",
+          "target": {
+            "file": "src/tea/agent/define-agent.ts",
+            "id": "src/tea/agent/define-agent.ts:drive",
+            "startLine": 774,
+            "type": "function"
+          },
+          "threshold": 5,
+          "value": 7
+        }
+      ],
       "startLine": 774
     },
     {
       "commentLines": 0,
       "complexity": 3,
       "edges": {
-        "callChainDepth": 4,
+        "callChainDepth": 8,
         "calledBy": [],
         "calls": [
           {
@@ -23146,14 +23193,27 @@ exit 0
       "nodeKind": {
         "kind": "plain"
       },
-      "smells": [],
+      "smells": [
+        {
+          "kind": "deep-call-chain",
+          "severity": "warn",
+          "target": {
+            "file": "src/tea/agent/define-agent.ts",
+            "id": "src/tea/agent/define-agent.ts:begin",
+            "startLine": 799,
+            "type": "function"
+          },
+          "threshold": 5,
+          "value": 8
+        }
+      ],
       "startLine": 799
     },
     {
       "commentLines": 0,
       "complexity": 1,
       "edges": {
-        "callChainDepth": 4,
+        "callChainDepth": 8,
         "calledBy": [],
         "calls": [
           {
@@ -23182,7 +23242,20 @@ exit 0
       "nodeKind": {
         "kind": "plain"
       },
-      "smells": [],
+      "smells": [
+        {
+          "kind": "deep-call-chain",
+          "severity": "warn",
+          "target": {
+            "file": "src/tea/agent/define-agent.ts",
+            "id": "src/tea/agent/define-agent.ts:cancel",
+            "startLine": 817,
+            "type": "function"
+          },
+          "threshold": 5,
+          "value": 8
+        }
+      ],
       "startLine": 817
     },
     {
@@ -30133,6 +30206,54 @@ exit 0
       "value": 68
     },
     {
+      "kind": "deep-call-chain",
+      "severity": "warn",
+      "target": {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:machine",
+        "startLine": 772,
+        "type": "function"
+      },
+      "threshold": 5,
+      "value": 7
+    },
+    {
+      "kind": "deep-call-chain",
+      "severity": "warn",
+      "target": {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:drive",
+        "startLine": 774,
+        "type": "function"
+      },
+      "threshold": 5,
+      "value": 7
+    },
+    {
+      "kind": "deep-call-chain",
+      "severity": "warn",
+      "target": {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:begin",
+        "startLine": 799,
+        "type": "function"
+      },
+      "threshold": 5,
+      "value": 8
+    },
+    {
+      "kind": "deep-call-chain",
+      "severity": "warn",
+      "target": {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:cancel",
+        "startLine": 817,
+        "type": "function"
+      },
+      "threshold": 5,
+      "value": 8
+    },
+    {
       "kind": "big-file",
       "severity": "high",
       "target": {
@@ -30149,7 +30270,7 @@ exit 0
     "parseFailures": [
       "src/misc/broken.ts"
     ],
-    "smellCount": 9,
+    "smellCount": 13,
     "totalCommentLines": 1838,
     "totalLoc": 8499
   },
@@ -30161,21 +30282,21 @@ exit 0
     "parseFailures": [
       "src/misc/broken.ts"
     ],
-    "smellCount": 9,
+    "smellCount": 13,
     "topTargets": [
       {
-        "calledByCount": 0,
+        "calledByCount": 2,
         "complexity": 4,
         "components": {
           "complexity": 4,
-          "fanIn": 0,
+          "fanIn": 2,
           "smells": 2
         },
         "endLine": 769,
         "file": "src/tea/agent/define-agent.ts",
         "id": "src/tea/agent/define-agent.ts:machineWith",
         "loc": 68,
-        "score": 2040,
+        "score": 2042,
         "smells": [
           {
             "kind": "deep-call-chain",
@@ -30203,6 +30324,35 @@ exit 0
           }
         ],
         "startLine": 702
+      },
+      {
+        "calledByCount": 2,
+        "complexity": 6,
+        "components": {
+          "complexity": 6,
+          "fanIn": 2,
+          "smells": 1
+        },
+        "endLine": 820,
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:drive",
+        "loc": 47,
+        "score": 1062,
+        "smells": [
+          {
+            "kind": "deep-call-chain",
+            "severity": "warn",
+            "target": {
+              "file": "src/tea/agent/define-agent.ts",
+              "id": "src/tea/agent/define-agent.ts:drive",
+              "startLine": 774,
+              "type": "function"
+            },
+            "threshold": 5,
+            "value": 7
+          }
+        ],
+        "startLine": 774
       },
       {
         "calledByCount": 0,
@@ -30263,6 +30413,35 @@ exit 0
         "startLine": 127
       },
       {
+        "calledByCount": 0,
+        "complexity": 3,
+        "components": {
+          "complexity": 3,
+          "fanIn": 0,
+          "smells": 1
+        },
+        "endLine": 804,
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:begin",
+        "loc": 6,
+        "score": 1030,
+        "smells": [
+          {
+            "kind": "deep-call-chain",
+            "severity": "warn",
+            "target": {
+              "file": "src/tea/agent/define-agent.ts",
+              "id": "src/tea/agent/define-agent.ts:begin",
+              "startLine": 799,
+              "type": "function"
+            },
+            "threshold": 5,
+            "value": 8
+          }
+        ],
+        "startLine": 799
+      },
+      {
         "calledByCount": 18,
         "complexity": 2,
         "components": {
@@ -30292,18 +30471,18 @@ exit 0
         "startLine": 16
       },
       {
-        "calledByCount": 4,
+        "calledByCount": 2,
         "complexity": 1,
         "components": {
           "complexity": 1,
-          "fanIn": 4,
+          "fanIn": 2,
           "smells": 1
         },
         "endLine": 827,
         "file": "src/tea/agent/define-agent.ts",
         "id": "src/tea/agent/define-agent.ts:definedAgent",
         "loc": 133,
-        "score": 1014,
+        "score": 1012,
         "smells": [
           {
             "kind": "long-function",
@@ -30319,6 +30498,64 @@ exit 0
           }
         ],
         "startLine": 695
+      },
+      {
+        "calledByCount": 0,
+        "complexity": 1,
+        "components": {
+          "complexity": 1,
+          "fanIn": 0,
+          "smells": 1
+        },
+        "endLine": 773,
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:machine",
+        "loc": 2,
+        "score": 1010,
+        "smells": [
+          {
+            "kind": "deep-call-chain",
+            "severity": "warn",
+            "target": {
+              "file": "src/tea/agent/define-agent.ts",
+              "id": "src/tea/agent/define-agent.ts:machine",
+              "startLine": 772,
+              "type": "function"
+            },
+            "threshold": 5,
+            "value": 7
+          }
+        ],
+        "startLine": 772
+      },
+      {
+        "calledByCount": 0,
+        "complexity": 1,
+        "components": {
+          "complexity": 1,
+          "fanIn": 0,
+          "smells": 1
+        },
+        "endLine": 817,
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:cancel",
+        "loc": 1,
+        "score": 1010,
+        "smells": [
+          {
+            "kind": "deep-call-chain",
+            "severity": "warn",
+            "target": {
+              "file": "src/tea/agent/define-agent.ts",
+              "id": "src/tea/agent/define-agent.ts:cancel",
+              "startLine": 817,
+              "type": "function"
+            },
+            "threshold": 5,
+            "value": 8
+          }
+        ],
+        "startLine": 817
       }
     ],
     "worstFile": "src/tea/agent/define-agent.ts",

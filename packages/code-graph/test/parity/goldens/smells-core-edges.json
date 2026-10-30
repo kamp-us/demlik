@@ -93,6 +93,54 @@ exit 0
     "value": 68
   },
   {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:machine",
+      "startLine": 772,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 7
+  },
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:drive",
+      "startLine": 774,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 7
+  },
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:begin",
+      "startLine": 799,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 8
+  },
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:cancel",
+      "startLine": 817,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 8
+  },
+  {
     "kind": "big-file",
     "severity": "high",
     "target": {
