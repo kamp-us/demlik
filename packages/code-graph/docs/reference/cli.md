@@ -377,7 +377,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   `only-called-from-tests` finding neither fails the run nor is pruned.
 - A finding whose kind changes is a new finding, and its old entry is pruned.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
-  `test-support-surface`) are not findings and never enter the ledger.
+  `test-support-surface`, `called-by-withheld`) are not findings and never enter
+  the ledger.
 - `--json` prints `{ passed, scope, gated, unrecorded, pruned }` for `--ci`, and
   `{ scope, accepted, pruned, reason }` for `--accept-dead`.
 - Exit 2, with one line on stderr and nothing written: `--accept-dead` without a
