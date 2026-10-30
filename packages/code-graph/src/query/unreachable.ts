@@ -18,6 +18,11 @@ export type UnreachableResult = {
   exportedCount: number;
 };
 
+// A test file, or a file a test-support rule names.
+export function testLikeFiles(testSupport: readonly CompiledRule[]): (file: string) => boolean {
+  return (file) => isTestFile(file) || matchingRules(testSupport, file).length > 0;
+}
+
 function productionRoots(functions: readonly FunctionNode[], refs: ReferenceResult): string[] {
   const roots = new Set<string>(refs.moduleScopeRoots);
   for (const fn of functions) {
@@ -121,8 +126,7 @@ export function findUnreachable(
   const adjacency = fullAdjacency(functions, refs.referencesById);
   const reachable = reachableFrom(adjacency, productionRoots(functions, refs));
   const surface = publicSurfaceFiles(modules, extraEntryFiles, exportPatterns);
-  const isTestLike = (file: string): boolean =>
-    isTestFile(file) || matchingRules(testSupport, file).length > 0;
+  const isTestLike = testLikeFiles(testSupport);
 
   const verdicts: Verdict[] = [];
   let exportedCount = 0;

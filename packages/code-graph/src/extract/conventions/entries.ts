@@ -79,6 +79,25 @@ function conventionsFor(
   };
 }
 
+// The names of the entrypoint-export conventions that make an export of `file` (relative to the
+// analyzed root) under one of `exportNames` an entry, sorted; `[]` when none does.
+export type ConventionMatcher = (file: string, exportNames: readonly string[]) => string[];
+
+export function conventionMatcher(
+  rules: NodeKindRules,
+  rootAbsolute: string,
+  repoRoot: string,
+): ConventionMatcher {
+  const locate = packageLocator(rootAbsolute, repoRoot);
+  const conventions = conventionsFor(rules);
+  return (file, exportNames) => {
+    const absolute = path.resolve(rootAbsolute, file);
+    const pkg = locate(absolute);
+    const packagePath = path.relative(pkg.dir, absolute).split(path.sep).join("/");
+    return matchingConventions(conventions(pkg), packagePath, exportNames);
+  };
+}
+
 // Function id → the names of the entrypoint-export conventions that make it an entry.
 export function conventionEntries(
   functions: readonly DiscoveredFunction[],
@@ -87,16 +106,12 @@ export function conventionEntries(
   repoRoot: string,
 ): ReadonlyMap<string, readonly string[]> {
   const exportNames = exportNamesById(functions);
-  const locate = packageLocator(rootAbsolute, repoRoot);
-  const conventions = conventionsFor(rules);
+  const match = conventionMatcher(rules, rootAbsolute, repoRoot);
   const out = new Map<string, readonly string[]>();
   for (const fn of functions) {
     const names = exportNames.get(fn.id);
     if (names === undefined || fn.isTest) continue;
-    const absolute = path.resolve(rootAbsolute, fn.file);
-    const pkg = locate(absolute);
-    const packagePath = path.relative(pkg.dir, absolute).split(path.sep).join("/");
-    const matched = matchingConventions(conventions(pkg), packagePath, names);
+    const matched = match(fn.file, names);
     if (matched.length > 0) out.set(fn.id, matched);
   }
   return out;

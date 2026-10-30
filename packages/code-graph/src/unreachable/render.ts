@@ -40,7 +40,7 @@ export function renderUnreachableGate(
     : [
         `UNREACHABLE LEDGER FAILED — ${result.unrecorded.length} finding(s) in scope ${result.scope} not in ${UNREACHABLE_LEDGER_FILENAME}:`,
         ...result.unrecorded.map(findingLine),
-        "Delete or use each export, or record it by name: " +
+        "Delete or use each export (drop the `export` keyword of an unused-export), or record it by name: " +
           '--unreachable --accept-dead --reason "<why>".',
       ];
   return { stdout: [...head, ...prunedLines(result.pruned)].join("\n"), exitCode };

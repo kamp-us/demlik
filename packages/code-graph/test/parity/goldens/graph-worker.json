@@ -625,6 +625,20 @@ exit 0
       }
     ],
     "unreachable": [],
+    "unusedExports": [
+      {
+        "file": "orphan.workflow.ts",
+        "id": "orphan.workflow.ts:persistOrphan",
+        "startLine": 3,
+        "symbolKind": "function"
+      },
+      {
+        "file": "scan.workflow.ts",
+        "id": "scan.workflow.ts:persistScan",
+        "startLine": 3,
+        "symbolKind": "function"
+      }
+    ],
     "withheld": []
   },
   "root": "<root>/apps/worker",

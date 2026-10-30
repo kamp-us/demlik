@@ -162,6 +162,38 @@ The report counts withheld candidates with their reasons. The wider walk
 includes passed function values, fallback functions, dynamic imports,
 factory options, module-level calls, object members, and rooted class methods.
 
+## Unused exports
+
+`--unreachable` also lists `unused-export` findings, in their own
+`unusedExports` list: an exported symbol that no other loaded file uses. It
+still runs, so it never joins the `unreachable` list, which means "never runs".
+The fix is to drop the `export` keyword.
+
+- Symbols judged: exported functions (declarations, arrows, function
+  expressions) and exported type aliases, interfaces, enums, classes and
+  constants.
+- A use is checker-resolved, through any chain of import and export aliases:
+  an import (`import { x as y }` included), a re-export, or a reference. A
+  same-named identifier in another file, or an import of a different symbol
+  with the same name, is not a use.
+- A file that takes a whole module (`import * as ns`, `export * from`,
+  `export * as ns from`, a dynamic `import("…")`) uses every export of it.
+- A test file's import counts as a use.
+- What counts as public is the same set the `public-entry-surface` reason
+  reads: every `index.ts` barrel, the worker main files, every file a
+  `package.json` `main`, `module`, `types`, `browser`, `bin` or `exports`
+  target maps to (`dist/*.js` read as `src/*.ts`; a target ending in `*`, such
+  as `"./dist/*"`, makes every file below it public), and every file those
+  re-export. An export there is never a finding.
+- An entry is never a finding: a function the kinds pass made an entry, a class
+  holding one, an export an entrypoint-export convention names, and a class a
+  wrangler binding names.
+- Test files and test-support files are not judged.
+- A symbol carries at most one finding: `dead` and `only-called-from-tests`
+  win.
+
+Source: [unused exports](../../src/query/unused-exports.ts).
+
 ## Unguarded effects
 
 `--unguarded` follows calls and cross-runtime edges from entries to effects.

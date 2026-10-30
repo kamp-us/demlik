@@ -256,7 +256,7 @@ contract, with examples, is [SPEC.md §13](../../SPEC.md).
 | `--deep` | Call analysis using the workspace-root tsconfig |
 | `--cross-runtime` | Calls through Cloudflare worker bindings |
 | `--kinds` | Function roles: entry, auth, effect, or plain |
-| `--unreachable` | Exports with no modeled path from an entry |
+| `--unreachable` | Exports with no modeled path from an entry, and exports no other file uses (`unused-export`) |
 | `--unguarded` | Effects reached along a path without an auth check |
 | `--clusters` | Groups of connected files compared with their folders |
 | `--interface-width` | Exports and consumer files outside each package |
@@ -327,11 +327,11 @@ conventions apply alongside active presets.
 | `--comments --ci` | Check ratios against `comment-ceilings.json` |
 | `--collapse --ci` | Check shared-block counts against `collapse-ceilings.json` |
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
-| `--unreachable --ci` | Check unreachable exports against `unreachable-ledger.json` |
+| `--unreachable --ci` | Check unreachable and unused exports against `unreachable-ledger.json` |
 | `--write-ceilings` | With comments: rewrite ratios. With collapse: record this scope's count |
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
 | `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
-| `--dead-only` | With `--unreachable --ci`: gate only `dead` findings |
+| `--dead-only` | With `--unreachable --ci`: gate only `dead` findings, not `only-called-from-tests` or `unused-export` |
 | `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead` or `--accept-smells` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
@@ -362,9 +362,15 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 ```
 
 - An entry is keyed by `(scope, kind, id)`. `scope` is the analyzed path relative
-  to the repo root (`.` for the root itself). `kind` is `dead` or
-  `only-called-from-tests`. `id` is the finding's scope-relative id. `reason` is
-  required.
+  to the repo root (`.` for the root itself). `kind` is `dead`,
+  `only-called-from-tests` or `unused-export`. `id` is the finding's
+  scope-relative id. `reason` is required.
+- `unused-export` is an exported symbol, outside the public surface, that no
+  other loaded file imports, re-exports or uses; a test file's import counts as
+  a use. Public is the set `public-entry-surface` reads: barrels, worker mains,
+  every file a `package.json` entry or `exports` target maps to (a target ending
+  in `*` makes every file below it public), and what those re-export. See
+  [Unused exports](./analyses.md#unused-exports).
 - `--unreachable --accept-dead --reason "<why>"` adds every finding of this scope
   that the ledger does not name yet. It also drops this scope's entries whose
   finding is gone.
@@ -373,8 +379,12 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
-- Both kinds are gated by default. `--dead-only` gates only `dead`: an
-  `only-called-from-tests` finding neither fails the run nor is pruned.
+- All three kinds are gated by default. `--dead-only` gates only `dead`: an
+  `only-called-from-tests` or `unused-export` finding neither fails the run nor
+  is pruned.
+- Upgrading past 0.12.0 can turn an existing `--unreachable --ci` run red: the
+  `unused-export` findings it now measures are not in the ledger yet. Record them
+  once with `--accept-dead --reason`, or drop their `export` keywords.
 - A finding whose kind changes is a new finding, and its old entry is pruned.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
   `test-support-surface`, `called-by-withheld`) are not findings and never enter
