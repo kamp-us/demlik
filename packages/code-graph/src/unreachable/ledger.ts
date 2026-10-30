@@ -2,20 +2,22 @@ import fs from "node:fs";
 import { z } from "zod";
 import { stableStringify } from "../render/json.js";
 import {
-  type UnreachableCategory,
-  UnreachableCategorySchema,
-  type UnreachableSymbol,
+  type ReachabilityReport,
+  UNUSED_EXPORT,
+  type UnreachableFindingKind,
+  UnreachableFindingKindSchema,
 } from "../schema.js";
 
-// `unreachable-ledger.json` at the repo root: one entry per unreachable export a scope still
-// carries. The gate fails only on a finding the ledger does not name, and drops the entries whose
-// finding is gone, so the file only shrinks unless someone adds to it by name and with a reason.
+// `unreachable-ledger.json` at the repo root: one entry per unreachable or unused export a scope
+// still carries. The gate fails only on a finding the ledger does not name, and drops the entries
+// whose finding is gone, so the file only shrinks unless someone adds to it by name and with a
+// reason.
 export const UNREACHABLE_LEDGER_FILENAME = "unreachable-ledger.json";
 
 const EntrySchema = z
   .object({
     scope: z.string().min(1),
-    kind: UnreachableCategorySchema,
+    kind: UnreachableFindingKindSchema,
     id: z.string().min(1),
     reason: z.string().refine((reason) => reason.trim() !== "", "a reason must not be blank"),
   })
@@ -105,11 +107,24 @@ export function writeUnreachableLedger(file: string, ledger: UnreachableLedger):
 
 export function findingsOf(
   scope: string,
-  unreachable: readonly UnreachableSymbol[],
+  report: Pick<ReachabilityReport, "unreachable" | "unusedExports">,
 ): UnreachableFinding[] {
-  return unreachable
-    .map((symbol) => ({ scope, kind: symbol.category, id: symbol.id }))
-    .sort(compareFindings);
+  return [
+    ...report.unreachable.map(
+      (symbol): UnreachableFinding => ({
+        scope,
+        kind: symbol.category,
+        id: symbol.id,
+      }),
+    ),
+    ...report.unusedExports.map(
+      (symbol): UnreachableFinding => ({
+        scope,
+        kind: UNUSED_EXPORT,
+        id: symbol.id,
+      }),
+    ),
+  ].sort(compareFindings);
 }
 
 // What one run found against the ledger. Only the entries of the analyzed scope and of a gated
@@ -117,7 +132,7 @@ export function findingsOf(
 // them. An entry of another scope, or of a kind the run does not gate, is kept as it is.
 export type UnreachableReconciliation = {
   readonly scope: string;
-  readonly gated: readonly UnreachableCategory[];
+  readonly gated: readonly UnreachableFindingKind[];
   readonly unrecorded: readonly UnreachableFinding[];
   readonly pruned: readonly UnreachableLedgerEntry[];
   readonly kept: UnreachableLedger;
@@ -127,7 +142,7 @@ export function reconcileUnreachable(
   ledger: UnreachableLedger,
   scope: string,
   findings: readonly UnreachableFinding[],
-  gated: readonly UnreachableCategory[],
+  gated: readonly UnreachableFindingKind[],
 ): UnreachableReconciliation {
   const isGated = (finding: UnreachableFinding) => gated.includes(finding.kind);
   const measured = findings.filter(isGated);

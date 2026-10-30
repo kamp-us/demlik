@@ -107,7 +107,7 @@ describe("--unreachable --accept-dead then --ci", () => {
     expect(JSON.parse(run.stdout)).toEqual({
       passed: false,
       scope: "packages/app",
-      gated: ["dead", "only-called-from-tests"],
+      gated: ["dead", "only-called-from-tests", "unused-export"],
       unrecorded: [{ scope: "packages/app", kind: "dead", id: "src/fresh.ts:fresh" }],
       pruned: [entry("dead", DEAD)],
     });

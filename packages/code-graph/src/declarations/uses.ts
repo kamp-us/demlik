@@ -1,5 +1,6 @@
 import type { TypeContext } from "../checker/context.js";
 import * as ts from "../engine/tsgo.js";
+import type { DiscoveredFunction } from "../extract/functions.js";
 import type { DeclarationKind, UseSite } from "../schema.js";
 import type { DiscoveredDeclaration } from "./discover.js";
 
@@ -7,6 +8,9 @@ export type DeclarationUses = {
   // One entry per joined declaration, `[]` when nothing uses it. A declaration absent here has no
   // node in tsgo's tree, so its uses are unknown.
   usesById: Map<string, UseSite[]>;
+  // The same, for every exported function node the edge pass joined. Kept apart from `usesById`,
+  // which is what a declaration node's `uses` field reports.
+  functionUsesById: Map<string, UseSite[]>;
   unjoined: string[];
 };
 
@@ -113,16 +117,38 @@ function resolvedSymbol(ctx: TypeContext, identifier: ts.Identifier): ts.TsSymbo
   return ctx.aliasedSymbol(symbol) ?? symbol;
 }
 
+// The tracked node id a checker declaration names: a declaration node, or an exported function
+// node. `export default () => …` declares the default export through the assignment that holds
+// the arrow, so its expression is the function node.
+type TargetOf = (declaration: ts.Node) => string | undefined;
+
+function targetResolver(
+  ctx: TypeContext,
+  nodeToId: ReadonlyMap<ts.Node, string>,
+  functionIds: ReadonlySet<string>,
+): TargetOf {
+  const functionIdOf = (declaration: ts.Node): string | null =>
+    ts.isExportAssignment(declaration)
+      ? (ctx.nodeToId.get(declaration.expression) ?? null)
+      : ctx.idOfDeclaration(declaration);
+  return (declaration) => {
+    const id = nodeToId.get(declaration);
+    if (id !== undefined) return id;
+    const fn = functionIdOf(declaration);
+    return fn !== null && functionIds.has(fn) ? fn : undefined;
+  };
+}
+
 function usedDeclarations(
   ctx: TypeContext,
   identifier: ts.Identifier,
-  nodeToId: ReadonlyMap<ts.Node, string>,
+  targetOf: TargetOf,
 ): string[] {
   const symbol = resolvedSymbol(ctx, identifier);
   if (symbol === undefined) return [];
   const ids: string[] = [];
   for (const declaration of ctx.declarationsOf(symbol)) {
-    const id = nodeToId.get(declaration);
+    const id = targetOf(declaration);
     if (id === undefined) continue;
     if ((declaration as { name?: ts.Node }).name === identifier) continue;
     ids.push(id);
@@ -135,27 +161,37 @@ function sortedSites(sites: Map<string, UseSite>): UseSite[] {
 }
 
 // SPEC §8 C6: every identifier of a loaded file the type checker resolves, through any chain of
-// import and export aliases, to a top-level declaration. One site per declaration per line.
+// import and export aliases, to a top-level declaration, or to one of `exportedFunctions`. One
+// site per symbol per line.
 export function resolveDeclarationUses(
   ctx: TypeContext,
   declarations: readonly DiscoveredDeclaration[],
+  exportedFunctions: readonly DiscoveredFunction[] = [],
 ): DeclarationUses {
   const nodeToId = joinDeclarations(ctx, declarations);
+  const joinedFunctions = new Set(ctx.nodeToId.values());
+  const functionIds = new Set(
+    exportedFunctions.filter((f) => joinedFunctions.has(f.id)).map((f) => f.id),
+  );
   const sites = new Map<string, Map<string, UseSite>>();
-  for (const id of nodeToId.values()) sites.set(id, new Map());
-  const declaredNames = new Set(declarations.map((d) => d.name));
+  for (const id of [...nodeToId.values(), ...functionIds]) sites.set(id, new Map());
+  const targetOf = targetResolver(ctx, nodeToId, functionIds);
+  const names = new Set([...declarations, ...exportedFunctions].map((d) => d.name));
   for (const { unit, source } of ctx.files) {
-    const identifiers = candidateIdentifiers(ctx, source, declaredNames);
+    const identifiers = candidateIdentifiers(ctx, source, names);
     ctx.prefetchSymbols(identifiers);
     for (const identifier of identifiers) {
-      for (const id of usedDeclarations(ctx, identifier, nodeToId)) {
+      for (const id of usedDeclarations(ctx, identifier, targetOf)) {
         const line = ctx.startLine(identifier);
         sites.get(id)?.set(`${unit.file}:${line}`, { file: unit.file, line });
       }
     }
   }
   const usesById = new Map<string, UseSite[]>();
-  for (const [id, byKey] of sites) usesById.set(id, sortedSites(byKey));
+  const functionUsesById = new Map<string, UseSite[]>();
+  for (const [id, byKey] of sites) {
+    (functionIds.has(id) ? functionUsesById : usesById).set(id, sortedSites(byKey));
+  }
   const unjoined = declarations.filter((d) => !usesById.has(d.id)).map((d) => d.id);
-  return { usesById, unjoined };
+  return { usesById, functionUsesById, unjoined };
 }

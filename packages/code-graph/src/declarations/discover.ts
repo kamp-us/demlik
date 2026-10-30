@@ -1,5 +1,7 @@
+import { localExportNames } from "../extract/conventions/export-names.js";
 import { exportedLocalNames, isTestFile } from "../extract/functions.js";
 import type { SourceUnit } from "../extract/project.js";
+import { DEFAULT_EXPORT } from "../kinds/conventions.js";
 import type { DeclarationKind, DeclarationNode, UseSite } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 
@@ -9,14 +11,26 @@ export type DiscoveredDeclaration = {
   kind: DeclarationKind;
   file: string;
   line: number;
+  // The last line of the declaration, so a class's methods can be found inside it.
+  endLine: number;
   isExported: boolean;
   isTest: boolean;
+  // The names the module exports it under from its own top level (`default` for the default
+  // export), sorted: what an entrypoint-export convention matches against.
+  exportNames: readonly string[];
   // The join key the edge pass matches against tsgo's statements: kind, name and the ordinal of
   // that pair in source order, so a merged interface's two halves stay two nodes.
   joinKey: string;
 };
 
-type Found = { name: string; kind: DeclarationKind; line: number; exportWrapped: boolean };
+// `exportedAs` is the name the statement's own `export` gives it, `null` when it carries none.
+type Found = {
+  name: string;
+  kind: DeclarationKind;
+  line: number;
+  endLine: number;
+  exportedAs: string | null;
+};
 
 const SINGLE_KIND: ReadonlyMap<string, DeclarationKind> = new Map([
   ["TSTypeAliasDeclaration", "type-alias"],
@@ -41,9 +55,16 @@ function constantsOf(syntax: SyntaxFile, statement: SyntaxNode, wrapped: boolean
     const init = nodeField(declarator, "init");
     if (name === null || (init !== null && FUNCTION_VALUES.has(init.type))) return;
     const line = index === 0 ? syntax.startLine(statement) : syntax.lineOf(declarator.start);
-    out.push({ name, kind: "constant", line, exportWrapped: wrapped });
+    const endLine = syntax.endLine(declarator);
+    out.push({ name, kind: "constant", line, endLine, exportedAs: wrapped ? name : null });
   });
   return out;
+}
+
+// The name a statement's own `export` gives a declaration named `name`, `null` when it has none.
+function ownExportName(statement: SyntaxNode, name: string): string | null {
+  if (statement.type === "ExportDefaultDeclaration") return DEFAULT_EXPORT;
+  return statement.type === "ExportNamedDeclaration" ? name : null;
 }
 
 function declaredIn(syntax: SyntaxFile, statement: SyntaxNode): Found[] {
@@ -56,7 +77,21 @@ function declaredIn(syntax: SyntaxFile, statement: SyntaxNode): Found[] {
   if (kind === undefined) return [];
   const name = identifierName(nodeField(inner, "id")) ?? (wrapper ? "default" : null);
   if (name === null) return [];
-  return [{ name, kind, line: syntax.startLine(inner), exportWrapped: wrapper }];
+  return [
+    {
+      name,
+      kind,
+      line: syntax.startLine(inner),
+      endLine: syntax.endLine(inner),
+      exportedAs: ownExportName(statement, name),
+    },
+  ];
+}
+
+function exportNamesOf(found: Found, locals: ReadonlyMap<string, readonly string[]>): string[] {
+  const names = new Set(locals.get(found.name) ?? []);
+  if (found.exportedAs !== null) names.add(found.exportedAs);
+  return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 function withOrdinals(
@@ -81,6 +116,7 @@ function discoverInFile(unit: SourceUnit): DiscoveredDeclaration[] {
   const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
   if (found.length === 0) return [];
   const exported = exportedLocalNames(syntax);
+  const locals = localExportNames(syntax);
   const isTest = isTestFile(file);
   return withOrdinals(file, found).map(({ found: f, id, joinKey }) => ({
     id,
@@ -88,8 +124,10 @@ function discoverInFile(unit: SourceUnit): DiscoveredDeclaration[] {
     kind: f.kind,
     file,
     line: f.line,
-    isExported: f.exportWrapped || exported.has(f.name),
+    endLine: f.endLine,
+    isExported: f.exportedAs !== null || exported.has(f.name),
     isTest,
+    exportNames: exportNamesOf(f, locals),
     joinKey,
   }));
 }
@@ -113,8 +151,10 @@ export function buildDeclarationNodes(
   sourceFiles: readonly SourceUnit[],
   usesById: ReadonlyMap<string, UseSite[]> | null,
 ): DeclarationNode[] {
-  return discoverDeclarations(sourceFiles).map(({ joinKey: _joinKey, ...node }) => ({
-    ...node,
-    uses: usesById?.get(node.id) ?? null,
-  }));
+  return discoverDeclarations(sourceFiles).map(
+    ({ joinKey: _j, exportNames: _e, endLine: _l, ...node }) => ({
+      ...node,
+      uses: usesById?.get(node.id) ?? null,
+    }),
+  );
 }

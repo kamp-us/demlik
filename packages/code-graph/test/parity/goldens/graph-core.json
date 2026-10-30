@@ -29933,6 +29933,716 @@ exit 0
         ]
       }
     ],
+    "unusedExports": [
+      {
+        "file": "src/cg/collapse/candidates.ts",
+        "id": "src/cg/collapse/candidates.ts:type-alias:BlockKind",
+        "startLine": 14,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/collapse/candidates.ts",
+        "id": "src/cg/collapse/candidates.ts:type-alias:SkippedBlock",
+        "startLine": 16,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/collapse/ceilings.ts",
+        "id": "src/cg/collapse/ceilings.ts:type-alias:RatchetRender",
+        "startLine": 24,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/collapse/gate.ts",
+        "id": "src/cg/collapse/gate.ts:type-alias:CollapseGateArgs",
+        "startLine": 22,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/collapse/signals.ts",
+        "id": "src/cg/collapse/signals.ts:calleeSignal",
+        "startLine": 87,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/collapse/signals.ts",
+        "id": "src/cg/collapse/signals.ts:callerSignal",
+        "startLine": 98,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/collapse/signals.ts",
+        "id": "src/cg/collapse/signals.ts:nameSignal",
+        "startLine": 109,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/collapse/signals.ts",
+        "id": "src/cg/collapse/signals.ts:shapeSignal",
+        "startLine": 64,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/collapse/signals.ts",
+        "id": "src/cg/collapse/signals.ts:type-alias:SignalName",
+        "startLine": 25,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/query/interface-width.ts",
+        "id": "src/cg/query/interface-width.ts:packageOf",
+        "startLine": 4,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/query/louvain.ts",
+        "id": "src/cg/query/louvain.ts:type-alias:Partition",
+        "startLine": 189,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/query/unreachable.ts",
+        "id": "src/cg/query/unreachable.ts:type-alias:UnreachableResult",
+        "startLine": 8,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/ratchet/scope-count.ts",
+        "id": "src/cg/ratchet/scope-count.ts:constant:ScopeCountCeilingsSchema",
+        "startLine": 6,
+        "symbolKind": "constant"
+      },
+      {
+        "file": "src/cg/ratchet/scope-count.ts",
+        "id": "src/cg/ratchet/scope-count.ts:type-alias:CeilingDirection",
+        "startLine": 17,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/ratchet/scope-count.ts",
+        "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCountCeilings",
+        "startLine": 13,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/ratchet/scope-count.ts",
+        "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCountViolation",
+        "startLine": 19,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/render/blast.ts",
+        "id": "src/cg/render/blast.ts:type-alias:BlastCaller",
+        "startLine": 5,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/render/blast.ts",
+        "id": "src/cg/render/blast.ts:type-alias:BlastResult",
+        "startLine": 12,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/render/ci.ts",
+        "id": "src/cg/render/ci.ts:type-alias:CiResult",
+        "startLine": 5,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/render/ci.ts",
+        "id": "src/cg/render/ci.ts:type-alias:FailOn",
+        "startLine": 3,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/render/file.ts",
+        "id": "src/cg/render/file.ts:type-alias:FileRender",
+        "startLine": 5,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/coupling.ts",
+        "id": "src/cg/smells/coupling.ts:boundaryOf",
+        "startLine": 4,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/cg/smells/coupling.ts",
+        "id": "src/cg/smells/coupling.ts:type-alias:ValueEdge",
+        "startLine": 13,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/plan.ts",
+        "id": "src/cg/smells/plan.ts:constant:PLAN_AXES",
+        "startLine": 6,
+        "symbolKind": "constant"
+      },
+      {
+        "file": "src/cg/smells/rules.ts",
+        "id": "src/cg/smells/rules.ts:type-alias:DirectoryFacts",
+        "startLine": 22,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/rules.ts",
+        "id": "src/cg/smells/rules.ts:type-alias:RawSmell",
+        "startLine": 34,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/rules.ts",
+        "id": "src/cg/smells/rules.ts:type-alias:Rule",
+        "startLine": 41,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/rules.ts",
+        "id": "src/cg/smells/rules.ts:type-alias:RuleContext",
+        "startLine": 27,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/cg/smells/rules.ts",
+        "id": "src/cg/smells/rules.ts:type-alias:SmellKind",
+        "startLine": 204,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/misc/shapes.ts",
+        "id": "src/misc/shapes.ts:class:Store",
+        "startLine": 49,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/misc/shapes.ts",
+        "id": "src/misc/shapes.ts:constant:table",
+        "startLine": 38,
+        "symbolKind": "constant"
+      },
+      {
+        "file": "src/misc/shapes.ts",
+        "id": "src/misc/shapes.ts:default",
+        "startLine": 16,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/misc/shapes.ts",
+        "id": "src/misc/shapes.ts:local",
+        "startLine": 11,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/misc/shapes.ts",
+        "id": "src/misc/shapes.ts:parse",
+        "startLine": 7,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/refs.ts",
+        "id": "src/pothos/refs.ts:type-alias:Ref",
+        "startLine": 4,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/pothos/schema.ts",
+        "id": "src/pothos/schema.ts:persistMutation",
+        "startLine": 9,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/schema.ts",
+        "id": "src/pothos/schema.ts:persistOpen",
+        "startLine": 13,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/schema.ts",
+        "id": "src/pothos/schema.ts:persistScoped",
+        "startLine": 5,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistAttached",
+        "startLine": 5,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistAttachedMany",
+        "startLine": 6,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistImplemented",
+        "startLine": 4,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistInline",
+        "startLine": 8,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistOpenAttached",
+        "startLine": 10,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistOpenImplemented",
+        "startLine": 9,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/pothos/types.ts",
+        "id": "src/pothos/types.ts:persistSkipped",
+        "startLine": 7,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/rpc/define-rpc.ts",
+        "id": "src/rpc/define-rpc.ts:interface:Spec",
+        "startLine": 1,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/rpc/entrypoints.ts",
+        "id": "src/rpc/entrypoints.ts:class:Pipeline",
+        "startLine": 23,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/rpc/entrypoints.ts",
+        "id": "src/rpc/entrypoints.ts:class:Plain",
+        "startLine": 27,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/rpc/store.ts",
+        "id": "src/rpc/store.ts:create",
+        "startLine": 2,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:constant:compactionSummarySchema",
+        "startLine": 61,
+        "symbolKind": "constant"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:interface:CompactionOutputs",
+        "startLine": 38,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:interface:CompactionSummary",
+        "startLine": 71,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:isCompactionSummary",
+        "startLine": 47,
+        "symbolKind": "function"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactErrMsg",
+        "startLine": 142,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactionConfig",
+        "startLine": 116,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:type-alias:CompactInterpret",
+        "startLine": 165,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/compaction.ts",
+        "id": "src/tea/agent/compaction.ts:type-alias:CompactionPurpose",
+        "startLine": 26,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:interface:AgentPrompt",
+        "startLine": 116,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:interface:DefineAgentConfig",
+        "startLine": 261,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:interface:DefinedAgent",
+        "startLine": 590,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:interface:DefinedAgentOverlay",
+        "startLine": 585,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:interface:ToolErrorContext",
+        "startLine": 467,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:AgentMessage",
+        "startLine": 85,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefineAgentCompaction",
+        "startLine": 420,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentCmd",
+        "startLine": 174,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentCtx",
+        "startLine": 154,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentEvent",
+        "startLine": 476,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentInterpret",
+        "startLine": 186,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentMachine",
+        "startLine": 193,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentModel",
+        "startLine": 246,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentMsg",
+        "startLine": 157,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentResolvedState",
+        "startLine": 148,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentRunOptions",
+        "startLine": 484,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentState",
+        "startLine": 127,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentWired",
+        "startLine": 207,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:InterpretOverlay",
+        "startLine": 567,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:LidPurpose",
+        "startLine": 123,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/agent/define-agent.ts",
+        "id": "src/tea/agent/define-agent.ts:type-alias:ToolPartsOf",
+        "startLine": 106,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/devtools/msg-log.tsx",
+        "id": "src/tea/devtools/msg-log.tsx:interface:MsgLogProps",
+        "startLine": 10,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/devtools/msg-log.tsx",
+        "id": "src/tea/devtools/msg-log.tsx:type-alias:MsgLogEntry",
+        "startLine": 1,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/devtools/state-inspector.tsx",
+        "id": "src/tea/devtools/state-inspector.tsx:interface:StateInspectorProps",
+        "startLine": 46,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/extension/react.tsx",
+        "id": "src/tea/extension/react.tsx:interface:BackgroundRuntimeContext",
+        "startLine": 148,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/extension/react.tsx",
+        "id": "src/tea/extension/react.tsx:interface:UseBackgroundRuntimeOpts",
+        "startLine": 64,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/extension/react.tsx",
+        "id": "src/tea/extension/react.tsx:interface:UseBackgroundRuntimeResult",
+        "startLine": 75,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:DispatchDiscardedError",
+        "startLine": 456,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:DisposeTimeoutNotice",
+        "startLine": 426,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:DriveFailedError",
+        "startLine": 299,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:DriveStalledError",
+        "startLine": 325,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:IdentityDropNotice",
+        "startLine": 401,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:PortNameCollisionError",
+        "startLine": 101,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:QuiescenceTimeoutError",
+        "startLine": 278,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:Refusal",
+        "startLine": 540,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:RuntimeDiscardedError",
+        "startLine": 369,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:RuntimeDiscardNotice",
+        "startLine": 352,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:StoreConflictError",
+        "startLine": 669,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:class:StoreRefusedError",
+        "startLine": 569,
+        "symbolKind": "class"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:BootedRunHandle",
+        "startLine": 822,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:DeletableStore",
+        "startLine": 650,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:FencedRead",
+        "startLine": 602,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:FencedStore",
+        "startLine": 623,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:FoldRefusal",
+        "startLine": 1438,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:RunHandle",
+        "startLine": 797,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:Runtime",
+        "startLine": 972,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:RuntimeErrorContext",
+        "startLine": 210,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:RuntimeRef",
+        "startLine": 757,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:Schema",
+        "startLine": 708,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:interface:TelemetryEvent",
+        "startLine": 193,
+        "symbolKind": "interface"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:Branded",
+        "startLine": 53,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:DispatchSettle",
+        "startLine": 748,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:EngineRun",
+        "startLine": 856,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:MachineTypes",
+        "startLine": 1088,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:Migrated",
+        "startLine": 534,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:OnError",
+        "startLine": 220,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:RunOptions",
+        "startLine": 837,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:RuntimeErrorPhase",
+        "startLine": 174,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:Supervision",
+        "startLine": 254,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:SupervisionStrategy",
+        "startLine": 244,
+        "symbolKind": "type-alias"
+      },
+      {
+        "file": "src/tea/runtime-types.ts",
+        "id": "src/tea/runtime-types.ts:type-alias:TelemetrySink",
+        "startLine": 207,
+        "symbolKind": "type-alias"
+      }
+    ],
     "withheld": [
       {
         "id": "src/cg/collapse/candidates.ts:isCandidateFunction",

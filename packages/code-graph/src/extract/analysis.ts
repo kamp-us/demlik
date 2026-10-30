@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { TypeContext } from "../checker/context.js";
+import type { DiscoveredDeclaration } from "../declarations/discover.js";
 import { type ClassifyContext, classifyFunction, compileKindRules } from "../kinds/classify.js";
 import {
   mergeRuleMaps,
@@ -10,8 +11,15 @@ import {
 import type { NodeKindRules } from "../kinds/rules.js";
 import { buildClusterReport } from "../query/clusters.js";
 import { findInterfaceWidth } from "../query/interface-width.js";
+import { publicSurfaceFiles } from "../query/surface.js";
 import { findUnguarded } from "../query/unguarded.js";
-import { findUnreachable } from "../query/unreachable.js";
+import { findUnreachable, testLikeFiles } from "../query/unreachable.js";
+import {
+  type ExportEvidence,
+  exportedSymbols,
+  findUnusedExports,
+  type UnusedExportScope,
+} from "../query/unused-exports.js";
 import type {
   BindingCensusRow,
   ClusterReport,
@@ -22,8 +30,9 @@ import type {
   ModuleNode,
   NodeKind,
   ReachabilityReport,
+  UnusedExport,
 } from "../schema.js";
-import { conventionEntries } from "./conventions/entries.js";
+import { conventionEntries, conventionMatcher } from "./conventions/entries.js";
 import {
   type CrossRuntimeResolver,
   createCrossRuntimeResolver,
@@ -141,6 +150,8 @@ export type CompleteInput = {
   names: Set<string>;
   exportsByFile: Map<string, string[]>;
   functions: readonly DiscoveredFunction[];
+  // Who uses each export, measured when the reach pass runs; `null` otherwise.
+  evidence: ExportEvidence | null;
 };
 
 function crossRuntimeReport(input: CompleteInput): CrossRuntimeReport | null {
@@ -174,13 +185,47 @@ function durableObjectClasses(catalog: BindingCatalog | null): Set<string> {
   return names;
 }
 
+type ReachabilityInput = {
+  options: AnalysisOptions;
+  prep: AnalysisPrep;
+  rootAbsolute: string;
+  compiled: ReturnType<typeof compileKindRules>;
+  refs: ReferenceResult;
+  evidence: ExportEvidence | null;
+};
+
+function unusedExportsOf(
+  input: ReachabilityInput,
+  functions: readonly FunctionNode[],
+  scope: UnusedExportScope,
+): UnusedExport[] {
+  const { evidence, options, rootAbsolute, prep } = input;
+  if (evidence === null) return [];
+  const match = options.kinds
+    ? conventionMatcher(options.kindRules, rootAbsolute, options.repoRoot)
+    : null;
+  const bound = boundClassNames(prep.catalog);
+  // The platform loads a class a wrangler binding names by that name, and a framework loads an
+  // export an entrypoint-export convention names.
+  const isEntry = (d: DiscoveredDeclaration): boolean =>
+    d.exportNames.some((name) => bound.has(name)) ||
+    (match !== null && match(d.file, d.exportNames).length > 0);
+  const symbols = exportedSymbols(functions, evidence.declarations, isEntry);
+  return findUnusedExports(symbols, evidence, scope);
+}
+
+function boundClassNames(catalog: BindingCatalog | null): Set<string> {
+  const names = new Set<string>();
+  for (const m of catalog?.manifests ?? []) {
+    for (const b of m.bindings) names.add(b.targetClass);
+  }
+  return names;
+}
+
 function buildReachability(
-  options: AnalysisOptions,
-  prep: AnalysisPrep,
-  rootAbsolute: string,
-  compiled: ReturnType<typeof compileKindRules>,
-  refs: ReferenceResult,
+  input: ReachabilityInput,
 ): (functions: FunctionNode[], modules: ModuleNode[]) => ReachabilityReport {
+  const { options, prep, rootAbsolute, compiled, refs } = input;
   return (functions, modules) => {
     const mains =
       prep.catalog === null ? [] : workerMainFiles(prep.catalog, options.repoRoot, rootAbsolute);
@@ -197,12 +242,18 @@ function buildReachability(
       compiled.testSupport,
       exportPatterns,
     );
+    const unusedExports = unusedExportsOf(input, functions, {
+      surface: publicSurfaceFiles(modules, mains, exportPatterns),
+      isTestLike: testLikeFiles(compiled.testSupport),
+      reported: new Set(found.unreachable.map((u) => u.id)),
+    });
     return {
       entryCount: functions.filter((f) => f.nodeKind?.kind === "entry").length,
       exportedCount: found.exportedCount,
       reachableCount: found.reachableCount,
       unguarded: findUnguarded(functions),
       unreachable: found.unreachable,
+      unusedExports,
       withheld: found.withheld,
     };
   };
@@ -252,7 +303,7 @@ export function completeAnalysis(input: CompleteInput): AnalysisBundle {
 
   const refs = resolveReferences(ctx, names, exportsByFile);
   const reachability = options.reach
-    ? buildReachability(options, prep, rootAbsolute, compiled, refs)
+    ? buildReachability({ options, prep, rootAbsolute, compiled, refs, evidence: input.evidence })
     : null;
   const interfaceWidth = options.interfaceWidth ? buildInterfaceWidth(rootAbsolute, refs) : null;
 

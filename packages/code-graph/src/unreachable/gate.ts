@@ -2,7 +2,11 @@ import path from "node:path";
 import type { Opts } from "../cli.js";
 import type { Reporter } from "../config.js";
 import { scopeOf } from "../ratchet/scope-count.js";
-import type { Graph, UnreachableCategory } from "../schema.js";
+import {
+  type Graph,
+  type UnreachableFindingKind,
+  UnreachableFindingKindSchema,
+} from "../schema.js";
 import {
   findingsOf,
   readUnreachableLedger,
@@ -40,11 +44,12 @@ function flagsOf(opts: UnreachableOpts): UnreachableFlags {
   };
 }
 
-const ALL_KINDS: readonly UnreachableCategory[] = ["dead", "only-called-from-tests"];
-const DEAD_ONLY: readonly UnreachableCategory[] = ["dead"];
+const ALL_KINDS: readonly UnreachableFindingKind[] = UnreachableFindingKindSchema.options;
+// `--dead-only` leaves `only-called-from-tests` and `unused-export` out: neither fails nor is pruned.
+const DEAD_ONLY: readonly UnreachableFindingKind[] = ["dead"];
 
 type UnreachableMode =
-  | { readonly kind: "gate"; readonly gated: readonly UnreachableCategory[] }
+  | { readonly kind: "gate"; readonly gated: readonly UnreachableFindingKind[] }
   | { readonly kind: "accept"; readonly reason: string };
 
 // What the flags ask of the unreachable gate: nothing (`none`), a refusal already reported, or a
@@ -151,7 +156,7 @@ export function runUnreachableGate(
     out.report("the reachability pass did not run; the unreachable gate has nothing to read.");
     return 2;
   }
-  const findings = findingsOf(gate.scope, graph.reachability.unreachable);
+  const findings = findingsOf(gate.scope, graph.reachability);
   const { mode } = gate;
   switch (mode.kind) {
     case "gate": {

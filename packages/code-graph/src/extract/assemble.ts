@@ -2,7 +2,9 @@ import path from "node:path";
 import { TypeContext } from "../checker/context.js";
 import { loadDataReport } from "../data/extract.js";
 import { buildDeclarationNodes, discoverDeclarations } from "../declarations/discover.js";
+import { wholeModuleUsers } from "../declarations/module-uses.js";
 import { resolveDeclarationUses } from "../declarations/uses.js";
+import type { ExportEvidence } from "../query/unused-exports.js";
 import {
   type DirectoryNode,
   type FunctionNode,
@@ -286,11 +288,21 @@ export function assembleGraphWithEdges(
     );
     const prep = options === null ? null : prepareAnalysis(options, rootAbsolute, ctx);
     const result = resolveEdges(ctx, imports, ids, prep?.resolver ?? null);
-    const uses = resolveDeclarationUses(ctx, discoverDeclarations(sourceFiles));
+    const declarations = discoverDeclarations(sourceFiles);
+    const reach = options?.reach === true;
+    const exportedFunctions = reach ? functions.filter((f) => f.isExported && !f.isTest) : [];
+    const uses = resolveDeclarationUses(ctx, declarations, exportedFunctions);
     reportUnjoined(
       uses.unjoined,
       "declaration(s) have no node in tsgo's tree, so their uses are unknown",
     );
+    const evidence: ExportEvidence | null = reach
+      ? {
+          declarations,
+          usesById: new Map([...uses.usesById, ...uses.functionUsesById]),
+          wholeModuleUsers: wholeModuleUsers(ctx),
+        }
+      : null;
     const analysis =
       options === null || prep === null
         ? null
@@ -300,6 +312,7 @@ export function assembleGraphWithEdges(
             rootAbsolute,
             ctx,
             functions,
+            evidence,
             ...analysisInputs(functions),
           });
     const edges = { result, declarationUses: uses.usesById, scope, tsConfig };
