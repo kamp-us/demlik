@@ -29365,34 +29365,6 @@ exit 0
       },
       {
         "category": "dead",
-        "file": "src/cg/collapse/signals.ts",
-        "id": "src/cg/collapse/signals.ts:calleeSignal",
-        "startLine": 87,
-        "testReferences": []
-      },
-      {
-        "category": "dead",
-        "file": "src/cg/collapse/signals.ts",
-        "id": "src/cg/collapse/signals.ts:callerSignal",
-        "startLine": 98,
-        "testReferences": []
-      },
-      {
-        "category": "dead",
-        "file": "src/cg/collapse/signals.ts",
-        "id": "src/cg/collapse/signals.ts:nameSignal",
-        "startLine": 109,
-        "testReferences": []
-      },
-      {
-        "category": "dead",
-        "file": "src/cg/collapse/signals.ts",
-        "id": "src/cg/collapse/signals.ts:shapeSignal",
-        "startLine": 64,
-        "testReferences": []
-      },
-      {
-        "category": "dead",
         "file": "src/cg/config.ts",
         "id": "src/cg/config.ts:resolveBoundaryRules",
         "startLine": 124,
@@ -29578,13 +29550,6 @@ exit 0
         "file": "src/cg/render/tree.ts",
         "id": "src/cg/render/tree.ts:renderTree",
         "startLine": 30,
-        "testReferences": []
-      },
-      {
-        "category": "dead",
-        "file": "src/cg/smells/coupling.ts",
-        "id": "src/cg/smells/coupling.ts:boundaryOf",
-        "startLine": 4,
         "testReferences": []
       },
       {
@@ -29897,51 +29862,103 @@ exit 0
     ],
     "withheld": [
       {
+        "id": "src/cg/collapse/candidates.ts:isCandidateFunction",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/cost.ts:collapseCost",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/cost.ts:costInputs",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/cost.ts:effectReachers",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/cost.ts:packageResolver",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/partial.ts:findPartialTwins",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:calleeSignal",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:callerSignal",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:firedSignals",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:nameSignal",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:round4",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:shapeSignal",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/signals.ts:toTwin",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/collapse/tokens.ts:nameTokens",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/query/reach.ts:invokedAdjacency",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/ratchet/scope-count.ts:hasDirection",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/ratchet/scope-count.ts:ratchetTableLines",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/render/json.ts:stableStringify",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/smells/coupling.ts:boundaryOf",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/smells/coupling.ts:valueEdges",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/cg/smells/plan.ts:rankPlan",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/misc/shapes.ts:local",
+        "reason": "called-by-withheld"
+      },
+      {
+        "id": "src/misc/shapes.ts:parse",
+        "reason": "called-by-withheld"
+      },
+      {
         "id": "src/cg/collapse/candidates.ts:findCollapseCandidates",
         "reason": "referenced-in-non-test-file"
       },
       {
-        "id": "src/cg/collapse/candidates.ts:isCandidateFunction",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
         "id": "src/cg/collapse/ceilings.ts:renderPartialTwinRatchet",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/cost.ts:collapseCost",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/cost.ts:costInputs",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/cost.ts:effectReachers",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/cost.ts:packageResolver",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/partial.ts:findPartialTwins",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/signals.ts:firedSignals",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/signals.ts:round4",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/signals.ts:toTwin",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/collapse/tokens.ts:nameTokens",
         "reason": "referenced-in-non-test-file"
       },
       {
@@ -29957,10 +29974,6 @@ exit 0
         "reason": "referenced-in-non-test-file"
       },
       {
-        "id": "src/cg/query/reach.ts:invokedAdjacency",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
         "id": "src/cg/query/reach.ts:reachableFrom",
         "reason": "referenced-in-non-test-file"
       },
@@ -29970,14 +29983,6 @@ exit 0
       },
       {
         "id": "src/cg/ratchet/scope-count.ts:evaluateScopeRatchet",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/ratchet/scope-count.ts:hasDirection",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/ratchet/scope-count.ts:ratchetTableLines",
         "reason": "referenced-in-non-test-file"
       },
       {
@@ -30005,31 +30010,11 @@ exit 0
         "reason": "referenced-in-non-test-file"
       },
       {
-        "id": "src/cg/render/json.ts:stableStringify",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
         "id": "src/cg/smells/coupling.ts:analyzeCoupling",
         "reason": "referenced-in-non-test-file"
       },
       {
-        "id": "src/cg/smells/coupling.ts:valueEdges",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/cg/smells/plan.ts:rankPlan",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
         "id": "src/misc/shapes.ts:default",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/misc/shapes.ts:local",
-        "reason": "referenced-in-non-test-file"
-      },
-      {
-        "id": "src/misc/shapes.ts:parse",
         "reason": "referenced-in-non-test-file"
       },
       {
