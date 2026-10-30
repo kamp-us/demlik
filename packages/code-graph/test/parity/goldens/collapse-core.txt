@@ -1,5 +1,5 @@
 exit 0
-collapse candidates: 64 findings / 153 pairs (top 20 shown) from 5499 scored over 220 functions, minSignals=2
+collapse candidates: 64 findings / 153 pairs (top 20 shown) from 5501 scored over 220 functions, minSignals=2
 a REPORT, not a gate — the graph narrows, a human judges
   1. rank=0.5  confidence=0.5  cluster of 3 (3 pairs)
      A src/cg/config.ts:resolveCollapseSettings  src/cg/config.ts:50
@@ -9,12 +9,12 @@ a REPORT, not a gate — the graph narrows, a human judges
      + callees 1  jaccard 1 over 3/3 callees
      also: src/cg/config.ts:resolveThresholds
   2. rank=0.5  confidence=0.5  cluster of 9 (29 pairs)
-     A src/cg/smells/rules.ts:evaluate#0  src/cg/smells/rules.ts:51
-     B src/cg/smells/rules.ts:evaluate#1  src/cg/smells/rules.ts:66
+     A src/cg/smells/rules.ts:evaluate#1  src/cg/smells/rules.ts:66
+     B src/cg/smells/rules.ts:evaluate#2  src/cg/smells/rules.ts:81
      cost=1  callers=0 packages=1
      + shape 1  loc 13/13 cx 3/3 nest 0/0
      + name 1  shared {evaluate}
-     also: src/cg/render/ci.ts:evaluateCi, src/cg/smells/rules.ts:evaluate#2, src/cg/smells/rules.ts:evaluate#3, src/cg/smells/rules.ts:evaluate#4, src/cg/smells/rules.ts:evaluate#5, src/cg/smells/rules.ts:evaluate#6, src/cg/smells/rules.ts:evaluate#7
+     also: src/cg/render/ci.ts:evaluateCi, src/cg/smells/rules.ts:evaluate#0, src/cg/smells/rules.ts:evaluate#3, src/cg/smells/rules.ts:evaluate#4, src/cg/smells/rules.ts:evaluate#5, src/cg/smells/rules.ts:evaluate#6, src/cg/smells/rules.ts:evaluate#7
   3. rank=0.5  confidence=0.5  cluster of 5 (7 pairs)
      A src/cg/smells/rules.ts:evaluate#5  src/cg/smells/rules.ts:126
      B src/cg/smells/rules.ts:evaluate#6  src/cg/smells/rules.ts:142
