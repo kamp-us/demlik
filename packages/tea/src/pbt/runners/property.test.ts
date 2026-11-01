@@ -479,17 +479,27 @@ describe("a check that says why", () => {
   const thirdLaw = (msg: CountMsg, s: Count) =>
     msg.type === "reset" && s.count !== 0 ? THIRD : null;
 
-  const threeLawsOnEachStep = (seed: number): PropertyRun =>
+  // Declared here rather than taken from fast-check's types: 4 does not know
+  // `errorWithCause`, and this file's tests run on both majors.
+  type CauseSetting = { readonly errorWithCause?: boolean };
+
+  const threeLawsOnEachStep = (
+    seed: number,
+    settings?: CauseSetting,
+  ): PropertyRun =>
     propertyInvariant(
       counter,
       {},
       countMsgs,
       ({ msg, next }) =>
         firstLaw(next) ?? secondLaw(next) ?? thirdLaw(msg, next),
-      { seed },
+      { seed, ...settings },
     );
 
-  const threeLawsOverTheTrace = (seed: number): PropertyRun =>
+  const threeLawsOverTheTrace = (
+    seed: number,
+    settings?: CauseSetting,
+  ): PropertyRun =>
     propertyTrace(
       counter,
       {},
@@ -502,7 +512,7 @@ describe("a check that says why", () => {
         }
         return null;
       },
-      { seed },
+      { seed, ...settings },
     );
 
   const THREE_LAWS = [
@@ -527,6 +537,16 @@ describe("a check that says why", () => {
     it("says it once, wherever fast-check files what a check threw", () => {
       const { message } = failureOf(() => run(1));
       expect(message.split(SECOND)).toHaveLength(2);
+    });
+
+    // Fast-check 4 files a throw in `cause` by default, so this setting is how
+    // the fast-check 3 line CI installs reaches the arm 4's users depend on.
+    it("says it once when fast-check files the throw in cause", () => {
+      const failure = failureOf(() => run(1, { errorWithCause: true }));
+
+      expect(failure.cause).toBeInstanceOf(Error);
+      expect(failure.message.split(SECOND)).toHaveLength(2);
+      expect(failure.message).toContain(SHRUNK);
     });
   });
 

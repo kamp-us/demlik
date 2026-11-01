@@ -11,7 +11,7 @@
 // state (a value, or an arbitrary that draws one per run), and fast-check's
 // settings. A passing run returns a `PropertyRun`; a failing run throws a
 // `PropertyFailure` carrying that same `PropertyRun` under fast-check's own
-// report.
+// report, plus a check's reason when fast-check filed that reason in `cause`.
 //
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
 // prefix shrinkers can be layered later but are opt-in, not default. The
@@ -85,7 +85,9 @@ export interface PropertyRun {
  * {@link PropertyFailure.run} holds the same {@link PropertyRun} a pass returns.
  * What the check threw sits where `fc.assert` puts it on the installed fast-check:
  * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
- * in the message by default and in `cause` with `errorWithCause`.
+ * in the message by default and in `cause` with `errorWithCause`. A reason the check
+ * returned is always in the message: when it went to `cause`, the message is the
+ * report plus a `reason:` line.
  *
  * @example
  * ```ts
