@@ -6,10 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "../test-helpers/ratchet-repo.js";
 import { SMELL_LEDGER_FILENAME } from "./ledger.js";
 
-// A source file `big-file` measures at exactly `count` lines, none of them a function. It ends
-// without a newline: the measure counts the empty line after a final newline as one more.
+// A source file `big-file` measures at exactly `count` lines, none of them a function.
 const linesFile = (count: number): string =>
-  Array.from({ length: count }, (_, i) => `export const v${i} = ${i};`).join("\n");
+  Array.from({ length: count }, (_, i) => `export const v${i} = ${i};\n`).join("");
 
 // A function of `body + 2` lines, over the default `longFunctionLoc` (60) when `body` is.
 const longFunction = (name: string, body: number): string =>
@@ -162,6 +161,35 @@ describe("a file size gate switched on at today's count", () => {
         { rule: "big-file", target: "packages/core/src/gone.ts", value: 500, reason: "kept" },
       ],
     });
+  });
+});
+
+describe("a ledger recorded when a final newline counted as one more line", () => {
+  it("passes --ci once: an entry over the limit is lowered and one at the limit is pruned", () => {
+    for (const size of [450, 620, 900, 1200, 2100]) fs.rmSync(path.join(top, big(size)));
+    write("packages/core/src/over.ts", linesFile(449));
+    write("packages/core/src/at-limit.ts", linesFile(400));
+    writeLedger(
+      ["big-file"],
+      [
+        { rule: "big-file", target: "packages/core/src/at-limit.ts", value: 401, reason: "kept" },
+        { rule: "big-file", target: "packages/core/src/over.ts", value: 450, reason: "kept" },
+      ],
+    );
+
+    const first = runCli([core, "--ci"]);
+    expect(first.code).toBe(0);
+    expect(first.stdout).toContain(
+      "big-file  packages/core/src/over.ts  recorded 450, measured 449",
+    );
+    expect(first.stdout).toContain("pruned 1 entry");
+    expect(readEntries()).toEqual([
+      { rule: "big-file", target: "packages/core/src/over.ts", value: 449, reason: "kept" },
+    ]);
+
+    const recorded = ledgerText();
+    expect(runCli([core, "--ci"]).code).toBe(0);
+    expect(ledgerText()).toBe(recorded);
   });
 });
 
