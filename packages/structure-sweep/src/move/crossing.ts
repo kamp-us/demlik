@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { getCompilerOptionsFromTsConfig, type SourceFile, ts } from "ts-morph";
+import { z } from "zod";
 import { absurd } from "../absurd.js";
 import type { PackageEdge } from "./dependencies.js";
 import {
   type ExportEntry,
   exportEntries,
+  exportTargets,
+  keyedTargets,
   sourceOfSubpath,
   subpathOf,
   subpathsOf,
+  targetsFor,
 } from "./entries.js";
 import type { Exists } from "./heal.js";
 import type { PathMove } from "./manifest.js";
@@ -61,17 +65,10 @@ export type Named =
   | { readonly kind: "package"; readonly pkg: WorkspacePackage }
   | { readonly kind: "alias"; readonly path: string };
 
-/** Whether `specifier` matches a tsconfig `paths` key, which holds at most one `*`. */
-const matchesPathsKey = (key: string, specifier: string): boolean => {
-  const star = key.indexOf("*");
-  if (star === -1) return key === specifier;
-  const [before, after] = [key.slice(0, star), key.slice(star + 1)];
-  return (
-    specifier.length >= before.length + after.length &&
-    specifier.startsWith(before) &&
-    specifier.endsWith(after)
-  );
-};
+/** The part of a `tsconfig.json` that names the configs it references. */
+const ProjectReferences = z.object({
+  references: z.array(z.object({ path: z.string() })),
+});
 
 /**
  * A workspace read against one tree: which file each specifier names there, and the subpath each
@@ -81,6 +78,14 @@ const matchesPathsKey = (key: string, specifier: string): boolean => {
 export class PackageTree {
   readonly #entries = new Map<string, readonly ExportEntry[]>();
   readonly #options = new Map<string, ts.CompilerOptions>();
+  readonly #aliasOptions = new Map<string, ts.CompilerOptions>();
+  readonly #imports = new Map<
+    string,
+    {
+      readonly dir: string;
+      readonly imports: readonly [string, readonly string[]][];
+    }
+  >();
 
   constructor(
     readonly repoRoot: string,
@@ -103,19 +108,75 @@ export class PackageTree {
   }
 
   /**
+   * The compiler options aliases are read under from `dir`: the nearest `tsconfig.json`'s, or when
+   * that declares no `paths`, those of the first config it references that does. A Vue scaffold's
+   * `tsconfig.json` holds only `references`, with its `paths` in `tsconfig.app.json`.
+   */
+  #aliasOptionsAt(dir: string): ts.CompilerOptions {
+    let options = this.#aliasOptions.get(dir);
+    if (options === undefined) {
+      options = this.#optionsAt(dir);
+      const config = ts.findConfigFile(dir, ts.sys.fileExists);
+      if (options.paths === undefined && config !== undefined) {
+        const referenced = ProjectReferences.safeParse(
+          ts.readConfigFile(config, ts.sys.readFile).config,
+        );
+        options =
+          (referenced.success ? referenced.data.references : [])
+            .map(({ path }) =>
+              ts.resolveProjectReferencePath({
+                path: resolve(dirname(config), path),
+              }),
+            )
+            .filter((path) => ts.sys.fileExists(path))
+            .map((path) => getCompilerOptionsFromTsConfig(path).options)
+            .find(
+              (referencedOptions) => referencedOptions.paths !== undefined,
+            ) ?? options;
+      }
+      this.#aliasOptions.set(dir, options);
+    }
+    return options;
+  }
+
+  /** Each `package.json` `imports` target `literal` opens from `dir`, as an absolute path. */
+  #importTargets(dir: string, literal: string): string[] {
+    let scope = this.#imports.get(dir);
+    if (scope === undefined) {
+      const manifest = ts.findConfigFile(
+        dir,
+        ts.sys.fileExists,
+        "package.json",
+      );
+      const { config } =
+        manifest === undefined
+          ? { config: undefined }
+          : ts.readConfigFile(manifest, ts.sys.readFile);
+      scope = {
+        dir: manifest === undefined ? dir : dirname(manifest),
+        imports: keyedTargets(config?.imports),
+      };
+      this.#imports.set(dir, scope);
+    }
+    const { dir: home, imports } = scope;
+    return targetsFor(imports, literal)
+      .filter((target) => target.startsWith("./"))
+      .map((target) => resolve(home, target));
+  }
+
+  /**
    * The file in this repository `literal` names from `importer` through tsconfig `paths`, tsconfig
    * `baseUrl` or a package's `imports`, read against `tree`. Only a specifier that looks like the
    * first or the last goes to the compiler, since this is asked of every quoted string in every
-   * tracked source.
+   * tracked source. The compiler resolves only the module extensions it knows, so what it does not
+   * answer is read off the alias's own targets: a bundler resolves `@/Card.vue`, and nothing else
+   * here would see it.
    */
   #aliased(importer: string, literal: string): string | undefined {
-    const options = this.#optionsAt(dirname(importer));
-    const looksAliased =
-      literal.startsWith("#") ||
-      Object.keys(options.paths ?? {}).some((key) =>
-        matchesPathsKey(key, literal),
-      );
-    if (!looksAliased)
+    const dir = dirname(importer);
+    const options = this.#aliasOptionsAt(dir);
+    const paths = targetsFor(Object.entries(options.paths ?? {}), literal);
+    if (!literal.startsWith("#") && paths.length === 0)
       return options.baseUrl === undefined
         ? undefined
         : moduleFileCandidates(resolve(options.baseUrl, literal)).find(
@@ -130,10 +191,32 @@ export class PackageTree {
         readFile: ts.sys.readFile,
       },
     );
-    return resolvedModule === undefined ||
-      resolvedModule.isExternalLibraryImport === true
-      ? undefined
-      : resolvedModule.resolvedFileName;
+    if (resolvedModule !== undefined)
+      return resolvedModule.isExternalLibraryImport === true
+        ? undefined
+        : resolvedModule.resolvedFileName;
+    // The compiler keeps the directory `paths` are relative to here, whatever config declared them.
+    const base = options.baseUrl ?? options.pathsBasePath;
+    return [
+      ...(typeof base === "string"
+        ? paths.map((target) => resolve(base, target))
+        : []),
+      ...this.#importTargets(dir, literal),
+    ]
+      .flatMap((target) => moduleFileCandidates(target))
+      .find(this.tree);
+  }
+
+  /**
+   * The non-code file an `exports` pattern gives `subpath`, as its target reads: the follow-back to
+   * a source knows only TypeScript, so `./*.vue` to `./src/*.vue` answers nothing there.
+   */
+  #plainExport(pkg: WorkspacePackage, subpath: string): string | undefined {
+    const dir = join(this.repoRoot, pkg.root);
+    return targetsFor(exportTargets(pkg.exports), subpath)
+      .filter((target) => !namesCode(target))
+      .map((target) => join(dir, target))
+      .find(this.tree);
   }
 
   /** The package an absolute path sits in. */
@@ -199,7 +282,7 @@ export class PackageTree {
           ? moduleFileCandidates(
               join(dir, subpath === "." ? "index" : subpath),
             ).find(this.tree)
-          : undefined;
+          : this.#plainExport(pkg, subpath);
     return path === undefined
       ? { kind: "package", pkg }
       : { kind: "file", path };

@@ -332,6 +332,261 @@ describe("an import in a .vue, .svelte, .mdx or .astro file", () => {
     ]);
   });
 
+  describe("through an alias spelling an extension the compiler does not resolve", () => {
+    const card = [
+      "packages/a/src/Card.vue",
+      "packages/a/src/deep/Card.vue",
+    ] as const;
+    const logo = [
+      "packages/a/src/logo.svg",
+      "packages/a/src/deep/logo.svg",
+    ] as const;
+    const ALIASES = {
+      "packages/a/src/Card.vue": `${PAGE}`,
+      "packages/a/src/Other.vue": `${PAGE}`,
+      "packages/a/src/logo.svg": "<svg />\n",
+    };
+    const tsconfig = (compilerOptions: object) =>
+      JSON.stringify({ compilerOptions });
+    const WITH_BASE = tsconfig({ baseUrl: ".", paths: { "@/*": ["src/*"] } });
+    const NO_BASE = tsconfig({ paths: { "@/*": ["./src/*"] } });
+    const manifest = (extra: object) =>
+      `${JSON.stringify({ name: "@fixture/a", private: true, type: "module", exports: WILD, ...extra }, null, 2)}\n`;
+    const IMPORTS = manifest({
+      imports: {
+        "#card": "./src/Card.vue",
+        "#assets/*": { browser: "./src/*", default: null },
+      },
+    });
+    /** Package `b` as the destination of a `.vue` row: only an exact `exports` entry reaches one. */
+    const CARD_IN_B = `${JSON.stringify({ name: "@fixture/b", private: true, type: "module", exports: { ...WILD, "./Card.vue": "./src/Card.vue" } }, null, 2)}\n`;
+
+    it.each<{
+      readonly name: string;
+      readonly row: readonly [string, string];
+      readonly specifier: string;
+      readonly at: Readonly<Record<string, string>>;
+    }>([
+      {
+        name: "a paths pattern, with baseUrl",
+        row: card,
+        specifier: "@/Card.vue",
+        at: { "packages/a/tsconfig.json": WITH_BASE },
+      },
+      {
+        name: "a paths pattern, with no baseUrl",
+        row: card,
+        specifier: "@/Card.vue",
+        at: { "packages/a/tsconfig.json": NO_BASE },
+      },
+      {
+        name: "a paths pattern from a config it extends",
+        row: card,
+        specifier: "@/Card.vue",
+        at: {
+          "tsconfig.base.json": tsconfig({
+            paths: { "@/*": ["./packages/a/src/*"] },
+          }),
+          "packages/a/tsconfig.json": JSON.stringify({
+            extends: "../../tsconfig.base.json",
+          }),
+        },
+      },
+      {
+        name: "a paths pattern in a config the tsconfig references",
+        row: card,
+        specifier: "@/Card.vue",
+        at: {
+          "packages/a/tsconfig.json": JSON.stringify({
+            files: [],
+            references: [
+              { path: "./tsconfig.node.json" },
+              { path: "./tsconfig.app.json" },
+            ],
+          }),
+          "packages/a/tsconfig.node.json": tsconfig({}),
+          "packages/a/tsconfig.app.json": NO_BASE,
+        },
+      },
+      {
+        name: "an exact paths key",
+        row: card,
+        specifier: "~card",
+        at: {
+          "packages/a/tsconfig.json": tsconfig({
+            paths: { "~card": ["./src/Card.vue"] },
+          }),
+        },
+      },
+      {
+        name: "a paths pattern, with a query",
+        row: logo,
+        specifier: "@/logo.svg?url",
+        at: { "packages/a/tsconfig.json": NO_BASE },
+      },
+      {
+        name: "a paths pattern naming an asset",
+        row: logo,
+        specifier: "@/logo.svg",
+        at: { "packages/a/tsconfig.json": WITH_BASE },
+      },
+      {
+        name: "an imports name",
+        row: card,
+        specifier: "#card",
+        at: { "packages/a/package.json": IMPORTS },
+      },
+      {
+        name: "an imports pattern under a condition",
+        row: logo,
+        specifier: "#assets/logo.svg",
+        at: { "packages/a/package.json": IMPORTS },
+      },
+      {
+        name: "an exports pattern for the extension",
+        row: card,
+        specifier: "@fixture/a/Card.vue",
+        at: {
+          "packages/a/package.json": `${JSON.stringify({ name: "@fixture/a", private: true, type: "module", exports: { "./*.vue": "./src/*.vue", ...WILD } }, null, 2)}\n`,
+        },
+      },
+      {
+        name: "an exports pattern with no extension",
+        row: card,
+        specifier: "@fixture/a/Card.vue",
+        at: {
+          "packages/a/package.json": `${JSON.stringify({ name: "@fixture/a", private: true, type: "module", exports: { "./*": "./src/*" } }, null, 2)}\n`,
+        },
+      },
+    ])("refuses $name: $specifier", ({ row, specifier, at }) => {
+      const page = "packages/a/src/page.mdx";
+      const root = workspace({
+        ...ALIASES,
+        ...at,
+        [page]: `import x from "${specifier}"\n`,
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, page, specifier)]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it.each([
+      { file: "packages/a/src/List.svelte", specifier: "@/Card.vue" },
+      { file: "packages/a/docs/Home.astro", specifier: "@/Card.vue?url" },
+      { file: "packages/a/docs/Page.vue", specifier: "#card" },
+    ])("refuses $specifier in $file, from a row across a package line too", ({
+      file,
+      specifier,
+    }) => {
+      const row = [
+        "packages/a/src/Card.vue",
+        "packages/b/src/Card.vue",
+      ] as const;
+      const root = workspace({
+        ...ALIASES,
+        "packages/a/tsconfig.json": NO_BASE,
+        "packages/a/package.json": IMPORTS,
+        "packages/b/package.json": CARD_IN_B,
+        [file]: `import x from "${specifier}"\n`,
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, file, specifier)]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it.each([
+      { specifier: "@/Card.vue" },
+      { specifier: "@/Card.vue?url" },
+      { specifier: "#card" },
+    ])("refuses $specifier on a resumed run", ({ specifier }) => {
+      const page = "packages/a/src/page.mdx";
+      const root = workspace({
+        ...ALIASES,
+        "packages/a/tsconfig.json": NO_BASE,
+        "packages/a/package.json": IMPORTS,
+      });
+      expect(applyHandPlan(root, planOf(card)).commits.rename).not.toBeNull();
+      write(root, { [page]: `import x from "${specifier}"\n` });
+      commit(root, "a page");
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(card)));
+
+      expect(rowLines(message)).toEqual([line(...card, page, specifier)]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it("refuses a string that a row's destination takes over through an alias", () => {
+      const row = [
+        "packages/a/src/x/Card.vue",
+        "packages/a/lib/Card.vue",
+      ] as const;
+      const page = "packages/a/src/page.mdx";
+      const root = workspace({
+        "packages/a/src/x/Card.vue": PAGE,
+        "packages/a/src/Card.vue": PAGE,
+        "packages/a/tsconfig.json": tsconfig({
+          paths: { "@/*": ["./lib/*", "./src/*"] },
+        }),
+        [page]: 'import x from "@/Card.vue"\n',
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, page, "@/Card.vue")]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it("does not refuse an alias that names no moved file, or one that keeps naming its file", () => {
+      const root = workspace({
+        ...ALIASES,
+        "packages/a/tsconfig.json": tsconfig({
+          paths: { "@/*": ["./src/*", "./src/deep/*"] },
+        }),
+        "packages/a/package.json": IMPORTS,
+        "packages/a/src/page.mdx": [
+          'import a from "@/Other.vue"',
+          'import b from "@/Card.vue"',
+          'import c from "@/gone.vue"',
+          'const color = "#fff"',
+          "",
+        ].join("\n"),
+      });
+
+      expect(applyHandPlan(root, planOf(card)).commits.rename).not.toBeNull();
+    });
+
+    it("refuses such an alias in a TypeScript importer on a row across a package line", () => {
+      const importer = "packages/a/src/uses.ts";
+      const row = [
+        "packages/a/src/Card.vue",
+        "packages/b/src/Card.vue",
+      ] as const;
+      const root = workspace({
+        ...ALIASES,
+        "packages/a/tsconfig.json": NO_BASE,
+        "packages/b/package.json": CARD_IN_B,
+        [importer]: 'export { default } from "@/Card.vue";\n',
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toHaveLength(1);
+      expect(rowLines(message)[0]).toContain(
+        `${importer} imports "@/Card.vue"`,
+      );
+      expect(snapshot(root)).toEqual(before);
+    });
+  });
+
   it("refuses a package-name string apply cannot follow into a package a row leaves", () => {
     const row = ["packages/a/src/one.ts", "packages/b/src/one.ts"] as const;
     const page = "packages/c/docs/guide.mdx";
