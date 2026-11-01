@@ -227,7 +227,9 @@ export interface RuntimeErrorContext {
  * itself surfaced via the default sink, so it can never re-introduce a silent
  * failure.
  *
- * Optional, except beside a fenced store (see {@link StoreAndOnError}). With no
+ * Optional, except beside a fenced store (see {@link StoreAndOnError}): there it
+ * does not compile without one, and a run whose store is fenced at runtime is
+ * refused at start without one, whatever its type says. With no
  * sink a `RuntimeDiscardNotice` is warned, and every other failure is rethrown on
  * a fresh macrotask, which ends a Node process and every run in it. That includes
  * a failing Sub (`"sub"`). A host running several machines in one process passes
@@ -781,8 +783,10 @@ export type UnfencedStore<S> = Store<S> & { readonly fenced?: never };
  * remembered.
  *
  * It reads a store's declared type. A fenced store first assigned to a variable
- * typed plain `Store<S>` has given that type up, so it compiles with no `onError`
- * and runs on the default sink.
+ * typed plain `Store<S>` has given that type up, so it compiles with no
+ * `onError`. Both engines then refuse it at start, before anything is loaded:
+ * the Promise engine's `run` throws, and the Effect engine's dies. A JavaScript
+ * caller is refused the same way.
  */
 export type StoreAndOnError<S> =
   | { readonly store?: UnfencedStore<S>; readonly onError?: OnError }

@@ -28,7 +28,10 @@ import {
   Scope,
   Stream,
 } from "effect";
-import { builtinExtensions } from "../internal/engine/builtins";
+import {
+  builtinExtensions,
+  refuseFencedRunWithoutSink,
+} from "../internal/engine/builtins";
 import {
   defaultOnError,
   type LiveWorkProbe,
@@ -303,7 +306,9 @@ export function settleCellExit(
  * the failure and ends the process.
  *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
- * one of the built-ins both engines run.
+ * one of the built-ins both engines run. A run on a store that is fenced at
+ * runtime with no `onError` dies at start, before anything is loaded, even when
+ * the store is typed plain `Store<S>` (ADR 0031).
  *
  * ```ts
  * const program = Effect.gen(function* () {
@@ -342,6 +347,11 @@ export function run<
   Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 > {
   return Effect.gen(function* () {
+    // A defect, before the run's scope exists, so nothing is loaded or saved.
+    // It reads the caller's own `onError`: the loop only ever sees the wrapped one.
+    yield* Effect.sync(() =>
+      refuseFencedRunWithoutSink(opts.store, opts.onError),
+    );
     const services = yield* Effect.context<
       InterpretServices<I> | SubscribeServices<B>
     >();

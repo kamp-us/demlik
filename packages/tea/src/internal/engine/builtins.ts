@@ -15,6 +15,7 @@ import {
   structuralHash,
 } from "../../pure/core";
 import type {
+  OnError,
   Store,
   Supervision,
   TelemetryEvent,
@@ -227,6 +228,28 @@ export function fencing<S, M, C>(): AnyExtension<S, M, C> {
       };
     },
   });
+}
+
+/**
+ * Refuse a run on a store that is fenced at runtime when the caller passed no
+ * `onError` (ADR 0031, amended by #810). The type already refuses it; this is
+ * the same rule for a store typed plain `Store<S>` and for a JavaScript caller.
+ *
+ * Each engine's `run` calls it on the caller's own `onError`, before the loop
+ * starts, so nothing is loaded or saved. It is not an extension: the Effect
+ * engine always hands the loop a wrapped sink, so the loop never sees the
+ * caller's option.
+ */
+export function refuseFencedRunWithoutSink<S>(
+  store: Store<S> | undefined,
+  onError: OnError | undefined,
+): void {
+  if (onError !== undefined || store === undefined || !isFencedStore(store)) {
+    return;
+  }
+  throw new Error(
+    "@demlik/tea: a run on a fenced store needs an `onError`. Without one, a lost fence ends the process and every run in it. Pass `onError` to `run`.",
+  );
 }
 
 // === ctx + handle: ports ===

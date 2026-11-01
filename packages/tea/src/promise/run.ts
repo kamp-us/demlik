@@ -9,7 +9,10 @@
  */
 
 import { builtinRunners } from "../internal/engine/builtin-runners";
-import { builtinExtensions } from "../internal/engine/builtins";
+import {
+  builtinExtensions,
+  refuseFencedRunWithoutSink,
+} from "../internal/engine/builtins";
 import {
   type LiveWorkProbe,
   type LoopHandler,
@@ -176,6 +179,10 @@ export interface Run<
  * Start a machine on the Promise engine and return its runtime. Pass the Cmd
  * handlers, the Sub runners, `ctx` and an optional `Store`; the runtime is
  * returned at once and every method waits for boot.
+ *
+ * Throws at once, before anything is loaded, when the store is fenced at runtime
+ * and no `onError` was passed, even when the store is typed plain `Store<S>`
+ * (ADR 0031).
  */
 export function run<
   S,
@@ -188,6 +195,9 @@ export function run<
   machine: Machine<S, M, C, U, Ctx>,
   opts: PromiseRunOptions<S, M, C, U, Ctx, E>,
 ): BootingRun<S, M, E> {
+  // Thrown here, before the loop starts, so nothing is loaded or saved.
+  refuseFencedRunWithoutSink(opts.store, opts.onError);
+
   // `interpret` is optional when `C extends Cmd<never>`; default a missing map
   // to `{}` — a Cmd with no handler is skipped, invariant 6's forward progress
   // for a miswired consumer.

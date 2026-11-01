@@ -126,8 +126,10 @@ run(machine, {
   store: doStore(storage, parse, doOptionsOrNone),
 });
 
-// The limit ADR 0031 names: assigned to a plain `Store`, the type no longer says
-// it is fenced.
+// Assigned to a plain `Store`, the type no longer says it is fenced, so this
+// compiles. The run is refused at start instead (ADR 0031, amended by #810);
+// `src/effect/fenced-run-refused-at-start.test.ts` and `src/lost-fence.test.ts` pin
+// that on both engines.
 const widened: Store<State> = fenced;
 run(machine, { ctx: undefined, store: widened });
 

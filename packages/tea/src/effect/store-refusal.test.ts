@@ -24,7 +24,13 @@ import {
   parseNotes,
 } from "../../examples/restore-or-refuse";
 import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
-import { type Migrated, refuse, type Store, StoreRefusedError } from "../index";
+import {
+  type Migrated,
+  type OnError,
+  refuse,
+  type Store,
+  StoreRefusedError,
+} from "../index";
 import { memoryStore } from "../mem";
 import { fileStore } from "../node";
 import { run as runPromise } from "../promise";
@@ -45,16 +51,20 @@ interface Ready {
  */
 const engines: Record<
   "Promise" | "Effect",
-  (store: Store<NotesState>, machine?: typeof notes) => Promise<Ready>
+  (
+    store: Store<NotesState>,
+    machine?: typeof notes,
+    onError?: OnError,
+  ) => Promise<Ready>
 > = {
-  Promise: (store, machine = notes) =>
-    runPromise(machine, { ctx: {}, store }).ready,
-  Effect: async (store, machine = notes) => {
+  Promise: (store, machine = notes, onError) =>
+    runPromise(machine, { ctx: {}, store, onError }).ready,
+  Effect: async (store, machine = notes, onError) => {
     const scope = await Effect.runPromise(Scope.make());
     const exit = await Effect.runPromiseExit(
       Scope.provide(scope)(
         Effect.flatMap(
-          runEffect(machine, { ctx: {}, store }),
+          runEffect(machine, { ctx: {}, store, onError }),
           (booting) => booting.ready,
         ),
       ),
@@ -92,8 +102,9 @@ async function refusalOn(
   engine: keyof typeof engines,
   store: Store<NotesState>,
   machine?: typeof notes,
+  onError?: OnError,
 ): Promise<StoreRefusedError> {
-  const failure = await engines[engine](store, machine).then(
+  const failure = await engines[engine](store, machine, onError).then(
     () => undefined,
     (err: unknown) => err,
   );
@@ -127,7 +138,13 @@ describe.each(["Promise", "Effect"] as const)("on the %s engine", (engine) => {
     const other = JSON.stringify({ version: 2 });
     await writeFile(path, other, "utf8");
 
-    await refusalOn(engine, fileStore(path, parseNotes, { fenced: true }));
+    // A fenced run needs a sink to start at all (ADR 0031).
+    await refusalOn(
+      engine,
+      fileStore(path, parseNotes, { fenced: true }),
+      undefined,
+      () => {},
+    );
 
     expect(await readFile(path, "utf8")).toBe(other);
     expect(await readdir(dir)).toEqual(["notes.json"]);
