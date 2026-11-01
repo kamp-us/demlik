@@ -419,6 +419,43 @@ describe.each([
   });
 });
 
+describe("useMachine: a real unmount", () => {
+  it("still takes a last Msg from a child's effect cleanup, and saves it", async () => {
+    const machine = counter();
+    const store = memoryStore<Count>(undefined, parseCount);
+    const probe = subProbe();
+    function Child({ inc }: { readonly inc: (msg: Inc) => Promise<void> }) {
+      useEffect(
+        () => () => {
+          void inc({ type: "inc" });
+        },
+        [inc],
+      );
+      return null;
+    }
+    function Parent() {
+      const [state, dispatch] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        store,
+        subscribe: probe.subscribe,
+      });
+      return (
+        <>
+          <span>{state.n}</span>
+          <Child inc={dispatch} />
+        </>
+      );
+    }
+
+    await settle(<Parent />);
+    await settle(<div />);
+
+    await expect(store.load()).resolves.toEqual({ n: 1 });
+    expect(probe.live).toBe(0);
+  });
+});
+
 describe.each([
   ["no Strict Mode", (node: ReactNode): ReactNode => node],
   [
