@@ -241,6 +241,7 @@ function buildReachability(
       mains,
       compiled.testSupport,
       exportPatterns,
+      input.evidence?.usesUnknownFiles ?? new Set(),
     );
     const unusedExports = unusedExportsOf(input, functions, {
       surface: publicSurfaceFiles(modules, mains, exportPatterns),

@@ -366,6 +366,24 @@ chooses the nearest `tsconfig.json` at or above that directory. `--deep` chooses
 one at or above the workspace root; it **does not widen the file scan**.
 Cross-package callers require a directory containing those packages.
 
+One run reads every file with that one tsconfig, so a root run does not read a
+package's own `paths`. An import like `@/useda` that only the file's nearest
+tsconfig resolves gives the run no use site and no call edge. `--deep` on a
+package has the same limit:
+
+- `--unreachable` withholds every export of the file that import lands on, because
+  its uses are unknown. It reports none of them and names those files on stderr.
+  A really unused export in such a file is reported by the package's own run and
+  not by the root run, so run the gate on the package as well. The next point is
+  the exception.
+- A package run withholds too when a file it loads reaches an export through a
+  tsconfig other than the run's own. That tsconfig is either a nested one with its
+  own `paths`, such as `e2e/tsconfig.json`, or a project the `tsconfig.json`
+  references, such as `tsconfig.app.json`. Neither the package run nor the root run
+  reports a really unused export in that file.
+- `--blast`, `calledBy` and the other graph modes still miss the calls made through
+  that import.
+
 The repo root, called the workspace root above, is the first of these that exists,
 each searched upward from the analyzed directory before the next is tried:
 
@@ -486,7 +504,11 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   the root. One entry covers both runs. The reverse split counts as a code change: a
   package's `only-called-from-tests` entry does not cover a `dead` finding at the
   root, because the root sees that test too. For the same reason a package run can
-  find what the root does not.
+  find what the root does not. A package run also finds what the root withholds as
+  `uses-unknown`, except when the package's `paths` sit in a project its
+  `tsconfig.json` references, or in a nested tsconfig such as `e2e/tsconfig.json`:
+  its own run withholds it too, so neither run reports it
+  ([Pass selection and scope](#pass-selection-and-scope)).
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an
@@ -507,8 +529,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   as `only-called-from-tests` and its only test is deleted, `packages/core` passes
   and `.` fails.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
-  `test-support-surface`, `called-by-withheld`) are not findings and never enter
-  the ledger.
+  `test-support-surface`, `called-by-withheld`, `uses-unknown`) are not findings
+  and never enter the ledger.
 - `--json` prints `{ passed, scope, gated, unrecorded, pruned }` for `--ci`, and
   `{ scope, accepted, pruned, reason }` for `--accept-dead`.
 - Exit 2, with one line on stderr and nothing written: `--accept-dead` without a

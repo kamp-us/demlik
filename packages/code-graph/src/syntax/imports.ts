@@ -1,6 +1,11 @@
 import fs from "node:fs";
-import { createModuleResolver } from "../engine/oxc.js";
-import { type SourceUnit, toRelative } from "../extract/project.js";
+import path from "node:path";
+import {
+  createModuleResolver,
+  createProjectModuleResolver,
+  type ModuleResolver,
+} from "../engine/oxc.js";
+import { findNearestTsConfig, type SourceUnit, toRelative } from "../extract/project.js";
 import type { ImportEdge } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "./file.js";
 
@@ -287,17 +292,13 @@ function realPath(file: string): string {
   }
 }
 
-// Resolves every import literal under the one tsconfig the edge pass reads, keeping a target only
-// when it lands in the loaded file set — the same module edge set the ts-morph edge program gave.
-export function resolveImports(
+// The loaded module file a resolved path names, or null when it names anything else.
+function loadedModuleOf(
   rootAbsolute: string,
   sourceFiles: readonly SourceUnit[],
-  tsConfigPath: string,
-): ImportGraph {
-  const resolve = createModuleResolver(tsConfigPath);
+): (resolved: string) => string | null {
   const rootReal = realPath(rootAbsolute);
   const units = new Map(sourceFiles.map((unit) => [unit.file, unit]));
-  const fileSet = new Set(units.keys());
   const modules = new Map<string, boolean>();
   const isModuleFile = (file: string): boolean => {
     const known = modules.get(file);
@@ -307,11 +308,23 @@ export function resolveImports(
     modules.set(file, answer);
     return answer;
   };
-  const inScope = (resolved: string): string | null => {
+  return (resolved) => {
     const direct = toRelative(rootAbsolute, resolved);
-    const file = fileSet.has(direct) ? direct : toRelative(rootReal, realPath(resolved));
-    return fileSet.has(file) && isModuleFile(file) ? file : null;
+    const file = units.has(direct) ? direct : toRelative(rootReal, realPath(resolved));
+    return units.has(file) && isModuleFile(file) ? file : null;
   };
+}
+
+// Resolves every import literal under the one tsconfig the edge pass reads, keeping a target only
+// when it lands in the loaded file set — the same module edge set the ts-morph edge program gave.
+export function resolveImports(
+  rootAbsolute: string,
+  sourceFiles: readonly SourceUnit[],
+  tsConfigPath: string,
+): ImportGraph {
+  const resolve = createModuleResolver(tsConfigPath);
+  const inScope = loadedModuleOf(rootAbsolute, sourceFiles);
+  const fileSet = new Set(sourceFiles.map((unit) => unit.file));
 
   const importsByFile = new Map<string, string[]>();
   const importEdgesByFile = new Map<string, ImportEdge[]>();
@@ -338,4 +351,48 @@ export function resolveImports(
   const importedByFile = new Map<string, string[]>();
   for (const f of fileSet) importedByFile.set(f, dedupSorted(importedAccum.get(f) ?? []));
   return { importsByFile, importedByFile, importEdgesByFile };
+}
+
+// The resolver of the tsconfig nearest each file, null where a file has none above it.
+function nearestProjectResolvers(): (absoluteFile: string) => ModuleResolver | null {
+  const byConfig = new Map<string, ModuleResolver>();
+  const byDirectory = new Map<string, ModuleResolver | null>();
+  return (absoluteFile) => {
+    const directory = path.dirname(absoluteFile);
+    const known = byDirectory.get(directory);
+    if (known !== undefined) return known;
+    const nearest = findNearestTsConfig(directory);
+    let resolver: ModuleResolver | null = null;
+    if (nearest !== null) {
+      resolver = byConfig.get(nearest) ?? createProjectModuleResolver(nearest);
+      byConfig.set(nearest, resolver);
+    }
+    byDirectory.set(directory, resolver);
+    return resolver;
+  };
+}
+
+// The loaded files an import reaches under its own file's nearest tsconfig and its references, and
+// not under the one tsconfig this run reads: a package's own `@/*` in a root run, or `paths` a
+// package keeps in a referenced `tsconfig.app.json`. The run's checker never sees those uses, so who
+// uses these files' exports is unknown. This reads only the module resolver, so it says which file an
+// import lands on and nothing about which of that file's exports it takes or calls.
+export function filesReachedOnlyByNearestTsConfig(
+  rootAbsolute: string,
+  sourceFiles: readonly SourceUnit[],
+  imports: ImportGraph,
+): Set<string> {
+  const resolverFor = nearestProjectResolvers();
+  const inScope = loadedModuleOf(rootAbsolute, sourceFiles);
+  const reached = new Set<string>();
+  for (const unit of sourceFiles) {
+    const resolve = resolverFor(unit.absolutePath);
+    if (resolve === null) continue;
+    for (const edge of imports.importEdgesByFile.get(unit.file) ?? []) {
+      const resolved = resolve(unit.absolutePath, edge.specifier);
+      const target = resolved === null ? null : inScope(resolved);
+      if (target !== null && target !== edge.target) reached.add(target);
+    }
+  }
+  return reached;
 }

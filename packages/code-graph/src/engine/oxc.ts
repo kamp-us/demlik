@@ -52,6 +52,16 @@ export function createModuleResolver(tsConfigPath: string): ModuleResolver {
   return (fromFile, specifier) => factory.sync(path.dirname(fromFile), specifier).path ?? null;
 }
 
+// The same resolution, also through the projects the tsconfig's `references` name. A package whose
+// `tsconfig.json` is only a list of references keeps its `paths` in one of those.
+export function createProjectModuleResolver(tsConfigPath: string): ModuleResolver {
+  const factory = new ResolverFactory({
+    ...MODULE_RESOLUTION,
+    tsconfig: { configFile: tsConfigPath, references: "auto" },
+  });
+  return (fromFile, specifier) => factory.sync(path.dirname(fromFile), specifier).path ?? null;
+}
+
 export type FileResolution =
   | { readonly kind: "path"; readonly path: string }
   | { readonly kind: "builtin" }

@@ -149,10 +149,10 @@ public surface, and absent from other non-test files.
 |---|---|
 | `dead` | No reference survives those checks |
 | `only-called-from-tests` | References remain only in test files |
-| Withheld | Public surface, test-support surface, a non-test reference, or a call from a withheld function (`called-by-withheld`) prevents a finding |
+| Withheld | Public surface, test-support surface, a non-test reference, a call from a withheld function (`called-by-withheld`), or an import this run's tsconfig does not follow (`uses-unknown`) prevents a finding |
 
-A candidate that a function withheld as `public-entry-surface` or
-`referenced-in-non-test-file` reaches through calls or references is withheld as
+A candidate that a function withheld as `public-entry-surface`,
+`referenced-in-non-test-file` or `uses-unknown` reaches through calls or references is withheld as
 `called-by-withheld`, so a callee is never reported as more dead than its
 caller. This reason wins over `referenced-in-non-test-file`. Test-support
 functions start no such walk, and these callees do not count toward
@@ -191,6 +191,13 @@ The fix is to drop the `export` keyword.
 - Test files and test-support files are not judged.
 - A symbol carries at most one finding: `dead` and `only-called-from-tests`
   win.
+- An import only the importing file's nearest tsconfig resolves, such as a
+  package's own `@/*` in a root run, makes the uses of every export in the file
+  it lands on unknown, and none of them is a finding. The package's own run still
+  reports a really unused one, except when the package's `paths` sit in a project
+  its `tsconfig.json` references, or in a nested tsconfig with its own `paths` such
+  as `e2e/tsconfig.json`: its own run withholds them too, so neither run reports it.
+  See [Pass selection and scope](./cli.md#pass-selection-and-scope).
 
 Source: [unused exports](../../src/query/unused-exports.ts).
 

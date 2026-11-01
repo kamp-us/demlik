@@ -22,7 +22,11 @@ import { compareFlatSmells, smellsForFunction, smellsForModule } from "../smells
 import { healthBand } from "../smells/health.js";
 import { rankPlan } from "../smells/plan.js";
 import { functionHeader } from "../syntax/headers.js";
-import { importDeclarationSpecifiers, resolveImports } from "../syntax/imports.js";
+import {
+  filesReachedOnlyByNearestTsConfig,
+  importDeclarationSpecifiers,
+  resolveImports,
+} from "../syntax/imports.js";
 import {
   type AnalysisBundle,
   type AnalysisOptions,
@@ -259,11 +263,11 @@ export function assembleGraph(
   return build(loaded, thresholds, null, null, null, data, fields);
 }
 
-function reportUnjoined(unjoined: readonly string[], what: string): void {
-  if (unjoined.length === 0) return;
-  const shown = unjoined.slice(0, 5).join(", ");
-  const more = unjoined.length > 5 ? ", ..." : "";
-  process.stderr.write(`code-graph: warning: ${unjoined.length} ${what}: ${shown}${more}\n`);
+function warnOf(names: readonly string[], what: string): void {
+  if (names.length === 0) return;
+  const shown = names.slice(0, 5).join(", ");
+  const more = names.length > 5 ? ", ..." : "";
+  process.stderr.write(`code-graph: warning: ${names.length} ${what}: ${shown}${more}\n`);
 }
 
 export function assembleGraphWithEdges(
@@ -282,7 +286,7 @@ export function assembleGraphWithEdges(
 
   const ctx = TypeContext.open({ rootAbsolute, tsConfigPath: tsConfig, sourceFiles, functions });
   try {
-    reportUnjoined(
+    warnOf(
       ctx.unjoined,
       "function(s) have no node in tsgo's tree, so their calls are not resolved",
     );
@@ -292,15 +296,20 @@ export function assembleGraphWithEdges(
     const reach = options?.reach === true;
     const exportedFunctions = reach ? functions.filter((f) => f.isExported && !f.isTest) : [];
     const uses = resolveDeclarationUses(ctx, declarations, exportedFunctions);
-    reportUnjoined(
-      uses.unjoined,
-      "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+    warnOf(uses.unjoined, "declaration(s) have no node in tsgo's tree, so their uses are unknown");
+    const usesUnknownFiles = reach
+      ? filesReachedOnlyByNearestTsConfig(rootAbsolute, sourceFiles, imports)
+      : new Set<string>();
+    warnOf(
+      [...usesUnknownFiles].sort((a, b) => a.localeCompare(b)),
+      "file(s) are reached by imports this run's tsconfig does not follow, so uses of their exports are unknown and none is reported",
     );
     const evidence: ExportEvidence | null = reach
       ? {
           declarations,
           usesById: new Map([...uses.usesById, ...uses.functionUsesById]),
           wholeModuleUsers: wholeModuleUsers(ctx),
+          usesUnknownFiles,
         }
       : null;
     const analysis =
