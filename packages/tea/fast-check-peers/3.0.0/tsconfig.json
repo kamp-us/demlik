@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": { "fast-check": ["./node_modules/fast-check"] }
+  }
+}

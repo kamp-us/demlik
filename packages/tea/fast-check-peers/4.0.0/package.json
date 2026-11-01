@@ -1,0 +1,15 @@
+{
+  "name": "@demlik/tea-fast-check-peer-4.0.0",
+  "version": "0.0.0",
+  "private": true,
+  "description": "fast-check 4.0.0, for the tea tests and typecheck of src/pbt across the published peer range.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fast-check": "catalog:fast-check-4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

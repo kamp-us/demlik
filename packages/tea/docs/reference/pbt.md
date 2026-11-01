@@ -240,7 +240,7 @@ function propertyInvariant<
 ### `PropertyOpts`
 
 ```ts
-interface PropertyOpts<S> extends Omit<fc.Parameters, "asyncReporter" | "examples" | "reporter" | "timeout"> {
+interface PropertyOpts<S> extends Omit<fc.Parameters, "asyncReporter" | "examples" | "plugins" | "reporter" | "timeout"> {
   /**
    * Fail a run whose laws all held when a Msg type never acted, naming each such
    * type, so a cut path can't stay green. Default `false`.

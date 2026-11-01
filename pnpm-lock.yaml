@@ -133,6 +133,22 @@ catalogs:
     zod:
       specifier: 4.5.4
       version: 4.5.4
+  fast-check-3.0.0:
+    fast-check:
+      specifier: 3.0.0
+      version: 3.0.0
+  fast-check-3.23.2:
+    fast-check:
+      specifier: 3.23.2
+      version: 3.23.2
+  fast-check-4.0.0:
+    fast-check:
+      specifier: 4.0.0
+      version: 4.0.0
+  fast-check-4.10.2:
+    fast-check:
+      specifier: 4.10.2
+      version: 4.10.2
   react-18.2.0:
     react:
       specifier: 18.2.0
@@ -188,7 +204,7 @@ importers:
         version: 2.31.1(@types/node@22.20.1)
       '@kampus/fabrika-cli':
         specifier: 'catalog:'
-        version: 0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
+        version: 0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       typescript:
         specifier: 'catalog:'
         version: 5.7.3
@@ -388,6 +404,46 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.5.4
+
+  packages/tea/fast-check-peers/3.0.0:
+    dependencies:
+      fast-check:
+        specifier: catalog:fast-check-3.0.0
+        version: 3.0.0
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.7.3
+
+  packages/tea/fast-check-peers/3.23.2:
+    dependencies:
+      fast-check:
+        specifier: catalog:fast-check-3.23.2
+        version: 3.23.2
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.7.3
+
+  packages/tea/fast-check-peers/4.0.0:
+    dependencies:
+      fast-check:
+        specifier: catalog:fast-check-4.0.0
+        version: 4.0.0
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.7.3
+
+  packages/tea/fast-check-peers/4.10.2:
+    dependencies:
+      fast-check:
+        specifier: catalog:fast-check-4.10.2
+        version: 4.10.2
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.7.3
 
   packages/tea/react-peers/18.2.0:
     dependencies:
@@ -1890,9 +1946,21 @@ packages:
   extendable-error@0.1.7:
     resolution: {integrity: sha512-UOiS2in6/Q0FK0R0q6UY9vYpQ21mr/Qn1KOnte7vsACuNJf514WvCCUHSRCPcgjPT2bAhNIJdlE6bVap1GKmeg==}
 
+  fast-check@3.0.0:
+    resolution: {integrity: sha512-uujtrFJEQQqnIMO52ARwzPcuV4omiL1OJBUBLE9WnNFeu0A97sREXDOmCIHY+Z6KLVcemUf09rWr0q0Xy/Y/Ew==}
+    engines: {node: '>=8.0.0'}
+
   fast-check@3.23.2:
     resolution: {integrity: sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==}
     engines: {node: '>=8.0.0'}
+
+  fast-check@4.0.0:
+    resolution: {integrity: sha512-aXLyLemZ7qhLNn2oq+YpjT2Xed21+i29WGAYuyrGbU4r8oinB3i4XR4e62O3NY6qmm5qHEDoc/7d+gMsri3AfA==}
+    engines: {node: '>=12.17.0'}
+
+  fast-check@4.10.2:
+    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
+    engines: {node: '>=12.17.0'}
 
   fast-check@4.9.0:
     resolution: {integrity: sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg==}
@@ -2335,8 +2403,14 @@ packages:
     resolution: {integrity: sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==}
     engines: {node: '>=6'}
 
+  pure-rand@5.0.5:
+    resolution: {integrity: sha512-BwQpbqxSCBJVpamI6ydzcKqyFmnd5msMWUGvzXLm1aXvusbbgkbOto/EUPM00hjveJEaJtdbhUjKSzWRhQVkaw==}
+
   pure-rand@6.1.0:
     resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
+
+  pure-rand@7.0.1:
+    resolution: {integrity: sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ==}
 
   pure-rand@8.4.2:
     resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
@@ -2952,13 +3026,13 @@ snapshots:
 
   '@cloudflare/workers-types@4.20260312.1': {}
 
-  '@demlik/tea@0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
+  '@demlik/tea@0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       effect: 4.0.0-rc.112
-      fast-check: 4.9.0
+      fast-check: 4.10.2
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
@@ -3185,9 +3259,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@kampus/fabrika-cli@0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
+  '@kampus/fabrika-cli@0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
     dependencies:
-      '@demlik/tea': 0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
+      '@demlik/tea': 0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@playwright/test': 1.62.1
@@ -3927,9 +4001,21 @@ snapshots:
 
   extendable-error@0.1.7: {}
 
+  fast-check@3.0.0:
+    dependencies:
+      pure-rand: 5.0.5
+
   fast-check@3.23.2:
     dependencies:
       pure-rand: 6.1.0
+
+  fast-check@4.0.0:
+    dependencies:
+      pure-rand: 7.0.1
+
+  fast-check@4.10.2:
+    dependencies:
+      pure-rand: 8.4.2
 
   fast-check@4.9.0:
     dependencies:
@@ -4350,7 +4436,11 @@ snapshots:
 
   punycode.js@2.3.1: {}
 
+  pure-rand@5.0.5: {}
+
   pure-rand@6.1.0: {}
+
+  pure-rand@7.0.1: {}
 
   pure-rand@8.4.2: {}
 

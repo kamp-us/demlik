@@ -10,6 +10,7 @@ import {
   propertyTrace,
 } from "./property";
 import { foldEvents } from "./replay-fold";
+import { HAS_ERROR_WITH_CAUSE, MAJOR } from "./test-fast-check";
 
 // A machine that lands a proved head, restarted from whatever storage hands
 // back. `land` lands the state's `proof`, so a saved state whose proof names
@@ -347,11 +348,10 @@ describe("fast-check's parameters", () => {
 });
 
 // tea promises fast-check ^3 and ^4, and they keep the check's error in different
-// places. This file also runs with fast-check aliased to 4, so nothing below may
-// assume one major: each row is either `fc.assert`'s own answer or keyed on the
-// major that is actually loaded.
+// places. This file also runs on each version in `packages/tea/fast-check-peers`, so
+// nothing below may assume one: each row is either `fc.assert`'s own answer or keyed
+// on the major, or the setting, that is actually loaded.
 describe("what the check threw", () => {
-  const MAJOR = Number(fc.__version.split(".")[0]);
   const WHY = "the check said why";
 
   const throwsOnLand = (s: State): void => {
@@ -426,10 +426,13 @@ describe("what the check threw", () => {
     }
   });
 
-  it.runIf(MAJOR < 4)("errorWithCause moves it to the cause on 3", () => {
-    const failure = viaRunner({ errorWithCause: true });
-    expect(causeMessage(failure)).toBe(WHY);
-  });
+  it.runIf(HAS_ERROR_WITH_CAUSE && MAJOR < 4)(
+    "errorWithCause moves it to the cause on 3",
+    () => {
+      const failure = viaRunner({ errorWithCause: true });
+      expect(causeMessage(failure)).toBe(WHY);
+    },
+  );
 
   it.runIf(MAJOR >= 4)(
     "includeErrorInReport moves it to the message on 4",
@@ -539,15 +542,18 @@ describe("a check that says why", () => {
       expect(message.split(SECOND)).toHaveLength(2);
     });
 
-    // Fast-check 4 files a throw in `cause` by default, so this setting is how
-    // the fast-check 3 line CI installs reaches the arm 4's users depend on.
-    it("says it once when fast-check files the throw in cause", () => {
-      const failure = failureOf(() => run(1, { errorWithCause: true }));
+    // Fast-check 4 files a throw in `cause` by default, and this setting is how a
+    // 3 that has it reaches that same arm. A 3 without it never files one there.
+    it.runIf(HAS_ERROR_WITH_CAUSE || MAJOR >= 4)(
+      "says it once when fast-check files the throw in cause",
+      () => {
+        const failure = failureOf(() => run(1, { errorWithCause: true }));
 
-      expect(failure.cause).toBeInstanceOf(Error);
-      expect(failure.message.split(SECOND)).toHaveLength(2);
-      expect(failure.message).toContain(SHRUNK);
-    });
+        expect(failure.cause).toBeInstanceOf(Error);
+        expect(failure.message.split(SECOND)).toHaveLength(2);
+        expect(failure.message).toContain(SHRUNK);
+      },
+    );
   });
 
   const ANSWERS: readonly (readonly [
