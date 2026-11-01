@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (21)
+## Exports (22)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ import { … } from "@demlik/tea/effect";
 | [`stop`](#stop) | Function | stable | Stop one child that `spawn` started. |
 | [`Stopped`](#Stopped) | Class | stable | A dispatch the run refused because it is stopping or has stopped. |
 | [`StoreFailed`](#StoreFailed) | Class | stable | The run's store failed. |
+| [`SubFailed`](#SubFailed) | Class | stable | A Sub failed with an error it did not map to a Msg, and that stopped the run before it reached a terminal State. |
 | [`SubscribeServices`](#SubscribeServices) | Type | stable | The services every runner of a `subscribe` map reads. |
 | [`tell`](#tell) | Function | stable | Put `msg` on a run's line and answer at once. |
 | [`TellAnswer`](#TellAnswer) | Type | stable | What `tell` answers, at once, about the Msg it was handed. |
@@ -298,17 +299,20 @@ interface EffectRuntime<S, M extends { type: string }, E extends { type: string 
   readonly ready: Effect<EffectRuntime<S, M, E, Err>, StoreFailed | Err>;
   /**
    * Succeeds with the terminal State only once it is saved. A failed terminal
-   * save fails with `StoreFailed` (`operation: "save"`), for waiting and later
-   * callers. Without a store, answers as soon as State is set.
+   * save fails with `StoreFailed` (`operation: "save"`), and a Sub failure that
+   * stopped the run short of a terminal State fails with `SubFailed`, both for
+   * waiting and later callers. The Msgs already in line fold first, so one of
+   * them reaching a terminal State makes that State the answer. Without a store, answers as soon as State is set.
    */
-  done(): Effect<S, StoreFailed>;
+  done(): Effect<S, StoreFailed | SubFailed>;
   /** The current State. Total. */
   getState(): S;
   /** Succeeds once every dispatched Msg and its follow-ups are processed. */
   idle(): Effect<void>;
   /**
    * The saved terminal State, or `undefined` while its save is pending or failed.
-   * Without a store, answers as soon as State is set.
+   * Without a store, answers as soon as State is set. A run a Sub failure
+   * stopped reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
 }
@@ -427,6 +431,16 @@ class StoreFailed extends YieldableError<this> & {} & Readonly<{
   readonly cause: unknown;
   readonly operation: "load" | "save";
 }> {
+  get message(): string;
+}
+```
+
+<a id="SubFailed"></a>
+
+### `SubFailed`
+
+```ts
+class SubFailed extends YieldableError<this> & {} & Readonly<{ readonly cause: unknown }> {
   get message(): string;
 }
 ```

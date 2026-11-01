@@ -20,7 +20,11 @@ import type {
   TelemetryEvent,
   TelemetrySink,
 } from "../../runtime-types";
-import { IdentityDropNotice, isFencedStore } from "../../runtime-types";
+import {
+  IdentityDropNotice,
+  isFencedStore,
+  SubFailedError,
+} from "../../runtime-types";
 import type { Extension, ExtensionFactory, LoopServices } from "./loop";
 
 type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
@@ -364,6 +368,12 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
  * on a terminal commit (boot included — a rehydrated run can land terminal),
  * or rejects when that State's save fails. Storeless State is eligible as soon
  * as it is set. No predicate → never terminal.
+ *
+ * A Sub failure that stops the run answers `done()` only once `stop()` has
+ * finished with the queue, because a Msg the Sub sent before it failed can still
+ * reach a terminal State. A State terminal by then keeps its answer: its own save
+ * decides. Any other State rejects with `SubFailedError`. So a waiter, a later
+ * caller and `result()` read one outcome.
  */
 export function terminality<S, M, C>(
   isTerminal: ((state: S) => boolean) | undefined,
@@ -374,7 +384,28 @@ export function terminality<S, M, C>(
       resolve(state: S): void;
       reject(error: unknown): void;
     }>();
+    let subFailure: SubFailedError | undefined;
+    // Set once the queue is finished with: the failure is now `done()`'s answer.
+    let stoppedBy: SubFailedError | undefined;
     return {
+      subFailed(error) {
+        subFailure = new SubFailedError(error);
+      },
+      drained() {
+        if (subFailure === undefined) return;
+        stoppedBy = subFailure;
+        const state = loop.state() as S;
+        const terminal = holds(state);
+        // A terminal State still waiting on its save keeps its waiters. A saved
+        // one can have them too: a runner that throws skips its step's commit.
+        if (terminal && loop.saveStatus().type !== "saved") return;
+        const parked = [...waiters];
+        waiters.clear();
+        for (const waiter of parked) {
+          if (terminal) waiter.resolve(state);
+          else waiter.reject(stoppedBy);
+        }
+      },
       commit(_msg, state) {
         if (
           loop.saveStatus().type !== "saved" ||
@@ -405,6 +436,8 @@ export function terminality<S, M, C>(
             const saved = loop.saveStatus();
             if (saved.type === "saved") return Promise.resolve(current);
             if (saved.type === "failed") return Promise.reject(saved.error);
+          } else if (stoppedBy !== undefined) {
+            return Promise.reject(stoppedBy);
           }
           return new Promise<S>((resolve, reject) => {
             waiters.add({ resolve, reject });

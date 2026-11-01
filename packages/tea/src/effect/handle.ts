@@ -16,7 +16,13 @@ import {
 } from "../internal/engine/loop";
 import type { Port } from "../pure/core";
 import type { DispatchSettle, Runtime } from "../runtime-types";
-import { exitOf, type Stopped, type StoreFailed } from "./failures";
+import {
+  doneExitOf,
+  exitOf,
+  type Stopped,
+  type StoreFailed,
+  type SubFailed,
+} from "./failures";
 
 /**
  * What the Effect engine's `run` yields while boot is in flight. `Err` is the
@@ -94,15 +100,18 @@ export interface EffectRuntime<
   idle(): Effect.Effect<void>;
   /**
    * The saved terminal State, or `undefined` while its save is pending or failed.
-   * Without a store, answers as soon as State is set.
+   * Without a store, answers as soon as State is set. A run a Sub failure
+   * stopped reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
   /**
    * Succeeds with the terminal State only once it is saved. A failed terminal
-   * save fails with `StoreFailed` (`operation: "save"`), for waiting and later
-   * callers. Without a store, answers as soon as State is set.
+   * save fails with `StoreFailed` (`operation: "save"`), and a Sub failure that
+   * stopped the run short of a terminal State fails with `SubFailed`, both for
+   * waiting and later callers. The Msgs already in line fold first, so one of
+   * them reaching a terminal State makes that State the answer. Without a store, answers as soon as State is set.
    */
-  done(): Effect.Effect<S, StoreFailed>;
+  done(): Effect.Effect<S, StoreFailed | SubFailed>;
 }
 
 /** Run a loop call, ending with the typed Exit its rejection maps to. */
@@ -148,9 +157,12 @@ export function effectHandle<
     ) as Effect.Effect<EffectRuntime<S, M, E, Err>, Err | StoreFailed>,
     // `idle` rejects only on a livelock, and `stop` never does.
     idle: () => Effect.promise(() => loop.idle()),
-    // `done` rejects only at the terminal save boundary, never at the gate.
     done: () =>
-      settled<S, never>(() => loop.done()) as Effect.Effect<S, StoreFailed>,
+      Effect.flatten(
+        Effect.promise(() =>
+          loop.done().then((state) => Effect.succeed(state), doneExitOf),
+        ),
+      ),
     stop: () => Effect.promise(() => loop.stop()),
   };
   return handle;

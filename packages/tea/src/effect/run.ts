@@ -18,7 +18,16 @@
  *     (`./handle`, `./failures`).
  */
 
-import { Cause, Effect, Exit, Fiber, Result, Scope, Stream } from "effect";
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  Result,
+  Scope,
+  Stream,
+} from "effect";
 import { builtinExtensions } from "../internal/engine/builtins";
 import {
   defaultOnError,
@@ -47,6 +56,7 @@ import type {
   Supervision,
   TelemetrySink,
 } from "../runtime-types";
+import { spawnedScope } from "./children";
 import { CellFailure, saveFailures, unwrapped } from "./failures";
 import { type EffectBootingRuntime, effectHandle } from "./handle";
 
@@ -89,7 +99,7 @@ export type EffectInterpret<
  * A Sub maps the errors it expects into Msgs itself, the way an Elm `Sub msg`
  * carries no error type: `Stream.catchTag("Closed", () => Stream.make({ type:
  * "disconnected" }))`. A stream that still fails reaches the error sink under
- * `"sub"` and stops the run: the run's Scope closes with that failure (#309).
+ * `"sub"` and stops the run (#309), and `done()` fails with `SubFailed`.
  */
 export type EffectRunner<
   M extends { type: string },
@@ -285,8 +295,12 @@ export function settleCellExit(
  * dispatch after stop fails with `Stopped`. The handle's `stop()` does the
  * same.
  *
- * A Sub whose Stream fails with an error it did not map to a Msg stops the
- * run the other way round: the engine closes that Scope with the failure.
+ * A Sub whose Stream fails with an error it did not map to a Msg stops this run
+ * alone. The run forks its own child of that scope and closes only the child,
+ * so the rest of the scope stays open, and `done()` fails with `SubFailed`. A
+ * handler or runner that reads `Scope.Scope` gets that child, so what it acquires
+ * is released with the run. With no `onError`, the default sink still rethrows
+ * the failure and ends the process.
  *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
  * one of the built-ins both engines run.
@@ -331,24 +345,31 @@ export function run<
     const services = yield* Effect.context<
       InterpretServices<I> | SubscribeServices<B>
     >();
-    const scope = yield* Scope.Scope;
-    const fork = Effect.runForkWith(services) as ForkEffect;
+    const callerScope = yield* Scope.Scope;
+    // The run's own scope: the caller's closing closes it, and a Sub failure
+    // closes it and leaves the caller's open (ADR 0030).
+    const scope = yield* Scope.fork(callerScope);
+    // Handlers and runners read that scope as `Scope.Scope`, so what they acquire
+    // is released with this run and not left in the caller's.
+    const runServices = Context.add(services, Scope.Scope, scope);
+    const fork = Effect.runForkWith(runServices) as ForkEffect;
     return yield* Effect.acquireRelease(
       Effect.sync(() =>
         effectHandle<S, M, E, CellErrors<C, I>>(
           start<S, M, C, U, Ctx, E>(
             machine,
             opts as EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
-            Effect.runPromiseExitWith(services) as RunEffect,
+            Effect.runPromiseExitWith(runServices) as RunEffect,
             fork,
             // Closing the Scope runs the release below, which stops the run.
             // A Scope that closes before that release is added runs it on add.
-            (exit) => fork(Scope.close(scope, exit)),
+            (exit) =>
+              fork(Scope.close(spawnedScope(callerScope) ?? scope, exit)),
           ),
         ),
       ),
       (runtime) => runtime.stop(),
-    );
+    ).pipe(Scope.provide(scope));
   });
 }
 
@@ -411,7 +432,7 @@ function start<
     return (cmd) => settle(cell, cmd);
   }
 
-  // The Cause the run's Scope closes with when a Sub fails: the Stream's own
+  // The Cause the run's own Scope closes with when a Sub fails: the Stream's own
   // when a Stream failed, else the runner's throw as a defect.
   let subFailure: Cause.Cause<unknown> | undefined;
 
