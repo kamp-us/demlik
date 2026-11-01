@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { getCompilerOptionsFromTsConfig, type SourceFile, ts } from "ts-morph";
+import { absurd } from "../absurd.js";
 import type { PackageEdge } from "./dependencies.js";
 import {
   type ExportEntry,
@@ -11,9 +12,10 @@ import {
 import type { Exists } from "./heal.js";
 import type { PathMove } from "./manifest.js";
 import {
+  moduleFileCandidates,
   moduleLiterals,
+  namesCode,
   relativeSpecifierOf,
-  sourceCandidates,
 } from "./specifier.js";
 import {
   packageLabel,
@@ -23,14 +25,12 @@ import {
 } from "./workspace.js";
 
 /**
- * Which extension a relative specifier written from `dir` must carry, by the compiler options of the
- * nearest `tsconfig.json`: NodeNext (`module` or `moduleResolution`, in any of its versions) asks
+ * Which extension a relative specifier must carry under the compiler options in force: NodeNext (`module` or `moduleResolution`, in any of its versions) asks
  * for one, `.ts` where the config lets imports name source files, `.js` otherwise.
  */
-function specifierExtensionFrom(dir: string): "none" | "js" | "ts" {
-  const config = ts.findConfigFile(dir, ts.sys.fileExists);
-  if (config === undefined) return "none";
-  const { options } = getCompilerOptionsFromTsConfig(config);
+function specifierExtensionFrom(
+  options: ts.CompilerOptions,
+): "none" | "js" | "ts" {
   const resolution = options.moduleResolution;
   const nodeNext =
     resolution === undefined
@@ -44,13 +44,40 @@ function specifierExtensionFrom(dir: string): "none" | "js" | "ts" {
 }
 
 /**
+ * What a specifier names in one tree. `outside`: no workspace package, so an npm package or a Node
+ * builtin. `missing`: a relative path to no file. `file`: an absolute path. `package`: a workspace
+ * package, by a subpath apply cannot follow to a file (a target with no source here, a `null` block).
+ * Such an import still needs its package declared, wherever the importer lands. `alias`: a file in
+ * this repository, through the importer's tsconfig `paths` or its package's `imports`, a name that
+ * means something only from where the importer sits.
+ */
+export type Named =
+  | { readonly kind: "outside" }
+  | { readonly kind: "missing" }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "package"; readonly pkg: WorkspacePackage }
+  | { readonly kind: "alias"; readonly path: string };
+
+/** Whether `specifier` matches a tsconfig `paths` key, which holds at most one `*`. */
+const matchesPathsKey = (key: string, specifier: string): boolean => {
+  const star = key.indexOf("*");
+  if (star === -1) return key === specifier;
+  const [before, after] = [key.slice(0, star), key.slice(star + 1)];
+  return (
+    specifier.length >= before.length + after.length &&
+    specifier.startsWith(before) &&
+    specifier.endsWith(after)
+  );
+};
+
+/**
  * A workspace read against one tree: which file each specifier names there, and the subpath each
  * file is imported by from another package. `tree` decides which exact `exports` targets follow
  * back to a source, so the same workspace answers differently before and after the renames.
  */
 export class PackageTree {
   readonly #entries = new Map<string, readonly ExportEntry[]>();
-  readonly #extensions = new Map<string, "none" | "js" | "ts">();
+  readonly #options = new Map<string, ts.CompilerOptions>();
 
   constructor(
     readonly repoRoot: string,
@@ -58,16 +85,58 @@ export class PackageTree {
     readonly tree: Exists,
   ) {}
 
+  /** The compiler options of the `tsconfig.json` nearest `dir`; none when there is no such file. */
+  #optionsAt(dir: string): ts.CompilerOptions {
+    let options = this.#options.get(dir);
+    if (options === undefined) {
+      const config = ts.findConfigFile(dir, ts.sys.fileExists);
+      options =
+        config === undefined
+          ? {}
+          : getCompilerOptionsFromTsConfig(config).options;
+      this.#options.set(dir, options);
+    }
+    return options;
+  }
+
+  /**
+   * The file in this repository `literal` names from `importer` through tsconfig `paths` or a
+   * package's `imports`. Only a specifier that looks like one is resolved, since this is asked of
+   * every quoted string in every tracked source.
+   */
+  #aliased(importer: string, literal: string): string | undefined {
+    const options = this.#optionsAt(dirname(importer));
+    const looksAliased =
+      literal.startsWith("#") ||
+      Object.keys(options.paths ?? {}).some((key) =>
+        matchesPathsKey(key, literal),
+      );
+    if (!looksAliased) return undefined;
+    const { resolvedModule } = ts.resolveModuleName(
+      literal,
+      importer,
+      options,
+      ts.sys,
+    );
+    return resolvedModule === undefined ||
+      resolvedModule.isExternalLibraryImport === true
+      ? undefined
+      : resolvedModule.resolvedFileName;
+  }
+
   /** The package an absolute path sits in. */
   packageAt(path: string): WorkspacePackage {
     return packageOf(this.workspace, relative(this.repoRoot, path));
   }
 
+  /** What answers each subpath of `pkg`: its `exports`, or with none its `main` answering `.`. */
   #entriesOf(pkg: WorkspacePackage): readonly ExportEntry[] {
     let entries = this.#entries.get(pkg.root);
     if (entries === undefined) {
       const dir = join(this.repoRoot, pkg.root);
-      entries = exportEntries(dir, pkg.exports, (p) => this.tree(join(dir, p)));
+      entries = exportEntries(dir, pkg.exports ?? pkg.main, (p) =>
+        this.tree(join(dir, p)),
+      );
       this.#entries.set(pkg.root, entries);
     }
     return entries;
@@ -87,25 +156,41 @@ export class PackageTree {
   }
 
   /**
-   * The absolute source file `literal` names from `importer`: a relative specifier by its base
-   * with the module suffixes tried, a workspace package's name by its `exports`. `undefined` for
-   * a specifier that names nothing in this workspace's tree.
+   * What `literal` names from `importer`. A relative specifier names a file by its base with the
+   * module suffixes tried. A workspace package's name names a file by its `exports`; with no
+   * `exports`, by its `main`, or by the path under the package, as Node reads it.
    */
-  resolve(importer: string, literal: string): string | undefined {
+  name(importer: string, literal: string): Named {
     if (literal.startsWith(".")) {
-      return sourceCandidates(resolve(dirname(importer), literal)).find(
-        this.tree,
-      );
+      const path = moduleFileCandidates(
+        resolve(dirname(importer), literal),
+      ).find(this.tree);
+      return path === undefined ? { kind: "missing" } : { kind: "file", path };
     }
     const pkg = this.#owner(literal);
-    if (pkg?.name === undefined) return undefined;
+    if (pkg?.name === undefined) {
+      const aliased = this.#aliased(importer, literal);
+      return aliased === undefined
+        ? { kind: "outside" }
+        : { kind: "alias", path: aliased };
+    }
     const subpath =
       literal === pkg.name ? "." : `./${literal.slice(pkg.name.length + 1)}`;
     const dir = join(this.repoRoot, pkg.root);
     const source = sourceOfSubpath(this.#entriesOf(pkg), subpath, (p) =>
       this.tree(join(dir, p)),
     );
-    return source === undefined ? undefined : join(dir, source);
+    const path =
+      source !== undefined
+        ? join(dir, source)
+        : pkg.exports === undefined
+          ? moduleFileCandidates(
+              join(dir, subpath === "." ? "index" : subpath),
+            ).find(this.tree)
+          : undefined;
+    return path === undefined
+      ? { kind: "package", pkg }
+      : { kind: "file", path };
   }
 
   /**
@@ -125,12 +210,10 @@ export class PackageTree {
   /** The relative specifier `importer` names the absolute file `target` by, in its own resolution. */
   relativeSpecifier(importer: string, target: string): string {
     const dir = dirname(importer);
-    let explicit = this.#extensions.get(dir);
-    if (explicit === undefined) {
-      explicit = specifierExtensionFrom(dir);
-      this.#extensions.set(dir, explicit);
-    }
-    return relativeSpecifierOf(relative(dir, target), explicit);
+    return relativeSpecifierOf(
+      relative(dir, target),
+      specifierExtensionFrom(this.#optionsAt(dir)),
+    );
   }
 }
 
@@ -152,43 +235,140 @@ export const describeUnreachable = (
   `${row.from} -> ${row.to}  (${relative(repoRoot, importer)} imports ${relative(repoRoot, target)}, which no exports entry of ${packageLabel(pkg)} reaches)`;
 
 /**
+ * An import a row would leave broken with apply unable to say how, so it refuses: a relative
+ * specifier in a file moving across a package line that names no file; a package-name specifier
+ * into a package a row leaves that apply cannot follow to a file, so it may name a moved one; or an
+ * alias in a file moving across a package line, or naming a moved file, which apply does not rewrite.
+ */
+export type Unfollowed = {
+  readonly row: PathMove;
+  readonly importer: string;
+  readonly specifier: string;
+} & (
+  | { readonly kind: "no-file" }
+  | { readonly kind: "unknown-file"; readonly pkg: WorkspacePackage }
+  | { readonly kind: "alias" }
+);
+
+const unfollowedReason = (unfollowed: Unfollowed): string => {
+  switch (unfollowed.kind) {
+    case "no-file":
+      return "which names no file apply can find";
+    case "unknown-file":
+      return `and apply cannot tell which file of ${packageLabel(unfollowed.pkg)} that is, so a row may move it`;
+    case "alias":
+      return "an alias from tsconfig paths or package.json imports, which apply does not rewrite";
+    default:
+      return absurd(unfollowed);
+  }
+};
+
+export const describeUnfollowed = (
+  repoRoot: string,
+  unfollowed: Unfollowed,
+): string => {
+  const { row, importer, specifier } = unfollowed;
+  return `${row.from} -> ${row.to}  (${relative(repoRoot, importer)} imports "${specifier}", ${unfollowedReason(unfollowed)})`;
+};
+
+/** For each package a row leaves, one row that leaves it, keyed by package root. */
+const rowsLeaving = (
+  rows: readonly PathMove[],
+  tree: PackageTree,
+): ReadonlyMap<string, PathMove> =>
+  new Map(
+    rows.map((r) => [tree.packageAt(join(tree.repoRoot, r.from)).root, r]),
+  );
+
+/**
  * Rewrite every import a move touched — one written in a moved file, or one naming a moved file —
  * so it matches where its two ends now sit. Across a package line it becomes the target package's
- * name and `exports` subpath; inside one package a package-name specifier becomes relative, and a
- * relative one keeps what the move wrote. Bare specifiers are resolved in the tree before the
- * renames (`before`), since ts-morph left them naming the old paths; relative ones in the tree
- * after (`after`), since ts-morph already rewrote them. Returns the imports no `exports` entry
- * carries across, which the caller refuses rather than writes, and the package edge of every import
- * it carried across, which the importing package must now declare.
+ * name and `exports` subpath, unless it is a package-name specifier already naming a file that did
+ * not move, which stays as written; inside one package a package-name specifier becomes relative,
+ * and a relative one keeps what the move wrote when that still names the file. Bare specifiers are
+ * resolved in the tree before the renames (`before`), since ts-morph left them naming the old paths;
+ * relative ones in the tree after (`after`), since ts-morph already rewrote them, and in `before`
+ * for an importer that stayed put and a literal ts-morph does not follow. Returns the imports no
+ * `exports` entry carries across and the imports apply cannot follow, which the caller refuses
+ * rather than writes, and the package edge of every import that crosses a line a move made it
+ * cross, which the importing package must now declare.
  */
 export function rewriteCrossings(
   sourceFiles: readonly SourceFile[],
   rows: readonly PathMove[],
   before: PackageTree,
   after: PackageTree,
-): { readonly unreachable: Unreachable[]; readonly edges: PackageEdge[] } {
+): {
+  readonly unreachable: Unreachable[];
+  readonly unfollowed: Unfollowed[];
+  readonly edges: PackageEdge[];
+} {
   const at = (path: string) => join(after.repoRoot, path);
   const movedTo = new Map(rows.map((r) => [at(r.from), at(r.to)]));
   const landed = new Map(rows.map((r) => [at(r.to), r]));
+  const leaving = rowsLeaving(rows, before);
   const unreachable: Unreachable[] = [];
+  const unfollowed: Unfollowed[] = [];
   const edges: PackageEdge[] = [];
   for (const sf of sourceFiles) {
     const importer = sf.getFilePath();
     const home = after.packageAt(importer);
+    const own = landed.get(importer);
+    const crossed =
+      own !== undefined && before.packageAt(at(own.from)).root !== home.root;
     for (const literal of moduleLiterals(sf)) {
       const value = literal.getLiteralValue();
       const relativeSpecifier = value.startsWith(".");
-      const named = relativeSpecifier
-        ? after.resolve(importer, value)
-        : before.resolve(importer, value);
-      if (named === undefined) continue;
-      const target = movedTo.get(named) ?? named;
-      const row = landed.get(importer) ?? landed.get(target);
+      const afterMove = relativeSpecifier
+        ? after.name(importer, value)
+        : before.name(own === undefined ? importer : at(own.from), value);
+      const named =
+        afterMove.kind === "missing" && own === undefined
+          ? before.name(importer, value)
+          : afterMove;
+      if (named.kind === "outside") continue;
+      if (named.kind === "alias") {
+        const target = landed.get(movedTo.get(named.path) ?? "");
+        const row = crossed ? own : target;
+        if (row !== undefined)
+          unfollowed.push({ kind: "alias", row, importer, specifier: value });
+        continue;
+      }
+      if (named.kind === "missing") {
+        if (crossed)
+          unfollowed.push({
+            kind: "no-file",
+            row: own,
+            importer,
+            specifier: value,
+          });
+        continue;
+      }
+      if (named.kind === "package") {
+        const row = leaving.get(named.pkg.root);
+        if (row !== undefined && namesCode(value))
+          unfollowed.push({
+            kind: "unknown-file",
+            row,
+            importer,
+            specifier: value,
+            pkg: named.pkg,
+          });
+        else if (crossed && named.pkg.root !== home.root)
+          edges.push({ from: home, to: named.pkg });
+        continue;
+      }
+      const target = movedTo.get(named.path) ?? named.path;
+      const row = own ?? landed.get(target);
       if (row === undefined) continue;
       const pkg = after.packageAt(target);
       if (pkg.root === home.root) {
-        if (relativeSpecifier) continue;
+        if (relativeSpecifier && afterMove.kind === "file") continue;
         literal.setLiteralValue(after.relativeSpecifier(importer, target));
+        continue;
+      }
+      if (!relativeSpecifier && target === named.path) {
+        edges.push({ from: home, to: pkg });
         continue;
       }
       const specifier = after.specifierOf(target);
@@ -200,7 +380,7 @@ export function rewriteCrossings(
       if (specifier !== value) literal.setLiteralValue(specifier);
     }
   }
-  return { unreachable, edges };
+  return { unreachable, unfollowed, edges };
 }
 
 /** Every quoted string in a file — a cheap superset of its module specifiers. */
@@ -208,8 +388,9 @@ const QUOTED = /["']([^"'\n]+)["']/g;
 
 /**
  * The tracked source files, absolute, of every workspace package holding a file whose text names
- * one of `rows`' sources, read in the tree before the renames. These are the packages a move
- * across a package line must load beyond its scope, since an importer there needs rewriting too.
+ * one of `rows`' sources, or names a package a row leaves by a subpath apply cannot follow to a
+ * file, read in the tree before the renames. These are the packages a move across a package line
+ * must load beyond its scope, since an importer there needs rewriting or refusing too.
  */
 export function importerPackageSources(
   sources: readonly string[],
@@ -217,15 +398,20 @@ export function importerPackageSources(
   before: PackageTree,
 ): string[] {
   const moved = new Set(rows.map((r) => join(before.repoRoot, r.from)));
+  const leaving = rowsLeaving(rows, before);
+  const names = (named: Named, literal: string) =>
+    named.kind === "file" || named.kind === "alias"
+      ? moved.has(named.path)
+      : named.kind === "package" &&
+        leaving.has(named.pkg.root) &&
+        namesCode(literal);
   const importing = new Set<string>();
   for (const file of sources) {
     const pkg = before.packageAt(file).root;
     if (importing.has(pkg)) continue;
     const text = readFileSync(file, "utf8");
     for (const [, literal] of text.matchAll(QUOTED)) {
-      const named =
-        literal === undefined ? undefined : before.resolve(file, literal);
-      if (named !== undefined && moved.has(named)) {
+      if (literal !== undefined && names(before.name(file, literal), literal)) {
         importing.add(pkg);
         break;
       }

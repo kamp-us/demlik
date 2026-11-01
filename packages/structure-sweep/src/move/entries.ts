@@ -197,8 +197,8 @@ const layoutOf = (dir: string): BuildLayout =>
 // ── exports subpaths and the sources behind them ───────────────────────────
 
 /**
- * One `exports` subpath and what answers it, package-relative. An `exact` entry's source is a file;
- * a `pattern` entry's key and source each hold the one `*` a wildcard subpath carries, its source
+ * One `exports` subpath and what answers it, package-relative. An `exact` entry's source is a file,
+ * TypeScript or a plain one such as `package.json`; a `pattern` entry's key and source each hold the one `*` a wildcard subpath carries, its source
  * is a stem with no extension, since a pattern names no single file, and `extensions` are the source
  * files its target can be built from. A `sourceless` entry answers its key with no source in this
  * tree: a `null` block, or a target that follows back to nothing. It reaches no file, and it still
@@ -272,11 +272,11 @@ function entryOf(
       ? undefined
       : { kind: "pattern", key, source, extensions: patternExtensions(target) };
   }
-  const source = SOURCE_FILE.test(target)
-    ? exists(target)
+  const source = BUILT.test(target)
+    ? sourceEntryOf(layout, target, exists)
+    : exists(target)
       ? target
-      : undefined
-    : sourceEntryOf(layout, target, exists);
+      : undefined;
   return source === undefined ? undefined : { kind: "exact", key, source };
 }
 

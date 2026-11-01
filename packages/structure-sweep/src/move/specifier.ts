@@ -1,3 +1,4 @@
+import { extname } from "node:path";
 import {
   Node,
   type SourceFile,
@@ -32,10 +33,34 @@ export function sourceCandidates(specifier: string): string[] {
 }
 
 /**
+ * Every file a specifier can name, most likely first: the sources {@link sourceCandidates} lists,
+ * then a declaration file, a JavaScript file, and the path as written when it carries an extension,
+ * which is how `./data.json` names `data.json`.
+ */
+export function moduleFileCandidates(specifier: string): string[] {
+  const { base } = splitSpecifierExtension(specifier);
+  return [
+    ...sourceCandidates(specifier),
+    `${base}.d.ts`,
+    `${base}.js`,
+    `${base}.jsx`,
+    ...(extname(specifier) === "" ? [] : [specifier]),
+  ];
+}
+
+/**
+ * Whether a specifier can name a TypeScript or JavaScript module: it has no extension, or a code one.
+ * `@scope/kit/styles.css` cannot, whatever its package's `exports` make of it.
+ */
+export const namesCode = (specifier: string): boolean =>
+  extname(specifier) === "" || SPECIFIER_EXTENSION.test(specifier);
+
+/**
  * A relative specifier naming the source `file`, spelled for the importer's module resolution.
- * Without `explicit`, a `.ts` or `.tsx` loses its extension; with it (NodeNext) it gains the one
- * the compiler reads back to that file. An `.mts` or `.cts` carries its extension in every mode,
- * since no resolution finds one without.
+ * Without `explicit`, a `.ts`, `.tsx` or `.d.ts` loses its extension; `"js"` (NodeNext) gives it the
+ * one the compiler reads back to that file, and `"ts"` (NodeNext with `allowImportingTsExtensions`)
+ * keeps every TypeScript extension as written. Otherwise an `.mts` or `.cts` is spelled `.mjs` or
+ * `.cjs`, since no resolution finds one without an extension.
  */
 export function relativeSpecifierOf(
   file: string,
@@ -45,13 +70,14 @@ export function relativeSpecifierOf(
   if (explicit === "ts" && /\.[cm]?tsx?$/.test(specifier)) return specifier;
   if (specifier.endsWith(".mts")) return specifier.replace(/\.mts$/, ".mjs");
   if (specifier.endsWith(".cts")) return specifier.replace(/\.cts$/, ".cjs");
-  return specifier.replace(/\.tsx?$/, explicit === "js" ? ".js" : "");
+  return specifier.replace(/(?:\.d)?\.tsx?$/, explicit === "js" ? ".js" : "");
 }
 
 /**
- * Every string literal in `sourceFile` that names a module: import and export declarations, dynamic
- * `import()` calls, type-position `import("…")` and the `vi.*` mock calls. Document order, so two
- * reads of one file line up position by position while only the literals' text changes.
+ * Every string literal in `sourceFile` that names a module: import and export declarations,
+ * `import x = require("…")`, `require("…")` and dynamic `import()` calls, type-position
+ * `import("…")`, `declare module "…"` and the `vi.*` mock calls. Document order, so two reads of one
+ * file line up position by position while only the literals' text changes.
  */
 export function moduleLiterals(sourceFile: SourceFile): StringLiteral[] {
   const out: StringLiteral[] = [];
@@ -61,10 +87,16 @@ export function moduleLiterals(sourceFile: SourceFile): StringLiteral[] {
   for (const node of sourceFile.getDescendants()) {
     if (Node.isImportDeclaration(node) || Node.isExportDeclaration(node)) {
       push(node.getModuleSpecifier());
+    } else if (Node.isExternalModuleReference(node)) {
+      push(node.getExpression());
+    } else if (Node.isModuleDeclaration(node)) {
+      const name = node.getNameNodes();
+      if (!Array.isArray(name)) push(name);
     } else if (Node.isCallExpression(node)) {
       const callee = node.getExpression();
       if (
         callee.getKind() === SyntaxKind.ImportKeyword ||
+        callee.getText() === "require" ||
         MODULE_CALL.test(callee.getText())
       )
         push(node.getArguments()[0]);
