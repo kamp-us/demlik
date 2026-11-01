@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 export {
+  PropertyFailure,
+  type PropertyRun,
   propertyInvariant,
   propertyTerminates,
   propertyTrace,

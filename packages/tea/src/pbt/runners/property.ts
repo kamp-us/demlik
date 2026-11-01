@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Property runners — three thin wrappers over `fc.assert(fc.property(...))`
+// Property runners — three thin wrappers over `fc.check(fc.property(...))`
 // that fold a generated Msg sequence through the machine via `foldEvents`
 // and pipe the result into a TEA-shaped predicate.
 //
@@ -7,10 +7,11 @@
 //   - `propertyInvariant`  — predicate holds on every (prev, msg, next, cmds) step.
 //   - `propertyTrace`      — predicate holds on the full (trace, final) shape.
 //
-// Each runner accepts `numRuns` (passed through to fast-check), an optional
-// `loaded` snapshot (forwarded to `foldEvents`), and the Msg-sequence
-// arbitrary. They return `void`; failures throw via fast-check's standard
-// shrinking output.
+// Each runner takes the Msg-sequence arbitrary, an optional `loaded` saved
+// state (a value, or an arbitrary that draws one per run), and fast-check's
+// settings. A passing run returns a `PropertyRun`; a failing run throws a
+// `PropertyFailure` carrying that same `PropertyRun` under fast-check's own
+// report.
 //
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
 // prefix shrinkers can be layered later but are opt-in, not default. The
@@ -22,14 +23,34 @@ import * as fc from "fast-check";
 import type { Cmd, Machine, Sub } from "../../index";
 import { foldEvents, type Step } from "./replay-fold";
 
-/** Common options shared by every property runner. */
-interface PropertyOpts<S> {
-  /** Pre-init snapshot — passed to `machine.init(loaded, ctx)`. Default `null`. */
-  readonly loaded?: S | null;
-  /** Number of generated sequences to test. Forwarded to `fc.assert`. */
-  readonly numRuns?: number;
-  /** Optional fast-check seed for reproducibility. */
-  readonly seed?: number;
+/**
+ * fast-check's settings a runner forwards. Four are left out, each because it
+ * would break what a runner promises:
+ *
+ *   - `reporter` and `asyncReporter` stop a failing run from throwing.
+ *   - `examples` has the shape of the drawn tuple, which an arbitrary `loaded`
+ *     changes.
+ *   - `timeout` applies only to async properties, and these runners are sync.
+ *     `interruptAfterTimeLimit` with `markInterruptAsFailure` is the limit that
+ *     works here.
+ */
+type ForwardedSettings = Omit<
+  fc.Parameters,
+  "reporter" | "asyncReporter" | "examples" | "timeout"
+>;
+
+/**
+ * Common options shared by every property runner: fast-check's settings
+ * (`numRuns` defaults to 200 here) plus the saved state to start from.
+ */
+interface PropertyOpts<S> extends ForwardedSettings {
+  /**
+   * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
+   * arbitrary draws one per run, and a failure's counterexample shows the drawn
+   * state beside the shrunk list. It can draw `null` as well, the nothing storage
+   * hands back on a fresh start, which boots the machine fresh.
+   */
+  readonly loaded?: S | null | fc.Arbitrary<S | null>;
 }
 
 /** The `foldEvents` result a runner's `check` inspects. */
@@ -40,24 +61,135 @@ type FoldResult<S, M, C> = {
 };
 
 /**
- * Build the fast-check parameters shared by every runner: the 200-default
- * `numRuns` plus an optional `seed`. Single source of truth so a change to
- * the default lands in one place.
+ * What a property run did. A passing runner returns it, and a failing one throws
+ * it on {@link PropertyFailure.run}, so a caller reads one shape on both arms and
+ * never parses error text.
  */
-function resolveFcParams<M>(
-  opts: PropertyOpts<unknown> | undefined,
-): fc.Parameters<[readonly M[]]> {
-  return {
-    numRuns: opts?.numRuns ?? 200,
-    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
-  };
+export interface PropertyRun {
+  /** Lists tried. On a failure, this counts up to and including the failing one. */
+  readonly numRuns: number;
+  /** Shrink steps a failure took. `0` on a pass. */
+  readonly numShrinks: number;
+  /** The seed this run drew from. Pass it back as `seed` to draw the same lists. */
+  readonly seed: number;
+  /**
+   * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
+   * that one failure. `null` when no list failed: on a pass, on an interrupt
+   * marked as a failure, or when too many `fc.pre` skips fail the run.
+   */
+  readonly path: string | null;
 }
 
 /**
- * The fold+assert core every runner shares: assert `check` over each
- * generated Msg sequence, folded once through the machine via `foldEvents`.
- * `check` throws on failure so the error message carries the offending
- * shape into fast-check's shrunk counter-example.
+ * Raised when a property fails. The message is fast-check's report, and
+ * {@link PropertyFailure.run} holds the same {@link PropertyRun} a pass returns.
+ * What the check threw sits where `fc.assert` puts it on the installed fast-check:
+ * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
+ * in the message by default and in `cause` with `errorWithCause`.
+ *
+ * @example
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import { PropertyFailure, propertyInvariant } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * type State = { type: "idle" } | { type: "done" };
+ * type Msg = { type: "finish" };
+ * declare const machine: Machine<State, Msg, never, never, object>;
+ * declare const seqArb: fc.Arbitrary<readonly Msg[]>;
+ *
+ * try {
+ *   propertyInvariant(machine, {}, seqArb, ({ next }) => next.type === "idle");
+ * } catch (error) {
+ *   if (error instanceof PropertyFailure) {
+ *     // Replay this one failure with `{ seed, path }`.
+ *     const { numShrinks, seed, path } = error.run;
+ *     console.log(numShrinks, seed, path);
+ *   }
+ * }
+ * ```
+ */
+export class PropertyFailure extends Error {
+  override readonly name = "PropertyFailure";
+  readonly _tag = "PropertyFailure" as const;
+  constructor(
+    report: string,
+    /** The run that failed. */
+    public readonly run: PropertyRun,
+    options?: ErrorOptions,
+  ) {
+    super(report, options);
+  }
+}
+
+/**
+ * Tell a drawn `loaded` from a fixed one. A saved state is plain data that can
+ * come back through JSON, so it never holds these functions, and testing for them
+ * keeps working where `instanceof` breaks: two copies of fast-check installed.
+ */
+function isArbitrary<S>(
+  loaded: S | null | fc.Arbitrary<S | null> | undefined,
+): loaded is fc.Arbitrary<S | null> {
+  if (typeof loaded !== "object" || loaded === null) return false;
+  const { generate, shrink, canShrinkWithoutContext } = loaded as Partial<
+    fc.Arbitrary<S | null>
+  >;
+  return (
+    typeof generate === "function" &&
+    typeof shrink === "function" &&
+    typeof canShrinkWithoutContext === "function"
+  );
+}
+
+/**
+ * The settings that decide whether `fc.assert` puts a `cause` on its error. tea
+ * promises two majors of fast-check, and each knows only one of these: 3 reads
+ * `errorWithCause` (off by default) and 4 reads `includeErrorInReport` (a `cause`
+ * unless it is on).
+ */
+interface CauseSettings {
+  readonly errorWithCause?: boolean;
+  readonly includeErrorInReport?: boolean;
+}
+
+/**
+ * The `cause` `fc.assert` would attach to this failure. `runConfiguration` holds
+ * `errorWithCause` only on 3, so its absence is what says the rule is 4's.
+ */
+function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
+  const { errorWithCause, includeErrorInReport }: CauseSettings =
+    details.runConfiguration;
+  return (errorWithCause ?? !includeErrorInReport)
+    ? { cause: details.errorInstance }
+    : undefined;
+}
+
+/**
+ * Turn fast-check's details into what the caller sees: the {@link PropertyRun}
+ * on a pass, a thrown {@link PropertyFailure} on a failure. `fc.check` never
+ * throws by itself, and this keeps the report and the `cause` `fc.assert` gives
+ * on either major. fast-check's report is `undefined` exactly when nothing failed.
+ */
+function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
+  const run: PropertyRun = {
+    numRuns: details.numRuns,
+    numShrinks: details.numShrinks,
+    seed: details.seed,
+    path: details.counterexamplePath,
+  };
+  const report = fc.defaultReportMessage(details);
+  if (report === undefined) return run;
+  throw new PropertyFailure(report, run, causeOf(details));
+}
+
+/**
+ * The fold+check core every runner shares: run `check` over each generated Msg
+ * sequence, folded once through the machine via `foldEvents`. `check` throws on
+ * failure so the error message carries the offending shape into fast-check's
+ * shrunk counter-example.
+ *
+ * A fixed `loaded` keeps a one-argument property, so a seed draws what it always
+ * drew. An arbitrary `loaded` draws as a second argument.
  */
 function runProperty<
   S,
@@ -71,13 +203,26 @@ function runProperty<
   seqArb: fc.Arbitrary<readonly M[]>,
   opts: PropertyOpts<S> | undefined,
   check: (result: FoldResult<S, M, C>) => void,
-): void {
-  fc.assert(
-    fc.property(seqArb, (msgs) => {
-      check(foldEvents(machine, ctx, opts?.loaded ?? null, msgs));
-    }),
-    resolveFcParams<M>(opts),
-  );
+): PropertyRun {
+  const { loaded, ...settings } = opts ?? {};
+  const params = { ...settings, numRuns: settings.numRuns ?? 200 };
+  return isArbitrary(loaded)
+    ? settle(
+        fc.check(
+          fc.property(seqArb, loaded, (msgs, drawn) => {
+            check(foldEvents(machine, ctx, drawn, msgs));
+          }),
+          params,
+        ),
+      )
+    : settle(
+        fc.check(
+          fc.property(seqArb, (msgs) => {
+            check(foldEvents(machine, ctx, loaded ?? null, msgs));
+          }),
+          params,
+        ),
+      );
 }
 
 /**
@@ -127,8 +272,8 @@ export function propertyTerminates<
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
   terminal: (state: NoInfer<S>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void {
-  runProperty(machine, ctx, seqArb, opts, ({ finalState }) => {
+): PropertyRun {
+  return runProperty(machine, ctx, seqArb, opts, ({ finalState }) => {
     if (!terminal(finalState)) {
       // Throwing here (vs returning false) lets the error message carry
       // the offending final state — fast-check pretty-prints it inside
@@ -189,8 +334,8 @@ export function propertyInvariant<
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
   invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void {
-  runProperty(machine, ctx, seqArb, opts, ({ steps }) => {
+): PropertyRun {
+  return runProperty(machine, ctx, seqArb, opts, ({ steps }) => {
     for (const step of steps) {
       if (!invariant(step)) {
         throw new Error(
@@ -247,8 +392,8 @@ export function propertyTrace<
     finalState: NoInfer<S>,
   ) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void {
-  runProperty(machine, ctx, seqArb, opts, ({ steps, finalState }) => {
+): PropertyRun {
+  return runProperty(machine, ctx, seqArb, opts, ({ steps, finalState }) => {
     if (!predicate(steps, finalState)) {
       throw new Error(
         `propertyTrace: predicate failed on trace length=${steps.length}, ` +
