@@ -52,6 +52,10 @@ const manifestPath = (pkg: WorkspacePackage) =>
 const indentOf = (text: string): string =>
   /^([ \t]+)"/m.exec(text)?.[1] ?? "  ";
 
+/** `json` written as `like` is: its indent, and its trailing newline when it has one. */
+export const jsonLike = (json: unknown, like: string): string =>
+  `${JSON.stringify(json, null, indentOf(like))}${like.endsWith("\n") ? "\n" : ""}`;
+
 /**
  * The dependency graph of a pnpm workspace as its `package.json` files declare it: for each package,
  * the workspace packages it names in any dependency field. Read once, before anything is written.
@@ -223,12 +227,11 @@ export class WorkspaceDependencies {
       json.dependencies = Object.fromEntries(
         Object.entries(merged).sort(([a], [b]) => a.localeCompare(b)),
       );
-      const trailing = text.endsWith("\n") ? "\n" : "";
       return {
         pkg,
         path: manifestPath(pkg),
         adds: [...adds].sort(),
-        text: `${JSON.stringify(json, null, indentOf(text))}${trailing}`,
+        text: jsonLike(json, text),
       };
     });
   }

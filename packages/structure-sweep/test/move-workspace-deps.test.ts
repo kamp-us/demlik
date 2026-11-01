@@ -337,6 +337,15 @@ describe("applyManifest adds the workspace:* dependencies a split needs", () => 
     expect(dependenciesOf(root, "packages/b/package.json")).toBeUndefined();
     expect(git(root, "status", "--porcelain")).toBe("");
 
+    // a's `./one` entry named a file that left; it goes, and a's other entries stay.
+    expect(JSON.parse(read(root, "packages/a/package.json")).exports).toEqual({
+      ".": "./src/index.ts",
+      "./helper": "./src/helper.ts",
+    });
+    expect(report.entriesRemoved).toEqual([
+      "packages/a/package.json exports ./one",
+    ]);
+
     // A second apply commits nothing.
     const head = git(root, "rev-parse", "HEAD");
     const again = applyManifest(root, manifestOf(INTO_B));
@@ -372,14 +381,22 @@ describe("applyManifest adds the workspace:* dependencies a split needs", () => 
     const report = withoutPnpm(() => applyManifest(root, manifestOf(INTO_B)));
 
     expect(report.dependenciesAdded).toEqual([]);
+    // a's package.json changes only to drop the `./one` entry the moved file left behind.
     expect(
       git(root, "diff", "--name-only", "HEAD~1", "HEAD").split("\n").sort(),
     ).toEqual([
+      "packages/a/package.json",
       "packages/a/src/index.ts",
       "packages/a/src/uses-three.ts",
       "packages/c/src/index.ts",
       "packages/c/src/rel.ts",
     ]);
+    expect(JSON.parse(read(root, "packages/a/package.json"))).toEqual({
+      name: "@fixture/a",
+      private: true,
+      exports: { ".": "./src/index.ts" },
+      dependencies: { "@fixture/b": "workspace:*" },
+    });
   });
 
   it("refuses a split that would make two packages depend on each other, naming both, before the rename commit", () => {
