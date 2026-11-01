@@ -103,9 +103,9 @@ export class PackageTree {
 
   /**
    * The file in this repository `literal` names from `importer` through tsconfig `paths`, tsconfig
-   * `baseUrl` or a package's `imports`. Only a specifier that looks like the first or the last goes
-   * to the compiler, since this is asked of every quoted string in every tracked source; `baseUrl`
-   * is read against `tree`, as the compiler would try it.
+   * `baseUrl` or a package's `imports`, read against `tree`. Only a specifier that looks like the
+   * first or the last goes to the compiler, since this is asked of every quoted string in every
+   * tracked source.
    */
   #aliased(importer: string, literal: string): string | undefined {
     const options = this.#optionsAt(dirname(importer));
@@ -124,7 +124,10 @@ export class PackageTree {
       literal,
       importer,
       options,
-      ts.sys,
+      {
+        fileExists: this.tree,
+        readFile: ts.sys.readFile,
+      },
     );
     return resolvedModule === undefined ||
       resolvedModule.isExternalLibraryImport === true
@@ -271,7 +274,9 @@ export const describeUnreachable = (
  * specifier in a file moving across a package line that names no file; a package-name specifier
  * into a package a row leaves that apply cannot follow to a file, so it may name a moved one; an
  * alias in a file moving across a package line, or naming a moved file, which apply does not rewrite;
- * or a path built at run time for which the row changes which file a value loads (`templates.ts`).
+ * a path built at run time for which the row changes which file a value loads (`templates.ts`); or a
+ * string in a file apply reads only for quoted strings, which the row would stop naming its file
+ * (`unreadImports`).
  */
 export type Unfollowed = {
   readonly row: PathMove;
@@ -282,6 +287,7 @@ export type Unfollowed = {
   | { readonly kind: "unknown-file"; readonly pkg: WorkspacePackage }
   | { readonly kind: "alias" }
   | { readonly kind: "template" }
+  | { readonly kind: "unread-file" }
 );
 
 const unfollowedReason = (unfollowed: Unfollowed): string => {
@@ -294,6 +300,8 @@ const unfollowedReason = (unfollowed: Unfollowed): string => {
       return "an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite";
     case "template":
       return "a path built at run time that apply cannot rewrite, and this row changes which file it loads";
+    case "unread-file":
+      return "in a kind of file apply does not rewrite, and this row would leave it naming the wrong file";
     default:
       return absurd(unfollowed);
   }
@@ -419,8 +427,17 @@ export function rewriteCrossings(
   return { unreachable, unfollowed, edges };
 }
 
-/** Every quoted or backtick string in a file — a cheap superset of its module specifiers. */
-const QUOTED = /["'`]([^"'`\n]+)["'`]/g;
+/** An opening quote, with what runs up to the next like quote on its line in a lookahead. */
+const QUOTED = /(["'`])(?=((?:(?!\1)[^\n])+)\1)/g;
+
+/**
+ * Everything between two like quotes on one line of `text` — a cheap superset of its module
+ * specifiers. The matches overlap, so an apostrophe earlier on the line cannot hide a specifier.
+ */
+const quotedStrings = (text: string): string[] =>
+  [...text.matchAll(QUOTED)].flatMap(([, , quoted]) =>
+    quoted === undefined ? [] : [quoted],
+  );
 
 /**
  * Those of `sources` in every workspace package holding one of them whose text names one of `rows`'
@@ -445,13 +462,62 @@ export function importerPackageSources(
   for (const file of sources) {
     const pkg = before.packageAt(file).root;
     if (importing.has(pkg)) continue;
-    const text = readFileSync(file, "utf8");
-    for (const [, literal] of text.matchAll(QUOTED)) {
-      if (literal !== undefined && names(before.name(file, literal), literal)) {
-        importing.add(pkg);
-        break;
-      }
-    }
+    const quoted = quotedStrings(readFileSync(file, "utf8"));
+    if (quoted.some((literal) => names(before.name(file, literal), literal)))
+      importing.add(pkg);
   }
   return sources.filter((file) => importing.has(before.packageAt(file).root));
+}
+
+/**
+ * The imports `rows` would break in `files`, which apply cannot parse or rewrite: each quoted string
+ * that names a file in the tree before the renames and, read from where its file then sits, no longer
+ * names that file after them. So a string naming a moved file is refused, and so is a moved file's
+ * string naming one left behind, while a file moving together with what it names passes. A
+ * package-name string into a package a row leaves that apply cannot follow to a file is refused too.
+ * The scan cannot tell an import from prose quoting a path, so such prose is refused as well.
+ */
+export function unreadImports(
+  files: readonly string[],
+  rows: readonly PathMove[],
+  before: PackageTree,
+  after: PackageTree,
+): Unfollowed[] {
+  const at = (path: string) => join(before.repoRoot, path);
+  const leavingFrom = new Map(rows.map((r) => [at(r.from), r]));
+  const arrivingAt = new Map(rows.map((r) => [at(r.to), r]));
+  const leaving = rowsLeaving(
+    rows.filter(
+      (r) =>
+        before.packageAt(at(r.from)).root !== after.packageAt(at(r.to)).root,
+    ),
+    before,
+  );
+  return files.flatMap((importer) => {
+    const own = leavingFrom.get(importer) ?? arrivingAt.get(importer);
+    const was = own === undefined ? importer : at(own.from);
+    const now = own === undefined ? importer : at(own.to);
+    const unread = (specifier: string): Unfollowed | undefined => {
+      const named = before.name(was, specifier);
+      if (named.kind === "package") {
+        const row = leaving.get(named.pkg.root);
+        return row !== undefined && namesCode(specifier)
+          ? { kind: "unknown-file", row, importer, specifier, pkg: named.pkg }
+          : undefined;
+      }
+      if (named.kind === "outside" || named.kind === "missing")
+        return undefined;
+      const moved = leavingFrom.get(named.path);
+      const row = moved ?? own;
+      if (row === undefined) return undefined;
+      const target = moved === undefined ? named.path : at(moved.to);
+      const still = after.name(now, specifier);
+      return (still.kind === "file" || still.kind === "alias") &&
+        still.path === target
+        ? undefined
+        : { kind: "unread-file", row, importer, specifier };
+    };
+    const quoted = new Set(quotedStrings(readFileSync(importer, "utf8")));
+    return [...quoted].flatMap((specifier) => unread(specifier) ?? []);
+  });
 }
