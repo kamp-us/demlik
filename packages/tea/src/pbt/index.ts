@@ -9,7 +9,8 @@
  *   - `arbMsg` / `arbMsgSequence` — build `fc.Arbitrary<M>` and `Arbitrary<M[]>`
  *     from a strict, mapped-type Msg-variant table.
  *   - `propertyTerminates` / `propertyInvariant` / `propertyTrace` — wrap
- *     `fc.assert(fc.property(...))` with a TEA-shaped fold over Msg sequences.
+ *     `fc.check(fc.property(...))` with a TEA-shaped fold over Msg sequences,
+ *     returning a `PropertyRun` and throwing a `PropertyFailure` that carries one.
  *   - `stubCtxThrowingProxy<Ctx>()` — type-shaped Ctx value whose every access
  *     throws (PBT runs the reducer; Ctx must never be touched).
  *
@@ -32,6 +33,8 @@ export {
 } from "./arbitraries";
 export {
   foldEvents,
+  PropertyFailure,
+  type PropertyRun,
   propertyInvariant,
   propertyTerminates,
   propertyTrace,

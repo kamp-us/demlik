@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (13)
+## Exports (15)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -20,7 +20,9 @@ import { … } from "@demlik/tea/pbt";
 | [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, and the final state. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
+| [`PropertyFailure`](#PropertyFailure) | Class | stable | Raised when a property fails. |
 | [`propertyInvariant`](#propertyInvariant) | Function | stable | Assert a predicate holds on EVERY transition step in a generated sequence. |
+| [`PropertyRun`](#PropertyRun) | Interface | stable | What a property run did. |
 | [`propertyTerminates`](#propertyTerminates) | Function | stable | Assert every generated Msg sequence ends in a terminal state. |
 | [`propertyTrace`](#propertyTrace) | Function | stable | Assert a predicate over the full trace plus the final state. |
 | [`Step`](#Step) | Interface | stable | One unit in a fold trace — the four pieces of data a property invariant typically asserts on. |
@@ -144,6 +146,20 @@ function msgTypeKeys<S, M extends { type: string }, C extends Cmd>(
 ): readonly string[]
 ```
 
+<a id="PropertyFailure"></a>
+
+### `PropertyFailure`
+
+```ts
+class PropertyFailure extends Error {
+  constructor(report: string, run: PropertyRun, options?: ErrorOptions);
+  readonly _tag: "PropertyFailure";
+  readonly name: "PropertyFailure";
+  /** The run that failed. */
+  readonly run: PropertyRun;
+}
+```
+
 <a id="propertyInvariant"></a>
 
 ### `propertyInvariant`
@@ -161,7 +177,28 @@ function propertyInvariant<
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
   invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
+```
+
+<a id="PropertyRun"></a>
+
+### `PropertyRun`
+
+```ts
+interface PropertyRun {
+  /** Lists tried. On a failure, this counts up to and including the failing one. */
+  readonly numRuns: number;
+  /** Shrink steps a failure took. `0` on a pass. */
+  readonly numShrinks: number;
+  /**
+   * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
+   * that one failure. `null` when no list failed: on a pass, or an interrupt
+   * marked as a failure.
+   */
+  readonly path: string | null;
+  /** The seed this run drew from. Pass it back as `seed` to draw the same lists. */
+  readonly seed: number;
+}
 ```
 
 <a id="propertyTerminates"></a>
@@ -181,7 +218,7 @@ function propertyTerminates<
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
   terminal: (state: NoInfer<S>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
 ```
 
 <a id="propertyTrace"></a>
@@ -204,7 +241,7 @@ function propertyTrace<
     finalState: NoInfer<S>,
   ) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
 ```
 
 <a id="Step"></a>
