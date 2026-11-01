@@ -8,6 +8,7 @@ import type { Machine } from "../index";
 import {
   type MsgCount,
   PropertyFailure,
+  type PropertyOpts,
   type PropertyRun,
   propertyInvariant,
   propertyTerminates,
@@ -54,6 +55,14 @@ propertyTrace(machine, {}, seqArb, () => true, {
   // @ts-expect-error an arbitrary of something that is not the machine's state
   loaded: otherArb,
 });
+
+// A caller can name what the runners take, to share one set of options.
+const shared: PropertyOpts<State> = {
+  loaded: stateArb,
+  failOnNeverActed: true,
+  failOnUndeclaredCmd: true,
+};
+propertyTrace(machine, {}, seqArb, () => true, shared);
 
 // Each check's last argument is what `init` sent, typed as the machine's Cmds.
 type Ping = { readonly type: "ping" };

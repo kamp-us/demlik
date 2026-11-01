@@ -102,11 +102,15 @@ const threeLaws = ({
 
 const SEEDS = [1, 42, 20261101];
 
-const run = (machine: ReturnType<typeof defineShip>, seed: number) =>
+const run = (
+  machine: ReturnType<typeof defineShip>,
+  seed: number,
+  maxLength?: number,
+) =>
   propertyInvariant(
     machine,
     {},
-    arbMsgSequence(msgArb, { size: "max", maxLength: 300 }),
+    arbMsgSequence(msgArb, { size: "max", maxLength: maxLength ?? 300 }),
     threeLaws,
     {
       seed,
@@ -138,6 +142,24 @@ describe("a test author replaces experiment 121's workarounds", () => {
       expect(drawn).toBeGreaterThan(0);
       expect(acted).toBeGreaterThan(0);
     }
+  });
+
+  // What the `failOnNeverActed` docs warn about: the default `maxLength` of 30 can't
+  // reach 20 steps deep when only one draw in 6 climbs, and the depth times the
+  // number of types can.
+  it.each(
+    SEEDS,
+  )("the healthy machine reads as cut at the default maxLength, seed %i", (seed) => {
+    const failure = failureOf(() => run(defineShip({}), seed, 30));
+
+    expect(failure.message).toContain("1 Msg type(s) never acted");
+    expect(failure.message).toContain("release (drawn");
+  });
+
+  it.each(
+    SEEDS,
+  )("the healthy machine passes at the depth times the types, seed %i", (seed) => {
+    expect(run(defineShip({}), seed, DEEP * 6).numRuns).toBe(200);
   });
 });
 

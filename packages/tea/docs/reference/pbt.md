@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (16)
+## Exports (17)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ import { … } from "@demlik/tea/pbt";
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
 | [`PropertyFailure`](#PropertyFailure) | Class | stable | Raised when a property fails. |
 | [`propertyInvariant`](#propertyInvariant) | Function | stable | Assert a predicate holds on EVERY transition step in a generated sequence. |
+| [`PropertyOpts`](#PropertyOpts) | Interface | stable | What every property runner takes: the saved state to start from, the two checks below, and fast-check's `Parameters` (`numRuns` defaults to 200 here). |
 | [`PropertyRun`](#PropertyRun) | Interface | stable | What a property run did. |
 | [`propertyTerminates`](#propertyTerminates) | Function | stable | Assert every generated Msg sequence ends in a terminal state. |
 | [`propertyTrace`](#propertyTrace) | Function | stable | Assert a predicate over the full trace plus the final state. |
@@ -199,6 +200,55 @@ function propertyInvariant<
   ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
+```
+
+<a id="PropertyOpts"></a>
+
+### `PropertyOpts`
+
+```ts
+interface PropertyOpts<S> extends Omit<fc.Parameters, "asyncReporter" | "examples" | "reporter" | "timeout"> {
+  /**
+   * Fail a run whose laws all held when a Msg type never acted, naming each such
+   * type, so a cut path can't stay green. Default `false`.
+   *
+   * A deep path needs a `maxLength` well past its depth as well as `size: "max"`
+   * on `arbMsgSequence`. Lists too short to reach a healthy machine's deep state
+   * name that healthy path as never acted, in the same report a cut path gives. At
+   * the default `maxLength` of 30, a state 20 steps deep on 6 Msg types drawn evenly
+   * fails this way, since only one draw in 6 climbs. Allow about the depth times the
+   * number of Msg types, here `maxLength: 120`.
+   *
+   * This stays out of any run with a non-empty `path`, so drop `path` to have it
+   * check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A
+   * path with no colon, such as `"3"`, is what a failure with no shrinks reports, and
+   * it is no replay once that failure is gone: fast-check draws a full `numRuns` of
+   * lists starting from that one, and a cut path reads green. `path: ""` is no path
+   * to fast-check, so this applies there.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
+   * "acted" unreadable, so this fails the run saying so.
+   */
+  readonly failOnNeverActed?: boolean;
+  /**
+   * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
+   * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
+   * keep a hand-written Cmd beside its defined ones. A machine with no `cmds` field
+   * has no list to check against, so this adds nothing there. `cmds: []` is a list
+   * with nothing on it, so every Cmd fails.
+   *
+   * A value with no string `type` is never a Cmd, so it fails with this off too, on
+   * every machine.
+   */
+  readonly failOnUndeclaredCmd?: boolean;
+  /**
+   * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
+   * arbitrary draws one per run, and a failure's counterexample shows the drawn
+   * state beside the shrunk list. It can draw `null` as well, the nothing storage
+   * hands back on a fresh start, which boots the machine fresh.
+   */
+  readonly loaded?: S | Arbitrary<S | null> | null;
+}
 ```
 
 <a id="PropertyRun"></a>

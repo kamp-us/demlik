@@ -1,5 +1,5 @@
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { defineMachine, type Reducer } from "../../index";
 import { arbMsg, arbMsgSequence } from "../arbitraries";
 import {
@@ -737,5 +737,109 @@ describe("what a run hands back", () => {
     expect(failure.run.numRuns + failure.run.numShrinks).toBeLessThanOrEqual(
       calls,
     );
+  });
+});
+
+// A call using no new option behaves as it did under `fc.assert`, and that includes a
+// reporter someone set for the whole process. Each row is `fc.assert`'s own answer, so
+// it holds on either major.
+describe("a reporter set through fc.configureGlobal", () => {
+  const before = fc.readConfigureGlobal();
+  afterEach(() => {
+    fc.resetConfigureGlobal();
+    fc.configureGlobal(before);
+  });
+
+  const viaAssert = (law: (s: State) => boolean): void => {
+    fc.assert(
+      fc.property(seqArb, (msgs) => {
+        if (!law(foldEvents(trusting, {}, BAD_STATE, msgs).finalState)) {
+          throw new Error("the law broke");
+        }
+      }),
+      { numRuns: 200, seed: 1 },
+    );
+  };
+  const viaRunner = (law: (s: State) => boolean, opts?: Opts): PropertyRun =>
+    propertyTerminates(trusting, {}, seqArb, law, {
+      loaded: BAD_STATE,
+      seed: 1,
+      ...opts,
+    });
+
+  const LAWS = [
+    ["a failing run", landsWhatWasSent, true],
+    ["a passing run", () => true, false],
+  ] as const;
+
+  it.each(
+    LAWS,
+  )("%s takes the details and throws nothing", (_name, law, failed) => {
+    const seen: boolean[] = [];
+    fc.configureGlobal({ reporter: (details) => seen.push(details.failed) });
+
+    expect(() => viaAssert(law)).not.toThrow();
+    expect(seen).toEqual([failed]);
+
+    seen.length = 0;
+    expect(() => viaRunner(law)).not.toThrow();
+    expect(seen).toEqual([failed]);
+  });
+
+  it("hands back the run it reported, failure and all", () => {
+    fc.configureGlobal({ reporter: () => {} });
+
+    const run = viaRunner(landsWhatWasSent);
+    expect(run.path).not.toBeNull();
+    expect(run.numShrinks).toBeGreaterThanOrEqual(0);
+  });
+
+  it("lets what the reporter throws reach the caller", () => {
+    const thrown = new Error("the reporter's own");
+    fc.configureGlobal({
+      reporter: () => {
+        throw thrown;
+      },
+    });
+
+    expect(() => viaAssert(landsWhatWasSent)).toThrow(thrown);
+    expect(() => viaRunner(landsWhatWasSent)).toThrow(thrown);
+  });
+
+  it("refuses a global asyncReporter the way fc.assert does", () => {
+    fc.configureGlobal({ asyncReporter: async () => {} });
+
+    expect(() => viaAssert(landsWhatWasSent)).toThrow(/asyncReporter/);
+    expect(() => viaRunner(landsWhatWasSent)).toThrow(/asyncReporter/);
+  });
+
+  it("failOnNeverActed still fails a run that passed", () => {
+    fc.configureGlobal({ reporter: () => {} });
+    // Nothing acts from `idle`, and this machine never leaves it.
+    const stuck = defineShip(() => ({ type: "idle" }));
+
+    const failure = failureOf(() =>
+      propertyTerminates(stuck, {}, seqArb, () => true, {
+        failOnNeverActed: true,
+      }),
+    );
+    expect(failure.message).toContain("never acted");
+  });
+
+  it("failOnNeverActed stays out of a failure the reporter already took", () => {
+    fc.configureGlobal({ reporter: () => {} });
+
+    expect(() =>
+      viaRunner(() => false, { failOnNeverActed: true }),
+    ).not.toThrow();
+  });
+
+  it("a reporter passed per call still can't hide a failure", () => {
+    const seen: unknown[] = [];
+    const reporter = (details: unknown) => seen.push(details);
+    const dodged = { reporter } as Opts;
+
+    expect(() => viaRunner(landsWhatWasSent, dodged)).toThrow(PropertyFailure);
+    expect(seen).toEqual([]);
   });
 });
