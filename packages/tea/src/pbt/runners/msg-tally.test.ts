@@ -2,6 +2,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { defineMachine, type Reducer, structuralHash } from "../../index";
 import { arbMsg, arbMsgSequence } from "../arbitraries";
+import { MsgTally } from "./msg-tally";
 import {
   PropertyFailure,
   type PropertyRun,
@@ -406,9 +407,28 @@ describe("a state that isn't plain data", () => {
       ctx: {} as Record<string, never>,
     },
     init: () => [{ at: new Date(0) }, []],
-    update: { tick: (s: Dated) => [{ at: s.at }, []] },
+    update: { tick: (s: Dated) => [{ at: new Date(s.at) }, []] },
   });
   const ticks = arbMsgSequence(fc.constant<Tick>({ type: "tick" }), {
+    minLength: 1,
+  });
+
+  class Money {
+    constructor(readonly cents: number) {}
+  }
+  type Swap = { readonly type: "swap" };
+  /** A machine that swaps between two states, each a new object to the other. */
+  const rebuilding = (one: object, other: object) =>
+    defineMachine({
+      types: {
+        model: {} as object,
+        msg: {} as Swap,
+        ctx: {} as Record<string, never>,
+      },
+      init: () => [one, []],
+      update: { swap: (s: object) => [s === one ? other : one, []] },
+    });
+  const swaps = arbMsgSequence(fc.constant<Swap>({ type: "swap" }), {
     minLength: 1,
   });
 
@@ -429,5 +449,446 @@ describe("a state that isn't plain data", () => {
 
     expect(failure.message).toContain("can't tell what acted");
     expect(failure.message).toContain("non-plain object (Date)");
+  });
+
+  describe.each([
+    ["a Date", new Date(0), new Date(0), "non-plain object (Date)"],
+    ["a Map", new Map([[1, 2]]), new Map([[1, 2]]), "non-plain object (Map)"],
+    [
+      "a class instance",
+      new Money(1),
+      new Money(1),
+      "non-plain object (Money)",
+    ],
+    [
+      "a Date set where null stood",
+      null,
+      new Date(0),
+      "non-plain object (Date)",
+    ],
+    [
+      "a Date under a new key",
+      undefined,
+      new Date(0),
+      "non-plain object (Date)",
+    ],
+  ])("%s deep in a rebuilt state", (_name, before, after, named) => {
+    const held = (value: unknown) => ({ deep: [{ value }] });
+    const machine = rebuilding(held(before), held(after));
+
+    it("fails the option, naming it", () => {
+      const failure = failureOf(() =>
+        propertyTrace(machine, {}, swaps, () => true, {
+          seed: 1,
+          failOnNeverActed: true,
+        }),
+      );
+
+      expect(failure.message).toContain("can't tell what acted");
+      expect(failure.message).toContain(named);
+    });
+
+    it("throws nothing with the option off, and counts it as acted", () => {
+      const run = propertyTrace(machine, {}, swaps, () => true, { seed: 1 });
+
+      expect(run.numRuns).toBe(200);
+      expect(actedOf(run, "swap")).toBe(run.msgCounts.get("swap")?.drawn);
+    });
+  });
+
+  describe("one the comparison never reaches", () => {
+    it("reads nothing in an object both states share", () => {
+      const shared = { at: new Date(0), byId: new Map(), money: new Money(1) };
+      const machine = rebuilding({ shared, n: 0 }, { shared, n: 1 });
+
+      const run = propertyTrace(machine, {}, swaps, () => true, {
+        seed: 1,
+        failOnNeverActed: true,
+      });
+
+      expect(actedOf(run, "swap")).toBe(run.msgCounts.get("swap")?.drawn);
+    });
+
+    it("counts an equal rebuild around a shared Date as not acting", () => {
+      const at = new Date(0);
+      const machine = rebuilding({ at }, { at });
+
+      const failure = failureOf(() =>
+        propertyTrace(machine, {}, swaps, () => true, {
+          seed: 1,
+          failOnNeverActed: true,
+        }),
+      );
+
+      expect(failure.message).toContain("1 Msg type(s) never acted");
+      expect(actedOf(failure.run, "swap")).toBe(0);
+    });
+
+    it("stops at the difference ahead of it, since that step acted", () => {
+      const machine = rebuilding(
+        { n: 0, at: new Date(0) },
+        { n: 1, at: new Date(0) },
+      );
+
+      const run = propertyTrace(machine, {}, swaps, () => true, {
+        seed: 1,
+        failOnNeverActed: true,
+      });
+
+      expect(actedOf(run, "swap")).toBe(run.msgCounts.get("swap")?.drawn);
+    });
+  });
+});
+
+/** Whether one step counts as acting, read from the tally the runners fill. */
+const actedOnStep = (prev: unknown, next: unknown): boolean => {
+  const tally = new MsgTally(["step"]);
+  tally.add([{ prev, msg: { type: "step" }, next, cmds: [] }]);
+  expect(tally.refusal).toBeNull();
+  return tally.counts.get("step")?.acted === 1;
+};
+
+describe("a step's comparison against structuralHash", () => {
+  const nullProto = (fields: object): object =>
+    Object.assign(Object.create(null), fields);
+  const holeAtZero = (): unknown[] => {
+    const list: unknown[] = [];
+    list[1] = 1;
+    return list;
+  };
+
+  it.each<readonly [string, unknown, unknown]>([
+    [
+      "different key order",
+      { a: 1, b: { c: 2, d: 3 } },
+      { b: { d: 3, c: 2 }, a: 1 },
+    ],
+    ["undefined against an absent key", { a: 1, b: undefined }, { a: 1 }],
+    ["an absent key against undefined", { a: 1 }, { a: 1, b: undefined }],
+    ["undefined against null", { a: undefined }, { a: null }],
+    ["an absent key against null", {}, { a: null }],
+    ["NaN against NaN", { a: Number.NaN }, { a: Number.NaN }],
+    ["NaN against its spelling", { a: Number.NaN }, { a: "NaN" }],
+    ["0 against -0", { a: 0 }, { a: -0 }],
+    ["a rebuilt list, equal", { a: [1, { b: 2 }] }, { a: [1, { b: 2 }] }],
+    ["a rebuilt list, reordered", { a: [1, 2] }, { a: [2, 1] }],
+    ["a list against a longer one", { a: [1] }, { a: [1, 2] }],
+    ["a list against a record", { a: [] }, { a: {} }],
+    ["a number against its spelling", { a: 1 }, { a: "1" }],
+    ["null against its spelling", { a: null }, { a: "null" }],
+    ["a bracket against a list", { a: "[" }, { a: [] }],
+    ["undefined in a list against null", [undefined], [null]],
+    ["a hole against undefined", holeAtZero(), [undefined, 1]],
+    ["a hole against a hole", holeAtZero(), holeAtZero()],
+    ["one hole against an empty list", new Array(1), []],
+    ["a null-prototype record", nullProto({ a: 1 }), { a: 1 }],
+    ["a key named like an inherited one", { constructor: 1 }, {}],
+    ["toString held by one side", {}, { toString: undefined }],
+    [
+      "a non-enumerable field",
+      Object.defineProperty({}, "a", { value: 1 }),
+      {},
+    ],
+  ])("agrees on %s", (_name, prev, next) => {
+    const changed = structuralHash(next) !== structuralHash(prev);
+
+    expect(actedOnStep(prev, next)).toBe(changed);
+    expect(actedOnStep(next, prev)).toBe(changed);
+  });
+
+  // A small pool of keys and leaves, so two states drawn apart often come out equal.
+  const plainData = fc.anything({
+    key: fc.constantFrom("a", "b", "__proto__", "toString"),
+    values: [
+      fc.constantFrom<unknown>(
+        0,
+        -0,
+        1,
+        "1",
+        "",
+        "[",
+        Number.NaN,
+        true,
+        null,
+        undefined,
+      ),
+    ],
+    maxDepth: 2,
+    maxKeys: 3,
+    withNullPrototype: true,
+    withSparseArray: true,
+  });
+
+  /** The same data with every record's keys set in the opposite order. */
+  const reversed = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      const copy: unknown[] = new Array(value.length);
+      for (const i of value.keys())
+        if (i in value) copy[i] = reversed(value[i]);
+      return copy;
+    }
+    if (typeof value !== "object" || value === null) return value;
+    const copy = Object.create(Object.getPrototypeOf(value)) as object;
+    for (const key of Object.keys(value).reverse()) {
+      Object.defineProperty(copy, key, {
+        value: reversed((value as Record<string, unknown>)[key]),
+        enumerable: true,
+      });
+    }
+    return copy;
+  };
+
+  const agrees = (prev: unknown, next: unknown): void => {
+    const changed = structuralHash(next) !== structuralHash(prev);
+    expect(actedOnStep(prev, next)).toBe(changed);
+  };
+
+  it("agrees on any two plain-data states", () => {
+    let same = 0;
+    let different = 0;
+    fc.assert(
+      fc.property(plainData, plainData, (prev, next) => {
+        if (structuralHash(next) === structuralHash(prev)) same += 1;
+        else different += 1;
+        agrees(prev, next);
+      }),
+      { seed: 20261101, numRuns: 2000 },
+    );
+
+    // The check means little unless both answers came up often.
+    expect(same).toBeGreaterThan(10);
+    expect(different).toBeGreaterThan(100);
+  });
+
+  it("agrees on a state and its own rebuild, whatever the key order", () => {
+    fc.assert(
+      fc.property(plainData, (state) => {
+        const rebuilt = reversed(state);
+        expect(structuralHash(rebuilt)).toBe(structuralHash(state));
+        agrees(state, rebuilt);
+      }),
+      { seed: 20261101, numRuns: 500 },
+    );
+  });
+
+  it("agrees on a state and a one-field change deep inside it", () => {
+    fc.assert(
+      fc.property(plainData, plainData, (head, tail) => {
+        agrees({ head, list: [tail, 1] }, { head, list: [tail, 2] });
+        agrees({ list: [tail, 1], head }, { list: [reversed(tail), 1], head });
+      }),
+      { seed: 20261101, numRuns: 500 },
+    );
+  });
+});
+
+describe("a step that shares a list with its prev", () => {
+  /** A list whose items count every field read through their accessors. */
+  const countedList = (length: number) => {
+    let reads = 0;
+    const items = Array.from({ length }, (_, id) => ({
+      get id() {
+        reads += 1;
+        return id;
+      },
+    }));
+    return { items, reads: () => reads };
+  };
+
+  type Held = {
+    readonly n: number;
+    readonly items: readonly { readonly id: number }[];
+  };
+  type HeldMsg = { readonly type: "bump" } | { readonly type: "copy" };
+  const holding = (loaded: Held) =>
+    defineMachine({
+      types: {
+        model: {} as Held,
+        msg: {} as HeldMsg,
+        ctx: {} as Record<string, never>,
+      },
+      init: () => [loaded, []],
+      update: {
+        bump: (s: Held) => [{ ...s, n: s.n + 1 }, []],
+        copy: (s: Held) => [{ ...s }, []],
+      },
+    });
+  const heldMsgs = arbMsgSequence(
+    fc.constantFrom<HeldMsg>({ type: "bump" }, { type: "copy" }),
+    { size: "max", maxLength: 60 },
+  );
+
+  it("reads none of its items, with failOnNeverActed on or off", () => {
+    const { items, reads } = countedList(100);
+    const machine = holding({ n: 0, items });
+
+    const off = propertyTrace(machine, {}, heldMsgs, () => true, { seed: 1 });
+    expect(reads()).toBe(0);
+    // `copy` never acts, so the option fails this run, having compared every step.
+    const on = failureOf(() =>
+      propertyTrace(machine, {}, heldMsgs, () => true, {
+        seed: 1,
+        failOnNeverActed: true,
+      }),
+    );
+    expect(on.message).toContain("1 Msg type(s) never acted");
+    expect(reads()).toBe(0);
+
+    expect(off.msgCounts.get("copy")?.drawn).toBeGreaterThan(0);
+    expect(off.msgCounts.get("copy")?.acted).toBe(0);
+    expect(on.run.msgCounts).toEqual(off.msgCounts);
+  });
+
+  it("reads its items once they stop being shared, so the count can move", () => {
+    const before = countedList(3);
+    const after = countedList(3);
+
+    expect(actedOnStep({ items: before.items }, { items: after.items })).toBe(
+      false,
+    );
+    expect(before.reads()).toBe(3);
+    expect(after.reads()).toBe(3);
+  });
+});
+
+describe("a property on a large state", () => {
+  type Item = {
+    readonly id: number;
+    readonly name: string;
+    readonly done: boolean;
+    readonly tags: readonly string[];
+  };
+  type Big = {
+    readonly n: number;
+    readonly flag: boolean;
+    readonly items: readonly Item[];
+  };
+  type BigMsg = {
+    readonly type: "bump" | "flip" | "a" | "b" | "c" | "d";
+  };
+  type Ping = { readonly type: "ping" };
+
+  const itemsOf = (count: number): readonly Item[] =>
+    Array.from({ length: count }, (_, id) => ({
+      id,
+      name: `item-${id}`,
+      done: id % 2 === 0,
+      tags: ["x", "y"],
+    }));
+
+  /** Two of six Msg types return a new object sharing the list. `others` is the rest. */
+  const big = (
+    items: readonly Item[],
+    others: (s: Big) => readonly [Big, Ping[]],
+  ) =>
+    defineMachine({
+      types: {
+        model: {} as Big,
+        msg: {} as BigMsg,
+        cmd: {} as Ping,
+        ctx: {} as Record<string, never>,
+      },
+      init: () => [{ n: 0, flag: false, items }, []],
+      update: {
+        bump: (s: Big) => [{ ...s, n: s.n + 1 }, []],
+        flip: (s: Big) => [{ ...s, flag: !s.flag }, []],
+        a: others,
+        b: others,
+        c: others,
+        d: others,
+      },
+    });
+
+  const quiet = (s: Big): readonly [Big, Ping[]] => [s, []];
+  const pinging = (s: Big): readonly [Big, Ping[]] => [s, [{ type: "ping" }]];
+
+  const lists = arbMsgSequence(
+    fc.constantFrom<BigMsg>(
+      { type: "bump" },
+      { type: "flip" },
+      { type: "a" },
+      { type: "b" },
+      { type: "c" },
+      { type: "d" },
+    ),
+    { size: "max", maxLength: 300 },
+  );
+
+  /**
+   * Run the fixture on 5000 items, timing the runner. The machine never reads its
+   * items, so the counts are worked out from the same lists over 5: hashing every
+   * step of 5000 is the very cost this test exists to rule out.
+   */
+  const timed = (
+    others: (s: Big) => readonly [Big, Ping[]],
+    failOnNeverActed: boolean,
+  ) => {
+    const seen: (readonly BigMsg[])[] = [];
+    const startedAt = performance.now();
+    let run: PropertyRun;
+    try {
+      run = propertyTrace(
+        big(itemsOf(5000), others),
+        {},
+        lists,
+        (steps) => {
+          seen.push(steps.map((step) => step.msg));
+          return true;
+        },
+        { seed: 1, numRuns: 200, failOnNeverActed },
+      );
+    } catch (error) {
+      if (!(error instanceof PropertyFailure)) throw error;
+      run = error.run;
+    }
+    const elapsed = performance.now() - startedAt;
+
+    const small = big(itemsOf(5), others);
+    const expected = new Map<string, { drawn: number; acted: number }>(
+      ["bump", "flip", "a", "b", "c", "d"].map((type) => [
+        type,
+        { drawn: 0, acted: 0 },
+      ]),
+    );
+    for (const msgs of seen) {
+      for (const step of foldEvents(small, {}, null, msgs).steps) {
+        const count = expected.get(step.msg.type);
+        if (!count) throw new Error(`unknown type ${step.msg.type}`);
+        count.drawn += 1;
+        const changed = structuralHash(step.next) !== structuralHash(step.prev);
+        if (changed || step.cmds.length > 0) count.acted += 1;
+      }
+    }
+    return { run, elapsed, expected };
+  };
+
+  it.each([
+    ["off", quiet, false],
+    ["on, and the four quiet types fail it", quiet, true],
+    ["on, and every type acts", pinging, true],
+  ] as const)("finishes in under 1 s with failOnNeverActed %s", (_name, others, on) => {
+    const { run, elapsed, expected } = timed(others, on);
+
+    expect(run.numRuns).toBe(200);
+    expect(run.msgCounts).toEqual(expected);
+    expect(run.msgCounts.get("bump")?.acted).toBeGreaterThan(0);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it("gives the 5000-item counts that hashing those 5000 items gives", () => {
+    const items = itemsOf(5000);
+    const machine = big(items, quiet);
+    const msgs = Array.from(
+      { length: 60 },
+      (_, i): BigMsg => ({
+        type: (["bump", "flip", "a", "b", "c", "d"] as const)[i % 6] ?? "a",
+      }),
+    );
+    const { steps } = foldEvents(machine, {}, null, msgs);
+
+    for (const step of steps) {
+      const changed = structuralHash(step.next) !== structuralHash(step.prev);
+      expect(actedOnStep(step.prev, step.next)).toBe(changed);
+    }
   });
 });

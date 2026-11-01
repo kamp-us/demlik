@@ -73,8 +73,13 @@ export interface PropertyOpts<S>
    * lists starting from that one, and a cut path reads green. `path: ""` is no path
    * to fast-check, so this applies there.
    *
-   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
-   * "acted" unreadable, so this fails the run saying so.
+   * A value `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
+   * "acted" unreadable when a step's comparison reaches it, so this fails the run
+   * saying so. The comparison stops at the first difference and doesn't look inside
+   * an object `prev` and `next` share, so a refused value stays unread, and fails
+   * nothing, when it sits in a shared object or past a difference. The answer is
+   * right either way: a shared object didn't change, and a difference means the
+   * step acted. Fields are compared in the order the state's keys were set.
    */
   readonly failOnNeverActed?: boolean;
   /**
@@ -124,8 +129,9 @@ export interface PropertyRun {
    * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
    * though `numRuns` includes it: its fold hands back no steps to count.
    *
-   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
-   * as acted whenever a cell returned a new object.
+   * A step counts as acted when its comparison reaches a value `structuralHash`
+   * refuses (a `Date`, a `Map`, a class instance). One in an object `prev` and `next`
+   * share, or past a difference, is never reached, so it changes no count.
    */
   readonly msgCounts: ReadonlyMap<string, MsgCount>;
 }
