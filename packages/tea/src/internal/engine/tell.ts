@@ -8,9 +8,9 @@ import { acceptedTypes } from "../../pure/core";
 import { type Postable, post, type TellAnswer } from "./loop";
 
 /**
- * Hand `msg` to the run behind `runtime`. The public handle types do not carry
- * the `post` symbol, so a handle that did not come from `run` is refused here,
- * loudly: it has no line to put a Msg on.
+ * Hand `msg` to the run behind `runtime`. Both `tell`s ask for a type that carries
+ * the `post` symbol, so a handle that did not come from `run` reaches this only
+ * through a cast. It is refused here, loudly: it has no line to put a Msg on.
  */
 export function tellRun<S, M extends { type: string }>(
   machine: Parameters<typeof acceptedTypes>[0],

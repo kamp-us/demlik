@@ -18,8 +18,8 @@ import {
 } from "../__fixtures__/answering-machines";
 import { replay, type Store } from "../index";
 import { memoryStore } from "../mem";
-import { type Runtime, RuntimeDiscardedError } from "../runtime-types";
-import { run, tell } from "./index";
+import { RuntimeDiscardedError } from "../runtime-types";
+import { type Run, run, tell } from "./index";
 
 const ROUNDS = 100;
 const LIMIT_MS = 10_000;
@@ -83,7 +83,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
       string,
       {
         readonly machine: ReturnType<typeof ringChild>;
-        readonly run: Runtime<RingChildState, RingChildMsg>;
+        readonly run: Run<RingChildState, RingChildMsg>;
         readonly log: RingChildMsg[];
       }
     >();
@@ -265,8 +265,31 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
     await runtime.stop();
   });
 
-  it("refuses a handle that did not come from `run`, loudly", () => {
-    const handBuilt = {} as Runtime<LineState, LineMsg>;
+  it("answers `no_cell` on a handle still booting, and takes the Msg once `ready` has run", async () => {
+    let loaded = (): void => {};
+    const loading = new Promise<void>((resolve) => {
+      loaded = resolve;
+    });
+    const inner = memoryStore<LineState>();
+    const store: Store<LineState> = {
+      load: () => loading.then(() => inner.load()),
+      save: (state) => inner.save(state),
+      migrate: (raw) => inner.migrate(raw),
+    };
+    const booting = run(line, { store, interpret: { wait: async () => {} } });
+
+    expect(tell(line, booting, ping("early"))).toBe("no_cell");
+
+    loaded();
+    const runtime = await booting.ready;
+    expect(tell(line, runtime, ping("a"))).toBe("queued");
+    await runtime.idle();
+    expect(runtime.getState().folded).toEqual(["a"]);
+    await runtime.stop();
+  });
+
+  it("refuses a handle cast past its type, loudly", () => {
+    const handBuilt = {} as Run<LineState, LineMsg>;
     expect(() => tell(line, handBuilt, ping("a"))).toThrow(
       /run handle from `run`/,
     );

@@ -58,7 +58,7 @@ import type {
 } from "../runtime-types";
 import { spawnedScope } from "./children";
 import { CellFailure, saveFailures, unwrapped } from "./failures";
-import { type EffectBootingRuntime, effectHandle } from "./handle";
+import { type EffectBootingRun, effectHandle } from "./handle";
 
 // === The handler and runner shapes ===
 
@@ -337,7 +337,7 @@ export function run<
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
 ): Effect.Effect<
-  EffectBootingRuntime<S, M, E, CellErrors<C, I>>,
+  EffectBootingRun<S, M, E, CellErrors<C, I>>,
   never,
   Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 > {

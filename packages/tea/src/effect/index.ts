@@ -18,7 +18,12 @@ export type { TellAnswer } from "../internal/engine/loop";
 export { type SpawnSteps, spawn, stop, tell } from "./children";
 export { type CheckingSchema, Cmd } from "./cmd";
 export { Stopped, StoreFailed, SubFailed } from "./failures";
-export type { EffectBootingRuntime, EffectRuntime } from "./handle";
+export type {
+  EffectBootingRun,
+  EffectBootingRuntime,
+  EffectRun,
+  EffectRuntime,
+} from "./handle";
 export {
   type CellErrors,
   type EffectInterpret,

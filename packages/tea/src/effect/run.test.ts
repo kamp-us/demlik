@@ -35,6 +35,7 @@ import {
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
 import { memoryStore } from "../mem";
 import {
+  type EffectBootingRun,
   type EffectBootingRuntime,
   type EffectRuntime,
   run,
@@ -233,7 +234,7 @@ describe("services flow from the caller's Layers", () => {
     type Model2 = Model & { readonly beats: number };
     expectTypeOf(program).toEqualTypeOf<
       Effect.Effect<
-        EffectBootingRuntime<Model2, Msg | { readonly type: "beat" }>,
+        EffectBootingRun<Model2, Msg | { readonly type: "beat" }>,
         never,
         Scope.Scope | Directory | Pulse
       >

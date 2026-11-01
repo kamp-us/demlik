@@ -8,18 +8,44 @@ Tier: `stable`
 import { … } from "@demlik/tea/promise";
 ```
 
-## Exports (6)
+## Exports (8)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`BootingRun`](#BootingRun) | Interface | stable | The handle `run` returns: a BootingRuntime that also carries the run's line, which is what `tell` asks for. |
 | [`driveToDone`](#driveToDone) | Function | stable | Drive a machine from `start` to its terminal State in one call, then tear the runtime down. |
 | [`DriveToDoneOptions`](#DriveToDoneOptions) | Type | stable | Options for `driveToDone`. |
 | [`PromiseRunOptions`](#PromiseRunOptions) | Type | stable | The options of the Promise engine's `run`. |
 | [`run`](#run) | Function | stable | Start a machine on the Promise engine and return its runtime. |
+| [`Run`](#Run) | Interface | stable | What a BootingRun's `ready` resolves to: a booted Runtime that still carries the run's line. |
 | [`tell`](#tell) | Function | stable | Put `msg` on a run's line and return at once. |
 | [`TellAnswer`](#TellAnswer) | Type | stable | What `tell` answers, at once, about the Msg it was handed. |
 
 ## Declarations
+
+<a id="BootingRun"></a>
+
+### `BootingRun`
+
+```ts
+interface BootingRun<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E>, Postable<S, M> {
+  /**
+   * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
+   * the boot error). This is the ONLY way to obtain a `Runtime` — and a
+   * `Runtime` is the only handle whose `getState()` is total. Awaiting `ready` is
+   * the single gate between "boot in flight" and "State exists":
+   *
+   * ```ts
+   * const runtime = await run(machine, opts).ready;
+   * runtime.getState(); // total — never throws-before-boot
+   * ```
+   *
+   * Idempotent — the same settled promise, resolving to the same `Runtime`, comes
+   * back on every read. Expresses canon §2.3 (boot is a named, awaitable moment).
+   */
+  ready: Promise<Run<S, M, E>>;
+}
+```
 
 <a id="driveToDone"></a>
 
@@ -150,7 +176,18 @@ function run<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: PromiseRunOptions<S, M, C, U, Ctx, E>,
-): BootingRuntime<S, M, E>
+): BootingRun<S, M, E>
+```
+
+<a id="Run"></a>
+
+### `Run`
+
+```ts
+interface Run<S, M extends { type: string }, E extends { type: string } = never> extends Runtime<S, M, E>, Postable<S, M> {
+  /** Resolves to this same `Runtime` once boot completes. Idempotent. */
+  ready: Promise<Run<S, M, E>>;
+}
 ```
 
 <a id="tell"></a>
@@ -167,7 +204,7 @@ function tell<
   E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: Runtime<S, M, E>,
+  runtime: BootingRun<S, M, E>,
   msg: NoInfer<M>,
 ): TellAnswer
 ```

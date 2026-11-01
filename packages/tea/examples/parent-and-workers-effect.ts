@@ -1,6 +1,6 @@
 import {
   type EffectBootingRuntime,
-  type EffectRuntime,
+  type EffectRun,
   run,
   spawn,
   stop,
@@ -32,7 +32,7 @@ export type Children = Map<string, Child>;
  */
 export const spawnWorker = (
   parentScope: Scope.Scope,
-  parentRun: EffectRuntime<ParentState, ParentMsg>,
+  parentRun: EffectRun<ParentState, ParentMsg>,
   children: Children,
   id: string,
 ): Effect.Effect<Child> =>

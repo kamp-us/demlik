@@ -8,6 +8,6 @@
 - `StoreFailed` leaves `tell`'s type. A failed save of the receiver reaches the receiver's `onError`, and no longer comes back to the sender. Drop any `Effect.catch` around a `tell`, as `spawn`'s `notify` no longer needs one.
 - A State read right after a `tell` no longer shows the Msg folded. Wait for the result as its own Msg, or use `idle()` on the receiver outside its Cmd handlers.
 - A Msg whose cell is gone by its turn is dropped without a word. It never ends the process, with or without an `onError`.
-- `tell` now needs a handle that came from `run`, or a spread of one. A plain object built by hand worked before and is refused now, though the type still accepts it: `tell` throws on the Promise engine and dies with a defect on the Effect engine. Inside `spawn`'s `notify`, that defect ends the fiber unseen, so the parent is never told. Hand `tell` the real handle.
+- `tell` now needs a handle that came from `run`, or a spread of one. A plain object built by hand worked before and no longer compiles. See the changeset for `EffectRun` and `Run`.
 
 Added: `tell` and `TellAnswer` on `@demlik/tea/promise`, and `TellAnswer` on `@demlik/tea/effect`. On the Promise engine `tell` returns its answer directly. `spawn` and `stop` keep their signatures. Two hand-written waiting `dispatch` calls into each other can still stop both machines.

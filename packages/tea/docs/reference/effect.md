@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (22)
+## Exports (24)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -16,12 +16,14 @@ import { … } from "@demlik/tea/effect";
 | [`CheckingSchema`](#CheckingSchema) | Type | stable | An Effect schema that checks a value and hands the same type on. |
 | [`Cmd`](#Cmd) | Type | stable | A Cmd value, as the core types it. |
 | [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds on the Effect engine. |
+| [`EffectBootingRun`](#EffectBootingRun) | Interface | stable | The handle `run` yields: an EffectBootingRuntime that also carries the run's line, which is what `tell` asks for. |
 | [`EffectBootingRuntime`](#EffectBootingRuntime) | Interface | stable | What the Effect engine's `run` yields while boot is in flight. |
 | [`EffectInterpret`](#EffectInterpret) | Type | stable | The Effect engine's `interpret` map: one cell per Cmd variant, each reading services within `R`. |
 | [`EffectInterpretCell`](#EffectInterpretCell) | Type | stable | One Effect `interpret` cell. |
+| [`EffectRun`](#EffectRun) | Interface | stable | What an EffectBootingRun's `ready` succeeds with: a booted EffectRuntime that still carries the run's line. |
 | [`EffectRunner`](#EffectRunner) | Type | stable | One Effect sub runner: the Sub in, a `Stream` of Msgs out. |
 | [`EffectRunOptions`](#EffectRunOptions) | Type | stable | The options of the Effect engine's `run`. |
-| [`EffectRuntime`](#EffectRuntime) | Interface | stable | The Effect engine's booted handle — what `ready` succeeds with. |
+| [`EffectRuntime`](#EffectRuntime) | Interface | stable | The Effect engine's booted handle. |
 | [`EffectSubscribe`](#EffectSubscribe) | Type | stable | The Effect engine's `subscribe` map: a runner for every Sub type the machine declares beyond the built-ins, and optionally one for a built-in, which replaces the engine's own (#270 R2.1). |
 | [`InterpretServices`](#InterpretServices) | Type | stable | The services every cell of an `interpret` map reads. |
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
@@ -163,6 +165,22 @@ const Cmd: {
 }
 ```
 
+<a id="EffectBootingRun"></a>
+
+### `EffectBootingRun`
+
+```ts
+interface EffectBootingRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err>, Postable<S, M> {
+  /**
+   * Succeeds with the booted handle once boot completes. Fails with
+   * `StoreFailed` when the saved state could not be restored (`"load"`) or the
+   * initial save failed (`"save"`), and with a hand-written cell's declared
+   * failure when a boot Cmd fails with one.
+   */
+  readonly ready: Effect<EffectRun<S, M, E, Err>, StoreFailed | Err>;
+}
+```
+
 <a id="EffectBootingRuntime"></a>
 
 ### `EffectBootingRuntime`
@@ -233,6 +251,22 @@ type EffectInterpret<M extends { type: string }, C extends Cmd, R = unknown> = {
 
 ```ts
 type EffectInterpretCell<M extends { type: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
+```
+
+<a id="EffectRun"></a>
+
+### `EffectRun`
+
+```ts
+interface EffectRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectRuntime<S, M, E, Err>, Postable<S, M> {
+  /**
+   * Succeeds with the booted handle once boot completes. Fails with
+   * `StoreFailed` when the saved state could not be restored (`"load"`) or the
+   * initial save failed (`"save"`), and with a hand-written cell's declared
+   * failure when a boot Cmd fails with one.
+   */
+  readonly ready: Effect<EffectRun<S, M, E, Err>, StoreFailed | Err>;
+}
 ```
 
 <a id="EffectRunner"></a>
@@ -357,7 +391,7 @@ function run<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
-): Effect<EffectBootingRuntime<S, M, E, CellErrors<C, I>>, never, Scope | InterpretServices<I> | SubscribeServices<B>>
+): Effect<EffectBootingRun<S, M, E, CellErrors<C, I>>, never, Scope | InterpretServices<I> | SubscribeServices<B>>
 ```
 
 <a id="spawn"></a>
@@ -385,9 +419,10 @@ interface SpawnSteps<A, E = never, R = never> {
    * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with. A `tell` has nothing to handle. A defect in it,
-   * such as a `tell` on a handle that did not come from `run`, is not observed
-   * by `spawn` and ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle, and a parent handle
+   * built by hand does not compile as its argument. A defect in this step, such
+   * as a `tell` on a handle cast past that type, is not observed by `spawn` and
+   * ends the fiber unseen.
    */
   readonly notify: Effect<unknown>;
   /**
@@ -474,7 +509,7 @@ function tell<
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: EffectRuntime<S, M, E, Err>,
+  runtime: EffectBootingRun<S, M, E, Err>,
   msg: NoInfer<M>,
 ): Effect<TellAnswer>
 ```

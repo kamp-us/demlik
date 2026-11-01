@@ -15,6 +15,7 @@ import {
   type LoopHandler,
   type LoopRunner,
   liveWork,
+  type Postable,
   startLoop,
 } from "../internal/engine/loop";
 import type {
@@ -28,6 +29,7 @@ import { applyCell, type Cmd, subEntriesOf } from "../pure/core";
 import type {
   BootingRuntime,
   CtxArg,
+  Runtime,
   StoreAndOnError,
   Supervision,
   TelemetrySink,
@@ -127,6 +129,35 @@ export type PromiseRunOptions<
     __idleCap?: number;
   };
 
+/**
+ * The handle `run` returns: a {@link BootingRuntime} that also carries the run's
+ * line, which is what `tell` asks for. A spread keeps the line. An object built
+ * by hand cannot have one, because tea does not export its key, so a
+ * {@link BootingRuntime} that is not one of these does not compile as `tell`'s
+ * argument.
+ */
+export interface BootingRun<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends BootingRuntime<S, M, E>,
+    Postable<S, M> {
+  ready: Promise<Run<S, M, E>>;
+}
+
+/**
+ * What a {@link BootingRun}'s `ready` resolves to: a booted {@link Runtime} that
+ * still carries the run's line. It fits anywhere a `Runtime` is asked for.
+ */
+export interface Run<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends Runtime<S, M, E>,
+    Postable<S, M> {
+  ready: Promise<Run<S, M, E>>;
+}
+
 // === run ===
 //
 // Boot runs as the FIRST entry on the serial dispatch tail, which is how every
@@ -157,7 +188,7 @@ export function run<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: PromiseRunOptions<S, M, C, U, Ctx, E>,
-): BootingRuntime<S, M, E> {
+): BootingRun<S, M, E> {
   // `interpret` is optional when `C extends Cmd<never>`; default a missing map
   // to `{}` — a Cmd with no handler is skipped, invariant 6's forward progress
   // for a miswired consumer.
@@ -205,7 +236,7 @@ export function run<
       queueMicrotask(() => void handle.stop());
     },
   });
-  return handle as unknown as BootingRuntime<S, M, E> & LiveWorkProbe;
+  return handle as unknown as BootingRun<S, M, E> & LiveWorkProbe;
 }
 
 /** A runner as a caller hands it to `run` in `subscribe`. */
