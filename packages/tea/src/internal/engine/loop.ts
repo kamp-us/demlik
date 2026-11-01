@@ -13,7 +13,7 @@
  * Sharing the loop is also what makes the two engines' traces identical: the
  * fold, the save order and the built-ins are the same code.
  *
- * Everything else `run` offers is an {@link Extension} built on nine points:
+ * Everything else `run` offers is an {@link Extension} built on ten points:
  *
  *   1. `update`    — middleware over the fold. Returning `null` means "no
  *                    transition": no save, no effects, no commit.
@@ -30,9 +30,11 @@
  *                    rejection reaches the dispatch caller.
  *   7. `subFailed` — called when a Sub's failure stops the run, before the
  *                    engine is told to stop it.
- *   8. `drained`   — called once `stop()` has finished with the queue, so no Msg
- *                    folds after it and the State is the run's last.
- *   9. `ctx`       — keys added to the ctx every Cmd handler receives, so a
+ *   8. `halted`    — called when an extension halts the run with an error.
+ *   9. `drained`   — called once no Msg can fold any more, so the State is the
+ *                    run's last: `stop()` has finished with the queue, or a
+ *                    halted run's line has ended.
+ *  10. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
  *
@@ -101,8 +103,11 @@ export interface LoopServices<S> {
     phase: RuntimeErrorPhase,
     fn: (item: T) => void,
   ): void;
-  /** Close the gate for good: every later dispatch is refused. */
-  halt(): void;
+  /**
+   * Close the gate for good because of `error`: every later dispatch is refused.
+   * The Msgs already in line still fold.
+   */
+  halt(error: unknown): void;
   /** The current State, or `undefined` before boot has produced one. */
   state(): S | undefined;
   /** The current State's save status; storeless State is saved immediately. */
@@ -118,6 +123,7 @@ export interface Extension<S, M, C> {
   readonly commit?: (msg: M | undefined, state: S) => void;
   readonly saveFailed?: (state: S, error: unknown) => void;
   readonly subFailed?: (error: unknown) => void;
+  readonly halted?: (error: unknown) => void;
   readonly drained?: () => void;
   readonly ctx?: object;
   readonly handle?: object;
@@ -392,14 +398,22 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   const services: LoopServices<S> = {
     report,
     fanout,
-    halt() {
+    halt(error) {
       if (gate !== "abandoned") gate = "closed";
+      for (const ext of extensions) ext.halted?.(error);
+      // The gate is shut, so nothing joins the line from here on, and `tail`
+      // already covers this step and every Msg behind it.
+      void tail.then(lastStateReached);
     },
     state: () => state,
     saveStatus: () =>
       config.store === undefined ? { type: "saved" } : saveStatus,
   };
   const extensions = config.extensions.map((make) => make(services));
+
+  function lastStateReached(): void {
+    fanout(extensions, "sub", (ext) => ext.drained?.());
+  }
 
   // The fold, the handler call and the store, each wrapped by the extensions
   // that ask for it. `reduceRight` makes the first extension the outermost.
@@ -937,7 +951,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     // has returned; a handler that never returns is what the limit is for
     // (ADR 0025). Either way this resolves, and the teardown below runs.
     await drainTail();
-    fanout(extensions, "sub", (ext) => ext.drained?.());
+    lastStateReached();
     stopSubs([...subRegistry.keys()]);
     // …then WAIT for the teardown still settling, up to the same limit (see
     // `drainDisposals`).

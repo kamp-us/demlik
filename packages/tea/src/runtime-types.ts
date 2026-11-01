@@ -244,8 +244,8 @@ export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
 // `phase: "reduce"` FIRST (invariant 6), then differs in what happens next:
 //
 //   - `stop`    — halt (SAFE DEFAULT). State is NOT advanced; the dispatch
-//                 promise rejects; every subsequent dispatch rejects. Never a
-//                 silent resume.
+//                 promise rejects; every subsequent dispatch rejects; `done()`
+//                 rejects with the throw. Never a silent resume.
 //   - `escalate`— surface + propagate: the dispatch promise rejects so the
 //                 failure bubbles to a parent supervisor. The runtime stays live.
 //   - `restart` — re-init from a host-provided last-known-good state and keep
@@ -1155,21 +1155,23 @@ export interface Runtime<
    * firehose by matching an internal Msg name. With a store, returns `undefined`
    * until the current State's save succeeds, including after a failed save.
    * Without a store, answers as soon as State is set. Total — never throws, so a
-   * run a Sub failure stopped reads `undefined` here; `done()` says why.
+   * run a failure closed reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
   /**
    * Resolves with the terminal State only once it is saved (per the `terminal`
    * predicate). If ALREADY saved and terminal, resolves immediately; otherwise
    * on that terminal commit. Rejects with the save failure if a terminal State
-   * cannot be saved, for both waiting and later callers. Rejects with
-   * `SubFailedError` once a Sub failure the Sub did not map to a Msg stops the
-   * run short of a terminal State, for both waiting and later callers too. It
-   * answers that only after the Msgs already in line have folded, because one of
-   * them can still reach a terminal State, and then the State is the answer.
-   * Without a store, answers as soon as State is set. The awaitable companion to
-   * `result()`. With no predicate this resolves never, and rejects only on that
-   * Sub failure. Idempotent and multi-caller safe.
+   * cannot be saved, for both waiting and later callers. When a failure closes
+   * the run short of a terminal State, it rejects for both waiting and later
+   * callers too: with `SubFailedError` for a Sub failure the Sub did not map to
+   * a Msg, and with what was thrown for a reducer throw under the `stop`
+   * strategy. It answers that only after the Msgs already in line have folded,
+   * because one of them can still reach a terminal State, and then the State is
+   * the answer. A `stop()` with no failure leaves it pending. Without a store,
+   * answers as soon as State is set. The awaitable companion to `result()`. With
+   * no predicate this resolves never, and rejects only on those failures.
+   * Idempotent and multi-caller safe.
    */
   done(): Promise<S>;
 }
