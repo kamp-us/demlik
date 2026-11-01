@@ -205,13 +205,26 @@ const runtime = await run(downloader, {
   onError: (error) => console.error("run error", error),
 }).ready;
 
+// A dispatch nobody awaits needs a catch of its own.
+function reportFailure(sent: Promise<unknown>) {
+  sent.catch((error: unknown) => console.error("dispatch failed", error));
+}
+
 function Progress() {
-  const [state] = useRuntime(runtime);
+  const [state, dispatch] = useRuntime(runtime);
 
   return (
-    <p>
-      {state.received}/{state.total}
-    </p>
+    <div>
+      <p>
+        {state.received}/{state.total}
+      </p>
+      <button
+        type="button"
+        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
+      >
+        Receive chunk
+      </button>
+    </div>
   );
 }
 
@@ -241,10 +254,16 @@ about a failed run.
 The `finally` stays for the failures too. After a reducer throw the Subs keep running
 and the final save has not happened until `stop()` runs.
 
-The `onError` is what keeps a Node process alive through those failures. With no
-`onError`, the default sink rethrows a Sub failure or a reducer throw on a later
-tick, and that ends a Node process whatever the catch does. In a browser, that
-rethrow only logs an error, and nothing ends.
+`dispatch` rejects too: with what the reducer threw, and with what a Sub threw when
+that Msg's State started the Sub and it threw at once. A `dispatch` nobody awaits, like
+the `onClick={() => dispatch(...)}` in step 1, needs a catch of its own, for the same
+reason `done()` does. That is the job of `reportFailure` above. Replace its
+`console.error` the same way.
+
+Together, the two catches and the `onError` keep a Node process alive through a
+failed run. With no `onError`, the default sink rethrows a Sub failure or a reducer
+throw on a later tick, and that ends a Node process whatever the catches do. In a
+browser, that rethrow only logs an error, and nothing ends.
 
 A listener hears before the Cmds run, so hearing one does not mean they are done.
 When your code needs that, use `observe` or `on`, which hear after a transition's

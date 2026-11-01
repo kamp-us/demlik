@@ -165,13 +165,26 @@ const runtime = await run(downloader, {
   onError: (error) => console.error("run error", error),
 }).ready;
 
+// A dispatch nobody awaits needs a catch of its own.
+function reportFailure(sent: Promise<unknown>) {
+  sent.catch((error: unknown) => console.error("dispatch failed", error));
+}
+
 function Progress() {
-  const [state] = useRuntime(runtime);
+  const [state, dispatch] = useRuntime(runtime);
 
   return (
-    <p>
-      {state.received}/{state.total}
-    </p>
+    <div>
+      <p>
+        {state.received}/{state.total}
+      </p>
+      <button
+        type="button"
+        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
+      >
+        Receive chunk
+      </button>
+    </div>
   );
 }
 
@@ -299,18 +312,18 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
 
   it("`useRuntime` renders a handle the component does not own", async () => {
     await render(<Progress />);
-    expect(container.textContent).toBe("0/0");
+    expect(container.querySelector("p")?.textContent).toBe("0/0");
 
     await act(async () => {
       await runtime.dispatch({ type: "start", total: 1 });
-      await runtime.dispatch({ type: "chunk", size: 1 });
     });
-    expect(container.textContent).toBe("1/1");
+    await click("Receive chunk");
+    expect(container.querySelector("p")?.textContent).toBe("1/1");
     expect((await finished)?.phase).toBe("done");
   });
 });
 
-describe("docs/how-to/drive-from-react.md — `finish` in a host with an `onError`", () => {
+describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a host with an `onError`", () => {
   const unhandled: unknown[] = [];
   const hearUnhandled = (reason: unknown) => {
     unhandled.push(reason);
@@ -327,8 +340,12 @@ describe("docs/how-to/drive-from-react.md — `finish` in a host with an `onErro
   });
 
   /**
-   * Starts `finish` and leaves its promise unawaited, as a host that never
-   * awaits it would, until Node has had its chance to call the rejection unhandled.
+   * Does what the page tells a host to do: starts `finish`, dispatches through
+   * `reportFailure`, and awaits neither, until Node has had its chance to call a
+   * rejection unhandled.
+   *
+   * `stop` counts `finish`'s call alone. A Sub failure also makes the engine stop
+   * the handle itself, and that call does not go through here.
    */
   async function endRun(msg: EndingMsg) {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -343,10 +360,10 @@ describe("docs/how-to/drive-from-react.md — `finish` in a host with an `onErro
         },
       },
     }).ready;
-    const stop = vi.spyOn(owned, "stop");
+    const stop = vi.fn(() => owned.stop());
 
-    const unawaited = finish(owned);
-    await owned.dispatch(msg).catch(() => {});
+    const unawaited = finish({ done: () => owned.done(), stop });
+    reportFailure(owned.dispatch(msg));
     await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
     await new Promise((settled) => setTimeout(settled, 0));
 
@@ -362,22 +379,24 @@ describe("docs/how-to/drive-from-react.md — `finish` in a host with an `onErro
     expect(heard).toEqual([]);
   });
 
-  it("a Sub failure: `stop()` ran and the host hears a `SubFailedError`", async () => {
+  it("a Sub failure: `stop()` ran and the host hears a `SubFailedError` from `done()` and the Sub's throw from `dispatch`", async () => {
     const { answer, logged, heard } = await endRun({ type: "watch" });
 
     expect(answer).toBeUndefined();
-    const [label, error] = logged.mock.calls[0] ?? [];
-    expect(label).toBe("run failed");
+    const [, error] =
+      logged.mock.calls.find(([label]) => label === "run failed") ?? [];
     expect(error).toBeInstanceOf(SubFailedError);
     expect((error as SubFailedError).cause).toBe(subFailed);
+    expect(logged).toHaveBeenCalledWith("dispatch failed", subFailed);
     expect(heard).toContain(subFailed);
   });
 
-  it("a reducer throw: `stop()` ran and the host hears what was thrown", async () => {
+  it("a reducer throw: `stop()` ran and the host hears what was thrown, from `done()` and from `dispatch`", async () => {
     const { answer, logged, heard } = await endRun({ type: "explode" });
 
     expect(answer).toBeUndefined();
     expect(logged).toHaveBeenCalledWith("run failed", reducerThrew);
+    expect(logged).toHaveBeenCalledWith("dispatch failed", reducerThrew);
     expect(heard).toContain(reducerThrew);
   });
 });
