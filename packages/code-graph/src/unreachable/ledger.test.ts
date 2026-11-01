@@ -102,9 +102,32 @@ describe("reconcileUnreachable", () => {
     expect(atPackage.pruned).toEqual([]);
   });
 
-  it("does not let another scope's entry of another kind or symbol cover a finding", () => {
+  it("lets another scope's entry cover the same symbol measured under another kind", () => {
+    const fromPackage = recorded(dead("packages/a", "src/x.ts:x"));
+    const atRoot = reconcileUnreachable(
+      fromPackage,
+      ".",
+      [testOnly(".", "packages/a/src/x.ts:x")],
+      ["dead", "only-called-from-tests"],
+    );
+    expect(atRoot.unrecorded).toEqual([]);
+    expect(atRoot.recorded).toBe(1);
+    expect(atRoot.pruned).toEqual([]);
+    expect(atRoot.kept.entries).toEqual(fromPackage.entries);
+
+    const atPackage = reconcileUnreachable(
+      recorded(testOnly(".", "packages/a/src/x.ts:x")),
+      "packages/a",
+      [dead("packages/a", "src/x.ts:x")],
+      ["dead", "only-called-from-tests"],
+    );
+    expect(atPackage.unrecorded).toEqual([]);
+    expect(atPackage.pruned).toEqual([]);
+  });
+
+  it("does not let another scope's entry of another symbol cover a finding", () => {
     const result = reconcileUnreachable(
-      recorded(testOnly("packages/a", "src/x.ts:x"), dead("packages/a", "src/x.ts:other")),
+      recorded(dead("packages/a", "src/x.ts:other"), dead("packages/b", "src/x.ts:x")),
       ".",
       [dead(".", "packages/a/src/x.ts:x")],
       ["dead", "only-called-from-tests"],

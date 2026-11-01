@@ -121,6 +121,8 @@ const bigFile = (name: string): string => {
 // An npm workspace with no `pnpm-workspace.yaml`. Each package holds one dead export, one export
 // only its test calls, one big file, and two features the first of which reaches into the second's
 // internals. `b` calls an export of `a`, so a run on `a` alone reads it as dead and the root does not.
+// A test in `b` is the only caller of `helper` in `a`, so `a` alone reads it as dead and the root as
+// only-called-from-tests.
 function npmWorkspace(): void {
   const files: Record<string, string> = {
     "package.json": '{ "name": "root", "private": true, "workspaces": ["packages/*"] }\n',
@@ -147,6 +149,10 @@ function npmWorkspace(): void {
     "export function shared(n: number): number {\n  return n - 1;\n}\n";
   files["packages/b/src/caller.ts"] =
     'import { shared } from "../../a/src/shared.js";\n\nexport function caller(): number {\n  return shared(1);\n}\n';
+  files["packages/a/src/helper.ts"] =
+    "export function helper(n: number): number {\n  return n + 2;\n}\n";
+  files["packages/b/src/use.test.ts"] =
+    'import { helper } from "../../a/src/helper.js";\n\nexport function checkHelper(): boolean {\n  return helper(1) === 3;\n}\n';
   write(files);
 }
 
@@ -168,92 +174,113 @@ function ledgerFilesBelowRoot(): string[] {
 const unreachableCi = (root: string): ReturnType<typeof runCli> =>
   runCli([root, "--unreachable", "--ci"]);
 
-describe("a repo with no pnpm-workspace.yaml judges a folder and the root the same", () => {
-  beforeEach(npmWorkspace);
+describe(
+  "a repo with no pnpm-workspace.yaml judges a folder and the root the same",
+  {
+    timeout: 120_000,
+  },
+  () => {
+    beforeEach(npmWorkspace);
 
-  it("agrees on every finding across three packages and the root, run after run", () => {
-    const allRoots = [...PACKAGES.map((name) => at("packages", name)), top];
+    it("agrees on every finding across three packages and the root, run after run", () => {
+      const allRoots = [...PACKAGES.map((name) => at("packages", name)), top];
 
-    for (const failing of allRoots) expect(unreachableCi(failing).code).toBe(1);
+      for (const failing of allRoots) expect(unreachableCi(failing).code).toBe(1);
 
-    expect(
-      runCli([at("packages", "a"), "--unreachable", "--accept-dead", "--reason", "x"]).code,
-    ).toBe(0);
-    expect(fs.existsSync(at("unreachable-ledger.json"))).toBe(true);
-    expect(unreachableCi(at("packages", "a")).code).toBe(0);
-    expect(unreachableCi(at("packages", "b")).code).toBe(1);
-
-    const partial = runCli([top, "--unreachable", "--ci", "--json"]);
-    expect(partial.code).toBe(1);
-    const unrecorded: { id: string }[] = JSON.parse(partial.stdout).unrecorded;
-    expect(
-      unrecorded.map((finding) => finding.id).filter((id) => id.includes("packages/a")),
-    ).toEqual([]);
-
-    for (const name of ["b", "c"]) {
       expect(
-        runCli([at("packages", name), "--unreachable", "--accept-dead", "--reason", "x"]).code,
+        runCli([at("packages", "a"), "--unreachable", "--accept-dead", "--reason", "x"]).code,
       ).toBe(0);
-    }
-    const ledger = fs.readFileSync(at("unreachable-ledger.json"), "utf8");
+      expect(fs.existsSync(at("unreachable-ledger.json"))).toBe(true);
+      expect(unreachableCi(at("packages", "a")).code).toBe(0);
+      expect(unreachableCi(at("packages", "b")).code).toBe(1);
 
-    const atRoot = unreachableCi(top).stdout;
-    expect(atRoot).toMatch(/PASS — scope \., [1-9]\d* recorded finding/);
+      const partial = runCli([top, "--unreachable", "--ci", "--json"]);
+      expect(partial.code).toBe(1);
+      const unrecorded: { id: string }[] = JSON.parse(partial.stdout).unrecorded;
+      expect(
+        unrecorded.map((finding) => finding.id).filter((id) => id.includes("packages/a")),
+      ).toEqual([]);
 
-    for (let round = 0; round < 2; round++) {
-      for (const root of allRoots) {
-        const run = unreachableCi(root);
-        expect(run.stdout).not.toContain("FAILED");
-        expect(run.code).toBe(0);
+      for (const name of ["b", "c"]) {
+        expect(
+          runCli([at("packages", name), "--unreachable", "--accept-dead", "--reason", "x"]).code,
+        ).toBe(0);
       }
-      expect(fs.readFileSync(at("unreachable-ledger.json"), "utf8")).toBe(ledger);
+      const ledger = fs.readFileSync(at("unreachable-ledger.json"), "utf8");
+      const entries: { scope: string; kind: string; id: string }[] = JSON.parse(ledger).entries;
+      expect(entries).toContainEqual(
+        expect.objectContaining({ scope: "packages/a", kind: "dead", id: "src/helper.ts:helper" }),
+      );
+      expect(
+        entries.some((entry) => entry.id.includes("helper") && entry.scope !== "packages/a"),
+      ).toBe(false);
+      const measuredAtRoot = JSON.parse(runCli([top, "--unreachable", "--json"]).stdout);
+      expect(measuredAtRoot.unreachable).toContainEqual(
+        expect.objectContaining({
+          id: "packages/a/src/helper.ts:helper",
+          category: "only-called-from-tests",
+        }),
+      );
+
+      const atRoot = unreachableCi(top).stdout;
+      expect(atRoot).toMatch(/PASS — scope \., [1-9]\d* recorded finding/);
+
+      for (let round = 0; round < 2; round++) {
+        for (const root of allRoots) {
+          const run = unreachableCi(root);
+          expect(run.stdout).not.toContain("FAILED");
+          expect(run.code).toBe(0);
+        }
+        expect(fs.readFileSync(at("unreachable-ledger.json"), "utf8")).toBe(ledger);
+        expect(ledgerFilesBelowRoot()).toEqual([]);
+      }
+    });
+
+    it("reads an entry the root run recorded from a package run", () => {
+      expect(runCli([top, "--unreachable", "--accept-dead", "--reason", "x"]).code).toBe(0);
+      expect(unreachableCi(top).code).toBe(0);
+      for (const name of ["b", "c"]) expect(unreachableCi(at("packages", name)).code).toBe(0);
       expect(ledgerFilesBelowRoot()).toEqual([]);
-    }
-  }, 120_000);
 
-  it("reads an entry the root run recorded from a package run", () => {
-    expect(runCli([top, "--unreachable", "--accept-dead", "--reason", "x"]).code).toBe(0);
-    expect(unreachableCi(top).code).toBe(0);
-    for (const name of ["b", "c"]) expect(unreachableCi(at("packages", name)).code).toBe(0);
-    expect(ledgerFilesBelowRoot()).toEqual([]);
+      // The root saw `b` call `shared`, so it recorded nothing for it. `a` alone cannot see that call.
+      // The root did record `helper`, under another kind, so `a` reads that entry for its own finding.
+      const a = runCli([at("packages", "a"), "--unreachable", "--ci", "--json"]);
+      expect(JSON.parse(a.stdout).unrecorded).toEqual([
+        { scope: "packages/a", kind: "dead", id: "src/shared.ts:shared" },
+      ]);
+    });
 
-    // The root saw `b` call `shared`, so it recorded nothing for it. `a` alone cannot see that call.
-    const a = runCli([at("packages", "a"), "--unreachable", "--ci", "--json"]);
-    expect(JSON.parse(a.stdout).unrecorded).toEqual([
-      { scope: "packages/a", kind: "dead", id: "src/shared.ts:shared" },
-    ]);
-  }, 60_000);
+    it("lands --accept-smells, --accept-crossings and --write-ceilings at the root", () => {
+      const pkg = at("packages", "a");
+      const rules = at("boundary-rules.json");
 
-  it("lands --accept-smells, --accept-crossings and --write-ceilings at the root", () => {
-    const pkg = at("packages", "a");
-    const rules = at("boundary-rules.json");
+      const smells = runCli([pkg, "--accept-smells", "--reason", "x"]);
+      expect(smells.code).toBe(0);
+      const smellLedger = JSON.parse(fs.readFileSync(at("smell-ledger.json"), "utf8"));
+      expect(smellLedger.entries.map((e: { target: string }) => e.target)).toEqual([
+        "packages/a/src/big.ts",
+      ]);
 
-    const smells = runCli([pkg, "--accept-smells", "--reason", "x"]);
-    expect(smells.code).toBe(0);
-    const smellLedger = JSON.parse(fs.readFileSync(at("smell-ledger.json"), "utf8"));
-    expect(smellLedger.entries.map((e: { target: string }) => e.target)).toEqual([
-      "packages/a/src/big.ts",
-    ]);
+      const crossings = runCli([
+        pkg,
+        "--boundaries",
+        "--boundary-rules",
+        rules,
+        "--accept-crossings",
+        "--reason",
+        "x",
+      ]);
+      expect(crossings.code).toBe(0);
+      expect(fs.existsSync(at("boundary-ledger.json"))).toBe(true);
 
-    const crossings = runCli([
-      pkg,
-      "--boundaries",
-      "--boundary-rules",
-      rules,
-      "--accept-crossings",
-      "--reason",
-      "x",
-    ]);
-    expect(crossings.code).toBe(0);
-    expect(fs.existsSync(at("boundary-ledger.json"))).toBe(true);
+      expect(runCli([pkg, "--comments", "--write-ceilings"]).code).toBe(0);
+      expect(fs.existsSync(at("comment-ceilings.json"))).toBe(true);
 
-    expect(runCli([pkg, "--comments", "--write-ceilings"]).code).toBe(0);
-    expect(fs.existsSync(at("comment-ceilings.json"))).toBe(true);
-
-    expect(ledgerFilesBelowRoot()).toEqual([]);
-    expect(runCli([pkg, "--ci"]).code).toBe(0);
-    expect(runCli([pkg, "--boundaries", "--boundary-rules", rules, "--ci"]).code).toBe(0);
-    expect(runCli([pkg, "--comments", "--ci"]).code).toBe(0);
-    expect(runCli([top, "--comments", "--ci"]).code).toBe(0);
-  }, 120_000);
-});
+      expect(ledgerFilesBelowRoot()).toEqual([]);
+      expect(runCli([pkg, "--ci"]).code).toBe(0);
+      expect(runCli([pkg, "--boundaries", "--boundary-rules", rules, "--ci"]).code).toBe(0);
+      expect(runCli([pkg, "--comments", "--ci"]).code).toBe(0);
+      expect(runCli([top, "--comments", "--ci"]).code).toBe(0);
+    });
+  },
+);

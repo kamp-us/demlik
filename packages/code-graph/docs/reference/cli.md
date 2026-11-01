@@ -444,11 +444,14 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 - `--unreachable --ci` exits 1 on a finding of this run that the ledger does not
   name, and lists each one. It never fails on an entry whose finding is gone: it
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
-- A finding counts as recorded when any entry names the same kind and the same
-  symbol, whichever scope recorded it. `packages/core` with `src/x.ts:f` and `.`
-  with `packages/core/src/x.ts:f` are one symbol, so `code-graph .` and
-  `code-graph packages/core` read one entry the same way. A run on a package alone
-  cannot see a caller in another package, so it can find what the root does not.
+- A finding counts as recorded when an entry of its own scope names the same kind
+  and symbol, or an entry of another scope names the same symbol at any kind.
+  `packages/core` with `src/x.ts:f` and `.` with `packages/core/src/x.ts:f` are one
+  symbol, so `code-graph .` and `code-graph packages/core` read one entry the same
+  way. The kind may differ because a run on a package alone cannot see a caller in
+  another package: an export only another package's test calls is `dead` there and
+  `only-called-from-tests` at the root, and one entry covers both. For the same
+  reason a package run can find what the root does not.
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an
@@ -457,7 +460,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 - Upgrading past 0.12.0 can turn an existing `--unreachable --ci` run red: the
   `unused-export` findings it now measures are not in the ledger yet. Record them
   once with `--accept-dead --reason`, or drop their `export` keywords.
-- A finding whose kind changes is a new finding, and its old entry is pruned.
+- A finding whose kind changes within one scope is a new finding, and its old
+  entry is pruned.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
   `test-support-surface`, `called-by-withheld`) are not findings and never enter
   the ledger.
