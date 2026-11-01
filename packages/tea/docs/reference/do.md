@@ -611,7 +611,7 @@ function doStore<S>(
 function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,
-  keyOrOptions: string | DoStoreOptions<S>,
+  keyOrOptions?: string | DoStoreOptions<S>,
 ): DeletableStore<S> | FencedStore<S> & DeletableStore<S>
 ```
 

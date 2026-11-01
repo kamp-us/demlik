@@ -91,6 +91,7 @@ run(machine, {
 // `doStore` is held the same way, and an unfenced call of it still needs no sink.
 declare const storage: DurableObjectStorage;
 declare const doOptions: DoStoreOptions<State>;
+declare const doOptionsOrNone: DoStoreOptions<State> | undefined;
 run(machine, { ctx: undefined, store: doStore(storage, parse) });
 run(machine, { ctx: undefined, store: doStore(storage, parse, "key") });
 run(machine, { ctx: undefined, store: doStore(storage, parse, { key: "k" }) });
@@ -104,6 +105,12 @@ run(machine, {
   store: doStore(storage, parse, doOptions),
   onError,
 });
+// A helper forwarding options it may not have, as `fileStore` and `memoryStore` allow.
+run(machine, {
+  ctx: undefined,
+  store: doStore(storage, parse, doOptionsOrNone),
+  onError,
+});
 // @ts-expect-error
 run(machine, {
   ctx: undefined,
@@ -113,6 +120,11 @@ run(machine, {
 run(machine, { ctx: undefined, store: doStore(storage, parse, doOptions) });
 // @ts-expect-error
 run(machine, { ctx: undefined, store: doStore(storage, parse, maybeFenced) });
+// @ts-expect-error options it may not have can still be fenced
+run(machine, {
+  ctx: undefined,
+  store: doStore(storage, parse, doOptionsOrNone),
+});
 
 // The limit ADR 0031 names: assigned to a plain `Store`, the type no longer says
 // it is fenced.

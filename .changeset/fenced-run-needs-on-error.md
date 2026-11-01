@@ -15,7 +15,7 @@ run(machine, {
 
 `useMachine`, `createAgentHost`, a defined agent's `run` and `agentTool` now take an `onError` too, because they had no way to pass one. `useMachine` reads the latest render's, so a sink passed inline does not replace the run. `AgentHostConfig` is now a type alias rather than an interface, so nothing can `extends` it; `AgentHostWiring` is the new interface for everything but the store and its sink.
 
-`doStore` called with options whose `fenced` is known only at runtime, such as a value typed `DoStoreOptions`, now returns a store that may be fenced, as `fileStore` and `memoryStore` already do, so a run on it needs an `onError` too. The Promise engine's `run` options now have a name, the exported `PromiseRunOptions`, where the reference prints them.
+`doStore` called with options whose `fenced` is known only at runtime, such as a value typed `DoStoreOptions` or `DoStoreOptions | undefined`, now returns a store that may be fenced, as `fileStore` and `memoryStore` already do, so a run on it needs an `onError` too. The Promise engine's `run` options now have a name, the exported `PromiseRunOptions`, where the reference prints them.
 
 The type reads a store's declared type, so a fenced store assigned to a variable typed plain `Store<S>` still compiles with no `onError` and runs on the default sink.
 
