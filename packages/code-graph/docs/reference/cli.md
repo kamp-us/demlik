@@ -224,9 +224,11 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
 | `--api <map>` | `PublishedApi` JSON | 0, 2, 3 |
 | `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2, 3 |
 | `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
+| `--api <map> --ci` | the verdict as text; `--json` for `{ passed, scope, unrecorded, pruned }` | 0 pass, 1 unrecorded name, 2, 3 |
+| `--api <map> --accept-api --reason <text>` | what it added as text; `--json` for `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
 
 `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
-and `--out`.
+and `--out`, or with [the API ledger's](#the-api-ledger) flags.
 Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
 flag beside it, a map that is not JSON or fails the schema (an unknown key, no
 subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
@@ -240,13 +242,76 @@ row missing a change kind, a `bump` outside the four), a
 `<directory>/package.json` that is missing or has no `name`, a changeset
 added since the base whose frontmatter does not parse, or a changed name whose
 tier has no row and no `default`.
-Exit 3 for any other error inside the run, in all three: one stderr line,
+Exit 3 for any other error inside the run, in every row: one stderr line,
 `code-graph: unexpected error: <message>`, no stack trace and nothing on
 stdout. The diagnostics warning above is a line of its own and still comes
 first when tsgo reported any. An `--out` file that cannot be written exits 3,
-not 2. Exit 1 therefore always means a ratchet miss, never a crash.
+not 2. Exit 1 therefore always means a ratchet miss or an unrecorded name, never
+a crash.
 Without `--api` no emit runs and every other output is unchanged. The full
 contract, with examples, is [SPEC.md §13](../../SPEC.md).
+
+### The API ledger
+
+A repo with no changesets can still fail lint on a new public name. `--api-base`
+only reports, and `--api-policy` passes once the author adds a changeset; both
+need a base commit in the checkout. The ledger needs neither. It runs no git
+command, so it works on a one-commit checkout and in a folder that is not a git
+repository. `api-ledger.json` sits at the repo root, beside
+`unreachable-ledger.json` and `smell-ledger.json`:
+
+```json
+{
+  "entries": [
+    {
+      "name": "parse",
+      "reason": "baseline",
+      "scope": "packages/core",
+      "subpath": "."
+    }
+  ]
+}
+```
+
+- An entry is keyed by `(scope, subpath, name)`. `scope` is `<directory>` relative
+  to the repo root (`.` for the root itself), which keeps two packages of one
+  workspace apart. `subpath` is the map's key. `reason` is required.
+- It records names, never signatures. A signature change on a recorded name is not
+  a failure; judging that change is what `--api-policy` is for.
+- `--api <map> --accept-api --reason "<why>"` adds every published name of this
+  scope that the ledger does not hold yet. It also drops this scope's entries whose
+  name is gone.
+- `--api <map> --ci` exits 1 on a published name of this scope that the ledger does
+  not hold, and lists each by subpath and name. It never fails on an entry whose
+  name is gone: it rewrites the ledger without that entry and prints it, so a second
+  run changes nothing. With no ledger file every published name fails.
+- A run changes only entries of its own scope, but it reads and validates the whole
+  file first: a bad entry in any scope exits 2.
+- On a run where the compiler reported errors, nothing is pruned. A name behind a
+  broken `export *` reads exactly like a removed one, so every entry the view does
+  not list stays, and each is printed with a note that the compiler reported errors.
+  New names still fail and can still be accepted. A blank name from a syntax error
+  is neither listed nor recorded.
+- The tradeoff: a type error anywhere in the tsconfig counts, so a package with a
+  standing error never prunes. The entry stays, each run names it, and the first
+  clean run prunes it. A stale entry could let a removed name come back without
+  failing; the gate takes that over losing a written reason.
+- `--json` prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and
+  `{ scope, accepted, pruned, reason }` for `--accept-api`. When the compiler
+  reported errors, `pruned` is `[]` and both add `unmeasured`, the entries kept with
+  their reasons.
+- Exit 2, with one line on stderr and nothing written: `--accept-api` without a
+  non-empty `--reason`, with `--ci`, or without `--api`; `--reason` with `--api --ci`;
+  either beside `--api-base`, `--api-policy` or any flag other than `--json`,
+  `--pretty` and `--out`; and an unreadable or schema-invalid `api-ledger.json`,
+  which is read before any emit. The map, tsconfig and emit refusals above apply too.
+
+```sh
+code-graph packages/core --api core-api.json --accept-api --reason "baseline"   # once
+code-graph packages/core --api core-api.json --ci                               # in lint
+```
+
+The contract is [SPEC.md §13.9](../../SPEC.md).
 
 ## Analysis options
 
@@ -328,16 +393,31 @@ conventions apply alongside active presets.
 | `--collapse --ci` | Check shared-block counts against `collapse-ceilings.json` |
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
 | `--unreachable --ci` | Check unreachable and unused exports against `unreachable-ledger.json` |
+| `--api <map> --ci` | Check published names against `api-ledger.json`; see [The API ledger](#the-api-ledger) |
 | `--write-ceilings` | With comments: rewrite ratios. With collapse: record this scope's count |
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
 | `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
+| `--accept-api` | With `--api`: add unrecorded published names to `api-ledger.json` |
 | `--dead-only` | With `--unreachable --ci`: gate only `dead` findings, not `only-called-from-tests` or `unused-export` |
-| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead` or `--accept-smells` |
+| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead`, `--accept-smells` or `--accept-api` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
 The ordinary smell gate is syntax-only unless call analysis is also requested.
 Boundary, comment, collapse, and unreachable gates use their own policies.
 Layers always gate, without needing `--ci`.
+
+**A run takes one gate.** A second one would never run, so two of `--layers`,
+`--boundaries`, `--comments`, `--collapse` and `--unreachable` in a run with
+`--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or
+`--migrate-ceilings` exit 2 with one line naming them, before any ledger or
+ceilings file is read. `--layers` counts with or without those flags.
+`--env-keys` and `--hexagon` beside a gate, `--ci` or `--accept-smells` exit 2
+the same way, since they run without one. A `--ci` that rides one named gate is
+not a second gate. `--api <map> --ci` and `--api <map> --accept-api` answer
+before this check and take only `--json`, `--pretty` and `--out` (plus `--reason`
+for the accept), so a gate flag beside them exits 2 with their own line.
+To run several gates, run the command once per gate. Two reports in one run,
+such as `--cycles --kinds`, are not refused: one is dropped and no gate is lost.
 
 Boundary `--ci` can rewrite the ledger when it prunes resolved crossings.
 `--boundaries --write-ceilings` is retired. Acceptance, migration, and boundary

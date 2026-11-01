@@ -14,6 +14,7 @@
  * import it.
  */
 
+export type { TellAnswer } from "../internal/engine/loop";
 export { type SpawnSteps, spawn, stop, tell } from "./children";
 export { type CheckingSchema, Cmd } from "./cmd";
 export { Stopped, StoreFailed } from "./failures";

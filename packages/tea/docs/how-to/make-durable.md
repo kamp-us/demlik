@@ -176,6 +176,13 @@ processes read the same version before either wrote. Fencing gives you
 **at most one live writer from here on**, not a guarantee that the loser never
 started.
 
+A fenced `fileStore` takes a lock file beside the state for each save, and a
+writer that dies holding it leaves it behind. The next write steals it when the
+holder is proven gone. A lock from another host is never stolen, because that
+host may still be writing to a shared volume, so restoring a folder onto a new
+machine can end the first write in a `FileLockTimeoutError` naming the file. Once
+you know the old machine is gone, delete that file and run again.
+
 `doStore` and `memoryStore` take the same `{ fenced: true }`. `chromeStorageStore`
 does not — `chrome.storage` cannot compare-and-swap atomically, so it stays
 unfenced rather than pretending. Leave fencing off and single-writer is a

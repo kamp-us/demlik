@@ -55,6 +55,7 @@ export type Opts = {
   api?: string;
   apiBase?: string;
   apiPolicy?: string;
+  acceptApi?: boolean;
 };
 
 export function cleanExit(message: string): void {
@@ -103,7 +104,7 @@ function graphOptions(command: Command): Command {
     .option("--html", "emit a self-contained HTML report (human view); implies the edge pass")
     .option(
       "--ci",
-      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on',
+      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on. A run takes one gate: two of --layers, --boundaries, --comments, --collapse and --unreachable with --ci, or --env-keys or --hexagon beside a gate or --ci, exit 2',
     )
     .option("--fail-on <level>", "CI severity to fail on: high | warn", "high")
     .option("--max <n>", "CI: fail if total smell count exceeds <n>")
@@ -158,7 +159,10 @@ function analysisOptions(command: Command): Command {
 
 function featureOptions(command: Command): Command {
   return command
-    .option("--layers", "layer gate: every import edge pointing UP the declared layer stack")
+    .option(
+      "--layers",
+      "layer gate: every import edge that points up the declared layer stack or leaves a layer's `imports`",
+    )
     .option(
       "--layer-rules <file>",
       "JSON file declaring the layer stack and allowlist (required by --layers)",
@@ -173,7 +177,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--reason <text>",
-      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay",
+      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay; with --api --accept-api: why these public names are published",
     )
     .option(
       "--migrate-ceilings",
@@ -213,7 +217,11 @@ function apiOptions(command: Command): Command {
   return command
     .option(
       "--api <map>",
-      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --api-policy, --json, --pretty and --out',
+      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --api-policy, --ci, --accept-api, --json, --pretty and --out. With --ci, gates the published names against api-ledger.json at the repo root instead of gating smells, with no git base: fails on a name the ledger does not hold for this scope, and prunes this scope\'s entries whose name is gone',
+    )
+    .option(
+      "--accept-api",
+      'with --api: add every published name api-ledger.json does not hold yet for this scope (entries keyed by scope, subpath and name), each carrying --reason "<why>" (required); not with --ci',
     )
     .option(
       "--api-policy <file>",

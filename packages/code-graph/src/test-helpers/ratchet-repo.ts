@@ -86,12 +86,16 @@ export function checkoutBranch(
 
 export type CliRun = { readonly code: number; readonly stdout: string; readonly stderr: string };
 
-export function runCli(args: readonly string[]): CliRun {
+export function runCli(
+  args: readonly string[],
+  env: Readonly<Record<string, string>> = {},
+): CliRun {
   try {
     const stdout = execFileSync(process.execPath, ["--import", "tsx", CLI, ...args], {
       cwd: PACKAGE_DIR,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...env },
     });
     return { code: 0, stdout, stderr: "" };
   } catch (error) {

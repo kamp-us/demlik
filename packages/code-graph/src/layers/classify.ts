@@ -3,6 +3,8 @@ import type { Layer } from "./rules.js";
 export type LayerRank = {
   readonly name: string;
   readonly rank: number;
+  /** The layers below this one it may import; `null` when it declares no `imports`, so any of them. */
+  readonly imports: ReadonlySet<string> | null;
 };
 
 type Specificity = {
@@ -80,8 +82,9 @@ function compile(layer: LayerRank, pattern: string): Matcher {
 export function compileMatchers(layers: readonly Layer[]): Matcher[] {
   const matchers: Matcher[] = [];
   layers.forEach((layer, rank) => {
+    const imports = layer.imports === undefined ? null : new Set(layer.imports);
     for (const pattern of layer.paths) {
-      matchers.push(compile({ name: layer.name, rank }, pattern));
+      matchers.push(compile({ name: layer.name, rank, imports }, pattern));
     }
   });
   matchers.sort(
@@ -108,7 +111,7 @@ export type EdgeDirection =
   | { readonly direction: "down" }
   /** Within one layer — always allowed. */
   | { readonly direction: "sideways" }
-  /** Into a HIGHER layer — the violation. */
+  /** Into a HIGHER layer — always a violation. */
   | { readonly direction: "up" }
   /** At least one endpoint is outside the declared lattice — not judgeable. */
   | { readonly direction: "unlayered" };
@@ -117,4 +120,13 @@ export function directionOf(from: LayerRank | null, to: LayerRank | null): EdgeD
   if (from === null || to === null) return { direction: "unlayered" };
   if (from.rank === to.rank) return { direction: "sideways" };
   return from.rank < to.rank ? { direction: "down" } : { direction: "up" };
+}
+
+export type LayerRule = "upward" | "outside-imports";
+
+/** The rule an edge between two layers breaks, or `null` when it breaks none. */
+export function ruleBroken(from: LayerRank, to: LayerRank): LayerRule | null {
+  if (from.rank > to.rank) return "upward";
+  if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
+  return "outside-imports";
 }

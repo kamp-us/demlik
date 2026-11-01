@@ -1,11 +1,16 @@
-// Type-level test for #568: `SpawnSteps.notify` cannot fail. `spawn` runs it
-// on a fiber nothing reads, so a `tell` passed bare, with its `StoreFailed`
-// unhandled, is a compile error. Compiled by `pnpm typecheck`; every
-// `@ts-expect-error` must sit on a line that fails.
+// Type-level test for #568 and #639: `SpawnSteps.notify` cannot fail, because
+// `spawn` runs it on a fiber nothing reads, and `tell` carries no failure, so it
+// goes in bare. Compiled by `pnpm typecheck`; every `@ts-expect-error` must sit
+// on a line that fails.
 
 import { Effect } from "effect";
 import { defineMachine } from "../index";
-import { type EffectRuntime, type SpawnSteps, tell } from "./index";
+import {
+  type EffectRuntime,
+  type SpawnSteps,
+  type TellAnswer,
+  tell,
+} from "./index";
 
 type ParentState = { readonly stopped: readonly string[] };
 type ParentMsg = { readonly type: "child_stopped"; readonly id: string };
@@ -28,20 +33,22 @@ const rest = {
 
 const bare: SpawnSteps<void> = {
   ...rest,
-  // @ts-expect-error a `tell` fails with `StoreFailed`, and `notify` cannot fail
   notify: tell(parent, parentRun, msg),
 };
 
-const handled: SpawnSteps<void> = {
+const failing: SpawnSteps<void> = {
   ...rest,
-  notify: tell(parent, parentRun, msg).pipe(
-    Effect.catch((failure) => Effect.logError(failure)),
-  ),
+  // @ts-expect-error `notify` cannot fail
+  notify: Effect.fail("no parent" as const),
 };
 
-const died: SpawnSteps<void> = {
-  ...rest,
-  notify: Effect.orDie(tell(parent, parentRun, msg)),
-};
+// The answer is the whole of what `tell` says: three words, no failure.
+const answered: Effect.Effect<"queued" | "stopped" | "no_cell", never> = tell(
+  parent,
+  parentRun,
+  msg,
+);
+// A save failure back in the failure channel breaks this line, `answered` and `bare`.
+const named: Effect.Effect<TellAnswer, never> = tell(parent, parentRun, msg);
 
-void [bare, handled, died];
+void [bare, failing, answered, named];
