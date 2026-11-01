@@ -226,6 +226,12 @@ export interface RuntimeErrorContext {
  * `run(machine, { onError })`. Should be total — a throw inside the sink is
  * itself surfaced via the default sink, so it can never re-introduce a silent
  * failure.
+ *
+ * Optional, except beside a fenced store (see {@link StoreAndOnError}). With no
+ * sink a `RuntimeDiscardNotice` is warned, and every other failure is rethrown on
+ * a fresh macrotask, which ends a Node process and every run in it. That includes
+ * a failing Sub (`"sub"`). A host running several machines in one process passes
+ * a sink that decides what one run's failure means for the rest.
  */
 export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
 
@@ -744,6 +750,32 @@ export function isFencedStore<S>(store: Store<S>): store is FencedStore<S> {
 }
 
 /**
+ * A `Store<S>` whose type says it is not fenced. A plain `Store<S>` fits it and
+ * a {@link FencedStore} does not. It is what lets {@link StoreAndOnError} tell the
+ * two apart, because a `FencedStore` is otherwise also a `Store`.
+ */
+export type UnfencedStore<S> = Store<S> & { readonly fenced?: never };
+
+/**
+ * The `store` and `onError` options of a run: a fenced store needs an `onError`,
+ * and the mistake does not compile (ADR 0031).
+ *
+ * Losing a fence is routine for a host that moves runs between processes, and
+ * with no `onError` the default sink rethrows the conflict and ends the process,
+ * along with every other run in it. A conflict can reach the sink at any save
+ * with no caller to reject at: `"stop-save"` from `stop()`, `"follow-up"` from a
+ * Msg a Sub or a Cmd sent. So the sink is required at the type, not left to be
+ * remembered.
+ *
+ * It reads a store's declared type. A fenced store first assigned to a variable
+ * typed plain `Store<S>` has given that type up, so it compiles with no `onError`
+ * and runs on the default sink.
+ */
+export type StoreAndOnError<S> =
+  | { readonly store?: UnfencedStore<S>; readonly onError?: OnError }
+  | { readonly store: Store<S>; readonly onError: OnError };
+
+/**
  * Thrown when a fenced save finds a version other than the one it expected —
  * another live writer has this run.
  *
@@ -931,8 +963,9 @@ export interface BootedRunHandle<
 
 /**
  * The options every engine's `run` accepts: the `ctx`, the handlers the
- * machine runs under, an optional `store`, and the `events` projector that
- * feeds `on`. An engine may take more; a host adapter hands only these.
+ * machine runs under, an optional `store` with the `onError` a fenced one needs,
+ * and the `events` projector that feeds `on`. An engine may take more; a host
+ * adapter hands only these.
  */
 export type RunOptions<
   S,
@@ -942,8 +975,8 @@ export type RunOptions<
   Ctx,
   E extends { type: string } = never,
 > = CtxArg<Ctx> &
-  RunHandlers<M, C, U, Ctx> & {
-    readonly store?: Store<S>;
+  RunHandlers<M, C, U, Ctx> &
+  StoreAndOnError<S> & {
     readonly events?: (msg: M, state: S) => readonly E[];
   };
 

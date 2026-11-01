@@ -90,6 +90,7 @@ export {
 export {
   type AgentHost,
   type AgentHostConfig,
+  type AgentHostWiring,
   acceptCommandSocket,
   acceptDurableCommandSocket,
   agentIsResumable,
@@ -239,7 +240,8 @@ export interface DoStoreOptions<S> {
    * `storage.transaction`, so the read, the compare and the two writes are one
    * atomic unit. Inside a single DO the platform already guarantees one writer;
    * fencing is what refuses a SECOND grain — a stale zombie isolate mid-migration,
-   * or a second DO id pointed at the same state by a routing bug.
+   * or a second DO id pointed at the same state by a routing bug. A run on a
+   * fenced store must be given an `onError` (see `StoreAndOnError`).
    */
   readonly fenced?: true;
 }

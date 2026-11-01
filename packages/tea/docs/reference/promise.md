@@ -68,69 +68,7 @@ function run<
   E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & {
-    /**
-     * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
-     * the interpret edge, and on each `telemetry` event. Defaults to
-     * `Date.now`. Inject a fixed one for a deterministic run; a `replay` log
-     * carries its own `at`s and never reads this.
-     */
-    clock?: () => number;
-    /**
-     * How long `stop()` waits for work it cannot interrupt before giving up
-     * on it. Defaults to 5_000ms. It bounds two waits, one after the other:
-     * the queue, where a Cmd handler may still be running, and then the
-     * teardown work that returned a Promise (an async `release` in
-     * `defineManagedResource`, an async Sub cleanup).
-     *
-     * `stop()` awaits those disposals so a host doing
-     * `await runtime.stop(); env.evict()` cannot drop the isolate mid-release —
-     * the leak the managed-resource battery exists to prevent, relocated to
-     * shutdown. The bound is what keeps a handler that never returns, or a
-     * release that never settles, from hanging the host: on expiry `stop()`
-     * reports a `DrainTimeoutNotice` or a `DisposeTimeoutNotice` (warn-only,
-     * like every `RuntimeDiscardNotice`) and resolves anyway, because `stop()`
-     * resolving is a contract (ADR 0025). The Subs are still stopped and the
-     * final save still runs. A handler `stop()` gave up on keeps running;
-     * what it returns later is dropped.
-     *
-     * tea starts no store call after `stop()` has returned. A store call
-     * already under way when `stop()` gave up is not cancelled and can
-     * finish after `stop()` has returned. On a plain store that late save
-     * can overwrite what a newer run saved; a fenced store refuses it with
-     * `StoreConflictError`. So a host that starts a new run on the same
-     * store after a `stop()` that gave up needs a fenced store. A run
-     * stopped while its `store.load()` was pending saves nothing when the
-     * load returns: `ready` resolves with the loaded State, unsaved.
-     */
-    disposeTimeoutMs?: number;
-    /**
-     * The SEMANTIC event projector. Maps one APPLIED transition `(msg, state)`
-     * to zero-or-more public events of `E`; `[]` skips the transition. Maps the
-     * machine's PRIVATE Msg vocabulary to NAMED events — the private names never
-     * reach `on`'s `E` surface. Omit → `E = never` and `on` is uncallable. PURE.
-     */
-    events?: (msg: M, state: S) => readonly E[];
-    onError?: OnError;
-    store?: Store<S>;
-    /**
-     * Declared policy for a reducer (`update`) throw. Always surfaced via
-     * `onError` (`phase: "reduce"`); the strategy decides what the runtime does
-     * next. Defaults to `"stop"`. See `Supervision`.
-     */
-    supervision?: Supervision<S, M>;
-    /**
-     * A sink handed `{ seq, msgType, at }` for every applied transition —
-     * the observe-only telemetry `withTelemetry` used to add by wrapping the
-     * machine (#268). Fire-and-forget; see TelemetrySink.
-     */
-    telemetry?: TelemetrySink;
-    /**
-     * The run-terminality predicate — makes the run's outcome first-class. Fed to
-     * `Runtime.result()` and `Runtime.done()`. PURE. Omit → never terminal.
-     */
-    terminal?: (state: S) => boolean;
-  },
+  opts: CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & StoreAndOnError<S> & { clock?: (() => number) | undefined; events?: ((msg: M, state: S) => readonly E[]) | undefined; supervision?: Supervision<S, M> | undefined; terminal?: ((state: S) => boolean) | undefined; telemetry?: TelemetrySink | undefined; disposeTimeoutMs?: number | undefined; __idleCap?: number | undefin...,
 ): BootingRuntime<S, M, E>
 ```
 

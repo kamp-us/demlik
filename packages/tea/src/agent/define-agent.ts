@@ -18,7 +18,7 @@ import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
 import { cmdEdgeOf, type Interpret } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";
-import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
+import type { BootingRuntime, CtxArg, StoreAndOnError } from "../runtime-types";
 import {
   type AgentCompactOkMsg,
   type AgentCompactRunCmd,
@@ -511,76 +511,79 @@ export type DefinedAgentEvent<T extends AnyToolDef> = AgentEvent<ToolResult<T>>;
  *
  * `ctx` is the plain object the tools' handlers read (ADR 0020). A host with a
  * resource to release wraps `run` in its own `try` / `finally`.
+ *
+ * `onError` is the run's sink, and a fenced `store` needs one (see
+ * {@link StoreAndOnError}).
  */
 export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
   DefinedAgentCtx<T>
-> & {
-  readonly store?: Store<DefinedAgentState<T>>;
-  /** The run's identity. Omit → a fresh UUID. */
-  readonly runId?: string;
-  /** The clock that stamps `at`. Omit → `Date.now`. */
-  readonly clock?: () => number;
-  /**
-   * Observe the run's turn-level lifecycle events — `TurnSettled`,
-   * `ToolSettled`, `RunDone` — in the order the kernel settles them. This is
-   * the progress seam: without it the only way to see anything mid-run is
-   * `machine(input)` plus the raw kernel loop.
-   *
-   * It forwards the runtime's existing semantic stream (`agentEvents()` /
-   * `runtime.on`); it mints no vocabulary of its own, so a consumer folds the
-   * same {@link AgentEvent}s a hand-wired `run` would.
-   *
-   * The listener is CONTAINED: a throw is caught and warned, never allowed to
-   * take the run down, and never observable in `run`'s resolution. Only
-   * transitions applied by THIS process project events, so a store-backed
-   * resume replays nothing that settled before the boot.
-   *
-   * Omit → no projector is wired and the run behaves exactly as before.
-   */
-  readonly onEvent?: (event: DefinedAgentEvent<T>) => void;
-  /**
-   * Observe the token deltas of the turn being produced right now — the
-   * granularity below `onEvent`'s. Wired only when the configured `model` is
-   * the streaming shape (`async (messages, { onChunk }) => turn`); a plain
-   * model has no deltas to give, so passing this beside one is silent.
-   *
-   * Chunks ride a SIDE CHANNEL, never state. They are not projected off
-   * transitions like an {@link AgentEvent} is, because nothing about a chunk is
-   * a transition: it is never journaled, never written to the `Store`, and
-   * never folded into the Model. That is the whole rule this option obeys — a
-   * delta that has not settled is not an outcome, so a run that dies mid-turn
-   * loses its chunks and resumes from the last SETTLED turn, and a resumed run
-   * re-emits nothing it did not itself re-produce.
-   *
-   * The listener is CONTAINED exactly as `onEvent`'s is: a throw is caught and
-   * warned, never allowed to fail the model call it fired from.
-   *
-   * Omit → the streaming model is still invoked in its streaming shape, with a
-   * sink that drops every chunk.
-   */
-  readonly onChunk?: (chunk: TurnChunk) => void;
-  /**
-   * Stop the run from outside — the stop button's seam. On abort the run settles
-   * on a CANCELLED terminal Model and `run` RESOLVES with it; it does not reject,
-   * and no `DriveFailedError` is thrown. Read the outcome with `status(state)`,
-   * which answers `{ kind: "cancelled", at }` — distinct from `failed`, because a
-   * run someone stopped did not fail.
-   *
-   * The outcome is durable, so it is also the answer on the next boot: a process
-   * killed after an abort resumes reading a run that ENDED, not one to restart.
-   * A signal already aborted when `run` is called ends it before the first model
-   * call is made.
-   *
-   * It stops DISPATCH, not the work already in flight — a promise cannot be
-   * cancelled, so a tool handler mid-call runs to its own end. Those late results
-   * reach no `onEvent`, no `onToolError` and no Model, and they do not hold the
-   * runtime's teardown. Propagating the signal INTO handlers is a separate seam
-   * this option does not open.
-   *
-   * Omit → the run has no stop button and every path behaves exactly as before.
-   */
-  readonly signal?: AbortSignal;
-};
+> &
+  StoreAndOnError<DefinedAgentState<T>> & {
+    /** The run's identity. Omit → a fresh UUID. */
+    readonly runId?: string;
+    /** The clock that stamps `at`. Omit → `Date.now`. */
+    readonly clock?: () => number;
+    /**
+     * Observe the run's turn-level lifecycle events — `TurnSettled`,
+     * `ToolSettled`, `RunDone` — in the order the kernel settles them. This is
+     * the progress seam: without it the only way to see anything mid-run is
+     * `machine(input)` plus the raw kernel loop.
+     *
+     * It forwards the runtime's existing semantic stream (`agentEvents()` /
+     * `runtime.on`); it mints no vocabulary of its own, so a consumer folds the
+     * same {@link AgentEvent}s a hand-wired `run` would.
+     *
+     * The listener is CONTAINED: a throw is caught and warned, never allowed to
+     * take the run down, and never observable in `run`'s resolution. Only
+     * transitions applied by THIS process project events, so a store-backed
+     * resume replays nothing that settled before the boot.
+     *
+     * Omit → no projector is wired and the run behaves exactly as before.
+     */
+    readonly onEvent?: (event: DefinedAgentEvent<T>) => void;
+    /**
+     * Observe the token deltas of the turn being produced right now — the
+     * granularity below `onEvent`'s. Wired only when the configured `model` is
+     * the streaming shape (`async (messages, { onChunk }) => turn`); a plain
+     * model has no deltas to give, so passing this beside one is silent.
+     *
+     * Chunks ride a SIDE CHANNEL, never state. They are not projected off
+     * transitions like an {@link AgentEvent} is, because nothing about a chunk is
+     * a transition: it is never journaled, never written to the `Store`, and
+     * never folded into the Model. That is the whole rule this option obeys — a
+     * delta that has not settled is not an outcome, so a run that dies mid-turn
+     * loses its chunks and resumes from the last SETTLED turn, and a resumed run
+     * re-emits nothing it did not itself re-produce.
+     *
+     * The listener is CONTAINED exactly as `onEvent`'s is: a throw is caught and
+     * warned, never allowed to fail the model call it fired from.
+     *
+     * Omit → the streaming model is still invoked in its streaming shape, with a
+     * sink that drops every chunk.
+     */
+    readonly onChunk?: (chunk: TurnChunk) => void;
+    /**
+     * Stop the run from outside — the stop button's seam. On abort the run settles
+     * on a CANCELLED terminal Model and `run` RESOLVES with it; it does not reject,
+     * and no `DriveFailedError` is thrown. Read the outcome with `status(state)`,
+     * which answers `{ kind: "cancelled", at }` — distinct from `failed`, because a
+     * run someone stopped did not fail.
+     *
+     * The outcome is durable, so it is also the answer on the next boot: a process
+     * killed after an abort resumes reading a run that ENDED, not one to restart.
+     * A signal already aborted when `run` is called ends it before the first model
+     * call is made.
+     *
+     * It stops DISPATCH, not the work already in flight — a promise cannot be
+     * cancelled, so a tool handler mid-call runs to its own end. Those late results
+     * reach no `onEvent`, no `onToolError` and no Model, and they do not hold the
+     * runtime's teardown. Propagating the signal INTO handlers is a separate seam
+     * this option does not open.
+     *
+     * Omit → the run has no stop button and every path behaves exactly as before.
+     */
+    readonly signal?: AbortSignal;
+  };
 
 /**
  * One decorator per interpret cell you name: it receives the cell the agent

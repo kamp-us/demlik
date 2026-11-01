@@ -28,8 +28,7 @@ import { applyCell, type Cmd, subEntriesOf } from "../pure/core";
 import type {
   BootingRuntime,
   CtxArg,
-  OnError,
-  Store,
+  StoreAndOnError,
   Supervision,
   TelemetrySink,
 } from "../runtime-types";
@@ -70,9 +69,8 @@ export function run<
   // keeps them a check against the machine's `M` / `C` rather than a second
   // inference site that could widen either.
   opts: CtxArg<Ctx> &
-    NoInfer<RunHandlers<M, C, U, Ctx>> & {
-      store?: Store<S>;
-      onError?: OnError;
+    NoInfer<RunHandlers<M, C, U, Ctx>> &
+    StoreAndOnError<S> & {
       /**
        * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
        * the interpret edge, and on each `telemetry` event. Defaults to

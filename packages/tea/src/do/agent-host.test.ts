@@ -94,7 +94,9 @@ function freshStore(): Store<S> {
  * A host over a real (fresh) agent whose `buildMachine` counts its invocations —
  * one call per host build. `builds` is the observable the race turns on.
  */
-function makeHost() {
+function makeHost(
+  overrides: Partial<Parameters<typeof createAgentHost>[0]> = {},
+) {
   const model = fakeModel(async () => ({ content: "idle", toolCalls: [] }));
   const agent = createAgent<Stage, Purpose, Outputs, string, ToolCmd, string>({
     stages: STAGES,
@@ -124,9 +126,29 @@ function makeHost() {
     ctx: {} as object,
     toSseFrame: () => null,
     now: () => 0,
+    ...overrides,
   });
   return { host, builds: () => builds };
 }
+
+describe("createAgentHost — onError (ADR 0031)", () => {
+  it("hands its `onError` to the engine's run", async () => {
+    const onError = () => {};
+    const seen: unknown[] = [];
+    const { host } = makeHost({
+      onError,
+      run: (machine, opts) => {
+        seen.push(opts.onError);
+        return run(machine, opts);
+      },
+    });
+
+    await host.runtime();
+
+    expect(seen).toEqual([onError]);
+    await host.reset();
+  });
+});
 
 describe("createAgentHost — build-once cell is race-safe (#313)", () => {
   it("concurrent runtime() calls share one build and one runtime handle", async () => {

@@ -176,6 +176,12 @@ export interface FileStoreOptions {
    * at its next save. Omit it and the store is exactly as it was — the last
    * writer wins, and single-writer is the caller's precondition to keep.
    *
+   * A run on a fenced store must be given an `onError`, or it does not compile
+   * (see `StoreAndOnError`). A lost fence can surface with no caller to reject
+   * at, under `"stop-save"` or `"follow-up"`, and the default sink would rethrow
+   * it and end the process. Treat a `StoreConflictError` there as this run having
+   * moved to another process: stop that run, and leave the others alone.
+   *
    * Each save and `delete()` takes a lock file, `<path>.fence.lock`, and a
    * writer that dies holding it leaves it behind. The next write steals a lock
    * whose holder is proven gone: an empty one older than a short grace period,

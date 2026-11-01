@@ -173,7 +173,9 @@ What changes from the Promise engine:
 
 The other options (`store`, `onError`, `clock`, `events`, `supervision`,
 `terminal`, `telemetry`, `disposeTimeoutMs`) mean what they mean on the Promise
-engine. A fenced store stays fenced.
+engine. A fenced store stays fenced, and must be given an `onError`:
+[step 4 of the durability how-to](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
+says why.
 
 ## 3. Swap a runner in a test
 
@@ -228,7 +230,9 @@ the Sub again.
 A failure the Sub does not catch stops the run. `onError` sees it under
 `phase: "sub"`, and the engine closes the run's Scope with that failure, so
 everything else in that Scope is released too. There is no hook on the machine
-or on `run` for it: a failure you expect belongs in the Sub.
+or on `run` for it: a failure you expect belongs in the Sub. With no `onError`,
+the default sink rethrows it and ends the process, along with every other run in
+it. A host running several machines in one process passes a sink.
 
 The Promise engine follows the same rule. Its runner dispatches the Msgs for
 the errors it expects (the `onError` option of `fromWebSocket` does this), and a
