@@ -5,12 +5,19 @@
  * `host` runs three fenced runs in one process and passes the `onError` the type
  * requires. `takeover` is the second process, taking one of those runs over.
  * `failing-sub` is an unfenced run whose Sub fails, with or without a sink.
+ * `widened-host` starts three fenced runs through a helper typed plain `Store`,
+ * with no `onError`, which each engine refuses at start (#810).
  */
 
 import { join } from "node:path";
 import { Cause, Effect, Exit, Scope, Stream } from "effect";
 import { z } from "zod";
-import { defineMachine, type RuntimeErrorContext, type Sub } from "../../index";
+import {
+  defineMachine,
+  type RuntimeErrorContext,
+  type Store,
+  type Sub,
+} from "../../index";
 import { fileStore } from "../../node";
 import { run as runPromise } from "../../promise";
 import { run as runEffect } from "../index";
@@ -18,7 +25,13 @@ import { run as runEffect } from "../index";
 const [engine, mode, dir] = z
   .tuple([
     z.enum(["promise", "effect"]),
-    z.enum(["host", "takeover", "failing-sub", "failing-sub-with-sink"]),
+    z.enum([
+      "host",
+      "takeover",
+      "failing-sub",
+      "failing-sub-with-sink",
+      "widened-host",
+    ]),
     z.string().min(1),
   ])
   .parse(process.argv.slice(2));
@@ -228,7 +241,76 @@ async function failingSub(onError: OnReport | undefined): Promise<void> {
   process.disconnect();
 }
 
+/** A host helper that hands back a fenced store under the plain type. */
+const widenedStoreOf = (name: string): Store<Model> => storeOf(name);
+
+/** What starting one widened run came to: refused, or a run left open. */
+type Widened =
+  | { readonly refused: string }
+  | { readonly refused?: undefined; readonly stop: () => Promise<unknown> };
+
+/**
+ * Start one run on `widenedStoreOf(name)` with no `onError`, as the type allows,
+ * and bump it once. A run the engine lets start is left open, so a takeover can
+ * reach its final save.
+ */
+async function startWidened(name: string): Promise<Widened> {
+  if (engine === "promise") {
+    try {
+      const rt = await runPromise(machine, {
+        ctx: undefined,
+        store: widenedStoreOf(name),
+        subscribe: { poke: () => () => {} },
+      }).ready;
+      await rt.dispatch(bumpMsg);
+      return { stop: () => rt.stop() };
+    } catch (error) {
+      return { refused: (error as Error).message };
+    }
+  }
+  const scope = await Effect.runPromise(Scope.make());
+  const exit = await Effect.runPromiseExit(
+    Effect.gen(function* () {
+      const booting = yield* runEffect(machine, {
+        ctx: undefined,
+        store: widenedStoreOf(name),
+        subscribe: { poke: () => Stream.never },
+      });
+      const rt = yield* booting.ready;
+      yield* rt.dispatch(bumpMsg);
+    }).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
+  if (Exit.isSuccess(exit)) {
+    return { stop: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
+  }
+  return { refused: (Cause.squash(exit.cause) as Error).message };
+}
+
+/**
+ * Three widened runs. Each should be refused; one that started anyway is
+ * stopped after the takeover of `b`, where its final save meets the lost fence.
+ */
+async function widenedHost(): Promise<void> {
+  const runs = [
+    await startWidened("a"),
+    await startWidened("b"),
+    await startWidened("c"),
+  ];
+  const taken = deferred();
+  process.once("message", taken.fire);
+  process.send?.({
+    type: "refused",
+    refusals: runs.map((run) => run.refused ?? "started"),
+  });
+  await taken.at;
+  for (const run of runs) if (run.refused === undefined) await run.stop();
+  await aLaterTurn();
+  process.send?.({ type: "alive" });
+  process.disconnect();
+}
+
 if (mode === "host") await host();
+else if (mode === "widened-host") await widenedHost();
 else if (mode === "takeover") await takeover();
 else if (mode === "failing-sub") await failingSub(undefined);
 else

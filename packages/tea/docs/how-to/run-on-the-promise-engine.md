@@ -128,7 +128,8 @@ What each piece does:
   failed (`"follow-up"`). With no `onError` the default sink warns about a
   discard and rethrows the rest, which ends the process along with every other
   run in it. A host running several machines in one process passes a sink. A
-  fenced store must be given one, or it does not compile.
+  fenced store must be given one, or it does not compile. A fenced store typed
+  plain `Store<S>` with no sink compiles, and `run` throws at once.
 
 ## 3. Swap a runner in a test
 

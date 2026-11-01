@@ -189,7 +189,11 @@ under `"stop-save"`, and a save driven by a Sub or a Cmd's Msg reports under
 `"follow-up"`. Both go to `onError`, which is why a fenced store needs one: with
 no sink, the default rethrows and ends the process along with every other run in
 it. In your sink, treat a `StoreConflictError` as "this run moved": log it and
-stop that run, and leave the others alone.
+stop that run, and leave the others alone. A run on a fenced store with no
+`onError` does not compile, and if the store's type was widened to plain
+`Store<S>`, or the caller is JavaScript, the run is refused at start instead:
+the Promise engine's `run` throws, the Effect engine's dies, and nothing is
+loaded or saved.
 [ADR 0031](../../../../.decisions/0031-a-fenced-run-must-pass-on-error.md) records
 this.
 

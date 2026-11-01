@@ -107,12 +107,16 @@ describe.each(factories)("$name — delete()", (factory) => {
 
     it("lets the next run boot fresh", async () => {
       const store = make();
-      const first = await run(noteMachine, { ctx: undefined, store }).ready;
+      // The fenced form needs a sink to start at all (ADR 0031).
+      const onError = () => {};
+      const first = await run(noteMachine, { ctx: undefined, store, onError })
+        .ready;
       await first.dispatch({ type: "note", text: "old" });
       await first.stop();
 
       await store.delete();
-      const next = await run(noteMachine, { ctx: undefined, store }).ready;
+      const next = await run(noteMachine, { ctx: undefined, store, onError })
+        .ready;
       expect(next.getState()).toEqual({ notes: [] });
       await next.stop();
     });

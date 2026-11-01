@@ -1,7 +1,9 @@
 /**
- * What one run's failure does to the process it shares (#728, ADR 0031). Only a
- * real process can show this: the default sink's rethrow ends the process, so
- * the fixture runs in children and the test reads how each one exited.
+ * What one run's failure does to the process it shares (#728, ADR 0031), and the
+ * refusal at start that keeps a widened fenced store from reaching it (#810).
+ * Only a real process can show this: the default sink's rethrow ends the
+ * process, so the fixture runs in children and the test reads how each one
+ * exited.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
@@ -122,6 +124,37 @@ describe.each(["promise", "effect"] as const)("on the %s engine", (engine) => {
       expect(await countIn(dir, "a")).toBe(3);
       expect(await countIn(dir, "c")).toBe(3);
       expect(await countIn(dir, "b")).toBe(takenAt);
+    } finally {
+      host.process.kill("SIGKILL");
+    }
+  });
+
+  it("three fenced runs started through a helper typed plain `Store`, with no `onError`: each is refused at start, nothing is saved, and a takeover leaves the process up", async () => {
+    const dir = join(work, `${engine}-widened`);
+    await mkdir(dir);
+    const host = launch(engine, "widened-host", dir);
+    try {
+      const { refusals } = await host.next("refused");
+      expect(refusals).toHaveLength(3);
+      for (const refusal of refusals as string[]) {
+        expect(refusal).toContain("`onError`");
+        expect(refusal).toContain("fenced store");
+      }
+      // No run saved: nothing is on disk for any of the three.
+      await expect(readFile(join(dir, "a.json"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(dir, "b.json"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(dir, "c.json"), "utf8")).rejects.toThrow();
+
+      const second = launch(engine, "takeover", dir);
+      expect(await second.exited).toEqual({ code: 0, signal: null });
+      expect(await countIn(dir, "b")).toBe(1);
+
+      host.process.send({ type: "taken" });
+      expect(await host.next("alive")).toEqual({ type: "alive" });
+      expect(await host.exited).toEqual({ code: 0, signal: null });
+      expect(host.stderr()).toBe("");
+      await expect(readFile(join(dir, "a.json"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(dir, "c.json"), "utf8")).rejects.toThrow();
     } finally {
       host.process.kill("SIGKILL");
     }

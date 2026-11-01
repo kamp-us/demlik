@@ -17,6 +17,6 @@ run(machine, {
 
 `doStore` called with options whose `fenced` is known only at runtime, such as a value typed `DoStoreOptions` or `DoStoreOptions | undefined`, now returns a store that may be fenced, as `fileStore` and `memoryStore` already do, so a run on it needs an `onError` too. The Promise engine's `run` options now have a name, the exported `PromiseRunOptions`, where the reference prints them.
 
-The type reads a store's declared type, so a fenced store assigned to a variable typed plain `Store<S>` still compiles with no `onError` and runs on the default sink.
+The type reads a store's declared type, so a fenced store assigned to a variable typed plain `Store<S>` still compiles with no `onError`. Such a run is refused at start instead, on both engines.
 
 The default sink does not change. A failing Sub on an unfenced run with no `onError` still ends the process.
