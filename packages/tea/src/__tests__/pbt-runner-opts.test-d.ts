@@ -1,5 +1,6 @@
 // Type-level test for what the property runners take and hand back (#747).
-// Compiled by `pnpm typecheck`. Each `@ts-expect-error` MUST sit on a line that
+// Compiled by `pnpm typecheck`, on the dev pin and on each folder in
+// `packages/tea/fast-check-peers`, so nothing here may hold on one version only. Each `@ts-expect-error` MUST sit on a line that
 // genuinely fails to type-check: if a setting that would break a runner's promise
 // ever comes back, the directive turns "unused" and `tsc` fails the package.
 
@@ -41,6 +42,10 @@ propertyTrace(machine, {}, seqArb, () => true, {
 propertyTrace(machine, {}, seqArb, () => true, {
   // @ts-expect-error timeout does nothing on a sync run
   timeout: 1,
+});
+propertyTrace(machine, {}, seqArb, () => true, {
+  // @ts-expect-error only the newest fast-checks have plugins, so no version offers it
+  plugins: [],
 });
 
 // `loaded` is a state, null, or an arbitrary of the machine's state that can

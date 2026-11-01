@@ -612,9 +612,19 @@ describe("a step's comparison against structuralHash", () => {
     expect(actedOnStep(next, prev)).toBe(changed);
   });
 
+  // The oldest 3s assign a drawn `__proto__` key, which swaps the object's prototype
+  // and so isn't plain data, so that key is only in the pool where it stays a key.
+  const [drawnProto] = fc.sample(
+    fc.dictionary(fc.constant("__proto__"), fc.constant(0), { minKeys: 1 }),
+    1,
+  );
+  const protoStaysAKey = Object.hasOwn(drawnProto ?? {}, "__proto__");
+
   // A small pool of keys and leaves, so two states drawn apart often come out equal.
   const plainData = fc.anything({
-    key: fc.constantFrom("a", "b", "__proto__", "toString"),
+    key: protoStaysAKey
+      ? fc.constantFrom("a", "b", "__proto__", "toString")
+      : fc.constantFrom("a", "b", "toString"),
     values: [
       fc.constantFrom<unknown>(
         0,

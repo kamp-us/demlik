@@ -1,0 +1,9 @@
+// What each folder's `pnpm typecheck` compiles: the code tea publishes under `./pbt` and the file
+// that demonstrates its types, with `fast-check` pointed at that folder's version by its own
+// `paths`. `tsconfig.json` one level up compiles against the dev pin alone, so it can't show a
+// setting the rest of the peer range adds or lacks.
+{
+  "extends": "../tsconfig.json",
+  "include": [],
+  "files": ["../src/pbt/index.ts", "../src/__tests__/pbt-runner-opts.test-d.ts"]
+}

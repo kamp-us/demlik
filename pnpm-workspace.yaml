@@ -2,6 +2,8 @@ packages:
   - packages/*
   # Private, never published: one React per folder, for tea's peer range test (#764).
   - packages/tea/react-peers/*
+  # Private, never published: one fast-check per folder, for tea's `src/pbt` tests and typecheck.
+  - packages/tea/fast-check-peers/*
 
 # Every dependency specifier in a workspace package.json is `catalog:`, `catalog:<name>` or
 # `workspace:` — `fabrika guard catalog-guard check` enforces it in CI (#358). A pin lives here
@@ -86,6 +88,17 @@ catalogs:
   react-19.2.9:
     react: 19.2.9
     react-dom: 19.2.9
+
+  # The fast-checks `packages/tea/fast-check-peers/*` runs `src/pbt` on: both ends of each major in
+  # the peer range. Read by hand: `scripts/exact-catalog-pins.test.mjs` does not read these (#814).
+  fast-check-3.0.0:
+    fast-check: 3.0.0
+  fast-check-3.23.2:
+    fast-check: 3.23.2
+  fast-check-4.0.0:
+    fast-check: 4.0.0
+  fast-check-4.10.2:
+    fast-check: 4.10.2
 
   # `@demlik/code-graph`'s pins that differ from the default catalog's (`catalog:code-graph`).
   # Moved as they were; converging them on one version is a dependency change of its own.

@@ -32,7 +32,7 @@ import { foldEvents, type Step } from "./replay-fold";
 
 /**
  * What every property runner takes: the saved state to start from, the two checks
- * below, and fast-check's `Parameters` (`numRuns` defaults to 200 here). Four of
+ * below, and fast-check's `Parameters` (`numRuns` defaults to 200 here). Five of
  * those settings are left out, each because it would break what a runner promises:
  *
  *   - `reporter` and `asyncReporter` stop a failing run from throwing. One set
@@ -42,11 +42,18 @@ import { foldEvents, type Step } from "./replay-fold";
  *   - `timeout` applies only to async properties, and these runners are sync.
  *     `interruptAfterTimeLimit` with `markInterruptAsFailure` is the limit that
  *     works here.
+ *   - `plugins` is left out on every fast-check. Only the newest 4s have it, so a
+ *     call using it would compile and run on some of the versions tea promises and
+ *     not on others. `fc.timeout`, which it can carry, has the same limit as
+ *     `timeout`. fast-check 4.10.2 marks `interruptAfterTimeLimit`,
+ *     `markInterruptAsFailure`, `skipEqualValues`, `ignoreEqualValues` and `unbiased`
+ *     as deprecated in favor of plugins, and they still work on every version tea
+ *     promises, so they stay.
  */
 export interface PropertyOpts<S>
   extends Omit<
     fc.Parameters,
-    "reporter" | "asyncReporter" | "examples" | "timeout"
+    "reporter" | "asyncReporter" | "examples" | "timeout" | "plugins"
   > {
   /**
    * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
@@ -141,9 +148,9 @@ export interface PropertyRun {
  * {@link PropertyFailure.run} holds the same {@link PropertyRun} a pass returns.
  * What the check threw sits where `fc.assert` puts it on the installed fast-check:
  * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
- * in the message by default and in `cause` with `errorWithCause`. A reason the check
- * returned is always in the message: when it went to `cause`, the message is the
- * report plus a `reason:` line. A run that `failOnNeverActed` fails broke no list,
+ * in the message by default and in `cause` with `errorWithCause`, on the 3s that have
+ * that setting. A reason the check returned is always in the message: when it went to
+ * `cause`, the message is the report plus a `reason:` line. A run that `failOnNeverActed` fails broke no list,
  * so fast-check has no report: the message names the Msg types instead.
  *
  * @example
@@ -185,14 +192,21 @@ export class PropertyFailure extends Error {
  * A check's failure that says why. The reason is text fast-check would otherwise
  * bury where it files what a check threw, so {@link settle} reads it back here
  * rather than out of that text.
+ *
+ * Every fast-check prints the stack, which opens with the message. The oldest 3s also
+ * print `String(error)` ahead of it, so that leaves the reason out to say it once.
  */
 class BrokenLaw extends Error {
   constructor(
-    report: string,
+    private readonly report: string,
     readonly reason: string,
   ) {
     super(`${report}\nreason: ${reason}`);
     this.name = "Error";
+  }
+
+  override toString(): string {
+    return `${this.name}: ${this.report}`;
   }
 }
 
@@ -279,7 +293,7 @@ function withoutUndefined<T extends object>(settings: T): Partial<T> {
  * The settings that decide whether `fc.assert` puts a `cause` on its error. tea
  * promises two majors of fast-check, and each knows only one of these: 3 reads
  * `errorWithCause` (off by default) and 4 reads `includeErrorInReport` (a `cause`
- * unless it is on).
+ * unless it is on). The oldest 3s have neither, and never attach a `cause`.
  */
 interface CauseSettings {
   readonly errorWithCause?: boolean;
@@ -287,13 +301,14 @@ interface CauseSettings {
 }
 
 /**
- * The `cause` `fc.assert` would attach to this failure. `runConfiguration` holds
- * `errorWithCause` only on 3, so its absence is what says the rule is 4's.
+ * The `cause` `fc.assert` would attach to this failure. The loaded major picks the
+ * rule: a missing `errorWithCause` can't, because the oldest 3s lack it as 4 does.
  */
 function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
-  const { errorWithCause, includeErrorInReport }: CauseSettings =
-    details.runConfiguration;
-  return (errorWithCause ?? !includeErrorInReport)
+  const { errorWithCause, includeErrorInReport } =
+    details.runConfiguration as CauseSettings;
+  const major = Number(fc.__version.split(".")[0]);
+  return (major >= 4 ? !includeErrorInReport : errorWithCause)
     ? { cause: details.errorInstance }
     : undefined;
 }

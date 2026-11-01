@@ -16,6 +16,7 @@ import {
   propertyTrace,
 } from "./property";
 import { foldEvents } from "./replay-fold";
+import { HAS_ERROR_WITH_CAUSE, MAJOR } from "./test-fast-check";
 
 // A machine shaped like one a real reducer grows into: a defined Cmd in `cmds`,
 // a hand-written Cmd beside it, and an `init` that sends a Cmd on each start.
@@ -37,8 +38,8 @@ type Msg =
 
 const SEEDS = [1, 42, 20261101];
 
-// Declared here rather than taken from fast-check's types: 4 does not know
-// `errorWithCause`, and this file's tests run on both majors.
+// Declared here rather than taken from fast-check's types: 4 and the oldest 3s do
+// not know `errorWithCause`, and this file's tests run on all of them.
 const IN_CAUSE: { readonly errorWithCause?: boolean } = {
   errorWithCause: true,
 };
@@ -168,19 +169,22 @@ describe("a test author sees a junk Cmd fail", () => {
       expect(failure.run.seed).toBe(seed);
     });
 
-    // Fast-check 4 files a throw in `cause` by default, so this setting is how
-    // the fast-check 3 line CI installs reaches the arm 4's users depend on.
-    it("names the Cmd when fast-check files the throw in cause", () => {
-      const failure = failureOf(() =>
-        propertyInvariant(machine, {}, seqArb, () => true, {
-          seed: 1,
-          failOnUndeclaredCmd: strict,
-          ...IN_CAUSE,
-        }),
-      );
-      expect(failure.cause).toBeInstanceOf(Error);
-      expect(failure.message).toContain(named);
-    });
+    // Fast-check 4 files a throw in `cause` by default, and this setting is how a
+    // 3 that has it reaches that same arm. A 3 without it never files one there.
+    it.runIf(HAS_ERROR_WITH_CAUSE || MAJOR >= 4)(
+      "names the Cmd when fast-check files the throw in cause",
+      () => {
+        const failure = failureOf(() =>
+          propertyInvariant(machine, {}, seqArb, () => true, {
+            seed: 1,
+            failOnUndeclaredCmd: strict,
+            ...IN_CAUSE,
+          }),
+        );
+        expect(failure.cause).toBeInstanceOf(Error);
+        expect(failure.message).toContain(named);
+      },
+    );
   });
 
   it.each(SEEDS)("the unbroken machine passes, seed %i", (seed) => {
