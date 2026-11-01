@@ -136,9 +136,11 @@ and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`,
 `root` is the package root and resolves against the working directory. `map`
 is the API map, `{ "<subpath>": { entry, tier? } }`, parsed through
 `ApiMapSchema` before use. `options` is `{ repoRoot?, warn? }`: `repoRoot`
-defaults to `findRepoRoot(root)`, and `warn` receives the one warning line for
-an emit with diagnostics (stderr by default). The emit runs in a temp folder
-outside the checkout and is removed before the promise settles.
+defaults to `findRepoRoot(root)`, and `warn` receives each warning line (stderr
+by default): one for an emit with diagnostics, one for each specifier the read
+could not resolve, and, on a run with no other warning, one for each published
+name with no text. So a clean emit can still call it. The emit runs in a temp
+folder outside the checkout and is removed before the promise settles.
 
 ```ts
 import { readPublishedApi } from "@demlik/code-graph/api";

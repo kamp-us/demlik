@@ -25,8 +25,8 @@ export type PublishedApi = {
 
 export type PublishedApiOptions = {
   readonly repoRoot?: string;
-  // Where the emit's diagnostic count and each specifier the read could not resolve go, one warning
-  // line each; stderr by default.
+  // Where the emit's diagnostic count, each specifier the read could not resolve and each published
+  // name with no text go, one warning line each; stderr by default.
   readonly warn?: (line: string) => void;
 };
 

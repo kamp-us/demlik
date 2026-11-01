@@ -297,9 +297,10 @@ repository. `api-ledger.json` sits at the repo root, beside
   or the read could not resolve a module. New names still fail and can still be
   accepted. A blank name from a syntax error is neither listed nor recorded.
 - The tradeoff: a type error anywhere in the tsconfig counts, so a package with a
-  standing error never prunes. The same goes for a specifier that stays unresolved. The entry stays, each run names it, and the first
-  clean run prunes it. A stale entry could let a removed name come back without
-  failing; the gate takes that over losing a written reason.
+  standing error never prunes. The same goes for a specifier that stays unresolved.
+  The entry stays, each run names it, and the first clean run prunes it. A stale
+  entry could let a removed name come back without failing; the gate takes that over
+  losing a written reason.
 - `--json` prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and
   `{ scope, accepted, pruned, reason }` for `--accept-api`. When the compiler
   reported errors or the read could not resolve a module, `pruned` is `[]` and both
