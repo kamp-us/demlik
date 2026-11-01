@@ -81,10 +81,11 @@ describe("dispatch from inside a listener", () => {
 
     expect(runtime.getState().log).toEqual([
       "outer",
-      // The `outer` fold's own Cmd follow-up: emitted by the transition, so it
-      // is ahead of anything a listener reacting to that transition issues.
-      "echoed",
+      // `subscribe` hears before the `outer` fold's Cmd runs (#695), so its
+      // dispatch is ahead of that Cmd's follow-up. `observe` hears after the
+      // Cmd, so its dispatch is behind it.
       "fromSubscribe",
+      "echoed",
       "fromObserve",
       "later",
     ]);

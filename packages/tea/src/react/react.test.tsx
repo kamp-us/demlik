@@ -21,7 +21,8 @@ import { useMachine, useRuntime } from "./index";
 // the source of truth and React subscribes via useSyncExternalStore, so the
 // tests must drive actual commits. The boot-race block pins the ref-capture
 // design: a store-backed mount serves `init(null, ctx)` as the preliminary
-// snapshot until `ready` resolves, then swaps to the booted runtime's state.
+// snapshot until the run tells it a State, or until `ready` on a handle with no
+// such read, then swaps to the runtime's state.
 // ───────────────────────────────────────────────────────────────────────────
 
 (

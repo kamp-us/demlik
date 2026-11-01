@@ -96,7 +96,8 @@ export type UseMachineOpts<
  *
  * - Starts the run in an effect, never during render, and keys it on `[machine,
  *   opts.run, opts.ctx, opts.store]`: the run is replaced when ANY of those
- *   identities change. Until it has booted, `state` is `init(null, ctx)`'s.
+ *   identities change. Until the run has its first State saved, `state` is
+ *   `init(null, ctx)`'s.
  * - Subscribes via `useSyncExternalStore` — tearing-free under React 18
  *   concurrent rendering.
  * - On unmount (or any dep change), calls `stop()` — drains the queue, up to

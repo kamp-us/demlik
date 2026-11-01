@@ -25,6 +25,7 @@
  */
 
 import type { BootedRunHandle, RunHandle } from "../index";
+import { readInstalledState } from "../internal/engine/installed-state";
 import { SubGate } from "./sub-gate";
 
 /** A Msg dispatched before the run has started, and the promise its caller holds. */
@@ -65,7 +66,7 @@ export class MountedRun<S, M extends { type: string }> {
 
   /**
    * @param startRun boots the run, its Sub runners going through `subs`.
-   * @param initial  the value React reads until the run has booted.
+   * @param initial  the value React reads until the run has told it a State.
    * @param cleanupMayBeAHide whether this React can run a passive cleanup on a
    *   hide, and so runs the insertion cleanup on every delete.
    */
@@ -162,9 +163,16 @@ export class MountedRun<S, M extends { type: string }> {
   private start(): void {
     const handle = this.startRun(this.subs);
     this.booted = null;
-    // A transition before `ready` needs no read: `ready`'s own read sees it.
+    // `ready` waits for boot's Cmds, so before it the State comes off the read
+    // the listener was told about: a page reloaded mid-work shows it while
+    // `init`'s Cmds run (#695). A handle with no such read waits for `ready`.
     const unlisten = handle.subscribe(() => {
-      if (this.booted !== null) this.publish(this.booted.getState());
+      if (this.booted !== null) {
+        this.publish(this.booted.getState());
+        return;
+      }
+      const installed = readInstalledState<S>(handle);
+      if (installed !== undefined) this.publish(installed);
     });
     this.phase = { type: "live", handle, unlisten };
     // A failed boot is not swallowed: it rejects every dispatch into this run.

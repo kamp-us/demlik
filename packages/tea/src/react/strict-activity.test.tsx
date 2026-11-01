@@ -548,10 +548,9 @@ describe.each([
             void dispatch?.({ type: "start" });
           });
         }
-        // The engine tells listeners about a transition after its Cmds return
-        // (#695), so an `update` that emits one still reads as "idle" here.
-        const waiting = startedBy === "init" ? "loading" : "idle";
-        expect(container.textContent).toBe(waiting);
+        // The engine tells listeners before a State's Cmds start (#695), so both
+        // starts read as "loading" while the handler is held.
+        expect(container.textContent).toBe("loading");
         expect(handler).toHaveBeenCalledTimes(1);
 
         await settle(shown(false));
@@ -561,7 +560,7 @@ describe.each([
           await settle(shown(true));
         } else {
           await settle(shown(true));
-          expect(container.textContent).toBe(waiting);
+          expect(container.textContent).toBe("loading");
           release();
           await act(beat);
         }

@@ -266,10 +266,11 @@ export function ports<S, M, C>(): AnyExtension<S, M, C> {
 // === commit observers ===
 
 /**
- * `subscribe` (zero-arg change notifiers), then `observe` (every applied
- * transition's `(msg, state)`) or, at boot, `onBoot` (the initial State, once;
- * a handler registered after boot fires at once). Each fanout is
- * throw-isolated under its own phase.
+ * `subscribe` (zero-arg change notifiers, told after the save and before the
+ * Cmds, #695), then, after the Cmds, `observe` (every applied transition's
+ * `(msg, state)`) or, at boot, `onBoot` (the initial State, once; a handler
+ * registered after boot fires at once). Each fanout is throw-isolated under its
+ * own phase.
  */
 export function observation<S, M, C>(): AnyExtension<S, M, C> {
   return (loop) => {
@@ -278,8 +279,10 @@ export function observation<S, M, C>(): AnyExtension<S, M, C> {
     const bootHandlers = new Set<(state: S) => void>();
     let booted = false;
     return {
-      commit(msg, state) {
+      installed() {
         loop.fanout(listeners, "listener", (listener) => listener());
+      },
+      commit(msg, state) {
         if (msg === undefined) {
           booted = true;
           loop.fanout(bootHandlers, "boot", (handler) => handler(state));
@@ -465,9 +468,9 @@ export interface BuiltinOptions<
  * Update middleware nests first-outermost: supervision wraps the identity
  * filter (a throwing `ofMsg` is supervised like a reducer throw — spike #264
  * run 3), which wraps the dev checks around the reducer itself. A Msg with no
- * cell rejects through supervision unsupervised (#310). Commit
- * callbacks run in order: change listeners, then `observe` / `onBoot`, then
- * semantic events, then `done()` waiters, then telemetry.
+ * cell rejects through supervision unsupervised (#310). Change listeners hear
+ * before the Cmds. Commit callbacks run after them, in order: `observe` /
+ * `onBoot`, then semantic events, then `done()` waiters, then telemetry.
  */
 export function builtinExtensions<
   S,
