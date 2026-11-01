@@ -202,23 +202,68 @@ import { useRuntime } from "@demlik/tea/react";
 const runtime = await run(downloader, {
   ctx: undefined,
   terminal: (s) => s.phase === "done",
+  onError: (error) => console.error("run error", error),
 }).ready;
 
+// A dispatch nobody awaits needs a catch of its own.
+function reportFailure(sent: Promise<unknown>) {
+  sent.catch((error: unknown) => console.error("dispatch failed", error));
+}
+
 function Progress() {
-  const [state] = useRuntime(runtime);
+  const [state, dispatch] = useRuntime(runtime);
 
   return (
-    <p>
-      {state.received}/{state.total}
-    </p>
+    <div>
+      <p>
+        {state.received}/{state.total}
+      </p>
+      <button
+        type="button"
+        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
+      >
+        Receive chunk
+      </button>
+    </div>
   );
 }
 
-// Elsewhere, the owner of the handle awaits the run and stops it.
-const finished = runtime.done().finally(() => runtime.stop());
+// Elsewhere, the owner of the handle waits for the run and stops it.
+function finish<S>(owned: { done(): Promise<S>; stop(): Promise<void> }) {
+  return owned
+    .done()
+    .catch((error: unknown) => {
+      console.error("run failed", error);
+      return undefined;
+    })
+    .finally(() => owned.stop());
+}
+
+const finished = finish(runtime);
 ```
 
 `useRuntime` never calls `stop()`. Whoever built the run stops it.
+
+`done()` rejects when a run fails: with `SubFailedError` when a Sub fails, and with
+what the reducer threw when `update` throws. A `done()` nobody awaits needs a catch,
+because an unhandled rejection ends a Node process. With the catch above, `finished`
+never rejects. It holds the terminal State, or `undefined` if the run failed, so you
+can leave it unawaited. Replace the `console.error` with whatever your host does
+about a failed run.
+
+The `finally` stays for the failures too. After a reducer throw the Subs keep running
+and the final save has not happened until `stop()` runs.
+
+`dispatch` rejects too: with what the reducer threw, and with what a Sub threw when
+that Msg's State started the Sub and it threw at once. A `dispatch` nobody awaits, like
+the `onClick={() => dispatch(...)}` in step 1, needs a catch of its own, for the same
+reason `done()` does. That is the job of `reportFailure` above. Replace its
+`console.error` the same way.
+
+Together, the two catches and the `onError` keep a Node process alive through a
+failed run. With no `onError`, the default sink rethrows a Sub failure or a reducer
+throw on a later tick, and that ends a Node process whatever the catches do. In a
+browser, that rethrow only logs an error, and nothing ends.
 
 A listener hears before the Cmds run, so hearing one does not mean they are done.
 When your code needs that, use `observe` or `on`, which hear after a transition's

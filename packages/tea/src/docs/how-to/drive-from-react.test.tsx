@@ -17,7 +17,7 @@
 import { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type Sub } from "@demlik/tea";
+import { defineMachine, type Sub, SubFailedError } from "@demlik/tea";
 import { memoryStore } from "@demlik/tea/mem";
 import { downloader, type State } from "../../../examples/downloader";
 import {
@@ -162,21 +162,77 @@ import { useRuntime } from "@demlik/tea/react";
 const runtime = await run(downloader, {
   ctx: undefined,
   terminal: (s) => s.phase === "done",
+  onError: (error) => console.error("run error", error),
 }).ready;
 
+// A dispatch nobody awaits needs a catch of its own.
+function reportFailure(sent: Promise<unknown>) {
+  sent.catch((error: unknown) => console.error("dispatch failed", error));
+}
+
 function Progress() {
-  const [state] = useRuntime(runtime);
+  const [state, dispatch] = useRuntime(runtime);
 
   return (
-    <p>
-      {state.received}/{state.total}
-    </p>
+    <div>
+      <p>
+        {state.received}/{state.total}
+      </p>
+      <button
+        type="button"
+        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
+      >
+        Receive chunk
+      </button>
+    </div>
   );
 }
 
-// Elsewhere, the owner of the handle awaits the run and stops it.
-const finished = runtime.done().finally(() => runtime.stop());
+// Elsewhere, the owner of the handle waits for the run and stops it.
+function finish<S>(owned: { done(): Promise<S>; stop(): Promise<void> }) {
+  return owned
+    .done()
+    .catch((error: unknown) => {
+      console.error("run failed", error);
+      return undefined;
+    })
+    .finally(() => owned.stop());
+}
+
+const finished = finish(runtime);
 // #endregion use-runtime
+
+/** A machine that can reach each way a run ends, for `finish` to meet. */
+type Watch = Sub<"watch", { readonly on: true }>;
+interface EndingState {
+  readonly reached: boolean;
+  readonly watching: boolean;
+}
+type EndingMsg =
+  | { readonly type: "reach" }
+  | { readonly type: "watch" }
+  | { readonly type: "explode" };
+
+const reducerThrew = new Error("reducer threw");
+const subFailed = new Error("sub failed");
+
+const ending = defineMachine({
+  types: { model: {} as EndingState, msg: {} as EndingMsg, sub: {} as Watch },
+  init: () => [{ reached: false, watching: false }, []],
+  update: {
+    reach: (s) => [{ ...s, reached: true }, []],
+    watch: (s) => [{ ...s, watching: true }, []],
+    explode: () => {
+      throw reducerThrew;
+    },
+  },
+  subs: [
+    {
+      type: "watch",
+      deps: (s) => (s.watching ? { on: true as const } : null),
+    },
+  ],
+});
 
 let container: HTMLDivElement;
 let root: Root;
@@ -256,13 +312,91 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
 
   it("`useRuntime` renders a handle the component does not own", async () => {
     await render(<Progress />);
-    expect(container.textContent).toBe("0/0");
+    expect(container.querySelector("p")?.textContent).toBe("0/0");
 
     await act(async () => {
       await runtime.dispatch({ type: "start", total: 1 });
-      await runtime.dispatch({ type: "chunk", size: 1 });
     });
-    expect(container.textContent).toBe("1/1");
-    expect((await finished).phase).toBe("done");
+    await click("Receive chunk");
+    expect(container.querySelector("p")?.textContent).toBe("1/1");
+    expect((await finished)?.phase).toBe("done");
+  });
+});
+
+describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a host with an `onError`", () => {
+  const unhandled: unknown[] = [];
+  const hearUnhandled = (reason: unknown) => {
+    unhandled.push(reason);
+  };
+
+  beforeEach(() => {
+    unhandled.length = 0;
+    process.on("unhandledRejection", hearUnhandled);
+  });
+
+  afterEach(() => {
+    process.off("unhandledRejection", hearUnhandled);
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Does what the page tells a host to do: starts `finish`, dispatches through
+   * `reportFailure`, and awaits neither, until Node has had its chance to call a
+   * rejection unhandled.
+   *
+   * `stop` counts `finish`'s call alone. A Sub failure also makes the engine stop
+   * the handle itself, and that call does not go through here.
+   */
+  async function endRun(msg: EndingMsg) {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const heard: unknown[] = [];
+    const owned = await run(ending, {
+      ctx: undefined,
+      terminal: (s) => s.reached,
+      onError: (error) => heard.push(error),
+      subscribe: {
+        watch: () => {
+          throw subFailed;
+        },
+      },
+    }).ready;
+    const stop = vi.fn(() => owned.stop());
+
+    const unawaited = finish({ done: () => owned.done(), stop });
+    reportFailure(owned.dispatch(msg));
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    await new Promise((settled) => setTimeout(settled, 0));
+
+    expect(unhandled).toEqual([]);
+    return { answer: await unawaited, logged, heard };
+  }
+
+  it("a terminal State: `stop()` ran and `finished` holds the State", async () => {
+    const { answer, logged, heard } = await endRun({ type: "reach" });
+
+    expect(answer?.reached).toBe(true);
+    expect(logged).not.toHaveBeenCalled();
+    expect(heard).toEqual([]);
+  });
+
+  it("a Sub failure: `stop()` ran and the host hears a `SubFailedError` from `done()` and the Sub's throw from `dispatch`", async () => {
+    const { answer, logged, heard } = await endRun({ type: "watch" });
+
+    expect(answer).toBeUndefined();
+    const [, error] =
+      logged.mock.calls.find(([label]) => label === "run failed") ?? [];
+    expect(error).toBeInstanceOf(SubFailedError);
+    expect((error as SubFailedError).cause).toBe(subFailed);
+    expect(logged).toHaveBeenCalledWith("dispatch failed", subFailed);
+    expect(heard).toContain(subFailed);
+  });
+
+  it("a reducer throw: `stop()` ran and the host hears what was thrown, from `done()` and from `dispatch`", async () => {
+    const { answer, logged, heard } = await endRun({ type: "explode" });
+
+    expect(answer).toBeUndefined();
+    expect(logged).toHaveBeenCalledWith("run failed", reducerThrew);
+    expect(logged).toHaveBeenCalledWith("dispatch failed", reducerThrew);
+    expect(heard).toContain(reducerThrew);
   });
 });
