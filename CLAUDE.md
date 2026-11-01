@@ -96,9 +96,11 @@ write and a manifest here would be a foreign opinion.
 
 ## PRs
 
-`pnpm typecheck && pnpm lint && pnpm test` from the root before opening one — the same commands
-`.github/workflows/build.yaml` runs, across every package (`pnpm -r`; `test` is one vitest run
-over `packages/*` plus a `scripts` project for the root's `scripts/*.test.mjs`). A change that touches a package's published surface also
+`pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test` from the root before opening one,
+across every package (`pnpm -r`; `typecheck:test` covers the test files `typecheck` leaves out;
+`test` is one vitest run over `packages/*` plus a `scripts` project for the root's
+`scripts/*.test.mjs`). `.github/workflows/build.yaml` runs these four and more, so a clean local
+run does not promise a green PR. A change that touches a package's published surface also
 needs a changeset (`pnpm changeset`). `pnpm lint:worktree` is an alias of `pnpm lint` that
 fabrika's `build check` invokes by that name.
 
