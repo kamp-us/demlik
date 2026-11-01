@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { getCompilerOptionsFromTsConfig, type SourceFile, ts } from "ts-morph";
+import { z } from "zod";
 import { absurd } from "../absurd.js";
 import type { PackageEdge } from "./dependencies.js";
 import {
   type ExportEntry,
   exportEntries,
+  exportTargets,
+  keyedTargets,
   sourceOfSubpath,
   subpathOf,
   subpathsOf,
+  targetsFor,
 } from "./entries.js";
 import type { Exists } from "./heal.js";
 import type { PathMove } from "./manifest.js";
@@ -18,6 +22,7 @@ import {
   moduleLiterals,
   namesCode,
   relativeSpecifierOf,
+  withoutBundlerSuffix,
 } from "./specifier.js";
 import {
   packageLabel,
@@ -60,17 +65,10 @@ export type Named =
   | { readonly kind: "package"; readonly pkg: WorkspacePackage }
   | { readonly kind: "alias"; readonly path: string };
 
-/** Whether `specifier` matches a tsconfig `paths` key, which holds at most one `*`. */
-const matchesPathsKey = (key: string, specifier: string): boolean => {
-  const star = key.indexOf("*");
-  if (star === -1) return key === specifier;
-  const [before, after] = [key.slice(0, star), key.slice(star + 1)];
-  return (
-    specifier.length >= before.length + after.length &&
-    specifier.startsWith(before) &&
-    specifier.endsWith(after)
-  );
-};
+/** The part of a `tsconfig.json` that names the configs it references. */
+const ProjectReferences = z.object({
+  references: z.array(z.object({ path: z.string() })),
+});
 
 /**
  * A workspace read against one tree: which file each specifier names there, and the subpath each
@@ -80,6 +78,14 @@ const matchesPathsKey = (key: string, specifier: string): boolean => {
 export class PackageTree {
   readonly #entries = new Map<string, readonly ExportEntry[]>();
   readonly #options = new Map<string, ts.CompilerOptions>();
+  readonly #aliasOptions = new Map<string, ts.CompilerOptions>();
+  readonly #imports = new Map<
+    string,
+    {
+      readonly dir: string;
+      readonly imports: readonly [string, readonly string[]][];
+    }
+  >();
 
   constructor(
     readonly repoRoot: string,
@@ -102,19 +108,75 @@ export class PackageTree {
   }
 
   /**
+   * The compiler options aliases are read under from `dir`: the nearest `tsconfig.json`'s, or when
+   * that declares no `paths`, those of the first config it references that does. A Vue scaffold's
+   * `tsconfig.json` holds only `references`, with its `paths` in `tsconfig.app.json`.
+   */
+  #aliasOptionsAt(dir: string): ts.CompilerOptions {
+    let options = this.#aliasOptions.get(dir);
+    if (options === undefined) {
+      options = this.#optionsAt(dir);
+      const config = ts.findConfigFile(dir, ts.sys.fileExists);
+      if (options.paths === undefined && config !== undefined) {
+        const referenced = ProjectReferences.safeParse(
+          ts.readConfigFile(config, ts.sys.readFile).config,
+        );
+        options =
+          (referenced.success ? referenced.data.references : [])
+            .map(({ path }) =>
+              ts.resolveProjectReferencePath({
+                path: resolve(dirname(config), path),
+              }),
+            )
+            .filter((path) => ts.sys.fileExists(path))
+            .map((path) => getCompilerOptionsFromTsConfig(path).options)
+            .find(
+              (referencedOptions) => referencedOptions.paths !== undefined,
+            ) ?? options;
+      }
+      this.#aliasOptions.set(dir, options);
+    }
+    return options;
+  }
+
+  /** Each `package.json` `imports` target `literal` opens from `dir`, as an absolute path. */
+  #importTargets(dir: string, literal: string): string[] {
+    let scope = this.#imports.get(dir);
+    if (scope === undefined) {
+      const manifest = ts.findConfigFile(
+        dir,
+        ts.sys.fileExists,
+        "package.json",
+      );
+      const { config } =
+        manifest === undefined
+          ? { config: undefined }
+          : ts.readConfigFile(manifest, ts.sys.readFile);
+      scope = {
+        dir: manifest === undefined ? dir : dirname(manifest),
+        imports: keyedTargets(config?.imports),
+      };
+      this.#imports.set(dir, scope);
+    }
+    const { dir: home, imports } = scope;
+    return targetsFor(imports, literal)
+      .filter((target) => target.startsWith("./"))
+      .map((target) => resolve(home, target));
+  }
+
+  /**
    * The file in this repository `literal` names from `importer` through tsconfig `paths`, tsconfig
-   * `baseUrl` or a package's `imports`. Only a specifier that looks like the first or the last goes
-   * to the compiler, since this is asked of every quoted string in every tracked source; `baseUrl`
-   * is read against `tree`, as the compiler would try it.
+   * `baseUrl` or a package's `imports`, read against `tree`. Only a specifier that looks like the
+   * first or the last goes to the compiler, since this is asked of every quoted string in every
+   * tracked source. The compiler resolves only the module extensions it knows, so what it does not
+   * answer is read off the alias's own targets: a bundler resolves `@/Card.vue`, and nothing else
+   * here would see it.
    */
   #aliased(importer: string, literal: string): string | undefined {
-    const options = this.#optionsAt(dirname(importer));
-    const looksAliased =
-      literal.startsWith("#") ||
-      Object.keys(options.paths ?? {}).some((key) =>
-        matchesPathsKey(key, literal),
-      );
-    if (!looksAliased)
+    const dir = dirname(importer);
+    const options = this.#aliasOptionsAt(dir);
+    const paths = targetsFor(Object.entries(options.paths ?? {}), literal);
+    if (!literal.startsWith("#") && paths.length === 0)
       return options.baseUrl === undefined
         ? undefined
         : moduleFileCandidates(resolve(options.baseUrl, literal)).find(
@@ -124,12 +186,37 @@ export class PackageTree {
       literal,
       importer,
       options,
-      ts.sys,
+      {
+        fileExists: this.tree,
+        readFile: ts.sys.readFile,
+      },
     );
-    return resolvedModule === undefined ||
-      resolvedModule.isExternalLibraryImport === true
-      ? undefined
-      : resolvedModule.resolvedFileName;
+    if (resolvedModule !== undefined)
+      return resolvedModule.isExternalLibraryImport === true
+        ? undefined
+        : resolvedModule.resolvedFileName;
+    // The compiler keeps the directory `paths` are relative to here, whatever config declared them.
+    const base = options.baseUrl ?? options.pathsBasePath;
+    return [
+      ...(typeof base === "string"
+        ? paths.map((target) => resolve(base, target))
+        : []),
+      ...this.#importTargets(dir, literal),
+    ]
+      .flatMap((target) => moduleFileCandidates(target))
+      .find(this.tree);
+  }
+
+  /**
+   * The non-code file an `exports` pattern gives `subpath`, as its target reads: the follow-back to
+   * a source knows only TypeScript, so `./*.vue` to `./src/*.vue` answers nothing there.
+   */
+  #plainExport(pkg: WorkspacePackage, subpath: string): string | undefined {
+    const dir = join(this.repoRoot, pkg.root);
+    return targetsFor(exportTargets(pkg.exports), subpath)
+      .filter((target) => !namesCode(target))
+      .map((target) => join(dir, target))
+      .find(this.tree);
   }
 
   /** The package an absolute path sits in. */
@@ -195,7 +282,7 @@ export class PackageTree {
           ? moduleFileCandidates(
               join(dir, subpath === "." ? "index" : subpath),
             ).find(this.tree)
-          : undefined;
+          : this.#plainExport(pkg, subpath);
     return path === undefined
       ? { kind: "package", pkg }
       : { kind: "file", path };
@@ -271,7 +358,9 @@ export const describeUnreachable = (
  * specifier in a file moving across a package line that names no file; a package-name specifier
  * into a package a row leaves that apply cannot follow to a file, so it may name a moved one; an
  * alias in a file moving across a package line, or naming a moved file, which apply does not rewrite;
- * or a path built at run time for which the row changes which file a value loads (`templates.ts`).
+ * a path built at run time for which the row changes which file a value loads (`templates.ts`); or a
+ * string in a file apply reads only for quoted strings, which the row would stop naming its file
+ * (`unreadImports`).
  */
 export type Unfollowed = {
   readonly row: PathMove;
@@ -282,6 +371,7 @@ export type Unfollowed = {
   | { readonly kind: "unknown-file"; readonly pkg: WorkspacePackage }
   | { readonly kind: "alias" }
   | { readonly kind: "template" }
+  | { readonly kind: "unread-file" }
 );
 
 const unfollowedReason = (unfollowed: Unfollowed): string => {
@@ -294,6 +384,8 @@ const unfollowedReason = (unfollowed: Unfollowed): string => {
       return "an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite";
     case "template":
       return "a path built at run time that apply cannot rewrite, and this row changes which file it loads";
+    case "unread-file":
+      return "in a kind of file apply does not rewrite, and this row would leave it naming the wrong file";
     default:
       return absurd(unfollowed);
   }
@@ -419,8 +511,17 @@ export function rewriteCrossings(
   return { unreachable, unfollowed, edges };
 }
 
-/** Every quoted or backtick string in a file — a cheap superset of its module specifiers. */
-const QUOTED = /["'`]([^"'`\n]+)["'`]/g;
+/** An opening quote, with what runs up to the next like quote on its line in a lookahead. */
+const QUOTED = /(["'`])(?=((?:(?!\1)[^\n])+)\1)/g;
+
+/**
+ * Everything between two like quotes on one line of `text` — a cheap superset of its module
+ * specifiers. The matches overlap, so an apostrophe earlier on the line cannot hide a specifier.
+ */
+const quotedStrings = (text: string): string[] =>
+  [...text.matchAll(QUOTED)].flatMap(([, , quoted]) =>
+    quoted === undefined ? [] : [quoted],
+  );
 
 /**
  * Those of `sources` in every workspace package holding one of them whose text names one of `rows`'
@@ -445,13 +546,68 @@ export function importerPackageSources(
   for (const file of sources) {
     const pkg = before.packageAt(file).root;
     if (importing.has(pkg)) continue;
-    const text = readFileSync(file, "utf8");
-    for (const [, literal] of text.matchAll(QUOTED)) {
-      if (literal !== undefined && names(before.name(file, literal), literal)) {
-        importing.add(pkg);
-        break;
-      }
-    }
+    const quoted = quotedStrings(readFileSync(file, "utf8"));
+    if (quoted.some((literal) => names(before.name(file, literal), literal)))
+      importing.add(pkg);
   }
   return sources.filter((file) => importing.has(before.packageAt(file).root));
+}
+
+/**
+ * The imports `rows` would break in `files`, which apply cannot parse or rewrite: each quoted string
+ * that names a file in the tree before the renames and, read from where its file then sits, no longer
+ * names that file after them. A bundler's query or hash after the path does not change what it names.
+ * So a string naming a moved file is refused, and so is a moved file's string naming one left behind
+ * and a string a row's destination takes over from the file it named, while a file moving together
+ * with what it names passes. A package-name string into a package a row leaves that apply cannot
+ * follow to a file is refused too, though it may name no moved file. The scan cannot tell an import
+ * from prose quoting a path, so such prose is refused as well.
+ */
+export function unreadImports(
+  files: readonly string[],
+  rows: readonly PathMove[],
+  before: PackageTree,
+  after: PackageTree,
+): Unfollowed[] {
+  const at = (path: string) => join(before.repoRoot, path);
+  const leavingFrom = new Map(rows.map((r) => [at(r.from), r]));
+  const arrivingAt = new Map(rows.map((r) => [at(r.to), r]));
+  const leaving = rowsLeaving(
+    rows.filter(
+      (r) =>
+        before.packageAt(at(r.from)).root !== after.packageAt(at(r.to)).root,
+    ),
+    before,
+  );
+  return files.flatMap((importer) => {
+    const own = leavingFrom.get(importer) ?? arrivingAt.get(importer);
+    const was = own === undefined ? importer : at(own.from);
+    const now = own === undefined ? importer : at(own.to);
+    const unread = (specifier: string): Unfollowed | undefined => {
+      const path = withoutBundlerSuffix(specifier);
+      const named = before.name(was, path);
+      if (named.kind === "package") {
+        const row = leaving.get(named.pkg.root);
+        return row !== undefined && namesCode(path)
+          ? { kind: "unknown-file", row, importer, specifier, pkg: named.pkg }
+          : undefined;
+      }
+      if (named.kind === "outside" || named.kind === "missing")
+        return undefined;
+      const moved = leavingFrom.get(named.path);
+      const target = moved === undefined ? named.path : at(moved.to);
+      const still = after.name(now, path);
+      const landed =
+        still.kind === "file" || still.kind === "alias"
+          ? still.path
+          : undefined;
+      if (landed === target) return undefined;
+      const row = moved ?? own ?? arrivingAt.get(landed ?? "");
+      return row === undefined
+        ? undefined
+        : { kind: "unread-file", row, importer, specifier };
+    };
+    const quoted = new Set(quotedStrings(readFileSync(importer, "utf8")));
+    return [...quoted].flatMap((specifier) => unread(specifier) ?? []);
+  });
 }

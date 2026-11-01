@@ -224,16 +224,22 @@ const STAR = "\u0000";
  * Each `exports` key with its targets: a bare target or condition map answers `.`. A key whose
  * value holds no target at all, `null` above all, comes back with none.
  */
-function exportTargets(exports: unknown): [key: string, targets: string[]][] {
+export function exportTargets(
+  exports: unknown,
+): [key: string, targets: string[]][] {
   const keyed =
     typeof exports === "object" &&
     exports !== null &&
     !Array.isArray(exports) &&
     Object.keys(exports).some((key) => key.startsWith("."));
-  if (!keyed) return [[".", strings(exports)]];
-  return Object.entries(exports as Record<string, unknown>).map(
-    ([key, value]) => [key, strings(value)],
-  );
+  return keyed ? keyedTargets(exports) : [[".", strings(exports)]];
+}
+
+/** Each key of a `package.json` map with the targets its value holds, through any conditions. */
+export function keyedTargets(map: unknown): [key: string, targets: string[]][] {
+  return typeof map === "object" && map !== null
+    ? Object.entries(map).map(([key, value]) => [key, strings(value)])
+    : [];
 }
 
 /** The source extensions a wildcard target can be built from: `.mjs` from `.mts` and no other. */
@@ -308,14 +314,13 @@ const sides = (pattern: string): [string, string] => {
 };
 
 /**
- * The `exports` key Node answers `subpath` by: the exact key if there is one, else the pattern with
- * the longest text before its `*`, then the longest key (`PATTERN_KEY_COMPARE`).
+ * The key Node answers `subpath` by: the exact key if there is one, else the pattern with the
+ * longest text before its `*`, then the longest key (`PATTERN_KEY_COMPARE`).
  */
 function answeringKey(
-  entries: readonly ExportEntry[],
+  keys: readonly string[],
   subpath: string,
 ): string | undefined {
-  const keys = entries.map((entry) => entry.key);
   if (keys.includes(subpath)) return subpath;
   return keys
     .filter((key) => key.includes("*") && capture(key, subpath) !== undefined)
@@ -334,6 +339,25 @@ function capture(pattern: string, text: string): string | undefined {
   )
     return undefined;
   return text.slice(before.length, text.length - after.length);
+}
+
+/**
+ * What a map of `exports`, `imports` or tsconfig `paths` shape gives `text`, as written and with no
+ * file looked for: the targets of the key that answers it, each `*` filled in.
+ */
+export function targetsFor(
+  map: readonly (readonly [key: string, targets: readonly string[]])[],
+  text: string,
+): string[] {
+  const key = answeringKey(
+    map.map(([mapKey]) => mapKey),
+    text,
+  );
+  if (key === undefined) return [];
+  const star = key.includes("*") ? (capture(key, text) ?? "") : "";
+  return map.flatMap(([mapKey, targets]) =>
+    mapKey === key ? targets.map((target) => target.replaceAll("*", star)) : [],
+  );
 }
 
 /**
@@ -357,7 +381,12 @@ export function subpathsOf(
     const star = capture(entry.source, stem);
     if (star === undefined) return [];
     const subpath = entry.key.replace("*", star);
-    return answeringKey(entries, subpath) === entry.key ? [subpath] : [];
+    return answeringKey(
+      entries.map((e) => e.key),
+      subpath,
+    ) === entry.key
+      ? [subpath]
+      : [];
   });
   return [...exact, ...patterned];
 }
@@ -377,7 +406,10 @@ export function sourceOfSubpath(
   subpath: string,
   exists: (packageRelative: string) => boolean,
 ): string | undefined {
-  const key = answeringKey(entries, subpath);
+  const key = answeringKey(
+    entries.map((entry) => entry.key),
+    subpath,
+  );
   for (const entry of entries) {
     if (entry.key !== key) continue;
     if (entry.kind === "exact") return entry.source;

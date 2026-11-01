@@ -18,6 +18,9 @@ import {
   importerPackageSources,
   PackageTree,
   rewriteCrossings,
+  type Unfollowed,
+  type Unreachable,
+  unreadImports,
 } from "./crossing.js";
 import {
   describeCycle,
@@ -112,6 +115,12 @@ const TS_EXTENSION = /\.[cm]?tsx?$/;
  */
 const MODULE_EXTENSION = /\.[cm]?[jt]sx?$/;
 
+/**
+ * A file that can import a module in a syntax apply does not parse. Its imports are never rewritten,
+ * only scanned as quoted strings and refused (`unreadImports`). The closed list of such kinds.
+ */
+const UNREAD_EXTENSION = /\.(?:vue|svelte|mdx|astro)$/;
+
 /** Every tracked file, the set an import built at run time can load from. */
 const ANY_FILE = /(?:)/;
 
@@ -167,18 +176,18 @@ type Ledger = {
   readonly pending: PathMove[];
   readonly conflicts: PathMove[];
   readonly absent: string[];
-  done: number;
+  readonly done: PathMove[];
 };
 
 function classify(repoRoot: string, rows: readonly PathMove[]): Ledger {
-  const ledger: Ledger = { pending: [], conflicts: [], absent: [], done: 0 };
+  const ledger: Ledger = { pending: [], conflicts: [], absent: [], done: [] };
   for (const state of rows.map((row) => stateOf(repoRoot, row))) {
     switch (state.kind) {
       case "pending":
         ledger.pending.push(state.row);
         break;
       case "done":
-        ledger.done += 1;
+        ledger.done.push(state.row);
         break;
       case "absent":
         ledger.absent.push(state.row.from);
@@ -329,6 +338,8 @@ type Rewrite = {
   readonly specifiersRewritten: number;
   /** The package edge of every import the rewrite carries across a package line. */
   readonly crossings: readonly PackageEdge[];
+  readonly unreachable: readonly Unreachable[];
+  readonly unfollowed: readonly Unfollowed[];
 };
 
 const NO_REWRITE: Rewrite = {
@@ -336,7 +347,30 @@ const NO_REWRITE: Rewrite = {
   healed: 0,
   specifiersRewritten: 0,
   crossings: [],
+  unreachable: [],
+  unfollowed: [],
 };
+
+/** Throw, naming every one in one message, when any import stops the run. Nothing is committed yet. */
+function refuseImports(
+  repoRoot: string,
+  unreachable: readonly Unreachable[],
+  unfollowed: readonly Unfollowed[],
+): void {
+  const refusals = [
+    ...(unreachable.length > 0
+      ? [
+          `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
+        ]
+      : []),
+    ...(unfollowed.length > 0
+      ? [
+          `rows touch imports apply cannot follow to a file, so it cannot carry them; refusing before any commit:\n${unfollowed.map((u) => `  ${describeUnfollowed(repoRoot, u)}`).join("\n")}`,
+        ]
+      : []),
+  ];
+  if (refusals.length > 0) throw new Error(refusals.join("\n"));
+}
 
 /**
  * The tree once every row is renamed: a row's destination exists and its source does not, whatever
@@ -422,7 +456,7 @@ function isOtherFile(path: string): boolean {
  * workspace package with an importer of a moved file, its tracked JavaScript included, and each
  * import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An import
  * no `exports` entry carries across, and an import a row touches that apply cannot follow to a file,
- * throw before anything is written. So does an import built at run time for which a row changes
+ * come back for the caller to refuse. So does an import built at run time for which a row changes
  * which file a value loads (`checkTemplates`), with or without a crossing row.
  */
 function planRewrite(
@@ -521,20 +555,6 @@ function planRewrite(
     tracked: trackedMatching(repoRoot, ANY_FILE),
     modules,
   });
-  const unfollowed = [...crossed.unfollowed, ...templates.unfollowed];
-  const refusals = [
-    ...(crossed.unreachable.length > 0
-      ? [
-          `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${crossed.unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
-        ]
-      : []),
-    ...(unfollowed.length > 0
-      ? [
-          `rows touch imports apply cannot follow to a file, so it cannot carry them; refusing before any commit:\n${unfollowed.map((u) => `  ${describeUnfollowed(repoRoot, u)}`).join("\n")}`,
-        ]
-      : []),
-  ];
-  if (refusals.length > 0) throw new Error(refusals.join("\n"));
   const edits: Edit[] = [];
   let specifiersRewritten = 0;
   for (const sf of project.getSourceFiles()) {
@@ -549,6 +569,8 @@ function planRewrite(
     healed,
     specifiersRewritten,
     crossings: [...crossed.edges, ...templates.edges],
+    unreachable: crossed.unreachable,
+    unfollowed: [...crossed.unfollowed, ...templates.unfollowed],
   };
 }
 
@@ -641,8 +663,9 @@ function trackedMatching(
  * across a package line to a file no `exports` entry reaches, an import in a file moving across a
  * package line that names no file, a package-name import into a package a row leaves that apply
  * cannot follow to a file, an import built at run time for which a row changes which file a value
- * loads, an added dependency that closes a cycle between workspace packages, and an added dependency
- * with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees
+ * loads, a quoted string a row would break in a file apply does not parse (`.vue`, say), an added
+ * dependency that closes a cycle between workspace packages, and an added dependency with no `pnpm`
+ * on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees
  * and messages, except that a manifest adding a dependency takes its lockfile from the installed
  * pnpm; one adding none never runs pnpm.
  */
@@ -701,6 +724,13 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
       `both ends exist, refusing to guess:\n${conflicts.map((r) => `  ${r.from} -> ${r.to}`).join("\n")}`,
     );
   const moved = movedModules(repoRoot, set.moves);
+  const present = [...pending, ...done];
+  const unread = unreadImports(
+    trackedMatching(repoRoot, UNREAD_EXTENSION),
+    present,
+    new PackageTree(repoRoot, workspace, originalTree(repoRoot, present)),
+    new PackageTree(repoRoot, workspace, renamedTree(repoRoot, present)),
+  );
 
   const rows = pending.length > 0 ? pending : renamedAtHead(repoRoot, set);
   const owed =
@@ -716,6 +746,10 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
         crossing.length > 0,
       )
     : NO_REWRITE;
+  refuseImports(repoRoot, rewrite.unreachable, [
+    ...rewrite.unfollowed,
+    ...unread,
+  ]);
   const dependencies = planDependencies(repoRoot, workspace, rewrite.crossings);
   const untracked = untrackedEdits(repoRoot, rewrite, dependencies);
   if (untracked.length > 0)
@@ -749,7 +783,7 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
 
   return {
     pending: pending.length,
-    done,
+    done: done.length,
     absent,
     moved: pending.length,
     healed,

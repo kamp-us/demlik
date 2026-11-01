@@ -546,7 +546,10 @@ Refused before either commit, naming the row and what stops it, with `HEAD` and 
   with a non-code extension, such as `@scope/kit/styles.css`, is not refused for this;
 - an alias from tsconfig `paths`, tsconfig `baseUrl` or `package.json` `imports`, in a file crossing a
   package line or naming a moved file, since apply does not rewrite aliases. A bare specifier is read
-  as a `baseUrl` import when a file answers it under `baseUrl`, as the compiler reads it;
+  as a `baseUrl` import when a file answers it under `baseUrl`, as the compiler reads it. What the
+  compiler does not resolve, such as `@/Card.vue` or `#card` with its target at `./src/Card.vue`, is
+  read off the alias's own targets, and `paths` are read from the nearest `tsconfig.json` or, when it
+  declares none, the first config it references that does;
 - a backtick path using `${}`, in any tracked TypeScript or JavaScript file, when a row changes
   which file a run-time value loads, whether or not a row crosses a package line. Apply matches its
   fixed text against tracked files before and after the move, trying what a written specifier could
@@ -558,14 +561,30 @@ Refused before either commit, naming the row and what stops it, with `HEAD` and 
   `@scope/a/${name}` is matched through the names the package gives each file, so a wildcard `exports`
   entry with no source in the tree matches nothing. A path with no fixed start (`${base}/one`), a
   start that only an alias gives meaning (`@/locale/${x}`) or one naming no tracked file changes
-  nothing.
+  nothing;
+- a quoted string in a tracked `.vue`, `.svelte`, `.mdx` or `.astro` file that a row would leave
+  naming the wrong file, whether or not a row crosses a package line, and a resumed run refuses the
+  same way. Apply does not parse or rewrite these files. It reads every quoted string in them as a
+  relative path, package name or alias would resolve, setting aside a bundler query or hash after the
+  path (`./one.ts?raw`). So a string naming a moved file is refused, and so are a moved file's string
+  naming one left behind and a string that a row's destination takes over from the file it names now
+  (`./one` naming `one.js` when a row moves another file to `one.ts`). A package-name string into a
+  package a row leaves that apply cannot follow to a file is refused too, as above, though it may name
+  no moved file. Such a file moved together with what it names, keeping their layout, applies
+  unchanged. Prose quoting such a path is refused too, since the scan cannot tell it from an import.
 
 A package with no `exports` answers its bare name by `main` (then `module`, then `types`) and a deep
 path as the file at that path, as Node reads them, so `@scope/a/src/one.js` is rewritten when a row
 moves `src/one.ts`. Apply sees only the file kinds and module forms it reads. The file kinds, when a
 row crosses a package line: tracked `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs`
-files, with or without `allowJs`. An import in any other file, such as `.vue`, `.svelte` or `.mdx`,
-is not read. The forms: `import`, `export`, `import x = require()`, `require()`, `import()`, a
+files, with or without `allowJs`. A row of either kind, inside one package or across a line, is
+refused over an import in a `.vue`, `.svelte`, `.mdx` or `.astro` file, as the refusal above says, but
+apply never rewrites one. That scan does not see a path built at run time, a bundler alias tsconfig
+does not declare, an unquoted path, a path that opens with neither `.`, a package name nor an alias
+(`/src/one.ts`, `one.ts`, `raw-loader!./one`), an extension the compiler would not try (`./Card`
+for `Card.vue`), or any target of an `imports` condition map or fallback list but the first whose
+file exists. Any other file is not read for imports, `.md` included. The forms:
+`import`, `export`, `import x = require()`, `require()`, `import()`, a
 type-position `import("...")`, `declare module` and the `vi.*` mock calls. A backtick path with no
 `${}` in it is read in `require()`, `import()` and the `vi.*` calls and rewritten like any other,
 staying in backticks; one with `${}` is checked as the refusal above says. Still unread are string
