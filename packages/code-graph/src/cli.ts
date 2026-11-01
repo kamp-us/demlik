@@ -104,7 +104,7 @@ function graphOptions(command: Command): Command {
     .option("--html", "emit a self-contained HTML report (human view); implies the edge pass")
     .option(
       "--ci",
-      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on',
+      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on. A run takes one gate: two of --layers, --boundaries, --comments, --collapse and --unreachable with --ci, or --env-keys or --hexagon beside a gate or --ci, exit 2',
     )
     .option("--fail-on <level>", "CI severity to fail on: high | warn", "high")
     .option("--max <n>", "CI: fail if total smell count exceeds <n>")

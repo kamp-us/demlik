@@ -8,6 +8,7 @@
  * built from `run`'s options in the order both engines share.
  */
 
+import { builtinRunners } from "../internal/engine/builtin-runners";
 import { builtinExtensions } from "../internal/engine/builtins";
 import {
   type LiveWorkProbe,
@@ -33,7 +34,6 @@ import type {
   TelemetrySink,
 } from "../runtime-types";
 import { DriveFailedError, DriveStalledError } from "../runtime-types";
-import { builtinRunners } from "./builtin-runners";
 
 // === run ===
 //
