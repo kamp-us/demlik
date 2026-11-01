@@ -188,6 +188,8 @@ export {
   type DeferredStepOutcome,
   type DeferredStepResponse,
   type DeferStepHostConfig,
+  type ExecutedStep,
+  type ExecutedSteps,
   type ExecuteStep,
   mintRunToken,
   type NextStep,

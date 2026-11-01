@@ -558,14 +558,52 @@ export type StepTransport<R, I, O> = (
 /** Execute one tool call and produce its result (the consumer's hands). */
 export type ExecuteStep<I, R> = (step: NextStep<I>) => Promise<R> | R;
 
-/** Tuning for {@link runStepLoop}. */
-export interface RunStepLoopConfig {
+/**
+ * What {@link ExecutedSteps} holds for a step that ran. The box is what tells a
+ * step whose result is `undefined` apart from a step that never ran, and it
+ * still does after a JSON round trip (`{}` is a box; a missing entry is not).
+ */
+export interface ExecutedStep<R> {
+  readonly result: R;
+}
+
+/**
+ * The hands' memory of the steps they already ran, keyed by `callId`. Pass one
+ * that outlives the process and a restarted {@link runStepLoop} re-POSTs a saved
+ * result instead of running the step again.
+ *
+ * Use one store per run: a host's `callId` only has to be unique inside its run.
+ * The caller owns where it lives and when it is cleared.
+ */
+export interface ExecutedSteps<R> {
+  /** The box saved for `callId`, or `undefined` if that step never ran. */
+  get(
+    callId: string,
+  ): Promise<ExecutedStep<R> | undefined> | ExecutedStep<R> | undefined;
+  /** Save the box for `callId`. Settled before the result is POSTed. */
+  set(callId: string, step: ExecutedStep<R>): Promise<void> | void;
+}
+
+/**
+ * Tuning for {@link runStepLoop}.
+ *
+ * `R` is the step result type, and only {@link RunStepLoopConfig.executed} reads
+ * it. It defaults to `never` because a bare `RunStepLoopConfig` says nothing
+ * about results: it has to fit a drive of any `R`, and a store of `unknown`
+ * could not hand a drive its `R` back.
+ */
+export interface RunStepLoopConfig<R = never> {
   /**
    * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
    * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
    * absolute-deadline contract (a resumed loop honors the SAME moment).
    */
   readonly deadlineMs: number;
+  /**
+   * Where the hands remember the steps they ran. Defaults to a fresh in-memory
+   * store per drive, which a restart forgets. See {@link runStepLoop}.
+   */
+  readonly executed?: ExecutedSteps<R>;
   /** Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`. */
   readonly retry?: RetryPolicy;
   /** Clock, injected for determinism. Defaults to `Date.now`. */
@@ -595,31 +633,43 @@ export type StepLoopOutcome<O> =
  *   - **backoff** — a FAILED POST (transport reject) is retried on the
  *     `retry-backoff` curve; once `shouldRetry` is exhausted the loop stops
  *     with `gave_up`. A success resets the retry counter.
- *   - **dedupe** — a step whose `callId` was already executed in THIS drive is
- *     not re-executed; its prior result is re-POSTed. Closes the "the host
- *     re-handed the same step after a duplicate settle" path (the host side is
- *     idempotent; the hands match it).
+ *   - **dedupe** — a step whose `callId` is already in `config.executed` is not
+ *     re-executed; its saved result is re-POSTed. Closes the "the host re-handed
+ *     the same step after a duplicate settle" path (the host side is idempotent;
+ *     the hands match it). That memory lives in `config.executed`. Left out, it
+ *     is a fresh in-memory store that lasts one drive, so hands that restart
+ *     forget it and run the re-handed step again; pass a store that outlives the
+ *     process to keep it across restarts.
+ *   - **store failure** — a `get` or `set` that throws or rejects ends the drive
+ *     with `gave_up` carrying the store's error. A failed `get` runs nothing. A
+ *     failed `set` means the step ran but is not remembered, and its result is
+ *     not POSTed, so a later drive over that store would run it again.
  *   - **not-ready re-poll** — a {@link StepWorking} arm (a defer-resume host
  *     computing the step out-of-band) is not a step: the loop re-POSTs the SAME
  *     `posted` after a backoff (honoring the host's advisory `retryAfterMs`),
  *     until a real step / done arrives. Bounded only by the absolute deadline —
  *     an inline host never returns this arm, so its drive is unchanged.
+ *
+ * **Crash window:** a store gives "run once per `callId`" except between
+ * `execute` finishing and `set` landing. Hands that die there have run the step
+ * with no record of it, and the next drive runs it again. No store can close
+ * that: the step itself has to be safe to repeat, as with `idempotentEffect`.
  */
 export async function runStepLoop<R, I, O>(
   token: string,
   runId: string,
   transport: StepTransport<R, I, O>,
   execute: ExecuteStep<I, R>,
-  config: RunStepLoopConfig,
+  config: RunStepLoopConfig<R>,
 ): Promise<StepLoopOutcome<O>> {
   const policy = config.retry ?? defaultRetryPolicy;
   const now = config.now ?? Date.now;
   const sleep = config.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const rng = config.rng;
 
-  // Dedupe-by-callId for THIS drive: the result already produced for a callId,
-  // so a re-handed step re-POSTs the cached result instead of re-executing.
-  const executed = new Map<string, R>();
+  // Dedupe-by-callId: the result already produced for a callId, so a re-handed
+  // step re-POSTs the saved result instead of re-executing.
+  const executed = config.executed ?? stepsInMemory<R>();
   // The result to POST on the NEXT request (null on the first request).
   let posted: StepResult<R> | null = null;
   // Consecutive not-ready ("working") polls, driving the re-poll backoff curve.
@@ -660,12 +710,35 @@ export async function runStepLoop<R, I, O>(
     }
     pollRetry = initRetry(); // a real step resets the poll backoff
 
-    // Execute the next step (dedupe: a callId already run in this drive re-POSTs
-    // its cached result rather than executing twice).
+    // Execute the next step (dedupe: a callId already remembered re-POSTs its
+    // saved result rather than executing twice). Only the store's own failures
+    // become `gave_up`; a throwing `execute` still rejects the drive.
     const step = response.step;
-    const cached = executed.get(step.callId);
-    const result = cached !== undefined ? cached : await execute(step);
-    if (cached === undefined) executed.set(step.callId, result);
-    posted = { callId: step.callId, result };
+    let saved: ExecutedStep<R> | undefined;
+    try {
+      saved = await executed.get(step.callId);
+    } catch (error) {
+      return { kind: "gave_up", error };
+    }
+    if (saved === undefined) {
+      saved = { result: await execute(step) };
+      try {
+        await executed.set(step.callId, saved);
+      } catch (error) {
+        return { kind: "gave_up", error };
+      }
+    }
+    posted = { callId: step.callId, result: saved.result };
   }
+}
+
+/** The default {@link ExecutedSteps}: lives as long as one drive. */
+function stepsInMemory<R>(): ExecutedSteps<R> {
+  const steps = new Map<string, ExecutedStep<R>>();
+  return {
+    get: (callId) => steps.get(callId),
+    set: (callId, step) => {
+      steps.set(callId, step);
+    },
+  };
 }

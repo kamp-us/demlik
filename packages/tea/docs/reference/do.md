@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (105)
+## Exports (107)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -63,6 +63,8 @@ import { … } from "@demlik/tea/do";
 | [`EventLogRange`](#EventLogRange) | Interface | stable | Optional inclusive bounds for EventSourcedStore.readEvents. |
 | [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Options for doEventSourcedStore. |
 | [`EventSourcedStore`](#EventSourcedStore) | Interface | stable | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the append + recovery surface the cooperating DO drives. |
+| [`ExecutedStep`](#ExecutedStep) | Interface | stable | What ExecutedSteps holds for a step that ran. |
+| [`ExecutedSteps`](#ExecutedSteps) | Interface | stable | The hands' memory of the steps they already ran, keyed by `callId`. |
 | [`ExecuteStep`](#ExecuteStep) | Type | stable | Execute one tool call and produce its result (the consumer's hands). |
 | [`foldApplied`](#foldApplied) | Function | stable | THE FOLD. |
 | [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
@@ -934,6 +936,31 @@ interface EventSourcedStore<S, M> {
 }
 ```
 
+<a id="ExecutedStep"></a>
+
+### `ExecutedStep`
+
+```ts
+interface ExecutedStep<R> {
+  readonly result: R;
+}
+```
+
+<a id="ExecutedSteps"></a>
+
+### `ExecutedSteps`
+
+```ts
+interface ExecutedSteps<R> {
+  /** The box saved for `callId`, or `undefined` if that step never ran. */
+  get(
+    callId: string,
+  ): ExecutedStep<R> | Promise<ExecutedStep<R> | undefined> | undefined;
+  /** Save the box for `callId`. Settled before the result is POSTed. */
+  set(callId: string, step: ExecutedStep<R>): void | Promise<void>;
+}
+```
+
 <a id="ExecuteStep"></a>
 
 ### `ExecuteStep`
@@ -1389,7 +1416,7 @@ function runStepLoop<R, I, O>(
   runId: string,
   transport: StepTransport<R, I, O>,
   execute: ExecuteStep<I, R>,
-  config: RunStepLoopConfig,
+  config: RunStepLoopConfig<R>,
 ): Promise<StepLoopOutcome<O>>
 ```
 
@@ -1398,13 +1425,18 @@ function runStepLoop<R, I, O>(
 ### `RunStepLoopConfig`
 
 ```ts
-interface RunStepLoopConfig {
+interface RunStepLoopConfig<R = never> {
   /**
    * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
    * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
    * absolute-deadline contract (a resumed loop honors the SAME moment).
    */
   readonly deadlineMs: number;
+  /**
+   * Where the hands remember the steps they ran. Defaults to a fresh in-memory
+   * store per drive, which a restart forgets. See runStepLoop.
+   */
+  readonly executed?: ExecutedSteps<R>;
   /** Clock, injected for determinism. Defaults to `Date.now`. */
   readonly now?: () => number;
   /** Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`. */
