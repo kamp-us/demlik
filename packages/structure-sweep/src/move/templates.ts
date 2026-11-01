@@ -19,7 +19,7 @@ const loadsById = (loads: readonly Load[]): ReadonlyMap<string, Load> =>
 
 /**
  * An import whose path is built at run time, read as what never changes: the fixed text around each
- * `${}`. It is never rewritten, so all a move can do to it is change which files it can load.
+ * `${}`. It is never rewritten, so all a move can do to it is change which file a value loads.
  */
 class ImportTemplate {
   /** The specifier as the file spells it, with no backticks. */

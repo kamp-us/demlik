@@ -418,12 +418,12 @@ function isOtherFile(path: string): boolean {
  * written in; heal then fixes any relative specifier still dangling in the renamed tree. Each edit
  * names the path its text was read from, so apply can check git tracks it before committing.
  *
- * With a `workspace` — a manifest moving a file across a package line — the project also holds
- * every workspace package with an importer of a moved file, its tracked JavaScript included, and
- * each import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An
- * import no `exports` entry carries across, and an import a row touches that apply cannot follow to
- * a file, throw before anything is written. So does an import built at run time whose reachable
- * files a row changes (`checkTemplates`), with or without a row crossing a package line.
+ * When `crossing` — a row moves a file across a package line — the project also holds every
+ * workspace package with an importer of a moved file, its tracked JavaScript included, and each
+ * import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An import
+ * no `exports` entry carries across, and an import a row touches that apply cannot follow to a file,
+ * throw before anything is written. So does an import built at run time for which a row changes
+ * which file a value loads (`checkTemplates`), with or without a crossing row.
  */
 function planRewrite(
   repoRoot: string,
@@ -640,9 +640,11 @@ function trackedMatching(
  * whose destination no `exports` entry of its new package reaches, an import a move would carry
  * across a package line to a file no `exports` entry reaches, an import in a file moving across a
  * package line that names no file, a package-name import into a package a row leaves that apply
- * cannot follow to a file, an import built at run time whose reachable files a row changes, an added dependency that closes a cycle between workspace packages, and an
- * added dependency with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees and messages, except that a manifest adding a dependency takes
- * its lockfile from the installed pnpm; one adding none never runs pnpm.
+ * cannot follow to a file, an import built at run time for which a row changes which file a value
+ * loads, an added dependency that closes a cycle between workspace packages, and an added dependency
+ * with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees
+ * and messages, except that a manifest adding a dependency takes its lockfile from the installed
+ * pnpm; one adding none never runs pnpm.
  */
 export function applyManifest(
   repoRoot: string,

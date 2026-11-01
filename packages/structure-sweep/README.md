@@ -552,8 +552,9 @@ Refused before either commit, naming the row and what stops it, with `HEAD` and 
   fixed text against tracked files before and after the move, trying what a written specifier could
   name (no extension, `.js` for `.ts`, a directory's `index`), so a target moved away, an importer
   moved away from its targets, a file moved into its reach and a file moved within a wide
-  `./${path}` are all refused, and a resumed run refuses the same way. `./locale/${lang}.js` moved together with every file it can load, keeping their
-  relative layout, applies with the import unchanged. A package-name start such as
+  `./${path}` are all refused, and a resumed run refuses the same way. `./locale/${lang}.js` moved
+  together with every file it can load, keeping their relative layout, applies with the import
+  unchanged. A package-name start such as
   `@scope/a/${name}` is matched through the names the package gives each file, so a wildcard `exports`
   entry with no source in the tree matches nothing. A path with no fixed start (`${base}/one`), a
   start that only an alias gives meaning (`@/locale/${x}`) or one naming no tracked file changes
