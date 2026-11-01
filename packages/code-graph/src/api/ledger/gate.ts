@@ -2,10 +2,11 @@ import path from "node:path";
 import { findRepoRoot } from "../../extract/project.js";
 import { scopeOf } from "../../ratchet/scope-count.js";
 import { ApiInputError } from "../map.js";
-import { readPublishedApi } from "../view.js";
+import { readMeasuredApi } from "../view.js";
 import {
   API_LEDGER_FILENAME,
   type ApiLedger,
+  prunesEntries,
   publishedNamesOf,
   readApiLedger,
   reconcileApiNames,
@@ -43,16 +44,16 @@ export async function runApiLedger(run: ApiLedgerRun): Promise<ApiLedgerOutcome>
   const file = path.join(repoRoot, API_LEDGER_FILENAME);
   const ledger = readLedgerOrRefuse(file);
   const scope = scopeOf(repoRoot, run.rootAbsolute);
-  const published = await readPublishedApi(run.rootAbsolute, run.map, { repoRoot });
+  const published = await readMeasuredApi(run.rootAbsolute, run.map, { repoRoot });
   const result = reconcileApiNames(ledger, scope, publishedNamesOf(scope, published));
   const { mode } = run;
   if (mode.kind === "accept") {
-    if (result.pruned.length > 0 || result.unrecorded.length > 0) {
+    if (prunesEntries(result) || result.unrecorded.length > 0) {
       writeApiLedger(file, withAcceptedNames(result.kept, result.unrecorded, mode.reason));
     }
     return { payload: `${renderApiLedgerAccept(result, mode.reason, run)}\n`, code: 0 };
   }
-  if (result.pruned.length > 0) writeApiLedger(file, result.kept);
+  if (prunesEntries(result)) writeApiLedger(file, result.kept);
   return {
     payload: `${renderApiLedgerCheck(result, run)}\n`,
     code: result.unrecorded.length === 0 ? 0 : 1,

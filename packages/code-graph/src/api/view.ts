@@ -58,9 +58,11 @@ function readNames(
   }
 }
 
-// What one emit of one tree publishes: the compiler that emitted, and the names per subpath.
+// What one emit of one tree publishes: the compiler that emitted, how many diagnostics it reported,
+// and the names per subpath.
 export type EmittedNames = {
   readonly compiler: string;
+  readonly diagnostics: number;
   readonly names: ReadonlyMap<string, SubpathNames>;
 };
 
@@ -88,10 +90,36 @@ export async function readEmittedNames(
       );
     }
     const entries = emittedEntries(emit, rootAbsolute, subpaths);
-    return { compiler: emit.compiler, names: readNames(tsConfigPath, emit.out, entries) };
+    return {
+      compiler: emit.compiler,
+      diagnostics: emit.diagnostics,
+      names: readNames(tsConfigPath, emit.out, entries),
+    };
   } finally {
     removeEmit(emit);
   }
+}
+
+// The view beside the count of diagnostics its emit reported. The count stays out of `PublishedApi`
+// because `--api` prints that object as it is.
+export type MeasuredApi = { readonly view: PublishedApi; readonly diagnostics: number };
+
+export async function readMeasuredApi(
+  root: string,
+  map: unknown,
+  options: PublishedApiOptions = {},
+): Promise<MeasuredApi> {
+  const rootAbsolute = packageRoot(root);
+  const subpaths = apiSubpaths(rootAbsolute, map);
+  const { compiler, diagnostics, names } = await readEmittedNames(rootAbsolute, subpaths, options);
+  const view: Record<string, PublishedApi["subpaths"][string]> = {};
+  for (const { subpath, entry, tier } of subpaths) {
+    view[subpath] = { entry, tier, names: names.get(subpath) ?? {} };
+  }
+  return {
+    view: { root: projectRelative(rootAbsolute), compiler, subpaths: view },
+    diagnostics,
+  };
 }
 
 // The published-API view of the package at `root` (SPEC §13.3): every name each subpath of `map`
@@ -102,12 +130,5 @@ export async function readPublishedApi(
   map: unknown,
   options: PublishedApiOptions = {},
 ): Promise<PublishedApi> {
-  const rootAbsolute = packageRoot(root);
-  const subpaths = apiSubpaths(rootAbsolute, map);
-  const { compiler, names } = await readEmittedNames(rootAbsolute, subpaths, options);
-  const view: Record<string, PublishedApi["subpaths"][string]> = {};
-  for (const { subpath, entry, tier } of subpaths) {
-    view[subpath] = { entry, tier, names: names.get(subpath) ?? {} };
-  }
-  return { root: projectRelative(rootAbsolute), compiler, subpaths: view };
+  return (await readMeasuredApi(root, map, options)).view;
 }

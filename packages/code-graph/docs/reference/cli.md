@@ -287,8 +287,19 @@ repository. `api-ledger.json` sits at the repo root, beside
   run changes nothing. With no ledger file every published name fails.
 - A run changes only entries of its own scope, but it reads and validates the whole
   file first: a bad entry in any scope exits 2.
+- On a run where the compiler reported errors, nothing is pruned. A name behind a
+  broken `export *` reads exactly like a removed one, so every entry the view does
+  not list stays, and each is printed with a note that the compiler reported errors.
+  New names still fail and can still be accepted. A blank name from a syntax error
+  is neither listed nor recorded.
+- The tradeoff: a type error anywhere in the tsconfig counts, so a package with a
+  standing error never prunes. The entry stays, each run names it, and the first
+  clean run prunes it. A stale entry could let a removed name come back without
+  failing; the gate takes that over losing a written reason.
 - `--json` prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and
-  `{ scope, accepted, pruned, reason }` for `--accept-api`.
+  `{ scope, accepted, pruned, reason }` for `--accept-api`. When the compiler
+  reported errors, `pruned` is `[]` and both add `unmeasured`, the entries kept with
+  their reasons.
 - Exit 2, with one line on stderr and nothing written: `--accept-api` without a
   non-empty `--reason`, with `--ci`, or without `--api`; `--reason` with `--api --ci`;
   either beside `--api-base`, `--api-policy` or any flag other than `--json`,
