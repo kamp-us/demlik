@@ -26,8 +26,9 @@ export type FunctionDiscovery = {
   functions: DiscoveredFunction[];
 };
 
-// Runtime tests (`.test.ts`, `.spec.tsx`) and vitest type tests (`.test-d.ts`, `.spec-d.tsx`).
-const TEST_FILE = /\.(test|spec)(-d)?\.tsx?$/;
+// Runtime tests (`.test.ts`, `.spec.tsx`), vitest type tests (`.test-d.ts`, `.spec-d.tsx`) and
+// compile-only type tests (`.type-test.ts`). The leading dot keeps `load-test.ts` production code.
+const TEST_FILE = /\.((test|spec)(-d)?|type-test)\.tsx?$/;
 
 export function isTestFile(file: string): boolean {
   return TEST_FILE.test(file);
