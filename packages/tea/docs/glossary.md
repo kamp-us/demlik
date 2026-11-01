@@ -180,14 +180,15 @@ Reference: [`replay`](./reference/tea.md#replay). Why:
 The function that starts a machine on an engine. It takes the machine and the
 `ctx`, `interpret`, `subscribe` and `store` the machine needs, and returns a
 handle that is still booting. Each engine exports its own. `run` from
-`@demlik/tea/promise` returns a `BootingRuntime`; `run` from
-`@demlik/tea/effect` returns an Effect that yields an `EffectBootingRuntime`.
+`@demlik/tea/promise` returns a `BootingRun`, a `BootingRuntime` whose `ready`
+gives a `Run`; `run` from `@demlik/tea/effect` returns an Effect that yields an
+`EffectBootingRun`, an `EffectBootingRuntime` whose `ready` gives an `EffectRun`.
 On both, the handle has `dispatch` and `stop`, and its `ready` gives the
-runtime.
+runtime. `tell` takes the runtime, not this handle.
 Reference: [`run` on the Promise engine](./reference/promise.md#run),
 [`run` on the Effect engine](./reference/effect.md#run),
-[`BootingRuntime`](./reference/tea.md#BootingRuntime) and
-[`EffectBootingRuntime`](./reference/effect.md#EffectBootingRuntime). Why:
+[`BootingRun`](./reference/promise.md#BootingRun) and
+[`EffectBootingRun`](./reference/effect.md#EffectBootingRun). Why:
 [what durability actually promises](./explanation/durability-model.md).
 
 ## runtime
@@ -196,9 +197,11 @@ The booted handle for one running machine. `run` does not return it: you get
 it from `ready` on the handle `run` returns, once `init` has run. It keeps that
 handle's `dispatch` and `stop` and adds `getState`, plus `idle` and `done` to
 wait for the machine to go idle or finish. On the Promise engine `ready` is a
-Promise of a `Runtime`, typed in `@demlik/tea`; on the Effect engine it is an
-Effect of an `EffectRuntime`, typed in `@demlik/tea/effect`.
-Reference: [`Runtime`](./reference/tea.md#Runtime) and
+Promise of a `Run`, a `Runtime` that `tell` takes; on the Effect engine it is an
+Effect of an `EffectRun`, an `EffectRuntime` that `tell` takes.
+Reference: [`Run`](./reference/promise.md#Run),
+[`Runtime`](./reference/tea.md#Runtime),
+[`EffectRun`](./reference/effect.md#EffectRun) and
 [`EffectRuntime`](./reference/effect.md#EffectRuntime). Why:
 [what durability actually promises](./explanation/durability-model.md).
 

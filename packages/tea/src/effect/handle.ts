@@ -86,7 +86,10 @@ export interface EffectBootingRuntime<
   stop(): Effect.Effect<void>;
 }
 
-/** The Effect engine's booted handle — what `ready` succeeds with. */
+/**
+ * The Effect engine's booted handle. `ready` on a real run succeeds with an
+ * {@link EffectRun}, which is one of these and carries what `tell` asks for.
+ */
 export interface EffectRuntime<
   S,
   M extends { type: string },
@@ -120,6 +123,38 @@ export interface EffectRuntime<
   done(): Effect.Effect<S, StoreFailed | SubFailed>;
 }
 
+/**
+ * The handle `run` yields: an {@link EffectBootingRuntime} whose `ready` succeeds
+ * with an {@link EffectRun}. It does not compile as `tell`'s argument: wait for
+ * `ready`.
+ */
+export interface EffectBootingRun<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+  Err = never,
+> extends EffectBootingRuntime<S, M, E, Err> {
+  readonly ready: Effect.Effect<EffectRun<S, M, E, Err>, Err | StoreFailed>;
+}
+
+/**
+ * What an {@link EffectBootingRun}'s `ready` succeeds with: a booted
+ * {@link EffectRuntime} that also carries the run's line, which is what `tell`
+ * asks for. A spread keeps the line. An object built by hand cannot have one,
+ * because tea does not export its key, so an {@link EffectRuntime} that is not one
+ * of these does not compile as `tell`'s argument. It fits anywhere an
+ * `EffectRuntime` is asked for.
+ */
+export interface EffectRun<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+  Err = never,
+> extends EffectRuntime<S, M, E, Err>,
+    Postable<S, M> {
+  readonly ready: Effect.Effect<EffectRun<S, M, E, Err>, Err | StoreFailed>;
+}
+
 /** Run a loop call, ending with the typed Exit its rejection maps to. */
 function settled<A, Err>(
   call: () => Promise<A>,
@@ -142,8 +177,8 @@ export function effectHandle<
   Err,
 >(
   loop: Runtime<S, M, E> & LiveWorkProbe & Postable<S, M>,
-): EffectRuntime<S, M, E, Err> & LiveWorkProbe & Postable<S, M> {
-  const handle: EffectRuntime<S, M, E, Err> & LiveWorkProbe & Postable<S, M> = {
+): EffectRun<S, M, E, Err> & LiveWorkProbe {
+  const handle: EffectRun<S, M, E, Err> & LiveWorkProbe = {
     [liveWork]: loop[liveWork],
     [post]: loop[post],
     dispatch: (msg, opts) => settled(() => loop.dispatch(msg, opts)),
@@ -160,7 +195,7 @@ export function effectHandle<
     // Suspended: `handle` is not built yet when this line runs.
     ready: Effect.suspend(() =>
       settled<unknown, Err>(() => loop.ready).pipe(Effect.as(handle)),
-    ) as Effect.Effect<EffectRuntime<S, M, E, Err>, Err | StoreFailed>,
+    ) as Effect.Effect<EffectRun<S, M, E, Err>, Err | StoreFailed>,
     // `idle` rejects only on a livelock, and `stop` never does.
     idle: () => Effect.promise(() => loop.idle()),
     done: () =>

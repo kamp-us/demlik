@@ -1,12 +1,17 @@
-// Type-level test for #568 and #639: `SpawnSteps.notify` cannot fail, because
-// `spawn` runs it on a fiber nothing reads, and `tell` carries no failure, so it
-// goes in bare. Compiled by `pnpm typecheck`; every `@ts-expect-error` must sit
-// on a line that fails.
+// Type-level test for #568, #639 and #782: `SpawnSteps.notify` cannot fail,
+// because `spawn` runs it on a fiber nothing reads, and `tell` carries no failure,
+// so it goes in bare. `tell` takes only the handle `ready` gives, so a `notify`
+// over a hand-built one does not compile. Compiled by `pnpm typecheck`;
+// every `@ts-expect-error` must sit on a line that fails.
 
 import { Effect } from "effect";
 import { defineMachine } from "../index";
 import {
+  type EffectBootingRun,
+  type EffectBootingRuntime,
+  type EffectRun,
   type EffectRuntime,
+  run,
   type SpawnSteps,
   type TellAnswer,
   tell,
@@ -22,7 +27,10 @@ const parent = defineMachine({
   },
 });
 
-declare const parentRun: EffectRuntime<ParentState, ParentMsg>;
+declare const parentRun: EffectRun<ParentState, ParentMsg>;
+declare const fromRun: EffectBootingRun<ParentState, ParentMsg>;
+declare const handBuilt: EffectRuntime<ParentState, ParentMsg>;
+declare const handBuiltBooting: EffectBootingRuntime<ParentState, ParentMsg>;
 const msg = { type: "child_stopped", id: "a" } as const;
 
 const rest = {
@@ -51,4 +59,46 @@ const answered: Effect.Effect<"queued" | "stopped" | "no_cell", never> = tell(
 // A save failure back in the failure channel breaks this line, `answered` and `bare`.
 const named: Effect.Effect<TellAnswer, never> = tell(parent, parentRun, msg);
 
-void [bare, failing, answered, named];
+// One parent, three spawned children, each stop told to the parent: the hand-built
+// parent cannot be written, so no child's notice is lost to it.
+const notices = (["a", "b", "c"] as const).map((id) => ({
+  real: { ...rest, notify: tell(parent, parentRun, { ...msg, id }) },
+  spread: { ...rest, notify: tell(parent, { ...parentRun }, { ...msg, id }) },
+  // @ts-expect-error a parent handle built by hand has no line
+  handBuilt: { ...rest, notify: tell(parent, handBuilt, { ...msg, id }) },
+  // @ts-expect-error a spread of a hand-built parent handle has no line either
+  spreadOfHandBuilt: { notify: tell(parent, { ...handBuilt }, { ...msg, id }) },
+}));
+
+// A handle from `ready`, and a spread of one. A handle from `run` waits for `ready`.
+const fromProgram = Effect.gen(function* () {
+  const booting = yield* run(parent, {});
+  const booted = yield* booting.ready;
+  yield* tell(parent, booted, msg);
+  yield* tell(parent, { ...booted }, msg);
+  // @ts-expect-error a booting handle does not compile: wait for `ready`
+  yield* tell(parent, booting, msg);
+  // @ts-expect-error a spread of a booting handle does not compile either
+  yield* tell(parent, { ...booting }, msg);
+  // A real handle still fits where the plain types are asked for.
+  const plain: EffectRuntime<ParentState, ParentMsg> = booted;
+  const plainBooting: EffectBootingRuntime<ParentState, ParentMsg> = booting;
+  return [plain, plainBooting];
+});
+
+// @ts-expect-error a booting handle does not compile: wait for `ready`
+const fromRunAnswer = tell(parent, fromRun, msg);
+
+// @ts-expect-error a booting handle does not compile: wait for `ready`
+const handBuiltAnswer = tell(parent, handBuiltBooting, msg);
+
+void [
+  bare,
+  failing,
+  answered,
+  named,
+  notices,
+  fromProgram,
+  fromRunAnswer,
+  handBuiltAnswer,
+];

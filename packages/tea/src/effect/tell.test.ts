@@ -21,7 +21,7 @@ import { replay, type Store } from "../index";
 import { memoryStore } from "../mem";
 import {
   type EffectBootingRuntime,
-  type EffectRuntime,
+  type EffectRun,
   run,
   spawn,
   stop,
@@ -75,7 +75,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
 
         interface Child {
           readonly machine: ReturnType<typeof ringChild>;
-          readonly run: EffectRuntime<RingChildState, RingChildMsg>;
+          readonly run: EffectRun<RingChildState, RingChildMsg>;
           readonly log: RingChildMsg[];
           readonly scope: Scope.Closeable;
         }
@@ -343,8 +343,59 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
     );
   });
 
-  it("dies with a defect on a handle that did not come from `run`", async () => {
-    const handBuilt = {} as EffectRuntime<LineState, LineMsg>;
+  it("on a run with no store, the booting handle does not compile and `ready`'s handle queues", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make();
+        const booting = yield* run(line, {
+          interpret: { wait: () => Effect.succeed([] as readonly LineMsg[]) },
+        }).pipe(Scope.provide(scope));
+        void (() => {
+          // @ts-expect-error a booting handle does not compile: wait for `ready`
+          tell(line, booting, ping("early"));
+        });
+
+        const runtime = yield* booting.ready;
+        expect(yield* tell(line, runtime, ping("a"))).toBe("queued");
+        yield* runtime.idle();
+        expect(runtime.getState().folded).toEqual(["a"]);
+        yield* Scope.close(scope, Exit.void);
+      }),
+    );
+  });
+
+  it("on a run whose store is still loading, the booting handle does not compile and answers `no_cell`, and `ready`'s handle queues", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make();
+        const loading = yield* Deferred.make<void>();
+        const inner = memoryStore<LineState>();
+        const store: Store<LineState> = {
+          load: () =>
+            Effect.runPromise(Deferred.await(loading)).then(() => inner.load()),
+          save: (state) => inner.save(state),
+          migrate: (raw) => inner.migrate(raw),
+        };
+        const booting = yield* run(line, {
+          store,
+          interpret: { wait: () => Effect.succeed([] as readonly LineMsg[]) },
+        }).pipe(Scope.provide(scope));
+
+        // @ts-expect-error a booting handle does not compile: wait for `ready`
+        expect(yield* tell(line, booting, ping("early"))).toBe("no_cell");
+
+        yield* Deferred.succeed(loading, undefined);
+        const runtime = yield* booting.ready;
+        expect(yield* tell(line, runtime, ping("a"))).toBe("queued");
+        yield* runtime.idle();
+        expect(runtime.getState().folded).toEqual(["a"]);
+        yield* Scope.close(scope, Exit.void);
+      }),
+    );
+  });
+
+  it("dies with a defect on a handle cast past its type", async () => {
+    const handBuilt = {} as EffectRun<LineState, LineMsg>;
     const exit = await Effect.runPromiseExit(tell(line, handBuilt, ping("a")));
     expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(
       expect.objectContaining({
@@ -369,6 +420,6 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
 // The handle `tell` takes is the booted one, as on the Promise engine.
 declare const booting: EffectBootingRuntime<LineState, LineMsg>;
 void (() => {
-  // @ts-expect-error a booting handle has no State to read yet
+  // @ts-expect-error a booting handle does not compile: wait for `ready`
   tell(line, booting, ping("a"));
 });

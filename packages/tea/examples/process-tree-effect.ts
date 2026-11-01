@@ -1,5 +1,5 @@
 import { Cmd, defineMachine } from "@demlik/tea";
-import { type EffectRuntime, run, spawn, stop, tell } from "@demlik/tea/effect";
+import { type EffectRun, run, spawn, stop, tell } from "@demlik/tea/effect";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { z } from "zod";
 import { type ParentMsg, type ParentState, parent } from "./parent-and-workers";
@@ -73,7 +73,7 @@ export type Processes = Map<string, Process>;
  */
 export const spawnProcess = <E>(
   parentScope: Scope.Scope,
-  parentRun: EffectRuntime<ParentState, ParentMsg>,
+  parentRun: EffectRun<ParentState, ParentMsg>,
   processes: Processes,
   id: string,
   terminal: Layer.Layer<Terminal, E>,

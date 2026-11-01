@@ -11,6 +11,7 @@
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import {
+  type ParentMsg,
   type ParentState,
   parent,
   type WorkerMsg,
@@ -21,6 +22,7 @@ import { defineMachine, type Store } from "../index";
 import { memoryStore } from "../mem";
 import {
   type EffectBootingRuntime,
+  type EffectRun,
   run,
   spawn,
   stop,
@@ -414,6 +416,35 @@ describe("stop", () => {
 });
 
 // === A parent and its children, end to end ===
+
+describe("a parent told by three children it stops", () => {
+  type ParentHandle = EffectRun<ParentState, ParentMsg>;
+  it.each<[string, (handle: ParentHandle) => ParentHandle]>([
+    ["the real handle", (handle) => handle],
+    ["a spread of it", (handle) => ({ ...handle })],
+  ])("every notice told through %s reaches the parent", async (_name, handle) => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { parentScope, parentRun, reports } = yield* openParent();
+        const { notices, start, stopById } = hostOf(parentScope, (id) =>
+          tell(parent, handle(parentRun), stopped(id)),
+        );
+        const ids = ["a", "b", "c"];
+        for (const id of ids) yield* start(id);
+
+        for (const id of ids) yield* stopById(id);
+
+        yield* settled(() =>
+          expect(parentRun.getState()).toEqual({ type: "open", stopped: ids }),
+        );
+        expect(notices.map((n) => n.id)).toEqual(ids);
+        expect(notices.every((n) => Exit.isSuccess(n.exit))).toBe(true);
+        expect(reports).toEqual([]);
+        yield* Scope.close(parentScope, Exit.void);
+      }),
+    );
+  });
+});
 
 describe("a parent and six children on the helpers", () => {
   it("the table holds only live children after every stop, and no notice dies", async () => {

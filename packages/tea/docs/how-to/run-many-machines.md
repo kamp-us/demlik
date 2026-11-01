@@ -71,7 +71,7 @@ This is host code, and it is yours to change. Save it beside the machines as
 ```ts
 import {
   type EffectBootingRuntime,
-  type EffectRuntime,
+  type EffectRun,
   run,
   spawn,
   stop,
@@ -103,7 +103,7 @@ export type Children = Map<string, Child>;
  */
 export const spawnWorker = (
   parentScope: Scope.Scope,
-  parentRun: EffectRuntime<ParentState, ParentMsg>,
+  parentRun: EffectRun<ParentState, ParentMsg>,
   children: Children,
   id: string,
 ): Effect.Effect<Child> =>
@@ -139,7 +139,8 @@ export const stopWorker = (
   which puts `msg` on the parent's line when the parent's State has a cell for
   it, and returns at once. `spawn` runs `notify` on a fiber nothing reads, so
   `notify` is typed to never fail. `tell` carries no failure in its type, so it
-  goes in bare. Hand it the handle `run` gave you, for the reason in
+  goes in bare. `parentRun` is an `EffectRun`, the handle `ready` gives you. The
+  plain `EffectRuntime` does not compile here, for the reason in
   [What the helpers guarantee](#what-the-helpers-guarantee).
 
 `stop(child.scope)` stops that one worker: its run stops, `remove` takes its
@@ -203,7 +204,7 @@ own beside `parent-and-workers.ts`.
 
 ```ts
 import { Cmd, defineMachine } from "@demlik/tea";
-import { type EffectRuntime, run, spawn, stop, tell } from "@demlik/tea/effect";
+import { type EffectRun, run, spawn, stop, tell } from "@demlik/tea/effect";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { z } from "zod";
 import { type ParentMsg, type ParentState, parent } from "./parent-and-workers";
@@ -277,7 +278,7 @@ export type Processes = Map<string, Process>;
  */
 export const spawnProcess = <E>(
   parentScope: Scope.Scope,
-  parentRun: EffectRuntime<ParentState, ParentMsg>,
+  parentRun: EffectRun<ParentState, ParentMsg>,
   processes: Processes,
   id: string,
   terminal: Layer.Layer<Terminal, E>,
@@ -338,6 +339,11 @@ You do not guard any of these in host code.
   is not. `"no_cell"` means the receiver's current State has no cell for it, so
   it is not. Tuval sent a notice the parent no longer took and logged an error
   per spawn ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
+- **`tell` takes only the handle `ready` gives.** That is an `EffectRun`, or a
+  spread of one (`Run` on the Promise engine). It carries the run's line, and the
+  type asks for it. An `EffectRuntime` built by hand does not compile as `tell`'s
+  argument, so a `notify` cannot lose its notice to one. The handle straight from
+  `run` does not compile either, with a store or without one. Wait for `ready`.
 - **Two `tell`s from one sender fold in the order they were sent.**
 - **A Msg whose cell is gone by its turn is dropped without a word.** It does
   not end the process, with or without an `onError`.
@@ -346,11 +352,10 @@ You do not guard any of these in host code.
 
 Four things stay yours:
 
-- **`tell` needs a handle that came from `run`.** A spread of that handle keeps
-  its line. A plain object built by hand has no line, though the type accepts
-  it. On it, `tell` throws on the Promise engine and dies with a defect on the
-  Effect engine. This is the one way `tell` fails. In `notify`, that defect ends
-  the fiber unseen, so the parent is never told.
+- **A cast past `tell`'s type can lose the notice.** A hand-built object cast
+  past it has no line. On it, `tell` throws on the Promise engine and dies with a
+  defect on the Effect engine. This is the one way `tell` fails. In `notify`, that
+  defect ends the fiber unseen, so the parent is never told.
 - **`"no_cell"` reads the State as it is now.** Msgs already on the line have
   not folded yet. A Msg that only a queued one makes acceptable answers
   `"no_cell"`, so wait for the first one's result before sending the second.
