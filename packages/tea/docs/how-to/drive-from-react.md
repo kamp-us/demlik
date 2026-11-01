@@ -139,7 +139,37 @@ const [state, dispatch] = useMachine(downloader, {
 });
 ```
 
-## 4. Render a run the component does not own
+## 4. Know what happens under Strict Mode and `<Activity>`
+
+React runs an effect's cleanup without the component going away in two cases.
+`useMachine` holds up in both, on the engine you handed it.
+
+**Strict Mode** runs each effect, its cleanup, then the effect again on mount.
+That does nothing here: one run starts, `run` is called once, and each Sub starts
+once. The hook starts the run in an effect, so a render that React repeats or
+throws away starts nothing.
+
+**`<Activity>`** runs the cleanups on hide and the effects again on show. So:
+
+- **On hide**, the run stops as it does on an unmount: every Sub's cleanup runs
+  and the final save happens.
+- **On show**, a new run starts at the State the last one ended on. `state` keeps
+  its value, on a machine with a `store` and on one without. `init` is not called
+  again, so its Cmds do not run again. With a `store`, the new run also reads and
+  saves it, as any run does at boot, and keeps the State it was handed.
+- **`dispatch` stays the same function**, so a handler a child kept from before
+  the hide still works after the show. A Msg dispatched while hidden waits for
+  the show, and its promise settles once the Msg is folded.
+
+A Cmd still in flight at the hide is lost, as it is on an unmount. `stop()` waits
+for its handler, refuses the Msg it returns, and reports the loss under
+`phase: "discard"`. A machine in a "loading" State stays there after the show, so
+if it can be hidden mid-Cmd, give it a Msg or a Sub that starts the work again.
+
+After a real unmount, a held Msg and any later `dispatch` reject with
+`@demlik/tea: runtime stopped`.
+
+## 5. Render a run the component does not own
 
 `useMachine` builds the run and stops it on unmount, and it hands back no
 handle. When you need the handle itself (to call `done()`, attach an `observe`
