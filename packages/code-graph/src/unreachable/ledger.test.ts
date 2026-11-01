@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { type UnreachableFindingKind, UnreachableFindingKindSchema } from "../schema.js";
 import {
   parseUnreachableLedger,
   reconcileUnreachable,
@@ -123,6 +124,88 @@ describe("reconcileUnreachable", () => {
     );
     expect(atPackage.unrecorded).toEqual([]);
     expect(atPackage.pruned).toEqual([]);
+  });
+
+  describe("across two scopes, by what the narrower scope holds", () => {
+    const ALL: readonly UnreachableFindingKind[] = UnreachableFindingKindSchema.options;
+    const of = (scope: string, kind: UnreachableFindingKind, id: string): UnreachableFinding => ({
+      scope,
+      kind,
+      id,
+    });
+
+    it.each<[UnreachableFindingKind, UnreachableFindingKind, boolean]>([
+      ["dead", "dead", true],
+      ["dead", "only-called-from-tests", true],
+      ["dead", "unused-export", true],
+      ["only-called-from-tests", "dead", false],
+      ["only-called-from-tests", "only-called-from-tests", true],
+      ["only-called-from-tests", "unused-export", false],
+      ["unused-export", "dead", false],
+      ["unused-export", "only-called-from-tests", false],
+      ["unused-export", "unused-export", true],
+    ])("narrower %s, wider %s: covered is %s, whichever one is the entry", (narrow, wide, covered) => {
+      const inPackage = of("packages/a", narrow, "src/x.ts:x");
+      const atRoot = of(".", wide, "packages/a/src/x.ts:x");
+
+      const rootRun = reconcileUnreachable(recorded(inPackage), ".", [atRoot], ALL);
+      expect(rootRun.unrecorded).toEqual(covered ? [] : [atRoot]);
+      expect(rootRun.pruned).toEqual([]);
+
+      const packageRun = reconcileUnreachable(recorded(atRoot), "packages/a", [inPackage], ALL);
+      expect(packageRun.unrecorded).toEqual(covered ? [] : [inPackage]);
+      expect(packageRun.pruned).toEqual([]);
+    });
+
+    it("reads a nested scope that is not the root the same way", () => {
+      const result = reconcileUnreachable(
+        recorded(testOnly("packages/a/src", "x.ts:x")),
+        "packages/a",
+        [dead("packages/a", "src/x.ts:x")],
+        ALL,
+      );
+      expect(result.unrecorded).toEqual([dead("packages/a", "src/x.ts:x")]);
+    });
+
+    it("fails a root --dead-only run on a dead symbol a package recorded as test-only", () => {
+      const result = reconcileUnreachable(
+        recorded(testOnly("packages/a", "src/x.ts:x")),
+        ".",
+        [dead(".", "packages/a/src/x.ts:x")],
+        ["dead"],
+      );
+      expect(result.unrecorded).toEqual([dead(".", "packages/a/src/x.ts:x")]);
+    });
+
+    it("passes a kind change at one of two recording scopes and fails it at the other", () => {
+      const both = recorded(dead(".", "packages/a/src/x.ts:x"), dead("packages/a", "src/x.ts:x"));
+      const gainedTest = reconcileUnreachable(
+        both,
+        ".",
+        [testOnly(".", "packages/a/src/x.ts:x")],
+        ALL,
+      );
+      expect(gainedTest.unrecorded).toEqual([]);
+      expect(gainedTest.pruned).toEqual([
+        { ...dead(".", "packages/a/src/x.ts:x"), reason: "kept" },
+      ]);
+      expect(
+        reconcileUnreachable(both, "packages/a", [testOnly("packages/a", "src/x.ts:x")], ALL)
+          .unrecorded,
+      ).toEqual([testOnly("packages/a", "src/x.ts:x")]);
+
+      const bothTested = recorded(
+        testOnly(".", "packages/a/src/x.ts:x"),
+        testOnly("packages/a", "src/x.ts:x"),
+      );
+      expect(
+        reconcileUnreachable(bothTested, "packages/a", [dead("packages/a", "src/x.ts:x")], ALL)
+          .unrecorded,
+      ).toEqual([]);
+      expect(
+        reconcileUnreachable(bothTested, ".", [dead(".", "packages/a/src/x.ts:x")], ALL).unrecorded,
+      ).toEqual([dead(".", "packages/a/src/x.ts:x")]);
+    });
   });
 
   it("does not let another scope's entry of another symbol cover a finding", () => {

@@ -236,6 +236,61 @@ describe(
       }
     });
 
+    it("fails the root run on a symbol a package recorded as test-only once its test is gone", () => {
+      for (const name of PACKAGES) {
+        expect(
+          runCli([at("packages", name), "--unreachable", "--accept-dead", "--reason", "x"]).code,
+        ).toBe(0);
+      }
+      const ledger = fs.readFileSync(at("unreachable-ledger.json"), "utf8");
+      expect(JSON.parse(ledger).entries).toContainEqual(
+        expect.objectContaining({
+          scope: "packages/a",
+          kind: "only-called-from-tests",
+          id: "src/tested.ts:testeda",
+        }),
+      );
+      expect(unreachableCi(top).code).toBe(0);
+
+      fs.rmSync(at("packages", "a", "src", "tested.test.ts"));
+
+      const nowDead = { scope: ".", kind: "dead", id: "packages/a/src/tested.ts:testeda" };
+      for (const gate of [[], ["--dead-only"]]) {
+        for (let round = 0; round < 2; round++) {
+          const run = runCli([top, "--unreachable", "--ci", ...gate, "--json"]);
+          expect(run.code).toBe(1);
+          expect(JSON.parse(run.stdout).unrecorded).toEqual([nowDead]);
+        }
+      }
+      expect(fs.readFileSync(at("unreachable-ledger.json"), "utf8")).toBe(ledger);
+    });
+
+    it("covers an unused-export the root measures on a package's dead entry", () => {
+      // `b`'s public entry calls `lone`, which calls `leaf`. `c` alone reads `leaf` as dead. The root
+      // reaches it, and no other file uses the export.
+      write({
+        "packages/c/src/lone.ts":
+          "export function lone(n: number): number {\n  return leaf(n);\n}\n\nexport function leaf(n: number): number {\n  return n + 4;\n}\n",
+        "packages/b/package.json": '{ "name": "b", "private": true, "main": "src/api.ts" }\n',
+        "packages/b/src/api.ts":
+          'import { lone } from "../../c/src/lone.js";\n\nexport function api(n: number): number {\n  return lone(n);\n}\n',
+      });
+      for (const name of PACKAGES) {
+        expect(
+          runCli([at("packages", name), "--unreachable", "--accept-dead", "--reason", "x"]).code,
+        ).toBe(0);
+      }
+      const entries = JSON.parse(fs.readFileSync(at("unreachable-ledger.json"), "utf8")).entries;
+      expect(entries).toContainEqual(
+        expect.objectContaining({ scope: "packages/c", kind: "dead", id: "src/lone.ts:leaf" }),
+      );
+      const measured = JSON.parse(runCli([top, "--unreachable", "--json"]).stdout);
+      expect(measured.unusedExports).toContainEqual(
+        expect.objectContaining({ id: "packages/c/src/lone.ts:leaf" }),
+      );
+      expect(unreachableCi(top).code).toBe(0);
+    });
+
     it("reads an entry the root run recorded from a package run", () => {
       expect(runCli([top, "--unreachable", "--accept-dead", "--reason", "x"]).code).toBe(0);
       expect(unreachableCi(top).code).toBe(0);

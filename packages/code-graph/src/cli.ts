@@ -128,7 +128,7 @@ function analysisOptions(command: Command): Command {
     )
     .option(
       "--accept-dead",
-      'with --unreachable: add every finding unreachable-ledger.json does not name yet for this scope (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
+      'with --unreachable: add every finding of this scope unreachable-ledger.json does not record yet, counting an entry of another scope that covers it (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
     )
     .option(
       "--dead-only",

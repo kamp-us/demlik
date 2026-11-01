@@ -439,29 +439,39 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   in `*` makes every file below it public), and what those re-export. See
   [Unused exports](./analyses.md#unused-exports).
 - `--unreachable --accept-dead --reason "<why>"` adds every finding of this scope
-  that the ledger does not name yet. It also drops this scope's entries whose
+  that the ledger does not record yet. It also drops this scope's entries whose
   finding is gone.
 - `--unreachable --ci` exits 1 on a finding of this run that the ledger does not
-  name, and lists each one. It never fails on an entry whose finding is gone: it
+  record, and lists each one. It never fails on an entry whose finding is gone: it
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
-- A finding counts as recorded when an entry of its own scope names the same kind
-  and symbol, or an entry of another scope names the same symbol at any kind.
-  `packages/core` with `src/x.ts:f` and `.` with `packages/core/src/x.ts:f` are one
-  symbol, so `code-graph .` and `code-graph packages/core` read one entry the same
-  way. The kind may differ because a run on a package alone cannot see a caller in
-  another package: an export only another package's test calls is `dead` there and
-  `only-called-from-tests` at the root, and one entry covers both. For the same
+- A finding counts as recorded when an entry in any scope names the same symbol at
+  the same kind, or an entry of another scope names the same symbol and the
+  narrower of the two scopes holds `dead`. `packages/core` with `src/x.ts:f` and `.`
+  with `packages/core/src/x.ts:f` are one symbol, so `code-graph .` and
+  `code-graph packages/core` read one entry the same way. The kinds may differ this
+  way because a run on a package alone cannot see a caller in another package: an
+  export only another package's test calls is `dead` there and
+  `only-called-from-tests` at the root, and one entry covers both. Any other split
+  counts as a code change: a package's `only-called-from-tests` entry does not cover
+  a `dead` finding at the root, because the root sees that test too. For the same
   reason a package run can find what the root does not.
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an
   `only-called-from-tests` or `unused-export` finding neither fails the run nor
-  is pruned.
+  is pruned. It reads entries by the same rule, so a package run's `dead` finding
+  is covered by a root entry of `only-called-from-tests`, and a root run's is not
+  covered by a package's.
 - Upgrading past 0.12.0 can turn an existing `--unreachable --ci` run red: the
   `unused-export` findings it now measures are not in the ledger yet. Record them
   once with `--accept-dead --reason`, or drop their `export` keywords.
-- A finding whose kind changes within one scope is a new finding, and its old
-  entry is pruned.
+- A finding whose kind changes is a new finding unless an entry of another scope
+  covers it, and its old entry is pruned either way. So one run can pass a change
+  another run fails. A root run cannot tell a test added to a symbol a package
+  recorded as `dead` from a test that was always in another package, so it passes
+  and that package's own run fails. If `.` and `packages/core` both record a symbol
+  as `only-called-from-tests` and its only test is deleted, `packages/core` passes
+  and `.` fails.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
   `test-support-surface`, `called-by-withheld`) are not findings and never enter
   the ledger.

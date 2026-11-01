@@ -134,13 +134,35 @@ function repoSymbol(finding: UnreachableFinding): string {
   return path.posix.join(finding.scope, finding.id);
 }
 
-// What one run found against the ledger. A finding is recorded by an entry of its own scope with the
-// same kind, or by an entry of another scope with the same symbol at any kind: a run over a different
-// scope sees different callers, so `packages/a` measures `dead` where the root, seeing a test in
-// `packages/b`, measures `only-called-from-tests`. In its own scope a changed kind is a new finding.
-// Only the entries of the analyzed scope and of a gated kind can be pruned: `pruned` are those whose
-// finding is gone, and `kept` is the ledger without them. An entry of another scope is kept as it is,
-// since that run's callers are not this run's and so this run cannot say its finding is gone.
+// Whether an entry records a finding of the same symbol. The same kind always does, and within one
+// scope nothing else does. Across two scopes a wider run sees every caller a narrower run sees and
+// more, so a narrower `dead` can be anything wider: `packages/a` measures `dead` where the root, seeing
+// a test in `packages/b`, measures `only-called-from-tests`. Any other narrower kind means that run saw
+// a caller or a use the wider run sees too, so a split there is a code change and does not count. Two
+// scopes naming one symbol both hold its file, so one sits inside the other.
+function covers(entry: UnreachableLedgerEntry, finding: UnreachableFinding): boolean {
+  if (entry.kind === finding.kind) return true;
+  if (entry.scope === finding.scope) return false;
+  const entryIsNarrower = finding.scope === "." || entry.scope.startsWith(`${finding.scope}/`);
+  return (entryIsNarrower ? entry : finding).kind === "dead";
+}
+
+function entriesBySymbol(
+  entries: readonly UnreachableLedgerEntry[],
+): ReadonlyMap<string, readonly UnreachableLedgerEntry[]> {
+  const bySymbol = new Map<string, UnreachableLedgerEntry[]>();
+  for (const entry of entries) {
+    const symbol = repoSymbol(entry);
+    bySymbol.set(symbol, [...(bySymbol.get(symbol) ?? []), entry]);
+  }
+  return bySymbol;
+}
+
+// What one run found against the ledger. A finding is recorded when an entry naming its symbol
+// `covers` it. Only the entries of the analyzed scope and of a gated kind can be pruned: `pruned` are
+// those whose finding is gone, and `kept` is the ledger without them. An entry of another scope is
+// kept as it is, since that run's callers are not this run's and so this run cannot say its finding
+// is gone.
 export type UnreachableReconciliation = {
   readonly scope: string;
   readonly gated: readonly UnreachableFindingKind[];
@@ -160,14 +182,11 @@ export function reconcileUnreachable(
   const isGated = (finding: UnreachableFinding) => gated.includes(finding.kind);
   const measured = findings.filter(isGated);
   const measuredKeys = new Set(measured.map(findingKey));
-  const entryKeys = new Set(ledger.entries.map(findingKey));
-  const otherScopeSymbols = new Set(
-    ledger.entries.filter((entry) => entry.scope !== scope).map(repoSymbol),
-  );
+  const bySymbol = entriesBySymbol(ledger.entries);
   const gone = (entry: UnreachableLedgerEntry) =>
     entry.scope === scope && isGated(entry) && !measuredKeys.has(findingKey(entry));
   const unrecorded = measured.filter(
-    (finding) => !entryKeys.has(findingKey(finding)) && !otherScopeSymbols.has(repoSymbol(finding)),
+    (finding) => !bySymbol.get(repoSymbol(finding))?.some((entry) => covers(entry, finding)),
   );
   return {
     scope,
