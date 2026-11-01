@@ -63,6 +63,7 @@ describe("ratchetApiDiff — the verdict (SPEC §13.5)", () => {
       changesets: [],
       highestBump: "none",
       calloutFound: false,
+      otherMarkersFound: [],
       misses: [],
     });
   });
@@ -101,6 +102,60 @@ describe("ratchetApiDiff — the verdict (SPEC §13.5)", () => {
       highestBump: "minor",
       calloutFound: true,
       changesets: [".changeset/a.md", ".changeset/b.md"],
+    });
+  });
+
+  describe("a rule with a second marker", () => {
+    const second = {
+      callout: "**Breaking",
+      tiers: {
+        stable: {
+          added: { bump: "minor" },
+          changed: { bump: "minor", callout: { or: "**Additive" } },
+          removed: { bump: "minor", callout: true },
+        },
+      },
+    };
+    const removedStable = diffOf({
+      ".": subpath("stable", { removed: { gone: { before: text("a") } } }),
+    });
+
+    it("is met by either marker, from any counted file", () => {
+      for (const body of ["**Breaking: x", "**Additive: x"]) {
+        expect(ratchetApiDiff(changedStable, second, since(file("minor", body))).passed).toBe(true);
+      }
+    });
+
+    it("is not met by neither, and still owes its bump", () => {
+      expect(ratchetApiDiff(changedStable, second, since(file("minor"))).passed).toBe(false);
+      expect(ratchetApiDiff(changedStable, second, since(file("patch", "**Additive"))).passed).toBe(
+        false,
+      );
+    });
+
+    it("does not meet another kind's rule that asks only for the callout", () => {
+      const verdict = ratchetApiDiff(removedStable, second, since(file("minor", "**Additive")));
+      expect(verdict.passed).toBe(false);
+      expect(verdict.misses[0]?.needs).toEqual({ bump: "minor", callout: true });
+    });
+
+    it("reports what it found without counting it as the callout", () => {
+      const verdict = ratchetApiDiff(changedStable, second, since(file("minor", "**Additive: x")));
+      expect(verdict).toMatchObject({ calloutFound: false, otherMarkersFound: ["**Additive"] });
+    });
+
+    it("lists a second marker the default row names, once and sorted", () => {
+      const many = {
+        ...second,
+        tiers: { ...second.tiers, again: second.tiers.stable },
+        default: { ...second.tiers.stable, changed: { bump: "minor", callout: { or: "**Added" } } },
+      };
+      const verdict = ratchetApiDiff(
+        changedStable,
+        many,
+        since(file("minor", "**Additive and **Added")),
+      );
+      expect(verdict.otherMarkersFound).toEqual(["**Added", "**Additive"]);
     });
   });
 
@@ -177,6 +232,20 @@ describe("BumpPolicySchema", () => {
     ["an empty marker", { callout: "", tiers: {} }],
     ["a row missing a change kind", { callout: "!", tiers: { s: { added: { bump: "none" } } } }],
     ["an unknown bump", { callout: "!", tiers: { s: row("huge") } }],
+    [
+      "an empty second marker",
+      {
+        callout: "!",
+        tiers: { s: { ...row("none"), changed: { bump: "none", callout: { or: "" } } } },
+      },
+    ],
+    [
+      "an unknown key beside a second marker",
+      {
+        callout: "!",
+        tiers: { s: { ...row("none"), changed: { bump: "none", callout: { or: "x", y: 1 } } } },
+      },
+    ],
     [
       "an unknown rule key",
       { callout: "!", tiers: { s: { ...row("none"), added: { bump: "none", note: 1 } } } },

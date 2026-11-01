@@ -173,6 +173,22 @@ describe.runIf(BASE === undefined)("bump policy", () => {
     expect(judge(tier, "added", [changeset("minor", PLAIN)]).passed).toBe(true);
   });
 
+  it.each([
+    "stable",
+    "battery",
+  ] as const)("the additive marker meets a %s changed name and no removed one", (tier) => {
+    const additive = "**Additive (declaration only):** `make` takes `size`.";
+    expect(judge(tier, "changed", [changeset("minor", additive)]).passed).toBe(
+      true,
+    );
+    expect(judge(tier, "changed", [changeset("patch", additive)]).passed).toBe(
+      false,
+    );
+    expect(judge(tier, "removed", [changeset("minor", additive)]).passed).toBe(
+      false,
+    );
+  });
+
   it("an experimental change of any kind needs a changeset of any bump", () => {
     for (const kind of ["added", "changed", "removed"] as const) {
       expect(judge("experimental", kind, []).passed).toBe(false);
@@ -200,7 +216,7 @@ describe.runIf(BASE === undefined)("verdict text", () => {
 
     expect(text).toBe(
       [
-        'api-ratchet: expectCmdEmitted in ./testing (stable) changed — needs a minor changeset with a "**Breaking" callout; found no changeset',
+        'api-ratchet: expectCmdEmitted in ./testing (stable) changed — needs a minor changeset with a "**Breaking" or "**Additive (declaration only)" callout; found no changeset',
         "  before:",
         `    ${BEFORE.text}`,
         "  after:",

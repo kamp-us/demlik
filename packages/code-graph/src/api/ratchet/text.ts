@@ -1,6 +1,6 @@
 import type { ApiEntryText } from "../read.js";
 import type { BumpRule } from "./policy.js";
-import type { ApiRatchetMiss, ApiRatchetVerdict } from "./verdict.js";
+import { type ApiRatchetMiss, type ApiRatchetVerdict, calloutMet } from "./verdict.js";
 
 // What the human verdict says beyond the verdict itself: how many changes the diff reported, and
 // the policy's callout marker.
@@ -26,12 +26,14 @@ function entryLines(label: string, entry: ApiEntryText | null): readonly string[
 
 function needText(needs: BumpRule, callout: string): string {
   const bump = needs.bump === "none" ? "a changeset" : `a ${needs.bump} changeset`;
-  return needs.callout ? `${bump} with a ${JSON.stringify(callout)} callout` : bump;
+  if (needs.callout === false) return bump;
+  const markers = needs.callout === true ? [callout] : [callout, needs.callout.or];
+  return `${bump} with a ${markers.map((marker) => JSON.stringify(marker)).join(" or ")} callout`;
 }
 
 function foundText(verdict: ApiRatchetVerdict, needs: BumpRule): string {
   if (verdict.highestBump === "none" || !needs.callout) return verdict.highestBump;
-  return `${verdict.highestBump} with ${verdict.calloutFound ? "the" : "no"} callout`;
+  return `${verdict.highestBump} with ${calloutMet(needs, verdict) ? "the" : "no"} callout`;
 }
 
 function missLines(
@@ -48,13 +50,18 @@ function missLines(
   ];
 }
 
+function passCalloutText(verdict: ApiRatchetVerdict): string {
+  if (verdict.calloutFound) return "callout found";
+  if (verdict.otherMarkersFound.length === 0) return "no callout";
+  return `${verdict.otherMarkersFound.map((marker) => JSON.stringify(marker)).join(", ")} found`;
+}
+
 // The human verdict (SPEC §13.5): one line on a pass; on a miss, one block per missing change
 // with its before and after text, then a summary line.
 export function renderApiRatchet(verdict: ApiRatchetVerdict, context: VerdictContext): string {
   const base = verdict.base.slice(0, SHORT_SHA);
   if (verdict.passed) {
-    const callout = verdict.calloutFound ? "callout found" : "no callout";
-    return `API RATCHET: pass — ${counted(context.changes)} against ${base}, highest changeset bump ${verdict.highestBump}, ${callout}\n`;
+    return `API RATCHET: pass — ${counted(context.changes)} against ${base}, highest changeset bump ${verdict.highestBump}, ${passCalloutText(verdict)}\n`;
   }
   const blocks = verdict.misses.flatMap((miss) => missLines(miss, verdict, context.callout));
   const verb = verdict.misses.length === 1 ? "misses its" : "miss their";

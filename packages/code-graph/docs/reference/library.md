@@ -205,12 +205,16 @@ its arguments. `policy` is the bump policy, parsed through `BumpPolicySchema`
 before use:
 `{ callout, tiers: { "<tier>": { added, changed, removed } }, default? }`, each
 rule `{ bump, callout? }` with `bump` one of `none`, `patch`, `minor` and
-`major`. The library holds no policy of its own. The verdict has `passed`,
-`base`, `package`, the counted `changesets`, `highestBump`, `calloutFound` and
-`misses`, sorted by subpath, then name, each with `subpath`, `tier`, `name`,
-`kind`, `needs`, `before` and `after`. An invalid policy throws
-`ApiInputError`, and so does a changed name whose tier the policy gives no row
-and no `default`.
+`major`, and `callout` one of `false`, `true` and `{ or: "<second marker>" }`.
+The library holds no policy of its own. The verdict has `passed`, `base`,
+`package`, the counted `changesets`, `highestBump`, `calloutFound`,
+`otherMarkersFound` and `misses`, sorted by subpath, then name, each with
+`subpath`, `tier`, `name`, `kind`, `needs`, `before` and `after`. An invalid
+policy throws `ApiInputError`, and so does a changed name whose tier the policy
+gives no row and no `default`.
+
+`calloutMet(rule, verdict)` says whether a rule's callout is met by the markers
+a verdict found, for a caller that prints its own verdict.
 
 ```ts
 import {
