@@ -681,7 +681,13 @@ describe("a check that says why", () => {
 describe("what a run hands back", () => {
   it.each(RUNNERS)("%s returns its counts on a pass", (_name, run) => {
     expect(run(guarded, { loaded: savedStates, seed: 7, numRuns: 25 })).toEqual(
-      { numRuns: 25, numShrinks: 0, seed: 7, path: null },
+      {
+        numRuns: 25,
+        numShrinks: 0,
+        seed: 7,
+        path: null,
+        msgCounts: expect.any(Map),
+      },
     );
   });
 
@@ -698,6 +704,7 @@ describe("what a run hands back", () => {
         numShrinks: 0,
         seed: 0,
         path: null,
+        msgCounts: new Map(),
       } satisfies PropertyRun).sort(),
     );
     expect(failure.run.numRuns).toBeGreaterThan(0);

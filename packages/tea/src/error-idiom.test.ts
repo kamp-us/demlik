@@ -113,6 +113,7 @@ const thrownCases: readonly ThrownCase[] = [
         numShrinks: 0,
         seed: 1,
         path: "0",
+        msgCounts: new Map(),
       }),
     ctor: PropertyFailure,
     tag: "PropertyFailure",

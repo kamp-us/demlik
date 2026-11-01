@@ -12,6 +12,7 @@
 // settings. A passing run returns a `PropertyRun`; a failing run throws a
 // `PropertyFailure` carrying that same `PropertyRun` under fast-check's own
 // report, plus a check's reason when fast-check filed that reason in `cause`.
+// `failOnNeverActed` throws one too, naming the Msg types a clean run never acted on.
 //
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
 // prefix shrinkers can be layered later but are opt-in, not default. The
@@ -20,7 +21,8 @@
 // ---------------------------------------------------------------------------
 
 import * as fc from "fast-check";
-import type { Cmd, Machine, Sub } from "../../index";
+import { type Cmd, type Machine, msgKeysOf, type Sub } from "../../index";
+import { type MsgCount, MsgTally } from "./msg-tally";
 import { foldEvents, type Step } from "./replay-fold";
 
 /**
@@ -51,6 +53,23 @@ interface PropertyOpts<S> extends ForwardedSettings {
    * hands back on a fresh start, which boots the machine fresh.
    */
   readonly loaded?: S | null | fc.Arbitrary<S | null>;
+  /**
+   * Fail a run whose laws all held when a Msg type never acted, naming each such
+   * type, so a cut path can't stay green. Default `false`. Draw long lists with
+   * `arbMsgSequence(msgArb, { size: "max" })`: short ones may never reach a healthy
+   * machine's deep states, and this fails on those too.
+   *
+   * This stays out of any run with a non-empty `path`, so drop `path` to have it
+   * check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A
+   * path with no colon, such as `"3"`, is what a failure with no shrinks reports, and
+   * it is no replay once that failure is gone: fast-check draws a full `numRuns` of
+   * lists starting from that one, and a cut path reads green. `path: ""` is no path
+   * to fast-check, so this applies there.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
+   * "acted" unreadable, so this fails the run saying so.
+   */
+  readonly failOnNeverActed?: boolean;
 }
 
 /** The `foldEvents` result a runner's `check` inspects. */
@@ -75,9 +94,21 @@ export interface PropertyRun {
   /**
    * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
    * that one failure. `null` when no list failed: on a pass, on an interrupt
-   * marked as a failure, or when too many `fc.pre` skips fail the run.
+   * marked as a failure, when too many `fc.pre` skips fail the run, or when
+   * `failOnNeverActed` fails it.
    */
   readonly path: string | null;
+  /**
+   * What the run's lists did, per Msg type: every type the machine has a cell for,
+   * then any other that was drawn. A type never drawn reads zero. On a failure this
+   * stops at the failing list, so shrinking adds nothing, and a list skipped with
+   * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
+   * though `numRuns` includes it: its fold hands back no steps to count.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
+   * as acted whenever a cell returned a new object.
+   */
+  readonly msgCounts: ReadonlyMap<string, MsgCount>;
 }
 
 /**
@@ -87,7 +118,8 @@ export interface PropertyRun {
  * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
  * in the message by default and in `cause` with `errorWithCause`. A reason the check
  * returned is always in the message: when it went to `cause`, the message is the
- * report plus a `reason:` line.
+ * report plus a `reason:` line. A run that `failOnNeverActed` fails broke no list,
+ * so fast-check has no report: the message names the Msg types instead.
  *
  * @example
  * ```ts
@@ -205,12 +237,13 @@ function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
  * so a check's reason is added to the report there. The thrown error is the one
  * from the shrunk list, so the reason always describes the list printed beside it.
  */
-function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
+function settle<Ts>(details: fc.RunDetails<Ts>, tally: MsgTally): PropertyRun {
   const run: PropertyRun = {
     numRuns: details.numRuns,
     numShrinks: details.numShrinks,
     seed: details.seed,
     path: details.counterexamplePath,
+    msgCounts: tally.counts,
   };
   const report = fc.defaultReportMessage(details);
   if (report === undefined) return run;
@@ -226,6 +259,31 @@ function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
 }
 
 /**
+ * Fail a run whose laws all held when a Msg type never acted. No single list broke
+ * this, so there is no shrunk list to show: the report names the types, and the
+ * seed draws the same lists again.
+ */
+function assertEveryTypeActed(run: PropertyRun, tally: MsgTally): void {
+  const { refusal, neverActed } = tally;
+  const ranOver = `after ${run.numRuns} runs, seed ${run.seed}`;
+  if (refusal !== null) {
+    const why = refusal instanceof Error ? refusal.message : String(refusal);
+    throw new PropertyFailure(
+      `Property failed ${ranOver}: failOnNeverActed can't tell what acted, because a state isn't plain data.\n\n${why}`,
+      run,
+    );
+  }
+  if (neverActed.length === 0) return;
+  const named = neverActed.map(
+    ([type, { drawn }]) => `  ${type} (drawn ${drawn})`,
+  );
+  throw new PropertyFailure(
+    `Property failed ${ranOver}: ${neverActed.length} Msg type(s) never acted:\n${named.join("\n")}`,
+    run,
+  );
+}
+
+/**
  * The fold+check core every runner shares: run `check` over each generated Msg
  * sequence, folded once through the machine via `foldEvents`. `check` throws on
  * failure so the error message carries the offending shape into fast-check's
@@ -233,6 +291,11 @@ function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
  *
  * A fixed `loaded` keeps a one-argument property, so a seed draws what it always
  * drew. An arbitrary `loaded` draws as a second argument.
+ *
+ * A list counts once its fold has finished. A `fc.pre` skip adds nothing, as it
+ * adds nothing to `numRuns`. Any other throw is the run's failure, so nothing after
+ * that list is counted. A check's throw still counts its list, but a reducer's adds
+ * nothing, though `numRuns` includes that list: `foldEvents` hands back no steps.
  */
 function runProperty<
   S,
@@ -247,25 +310,46 @@ function runProperty<
   opts: PropertyOpts<S> | undefined,
   check: (result: FoldResult<S, M, C>) => void,
 ): PropertyRun {
-  const { loaded, ...settings } = opts ?? {};
+  const { loaded, failOnNeverActed, ...settings } = opts ?? {};
   const params = { ...settings, numRuns: settings.numRuns ?? 200 };
-  return isArbitrary(loaded)
+  const tally = new MsgTally(msgKeysOf(machine));
+  const runList = (msgs: readonly M[], start: S | null): void => {
+    let steps: readonly Step<S, M, C>[] = [];
+    try {
+      const result = foldEvents(machine, ctx, start, msgs);
+      steps = result.steps;
+      check(result);
+    } catch (error) {
+      if (!fc.PreconditionFailure.isFailure(error)) {
+        tally.add(steps);
+        tally.close();
+      }
+      throw error;
+    }
+    tally.add(steps);
+  };
+  const run = isArbitrary(loaded)
     ? settle(
         fc.check(
           fc.property(seqArb, loaded, (msgs, drawn) => {
-            check(foldEvents(machine, ctx, drawn, msgs));
+            runList(msgs, drawn);
           }),
           params,
         ),
+        tally,
       )
     : settle(
         fc.check(
           fc.property(seqArb, (msgs) => {
-            check(foldEvents(machine, ctx, loaded ?? null, msgs));
+            runList(msgs, loaded ?? null);
           }),
           params,
         ),
+        tally,
       );
+  const hasPath = Boolean(settings.path);
+  if (failOnNeverActed && !hasPath) assertEveryTypeActed(run, tally);
+  return run;
 }
 
 /**

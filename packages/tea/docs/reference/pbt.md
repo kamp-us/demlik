@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (15)
+## Exports (16)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -19,6 +19,7 @@ import { … } from "@demlik/tea/pbt";
 | [`arbRecordMsg`](#arbRecordMsg) | Function | stable | Build a record-shaped Msg variant arbitrary. |
 | [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, and the final state. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
+| [`MsgCount`](#MsgCount) | Interface | stable | What a property run's lists did with one Msg type. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
 | [`PropertyFailure`](#PropertyFailure) | Class | stable | Raised when a property fails. |
 | [`propertyInvariant`](#propertyInvariant) | Function | stable | Assert a predicate holds on EVERY transition step in a generated sequence. |
@@ -133,6 +134,22 @@ function foldEvents<
 type MsgArbitraryTable<M extends { type: string }> = { [K in M["type"]]: fc.Arbitrary<Extract<M, { type: K }>> }
 ```
 
+<a id="MsgCount"></a>
+
+### `MsgCount`
+
+```ts
+interface MsgCount {
+  /**
+   * How many of those acted: the step's `next` differs from its `prev` by
+   * `structuralHash`, or the step sent a Cmd.
+   */
+  readonly acted: number;
+  /** How many of this Msg type the run's lists held. */
+  readonly drawn: number;
+}
+```
+
 <a id="msgTypeKeys"></a>
 
 ### `msgTypeKeys`
@@ -186,6 +203,17 @@ function propertyInvariant<
 
 ```ts
 interface PropertyRun {
+  /**
+   * What the run's lists did, per Msg type: every type the machine has a cell for,
+   * then any other that was drawn. A type never drawn reads zero. On a failure this
+   * stops at the failing list, so shrinking adds nothing, and a list skipped with
+   * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
+   * though `numRuns` includes it: its fold hands back no steps to count.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
+   * as acted whenever a cell returned a new object.
+   */
+  readonly msgCounts: ReadonlyMap<string, MsgCount>;
   /** Lists tried. On a failure, this counts up to and including the failing one. */
   readonly numRuns: number;
   /** Shrink steps a failure took. `0` on a pass. */
@@ -193,7 +221,8 @@ interface PropertyRun {
   /**
    * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
    * that one failure. `null` when no list failed: on a pass, on an interrupt
-   * marked as a failure, or when too many `fc.pre` skips fail the run.
+   * marked as a failure, when too many `fc.pre` skips fail the run, or when
+   * `failOnNeverActed` fails it.
    */
   readonly path: string | null;
   /** The seed this run drew from. Pass it back as `seed` to draw the same lists. */
