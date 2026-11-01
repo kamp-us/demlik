@@ -187,6 +187,43 @@ describe("a cut path, with failOnNeverActed on", () => {
       expect(failure.message).toMatch(/\bapprove \(drawn [1-9]/);
       expect(failure.message).toMatch(/\bmerge \(drawn [1-9]/);
     });
+
+    // A failure with no shrinks reports a path like "3". Handed back once that
+    // failure is gone, it is no replay: fast-check draws a full run from there, and
+    // the option stays out, so a cut path reads green.
+    it.each(
+      SEEDS,
+    )("stays out of a full run on a colon-less path, seed %i", (seed) => {
+      const passed = run(cut, { seed, path: "3", failOnNeverActed: true });
+
+      expect(passed.numRuns).toBe(200);
+      expect(passed.path).toBeNull();
+      expect(passed.msgCounts.get("merge")?.drawn).toBeGreaterThan(0);
+      expect(actedOf(passed, "merge")).toBe(0);
+    });
+  });
+
+  it("starts a colon-less path's full run at the list that path names", () => {
+    const listsOf = (path: string | undefined) => {
+      const lists: (readonly Msg[])[] = [];
+      propertyTrace(
+        cut,
+        {},
+        longLists,
+        (steps) => {
+          lists.push(steps.map((step) => step.msg));
+          return true;
+        },
+        { seed: 1, numRuns: 10, ...(path === undefined ? {} : { path }) },
+      );
+      return lists;
+    };
+
+    const full = listsOf(undefined);
+    const fromThree = listsOf("3");
+
+    expect(fromThree).toHaveLength(10);
+    expect(fromThree.slice(0, 7)).toEqual(full.slice(3));
   });
 });
 

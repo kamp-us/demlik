@@ -59,11 +59,15 @@ interface PropertyOpts<S> extends ForwardedSettings {
    * `arbMsgSequence(msgArb, { size: "max" })`: short ones may never reach a healthy
    * machine's deep states, and this fails on those too.
    *
-   * A run with a non-empty `path` replays a failure rather than drawing the run's
-   * lists, so this stays out of it. `path: ""` is no path to fast-check, which draws
-   * the full run, so this applies there. A state `structuralHash` refuses (a `Date`,
-   * a `Map`, a class instance) leaves "acted" unreadable, so this fails the run
-   * saying so.
+   * This stays out of any run with a non-empty `path`, so drop `path` to have it
+   * check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A
+   * path with no colon, such as `"3"`, is what a failure with no shrinks reports, and
+   * it is no replay once that failure is gone: fast-check draws a full `numRuns` of
+   * lists starting from that one, and a cut path reads green. `path: ""` is no path
+   * to fast-check, so this applies there.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
+   * "acted" unreadable, so this fails the run saying so.
    */
   readonly failOnNeverActed?: boolean;
 }
@@ -343,8 +347,8 @@ function runProperty<
         ),
         tally,
       );
-  const isReplay = Boolean(settings.path);
-  if (failOnNeverActed && !isReplay) assertEveryTypeActed(run, tally);
+  const hasPath = Boolean(settings.path);
+  if (failOnNeverActed && !hasPath) assertEveryTypeActed(run, tally);
   return run;
 }
 
