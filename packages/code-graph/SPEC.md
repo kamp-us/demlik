@@ -53,6 +53,7 @@ packages/code-graph/
   src/
     index.ts              the RUN: which passes fire, which view answers
     cli.ts                the VOCABULARY: the flag set + the `Opts` commander parses into
+    gates/one-gate.ts     the flags that name more than one gate, refused before any ledger is read (§10)
     schema.ts             barrel over schema/ — the import path every consumer writes
     schema/
       core.ts             the cross-referencing contract (§5). OWNS threshold defaults + SmellKind.
@@ -357,6 +358,8 @@ Deterministic. Default axis `--by rot`: sort descending by `(1) smells.length, (
 ```
 code-graph <path> [flags]
 ```
+
+**A run takes one gate.** The modes below answer in a fixed order and each returns, so a second gate would never run and a green would say nothing about it. `gates/one-gate.ts` decides this from the flags alone, before any ledger or ceilings file is read, and exits 2 with one stderr line naming the flags: two of `--layers`, `--boundaries`, `--comments`, `--collapse` and `--unreachable` when a run also carries `--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or `--migrate-ceilings` (`--layers` counts without them, since it always gates), or `--env-keys` or `--hexagon` beside any such gate, plain `--ci` or `--accept-smells`. A `--ci` riding one named gate is not a second gate. The API ledger's `--api <map> --ci` and `--api <map> --accept-api` answer before this check and refuse any other gate flag with their own line (§13.9), so they keep to one gate too. Two report flags in one run, such as `--cycles --kinds`, are not refused: one report is dropped and no gate is lost.
 
 | Flag | Behavior |
 |---|---|
@@ -844,7 +847,9 @@ Each child documents the part it builds: the view child `--api` and `readPublish
 
 - **`--api <map> --ci`** runs the view and **exits 1** when a name the view lists has no entry, listing each by subpath and name. It never fails because an entry's name is gone: it rewrites the ledger without the run's scope's entries whose name the view no longer lists, and prints them, so a subpath dropped from the map prunes its names. Entries of other scopes are untouched, and a run with nothing to prune does not write. An absent ledger holds nothing, so every published name fails.
 - **`--api <map> --accept-api --reason "<text>"`** is the only way the ledger grows: it adds every unrecorded name of the run's scope, each carrying the trimmed reason, and prunes as `--ci` does. An entry already held keeps the reason it has.
-- **`--json`** prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and `{ scope, accepted, pruned, reason }` for `--accept-api`. A name in `unrecorded` or `accepted` is `{ scope, subpath, name }`; an entry in `pruned` also has its `reason`.
+- **An entry is never pruned unmeasured.** On a run whose emit reported diagnostics, `--ci` and `--accept-api` prune nothing and keep every entry the view does not list, because a name behind a broken `export *` reads exactly like a removed one. Each kept entry is printed, with the words "the compiler reported errors". The gate still gates: a name the view lists with no entry exits 1, and `--accept-api` adds it. A name with no text, which is how a syntax error such as `export function (` reads, is neither listed nor recorded on such a run.
+- **The tradeoff of that rule:** the count covers the whole tsconfig, so a type error nowhere near an export holds back a real removal too, and a package with a standing error never prunes. The entry stays, each run names it, and the first clean run prunes it. A stale entry could let a removed name come back without failing; this gate takes that over losing a written reason. Refusing the run instead would stop a package with a standing error from using the gate at all, and the emit's count cannot say which diagnostics touch an export.
+- **`--json`** prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and `{ scope, accepted, pruned, reason }` for `--accept-api`. A name in `unrecorded` or `accepted` is `{ scope, subpath, name }`; an entry in `pruned` also has its `reason`. On a run whose emit reported diagnostics, `pruned` is `[]` and both add `unmeasured`, the entries kept as above, each with its `reason`; the key is absent on any other run.
 - **No git.** The path runs the view and reads and writes the one file. It works in a folder that is not a git repository, and it reads no `.changeset/`, no `package.json` `exports` and no base commit.
 - **Exit 2, with one stderr line and nothing written:** `--accept-api` without a non-empty `--reason`, with `--ci`, or without `--api`; `--reason` with `--api --ci`; either beside `--api-base`, `--api-policy` or any flag other than `--json`, `--pretty` and `--out`; an invalid map (§13.2); no tsconfig or no emitted entry (§13.6); and an unreadable or schema-invalid ledger (an unknown key, a missing field, a blank reason or a duplicate key), which is read before any emit. A bad entry of any scope refuses the run.
 

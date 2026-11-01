@@ -88,12 +88,7 @@ export const spawnProcess = <E>(
       }),
     enrol: (process) => Effect.sync(() => processes.set(id, process)),
     remove: Effect.sync(() => processes.delete(id)),
-    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
-    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
-      Effect.catch((failure) =>
-        Effect.logError(`the parent did not take the stop of ${id}`, failure),
-      ),
-    ),
+    notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
 /** Stop one running process. Any other id is a no-op. */

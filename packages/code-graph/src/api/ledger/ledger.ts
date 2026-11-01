@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import { z } from "zod";
 import { stableStringify } from "../../render/json.js";
-import type { PublishedApi } from "../view.js";
+import type { MeasuredApi } from "../view.js";
 
 // `api-ledger.json` at the repo root: one entry per name a package publishes. The gate fails only
 // on a name the ledger does not hold and drops the entries whose name is gone, so adding a public
 // name is a change to this file, by name and with a reason. It holds names and never signatures:
-// what a signature change owes is `--api-policy`'s question.
+// what a signature change owes is `--api-policy`'s question. An entry is never dropped on a run
+// whose emit reported diagnostics, which cannot tell a removed name from one it could not read.
 export const API_LEDGER_FILENAME = "api-ledger.json";
 
 const EntrySchema = z
@@ -92,40 +93,65 @@ export function writeApiLedger(file: string, ledger: ApiLedger): void {
   fs.writeFileSync(file, `${stableStringify(sorted(ledger.entries), true)}\n`);
 }
 
-export function publishedNamesOf(scope: string, published: PublishedApi): ApiName[] {
-  return Object.entries(published.subpaths)
+// The names one run read, and whether its emit was clean enough to say a missing name was removed.
+export type PublishedNames = { readonly names: readonly ApiName[]; readonly measured: boolean };
+
+export function publishedNamesOf(
+  scope: string,
+  { view, diagnostics }: MeasuredApi,
+): PublishedNames {
+  const measured = diagnostics === 0;
+  const names = Object.entries(view.subpaths)
     .flatMap(([subpath, { names }]) =>
       Object.keys(names).map((name): ApiName => ({ scope, subpath, name })),
     )
+    // A syntax error such as `export function (` reads as a name with no text, which is no name to
+    // gate on and one the schema would refuse to read back.
+    .filter(({ name }) => measured || name !== "")
     .sort(compareNames);
+  return { names, measured };
 }
 
-// What one run found against the ledger. Only the entries of the run's scope are in reach:
-// `pruned` are those whose name is no longer published, and `kept` is the ledger without them. An
-// entry of another scope is kept as it is.
+// The run's scope's entries the view does not list. They are `pruned` on a measured run, and
+// `unmeasured` on any other: those stay in the ledger until a clean run decides.
+export type MissingEntries = {
+  readonly kind: "pruned" | "unmeasured";
+  readonly entries: readonly ApiLedgerEntry[];
+};
+
+// What one run found against the ledger. Only the entries of the run's scope are in reach: `kept`
+// is the ledger without the entries it pruned, and an entry of another scope is kept as it is.
 export type ApiReconciliation = {
   readonly scope: string;
   readonly unrecorded: readonly ApiName[];
-  readonly pruned: readonly ApiLedgerEntry[];
+  readonly missing: MissingEntries;
   readonly kept: ApiLedger;
 };
 
 export function reconcileApiNames(
   ledger: ApiLedger,
   scope: string,
-  published: readonly ApiName[],
+  published: PublishedNames,
 ): ApiReconciliation {
-  const publishedKeys = new Set(published.map(nameKey));
+  const publishedKeys = new Set(published.names.map(nameKey));
   const recordedKeys = new Set(ledger.entries.map(nameKey));
   const gone = (entry: ApiLedgerEntry) =>
     entry.scope === scope && !publishedKeys.has(nameKey(entry));
-  return {
-    scope,
-    unrecorded: published.filter((name) => !recordedKeys.has(nameKey(name))),
-    pruned: ledger.entries.filter(gone),
-    kept: sorted(ledger.entries.filter((entry) => !gone(entry))),
-  };
+  const unrecorded = published.names.filter((name) => !recordedKeys.has(nameKey(name)));
+  const entries = ledger.entries.filter(gone);
+  return published.measured
+    ? {
+        scope,
+        unrecorded,
+        missing: { kind: "pruned", entries },
+        kept: sorted(ledger.entries.filter((entry) => !gone(entry))),
+      }
+    : { scope, unrecorded, missing: { kind: "unmeasured", entries }, kept: ledger };
 }
+
+// Whether the run has anything to write besides the names it accepts.
+export const prunesEntries = ({ missing }: ApiReconciliation): boolean =>
+  missing.kind === "pruned" && missing.entries.length > 0;
 
 export function withAcceptedNames(
   ledger: ApiLedger,

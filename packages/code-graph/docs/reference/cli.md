@@ -287,8 +287,19 @@ repository. `api-ledger.json` sits at the repo root, beside
   run changes nothing. With no ledger file every published name fails.
 - A run changes only entries of its own scope, but it reads and validates the whole
   file first: a bad entry in any scope exits 2.
+- On a run where the compiler reported errors, nothing is pruned. A name behind a
+  broken `export *` reads exactly like a removed one, so every entry the view does
+  not list stays, and each is printed with a note that the compiler reported errors.
+  New names still fail and can still be accepted. A blank name from a syntax error
+  is neither listed nor recorded.
+- The tradeoff: a type error anywhere in the tsconfig counts, so a package with a
+  standing error never prunes. The entry stays, each run names it, and the first
+  clean run prunes it. A stale entry could let a removed name come back without
+  failing; the gate takes that over losing a written reason.
 - `--json` prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and
-  `{ scope, accepted, pruned, reason }` for `--accept-api`.
+  `{ scope, accepted, pruned, reason }` for `--accept-api`. When the compiler
+  reported errors, `pruned` is `[]` and both add `unmeasured`, the entries kept with
+  their reasons.
 - Exit 2, with one line on stderr and nothing written: `--accept-api` without a
   non-empty `--reason`, with `--ci`, or without `--api`; `--reason` with `--api --ci`;
   either beside `--api-base`, `--api-policy` or any flag other than `--json`,
@@ -394,6 +405,19 @@ conventions apply alongside active presets.
 The ordinary smell gate is syntax-only unless call analysis is also requested.
 Boundary, comment, collapse, and unreachable gates use their own policies.
 Layers always gate, without needing `--ci`.
+
+**A run takes one gate.** A second one would never run, so two of `--layers`,
+`--boundaries`, `--comments`, `--collapse` and `--unreachable` in a run with
+`--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or
+`--migrate-ceilings` exit 2 with one line naming them, before any ledger or
+ceilings file is read. `--layers` counts with or without those flags.
+`--env-keys` and `--hexagon` beside a gate, `--ci` or `--accept-smells` exit 2
+the same way, since they run without one. A `--ci` that rides one named gate is
+not a second gate. `--api <map> --ci` and `--api <map> --accept-api` answer
+before this check and take only `--json`, `--pretty` and `--out` (plus `--reason`
+for the accept), so a gate flag beside them exits 2 with their own line.
+To run several gates, run the command once per gate. Two reports in one run,
+such as `--cycles --kinds`, are not refused: one is dropped and no gate is lost.
 
 Boundary `--ci` can rewrite the ledger when it prunes resolved crossings.
 `--boundaries --write-ceilings` is retired. Acceptance, migration, and boundary

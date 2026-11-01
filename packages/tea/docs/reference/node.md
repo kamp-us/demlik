@@ -8,11 +8,13 @@ Tier: `stable`
 import { … } from "@demlik/tea/node";
 ```
 
-## Exports (18)
+## Exports (20)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
 | [`fileJournal`](#fileJournal) | Function | experimental | The Node file substrate for the journal (`src/internal/journal/`), beside `fileStore`. |
+| [`FileLockBlock`](#FileLockBlock) | Type | stable | Why a writer could not take a lock: - `another-host`: the lock names another host, which may still be writing. |
+| [`FileLockTimeoutError`](#FileLockTimeoutError) | Class | stable | A write gave up waiting for a lock file. |
 | [`fileStore`](#fileStore) | Function | stable | Persist a machine's state to a JSON file — pass the `path` and a `parse` that validates what comes back, get a `Store<S>` you hand to `run` so the next run resumes where this one stopped. |
 | [`FileStoreOptions`](#FileStoreOptions) | Interface | stable | Options for fileStore. |
 | [`NodeSignalDeps`](#NodeSignalDeps) | Type | stable | The `deps` of a `node_signal` Sub: `signal` (SIGINT/SIGTERM/…) → `msg`. |
@@ -39,6 +41,29 @@ import { … } from "@demlik/tea/node";
 
 ```ts
 function fileJournal<R>(dir: string, parse: (raw: unknown) => R): Journal<R>
+```
+
+<a id="FileLockBlock"></a>
+
+### `FileLockBlock`
+
+```ts
+type FileLockBlock = "another-host" | "contended" | "live-holder" | "unreadable" | "unwritten"
+```
+
+<a id="FileLockTimeoutError"></a>
+
+### `FileLockTimeoutError`
+
+```ts
+class FileLockTimeoutError extends Error {
+  constructor(lockPath: string, waitedMs: number, blockedBy: FileLockBlock);
+  readonly _tag: "file_lock_timeout";
+  readonly blockedBy: FileLockBlock;
+  readonly lockPath: string;
+  readonly name: "FileLockTimeoutError";
+  readonly waitedMs: number;
+}
 ```
 
 <a id="fileStore"></a>
@@ -76,6 +101,19 @@ interface FileStoreOptions {
    * that started from the same version is refused with a `StoreConflictError`
    * at its next save. Omit it and the store is exactly as it was — the last
    * writer wins, and single-writer is the caller's precondition to keep.
+   *
+   * Each save and `delete()` takes a lock file, `<path>.fence.lock`, and a
+   * writer that dies holding it leaves it behind. The next write steals a lock
+   * whose holder is proven gone: an empty one older than a short grace period,
+   * one from an earlier boot of this machine, or one whose process is dead.
+   *
+   * Any other lock is waited on for up to 10 seconds, and then the write rejects
+   * with a FileLockTimeoutError naming the file. That includes a lock
+   * from another host, which is never stolen because that host may be live on a
+   * shared volume. So a folder restored onto a new machine can need one clear
+   * step: once the old machine is known to be gone, delete the file. Hosts are
+   * told apart by `os.hostname()`, so give two live hosts on one volume two
+   * names.
    */
   readonly fenced?: true;
 }

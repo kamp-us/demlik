@@ -22,9 +22,9 @@ import { memoryStore } from "../mem";
 import {
   type EffectBootingRuntime,
   run,
-  StoreFailed,
   spawn,
   stop,
+  type TellAnswer,
   tell,
 } from "./index";
 
@@ -140,14 +140,15 @@ const boss = defineMachine({
 // === tell ===
 
 describe("tell", () => {
-  it("sends nothing when the State has no cell for the Msg", async () => {
+  it("answers `no_cell` and sends nothing when the State has no cell for the Msg", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { parentScope, parentRun, reports, seen } = yield* openParent();
         yield* parentRun.dispatch({ type: "close" });
 
-        yield* tell(parent, parentRun, stopped("a"));
+        const answer = yield* tell(parent, parentRun, stopped("a"));
 
+        expect(answer).toBe("no_cell");
         expect(seen).toEqual(["close"]);
         expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
         expect(reports).toEqual([]);
@@ -156,35 +157,39 @@ describe("tell", () => {
     );
   });
 
-  it("delivers a Msg the State has a cell for", async () => {
+  it("answers `queued` for a Msg the State has a cell for, and the Msg folds", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { parentScope, parentRun } = yield* openParent();
-        yield* tell(parent, parentRun, stopped("a"));
+        const answer = yield* tell(parent, parentRun, stopped("a"));
+        expect(answer).toBe("queued");
+        yield* parentRun.idle();
         expect(parentRun.getState()).toEqual({ type: "open", stopped: ["a"] });
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
   });
 
-  it("drops a `NoCellError` raised after the check", async () => {
+  it("drops a Msg whose cell is gone by its turn, and tells no one", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const { parentScope, parentRun } = yield* openParent();
+        const { parentScope, parentRun, reports } = yield* openParent();
         // `close` is queued, not folded, so the check still reads `open`.
         const closing = yield* Effect.forkChild(
           parentRun.dispatch({ type: "close" }),
           { startImmediately: true },
         );
-        yield* tell(parent, parentRun, stopped("a"));
+        expect(yield* tell(parent, parentRun, stopped("a"))).toBe("queued");
         yield* Fiber.await(closing);
+        yield* parentRun.idle();
         expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
+        expect(reports).toEqual([]);
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
   });
 
-  it("drops `Stopped`", async () => {
+  it("answers `stopped` for a run that stopped", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { parentScope, parentRun } = yield* openParent();
@@ -192,37 +197,9 @@ describe("tell", () => {
         const refused = yield* Effect.flip(parentRun.dispatch(stopped("a")));
         expect(refused._tag).toBe("Stopped");
 
-        yield* tell(parent, parentRun, stopped("a"));
+        expect(yield* tell(parent, parentRun, stopped("a"))).toBe("stopped");
       }),
     );
-  });
-
-  it("still fails with `StoreFailed` when the save fails", async () => {
-    const disk = new Error("disk full");
-    const inner = memoryStore<ParentState>();
-    let full = false;
-    const store: Store<ParentState> = {
-      load: () => inner.load(),
-      save: async (state) => {
-        if (full) throw disk;
-        await inner.save(state);
-      },
-      migrate: (raw) => inner.migrate(raw),
-    };
-    const failure = await Effect.runPromise(
-      Effect.gen(function* () {
-        const { parentScope, parentRun } = yield* openParent(store);
-        full = true;
-        const failure = yield* Effect.flip(
-          tell(parent, parentRun, stopped("a")),
-        );
-        full = false;
-        yield* Scope.close(parentScope, Exit.void);
-        return failure;
-      }),
-    );
-    expect(failure).toBeInstanceOf(StoreFailed);
-    expect(failure).toMatchObject({ operation: "save", cause: disk });
   });
 });
 
@@ -477,7 +454,7 @@ describe("a parent and six children on the helpers", () => {
     );
   });
 
-  it("a parent whose every save fails: three children stop, and the handler each `notify` carries is the one place the three failed notices are seen", async () => {
+  it("a parent whose every save fails: three children stop, each notice was `queued`, and the parent's own `onError` is where the three failed saves are seen", async () => {
     const disk = new Error("disk full");
     const inner = memoryStore<ParentState>();
     let full = false;
@@ -493,7 +470,7 @@ describe("a parent and six children on the helpers", () => {
       Effect.gen(function* () {
         const { parentScope, parentRun, reports } = yield* openParent(store);
         const table = new Map<string, Child>();
-        const failed: Array<{ id: string; failure: StoreFailed }> = [];
+        const answers: TellAnswer[] = [];
         const ids = ["a", "b", "c"];
         for (const id of ids) {
           yield* spawn(parentScope, {
@@ -502,27 +479,21 @@ describe("a parent and six children on the helpers", () => {
             enrol: (child) => Effect.sync(() => table.set(id, child)),
             remove: Effect.sync(() => table.delete(id)),
             notify: tell(parent, parentRun, stopped(id)).pipe(
-              Effect.catch((failure) =>
-                Effect.sync(() => failed.push({ id, failure })),
-              ),
+              Effect.map((answer) => answers.push(answer)),
             ),
           });
         }
         const all = new Map(table);
         full = true;
 
-        // Each stop succeeds: the failed notice is not the stop's failure.
+        // Each stop succeeds: the failed save is not the stop's failure.
         for (const id of ids) yield* stop((all.get(id) as Child).scope);
 
         expect(table.size).toBe(0);
-        yield* settled(() => expect(failed).toHaveLength(ids.length));
-        expect(failed.map((f) => f.id).sort()).toEqual(ids);
-        for (const { failure } of failed) {
-          expect(failure).toBeInstanceOf(StoreFailed);
-          expect(failure).toMatchObject({ operation: "save", cause: disk });
-        }
-        // The parent's own sink was handed none of them.
-        expect(reports).toEqual([]);
+        yield* settled(() =>
+          expect(answers).toEqual(["queued", "queued", "queued"]),
+        );
+        yield* settled(() => expect(reports).toEqual([disk, disk, disk]));
         full = false;
         yield* Scope.close(parentScope, Exit.void);
       }),

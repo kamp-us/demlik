@@ -31,6 +31,7 @@ import {
   loadCheapProject,
   loadEdgeProject,
 } from "./extract/project.js";
+import { oneGateRefusal } from "./gates/one-gate.js";
 import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
 import { renderHotspots } from "./hotspots/render.js";
@@ -100,6 +101,12 @@ defineProgram()
     });
     if (apiRun !== null) {
       void apiRun.then(exitWith);
+      return;
+    }
+
+    const refusal = oneGateRefusal(opts);
+    if (refusal !== null) {
+      cleanExit(refusal);
       return;
     }
 
