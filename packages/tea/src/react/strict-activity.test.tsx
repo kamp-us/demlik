@@ -317,22 +317,28 @@ describe.each([
       expect(container.textContent).toBe("2");
     });
 
-    it("holds a Msg dispatched while hidden and folds it on show", async () => {
-      const { slot, shown } = harness();
+    it("folds a Msg dispatched while hidden, and the show renders it", async () => {
+      const { probe, slot, shown } = harness();
       await settle(shown(true));
       await settle(shown(false));
 
-      let settled = false;
-      const held = slot.dispatch?.({ type: "inc" }).then(() => {
-        settled = true;
+      await act(async () => {
+        await slot.dispatch?.({ type: "inc" });
       });
-      await act(beat);
-      expect(settled).toBe(false);
+      expect(probe.live).toBe(0);
 
       await settle(shown(true));
-      await held;
-      expect(settled).toBe(true);
       expect(container.textContent).toBe("1");
+    });
+
+    it("keeps one run across hides and shows", async () => {
+      const { counts, shown } = harness();
+      await settle(shown(true));
+      for (let cycle = 0; cycle < 3; cycle++) {
+        await settle(shown(false));
+        await settle(shown(true));
+      }
+      expect(counts).toEqual({ started: 1, stopped: 0 });
     });
 
     it("leaves no run behind after a real unmount, and the final save happened", async () => {
@@ -349,7 +355,7 @@ describe.each([
 
       await settle(wrap(<div />));
 
-      expect(counts).toEqual({ started: 2, stopped: 2 });
+      expect(counts).toEqual({ started: 1, stopped: 1 });
       expect(probe.live).toBe(0);
       expect(probe.cleanups).toBe(probe.starts);
       if (store !== undefined) {
@@ -360,20 +366,533 @@ describe.each([
       );
     });
 
-    it("refuses a held Msg when the hidden component really unmounts", async () => {
-      const { counts, slot, shown } = harness();
+    it("stops the run when the hidden component really unmounts", async () => {
+      const { store, probe, counts, slot, shown } = harness();
       await settle(shown(true));
+      await act(async () => {
+        await slot.dispatch?.({ type: "inc" });
+      });
       await settle(shown(false));
 
-      const held = slot.dispatch?.({ type: "inc" });
-      const refused = expect(held).rejects.toThrow(
+      await settle(wrap(<div />));
+
+      expect(counts).toEqual({ started: 1, stopped: 1 });
+      expect(probe.cleanups).toBe(probe.starts);
+      if (store !== undefined) {
+        await expect(store.load()).resolves.toEqual({ n: 1 });
+      }
+      await expect(slot.dispatch?.({ type: "inc" })).rejects.toThrow(
+        "@demlik/tea: runtime stopped",
+      );
+    });
+
+    it("on a first mount hidden, starts no run and holds a Msg for the first show", async () => {
+      const { probe, counts, slot, shown } = harness();
+      await settle(shown(false));
+      expect(counts).toEqual({ started: 0, stopped: 0 });
+
+      let settled = false;
+      const held = slot.dispatch?.({ type: "inc" }).then(() => {
+        settled = true;
+      });
+      await act(beat);
+      expect(settled).toBe(false);
+
+      await settle(shown(true));
+      await held;
+      expect(container.textContent).toBe("1");
+      expect(probe.live).toBe(1);
+    });
+
+    it("refuses a held Msg when a first mount hidden really unmounts", async () => {
+      const { counts, slot, shown } = harness();
+      await settle(shown(false));
+
+      const refused = expect(slot.dispatch?.({ type: "inc" })).rejects.toThrow(
         "@demlik/tea: runtime stopped",
       );
       await settle(wrap(<div />));
 
       await refused;
-      expect(counts).toEqual({ started: 1, stopped: 1 });
+      expect(counts).toEqual({ started: 0, stopped: 0 });
     });
+  });
+});
+
+describe.each([
+  ["no Strict Mode", (node: ReactNode): ReactNode => node],
+  [
+    "Strict Mode",
+    (node: ReactNode): ReactNode => <StrictMode>{node}</StrictMode>,
+  ],
+] as const)("useMachine: a Cmd in flight at a hide, %s", (_label, wrap) => {
+  type Load = { readonly phase: "idle" | "loading" | "loaded" };
+  type LoadMsg = { readonly type: "start" } | { readonly type: "answered" };
+  const types = {
+    model: {} as Load,
+    msg: {} as LoadMsg,
+    cmd: {} as { readonly type: "fetch" },
+    ctx: undefined,
+  };
+  const update = {
+    start: (): [Load, { readonly type: "fetch" }[]] => [
+      { phase: "loading" },
+      [{ type: "fetch" }],
+    ],
+    answered: (): [Load, never[]] => [{ phase: "loaded" }, []],
+  };
+  const parseLoad = (raw: unknown): Load | null =>
+    raw === null || raw === undefined ? null : (raw as Load);
+
+  // `init` shows "loading" and starts the Cmd, or `update` does on `start`.
+  const machines = {
+    init: defineMachine({
+      types,
+      init: (loaded) =>
+        loaded?.phase === "loaded"
+          ? [loaded, []]
+          : [{ phase: "loading" }, [{ type: "fetch" }]],
+      update,
+    }),
+    update: defineMachine({
+      types,
+      init: (loaded) => [loaded ?? { phase: "idle" }, []],
+      update,
+    }),
+  };
+
+  describe.each([
+    ["storeless", (): Store<Load> | undefined => undefined],
+    [
+      "with a store",
+      (): Store<Load> | undefined => memoryStore<Load>(undefined, parseLoad),
+    ],
+  ] as const)("%s", (_kind, makeStore) => {
+    describe.each([
+      "init",
+      "update",
+    ] as const)("started by `%s`", (startedBy) => {
+      it.each([
+        "during the hide",
+        "after the show",
+      ] as const)("reaches the answer when it lands %s, and calls the handler once", async (landing) => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        let release = (): void => {};
+        const answer = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const handler = vi.fn(async () => {
+          await answer;
+          return { type: "answered" } as const;
+        });
+        const store = makeStore();
+        const { counts, counted } = countedRun();
+        let dispatch: ((msg: LoadMsg) => Promise<void>) | undefined;
+        function Part() {
+          const [state, d] = useMachine(machines[startedBy], {
+            run: counted,
+            ctx: undefined,
+            store,
+            interpret: { fetch: handler },
+          });
+          dispatch = d;
+          return <span>{state.phase}</span>;
+        }
+        const shown = (visible: boolean) =>
+          wrap(
+            <Activity mode={visible ? "visible" : "hidden"}>
+              <Part />
+            </Activity>,
+          );
+
+        await settle(shown(true));
+        if (startedBy === "update") {
+          await act(async () => {
+            void dispatch?.({ type: "start" });
+          });
+        }
+        // The engine tells listeners about a transition after its Cmds return
+        // (#695), so an `update` that emits one still reads as "idle" here.
+        const waiting = startedBy === "init" ? "loading" : "idle";
+        expect(container.textContent).toBe(waiting);
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        await settle(shown(false));
+        if (landing === "during the hide") {
+          release();
+          await act(beat);
+          await settle(shown(true));
+        } else {
+          await settle(shown(true));
+          expect(container.textContent).toBe(waiting);
+          release();
+          await act(beat);
+        }
+
+        expect(container.textContent).toBe("loaded");
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(counts).toEqual({ started: 1, stopped: 0 });
+        expect(warn).not.toHaveBeenCalled();
+        if (store !== undefined) {
+          await expect(store.load()).resolves.toEqual({ phase: "loaded" });
+        }
+        warn.mockRestore();
+      });
+    });
+  });
+
+  it("does not make a machine that resumes in `init` (ADR 0028) start the work twice", async () => {
+    const machine = defineMachine({
+      types,
+      init: (loaded) =>
+        loaded?.phase === "loaded"
+          ? [loaded, []]
+          : [{ phase: "loading" }, [{ type: "fetch" }]],
+      update,
+    });
+    const store = memoryStore<Load>(undefined, parseLoad);
+    await store.save({ phase: "loading" });
+    let release = (): void => {};
+    const answer = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const handler = vi.fn(async () => {
+      await answer;
+      return { type: "answered" } as const;
+    });
+    function Part() {
+      const [state] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        store,
+        interpret: { fetch: handler },
+      });
+      return <span>{state.phase}</span>;
+    }
+    const shown = (visible: boolean) =>
+      wrap(
+        <Activity mode={visible ? "visible" : "hidden"}>
+          <Part />
+        </Activity>,
+      );
+
+    await settle(shown(true));
+    await settle(shown(false));
+    await settle(shown(true));
+    release();
+    await act(beat);
+
+    expect(container.textContent).toBe("loaded");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops the Subs while the Cmd is still running", async () => {
+    const machine = defineMachine({
+      types: {
+        model: {} as Load,
+        msg: {} as LoadMsg,
+        cmd: {} as { readonly type: "fetch" },
+        sub: {} as Probe,
+        ctx: undefined,
+      },
+      init: (_loaded) => [{ phase: "loading" }, [{ type: "fetch" }]],
+      update,
+      subs: [{ type: "probe", deps: () => ({ name: "p" }) }],
+    });
+    let release = (): void => {};
+    const answer = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const live = { subs: 0 };
+    function Part() {
+      const [state] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        interpret: {
+          fetch: async () => {
+            await answer;
+            return { type: "answered" } as const;
+          },
+        },
+        subscribe: {
+          probe: () => {
+            live.subs += 1;
+            return () => {
+              live.subs -= 1;
+            };
+          },
+        },
+      });
+      return <span>{state.phase}</span>;
+    }
+    const shown = (visible: boolean) =>
+      wrap(
+        <Activity mode={visible ? "visible" : "hidden"}>
+          <Part />
+        </Activity>,
+      );
+
+    await settle(shown(true));
+    expect(live.subs).toBe(1);
+    await settle(shown(false));
+    expect(live.subs).toBe(0);
+    await settle(shown(true));
+    expect(live.subs).toBe(1);
+    release();
+    await act(beat);
+    expect(container.textContent).toBe("loaded");
+  });
+
+  it("still reports the loss on a real unmount with the Cmd in flight", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let release = (): void => {};
+    const answer = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    function Part() {
+      const [state] = useMachine(machines.init, {
+        run,
+        ctx: undefined,
+        interpret: {
+          fetch: async () => {
+            await answer;
+            return { type: "answered" } as const;
+          },
+        },
+      });
+      return <span>{state.phase}</span>;
+    }
+
+    await settle(
+      wrap(
+        <Activity mode="visible">
+          <Part />
+        </Activity>,
+      ),
+    );
+    await settle(wrap(<div />));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toBeInstanceOf(RuntimeDiscardedError);
+    release();
+    await act(beat);
+    warn.mockRestore();
+  });
+});
+
+describe("useMachine under <Activity>: which Subs run", () => {
+  type Flag = { readonly n: number; readonly fired: boolean };
+  type FlagMsg = Inc | { readonly type: "fired" };
+
+  it("stops the built-in `timer` while hidden, and the show starts its countdown over", async () => {
+    const machine = defineMachine({
+      types: { model: {} as Flag, msg: {} as FlagMsg, ctx: undefined },
+      init: () => [{ n: 0, fired: false }, []],
+      update: {
+        inc: (s) => [{ ...s, n: s.n + 1 }, []],
+        fired: (s) => [{ ...s, fired: true }, []],
+      },
+      subs: [
+        {
+          type: "timer",
+          deps: (s) =>
+            s.fired ? null : { ms: 30, msg: { type: "fired" } as const },
+        },
+      ],
+    });
+    function Part() {
+      const [state] = useMachine(machine, { run, ctx: undefined });
+      return <span>{state.fired ? "fired" : "waiting"}</span>;
+    }
+    const shown = (visible: boolean) => (
+      <Activity mode={visible ? "visible" : "hidden"}>
+        <Part />
+      </Activity>
+    );
+    // A fake clock: on a real one, a slow machine lets the countdown run out
+    // before the assertion that it has not.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const advance = (ms: number) =>
+        act(async () => {
+          vi.advanceTimersByTime(ms);
+        });
+
+      await render(shown(true));
+      await render(shown(false));
+      await advance(60);
+      await render(shown(true));
+      expect(container.textContent).toBe("waiting");
+
+      await advance(29);
+      expect(container.textContent).toBe("waiting");
+      await advance(1);
+      expect(container.textContent).toBe("fired");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses a `subscribe` entry named `timer` in place of the built-in", async () => {
+    const machine = defineMachine({
+      types: { model: {} as Flag, msg: {} as FlagMsg, ctx: undefined },
+      init: () => [{ n: 0, fired: false }, []],
+      update: {
+        inc: (s) => [{ ...s, n: s.n + 1 }, []],
+        fired: (s) => [{ ...s, fired: true }, []],
+      },
+      subs: [
+        {
+          type: "timer",
+          deps: () => ({ ms: 60_000, msg: { type: "fired" } as const }),
+        },
+      ],
+    });
+    function Part() {
+      const [state] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        subscribe: {
+          timer: (sub, _ctx, dispatch) => {
+            dispatch(sub.deps.msg);
+            return () => {};
+          },
+        },
+      });
+      return <span>{state.fired ? "fired" : "waiting"}</span>;
+    }
+
+    await settle(<Part />);
+    expect(container.textContent).toBe("fired");
+  });
+
+  it("starts a Sub the State asks for while hidden only on show", async () => {
+    const machine = defineMachine({
+      types: {
+        model: {} as Count,
+        msg: {} as Inc,
+        sub: {} as Probe,
+        ctx: undefined,
+      },
+      init: () => [{ n: 0 }, []],
+      update: { inc: (s) => [{ n: s.n + 1 }, []] },
+      subs: [{ type: "probe", deps: (s) => (s.n > 0 ? { name: "p" } : null) }],
+    });
+    const probe = subProbe();
+    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    function Part() {
+      const [state, d] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        subscribe: probe.subscribe,
+      });
+      dispatch = d;
+      return <span>{state.n}</span>;
+    }
+    const shown = (visible: boolean) => (
+      <Activity mode={visible ? "visible" : "hidden"}>
+        <Part />
+      </Activity>
+    );
+
+    await settle(shown(true));
+    await settle(shown(false));
+    await act(async () => {
+      await dispatch?.({ type: "inc" });
+    });
+    expect(probe).toMatchObject({ live: 0, starts: 0 });
+
+    await settle(shown(true));
+    expect(probe).toMatchObject({ live: 1, starts: 1 });
+  });
+
+  it("does not bring back on show a Sub the State dropped while hidden", async () => {
+    const machine = defineMachine({
+      types: {
+        model: {} as Count,
+        msg: {} as Inc,
+        sub: {} as Probe,
+        ctx: undefined,
+      },
+      init: () => [{ n: 0 }, []],
+      update: { inc: (s) => [{ n: s.n + 1 }, []] },
+      subs: [
+        { type: "probe", deps: (s) => (s.n === 0 ? { name: "p" } : null) },
+      ],
+    });
+    const probe = subProbe();
+    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    function Part() {
+      const [state, d] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        subscribe: probe.subscribe,
+      });
+      dispatch = d;
+      return <span>{state.n}</span>;
+    }
+    const shown = (visible: boolean) => (
+      <Activity mode={visible ? "visible" : "hidden"}>
+        <Part />
+      </Activity>
+    );
+
+    await settle(shown(true));
+    await settle(shown(false));
+    await act(async () => {
+      await dispatch?.({ type: "inc" });
+    });
+    await settle(shown(true));
+
+    expect(probe).toMatchObject({ live: 0, starts: 1, cleanups: 1 });
+  });
+
+  it("reads the latest render's runner when a Sub starts again on show", async () => {
+    const machine = counter();
+    const started: string[] = [];
+    function Part({ label }: { readonly label: string }) {
+      const [state] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        subscribe: {
+          probe: () => {
+            started.push(label);
+            return () => {};
+          },
+        },
+      });
+      return <span>{state.n}</span>;
+    }
+    const shown = (visible: boolean, label: string) => (
+      <Activity mode={visible ? "visible" : "hidden"}>
+        <Part label={label} />
+      </Activity>
+    );
+
+    await settle(shown(true, "first"));
+    await settle(shown(false, "first"));
+    await settle(shown(true, "second"));
+
+    expect(started).toEqual(["first", "second"]);
+  });
+
+  it("still reports a Sub type with no runner", async () => {
+    const machine = counter();
+    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    function Part() {
+      const [state, d] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        subscribe: {} as Subscribe<Inc, Probe, undefined>,
+      });
+      dispatch = d;
+      return <span>{state.n}</span>;
+    }
+
+    await settle(<Part />);
+    await expect(dispatch?.({ type: "inc" })).rejects.toThrow(
+      'no subscribe runner for Sub type "probe"',
+    );
   });
 });
 
@@ -437,12 +956,11 @@ describe("useMachine across a hide and show: the value and `init`", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("carries a Msg folded by a stop that was still running when the show came", async () => {
+  it("folds Msgs queued behind a Cmd that spans a hide, in order", async () => {
     let release = (): void => {};
     const park = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const machine = defineMachine({
       types: {
         model: {} as Count,
@@ -483,9 +1001,9 @@ describe("useMachine across a hide and show: the value and `init`", () => {
       void dispatch?.({ type: "park" });
       void dispatch?.({ type: "inc" });
     });
-    // The hide's stop is parked on the handler, with `inc` queued behind it.
-    await render(shown(false));
-    await render(shown(true));
+    // The run's queue is parked on the handler, with `inc` waiting behind it.
+    await settle(shown(false));
+    await settle(shown(true));
     const late = dispatch?.({ type: "inc" });
     expect(container.textContent).toBe("0");
 
@@ -494,7 +1012,6 @@ describe("useMachine across a hide and show: the value and `init`", () => {
       await late;
     });
     expect(container.textContent).toBe("2");
-    warn.mockRestore();
   });
 });
 

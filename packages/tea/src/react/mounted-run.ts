@@ -3,66 +3,66 @@
  *
  * A passive effect's cleanup does not mean the component went away: Strict Mode
  * runs it and the effect again on mount, and `<Activity>` runs it on hide and
- * the effect again on show. So this object outlives any one run. It holds the
- * value React reads and the `dispatch` a child may keep, and it starts and
- * stops runs underneath them:
+ * the effect again on show. So:
  *
+ *   - The first effect starts the one run. Render starts nothing, so a render
+ *     may build this object and throw it away.
  *   - A cleanup and an effect in one synchronous pass (Strict Mode) are no event
- *     at all: the stop is put off to a microtask, and the effect cancels it.
- *   - A cleanup with nothing after it (a hide, an unmount) stops the run for
- *     real, because React cannot say which one it was and a hidden component's
- *     Subs must not run. The stop's final State is carried.
- *   - An effect after a real stop (a show) starts a new run at the carried
- *     State.
- *
- * Constructing one starts nothing, so a render may build one and throw it away.
+ *     at all: what the cleanup does is put off to a microtask, and the effect
+ *     cancels it.
+ *   - A cleanup with nothing after it (a hide) closes the {@link SubGate}, and
+ *     that is all. The run stays live, so a Cmd in flight lands, its answer
+ *     folds, and `init` never runs twice. An effect after it (a show) opens the
+ *     gate again.
+ *   - The insertion effect's cleanup, which neither of those cases runs, is the
+ *     one that means the component is gone. It stops the run.
  */
 
 import type { BootedRunHandle, RunHandle } from "../index";
+import { SubGate } from "./sub-gate";
 
-/** A Msg dispatched while no run can take it, and the promise its caller holds. */
+/** A Msg dispatched before the run has started, and the promise its caller holds. */
 interface HeldMsg<M> {
   readonly msg: M;
   readonly resolve: () => void;
   readonly reject: (error: unknown) => void;
 }
 
-/** The State a stopped run ended on. A box, because `S` may itself be nullish. */
-export interface CarriedState<S> {
-  readonly state: S;
+/** A run and the listener this object holds on it. */
+interface Started<S, M extends { type: string }> {
+  readonly handle: RunHandle<S, M>;
+  readonly unlisten: () => void;
 }
 
-/** Where the current run is. A `stopping` run refuses new Msgs but still folds. */
+/**
+ * Where the run is. `leaving` is a run whose component is gone but whose passive
+ * cleanups have not run yet: a child's cleanup may still send it a last Msg.
+ */
 type Phase<S, M extends { type: string }> =
-  | { readonly type: "no-run" }
-  | {
-      readonly type: "live" | "stopping";
-      readonly handle: RunHandle<S, M>;
-      readonly unlisten: () => void;
-    };
+  | { readonly type: "not-started" }
+  | ({ readonly type: "live" | "leaving" } & Started<S, M>)
+  | { readonly type: "stopped" };
+
+const stoppedError = () => new Error("@demlik/tea: runtime stopped");
 
 export class MountedRun<S, M extends { type: string }> {
   private snapshot: S;
-  private phase: Phase<S, M> = { type: "no-run" };
-  // The current run's booted handle: the only thing with a `getState`. `null`
-  // until its `ready` resolves, and for good if its boot fails.
+  private phase: Phase<S, M> = { type: "not-started" };
+  // The run's booted handle: the only thing with a `getState`. `null` until its
+  // `ready` resolves, and for good if its boot fails.
   private booted: BootedRunHandle<S, M> | null = null;
-  private carried: CarriedState<S> | null = null;
-  // An effect is standing: a run is wanted. Read by the put-off stop.
+  // An effect is standing, so the component is on screen.
   private connected = false;
-  // The component is gone for good, not hidden.
-  private retired = false;
   private held: HeldMsg<M>[] = [];
+  private readonly subs = new SubGate();
   private readonly listeners = new Set<() => void>();
 
   /**
-   * @param startRun boots a run, at `carried`'s State when there is one.
-   * @param initial  the value React reads until a run has booted.
+   * @param startRun boots the run, its Sub runners going through `subs`.
+   * @param initial  the value React reads until the run has booted.
    */
   constructor(
-    private readonly startRun: (
-      carried: CarriedState<S> | null,
-    ) => RunHandle<S, M>,
+    private readonly startRun: (subs: SubGate) => RunHandle<S, M>,
     initial: S,
   ) {
     this.snapshot = initial;
@@ -78,52 +78,79 @@ export class MountedRun<S, M extends { type: string }> {
   };
 
   /**
-   * Stable for the life of this object, so a handler kept across a hide never
-   * holds a dead run. With no run to take it, the Msg waits for the next one in
-   * order, and its promise settles when that run has folded it.
+   * Stable for the life of this object. A hide changes nothing about it: the run
+   * is still there. A Msg dispatched before the first effect (a child's effects
+   * run before its parent's, and a tree first mounted hidden runs none) waits
+   * for the run, in order.
    */
   readonly dispatch = (msg: M): Promise<void> => {
-    // Live first: a child's effect cleanup still reaches the run on an unmount.
-    if (this.phase.type === "live") return this.phase.handle.dispatch(msg);
-    if (this.retired) {
-      return Promise.reject(new Error("@demlik/tea: runtime stopped"));
+    switch (this.phase.type) {
+      case "live":
+      case "leaving":
+        return this.phase.handle.dispatch(msg);
+      case "stopped":
+        return Promise.reject(stoppedError());
+      case "not-started":
+        return new Promise((resolve, reject) => {
+          this.held.push({ msg, resolve, reject });
+        });
     }
-    return new Promise((resolve, reject) => {
-      this.held.push({ msg, resolve, reject });
-    });
   };
 
-  /** The effect ran. Start a run unless one is live or is still stopping. */
+  /** The effect ran: the component is on screen. */
   connect(): void {
     this.connected = true;
-    if (this.phase.type === "no-run") this.start();
+    this.subs.open();
+    switch (this.phase.type) {
+      case "live":
+        return;
+      case "leaving":
+        // Only if React ever calls an insertion cleanup on a hide. The show that
+        // follows must not find a dead run, so it takes the run back.
+        this.phase = { ...this.phase, type: "live" };
+        return;
+      case "not-started":
+      case "stopped":
+        this.start();
+    }
   }
 
-  /** The effect's cleanup ran. Stop the run unless the effect runs again first. */
+  /** The effect's cleanup ran. Act on it unless the effect runs again first. */
   disconnect(): void {
     this.connected = false;
     queueMicrotask(() => {
-      if (!this.connected) void this.stop();
+      if (this.connected) return;
+      if (this.phase.type === "leaving") this.stop();
+      else this.subs.close();
     });
   }
 
   /**
-   * The component is gone for good. Only a real unmount or a replacement gets
-   * here: this runs from `useInsertionEffect`'s cleanup, which neither Strict
-   * Mode's double run nor `<Activity>` calls. A held Msg has no run coming, so
-   * it is refused rather than left waiting forever.
+   * The component is gone for good: this runs from `useInsertionEffect`'s
+   * cleanup, which neither Strict Mode's double run nor `<Activity>` calls.
    */
   retire(): void {
-    this.retired = true;
-    const held = this.held;
-    this.held = [];
-    for (const { reject } of held) {
-      reject(new Error("@demlik/tea: runtime stopped"));
+    switch (this.phase.type) {
+      case "not-started": {
+        this.phase = { type: "stopped" };
+        const held = this.held;
+        this.held = [];
+        for (const { reject } of held) reject(stoppedError());
+        return;
+      }
+      case "live":
+        // A standing effect's cleanup comes later and stops the run then, so a
+        // child's cleanup can still reach it. A hidden one has no cleanup coming.
+        if (this.connected) this.phase = { ...this.phase, type: "leaving" };
+        else this.stop();
+        return;
+      default:
+        return;
     }
   }
 
   private start(): void {
-    const handle = this.startRun(this.carried);
+    const handle = this.startRun(this.subs);
     this.booted = null;
     // A transition before `ready` needs no read: `ready`'s own read sees it.
     const unlisten = handle.subscribe(() => {
@@ -133,10 +160,8 @@ export class MountedRun<S, M extends { type: string }> {
     // A failed boot is not swallowed: it rejects every dispatch into this run.
     handle.ready.then(
       (booted) => {
-        // A load `stop()` gave up on can return after the next run has started.
-        if (this.phase.type === "no-run" || this.phase.handle !== handle) {
-          return;
-        }
+        // A run stopped mid-boot still boots, and nobody is reading it.
+        if (!("handle" in this.phase) || this.phase.handle !== handle) return;
         this.booted = booted;
         this.publish(booted.getState());
       },
@@ -149,22 +174,12 @@ export class MountedRun<S, M extends { type: string }> {
     }
   }
 
-  private async stop(): Promise<void> {
-    if (this.phase.type !== "live") return;
+  private stop(): void {
+    if (!("handle" in this.phase)) return;
     const { handle, unlisten } = this.phase;
-    this.phase = { type: "stopping", handle, unlisten };
-    // `stop()` also folds what was already queued, so the value is read after it.
-    await handle.stop().catch(() => {});
+    this.phase = { type: "stopped" };
     unlisten();
-    // A run that never booted has no State of its own to carry, so the previous
-    // carried State (if any) stands.
-    if (this.booted !== null) {
-      const state = this.booted.getState();
-      this.carried = { state };
-      this.publish(state);
-    }
-    this.phase = { type: "no-run" };
-    if (this.connected) this.start();
+    void handle.stop();
   }
 
   private publish(state: S): void {

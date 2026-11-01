@@ -149,24 +149,29 @@ That does nothing here: one run starts, `run` is called once, and each Sub start
 once. The hook starts the run in an effect, so a render that React repeats or
 throws away starts nothing.
 
-**`<Activity>`** runs the cleanups on hide and the effects again on show. So:
+**`<Activity>`** runs the cleanups on hide and the effects again on show. A hide
+stops the machine's Subs and nothing else. It is one run from mount to unmount:
 
-- **On hide**, the run stops as it does on an unmount: every Sub's cleanup runs
-  and the final save happens.
-- **On show**, a new run starts at the State the last one ended on. `state` keeps
-  its value, on a machine with a `store` and on one without. `init` is not called
-  again, so its Cmds do not run again. With a `store`, the new run also reads and
-  saves it, as any run does at boot, and keeps the State it was handed.
+- **On hide**, every Sub's cleanup runs, the built-in `timer` included. A Sub the
+  State asks for while hidden waits for the show.
+- **On show**, the Subs start again. A `timer` starts its countdown over.
+- **`state` keeps its value**, on a machine with a `store` and on one without.
+  `init` is not called again, and nothing is saved or loaded by the hide or the
+  show: every transition has already saved.
+- **A Cmd in flight lands.** A screen hidden while it loads reaches its answer
+  whether the answer comes during the hide or after the show, and the handler
+  runs once. You write nothing for this.
+- **A Msg dispatched while hidden folds at once**, and any Cmd it emits runs. So a
+  parent can keep talking to a hidden screen, and that screen does work off
+  screen. If it should not, have the parent stop sending.
 - **`dispatch` stays the same function**, so a handler a child kept from before
-  the hide still works after the show. A Msg dispatched while hidden waits for
-  the show, and its promise settles once the Msg is folded.
+  the hide still works after the show.
 
-A Cmd still in flight at the hide is lost, as it is on an unmount. `stop()` waits
-for its handler, refuses the Msg it returns, and reports the loss under
-`phase: "discard"`. A machine in a "loading" State stays there after the show, so
-if it can be hidden mid-Cmd, give it a Msg or a Sub that starts the work again.
+A tree first mounted hidden runs no effects, so it has no run until its first
+show. A Msg dispatched before then waits, and its promise settles once it is
+folded.
 
-After a real unmount, a held Msg and any later `dispatch` reject with
+After a real unmount, a Msg still waiting and any later `dispatch` reject with
 `@demlik/tea: runtime stopped`.
 
 ## 5. Render a run the component does not own

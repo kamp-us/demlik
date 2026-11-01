@@ -33,6 +33,7 @@ import {
 import type {
   BootedRunHandle,
   Cmd,
+  Dispose,
   EngineRun,
   Interpret,
   Machine,
@@ -42,7 +43,9 @@ import type {
   Sub,
   Subscribe,
 } from "../index";
-import { type CarriedState, MountedRun } from "./mounted-run";
+import { builtinRunners } from "../internal/engine/builtin-runners";
+import { MountedRun } from "./mounted-run";
+import type { SubGate } from "./sub-gate";
 
 /**
  * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
@@ -61,7 +64,7 @@ import { type CarriedState, MountedRun } from "./mounted-run";
  * `subscribe` at the moment a Cmd runs or a Sub starts — a handler may close
  * over props and state freely.
  *
- * **Identity matters.** The runtime is memoized on `[machine, opts.run,
+ * **Identity matters.** The runtime is keyed on `[machine, opts.run,
  * opts.ctx, opts.store]`. A new `ctx` reference rebuilds the runtime, and so
  * does a new `run` — pass the engine's own function, not an inline wrapper. Always `useMemo`
  * (or otherwise stabilize) the ctx at the call site. See README.
@@ -100,16 +103,16 @@ export type UseMachineOpts<
  * **Strict Mode:** its extra effect run on mount does nothing. One run starts,
  * `run` is called once, and each Sub starts once.
  *
- * **`<Activity>`:** a hide stops the run as an unmount does, so Subs are stopped
- * and the final save happens. A show starts a new run at the State the last one
- * ended on: `state` keeps its value, `init` is not called, and its Cmds do not
- * run again. A Cmd still in flight at the hide is lost as at an unmount: its
- * result is refused and reported, so a machine waiting on it keeps waiting.
+ * **`<Activity>`:** a hide stops the machine's Subs, and nothing else: their
+ * cleanups run, and they start again on show. It is the same run across the hide,
+ * so `state` keeps its value, `init` is not called again, and a Cmd in flight
+ * lands and its answer folds, whether that comes during the hide or after the
+ * show. A Msg dispatched while hidden folds at once, and any Cmd it emits runs.
  *
  * `dispatch` stays the same function across a hide and show. A Msg dispatched
- * while hidden, or before the run has started, waits for the run and its promise
- * settles once it is folded. After an unmount, `dispatch` rejects with
- * `@demlik/tea: runtime stopped`.
+ * before the run has started, which on a tree first mounted hidden means before
+ * its first show, waits for the run and its promise settles once it is folded.
+ * After an unmount, `dispatch` rejects with `@demlik/tea: runtime stopped`.
  *
  * Returns `[state, dispatch]` shaped like `useReducer`.
  */
@@ -136,15 +139,11 @@ export function useMachine<
   // that produced it, so the table it reads is never older than that render.
   const handlersRef = useRef<RunHandlers<M, C, U, Ctx>>(opts);
   handlersRef.current = opts;
-  const handlers = useMemo(
-    () => ({
-      interpret: latestTable(
+  const interpret = useMemo(
+    () =>
+      latestTable(
         () => (handlersRef.current as { interpret?: object }).interpret,
       ) as Interpret<M, C, Ctx>,
-      subscribe: latestTable(() => handlersRef.current.subscribe) as Partial<
-        Subscribe<M, U, Ctx>
-      >,
-    }),
     [],
   );
   // Render only builds the holder and reads `init` for the first paint, which
@@ -153,15 +152,19 @@ export function useMachine<
   const mounted = useMemo(
     () =>
       new MountedRun<S, M>(
-        (carried) =>
-          run(carried === null ? machine : resumedAt(machine, carried), {
+        (subs) =>
+          run(machine, {
             ctx,
             store,
-            ...handlers,
+            interpret,
+            subscribe: gatedRunners(
+              subs,
+              () => handlersRef.current.subscribe,
+            ) as Partial<Subscribe<M, U, Ctx>>,
           } as RunOptions<S, M, C, U, Ctx>),
         machine.init(null, ctx)[0],
       ),
-    [machine, run, ctx, store, handlers],
+    [machine, run, ctx, store, interpret],
   );
 
   const state = useSyncExternalStore(
@@ -183,22 +186,36 @@ export function useMachine<
   return [state, mounted.dispatch];
 }
 
+/** A Sub runner as `run` calls it. */
+type GatedRunner = (sub: Sub, ctx: unknown, dispatch: unknown) => Dispose;
+
 /**
- * `machine`, starting at the State a stopped run ended on. Its `init` already
- * ran for this mount, so its Cmds do not run again, and a store's saved State
- * (the same one, just flushed by the stop) is read and passed over.
+ * The Sub runner table `run` is handed: each runner the latest render names goes
+ * through `subs`, read again each time the Sub starts. The built-ins are named
+ * here so they go through it too. A type with no runner at all stays `undefined`,
+ * which is what the engine reports as a missing runner.
  */
-function resumedAt<
-  S,
-  M extends { type: string },
-  C extends Cmd,
-  U extends Sub,
-  Ctx,
->(
-  machine: Machine<S, M, C, U, Ctx>,
-  carried: CarriedState<S>,
-): Machine<S, M, C, U, Ctx> {
-  return { ...machine, init: () => [carried.state, []] };
+function gatedRunners(
+  subs: SubGate,
+  current: () => object | undefined,
+): object {
+  const runnerFor = (type: PropertyKey) =>
+    ((current() as Record<PropertyKey, unknown> | undefined)?.[type] ??
+      (builtinRunners as Record<PropertyKey, unknown>)[type]) as
+      | GatedRunner
+      | undefined;
+  return new Proxy(
+    {},
+    {
+      get: (_target, type) => {
+        const first = runnerFor(type);
+        if (first === undefined) return undefined;
+        const gated: GatedRunner = (sub, ctx, dispatch) =>
+          subs.admit(() => (runnerFor(type) ?? first)(sub, ctx, dispatch));
+        return gated;
+      },
+    },
+  );
 }
 
 /**
