@@ -1,7 +1,13 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Cmd, defineMachine, type Reducer, type Settled } from "../../index";
+import {
+  Cmd,
+  defineMachine,
+  type Reducer,
+  type Settled,
+  type Transitions,
+} from "../../index";
 import {
   PropertyFailure,
   propertyTerminates,
@@ -464,6 +470,199 @@ describe("a machine with no machine.cmds", () => {
     for (const msgs of fc.sample(from, { seed: 1, numRuns: 100 })) {
       expect(msgs.length).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("a machine in the transitions form", () => {
+  // The same release, where each state lists only the Msgs it takes. `asking` has no
+  // `start`, and `publishing` has no check answer, so a check nudged twice can answer
+  // after the run has left. `landed` takes nothing, whatever still waits.
+  const table = {
+    idle: {
+      start: (_s, m) => [
+        { type: "asking", ticket: m.ticket, got: [] },
+        CHECKS.map((name) => ask(name, m.ticket)),
+      ],
+    },
+    asking: {
+      nudge: update.nudge,
+      lint_ok: checkOk("lint"),
+      lint_err: checkErr("lint"),
+      test_ok: checkOk("test"),
+      test_err: checkErr("test"),
+      scan_ok: checkOk("scan"),
+      scan_err: checkErr("scan"),
+    },
+    publishing: {
+      publish_ok: () => [{ type: "landed" }, []],
+      publish_err: (s) => [s, [publish({ ticket: s.ticket })]],
+    },
+    landed: {},
+  } satisfies Transitions<State, Msg, Sent>;
+
+  const phased = (cells: Transitions<State, Msg, Sent> = table) =>
+    defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Sent,
+        ctx: {} as Ctx,
+      },
+      cmds: [defined.lint, defined.test, defined.scan, publish],
+      init: (loaded) => [loaded ?? { type: "idle" }, []],
+      update: cells,
+    });
+
+  const correct = phased();
+  const phasedLists = arbGuidedSequence(correct, ctx, cells);
+
+  it.each(SEEDS)("a law that always holds passes, seed %i", (seed) => {
+    let landed = 0;
+    const run = propertyTrace(
+      correct,
+      ctx,
+      phasedLists,
+      (_steps, final) => {
+        if (final.type === "landed") landed++;
+        return true;
+      },
+      { seed, numRuns: 500 },
+    );
+    expect(run.numRuns).toBe(500);
+    expect(landed).toBeGreaterThan(25);
+  });
+
+  it.each(SEEDS)("a run given every answer lands, seed %i", (seed) => {
+    propertyTrace(correct, ctx, phasedLists, landsGivenEveryAnswer, {
+      seed,
+      numRuns: 500,
+    });
+  });
+
+  it.each(
+    SEEDS,
+  )("a broken copy fails on its law and no refusal, seed %i", (seed) => {
+    const broken = phased({
+      ...table,
+      asking: { ...table.asking, test_ok: (s) => [s, []] },
+    });
+    const failure = failureOf(() =>
+      propertyTrace(
+        broken,
+        ctx,
+        arbGuidedSequence(broken, ctx, cells),
+        landsGivenEveryAnswer,
+        { seed, numRuns: 500 },
+      ),
+    );
+    expect(failure.run.numShrinks).toBeGreaterThan(0);
+    expect(told(failure)).toContain("sits in asking");
+  });
+
+  it.each(
+    SEEDS,
+  )("no list holds a Msg its state refuses, and every answer was sent, seed %i", (seed) => {
+    let nudgedPast = 0;
+    for (const msgs of fc.sample(phasedLists, { seed, numRuns: 1000 })) {
+      // `foldEvents` steps with `applyCell`, which throws on a refused Msg.
+      const { steps, initCmds, finalState } = foldEvents(
+        correct,
+        ctx,
+        null,
+        msgs,
+      );
+      const { misfit, waiting } = walk(initCmds, steps);
+      expect(misfit).toBeNull();
+      if (
+        finalState.type !== "asking" &&
+        waiting.some((cmd) => (cmd as Sent).type !== "publish")
+      ) {
+        nudgedPast++;
+      }
+    }
+    // Cmds really did outlive the state that takes their answer.
+    expect(nudgedPast).toBeGreaterThan(0);
+  });
+
+  it("a refused answer leaves its Cmd waiting for a later one", () => {
+    // One Cmd, sent at the start, whose answer `shut` refuses and `open` takes.
+    type Job = { readonly type: "job" };
+    type GateMsg = { readonly type: "unlock" } | { readonly type: "job_done" };
+    type Gate =
+      | { readonly type: "shut" }
+      | { readonly type: "open" }
+      | { readonly type: "done" };
+    const gate = defineMachine({
+      types: {
+        model: {} as Gate,
+        msg: {} as GateMsg,
+        cmd: {} as Job,
+        ctx: {} as Ctx,
+      },
+      init: (loaded) => [loaded ?? { type: "shut" }, [{ type: "job" }]],
+      update: {
+        shut: { unlock: () => [{ type: "open" }, []] },
+        open: { job_done: () => [{ type: "done" }, []] },
+        done: {},
+      } satisfies Transitions<Gate, GateMsg, Job>,
+    });
+
+    // `make` runs for every answer event read, refused or not, so more than one call
+    // on a list means a refused event left the one Cmd there to be read again.
+    let reads = 0;
+    const counted = arbGuidedSequence(gate, ctx, {
+      outside: { unlock: fc.constant({ type: "unlock" as const }) },
+      answers: {
+        job: {
+          draw: fc.constant(null),
+          make: () => {
+            reads++;
+            return { type: "job_done" as const };
+          },
+        },
+      },
+    }).map((msgs) => {
+      const read = reads;
+      reads = 0;
+      return { msgs, read };
+    });
+
+    const samples = fc.sample(counted, { seed: 1, numRuns: 500 });
+    expect(
+      samples.some(
+        ({ msgs, read }) =>
+          read > 1 && msgs.some(({ type }) => type === "job_done"),
+      ),
+    ).toBe(true);
+    for (const { msgs } of samples) {
+      expect(
+        msgs.filter(({ type }) => type === "job_done").length,
+      ).toBeLessThanOrEqual(1);
+      expect(foldEvents(gate, ctx, null, msgs).steps).toHaveLength(msgs.length);
+    }
+  });
+
+  it("a step's throw is still that list's failure, not a dropped event", () => {
+    const throwing = phased({
+      ...table,
+      asking: {
+        ...table.asking,
+        scan_ok: () => {
+          throw new Error("scan_ok broke");
+        },
+      },
+    });
+    const failure = failureOf(() =>
+      propertyTrace(
+        throwing,
+        ctx,
+        arbGuidedSequence(throwing, ctx, cells),
+        () => true,
+        { seed: 1, numRuns: 500 },
+      ),
+    );
+    expect(told(failure)).toContain("scan_ok broke");
+    expect(failure.message).toMatch(/"type":"scan_ok"[^\]]*\]\]/);
   });
 });
 

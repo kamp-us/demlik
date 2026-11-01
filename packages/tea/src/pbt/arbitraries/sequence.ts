@@ -15,6 +15,7 @@
 
 import * as fc from "fast-check";
 import {
+  acceptedTypes,
   applyCell,
   type Cmd,
   type Machine,
@@ -128,6 +129,12 @@ const MAX_PICK = 5039;
  * holds a pick and one value per answer cell, and the fold reads the pick modulo
  * the Cmds waiting at that point. With nothing waiting, the event is dropped.
  *
+ * **Refusals.** An event whose Msg the state at that point has no cell for is
+ * dropped too, in either update form, so a transitions machine can leave a Msg out
+ * of a state and no list holds it there. A Cmd whose answer was refused keeps
+ * waiting, and a later event can still answer it. A list therefore never tests
+ * that a state refuses a Msg: send that Msg by hand for that.
+ *
  * **Waiting** holds every Cmd that `init` and the steps have sent, that has a cell
  * in `answers`, and that has no answer yet. A Cmd sent twice waits twice. The fold
  * reads it off what the reducer returned, not `machine.cmds`, so a machine with no
@@ -240,11 +247,11 @@ export function arbGuidedSequence<
     );
   }
 
-  /** The Msg an event means now, taking its Cmd off `waiting`, or `null` if dropped. */
-  const read = (event: BlindEvent<M>, waiting: C[]): M | null => {
+  /** The Msg an event means now, or `null` with nothing waiting. */
+  const read = (event: BlindEvent<M>, waiting: readonly C[]): M | null => {
     if (event.kind === "outside") return event.msg;
     if (waiting.length === 0) return null;
-    const [cmd] = waiting.splice(event.pick % waiting.length, 1) as [C];
+    const cmd = waiting[event.pick % waiting.length] as C;
     const index = cellIndex.get(cmd.type) as number;
     const [, cell] = answers[index] as [string, Cell];
     return cell.make(cmd, event.values[index]);
@@ -270,6 +277,11 @@ export function arbGuidedSequence<
     for (const event of events) {
       const msg = read(event, waiting);
       if (msg === null) continue;
+      // A refused answer takes nothing off `waiting`: its Cmd still has no answer.
+      if (!acceptedTypes(machine, state).includes(msg.type)) continue;
+      if (event.kind === "answer") {
+        waiting.splice(event.pick % waiting.length, 1);
+      }
       msgs.push(msg);
       try {
         const [next, sent] = applyCell<S, M, C>(machine, state, msg);
