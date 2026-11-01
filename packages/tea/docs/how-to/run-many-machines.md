@@ -149,7 +149,9 @@ every child forked from it, so the whole tree stops with it.
 
 A worker whose Sub fails with an error it did not map to a Msg closes its own
 child scope the same way, so `remove` and `notify` run. The parent's scope and
-the other workers stay up.
+the other workers stay up. That takes an `onError` on the worker's `run`: with
+none, the default sink rethrows the failure and ends the process, along with
+every run in it. The same goes for the parent.
 
 ## 3. Use it
 
