@@ -27,6 +27,7 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
 | Comment ratio ratchet (a gate) | `code-graph . --comments --ci` |
 | What a package publishes, per export subpath (§13) | `code-graph <pkg> --api <map>` |
 | What a branch did to it, and does it owe a changeset (§13) | `code-graph <pkg> --api <map> --api-base <rev> [--api-policy <file>]` |
+| Does it publish a name nobody recorded, with no changesets or git base (§13.9) | `code-graph <pkg> --api <map> --ci` |
 
 `--blast` requires an unambiguous target; pass the `id` (`file:name`), not a bare name. In default (`package`) scope, blast output is flagged incomplete for cross-package callers (§10).
 
@@ -391,6 +392,8 @@ code-graph <path> [flags]
 | `--api <map>` | Published-API view: per export subpath, every published name with its emitted declaration text (§13.3). Standalone; reads emitted declarations, never the graph |
 | `--api-base <rev>` | With `--api`: the API diff against a base commit (§13.4) |
 | `--api-policy <file>` | With `--api` and `--api-base`: the bump ratchet (§13.5). Exit 1 on a miss |
+| `--api <map> --ci` | API LEDGER gate (§13.9): fails on a published name `api-ledger.json` at the repo root does not hold. No git base. Never the smell gate |
+| `--api <map> --accept-api --reason "<text>"` | The only way the API ledger grows (§13.9) |
 
 **Emitting output — one way, banner-safe.** With no `--out`, a view writes its document to stdout (unchanged). To capture it to a file, prefer `--out <file>`: because the `pnpm code-graph` wrapper prints its run banner to stdout, a bare `… > report.html` redirect interleaves that banner above the document (an invalid artifact, #1761), whereas `--out` writes the file directly and leaves the banner harmlessly on stdout. If you must redirect stdout instead, run banner-free — `pnpm --silent code-graph …` or `tsx tools/code-graph/src/index.ts …` directly.
 
@@ -420,14 +423,14 @@ code-graph <path> [flags]
 
 ## 13. Published-API mode (`--api`)
 
-An opt-in mode that answers two questions about one package: what does each export subpath publish, as a consumer's types see it, and what did a change do to that. It has three steps over one input. The **view** (§13.3) lists the published names. The **diff** (§13.4) compares the view at a base commit with the view now. The **ratchet** (§13.5) checks the diff against the package's changesets and a bump policy. Each step adds one flag, and each later step runs the earlier ones.
+An opt-in mode that answers two questions about one package: what does each export subpath publish, as a consumer's types see it, and what did a change do to that. It has three steps over one input. The **view** (§13.3) lists the published names. The **diff** (§13.4) compares the view at a base commit with the view now. The **ratchet** (§13.5) checks the diff against the package's changesets and a bump policy. Each step adds one flag, and each later step runs the earlier ones. The **API ledger** (§13.9) is a separate gate over the view alone, for a repo with no changesets.
 
 ### 13.1 What it reads, and what it leaves alone
 
 - **Emitted declarations, not the oxc graph.** The mode runs the pinned tsgo itself (`tsgoBinary()` in `src/engine/tsgo.ts`) with declaration-only emit into a temp folder, then reads those `.d.ts` files with a tsgo program. It runs neither the cheap pass nor the edge pass and never reads the `Graph` or its nodes, including the nodes #599 and #600 add. Source text misses what a consumer gets: an inferred return type, a private type folded into a public name. The emitted declarations carry both.
 - **§6-A3 still holds.** The `**/*.d.ts` exclusion filters the source graph's files. This mode's `.d.ts` files are the ones it emitted into its own temp folder, and they never enter the source graph.
 - **Existing output does not change.** With none of `--api`, `--api-base` and `--api-policy` on the command line, no emit runs, no temp folder is made, and every existing flag's output is byte-identical to before: the summary, `Graph`, every report and every gate. The mode adds no key to `Graph` and changes no existing type.
-- **The checkout is never written.** The mode writes only inside temp folders outside the checkout. It changes no file, index entry or ref in the checkout (§13.4 says how the base commit is read).
+- **The checkout is never written, but for the ledger.** The view, the diff and the ratchet write only inside temp folders outside the checkout. They change no file, index entry or ref in the checkout (§13.4 says how the base commit is read). The API ledger (§13.9) writes one file, `api-ledger.json`, and touches no index entry or ref.
 
 ### 13.2 Input: the API map
 
@@ -797,16 +800,19 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
 | `--api <map>` | view | `PublishedApi` JSON | 0, 2, 3 |
 | `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2, 3 |
 | `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
+| `--api <map> --ci` | view, then the API ledger (§13.9) | human verdict; `--json` gives `{ passed, scope, unrecorded, pruned }` | 0 pass, 1 unrecorded name, 2, 3 |
+| `--api <map> --accept-api --reason "<text>"` | view, then the API ledger's accept (§13.9) | human summary; `--json` gives `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
 
-`--json`, `--pretty` and `--out` apply as in §10; no other flag combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
+`--json`, `--pretty` and `--out` apply as in §10; no flag but those and the ones each row names combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
 
-- `--api-base` without `--api`, `--api-policy` without `--api-base`, or `--api` with any view, analysis or gate flag other than `--json`, `--pretty` and `--out`;
+- `--api-base` without `--api`, `--api-policy` without `--api-base`, or `--api` with any view, analysis or gate flag a row does not name;
 - an invalid map (§13.2) or policy (§13.5);
 - no tsconfig for `<path>`, tsgo failing to start, or an entry with no emitted file;
 - a base rev that does not resolve, or a failed `git archive`;
-- with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`.
+- with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`;
+- the ledger's own refusals, in §13.9.
 
-Exit 3 for any other error inside the run, on all three rows: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. The emit's diagnostics warning (§13.3) is a line of its own and still comes first when tsgo reported any. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss, never a crash.
+Exit 3 for any other error inside the run, on every row: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. The emit's diagnostics warning (§13.3) is a line of its own and still comes first when tsgo reported any. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss or an unrecorded name, never a crash.
 
 ### 13.7 Library subpath `@demlik/code-graph/api`
 
@@ -820,7 +826,7 @@ The mode ships as the `./api` export (`src/api.ts`, a barrel over `src/api/`), b
 | `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`; pure, no I/O |
 | `ApiMapSchema`, `BumpPolicySchema` | the zod schemas the CLI parses through |
 
-It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `ApiDiffOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own.
+It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `ApiDiffOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own. The API ledger (§13.9) is the command line's alone, like the unreachable and smell ledgers, and adds no export here.
 
 ### 13.8 Where it is documented
 
@@ -828,6 +834,25 @@ It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `
 - `docs/reference/library.md` gains an "API" section for `@demlik/code-graph/api`: the exports of §13.7, the map and policy shapes, and one example.
 
 Each child documents the part it builds: the view child `--api` and `readPublishedApi`, the diff child `--api-base` and `diffPublishedApi`, the ratchet child `--api-policy`, `readChangesetsSince` and `ratchetApiDiff`.
+
+### 13.9 The API ledger (`--api <map> --ci`)
+
+`--api-base` reports and gates nothing, `--api-policy` passes once the author adds a changeset, and both need a base commit in the checkout. The ledger gates a new public name with neither a changeset nor git, the same shape as the unreachable ledger (§10).
+
+`api-ledger.json` at the repo root (`findRepoRoot(<path>)`), beside `unreachable-ledger.json` and `smell-ledger.json`, holds one entry per published name, `{ scope, subpath, name, reason }`, written sorted with sorted keys (`src/api/ledger/ledger.ts`). `scope` is `<path>` relative to the repo root (`.` for the root itself). `subpath` is the map's key. `name` is a key of that subpath's `names` in the view (§13.3). An entry is keyed by `(scope, subpath, name)`, where the scope keeps two packages of one workspace apart. It records names and never signatures, so a change to a recorded name's text is not a failure: what that change owes is the ratchet's question.
+
+- **`--api <map> --ci`** runs the view and **exits 1** when a name the view lists has no entry, listing each by subpath and name. It never fails because an entry's name is gone: it rewrites the ledger without the run's scope's entries whose name the view no longer lists, and prints them, so a subpath dropped from the map prunes its names. Entries of other scopes are untouched, and a run with nothing to prune does not write. An absent ledger holds nothing, so every published name fails.
+- **`--api <map> --accept-api --reason "<text>"`** is the only way the ledger grows: it adds every unrecorded name of the run's scope, each carrying the trimmed reason, and prunes as `--ci` does. An entry already held keeps the reason it has.
+- **`--json`** prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and `{ scope, accepted, pruned, reason }` for `--accept-api`. A name in `unrecorded` or `accepted` is `{ scope, subpath, name }`; an entry in `pruned` also has its `reason`.
+- **No git.** The path runs the view and reads and writes the one file. It works in a folder that is not a git repository, and it reads no `.changeset/`, no `package.json` `exports` and no base commit.
+- **Exit 2, with one stderr line and nothing written:** `--accept-api` without a non-empty `--reason`, with `--ci`, or without `--api`; `--reason` with `--api --ci`; either beside `--api-base`, `--api-policy` or any flag other than `--json`, `--pretty` and `--out`; an invalid map (§13.2); no tsconfig or no emitted entry (§13.6); and an unreadable or schema-invalid ledger (an unknown key, a missing field, a blank reason or a duplicate key), which is read before any emit. A bad entry of any scope refuses the run.
+
+`--ci` keeps its other meanings without `--api`, and `--api-base` and `--api-policy` runs do not read this file.
+
+```sh
+code-graph packages/tea --api tea-api.json --accept-api --reason "baseline"   # once
+code-graph packages/tea --api tea-api.json --ci                               # in lint
+```
 
 ## 14. Feature hexagon (`--hexagon`)
 
