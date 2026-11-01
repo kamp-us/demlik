@@ -182,8 +182,33 @@ export interface LiveWorkProbe {
   readonly [liveWork]: () => LiveWork;
 }
 
+// === post: the one entry onto the line that waits for nothing ===
+//
+// What `tell` stands on (ADR 0029, item 5). Module-private and symbol-keyed for
+// the same reason `liveWork` is: it reaches no export, and it survives the
+// spread a wrapper does over the handle.
+export const post: unique symbol = Symbol("demlik-tea.post");
+
+/**
+ * What `tell` answers, at once, about the Msg it was handed. It says where the
+ * Msg stands at that moment and nothing about how it ends.
+ *
+ *   - `"queued"`: the Msg is on the receiver's line. It has not been handled.
+ *   - `"stopped"`: the receiver is stopping or has stopped, so the Msg is not on
+ *     its line and never will be.
+ *   - `"no_cell"`: the receiver's current State has no cell for the Msg, so the
+ *     Msg is not on its line. That reads the State as it is now, not the State
+ *     the Msgs already in line will leave.
+ */
+export type TellAnswer = "queued" | "stopped" | "no_cell";
+
+/** A run handle `tell` can reach the line of. */
+export interface Postable<S, M> {
+  readonly [post]: (msg: M, takes: (state: S) => boolean) => TellAnswer;
+}
+
 /** The members the core itself puts on the run handle. */
-export interface LoopHandle<S, M> extends LiveWorkProbe {
+export interface LoopHandle<S, M> extends LiveWorkProbe, Postable<S, M> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   getState(): S;
@@ -738,15 +763,40 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
           : new RuntimeStoppedError(msg.type),
       );
     }
+    return enqueueStep(msg, stepDispatch);
+  }
+
+  /** Put `step` on the tail, past the gate: the caller has already checked it. */
+  function enqueueStep(
+    msg: M,
+    step: (msg: M) => Promise<void> | undefined,
+  ): Promise<void> {
     const next = tail.then(() => {
       if (gate === "abandoned") throw new DispatchDiscardedError(msg.type);
       if (bootError !== null) throw bootError;
-      return stepDispatch(msg);
+      return step(msg);
     });
     // Swallow the rejection on the tail so one failing dispatch does NOT poison
     // every later one. The original `next` still rejects for the caller.
     tail = next.catch(() => {});
     return next;
+  }
+
+  /**
+   * Put a Msg on the tail and answer at once, with no caller left to reject at.
+   * The tail is extended synchronously, so two posts from one sender fold in
+   * the order they were made. Whatever the step ends with goes to this run's
+   * own sink, as for any Msg with no caller. The one exception is a cell that
+   * is gone by the Msg's turn: the Msg is dropped there, before any fold, so
+   * nothing is raised and the default sink has nothing to rethrow.
+   */
+  function postMsg(msg: M, takes: (state: S) => boolean): TellAnswer {
+    if (gate !== "open") return "stopped";
+    if (!takes(state as S)) return "no_cell";
+    enqueueStep(msg, (queued) =>
+      takes(state as S) ? stepDispatch(queued) : undefined,
+    ).catch(reportUndelivered);
+    return "queued";
   }
 
   /**
@@ -828,6 +878,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
 
   const core: LoopHandle<S, M> = {
     [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
+    [post]: postMsg,
     dispatch: dispatchToQuiescence,
     dispatchOnce: (msg) => enqueueDispatch(msg),
     getState(): S {

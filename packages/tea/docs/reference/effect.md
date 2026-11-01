@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (20)
+## Exports (21)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -31,7 +31,8 @@ import { … } from "@demlik/tea/effect";
 | [`Stopped`](#Stopped) | Class | stable | A dispatch the run refused because it is stopping or has stopped. |
 | [`StoreFailed`](#StoreFailed) | Class | stable | The run's store failed. |
 | [`SubscribeServices`](#SubscribeServices) | Type | stable | The services every runner of a `subscribe` map reads. |
-| [`tell`](#tell) | Function | stable | Hand `msg` to a run only when its State has a cell for it, and drop it when the run no longer takes it. |
+| [`tell`](#tell) | Function | stable | Put `msg` on a run's line and answer at once. |
+| [`TellAnswer`](#TellAnswer) | Type | stable | What `tell` answers, at once, about the Msg it was handed. |
 
 ## Declarations
 
@@ -370,11 +371,12 @@ interface SpawnSteps<A, E = never, R = never> {
   /**
    * Say the child stopped, usually a tell to the parent. It runs
    * after `remove`, on a fiber of its own that the closing scope never waits
-   * for, so it may wait on the parent.
+   * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with, such as the `StoreFailed` of a `tell`. A defect
-   * in it is not observed by `spawn` and ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. A defect in it,
+   * such as a `tell` on a handle that did not come from `run`, is not observed
+   * by `spawn` and ends the fiber unseen.
    */
   readonly notify: Effect<unknown>;
   /**
@@ -453,5 +455,13 @@ function tell<
   machine: Machine<S, M, C, U, Ctx>,
   runtime: EffectRuntime<S, M, E, Err>,
   msg: NoInfer<M>,
-): Effect<void, StoreFailed | Err>
+): Effect<TellAnswer>
+```
+
+<a id="TellAnswer"></a>
+
+### `TellAnswer`
+
+```ts
+type TellAnswer = "no_cell" | "queued" | "stopped"
 ```
