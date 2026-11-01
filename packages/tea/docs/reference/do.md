@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (107)
+## Exports (108)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -16,7 +16,8 @@ import { … } from "@demlik/tea/do";
 | [`acceptDurableCommandSocket`](#acceptDurableCommandSocket) | Function | stable | Accept a command-runner WebSocket using the Cloudflare **Hibernation API** so the socket survives DO eviction. |
 | [`acceptPresenceSocket`](#acceptPresenceSocket) | Function | stable | Accept a client WebSocket upgrade on a native DO and register it for hibernation. |
 | [`AgentHost`](#AgentHost) | Interface | stable | The assembled host: the runtime handle + the SSE hub + the framework test seam, owned ONCE. |
-| [`AgentHostConfig`](#AgentHostConfig) | Interface | stable | What the consumer supplies to createAgentHost — the domain mappings, nothing of the wiring. |
+| [`AgentHostConfig`](#AgentHostConfig) | Type | stable | What the consumer supplies to createAgentHost — the domain mappings, nothing of the wiring. |
+| [`AgentHostWiring`](#AgentHostWiring) | Interface | stable | The part of AgentHostConfig that is not the store and its sink. |
 | [`agentIsResumable`](#agentIsResumable) | Function | stable | True iff an agent slice loaded from storage is mid-loop (running + awaiting tools) — the resumable case `agent_boot` re-fires. |
 | [`AlarmStorage`](#AlarmStorage) | Interface | stable | The DO-native alarm slice `stepHost` re-arms. |
 | [`appliedEffects`](#appliedEffects) | Function | stable | Build a live guard. |
@@ -203,7 +204,27 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
 ### `AgentHostConfig`
 
 ```ts
-interface AgentHostConfig<
+type AgentHostConfig<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  Frame,
+  C extends Cmd = Cmd,
+  U extends Sub = Sub,
+  Ctx = unknown,
+> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx> & StoreAndOnError<AgentState<Stage, P, O, R>> & {
+  /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
+  readonly store: Store<AgentState<Stage, P, O, R>>;
+}
+```
+
+<a id="AgentHostWiring"></a>
+
+### `AgentHostWiring`
+
+```ts
+interface AgentHostWiring<
   Stage,
   P extends string,
   O extends Record<P, AgentTurn>,
@@ -230,8 +251,6 @@ interface AgentHostConfig<
    * host imports no engine; it boots the machine through this.
    */
   readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx, AgentEvent<R>>;
-  /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
-  readonly store: Store<AgentState<Stage, P, O, R>>;
   /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
@@ -587,8 +606,13 @@ function doStore<S>(
 function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,
-  keyOrOptions?: string | DoStoreOptions<S>,
+  keyOrOptions?: string | DoStoreOptions<S> & { readonly fenced?: undefined },
 ): DeletableStore<S>
+function doStore<S>(
+  storage: DurableObjectStorage,
+  parse: (raw: unknown) => Migrated<S>,
+  keyOrOptions?: string | DoStoreOptions<S>,
+): DeletableStore<S> | FencedStore<S> & DeletableStore<S>
 ```
 
 <a id="DoStoreOptions"></a>
@@ -604,7 +628,8 @@ interface DoStoreOptions<S> {
    * `storage.transaction`, so the read, the compare and the two writes are one
    * atomic unit. Inside a single DO the platform already guarantees one writer;
    * fencing is what refuses a SECOND grain — a stale zombie isolate mid-migration,
-   * or a second DO id pointed at the same state by a routing bug.
+   * or a second DO id pointed at the same state by a routing bug. A run on a
+   * fenced store must be given an `onError` (see `StoreAndOnError`).
    */
   readonly fenced?: true;
   /** Storage key the snapshot cell lives at. Defaults to `@@state`. */

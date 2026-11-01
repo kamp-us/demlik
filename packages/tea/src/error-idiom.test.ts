@@ -13,6 +13,7 @@ import { TerminalTimeoutError } from "./internal/flow/await-terminal";
 import type { UnauthorizedError } from "./internal/resilience/authed-call";
 import type { DeadlineExceededError } from "./internal/resilience/resilient-call";
 import { RetryExhaustedError } from "./internal/resilience/retry-to-success";
+import { PropertyFailure } from "./pbt";
 
 // ───────────────────────────────────────────────────────────────────────────
 // #283 — one error idiom PER KIND, and the conformance guard that pins it.
@@ -103,6 +104,19 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new OutcomeContractError("fetch", "returned 42"),
     ctor: OutcomeContractError,
     tag: "OutcomeContractError",
+  },
+  {
+    name: "PropertyFailure",
+    make: () =>
+      new PropertyFailure("Property failed", {
+        numRuns: 1,
+        numShrinks: 0,
+        seed: 1,
+        path: "0",
+        msgCounts: new Map(),
+      }),
+    ctor: PropertyFailure,
+    tag: "PropertyFailure",
   },
   {
     name: "AsyncSchemaError",

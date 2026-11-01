@@ -37,9 +37,10 @@ import type {
   EngineRun,
   Interpret,
   Machine,
+  OnError,
   RunHandlers,
   RunOptions,
-  Store,
+  StoreAndOnError,
   Sub,
   Subscribe,
 } from "../index";
@@ -87,8 +88,8 @@ export type UseMachineOpts<
 > = {
   run: EngineRun<S, M, C, U, Ctx>;
   ctx: Ctx;
-  store?: Store<S>;
-} & RunHandlers<M, C, U, Ctx>;
+} & StoreAndOnError<S> &
+  RunHandlers<M, C, U, Ctx>;
 
 /**
  * Build and own a run of `machine` for the lifetime of the component mount, on
@@ -152,6 +153,18 @@ export function useMachine<
       ) as Interpret<M, C, Ctx>,
     [],
   );
+  // The latest render's `onError`, on the same terms, so a sink passed inline
+  // does not replace the run. A render that passes none rethrows: the engine
+  // sends what its sink throws to the default sink (see `OnError`).
+  const onErrorRef = useRef<OnError | undefined>(opts.onError);
+  onErrorRef.current = opts.onError;
+  const onError = useMemo<OnError>(
+    () => (error, context) => {
+      if (onErrorRef.current === undefined) throw error;
+      onErrorRef.current(error, context);
+    },
+    [],
+  );
   // Render only builds the holder and reads `init` for the first paint, which
   // is pure. `useMemo` may call this twice under Strict Mode and an abandoned
   // render may drop the result, so no run starts here: that would leak one.
@@ -162,6 +175,7 @@ export function useMachine<
           run(machine, {
             ctx,
             store,
+            onError,
             interpret,
             subscribe: gatedRunners(
               subs,
@@ -171,7 +185,7 @@ export function useMachine<
         machine.init(null, ctx)[0],
         cleanupMayBeAHide,
       ),
-    [machine, run, ctx, store, interpret],
+    [machine, run, ctx, store, onError, interpret],
   );
 
   const state = useSyncExternalStore(

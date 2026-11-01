@@ -147,6 +147,10 @@ const [state, dispatch] = useMachine(downloader, {
 });
 ```
 
+A fenced store must also be given an `onError`, or it does not compile. `useMachine`
+reads the latest render's, so passing one inline does not replace the run. See
+[refusing a second writer](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage).
+
 ## 4. Know what happens under Strict Mode and `<Activity>`
 
 React runs an effect's cleanup without the component going away in two cases.

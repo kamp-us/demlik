@@ -32,6 +32,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0028](./0028-restored-init-may-resume.md) | Restored initialization may resume work | Accepted | 2026-10-18 |
 | [0029](./0029-ports-live-at-program-layer.md) | Typed ports live on the program above tea, never on a tea machine | Accepted | 2026-10-18 |
 | [0030](./0030-a-sub-failure-closes-the-runs-own-scope.md) | A Sub failure closes the run's own Scope, and `done()` reports it | Accepted | 2026-10-31 |
+| [0031](./0031-a-fenced-run-must-pass-on-error.md) | A fenced run must pass an `onError`, held by its type, never a quieter default sink | Accepted | 2026-10-31 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

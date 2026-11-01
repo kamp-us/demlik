@@ -257,7 +257,7 @@ type EffectRunOptions<
   E extends { type: string },
   I,
   B,
-> = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & {
+> = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & StoreAndOnError<S> & {
   /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
   readonly clock?: () => number;
   /**
@@ -275,8 +275,6 @@ type EffectRunOptions<
   readonly disposeTimeoutMs?: number;
   /** Projects each applied transition to the public events `on` serves. */
   readonly events?: (msg: M, state: S) => readonly E[];
-  readonly onError?: OnError;
-  readonly store?: Store<S>;
   /** The policy for a reducer throw. Defaults to `"stop"`. */
   readonly supervision?: Supervision<S, M>;
   /** A fire-and-forget sink for every applied transition. */

@@ -248,6 +248,14 @@ export interface LoopHandle<S, M>
 // hands a THROWING consumer sink's own error back here with the phase it was
 // handling, so a phase-keyed branch would warn away a broken sink and re-create
 // the very silent failure this exists to remove.
+//
+// Everything else is rethrown on a fresh macrotask, which ends a Node process
+// and every run in it: a failing Sub (`"sub"`) on a run with no sink keeps that
+// behaviour on purpose. A store that refuses a second writer never gets here by
+// omission, because a run on one must pass an `onError`, held by its type
+// (`StoreAndOnError`, ADR 0031). So there is no case here for
+// `StoreConflictError`: one that arrives is a store whose type no longer says
+// what it is, or a throwing sink, and both stay loud.
 export function defaultOnError(
   error: unknown,
   _context: RuntimeErrorContext,
@@ -278,6 +286,30 @@ class RunningSub {
   dispose: Dispose = () => {};
   failed = false;
   constructor(readonly type: string) {}
+}
+
+/**
+ * The Msgs on the line, per Msg type: one more when a Msg joins the tail, one
+ * fewer when its turn comes. Types and counts only, so a sink that logs what
+ * this reports never sees a Msg's payload.
+ */
+class MsgLine {
+  private readonly counts = new Map<string, number>();
+
+  joined(type: string): void {
+    this.counts.set(type, (this.counts.get(type) ?? 0) + 1);
+  }
+
+  reachedTurn(type: string): void {
+    const left = (this.counts.get(type) ?? 0) - 1;
+    if (left > 0) this.counts.set(type, left);
+    else this.counts.delete(type);
+  }
+
+  /** The counts now, in a fresh object later turns cannot change. */
+  snapshot(): Readonly<Record<string, number>> {
+    return Object.fromEntries(this.counts);
+  }
 }
 
 /**
@@ -405,6 +437,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
 
   // Every step chains onto `tail` — the single concurrency gate.
   let tail: Promise<void> = Promise.resolve();
+  // Every Msg on `tail` whose turn has not come. All of them are dropped if
+  // `stop()` gives up, so this is what its notice counts.
+  const line = new MsgLine();
 
   // The running Subs, keyed by their derived id. An id present here is a runner
   // that started and has neither been disposed nor failed.
@@ -471,7 +506,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   /**
    * Wait for the tail, up to the limit, and settle the gate on what happened.
    * On expiry report a `DrainTimeoutNotice` naming the handlers still awaiting
-   * and leave the gate `"abandoned"`, which is what drops their late work.
+   * and counting the Msgs on the line, and leave the gate `"abandoned"`, which
+   * is what drops their late work and those Msgs. The gate has refused new work
+   * since `stop()` began, so the count cannot grow after this.
    */
   async function drainTail(): Promise<void> {
     if ((await withinLimit(tail)) === "settled") {
@@ -483,6 +520,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
         [...inFlight].flatMap(({ cmdType }) => cmdType ?? []),
         inFlight.size,
         disposeTimeoutMs,
+        line.snapshot(),
       ),
       "discard",
     );
@@ -781,7 +819,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * loop's own producers is the late work `stop()` gave up on, so it is a
    * discard; a caller's dispatch is still a retired runtime being used. A Msg
    * accepted before `stop()` gave up is dropped when its turn comes, unfolded
-   * and unsaved, as a discard whoever sent it.
+   * and unsaved: a discard for a caller, and no word at all for a Msg with no
+   * caller, since the notice already counted it (`enqueueStep`).
    */
   function enqueueDispatch(
     msg: M,
@@ -794,16 +833,29 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
           : new RuntimeStoppedError(msg.type),
       );
     }
-    return enqueueStep(msg, stepDispatch);
+    return enqueueStep(msg, origin, stepDispatch);
   }
 
-  /** Put `step` on the tail, past the gate: the caller has already checked it. */
+  /**
+   * Put `step` on the tail, past the gate: the caller has already checked it.
+   *
+   * Every Msg dropped at its turn was on the line when `stop()` gave up, so the
+   * `DrainTimeoutNotice` has already counted it. A caller holds a promise that
+   * must settle, so it gets a `DispatchDiscardedError`. A Msg with no caller
+   * goes without a word: an error here would reach the sink and count it twice.
+   */
   function enqueueStep(
     msg: M,
+    origin: "caller" | "loop" | "tell",
     step: (msg: M) => Promise<void> | undefined,
   ): Promise<void> {
+    line.joined(msg.type);
     const next = tail.then(() => {
-      if (gate === "abandoned") throw new DispatchDiscardedError(msg.type);
+      line.reachedTurn(msg.type);
+      if (gate === "abandoned") {
+        if (origin === "caller") throw new DispatchDiscardedError(msg.type);
+        return;
+      }
       if (bootError !== null) throw bootError;
       return step(msg);
     });
@@ -819,12 +871,13 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * the order they were made. Whatever the step ends with goes to this run's
    * own sink, as for any Msg with no caller. The one exception is a cell that
    * is gone by the Msg's turn: the Msg is dropped there, before any fold, so
-   * nothing is raised and the default sink has nothing to rethrow.
+   * nothing is raised and the default sink has nothing to rethrow. A `stop()`
+   * that gave up counts the Msg in its notice instead (`enqueueStep`).
    */
   function postMsg(msg: M, takes: (state: S) => boolean): TellAnswer {
     if (gate !== "open") return "stopped";
     if (!takes(state as S)) return "no_cell";
-    enqueueStep(msg, (queued) =>
+    enqueueStep(msg, "tell", (queued) =>
       takes(state as S) ? stepDispatch(queued) : undefined,
     ).catch(reportUndelivered);
     return "queued";

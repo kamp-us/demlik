@@ -48,6 +48,10 @@ pending forever after a Sub failure, on both engines, and `result()` read
 
 Other work in a caller's Scope survives one run's Sub failure. This is published behaviour: a host that relied on the Scope closing, or on a finalizer seeing the failure as its `Exit`, must now wait on `done()`. `done()`'s Effect error type widens by `SubFailed`, which owes a minor changeset while tea is at 0.x.
 
+That survival needs an `onError`. [ADR 0031](./0031-a-fenced-run-must-pass-on-error.md) keeps the default sink as it was, so with none a failing Sub on an unfenced run still ends the process, along with every other run in it. A fenced run always has a sink, by its type.
+
+A fenced run whose lease another run took answers the same way. A terminal State the store refuses keeps the store's failure as its answer for every `done()`. Any other State answers with the Sub failure, and the refused final save reaches `onError` under `"stop-save"`.
+
 A handler that wants something to outlive its run has to hold a Scope other than the one it reads from the service.
 
 A parent run in a host's tree is not special: its Sub failure leaves the scope its workers were spawned under open, so they keep running until the host closes that scope.

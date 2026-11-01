@@ -44,11 +44,14 @@ and the Consequences below carry that narrowing.
 
 - `stop()` waits for the queue for at most `disposeTimeoutMs`. No new option sets that limit.
 - When the limit passes, `stop()` reports a `DrainTimeoutNotice` to `onError` under
-  `phase: "discard"`. It names the Cmd of each handler still running. Then `stop()` stops the Subs,
-  runs the final save and returns.
+  `phase: "discard"`. It names the Cmd of each handler still running and counts the Msgs queued
+  behind them, per Msg type ([#698](https://github.com/kamp-us/demlik/issues/698)). The count holds
+  types and numbers, no payload. Then `stop()` stops the Subs, runs the final save and returns.
 - Work that turns up after `stop()` gave up is dropped: what the stuck handler returns later, the
-  next Cmd of its step, and the Msgs already queued behind it. Each dropped Msg is a
-  `DispatchDiscardedError`. No further handler starts.
+  next Cmd of its step, and the Msgs already queued behind it. A Msg the stuck handler returns later
+  is a `DispatchDiscardedError` in the sink. A queued Msg is counted once, in the notice; if the
+  handler returns, a caller holding its promise gets a `DispatchDiscardedError`, and a Msg with no
+  caller is not reported again. No further handler starts.
 - tea starts no store call after `stop()` has returned. A run stopped while its `store.load()` was
   still pending saves nothing when that load returns: its `ready` resolves with the loaded State
   installed and unsaved, and it starts no Sub and no handler. A second `stop()` returns the first
@@ -89,4 +92,4 @@ What `stop()` promises on each engine when a Cmd handler never returns:
 - The final save itself has no limit. The ruling does not cover a store whose `save` never returns.
 - A dispatch a caller sent before `stop()` and that was still queued behind the stuck handler
   rejects with `DispatchDiscardedError` when its turn comes. If the handler never returns, that
-  dispatch never settles.
+  dispatch never settles, and the notice's count is what reports it.

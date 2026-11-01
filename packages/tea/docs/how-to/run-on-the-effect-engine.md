@@ -173,7 +173,9 @@ What changes from the Promise engine:
 
 The other options (`store`, `onError`, `clock`, `events`, `supervision`,
 `terminal`, `telemetry`, `disposeTimeoutMs`) mean what they mean on the Promise
-engine. A fenced store stays fenced.
+engine. A fenced store stays fenced, and must be given an `onError`:
+[step 4 of the durability how-to](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
+says why.
 
 ## 3. Swap a runner in a test
 
@@ -225,16 +227,20 @@ The machine handles `disconnected` like any other Msg. To reconnect, its
 `update` changes the State so the Sub's `deps` change, and the engine starts
 the Sub again.
 
-A failure the Sub does not catch stops that run and nothing else. `onError` sees
-it under `phase: "sub"`, and `done()` fails with `SubFailed`, whose `cause` is
-what the Sub failed with. `result()` stays `undefined`. The Scope you ran it in
-stays open, so whatever else lives there keeps going, and your program does not
-end by itself. To end it, wait on `done()`. What the run's handlers and runners
-acquired through `Scope.Scope` is released with the run, because that service is
-the run's own child Scope there. The Msgs the Sub sent before it failed fold
-first, so if one of them reaches a terminal State, `done()` and `result()` both
-answer with that State. There is no hook on the machine or
-on `run` for it: a failure you expect belongs in the Sub.
+A failure the Sub does not catch stops that run. `onError` sees it under
+`phase: "sub"`, and `done()` fails with `SubFailed`, whose `cause` is what the
+Sub failed with. `result()` stays `undefined`. The Scope you ran it in stays
+open, so whatever else lives there keeps going, and your program does not end by
+itself. To end it, wait on `done()`. What the run's handlers and runners acquired
+through `Scope.Scope` is released with the run, because that service is the run's
+own child Scope there. The Msgs the Sub sent before it failed fold first, so if
+one of them reaches a terminal State, `done()` and `result()` both answer with
+that State. There is no hook on the machine or on `run` for it: a failure you
+expect belongs in the Sub.
+
+With no `onError`, the default sink rethrows the failure and ends the process,
+along with every other run in it, whatever the Scope does. A host running several
+machines in one process passes a sink.
 
 The Promise engine follows the same rule. Its runner dispatches the Msgs for
 the errors it expects (the `onError` option of `fromWebSocket` does this), and a

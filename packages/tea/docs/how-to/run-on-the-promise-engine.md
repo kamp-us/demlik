@@ -116,12 +116,19 @@ What each piece does:
   a handler never returns, `stop()` gives up on it at that limit, reports a
   `DrainTimeoutNotice` to `onError`, then stops the Subs, runs the final save
   and returns. The handler is still running. What it returns later is dropped,
-  and so are the Msgs queued behind it. No store call starts after `stop()`
+  and so are the Msgs queued behind it; the notice's `droppedMsgs` counts those
+  per Msg type. No store call starts after `stop()`
   has returned, but a save or load already under way is not cancelled and can
   finish later. On a plain store that late save can overwrite what a newer run
   saved; a [fenced store](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
   refuses it. Use a fenced store if you start a new run on the same store
   after a `stop()` that gave up.
+- **`onError` hears what has no caller to reject at.** That is a failing Sub
+  (`"sub"`), a failed final save (`"stop-save"`), a Msg a Sub or a Cmd sent that
+  failed (`"follow-up"`). With no `onError` the default sink warns about a
+  discard and rethrows the rest, which ends the process along with every other
+  run in it. A host running several machines in one process passes a sink. A
+  fenced store must be given one, or it does not compile.
 
 ## 3. Swap a runner in a test
 

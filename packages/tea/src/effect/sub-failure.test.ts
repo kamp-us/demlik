@@ -23,9 +23,11 @@ import {
   defineMachine,
   type RuntimeErrorContext,
   type Store,
+  StoreConflictError,
   type Sub,
 } from "../index";
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
+import { memoryStore } from "../mem";
 import * as EffectEngine from "./index";
 
 class Closed extends Data.TaggedError("Closed")<{ readonly code: number }> {}
@@ -683,6 +685,72 @@ describe("Effect engine: done() gives one answer for one run", () => {
 
     const failed = await Effect.runPromise(Effect.flip(rt.done()));
     expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
+  });
+
+  // ADR 0031 beside ADR 0030: a run that lost its fence is told by its next save.
+  describe("on a fenced store whose lease another run took", () => {
+    const newer: Model = { ticks: 9, failed: null, pokes: 0 };
+    const losingLease = async (msgs: readonly Msg[]) => {
+      const inner = memoryStore<Model>(null, undefined, { fenced: true });
+      const go = Effect.runSync(Deferred.make<void>());
+      const { reports, onError } = sink();
+      const { value: booting, exits } = await openScope(
+        EffectEngine.run(machine, {
+          onError,
+          terminal: (s) => s.pokes > 0,
+          store: inner,
+          subscribe: {
+            feed: () =>
+              Stream.fromEffect(Deferred.await(go)).pipe(
+                Stream.flatMap(() => Stream.fromIterable(msgs)),
+                Stream.concat(Stream.fail(closed)),
+              ),
+            other: () => forever(() => {}),
+          },
+        }),
+      );
+      const rt = await Effect.runPromise(booting.ready);
+      const { version } = await inner.loadFenced();
+      await inner.saveFenced(newer, version);
+      const send = () => Effect.runSync(Deferred.succeed(go, undefined));
+      return { inner, rt, send, reports, exits };
+    };
+
+    it("a Sub failure still reads SubFailed, and the lost final save reaches the sink", async () => {
+      const { inner, rt, send, reports, exits } = await losingLease([]);
+      const waiting = Effect.runPromise(Effect.flip(rt.done()));
+
+      send();
+
+      const failed = await waiting;
+      expect(failed).toBeInstanceOf(EffectEngine.SubFailed);
+      expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
+      await vi.waitFor(() =>
+        expect(reports.map((r) => r.phase)).toEqual(["sub", "stop-save"]),
+      );
+      expect(reports[1]?.error).toBeInstanceOf(StoreConflictError);
+      expect(exits).toEqual([]);
+      expect(await inner.load()).toEqual(newer);
+    });
+
+    it("a terminal Msg the lease refuses gives every done() the store's failure", async () => {
+      const { inner, rt, send, exits } = await losingLease([{ type: "poke" }]);
+      const waiting = Effect.runPromise(Effect.flip(rt.done()));
+
+      send();
+
+      const first = await waiting;
+      const later = await Effect.runPromise(Effect.flip(rt.done()));
+      for (const answer of [first, later]) {
+        expect(answer).toBeInstanceOf(EffectEngine.StoreFailed);
+        expect((answer as EffectEngine.StoreFailed).cause).toBeInstanceOf(
+          StoreConflictError,
+        );
+      }
+      expect(rt.result()).toBeUndefined();
+      expect(exits).toEqual([]);
+      expect(await inner.load()).toEqual(newer);
+    });
   });
 });
 

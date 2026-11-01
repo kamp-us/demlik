@@ -16,7 +16,7 @@ library export; the `code-graph` executable is the CLI.
 | `discoverPackageRoots(root)` | Relative package directories, including `""` for the root |
 | `resolveEdgeTsConfig(root, scope, repoRoot)` | Selected tsconfig path; throws if none exists |
 | `toRelative(root, path)` | Relative POSIX path |
-| `findRepoRoot(root)` | Nearest ancestor with `pnpm-workspace.yaml`, otherwise the given root |
+| `findRepoRoot(root)` | First that exists, each searched upward before the next: nearest ancestor with `pnpm-workspace.yaml`; nearest ancestor whose valid-JSON `package.json` has a `workspaces` key; nearest ancestor with a `.git` directory or file; the given root |
 
 Use absolute roots. `EdgeScope` is `"package" | "deep"`.
 The former `loadCheapProject`, `loadEdgeProject`, `LoadedProject`, and

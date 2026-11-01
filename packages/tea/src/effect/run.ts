@@ -51,9 +51,8 @@ import type {
 import { applyCell, Outcome, subEntriesOf } from "../pure/core";
 import type {
   CtxArg,
-  OnError,
   Runtime,
-  Store,
+  StoreAndOnError,
   Supervision,
   TelemetrySink,
 } from "../runtime-types";
@@ -199,9 +198,8 @@ export type EffectRunOptions<
   B,
 > = CtxArg<Ctx> &
   InterpretOption<C, I> &
-  SubscribeOption<U, B> & {
-    readonly store?: Store<S>;
-    readonly onError?: OnError;
+  SubscribeOption<U, B> &
+  StoreAndOnError<S> & {
     /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
     readonly clock?: () => number;
     /** Projects each applied transition to the public events `on` serves. */
@@ -301,7 +299,8 @@ export function settleCellExit(
  * alone. The run forks its own child of that scope and closes only the child,
  * so the rest of the scope stays open, and `done()` fails with `SubFailed`. A
  * handler or runner that reads `Scope.Scope` gets that child, so what it acquires
- * is released with the run.
+ * is released with the run. With no `onError`, the default sink still rethrows
+ * the failure and ends the process.
  *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
  * one of the built-ins both engines run.

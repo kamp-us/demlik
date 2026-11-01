@@ -106,6 +106,9 @@ the limit.
 
 `fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
 `chromeStorageStore` has no atomic compare-and-swap and stays unfenced.
+A run on a fenced store must be given an `onError`, held by its type, because a
+lost fence can surface with no caller to reject at
+([ADR 0031](../../../../.decisions/0031-a-fenced-run-must-pass-on-error.md)).
 The [durability how-to](../how-to/make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
 shows the setup; [ADR 0017](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md)
 records the design.

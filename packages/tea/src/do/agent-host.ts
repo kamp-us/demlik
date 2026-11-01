@@ -21,7 +21,9 @@ import type {
   CtxArg,
   EngineRun,
   RunHandle,
+  RunOptions,
   Store,
+  StoreAndOnError,
   Sub,
   Wired,
 } from "../index";
@@ -64,8 +66,27 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
  * `C`/`U`/`Ctx` are the machine's own Cmd/Sub/Ctx — inferred from
  * `buildMachine` at the `createAgentHost` call site (never name them by hand;
  * an erased `any` here cost consumers all checking on this layer — #278).
+ *
+ * `store` is required, and a fenced one needs an `onError` (see
+ * {@link StoreAndOnError}).
  */
-export interface AgentHostConfig<
+export type AgentHostConfig<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  Frame,
+  C extends Cmd = Cmd,
+  U extends Sub = Sub,
+  Ctx = unknown,
+> = AgentHostWiring<Stage, P, O, R, Frame, C, U, Ctx> &
+  StoreAndOnError<AgentState<Stage, P, O, R>> & {
+    /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
+    readonly store: Store<AgentState<Stage, P, O, R>>;
+  };
+
+/** The part of {@link AgentHostConfig} that is not the store and its sink. */
+export interface AgentHostWiring<
   Stage,
   P extends string,
   O extends Record<P, AgentTurn>,
@@ -101,8 +122,6 @@ export interface AgentHostConfig<
     U,
     Ctx
   >;
-  /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
-  readonly store: Store<AgentState<Stage, P, O, R>>;
   /** The plain Ctx the machine threads to its interpret cells. */
   readonly ctx: Ctx;
   /**
@@ -286,12 +305,15 @@ export function createAgentHost<
     // conditional stays deferred, and tsc relates it only to itself, not to an
     // object that spreads the handlers beside it.
     const ctxArg = { ctx: config.ctx } as CtxArg<Ctx>;
+    // Lifted out of `config`, `store` and `onError` no longer read as one member
+    // of its union, so the options are read at `run`'s own parameter type.
     const booting: RunHandle<S, M, E> = config.run(wired.machine, {
       ...wired,
       ...ctxArg,
       store: config.store,
+      onError: config.onError,
       events: agentEvents<Stage, P, O, R>(),
-    });
+    } as RunOptions<S, M, C, U, Ctx, E>);
 
     // SSE off the semantic stream. Subscriptions attach on the booting handle
     // (total before boot), so the hub catches every event from the first

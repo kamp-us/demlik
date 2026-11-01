@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (159)
+## Exports (161)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -121,7 +121,7 @@ import { … } from "@demlik/tea";
 | [`replay`](#replay) | Function | stable | Run a machine's `init` and then its `update` over a list of Msgs, with no engine, store or effects. |
 | [`RunHandle`](#RunHandle) | Interface | stable | A running machine's handle: queue a Msg, listen, wait for boot, stop. |
 | [`RunHandlers`](#RunHandlers) | Type | stable | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
-| [`RunOptions`](#RunOptions) | Type | stable | The options every engine's `run` accepts: the `ctx`, the handlers the machine runs under, an optional `store`, and the `events` projector that feeds `on`. |
+| [`RunOptions`](#RunOptions) | Type | stable | The options every engine's `run` accepts: the `ctx`, the handlers the machine runs under, an optional `store` with the `onError` a fenced one needs, and the `events` projector that feeds `on`. |
 | [`Runtime`](#Runtime) | Interface | stable | The Promise engine's booted handle — what BootingRuntime's `ready` resolves to once boot completes. |
 | [`RuntimeDiscardedError`](#RuntimeDiscardedError) | Class | stable | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | [`RuntimeDiscardNotice`](#RuntimeDiscardNotice) | Class | stable | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
@@ -136,6 +136,7 @@ import { … } from "@demlik/tea";
 | [`SettledErr`](#SettledErr) | Type | stable | The Msg the engine mints when a `Cmd.define`d Cmd's handler fails: `<name>_err`, carrying the Cmd and the tagged error. |
 | [`SettledOk`](#SettledOk) | Type | stable | The Msg the engine mints when a `Cmd.define`d Cmd's handler succeeds: `<name>_ok`, carrying the Cmd and its value. |
 | [`Store`](#Store) | Interface | stable | Where an engine loads and saves a machine's state. |
+| [`StoreAndOnError`](#StoreAndOnError) | Type | stable | The `store` and `onError` options of a run: a fenced store needs an `onError`, and the mistake does not compile (ADR 0031). |
 | [`StoreConflictError`](#StoreConflictError) | Class | stable | Thrown when a fenced save finds a version other than the one it expected — another live writer has this run. |
 | [`StoreRefusedError`](#StoreRefusedError) | Class | stable | `ready` rejects with this when the saved state could not be restored: `migrate` returned refuse, or `load` / `migrate` threw (that throw is the `cause`). |
 | [`structuralHash`](#structuralHash) | Function | stable | Turn a plain-data value into a stable string that does not depend on object key order. |
@@ -166,6 +167,7 @@ import { … } from "@demlik/tea";
 | [`tryFoldMsgs`](#tryFoldMsgs) | Function | stable | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | [`tryInterpret`](#tryInterpret) | Function | stable | Wrap a function that may throw into a Cmd handler that never rejects: success maps to one Msg through `onOk`, failure to another through `onErr`. |
 | [`UndeclaredFailureError`](#UndeclaredFailureError) | Class | stable | A `Cmd.define`d handler failed outside its declared channel: its `Err` carried no `_tag`, or a tag the def does not declare. |
+| [`UnfencedStore`](#UnfencedStore) | Type | stable | A `Store<S>` whose type says it is not fenced. |
 | [`UpdateForm`](#UpdateForm) | Type | stable | Which of the two shapes a machine's `update` takes: a flat `reducer` keyed by Msg type, or a `transitions` table keyed by state type and then Msg type. |
 | [`WebSocketFactoryOpts`](#WebSocketFactoryOpts) | Interface | stable | Options for `fromWebSocket`: map each message, open, error and close event to a Msg, or to `null` to drop it. |
 | [`WebSocketSubData`](#WebSocketSubData) | Type | stable | The `deps` a WebSocket Sub carries: the `wsUrl` to connect to. |
@@ -877,9 +879,15 @@ class DisposeTimeoutNotice extends RuntimeDiscardNotice {
 
 ```ts
 class DrainTimeoutNotice extends RuntimeDiscardNotice {
-  constructor(cmdTypes: readonly string[], pendingCmds: number, timeoutMs: number);
+  constructor(
+    cmdTypes: readonly string[],
+    pendingCmds: number,
+    timeoutMs: number,
+    droppedMsgs?: Readonly<Record<string, number>>,
+  );
   readonly _tag: "DrainTimeoutNotice";
   readonly cmdTypes: readonly string[];
+  readonly droppedMsgs: Readonly<Record<string, number>>;
   readonly name: "DrainTimeoutNotice";
   readonly pendingCmds: number;
   readonly timeoutMs: number;
@@ -1908,9 +1916,8 @@ type RunOptions<
   U extends Sub,
   Ctx,
   E extends { type: string } = never,
-> = CtxArg<Ctx> & RunHandlers<M, C, U, Ctx> & {
+> = CtxArg<Ctx> & RunHandlers<M, C, U, Ctx> & StoreAndOnError<S> & {
   readonly events?: (msg: M, state: S) => readonly E[];
-  readonly store?: Store<S>;
 }
 ```
 
@@ -2138,6 +2145,22 @@ interface Store<S> {
   migrate(raw: unknown): Migrated<S>;
   save(state: S): Promise<void>;
 }
+```
+
+<a id="StoreAndOnError"></a>
+
+### `StoreAndOnError`
+
+```ts
+type StoreAndOnError<S> =
+  | {
+    readonly onError?: OnError;
+    readonly store?: UnfencedStore<S>;
+  }
+  | {
+    readonly onError: OnError;
+    readonly store: Store<S>;
+  }
 ```
 
 <a id="StoreConflictError"></a>
@@ -2506,6 +2529,14 @@ class UndeclaredFailureError extends Error {
   readonly failure: unknown;
   readonly name: "UndeclaredFailureError";
 }
+```
+
+<a id="UnfencedStore"></a>
+
+### `UnfencedStore`
+
+```ts
+type UnfencedStore<S> = Store<S> & { readonly fenced?: never }
 ```
 
 <a id="UpdateForm"></a>

@@ -163,10 +163,11 @@ export function __resetPortRegistry(): void {
  * - `"discard"` — work lost to a teardown the host asked for. Four witnesses,
  *   each carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
  *   handlers were still awaiting (`RuntimeDiscardedError`), a Msg that
- *   arrived DURING `stop()`'s drain, or was still queued when `stop()` gave up
- *   on it, and so could not be delivered (`DispatchDiscardedError`), a drain
- *   that did not finish inside `disposeTimeoutMs` (`DrainTimeoutNotice`), and
- *   teardown work that did not settle inside `disposeTimeoutMs`
+ *   arrived DURING `stop()`'s drain, or from a handler `stop()` gave up on, and
+ *   so could not be delivered (`DispatchDiscardedError`), a drain that did not
+ *   finish inside `disposeTimeoutMs`, which also counts the Msgs that were still
+ *   queued (`DrainTimeoutNotice`), and teardown work that did not settle inside
+ *   `disposeTimeoutMs`
  *   (`DisposeTimeoutNotice`). The one phase that is a
  *   LIFECYCLE report rather than a failure: legal, merely lossy.
  * - `"identity-drop"` — the `Identity` filter dropped a message addressed to a
@@ -225,6 +226,12 @@ export interface RuntimeErrorContext {
  * `run(machine, { onError })`. Should be total — a throw inside the sink is
  * itself surfaced via the default sink, so it can never re-introduce a silent
  * failure.
+ *
+ * Optional, except beside a fenced store (see {@link StoreAndOnError}). With no
+ * sink a `RuntimeDiscardNotice` is warned, and every other failure is rethrown on
+ * a fresh macrotask, which ends a Node process and every run in it. That includes
+ * a failing Sub (`"sub"`). A host running several machines in one process passes
+ * a sink that decides what one run's failure means for the rest.
  */
 export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
 
@@ -471,10 +478,18 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * for it without limit. It then stops the Subs and runs the final save as it
  * always does. The work it gave up on is not recalled — a Promise cannot be
  * cancelled — so a handler may still be running after `stop()` has returned.
- * Whatever it returns later is dropped, and so are the Msgs queued behind it:
- * each dropped Msg is a `DispatchDiscardedError`. The rest of its step's
- * Cmds are skipped: no handler starts for them, and they get no notice of
- * their own. None of it is saved.
+ * Whatever it returns later is dropped, and so are the Msgs queued behind it.
+ * The rest of its step's Cmds are skipped: no handler starts for them, and they
+ * get no notice of their own. None of it is saved.
+ *
+ * `droppedMsgs` is how a host learns what it lost. It counts the Msgs queued
+ * behind the stuck work when `stop()` gave up, per Msg type: Msgs handed to
+ * `dispatch` or `tell`, and those a handler or a Sub sent. It carries types and
+ * counts only, never a payload, so a sink can log it. It is read once and does
+ * not change. A Msg it counts is not reported again: if the handler returns
+ * late, a `dispatch` caller's promise rejects with a `DispatchDiscardedError`,
+ * and a Msg with no caller reaches the sink no second time. If the handler
+ * never returns, those promises never settle, and this count is the only word.
  *
  * tea starts no store call after `stop()` has returned. A store call already
  * under way when `stop()` gave up is not cancelled and can finish afterwards;
@@ -492,12 +507,19 @@ export class DrainTimeoutNotice extends RuntimeDiscardNotice {
     public readonly cmdTypes: readonly string[],
     public readonly pendingCmds: number,
     public readonly timeoutMs: number,
+    public readonly droppedMsgs: Readonly<Record<string, number>> = {},
   ) {
+    const dropped = Object.entries(droppedMsgs);
     super(
       `@demlik/tea: stop() gave up waiting for the queue after ${timeoutMs}ms ` +
         `with ${pendingCmds} Cmd(s) still in flight` +
         (cmdTypes.length > 0
           ? ` (${cmdTypes.map((type) => `"${type}"`).join(", ")})`
+          : "") +
+        (dropped.length > 0
+          ? ` and these Msgs queued: ${dropped
+              .map(([type, count]) => `"${type}" x${count}`)
+              .join(", ")}`
           : "") +
         ` — whatever they return, the rest of their step and the Msgs queued ` +
         `behind them are dropped. No store call starts after stop() has ` +
@@ -741,6 +763,32 @@ export function isFencedStore<S>(store: Store<S>): store is FencedStore<S> {
 }
 
 /**
+ * A `Store<S>` whose type says it is not fenced. A plain `Store<S>` fits it and
+ * a {@link FencedStore} does not. It is what lets {@link StoreAndOnError} tell the
+ * two apart, because a `FencedStore` is otherwise also a `Store`.
+ */
+export type UnfencedStore<S> = Store<S> & { readonly fenced?: never };
+
+/**
+ * The `store` and `onError` options of a run: a fenced store needs an `onError`,
+ * and the mistake does not compile (ADR 0031).
+ *
+ * Losing a fence is routine for a host that moves runs between processes, and
+ * with no `onError` the default sink rethrows the conflict and ends the process,
+ * along with every other run in it. A conflict can reach the sink at any save
+ * with no caller to reject at: `"stop-save"` from `stop()`, `"follow-up"` from a
+ * Msg a Sub or a Cmd sent. So the sink is required at the type, not left to be
+ * remembered.
+ *
+ * It reads a store's declared type. A fenced store first assigned to a variable
+ * typed plain `Store<S>` has given that type up, so it compiles with no `onError`
+ * and runs on the default sink.
+ */
+export type StoreAndOnError<S> =
+  | { readonly store?: UnfencedStore<S>; readonly onError?: OnError }
+  | { readonly store: Store<S>; readonly onError: OnError };
+
+/**
  * Thrown when a fenced save finds a version other than the one it expected —
  * another live writer has this run.
  *
@@ -928,8 +976,9 @@ export interface BootedRunHandle<
 
 /**
  * The options every engine's `run` accepts: the `ctx`, the handlers the
- * machine runs under, an optional `store`, and the `events` projector that
- * feeds `on`. An engine may take more; a host adapter hands only these.
+ * machine runs under, an optional `store` with the `onError` a fenced one needs,
+ * and the `events` projector that feeds `on`. An engine may take more; a host
+ * adapter hands only these.
  */
 export type RunOptions<
   S,
@@ -939,8 +988,8 @@ export type RunOptions<
   Ctx,
   E extends { type: string } = never,
 > = CtxArg<Ctx> &
-  RunHandlers<M, C, U, Ctx> & {
-    readonly store?: Store<S>;
+  RunHandlers<M, C, U, Ctx> &
+  StoreAndOnError<S> & {
     readonly events?: (msg: M, state: S) => readonly E[];
   };
 

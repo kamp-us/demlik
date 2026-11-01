@@ -983,19 +983,18 @@ type AgentToolSpec<Args, Ok, CT extends AnyToolDef, Ctx> = {
   /** Parses what `result` returns, at the edge, like any tool's `ok`. */
   readonly ok: StandardSchemaV1<unknown, Ok>;
   /**
+   * What the child run's failures with no caller to reject at reach. See
+   * `run`'s `onError`.
+   */
+  readonly onError?: OnError;
+  /**
    * The child's whole input, derived from the call's args. It is the only thing
    * the child is told: the parent's conversation never reaches it.
    */
   readonly prompt: (args: Args) => string;
   /** The value the parent call settles with, read off the child's final turn. */
   readonly result: (output: AgentTurn) => Ok;
-  /**
-   * The child run's Store at `key`. The same key must reach the same durable
-   * cell on every call, in every process — that is what makes a re-fired call
-   * resume the child instead of restarting it.
-   */
-  readonly store: (key: string, ctx: HandlerCtx<Ctx>) => Store<DefinedAgentState<CT>>;
-} & ChildCtxOption<CT, Ctx>
+} & ChildCtxOption<CT, Ctx> & ChildStoreOption<CT, Ctx>
 ```
 
 <a id="AgentTurn"></a>
@@ -1623,7 +1622,7 @@ type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<DefinedAgentState<T>
 ### `DefinedAgentRunOptions`
 
 ```ts
-type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> & {
+type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> & StoreAndOnError<DefinedAgentState<T>> & {
   /** The clock that stamps `at`. Omit → `Date.now`. */
   readonly clock?: () => number;
   /**
@@ -1688,7 +1687,6 @@ type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> &
    * Omit → the run has no stop button and every path behaves exactly as before.
    */
   readonly signal?: AbortSignal;
-  readonly store?: Store<DefinedAgentState<T>>;
 }
 ```
 

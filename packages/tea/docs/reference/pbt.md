@@ -8,25 +8,42 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (13)
+## Exports (19)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`AnswerCell`](#AnswerCell) | Interface | stable | How one type of Cmd gets answered. |
 | [`arbConstantMsg`](#arbConstantMsg) | Function | stable | Build a payload-free Msg variant arbitrary. |
-| [`arbGuidedSequence`](#arbGuidedSequence) | Function | stable | State-aware Msg sequence arbitrary — generates only msgs whose precondition holds in the current state. |
+| [`arbGuidedSequence`](#arbGuidedSequence) | Function | stable | Draw Msg lists in which every answer answers a Cmd that was sent and not yet answered, so a law that something must happen can be checked on random lists. |
 | [`arbMsg`](#arbMsg) | Function | stable | Build a single `fc.Arbitrary<M>` from a `MsgArbitraryTable<M>`. |
 | [`arbMsgSequence`](#arbMsgSequence) | Function | stable | Build an arbitrary of Msg sequences over a per-Msg arbitrary. |
 | [`arbRecordMsg`](#arbRecordMsg) | Function | stable | Build a record-shaped Msg variant arbitrary. |
-| [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, and the final state. |
+| [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, the final state, and the Cmds `init` sent. |
+| [`GuidedCells`](#GuidedCells) | Interface | stable | What arbGuidedSequence draws from. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
+| [`MsgCount`](#MsgCount) | Interface | stable | What a property run's lists did with one Msg type. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
+| [`PropertyFailure`](#PropertyFailure) | Class | stable | Raised when a property fails. |
 | [`propertyInvariant`](#propertyInvariant) | Function | stable | Assert a predicate holds on EVERY transition step in a generated sequence. |
+| [`PropertyOpts`](#PropertyOpts) | Interface | stable | What every property runner takes: the saved state to start from, the two checks below, and fast-check's `Parameters` (`numRuns` defaults to 200 here). |
+| [`PropertyRun`](#PropertyRun) | Interface | stable | What a property run did. |
 | [`propertyTerminates`](#propertyTerminates) | Function | stable | Assert every generated Msg sequence ends in a terminal state. |
 | [`propertyTrace`](#propertyTrace) | Function | stable | Assert a predicate over the full trace plus the final state. |
 | [`Step`](#Step) | Interface | stable | One unit in a fold trace — the four pieces of data a property invariant typically asserts on. |
 | [`stubCtxThrowingProxy`](#stubCtxThrowingProxy) | Function | stable | Build a Ctx value whose every property access throws. |
 
 ## Declarations
+
+<a id="AnswerCell"></a>
+
+### `AnswerCell`
+
+```ts
+interface AnswerCell<K extends Cmd, V, M> {
+  readonly draw: Arbitrary<V>;
+  readonly make: (cmd: K, value: V) => NoInfer<M>;
+}
+```
 
 <a id="arbConstantMsg"></a>
 
@@ -47,11 +64,16 @@ function arbGuidedSequence<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  A extends { readonly [K in string]?: unknown },
 >(
-  _machine: Machine<S, M, C, U, Ctx>,
-  _ctx: Ctx,
-  _cells: { [K in string]?: (state: S) => Arbitrary<Extract<M, { type: K }>> | null },
-  _opts?: { maxLength?: number },
+  machine: Machine<S, M, C, U, Ctx>,
+  ctx: NoInfer<Ctx>,
+  cells: GuidedCells<M, C, A>,
+  opts?: {
+    readonly loaded?: NoInfer<S> | null;
+    readonly maxLength?: number;
+    readonly size?: SizeForArbitrary;
+  },
 ): Arbitrary<readonly M[]>
 ```
 
@@ -77,6 +99,14 @@ function arbMsgSequence<M extends { type: string }>(
     readonly maxLength?: number;
     readonly minLength?: number;
     readonly prefix?: readonly NoInfer<M>[];
+    /**
+     * Forwarded to `fc.array`. Left out, fast-check's default size applies:
+     * `"small"` unless `fc.configureGlobal` changed it, which draws at most
+     * `2 * minLength + 10` Msgs however large `maxLength` is. So `maxLength: 60`
+     * comes out about 10 long, and a state that takes more steps than that is
+     * never reached. Pass `"max"` to draw up to `maxLength`.
+     */
+    readonly size?: SizeForArbitrary;
   },
 ): Arbitrary<readonly M[]>
 ```
@@ -110,8 +140,24 @@ function foldEvents<
   msgs: readonly NoInfer<M>[],
 ): {
   readonly finalState: S;
+  readonly initCmds: readonly C[];
   readonly states: readonly S[];
   readonly steps: readonly Step<S, M, C>[];
+}
+```
+
+<a id="GuidedCells"></a>
+
+### `GuidedCells`
+
+```ts
+interface GuidedCells<
+  M extends { type: string },
+  C extends Cmd,
+  A extends { readonly [K in C["type"]]?: unknown },
+> {
+  readonly answers?: { readonly [K in string | number | symbol]: K extends C["type"] ? AnswerCell<Extract<C, { type: K }>, A[K], M> : never };
+  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { type: K }>> };
 }
 ```
 
@@ -121,6 +167,22 @@ function foldEvents<
 
 ```ts
 type MsgArbitraryTable<M extends { type: string }> = { [K in M["type"]]: fc.Arbitrary<Extract<M, { type: K }>> }
+```
+
+<a id="MsgCount"></a>
+
+### `MsgCount`
+
+```ts
+interface MsgCount {
+  /**
+   * How many of those acted: the step's `next` differs from its `prev` by
+   * `structuralHash`, or the step sent a Cmd.
+   */
+  readonly acted: number;
+  /** How many of this Msg type the run's lists held. */
+  readonly drawn: number;
+}
 ```
 
 <a id="msgTypeKeys"></a>
@@ -134,6 +196,20 @@ function msgTypeKeys<S, M extends { type: string }, C extends Cmd>(
     update: Reducer<S, M, C> | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
   },
 ): readonly string[]
+```
+
+<a id="PropertyFailure"></a>
+
+### `PropertyFailure`
+
+```ts
+class PropertyFailure extends Error {
+  constructor(report: string, run: PropertyRun, options?: ErrorOptions);
+  readonly _tag: "PropertyFailure";
+  readonly name: "PropertyFailure";
+  /** The run that failed. */
+  readonly run: PropertyRun;
+}
 ```
 
 <a id="propertyInvariant"></a>
@@ -151,9 +227,94 @@ function propertyInvariant<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
-  invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
+  invariant: (
+    step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>,
+    initCmds: readonly NoInfer<C>[],
+  ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
+```
+
+<a id="PropertyOpts"></a>
+
+### `PropertyOpts`
+
+```ts
+interface PropertyOpts<S> extends Omit<fc.Parameters, "asyncReporter" | "examples" | "reporter" | "timeout"> {
+  /**
+   * Fail a run whose laws all held when a Msg type never acted, naming each such
+   * type, so a cut path can't stay green. Default `false`.
+   *
+   * A deep path needs a `maxLength` well past its depth as well as `size: "max"`
+   * on `arbMsgSequence`. Lists too short to reach a healthy machine's deep state
+   * name that healthy path as never acted, in the same report a cut path gives. At
+   * the default `maxLength` of 30, a state 20 steps deep on 6 Msg types drawn evenly
+   * fails this way, since only one draw in 6 climbs. Allow about the depth times the
+   * number of Msg types, here `maxLength: 120`.
+   *
+   * This stays out of any run with a non-empty `path`, so drop `path` to have it
+   * check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A
+   * path with no colon, such as `"3"`, is what a failure with no shrinks reports, and
+   * it is no replay once that failure is gone: fast-check draws a full `numRuns` of
+   * lists starting from that one, and a cut path reads green. `path: ""` is no path
+   * to fast-check, so this applies there.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) leaves
+   * "acted" unreadable, so this fails the run saying so.
+   */
+  readonly failOnNeverActed?: boolean;
+  /**
+   * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
+   * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
+   * keep a hand-written Cmd beside its defined ones. A machine with no `cmds` field
+   * has no list to check against, so this adds nothing there. `cmds: []` is a list
+   * with nothing on it, so every Cmd fails.
+   *
+   * A value with no string `type` is never a Cmd, so it fails with this off too, on
+   * every machine.
+   */
+  readonly failOnUndeclaredCmd?: boolean;
+  /**
+   * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
+   * arbitrary draws one per run, and a failure's counterexample shows the drawn
+   * state beside the shrunk list. It can draw `null` as well, the nothing storage
+   * hands back on a fresh start, which boots the machine fresh.
+   */
+  readonly loaded?: S | Arbitrary<S | null> | null;
+}
+```
+
+<a id="PropertyRun"></a>
+
+### `PropertyRun`
+
+```ts
+interface PropertyRun {
+  /**
+   * What the run's lists did, per Msg type: every type the machine has a cell for,
+   * then any other that was drawn. A type never drawn reads zero. On a failure this
+   * stops at the failing list, so shrinking adds nothing, and a list skipped with
+   * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
+   * though `numRuns` includes it: its fold hands back no steps to count.
+   *
+   * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
+   * as acted whenever a cell returned a new object.
+   */
+  readonly msgCounts: ReadonlyMap<string, MsgCount>;
+  /** Lists tried. On a failure, this counts up to and including the failing one. */
+  readonly numRuns: number;
+  /** Shrink steps a failure took. `0` on a pass. */
+  readonly numShrinks: number;
+  /**
+   * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
+   * that one failure. `null` when no list failed: on a pass, on an interrupt
+   * marked as a failure, when too many `fc.pre` skips fail the run, or when
+   * `failOnNeverActed` fails it.
+   */
+  readonly path: string | null;
+  /** The seed this run drew from. Pass it back as `seed` to draw the same lists. */
+  readonly seed: number;
+}
 ```
 
 <a id="propertyTerminates"></a>
@@ -171,9 +332,9 @@ function propertyTerminates<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
-  terminal: (state: NoInfer<S>) => boolean,
+  terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
 ```
 
 <a id="propertyTrace"></a>
@@ -194,9 +355,10 @@ function propertyTrace<
   predicate: (
     steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
     finalState: NoInfer<S>,
-  ) => boolean,
+    initCmds: readonly NoInfer<C>[],
+  ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
-): void
+): PropertyRun
 ```
 
 <a id="Step"></a>

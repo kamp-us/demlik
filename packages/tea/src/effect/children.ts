@@ -36,7 +36,8 @@ import type { EffectRuntime } from "./handle";
  * fold in the order they were sent. A failed save or a cell's failure goes to
  * the receiver's `onError`, never back to the sender. A Msg whose cell is gone
  * by its turn is dropped without a word, and a `stop()` that gives up drops
- * what is still in line and reports each as a discard.
+ * what is still in line and counts it, per Msg type, in its
+ * `DrainTimeoutNotice`.
  *
  * Two hand-written waiting `runtime.dispatch(...)` calls into each other, one
  * from each machine's Cmd handler, still stop both machines: `dispatch` waits,

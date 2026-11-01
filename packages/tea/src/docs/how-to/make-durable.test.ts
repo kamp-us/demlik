@@ -64,11 +64,18 @@ const resumed = b.getState(); // phase "downloading", received 1: where A stoppe
 // #endregion resume
 
 // #region fence
+import type { OnError } from "@demlik/tea";
 import { fileStore } from "@demlik/tea/node";
+
+// A fenced run must be given a sink, or it does not compile.
+const onError: OnError = (error, { phase }) => {
+  console.error(`download run, ${phase}:`, error);
+};
 
 const file = process.env.DOWNLOAD_FILE ?? "download.json";
 const first = await run(downloader, {
   store: fileStore(file, parse, { fenced: true }),
+  onError,
 }).ready;
 // #endregion fence
 
@@ -77,6 +84,7 @@ const first = await run(downloader, {
 // boot, so B's own boot save swaps cleanly and B runs.
 const second = await run(downloader, {
   store: fileStore(file, parse, { fenced: true }),
+  onError,
 }).ready; // resolves — B now holds the fence
 // #endregion second-writer
 

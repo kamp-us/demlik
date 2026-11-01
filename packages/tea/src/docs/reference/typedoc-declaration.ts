@@ -184,7 +184,15 @@ export function printType(type: unknown): string {
   }
   switch (type.type) {
     case "intrinsic":
+      return text(type.name);
     case "unknown":
+      // typedoc falls back to the compiler's printed type, which the compiler
+      // cuts off at a fixed length. A cut type is a signature printed wrong.
+      if (text(type.name).endsWith("...")) {
+        throw new Error(
+          `typedoc type: a type was cut off where typedoc gave up on it; name it with a type alias: ${text(type.name)}`,
+        );
+      }
       return text(type.name);
     case "reference":
       return `${text(type.name)}${typeArguments(type)}`;
