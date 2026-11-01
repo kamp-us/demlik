@@ -12,6 +12,7 @@ import {
   type DefinedAgent,
   type DefinedAgentState,
 } from "../agent/index";
+import { type DoStoreOptions, doStore } from "../do";
 import { type AgentHostConfig, createAgentHost } from "../do/host";
 import { run as runEffect } from "../effect/index";
 import {
@@ -86,6 +87,32 @@ run(machine, {
   ctx: undefined,
   store: fileStore("f", parse, maybeFenced),
 });
+
+// `doStore` is held the same way, and an unfenced call of it still needs no sink.
+declare const storage: DurableObjectStorage;
+declare const doOptions: DoStoreOptions<State>;
+run(machine, { ctx: undefined, store: doStore(storage, parse) });
+run(machine, { ctx: undefined, store: doStore(storage, parse, "key") });
+run(machine, { ctx: undefined, store: doStore(storage, parse, { key: "k" }) });
+run(machine, {
+  ctx: undefined,
+  store: doStore(storage, parse, { fenced: true }),
+  onError,
+});
+run(machine, {
+  ctx: undefined,
+  store: doStore(storage, parse, doOptions),
+  onError,
+});
+// @ts-expect-error
+run(machine, {
+  ctx: undefined,
+  store: doStore(storage, parse, { fenced: true }),
+});
+// @ts-expect-error fenced only at runtime, so it needs one
+run(machine, { ctx: undefined, store: doStore(storage, parse, doOptions) });
+// @ts-expect-error
+run(machine, { ctx: undefined, store: doStore(storage, parse, maybeFenced) });
 
 // The limit ADR 0031 names: assigned to a plain `Store`, the type no longer says
 // it is fenced.

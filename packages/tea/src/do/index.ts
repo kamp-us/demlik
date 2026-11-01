@@ -289,6 +289,10 @@ export interface DoStoreOptions<S> {
  *
  * Either form is a `DeletableStore<S>`: `delete()` removes the state cell and
  * its `<key>@@version` cell in one `storage.delete` call.
+ *
+ * Options whose `fenced` is known only at runtime, such as a value typed
+ * {@link DoStoreOptions}, return a store that may be fenced, so a run on it must
+ * be given an `onError` (see `StoreAndOnError`).
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
@@ -298,8 +302,13 @@ export function doStore<S>(
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,
-  keyOrOptions?: string | DoStoreOptions<S>,
+  keyOrOptions?: string | (DoStoreOptions<S> & { readonly fenced?: never }),
 ): DeletableStore<S>;
+export function doStore<S>(
+  storage: DurableObjectStorage,
+  parse: (raw: unknown) => Migrated<S>,
+  keyOrOptions: string | DoStoreOptions<S>,
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,
