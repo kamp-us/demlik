@@ -68,10 +68,12 @@ export async function emitDeclarations(
   const tsgo = await tsgoBinary();
   const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-api-")));
   const out = path.join(temp, "out");
+  // A tsconfig's `declarationDir` beats `--outDir`, so both are named or the emit lands in the package.
   const args = [
     ...["-p", tsConfigPath, "--noEmit", "false", "--declaration", "--emitDeclarationOnly"],
     ...["--declarationMap", "false", "--noEmitOnError", "false", "--incremental", "false"],
     ...["--composite", "false", "--rootDir", rootAbsolute, "--outDir", out],
+    ...["--declarationDir", out],
   ];
   const run = spawnSync(tsgo.path, args, { cwd: rootAbsolute, encoding: "utf8" });
   if (run.error !== undefined) {
