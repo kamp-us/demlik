@@ -196,6 +196,20 @@ describe("the limit: a really unused export in a file reached that way", () => {
     expect(gate("packages/b").code).toBe(1);
     expect(gate(".").code).toBe(0);
   });
+
+  it("is reported by neither run when the package keeps its alias in a referenced project", () => {
+    writeTree({
+      "packages/b/tsconfig.json":
+        '{ "files": [], "references": [{ "path": "./tsconfig.app.json" }] }\n',
+      "packages/b/tsconfig.app.json": PACKAGE_TSCONFIG,
+    });
+    for (const scope of [".", "packages/b"]) {
+      const withheld = report(scope);
+      expect(withheld.unreachable).toEqual([]);
+      expect(withheld.unusedExports).toEqual([]);
+      expect(gate(scope).code).toBe(0);
+    }
+  });
 });
 
 describe("what the withholding must not reach", () => {

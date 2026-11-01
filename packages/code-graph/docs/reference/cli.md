@@ -502,7 +502,9 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   package's `only-called-from-tests` entry does not cover a `dead` finding at the
   root, because the root sees that test too. For the same reason a package run can
   find what the root does not. A package run also finds what the root withholds as
-  `uses-unknown` ([Pass selection and scope](#pass-selection-and-scope)).
+  `uses-unknown`, except when the package's `paths` sit in a project its
+  `tsconfig.json` references: its own run withholds it too, so neither run reports it
+  ([Pass selection and scope](#pass-selection-and-scope)).
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an
