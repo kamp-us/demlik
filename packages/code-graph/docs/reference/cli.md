@@ -350,8 +350,19 @@ chooses the nearest `tsconfig.json` at or above that directory. `--deep` chooses
 one at or above the workspace root; it **does not widen the file scan**.
 Cross-package callers require a directory containing those packages.
 
-The workspace root is the nearest ancestor with `pnpm-workspace.yaml`, or the
-analyzed directory if none exists. An edge pass without a tsconfig exits 2.
+The repo root, called the workspace root above, is the first of these that exists,
+each searched upward from the analyzed directory before the next is tried:
+
+1. The nearest ancestor with `pnpm-workspace.yaml`.
+2. The nearest ancestor whose `package.json` has a `workspaces` key. A
+   `package.json` that is not valid JSON does not count.
+3. The nearest ancestor with a `.git` directory or file.
+4. The analyzed directory.
+
+Every ledger and ceiling file sits at this root, and `.changeset/`, repo-relative
+scopes and `--deep` read it too.
+
+An edge pass without a tsconfig exits 2.
 This monorepo has package tsconfigs, so `--edges` works on a package; it has no
 root tsconfig for a root `--deep` run.
 
@@ -430,9 +441,14 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 - `--unreachable --accept-dead --reason "<why>"` adds every finding of this scope
   that the ledger does not name yet. It also drops this scope's entries whose
   finding is gone.
-- `--unreachable --ci` exits 1 on a finding of this scope that the ledger does not
+- `--unreachable --ci` exits 1 on a finding of this run that the ledger does not
   name, and lists each one. It never fails on an entry whose finding is gone: it
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
+- A finding counts as recorded when any entry names the same kind and the same
+  symbol, whichever scope recorded it. `packages/core` with `src/x.ts:f` and `.`
+  with `packages/core/src/x.ts:f` are one symbol, so `code-graph .` and
+  `code-graph packages/core` read one entry the same way. A run on a package alone
+  cannot see a caller in another package, so it can find what the root does not.
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an

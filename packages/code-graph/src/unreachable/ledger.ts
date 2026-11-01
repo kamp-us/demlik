@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { stableStringify } from "../render/json.js";
 import {
@@ -127,12 +128,22 @@ export function findingsOf(
   ].sort(compareFindings);
 }
 
-// What one run found against the ledger. Only the entries of the analyzed scope and of a gated
-// kind are in reach: `pruned` are those whose finding is gone, and `kept` is the ledger without
-// them. An entry of another scope, or of a kind the run does not gate, is kept as it is.
+// What a finding names, whichever scope measured it: `packages/core` with `src/x.ts:f` and `.` with
+// `packages/core/src/x.ts:f` are one symbol.
+function repoPlace(finding: UnreachableFinding): string {
+  return JSON.stringify([finding.kind, path.posix.join(finding.scope, finding.id)]);
+}
+
+// What one run found against the ledger. A finding is recorded when any entry names the same symbol,
+// so a run on a folder and a run on the root read one ledger the same way. Only the entries of the
+// analyzed scope and of a gated kind can be pruned: `pruned` are those whose finding is gone, and
+// `kept` is the ledger without them. An entry of another scope is kept as it is, since a run over a
+// different scope sees different callers and so cannot say its finding is gone.
 export type UnreachableReconciliation = {
   readonly scope: string;
   readonly gated: readonly UnreachableFindingKind[];
+  // How many of this run's gated findings an entry names.
+  readonly recorded: number;
   readonly unrecorded: readonly UnreachableFinding[];
   readonly pruned: readonly UnreachableLedgerEntry[];
   readonly kept: UnreachableLedger;
@@ -147,13 +158,15 @@ export function reconcileUnreachable(
   const isGated = (finding: UnreachableFinding) => gated.includes(finding.kind);
   const measured = findings.filter(isGated);
   const measuredKeys = new Set(measured.map(findingKey));
-  const recordedKeys = new Set(ledger.entries.map(findingKey));
+  const recordedPlaces = new Set(ledger.entries.map(repoPlace));
   const gone = (entry: UnreachableLedgerEntry) =>
     entry.scope === scope && isGated(entry) && !measuredKeys.has(findingKey(entry));
+  const unrecorded = measured.filter((finding) => !recordedPlaces.has(repoPlace(finding)));
   return {
     scope,
     gated,
-    unrecorded: measured.filter((finding) => !recordedKeys.has(findingKey(finding))),
+    recorded: measured.length - unrecorded.length,
+    unrecorded,
     pruned: ledger.entries.filter(gone),
     kept: unreachableLedgerOf(ledger.entries.filter((entry) => !gone(entry))),
   };

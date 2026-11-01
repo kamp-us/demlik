@@ -77,6 +77,41 @@ describe("reconcileUnreachable", () => {
     ]);
   });
 
+  it("counts an entry of another scope naming the same symbol as recorded, and never prunes it", () => {
+    const fromPackage = recorded(
+      dead("packages/a", "src/x.ts:x"),
+      dead("packages/b", "src/y.ts:y"),
+    );
+    const atRoot = reconcileUnreachable(
+      fromPackage,
+      ".",
+      [dead(".", "packages/a/src/x.ts:x"), dead(".", "packages/c/src/z.ts:z")],
+      ["dead"],
+    );
+    expect(atRoot.unrecorded).toEqual([dead(".", "packages/c/src/z.ts:z")]);
+    expect(atRoot.pruned).toEqual([]);
+    expect(atRoot.kept.entries).toEqual(fromPackage.entries);
+
+    const atPackage = reconcileUnreachable(
+      recorded(dead(".", "packages/a/src/x.ts:x")),
+      "packages/a",
+      [dead("packages/a", "src/x.ts:x")],
+      ["dead"],
+    );
+    expect(atPackage.unrecorded).toEqual([]);
+    expect(atPackage.pruned).toEqual([]);
+  });
+
+  it("does not let another scope's entry of another kind or symbol cover a finding", () => {
+    const result = reconcileUnreachable(
+      recorded(testOnly("packages/a", "src/x.ts:x"), dead("packages/a", "src/x.ts:other")),
+      ".",
+      [dead(".", "packages/a/src/x.ts:x")],
+      ["dead", "only-called-from-tests"],
+    );
+    expect(result.unrecorded).toEqual([dead(".", "packages/a/src/x.ts:x")]);
+  });
+
   it("leaves a kind the run does not gate alone: never unrecorded, never pruned", () => {
     const result = reconcileUnreachable(
       ledger,
