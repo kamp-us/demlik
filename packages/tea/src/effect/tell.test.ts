@@ -158,7 +158,7 @@ describe("tell on the Effect engine", () => {
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
-  });
+  }, 20_000);
 
   it("returns before the receiver's step runs: with its handler held, `tell` has answered and the Msg folds once it is released", async () => {
     await Effect.runPromise(

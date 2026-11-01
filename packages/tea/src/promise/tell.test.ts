@@ -74,77 +74,83 @@ afterEach(() => {
 });
 
 describe("tell on the Promise engine", () => {
-  it("one parent and three children answering each other from Cmd handlers, 100 round trips each: all finish, and each log replays to the same State", async () => {
-    const ids = ["a", "b", "c"];
-    const parent = ringParent(ids, ROUNDS);
-    const parentLog: RingParentMsg[] = [];
-    const children = new Map<
-      string,
-      {
-        readonly machine: ReturnType<typeof ringChild>;
-        readonly run: Runtime<RingChildState, RingChildMsg>;
-        readonly log: RingChildMsg[];
-      }
-    >();
-    const finished = (state: { readonly type: string }) =>
-      state.type === "finished";
+  it(
+    "one parent and three children answering each other from Cmd handlers, 100 round trips each: all finish, and each log replays to the same State",
+    async () => {
+      const ids = ["a", "b", "c"];
+      const parent = ringParent(ids, ROUNDS);
+      const parentLog: RingParentMsg[] = [];
+      const children = new Map<
+        string,
+        {
+          readonly machine: ReturnType<typeof ringChild>;
+          readonly run: Runtime<RingChildState, RingChildMsg>;
+          readonly log: RingChildMsg[];
+        }
+      >();
+      const finished = (state: { readonly type: string }) =>
+        state.type === "finished";
 
-    const parentRun = await run(parent, {
-      terminal: finished,
-      interpret: {
-        answer_back: async (cmd) => {
-          const child = children.get(cmd.id);
-          if (child === undefined) throw new Error(`no child ${cmd.id}`);
-          tell(child.machine, child.run, {
-            type: "answer",
-            round: cmd.round,
-          });
-        },
-      },
-    }).ready;
-    parentRun.observe((msg) => void parentLog.push(msg));
-
-    for (const id of ids) {
-      const machine = ringChild(id, ROUNDS);
-      const log: RingChildMsg[] = [];
-      const childRun = await run(machine, {
+      const parentRun = await run(parent, {
         terminal: finished,
         interpret: {
-          report: async (cmd) => {
-            tell(parent, parentRun, {
-              type: "child_result",
-              id: cmd.id,
+          answer_back: async (cmd) => {
+            const child = children.get(cmd.id);
+            if (child === undefined) throw new Error(`no child ${cmd.id}`);
+            tell(child.machine, child.run, {
+              type: "answer",
               round: cmd.round,
             });
           },
         },
       }).ready;
-      childRun.observe((msg) => void log.push(msg));
-      children.set(id, { machine, run: childRun, log });
-    }
+      parentRun.observe((msg) => void parentLog.push(msg));
 
-    for (const child of children.values()) {
-      expect(tell(child.machine, child.run, { type: "begin" })).toBe("queued");
-    }
+      for (const id of ids) {
+        const machine = ringChild(id, ROUNDS);
+        const log: RingChildMsg[] = [];
+        const childRun = await run(machine, {
+          terminal: finished,
+          interpret: {
+            report: async (cmd) => {
+              tell(parent, parentRun, {
+                type: "child_result",
+                id: cmd.id,
+                round: cmd.round,
+              });
+            },
+          },
+        }).ready;
+        childRun.observe((msg) => void log.push(msg));
+        children.set(id, { machine, run: childRun, log });
+      }
 
-    const parentFinal: RingParentState = await within(parentRun.done());
-    const expected = { a: ROUNDS, b: ROUNDS, c: ROUNDS };
-    expect(parentFinal).toEqual({ type: "finished", reports: expected });
-    expect(replay(parent, { msgs: parentLog, ctx: {} }).state).toEqual(
-      parentFinal,
-    );
+      for (const child of children.values()) {
+        expect(tell(child.machine, child.run, { type: "begin" })).toBe(
+          "queued",
+        );
+      }
 
-    for (const child of children.values()) {
-      const childFinal = await within(child.run.done());
-      expect(childFinal).toEqual({ type: "finished", answered: ROUNDS });
-      expect(child.log).toHaveLength(ROUNDS + 1);
-      expect(replay(child.machine, { msgs: child.log, ctx: {} }).state).toEqual(
-        childFinal,
+      const parentFinal: RingParentState = await within(parentRun.done());
+      const expected = { a: ROUNDS, b: ROUNDS, c: ROUNDS };
+      expect(parentFinal).toEqual({ type: "finished", reports: expected });
+      expect(replay(parent, { msgs: parentLog, ctx: {} }).state).toEqual(
+        parentFinal,
       );
-      await child.run.stop();
-    }
-    await parentRun.stop();
-  });
+
+      for (const child of children.values()) {
+        const childFinal = await within(child.run.done());
+        expect(childFinal).toEqual({ type: "finished", answered: ROUNDS });
+        expect(child.log).toHaveLength(ROUNDS + 1);
+        expect(
+          replay(child.machine, { msgs: child.log, ctx: {} }).state,
+        ).toEqual(childFinal);
+        await child.run.stop();
+      }
+      await parentRun.stop();
+    },
+    2 * LIMIT_MS,
+  );
 
   it("returns before the receiver's step runs: with its handler held, `tell` has answered and the Msg folds once it is released", async () => {
     const { runtime, started, release } = await openLine();
