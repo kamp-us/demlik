@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { type Project, type SourceFile, ts } from "ts-morph";
 import { absurd } from "../absurd.js";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../git.js";
 import { canonicalJson, contentHash } from "../lowering/artifact.js";
 import {
+  describeUnfollowed,
   describeUnreachable,
   importerPackageSources,
   PackageTree,
@@ -42,7 +43,7 @@ import {
 } from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
-import { moduleLiterals } from "./specifier.js";
+import { moduleLiterals, sourceCandidates } from "./specifier.js";
 import {
   crossesPackages,
   packageLabel,
@@ -356,19 +357,21 @@ const relativeSpecifier = (fromDir: string, to: string) => {
  * Point every module specifier that named a moved non-TypeScript file (a `.json` fixture, say) at
  * its new path. ts-morph cannot move such a file, so it rewrites none of its importers; each
  * specifier is read as it was written before any move, from the directory its file sat in then,
- * and re-derived from the directory that file sits in now.
+ * and re-derived from the directory that file sits in now. The same goes for a moved file's import
+ * of such a file left where it is: ts-morph drops a `.json`, and leaves any other as written.
  */
 function repointOtherFiles(
   project: Project,
   repoRoot: string,
   rows: readonly PathMove[],
+  unheld: readonly PathMove[],
   before: ReadonlyMap<SourceFile, { readonly specifiers: readonly string[] }>,
   dirBefore: ReadonlyMap<SourceFile, string>,
 ): void {
-  if (rows.length === 0) return;
   const destination = new Map(
-    rows.map((r) => [join(repoRoot, r.from), join(repoRoot, r.to)]),
+    unheld.map((r) => [join(repoRoot, r.from), join(repoRoot, r.to)]),
   );
+  const moved = new Set(rows.map((r) => join(repoRoot, r.from)));
   for (const sf of project.getSourceFiles()) {
     const written = before.get(sf)?.specifiers;
     const dir = dirBefore.get(sf);
@@ -377,10 +380,25 @@ function repointOtherFiles(
     moduleLiterals(sf).forEach((literal, i) => {
       const was = written[i];
       if (was === undefined || !was.startsWith(".")) return;
-      const to = destination.get(resolve(dir, was));
+      const path = resolve(dir, was);
+      const to =
+        destination.get(path) ??
+        (now !== dir && !moved.has(path) && isOtherFile(path)
+          ? path
+          : undefined);
       if (to !== undefined) literal.setLiteralValue(relativeSpecifier(now, to));
     });
   }
+}
+
+/** A file on disk a specifier names by its full path, with no TypeScript source answering it first. */
+function isOtherFile(path: string): boolean {
+  return (
+    extname(path) !== "" &&
+    existsSync(path) &&
+    statSync(path).isFile() &&
+    !sourceCandidates(path).some((candidate) => existsSync(candidate))
+  );
 }
 
 /**
@@ -393,7 +411,8 @@ function repointOtherFiles(
  * With a `workspace` — a manifest moving a file across a package line — the project also holds
  * every workspace package with an importer of a moved file, and each import the move touched is
  * rewritten to match its ends' packages (`rewriteCrossings`). An import no `exports` entry carries
- * across throws, before anything is written.
+ * across, and an import a row touches that apply cannot follow to a file, throw before anything is
+ * written.
  */
 function planRewrite(
   repoRoot: string,
@@ -476,6 +495,7 @@ function planRewrite(
   repointOtherFiles(
     project,
     repoRoot,
+    rows,
     rows.filter((r) => !held(r)),
     before,
     dirBefore,
@@ -487,17 +507,26 @@ function planRewrite(
   );
   const crossed =
     trees === null
-      ? { unreachable: [], edges: [] }
+      ? { unreachable: [], unfollowed: [], edges: [] }
       : rewriteCrossings(
           project.getSourceFiles(),
           rows,
           trees.before,
           trees.after,
         );
-  if (crossed.unreachable.length > 0)
-    throw new Error(
-      `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${crossed.unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
-    );
+  const refusals = [
+    ...(crossed.unreachable.length > 0
+      ? [
+          `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${crossed.unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
+        ]
+      : []),
+    ...(crossed.unfollowed.length > 0
+      ? [
+          `rows touch imports apply cannot follow to a file, so it cannot carry them; refusing before any commit:\n${crossed.unfollowed.map((u) => `  ${describeUnfollowed(repoRoot, u)}`).join("\n")}`,
+        ]
+      : []),
+  ];
+  if (refusals.length > 0) throw new Error(refusals.join("\n"));
   const edits: Edit[] = [];
   let specifiersRewritten = 0;
   for (const sf of project.getSourceFiles()) {
@@ -592,10 +621,10 @@ function trackedSources(repoRoot: string, scope?: string): string[] {
  * `"<name>": "workspace:*"` dependency it does not yet declare, and `pnpm install --lockfile-only`
  * updates `pnpm-lock.yaml` to match, all in the rewrite commit. Refused before either commit: a row
  * whose destination no `exports` entry of its new package reaches, an import a move would carry
- * across a package line to a file no `exports` entry reaches, an added dependency that closes a
- * cycle between workspace packages, and an added dependency with no `pnpm` on `PATH` or with a
- * lockfile git ignores. Over the
- * same HEAD it makes the same trees and messages, except that a manifest adding a dependency takes
+ * across a package line to a file no `exports` entry reaches, an import in a file moving across a
+ * package line that names no file, a package-name import into a package a row leaves that apply
+ * cannot follow to a file, an added dependency that closes a cycle between workspace packages, and an
+ * added dependency with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees and messages, except that a manifest adding a dependency takes
  * its lockfile from the installed pnpm; one adding none never runs pnpm.
  */
 export function applyManifest(

@@ -27,17 +27,22 @@ const Exports: z.ZodType<Exports> = z.lazy(() =>
 const PackageJson = z.object({
   name: z.string().min(1).optional(),
   exports: Exports.optional(),
+  main: z.string().optional(),
+  module: z.string().optional(),
+  types: z.string().optional(),
 });
 
 /**
  * One workspace package. `root` is repo-relative, `.` for the repository root. `name` and `exports`
  * are its `package.json`'s, `undefined` where that file does not declare them — or, for the root
- * alone, where there is no root `package.json` at all.
+ * alone, where there is no root `package.json` at all. `main` is what the bare package name answers
+ * when it has no `exports`: that file's `main`, else its `module`, else its `types`.
  */
 export type WorkspacePackage = {
   readonly root: string;
   readonly name: string | undefined;
   readonly exports: Exports | undefined;
+  readonly main?: string;
 };
 
 /**
@@ -54,8 +59,11 @@ const PnpmWorkspace = z
   .object({ packages: z.array(z.string()).optional() })
   .nullable();
 
-/** The directories pnpm's package search never descends into (`@pnpm/fs.find-packages`). */
-const IGNORED = ["node_modules", "bower_components", "test", "tests"].map(
+/**
+ * The directories pnpm's package search never descends into, as `pnpm -r` answers it: a member at
+ * `packages/test` counts, so `test` and `tests` are no part of this list.
+ */
+const IGNORED = ["node_modules", "bower_components"].map(
   (dir) => `**/${dir}/**`,
 );
 
@@ -90,7 +98,14 @@ function readPackage(repoRoot: string, root: string): WorkspacePackage {
     throw new Error(
       `${posix.join(root, "package.json")}: unreadable name or exports: ${parsed.error.message}`,
     );
-  return { root, name: parsed.data.name, exports: parsed.data.exports };
+  const { name, exports, main, module, types } = parsed.data;
+  const entry = main ?? module ?? types;
+  return {
+    root,
+    name,
+    exports,
+    ...(entry === undefined ? {} : { main: entry }),
+  };
 }
 
 /**
