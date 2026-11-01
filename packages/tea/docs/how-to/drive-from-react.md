@@ -73,6 +73,10 @@ function Downloader() {
 ```
 
 Each `dispatch` folds a Msg through `update` and re-renders with the next state.
+The page hears right after the save and before the first Cmd's handler starts, so
+a machine that moves to `loading` and emits a slow read shows `loading` for the
+whole read. It does not wait for the Cmd. A save that fails tells the page
+nothing.
 Under the hood `useMachine` calls the `run` you passed with
 `(machine, { ctx, interpret, subscribe })`,
 subscribes via `useSyncExternalStore` (so it is tearing-free under React 18's
@@ -170,3 +174,7 @@ const finished = runtime.done().finally(() => runtime.stop());
 ```
 
 `useRuntime` never calls `stop()`. Whoever built the run stops it.
+
+A listener hears before the Cmds run, so hearing one does not mean they are done.
+When your code needs that, use `observe` or `on`, which hear after a transition's
+Cmds, or `done()`.

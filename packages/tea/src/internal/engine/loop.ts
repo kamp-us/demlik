@@ -13,26 +13,30 @@
  * Sharing the loop is also what makes the two engines' traces identical: the
  * fold, the save order and the built-ins are the same code.
  *
- * Everything else `run` offers is an {@link Extension} built on six points:
+ * Everything else `run` offers is an {@link Extension} built on seven points:
  *
  *   1. `update`    — middleware over the fold. Returning `null` means "no
  *                    transition": no save, no effects, no commit.
  *   2. `interpret` — middleware over one Cmd's handler call; it maps what the
  *                    handler returned to the Msgs to dispatch, if any.
  *   3. `store`     — a wrapper over the store the caller handed `run`.
- *   4. `commit`    — called after a transition's effects, with the Msg and the
+ *   4. `installed` — called once a transition's State is past its save and its
+ *                    Subs are reconciled, before its first Cmd's handler starts.
+ *                    This is Elm's `view`: it never waits on a Cmd (#695).
+ *   5. `commit`    — called after a transition's effects, with the Msg and the
  *                    committed State, even when a Cmd handler threw. Boot
  *                    passes `undefined` for the Msg.
- *   5. `saveFailed` — called when a transition's save rejects, before that
+ *   6. `saveFailed` — called when a transition's save rejects, before that
  *                    rejection reaches the dispatch caller.
- *   6. `ctx`       — keys added to the ctx every Cmd handler receives, so a
+ *   7. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
  *
  * An extension may also add methods to the run handle (`handle`). Array order
  * is nesting order: the first extension's middleware is the outermost, and
- * commit callbacks run first to last. `builtinExtensions` (`./builtins`) fixes
- * that order for every engine; it is not a user-facing plugin API (#268).
+ * `installed` and commit callbacks run first to last. `builtinExtensions`
+ * (`./builtins`) fixes that order for every engine; it is not a user-facing
+ * plugin API (#268).
  *
  * `stop()` is the core's own lifecycle, because the gate it drives is what every
  * dispatch passes through: open → draining → closed, or → abandoned when
@@ -105,6 +109,7 @@ export interface Extension<S, M, C> {
   readonly update?: (next: Step<S, M, C>) => Step<S, M, C>;
   readonly interpret?: (next: InterpretStep<C, M>) => InterpretStep<C, M>;
   readonly store?: (store: Store<S>) => Store<S>;
+  readonly installed?: () => void;
   readonly commit?: (msg: M | undefined, state: S) => void;
   readonly saveFailed?: (state: S, error: unknown) => void;
   readonly ctx?: object;
@@ -268,8 +273,9 @@ class RunningSub {
 /**
  * Start the loop. Returns the handle synchronously; boot runs as the FIRST entry
  * on the serial tail. Save-then-effects ordering is structural: every
- * transition installs State, awaits the save, reconciles Subs, runs the Cmds,
- * then calls the commit callbacks — even when a Cmd handler throws.
+ * transition installs State, awaits the save, reconciles Subs, tells `subscribe`
+ * listeners, runs the Cmds, then calls the commit callbacks — even when a Cmd
+ * handler throws.
  */
 export function startLoop<S, M extends { type: string }, C, Ctx>(
   config: LoopConfig<S, M, C, Ctx>,
@@ -366,6 +372,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
           (inner, ext) => (ext.store ? ext.store(inner) : inner),
           config.store,
         );
+  const installedCallbacks = extensions.flatMap((ext) =>
+    ext.installed ? [ext.installed] : [],
+  );
   const commitCallbacks = extensions.flatMap((ext) =>
     ext.commit ? [ext.commit] : [],
   );
@@ -670,14 +679,20 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     }
   }
 
-  // Install State, then save → reconcile subs → run Cmds → commit callbacks.
-  // Save-before-effects is the hard ordering; tests pin it. Boot and every
-  // transition end here; boot passes no Msg.
+  // Install State, then save → reconcile subs → tell `subscribe` listeners →
+  // run Cmds → commit callbacks. Save-before-effects is the hard ordering; tests
+  // pin it. Boot and every transition end here; boot passes no Msg.
+  //
+  // A listener hears here, once per transition, because it is the view: it
+  // reads the new State while that State's Cmds run and never waits on them, as
+  // in Elm (#695). A failed save returns before this point, so a listener never
+  // hears unsaved State.
   //
   // The commit callbacks run in a `finally`: a Cmd handler that throws still
   // rejects the dispatch with its own error, but the State it left installed
-  // and saved still reaches every listener, observer, `on` handler, `done()`
-  // waiter and the telemetry sink (#311).
+  // and saved still reaches every observer, `on` handler, `done()` waiter and
+  // the telemetry sink (#311). Those stay after the Cmds: `driveToDone` settles
+  // on `observe`, so the Cmds of the State it settles on have finished by then.
   //
   // No store call starts once `stop()` has given up (ADR 0025). A step never
   // gets here abandoned, because the queued step in `enqueueDispatch` drops it
@@ -703,6 +718,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
       }
     }
     reconcileSubs();
+    for (const callback of installedCallbacks) callback();
     try {
       await runCmds(cmds);
     } finally {

@@ -882,9 +882,12 @@ export interface RunHandle<
 > {
   /** Put a Msg in the inbox; resolves once the engine has processed it. */
   dispatch(msg: M): Promise<void>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
@@ -974,12 +977,16 @@ export interface BootingRuntime<
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   /**
-   * Register a zero-arg change notifier, fired for every applied transition
-   * with the fold's State already committed — `getState()` inside the listener
-   * reads it, not the State before. A `dispatch` issued from the listener is
-   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
-   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
-   * deferral; two listeners issuing in order fold in that order.
+   * Register a zero-arg change notifier, fired once for every applied
+   * transition, after its save and before its first Cmd's handler starts, so a
+   * view shows the State while that State's Cmds run. `getState()` inside the
+   * listener reads the new State, not the State before. A failed save fires
+   * nothing. The listener does not mean the Cmds are done: `observe`, `on` and
+   * `done()` hear after them. A `dispatch` issued from the listener is SCHEDULED
+   * onto the serial tail behind the fold that fired it, never folded re-entrantly
+   * and never discarded, so it needs no `setTimeout(fn, 0)` deferral; it folds
+   * ahead of what that fold's Cmds return, and two listeners issuing in order
+   * fold in that order.
    */
   subscribe(listener: () => void): () => void;
   /**
