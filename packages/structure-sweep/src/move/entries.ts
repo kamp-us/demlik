@@ -337,30 +337,36 @@ function capture(pattern: string, text: string): string | undefined {
 }
 
 /**
- * The subpath an import names the package-relative source `file` by — `exports` inverted. An exact
- * entry wins over a pattern, and a pattern reaches the file only where Node would answer the
- * subpath by that same pattern, so a narrower `null` block keeps it out. `undefined` when no entry
- * reaches the file.
+ * Every subpath an import can name the package-relative source `file` by — `exports` inverted, most
+ * direct first. Exact entries come before patterns, and a pattern reaches the file only where Node
+ * would answer the subpath by that same pattern, so a narrower `null` block keeps it out.
  */
-export function subpathOf(
+export function subpathsOf(
   entries: readonly ExportEntry[],
   file: string,
-): string | undefined {
-  const exact = entries.find((e) => e.kind === "exact" && e.source === file);
-  if (exact !== undefined) return exact.key;
+): string[] {
+  const exact = entries.flatMap((e) =>
+    e.kind === "exact" && e.source === file ? [e.key] : [],
+  );
   const extension = SOURCE_FILE.exec(file)?.[0];
-  if (extension === undefined) return undefined;
+  if (extension === undefined) return exact;
   const stem = file.slice(0, file.length - extension.length);
-  for (const entry of entries) {
+  const patterned = entries.flatMap((entry) => {
     if (entry.kind !== "pattern" || !entry.extensions.includes(extension))
-      continue;
+      return [];
     const star = capture(entry.source, stem);
-    if (star === undefined) continue;
+    if (star === undefined) return [];
     const subpath = entry.key.replace("*", star);
-    if (answeringKey(entries, subpath) === entry.key) return subpath;
-  }
-  return undefined;
+    return answeringKey(entries, subpath) === entry.key ? [subpath] : [];
+  });
+  return [...exact, ...patterned];
 }
+
+/** The subpath an import names `file` by, the first of {@link subpathsOf}; `undefined` when no entry reaches it. */
+export const subpathOf = (
+  entries: readonly ExportEntry[],
+  file: string,
+): string | undefined => subpathsOf(entries, file)[0];
 
 /**
  * The package-relative source file `subpath` names, reading only the key Node answers it by.

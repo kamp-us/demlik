@@ -44,6 +44,7 @@ import {
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
 import { moduleLiterals, sourceCandidates } from "./specifier.js";
+import { checkTemplates } from "./templates.js";
 import {
   crossesPackages,
   packageLabel,
@@ -110,6 +111,9 @@ const TS_EXTENSION = /\.[cm]?tsx?$/;
  * tsconfig says, since `next.config.mjs` breaks as surely as a `.ts` file on a stale import.
  */
 const MODULE_EXTENSION = /\.[cm]?[jt]sx?$/;
+
+/** Every tracked file, the set an import built at run time can load from. */
+const ANY_FILE = /(?:)/;
 
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
 function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
@@ -414,47 +418,35 @@ function isOtherFile(path: string): boolean {
  * written in; heal then fixes any relative specifier still dangling in the renamed tree. Each edit
  * names the path its text was read from, so apply can check git tracks it before committing.
  *
- * With a `workspace` — a manifest moving a file across a package line — the project also holds
- * every workspace package with an importer of a moved file, its tracked JavaScript included, and
- * each import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An
- * import no `exports` entry carries across, and an import a row touches that apply cannot follow to
- * a file, throw before anything is written.
+ * When `crossing` — a row moves a file across a package line — the project also holds every
+ * workspace package with an importer of a moved file, its tracked JavaScript included, and each
+ * import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An import
+ * no `exports` entry carries across, and an import a row touches that apply cannot follow to a file,
+ * throw before anything is written. So does an import built at run time for which a row changes
+ * which file a value loads (`checkTemplates`), with or without a crossing row.
  */
 function planRewrite(
   repoRoot: string,
   scope: string,
   rows: readonly PathMove[],
   moved: MovedModules,
-  workspace: Workspace | null,
+  workspace: Workspace,
+  crossing: boolean,
 ): Rewrite {
   const scopeRoot = join(repoRoot, scope);
   const project = loadMoveProject(scopeRoot, repoRoot);
-  const trees =
-    workspace === null
-      ? null
-      : {
-          before: new PackageTree(
-            repoRoot,
-            workspace,
-            originalTree(repoRoot, rows),
-          ),
-          after: new PackageTree(
-            repoRoot,
-            workspace,
-            renamedTree(repoRoot, rows),
-          ),
-        };
-  if (trees !== null) {
+  const trees = {
+    before: new PackageTree(repoRoot, workspace, originalTree(repoRoot, rows)),
+    after: new PackageTree(repoRoot, workspace, renamedTree(repoRoot, rows)),
+  };
+  const modules = trackedMatching(repoRoot, MODULE_EXTENSION);
+  if (crossing) {
     const endpoints = rows
       .flatMap((r) => [r.from, r.to])
       .map((p) => join(repoRoot, p))
       .filter((p) => existsSync(p));
     for (const file of [
-      ...importerPackageSources(
-        trackedMatching(repoRoot, MODULE_EXTENSION),
-        rows,
-        trees.before,
-      ),
+      ...importerPackageSources(modules, rows, trees.before),
       ...endpoints,
     ])
       if (project.getSourceFile(file) === undefined)
@@ -515,24 +507,30 @@ function planRewrite(
     moved,
     renamedTree(repoRoot, rows),
   );
-  const crossed =
-    trees === null
-      ? { unreachable: [], unfollowed: [], edges: [] }
-      : rewriteCrossings(
-          project.getSourceFiles(),
-          rows,
-          trees.before,
-          trees.after,
-        );
+  const crossed = crossing
+    ? rewriteCrossings(
+        project.getSourceFiles(),
+        rows,
+        trees.before,
+        trees.after,
+      )
+    : { unreachable: [], unfollowed: [], edges: [] };
+  const templates = checkTemplates({
+    rows,
+    ...trees,
+    tracked: trackedMatching(repoRoot, ANY_FILE),
+    modules,
+  });
+  const unfollowed = [...crossed.unfollowed, ...templates.unfollowed];
   const refusals = [
     ...(crossed.unreachable.length > 0
       ? [
           `rows would import a file across a package line that no exports entry reaches; refusing before any commit:\n${crossed.unreachable.map((u) => `  ${describeUnreachable(repoRoot, u)}`).join("\n")}`,
         ]
       : []),
-    ...(crossed.unfollowed.length > 0
+    ...(unfollowed.length > 0
       ? [
-          `rows touch imports apply cannot follow to a file, so it cannot carry them; refusing before any commit:\n${crossed.unfollowed.map((u) => `  ${describeUnfollowed(repoRoot, u)}`).join("\n")}`,
+          `rows touch imports apply cannot follow to a file, so it cannot carry them; refusing before any commit:\n${unfollowed.map((u) => `  ${describeUnfollowed(repoRoot, u)}`).join("\n")}`,
         ]
       : []),
   ];
@@ -546,7 +544,12 @@ function planRewrite(
     edits.push({ origin: was.origin, path: sf.getFilePath(), text });
     specifiersRewritten += differing(was.specifiers, specifiersOf(sf));
   }
-  return { edits, healed, specifiersRewritten, crossings: crossed.edges };
+  return {
+    edits,
+    healed,
+    specifiersRewritten,
+    crossings: [...crossed.edges, ...templates.edges],
+  };
 }
 
 /** The `package.json` edits and lockfile a rewrite's crossings call for; none when it adds no dependency. */
@@ -637,9 +640,11 @@ function trackedMatching(
  * whose destination no `exports` entry of its new package reaches, an import a move would carry
  * across a package line to a file no `exports` entry reaches, an import in a file moving across a
  * package line that names no file, a package-name import into a package a row leaves that apply
- * cannot follow to a file, an added dependency that closes a cycle between workspace packages, and an
- * added dependency with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees and messages, except that a manifest adding a dependency takes
- * its lockfile from the installed pnpm; one adding none never runs pnpm.
+ * cannot follow to a file, an import built at run time for which a row changes which file a value
+ * loads, an added dependency that closes a cycle between workspace packages, and an added dependency
+ * with no `pnpm` on `PATH` or with a lockfile git ignores. Over the same HEAD it makes the same trees
+ * and messages, except that a manifest adding a dependency takes its lockfile from the installed
+ * pnpm; one adding none never runs pnpm.
  */
 export function applyManifest(
   repoRoot: string,
@@ -707,7 +712,8 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
         set.scope,
         rows,
         moved,
-        crossing.length > 0 ? workspace : null,
+        workspace,
+        crossing.length > 0,
       )
     : NO_REWRITE;
   const dependencies = planDependencies(repoRoot, workspace, rewrite.crossings);

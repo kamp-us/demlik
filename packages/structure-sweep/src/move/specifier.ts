@@ -1,9 +1,11 @@
-import { extname } from "node:path";
+import { dirname, extname } from "node:path";
 import {
   Node,
+  type NoSubstitutionTemplateLiteral,
   type SourceFile,
   type StringLiteral,
   SyntaxKind,
+  type TemplateExpression,
 } from "ts-morph";
 
 const SPECIFIER_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
@@ -48,6 +50,34 @@ export function moduleFileCandidates(specifier: string): string[] {
   ];
 }
 
+const SPELLED_EXTENSIONS = [
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+];
+
+/**
+ * Every way a specifier can spell `file`, the path as written first: {@link moduleFileCandidates}
+ * read backwards, so a path built at run time is matched by the same rule a written one resolves by.
+ */
+export function moduleFileSpellings(file: string): string[] {
+  const base = file.replace(/(?:\.d)?\.[cm]?[jt]sx?$/, "");
+  const forms = [
+    file,
+    base,
+    ...SPELLED_EXTENSIONS.map((extension) => `${base}${extension}`),
+    ...(base.endsWith("/index") ? [dirname(base)] : []),
+  ];
+  return [...new Set(forms)].filter((form) =>
+    moduleFileCandidates(form).includes(file),
+  );
+}
+
 /**
  * Whether a specifier can name a TypeScript or JavaScript module: it has no extension, or a code one.
  * `@scope/kit/styles.css` cannot, whatever its package's `exports` make of it.
@@ -73,16 +103,21 @@ export function relativeSpecifierOf(
   return specifier.replace(/(?:\.d)?\.tsx?$/, explicit === "js" ? ".js" : "");
 }
 
+/** A specifier written out in full: a quoted string, or a backtick one with no `${}` in it. */
+export type ModuleLiteral = StringLiteral | NoSubstitutionTemplateLiteral;
+
+export const isModuleLiteral = (node: Node): node is ModuleLiteral =>
+  Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node);
+
 /**
- * Every string literal in `sourceFile` that names a module: import and export declarations,
+ * The node in each spot of `sourceFile` that names a module: import and export declarations,
  * `import x = require("…")`, `require("…")` and dynamic `import()` calls, type-position
- * `import("…")`, `declare module "…"` and the `vi.*` mock calls. Document order, so two reads of one
- * file line up position by position while only the literals' text changes.
+ * `import("…")`, `declare module "…"` and the `vi.*` mock calls. Document order.
  */
-export function moduleLiterals(sourceFile: SourceFile): StringLiteral[] {
-  const out: StringLiteral[] = [];
+function moduleArguments(sourceFile: SourceFile): Node[] {
+  const out: Node[] = [];
   const push = (node: Node | undefined) => {
-    if (node !== undefined && Node.isStringLiteral(node)) out.push(node);
+    if (node !== undefined) out.push(node);
   };
   for (const node of sourceFile.getDescendants()) {
     if (Node.isImportDeclaration(node) || Node.isExportDeclaration(node)) {
@@ -107,3 +142,14 @@ export function moduleLiterals(sourceFile: SourceFile): StringLiteral[] {
   }
   return out;
 }
+
+/**
+ * Every specifier in `sourceFile` written out in full, in document order, so two reads of one file
+ * line up position by position while only the literals' text changes.
+ */
+export const moduleLiterals = (sourceFile: SourceFile): ModuleLiteral[] =>
+  moduleArguments(sourceFile).filter(isModuleLiteral);
+
+/** Every specifier in `sourceFile` built at run time by a backtick string with `${}` in it. */
+export const moduleTemplates = (sourceFile: SourceFile): TemplateExpression[] =>
+  moduleArguments(sourceFile).filter(Node.isTemplateExpression);

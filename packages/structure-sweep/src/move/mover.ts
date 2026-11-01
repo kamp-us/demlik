@@ -1,6 +1,10 @@
 import path from "node:path";
-import { Node, type Project, type SourceFile, SyntaxKind } from "ts-morph";
-import { moduleLiterals, splitSpecifierExtension } from "./specifier.js";
+import { type Project, type SourceFile, SyntaxKind } from "ts-morph";
+import {
+  isModuleLiteral,
+  moduleLiterals,
+  splitSpecifierExtension,
+} from "./specifier.js";
 
 /** One file move, both ends relative to the root the moves are applied under. */
 export type Move = readonly [from: string, to: string];
@@ -139,7 +143,7 @@ function remapMockSpecifiers(
       if (!MOCK_CALLEES.has(call.getExpression().getText())) continue;
 
       const [specifier] = call.getArguments();
-      if (!specifier || !Node.isStringLiteral(specifier)) continue;
+      if (!specifier || !isModuleLiteral(specifier)) continue;
 
       const literal = specifier.getLiteralValue();
       if (!literal.startsWith(".")) continue;
