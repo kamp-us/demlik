@@ -133,11 +133,18 @@ drive the run to done and every effect fires twice — a retried job, a second
 pod, the CLI started twice. When that is reachable, ask the store to fence:
 
 ```ts
+import type { OnError } from "@demlik/tea";
 import { fileStore } from "@demlik/tea/node";
+
+// A fenced run must be given a sink, or it does not compile.
+const onError: OnError = (error, { phase }) => {
+  console.error(`download run, ${phase}:`, error);
+};
 
 const file = process.env.DOWNLOAD_FILE ?? "download.json";
 const first = await run(downloader, {
   store: fileStore(file, parse, { fenced: true }),
+  onError,
 }).ready;
 ```
 
@@ -150,6 +157,7 @@ the one refused** — at its next save, not at the newer one's boot:
 // boot, so B's own boot save swaps cleanly and B runs.
 const second = await run(downloader, {
   store: fileStore(file, parse, { fenced: true }),
+  onError,
 }).ready; // resolves — B now holds the fence
 ```
 
@@ -175,6 +183,15 @@ A conflict at boot is possible too, but only in the narrow race where both
 processes read the same version before either wrote. Fencing gives you
 **at most one live writer from here on**, not a guarantee that the loser never
 started.
+
+Not every conflict has a dispatch to reject. The final save in `stop()` reports
+under `"stop-save"`, and a save driven by a Sub or a Cmd's Msg reports under
+`"follow-up"`. Both go to `onError`, which is why a fenced store needs one: with
+no sink, the default rethrows and ends the process along with every other run in
+it. In your sink, treat a `StoreConflictError` as "this run moved": log it and
+stop that run, and leave the others alone.
+[ADR 0031](../../../../.decisions/0031-a-fenced-run-must-pass-on-error.md) records
+this.
 
 A fenced `fileStore` takes a lock file beside the state for each save, and a
 writer that dies holding it leaves it behind. The next write steals it when the

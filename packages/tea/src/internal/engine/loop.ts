@@ -242,6 +242,14 @@ export interface LoopHandle<S, M>
 // hands a THROWING consumer sink's own error back here with the phase it was
 // handling, so a phase-keyed branch would warn away a broken sink and re-create
 // the very silent failure this exists to remove.
+//
+// Everything else is rethrown on a fresh macrotask, which ends a Node process
+// and every run in it: a failing Sub (`"sub"`) on a run with no sink keeps that
+// behaviour on purpose. A store that refuses a second writer never gets here by
+// omission, because a run on one must pass an `onError`, held by its type
+// (`StoreAndOnError`, ADR 0031). So there is no case here for
+// `StoreConflictError`: one that arrives is a store whose type no longer says
+// what it is, or a throwing sink, and both stay loud.
 export function defaultOnError(
   error: unknown,
   _context: RuntimeErrorContext,

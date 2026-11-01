@@ -90,6 +90,7 @@ export {
 export {
   type AgentHost,
   type AgentHostConfig,
+  type AgentHostWiring,
   acceptCommandSocket,
   acceptDurableCommandSocket,
   agentIsResumable,
@@ -239,7 +240,8 @@ export interface DoStoreOptions<S> {
    * `storage.transaction`, so the read, the compare and the two writes are one
    * atomic unit. Inside a single DO the platform already guarantees one writer;
    * fencing is what refuses a SECOND grain — a stale zombie isolate mid-migration,
-   * or a second DO id pointed at the same state by a routing bug.
+   * or a second DO id pointed at the same state by a routing bug. A run on a
+   * fenced store must be given an `onError` (see `StoreAndOnError`).
    */
   readonly fenced?: true;
 }
@@ -287,6 +289,10 @@ export interface DoStoreOptions<S> {
  *
  * Either form is a `DeletableStore<S>`: `delete()` removes the state cell and
  * its `<key>@@version` cell in one `storage.delete` call.
+ *
+ * Options whose `fenced` is known only at runtime, such as a value typed
+ * {@link DoStoreOptions}, return a store that may be fenced, so a run on it must
+ * be given an `onError` (see `StoreAndOnError`).
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
@@ -296,8 +302,13 @@ export function doStore<S>(
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,
-  keyOrOptions?: string | DoStoreOptions<S>,
+  keyOrOptions?: string | (DoStoreOptions<S> & { readonly fenced?: never }),
 ): DeletableStore<S>;
+export function doStore<S>(
+  storage: DurableObjectStorage,
+  parse: (raw: unknown) => Migrated<S>,
+  keyOrOptions?: string | DoStoreOptions<S>,
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => Migrated<S>,

@@ -41,6 +41,7 @@
 export {
   type AgentHost,
   type AgentHostConfig,
+  type AgentHostWiring,
   createAgentHost,
 } from "./agent-host";
 export {

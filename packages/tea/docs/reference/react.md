@@ -40,11 +40,7 @@ function useMachine<
 ### `UseMachineOpts`
 
 ```ts
-type UseMachineOpts<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
-  ctx: Ctx;
-  run: EngineRun<S, M, C, U, Ctx>;
-  store?: Store<S>;
-} & RunHandlers<M, C, U, Ctx>
+type UseMachineOpts<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = { ctx: Ctx; run: EngineRun<S, M, C, U, Ctx> } & StoreAndOnError<S> & RunHandlers<M, C, U, Ctx>
 ```
 
 <a id="useRuntime"></a>

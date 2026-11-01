@@ -17,7 +17,12 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { Outcome } from "../index";
 import type { HandlerCtx } from "../pure/core";
-import { DriveFailedError, type Store } from "../runtime-types";
+import {
+  DriveFailedError,
+  type OnError,
+  type Store,
+  type UnfencedStore,
+} from "../runtime-types";
 import type {
   DefinedAgent,
   DefinedAgentCtx,
@@ -92,15 +97,33 @@ export type AgentToolSpec<Args, Ok, CT extends AnyToolDef, Ctx> = {
    */
   readonly namespace: (ctx: HandlerCtx<Ctx>) => string;
   /**
-   * The child run's Store at `key`. The same key must reach the same durable
-   * cell on every call, in every process — that is what makes a re-fired call
-   * resume the child instead of restarting it.
+   * What the child run's failures with no caller to reject at reach. See
+   * `run`'s `onError`.
    */
-  readonly store: (
-    key: string,
-    ctx: HandlerCtx<Ctx>,
-  ) => Store<DefinedAgentState<CT>>;
-} & ChildCtxOption<CT, Ctx>;
+  readonly onError?: OnError;
+} & ChildCtxOption<CT, Ctx> &
+  ChildStoreOption<CT, Ctx>;
+
+/**
+ * The child run's Store at `key`. The same key must reach the same durable cell
+ * on every call, in every process — that is what makes a re-fired call resume
+ * the child instead of restarting it. A child on a fenced Store needs an
+ * `onError`, the same rule `run`'s own `store` follows (ADR 0031).
+ */
+type ChildStoreOption<CT extends AnyToolDef, Ctx> =
+  | {
+      readonly store: (
+        key: string,
+        ctx: HandlerCtx<Ctx>,
+      ) => UnfencedStore<DefinedAgentState<CT>>;
+    }
+  | {
+      readonly store: (
+        key: string,
+        ctx: HandlerCtx<Ctx>,
+      ) => Store<DefinedAgentState<CT>>;
+      readonly onError: OnError;
+    };
 
 /**
  * Wrap a child `defineAgent` as a tool a parent `defineAgent` calls and awaits
@@ -161,6 +184,7 @@ export function agentTool<
       const childRunId = `${spec.namespace(ctx)}/${cmd.callId}`;
       const opts = {
         store: spec.store(childRunId, ctx),
+        onError: spec.onError,
         runId: childRunId,
         ...(childCtx === undefined ? {} : { ctx: childCtx(ctx) }),
       } as DefinedAgentRunOptions<CT>;

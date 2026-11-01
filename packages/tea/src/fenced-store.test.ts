@@ -36,6 +36,9 @@ function parseNotes(raw: unknown): NoteState | null {
     : null;
 }
 
+/** The sink a fenced run must have (ADR 0031), for a test that reads the refusal off the rejection. */
+const ignoreReports = () => {};
+
 const update: Reducer<NoteState, NoteMsg, never> = {
   note: (state, msg) => [{ notes: [...state.notes, msg.text] }, []],
 };
@@ -99,12 +102,17 @@ describe("run — a fenced store refuses the second live writer", () => {
     // race, with the read taken explicitly so there is no timing to lose.
     const stale = await store.loadFenced();
 
-    const winner = await run(noteMachine, { ctx: undefined, store }).ready;
+    const winner = await run(noteMachine, {
+      ctx: undefined,
+      store,
+      onError: ignoreReports,
+    }).ready;
     await winner.dispatch({ type: "note", text: "one" });
 
     const loser = run(noteMachine, {
       ctx: undefined,
       store: resumedAt(store, stale),
+      onError: ignoreReports,
     });
     await expect(loser.ready).rejects.toBeInstanceOf(StoreConflictError);
 
@@ -182,6 +190,7 @@ describe("fileStore — fenced", () => {
     const first = await run(noteMachine, {
       ctx: undefined,
       store: fileStore(path, parseNotes, { fenced: true }),
+      onError: ignoreReports,
     }).ready;
     // The notes are the side effect the duplicate worker doubled: one line per
     // transition, written by whichever process owns the run.
@@ -195,6 +204,7 @@ describe("fileStore — fenced", () => {
     const loser = run(noteMachine, {
       ctx: undefined,
       store: resumedAt(second, stale),
+      onError: ignoreReports,
     });
     await expect(loser.ready).rejects.toBeInstanceOf(StoreConflictError);
 

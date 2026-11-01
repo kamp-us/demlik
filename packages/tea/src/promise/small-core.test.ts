@@ -292,10 +292,12 @@ describe("spike #264's eleven cases, against the new loop", () => {
     const first = await run(machine, {
       interpret: { fetch: firstHandler },
       store: shared,
+      onError: () => {},
     }).ready;
     const second = await run(machine, {
       interpret: answering({ n: 2 }),
       store: shared,
+      onError: () => {},
     }).ready;
 
     await second.dispatch({ type: "bump" });

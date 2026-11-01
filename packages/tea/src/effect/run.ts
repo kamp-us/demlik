@@ -42,9 +42,8 @@ import type {
 import { applyCell, Outcome, subEntriesOf } from "../pure/core";
 import type {
   CtxArg,
-  OnError,
   Runtime,
-  Store,
+  StoreAndOnError,
   Supervision,
   TelemetrySink,
 } from "../runtime-types";
@@ -189,9 +188,8 @@ export type EffectRunOptions<
   B,
 > = CtxArg<Ctx> &
   InterpretOption<C, I> &
-  SubscribeOption<U, B> & {
-    readonly store?: Store<S>;
-    readonly onError?: OnError;
+  SubscribeOption<U, B> &
+  StoreAndOnError<S> & {
     /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
     readonly clock?: () => number;
     /** Projects each applied transition to the public events `on` serves. */

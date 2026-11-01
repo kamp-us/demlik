@@ -78,6 +78,13 @@ describe("printType — where precedence needs parentheses", () => {
       /no printer for a 'somethingNew' node/,
     );
   });
+
+  it("prints a type typedoc gave up on, unless the compiler cut it off", () => {
+    expect(printType({ type: "unknown", name: "Foo" })).toBe("Foo");
+    expect(() =>
+      printType({ type: "unknown", name: "{ a?: number | undefin..." }),
+    ).toThrowError(/cut off/);
+  });
 });
 
 describe("printDeclaration — union ordering", () => {

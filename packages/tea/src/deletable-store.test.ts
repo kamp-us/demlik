@@ -120,7 +120,11 @@ describe.each(factories)("$name — delete()", (factory) => {
 
   it("refuses a fenced run that saves after delete()", async () => {
     const store = factory.fenced();
-    const live = await run(noteMachine, { ctx: undefined, store }).ready;
+    const live = await run(noteMachine, {
+      ctx: undefined,
+      store,
+      onError: () => {},
+    }).ready;
     await live.dispatch({ type: "note", text: "one" });
 
     await store.delete();
