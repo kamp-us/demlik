@@ -64,6 +64,24 @@ const run: PropertyRun = propertyInvariant(machine, {}, seqArb, () => true, {
   markInterruptAsFailure: true,
 });
 
+// A check answers `boolean | string | null`, on both runners that take one. A plain
+// boolean check, however it was declared, still compiles.
+declare const answer: boolean | string | null;
+const plainStep = (step: { readonly next: State }): boolean =>
+  step.next.type === "done";
+const plainTrace = (_steps: readonly unknown[], final: State): boolean =>
+  final.type === "done";
+propertyInvariant(machine, {}, seqArb, plainStep);
+propertyInvariant(machine, {}, seqArb, () => answer);
+propertyTrace(machine, {}, seqArb, plainTrace);
+propertyTrace(machine, {}, seqArb, () => answer);
+// @ts-expect-error a check answers no other type
+propertyInvariant(machine, {}, seqArb, () => 1);
+// @ts-expect-error a check answers no other type
+propertyTrace(machine, {}, seqArb, () => undefined);
+// @ts-expect-error `terminal` names states rather than laws, so it stays a boolean
+propertyTerminates(machine, {}, seqArb, () => answer);
+
 // One shape on both arms.
 declare const failure: PropertyFailure;
 const failed: PropertyRun = failure.run;

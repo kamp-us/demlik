@@ -11,7 +11,7 @@
 // state (a value, or an arbitrary that draws one per run), and fast-check's
 // settings. A passing run returns a `PropertyRun`; a failing run throws a
 // `PropertyFailure` carrying that same `PropertyRun` under fast-check's own
-// report.
+// report, plus a check's reason when fast-check filed that reason in `cause`.
 //
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
 // prefix shrinkers can be layered later but are opt-in, not default. The
@@ -85,7 +85,9 @@ export interface PropertyRun {
  * {@link PropertyFailure.run} holds the same {@link PropertyRun} a pass returns.
  * What the check threw sits where `fc.assert` puts it on the installed fast-check:
  * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
- * in the message by default and in `cause` with `errorWithCause`.
+ * in the message by default and in `cause` with `errorWithCause`. A reason the check
+ * returned is always in the message: when it went to `cause`, the message is the
+ * report plus a `reason:` line.
  *
  * @example
  * ```ts
@@ -120,6 +122,35 @@ export class PropertyFailure extends Error {
   ) {
     super(report, options);
   }
+}
+
+/**
+ * A check's failure that says why. The reason is text fast-check would otherwise
+ * bury where it files what a check threw, so {@link settle} reads it back here
+ * rather than out of that text.
+ */
+class BrokenLaw extends Error {
+  constructor(
+    report: string,
+    readonly reason: string,
+  ) {
+    super(`${report}\nreason: ${reason}`);
+    this.name = "Error";
+  }
+}
+
+/**
+ * Read what a check answered: `true` and `null` hold, `false` and any string fail.
+ * An empty string fails with nothing to say, so it reads as `false`. `report` is
+ * what the runner prints today, built only when there is a failure to print.
+ */
+function assertHolds(
+  answer: boolean | string | null,
+  report: () => string,
+): void {
+  if (answer === true || answer === null) return;
+  if (answer === false || answer === "") throw new Error(report());
+  throw new BrokenLaw(report(), answer);
 }
 
 /**
@@ -169,6 +200,10 @@ function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
  * on a pass, a thrown {@link PropertyFailure} on a failure. `fc.check` never
  * throws by itself, and this keeps the report and the `cause` `fc.assert` gives
  * on either major. fast-check's report is `undefined` exactly when nothing failed.
+ *
+ * A report leaves out what the check threw exactly when that went to the `cause`,
+ * so a check's reason is added to the report there. The thrown error is the one
+ * from the shrunk list, so the reason always describes the list printed beside it.
  */
 function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
   const run: PropertyRun = {
@@ -179,7 +214,15 @@ function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
   };
   const report = fc.defaultReportMessage(details);
   if (report === undefined) return run;
-  throw new PropertyFailure(report, run, causeOf(details));
+  const cause = causeOf(details);
+  const broken = details.errorInstance;
+  throw new PropertyFailure(
+    cause && broken instanceof BrokenLaw
+      ? `${report}\n\nreason: ${broken.reason}`
+      : report,
+    run,
+    cause,
+  );
 }
 
 /**
@@ -288,8 +331,10 @@ export function propertyTerminates<
 
 /**
  * Assert a predicate holds on EVERY transition step in a generated
- * sequence. The predicate sees `{ prev, msg, next, cmds }` per step;
- * return true to accept, false (or throw) to fail.
+ * sequence. The predicate sees `{ prev, msg, next, cmds }` per step. Return
+ * `true` or `null` to accept. Return `false`, or a string saying why, to fail: the
+ * thrown error's message names that string. An empty string fails too. A throw
+ * still fails with its own message.
  *
  * Use to pin a "when X happens in state Y, cmd Z must be emitted" rule.
  * The shrinker minimizes the offending sequence to the smallest Msg list
@@ -332,18 +377,20 @@ export function propertyInvariant<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
-  invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
+  invariant: (
+    step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>,
+  ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
   return runProperty(machine, ctx, seqArb, opts, ({ steps }) => {
     for (const step of steps) {
-      if (!invariant(step)) {
-        throw new Error(
+      assertHolds(
+        invariant(step),
+        () =>
           `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
-            `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
-            `cmds=${JSON.stringify(step.cmds)}`,
-        );
-      }
+          `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
+          `cmds=${JSON.stringify(step.cmds)}`,
+      );
     }
   });
 }
@@ -353,6 +400,10 @@ export function propertyInvariant<
  * the property is "some Msg appeared in the trace before reaching the
  * final state" or "no two consecutive steps had the same state.type" —
  * predicates that need the full sequence, not a single step.
+ *
+ * Return `true` or `null` to accept. Return `false`, or a string saying why, to
+ * fail: the thrown error's message names that string. An empty string fails too.
+ * A throw still fails with its own message.
  *
  * @example
  * ```ts
@@ -390,15 +441,15 @@ export function propertyTrace<
   predicate: (
     steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
     finalState: NoInfer<S>,
-  ) => boolean,
+  ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
   return runProperty(machine, ctx, seqArb, opts, ({ steps, finalState }) => {
-    if (!predicate(steps, finalState)) {
-      throw new Error(
+    assertHolds(
+      predicate(steps, finalState),
+      () =>
         `propertyTrace: predicate failed on trace length=${steps.length}, ` +
-          `final=${JSON.stringify(finalState)}`,
-      );
-    }
+        `final=${JSON.stringify(finalState)}`,
+    );
   });
 }
