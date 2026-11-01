@@ -53,6 +53,7 @@ packages/code-graph/
   src/
     index.ts              the RUN: which passes fire, which view answers
     cli.ts                the VOCABULARY: the flag set + the `Opts` commander parses into
+    gates/one-gate.ts     the flags that name more than one gate, refused before any ledger is read (§10)
     schema.ts             barrel over schema/ — the import path every consumer writes
     schema/
       core.ts             the cross-referencing contract (§5). OWNS threshold defaults + SmellKind.
@@ -357,6 +358,8 @@ Deterministic. Default axis `--by rot`: sort descending by `(1) smells.length, (
 ```
 code-graph <path> [flags]
 ```
+
+**A run takes one gate.** The modes below answer in a fixed order and each returns, so a second gate would never run and a green would say nothing about it. `gates/one-gate.ts` decides this from the flags alone, before any ledger or ceilings file is read, and exits 2 with one stderr line naming the flags: two of `--layers`, `--boundaries`, `--comments`, `--collapse` and `--unreachable` when a run also carries `--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or `--migrate-ceilings` (`--layers` counts without them, since it always gates), or `--env-keys` or `--hexagon` beside any such gate, plain `--ci` or `--accept-smells`. A `--ci` riding one named gate is not a second gate. The API ledger's `--api <map> --ci` and `--api <map> --accept-api` answer before this check and refuse any other gate flag with their own line (§13.9), so they keep to one gate too. Two report flags in one run, such as `--cycles --kinds`, are not refused: one report is dropped and no gate is lost.
 
 | Flag | Behavior |
 |---|---|
