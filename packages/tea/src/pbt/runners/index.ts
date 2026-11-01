@@ -4,7 +4,11 @@
 // helper they all share.
 // ---------------------------------------------------------------------------
 
+export type { MsgCount } from "./msg-tally";
 export {
+  PropertyFailure,
+  type PropertyOpts,
+  type PropertyRun,
   propertyInvariant,
   propertyTerminates,
   propertyTrace,

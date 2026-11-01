@@ -22,7 +22,8 @@ import type { Cmd, Machine, Sub } from "../../index";
  *
  * - `minLength` (default 0) and `maxLength` (default 30) bound the random
  *   array length. `prefix` is prepended AFTER the random tail is built; the
- *   final length is `prefix.length + tail.length`.
+ *   final length is `prefix.length + tail.length`. `size` decides how much of
+ *   that bound the draws actually use.
  * - `prefix` is the load-bearing escape hatch for "the first msg is the
  *   one that exercises the cell I care about" (e.g. Test A's
  *   `[{ type: "ws:client:hello" }]` prefix to land in the
@@ -38,6 +39,7 @@ import type { Cmd, Machine, Sub } from "../../index";
  *
  * arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 });
  * arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }], maxLength: 20 });
+ * arbMsgSequence(msgArb, { maxLength: 60, size: "max" });
  * ```
  */
 export function arbMsgSequence<M extends { type: string }>(
@@ -46,12 +48,20 @@ export function arbMsgSequence<M extends { type: string }>(
     readonly minLength?: number;
     readonly maxLength?: number;
     readonly prefix?: readonly NoInfer<M>[];
+    /**
+     * Forwarded to `fc.array`. Left out, fast-check's default size applies:
+     * `"small"` unless `fc.configureGlobal` changed it, which draws at most
+     * `2 * minLength + 10` Msgs however large `maxLength` is. So `maxLength: 60`
+     * comes out about 10 long, and a state that takes more steps than that is
+     * never reached. Pass `"max"` to draw up to `maxLength`.
+     */
+    readonly size?: fc.SizeForArbitrary;
   },
 ): fc.Arbitrary<readonly M[]> {
   const minLength = opts?.minLength ?? 0;
   const maxLength = opts?.maxLength ?? 30;
   const prefix = opts?.prefix ?? [];
-  const tail = fc.array(msgArb, { minLength, maxLength });
+  const tail = fc.array(msgArb, { minLength, maxLength, size: opts?.size });
   if (prefix.length === 0) return tail;
   return tail.map((arr) => [...prefix, ...arr]);
 }
