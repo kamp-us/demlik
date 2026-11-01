@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { stableStringify } from "../render/json.js";
 import {
@@ -127,12 +128,54 @@ export function findingsOf(
   ].sort(compareFindings);
 }
 
-// What one run found against the ledger. Only the entries of the analyzed scope and of a gated
-// kind are in reach: `pruned` are those whose finding is gone, and `kept` is the ledger without
-// them. An entry of another scope, or of a kind the run does not gate, is kept as it is.
+// What a finding names, whichever scope measured it: `packages/core` with `src/x.ts:f` and `.` with
+// `packages/core/src/x.ts:f` are one symbol.
+function repoSymbol(finding: UnreachableFinding): string {
+  return path.posix.join(finding.scope, finding.id);
+}
+
+// How much use of a symbol each kind says a run saw: nothing, a name in a test, a production path.
+const USE_SEEN: Readonly<Record<UnreachableFindingKind, number>> = {
+  dead: 0,
+  "only-called-from-tests": 1,
+  [UNUSED_EXPORT]: 2,
+};
+
+// Whether an entry records a finding of the same symbol. The same kind always does, and within one
+// scope nothing else does. Across two scopes a wider run sees all a narrower run sees and more, so it
+// can only measure more use: `packages/a` measures `dead` where the root, seeing a test in `packages/b`,
+// measures `only-called-from-tests`, and `only-called-from-tests` where the root, seeing a path from
+// `packages/b`, measures `unused-export`. A wider run measuring less use is a code change and does not
+// count. Two scopes naming one symbol both hold its file, so one sits inside the other.
+function covers(entry: UnreachableLedgerEntry, finding: UnreachableFinding): boolean {
+  if (entry.kind === finding.kind) return true;
+  if (entry.scope === finding.scope) return false;
+  const entryIsNarrower = finding.scope === "." || entry.scope.startsWith(`${finding.scope}/`);
+  const [narrower, wider] = entryIsNarrower ? [entry, finding] : [finding, entry];
+  return USE_SEEN[narrower.kind] < USE_SEEN[wider.kind];
+}
+
+function entriesBySymbol(
+  entries: readonly UnreachableLedgerEntry[],
+): ReadonlyMap<string, readonly UnreachableLedgerEntry[]> {
+  const bySymbol = new Map<string, UnreachableLedgerEntry[]>();
+  for (const entry of entries) {
+    const symbol = repoSymbol(entry);
+    bySymbol.set(symbol, [...(bySymbol.get(symbol) ?? []), entry]);
+  }
+  return bySymbol;
+}
+
+// What one run found against the ledger. A finding is recorded when an entry naming its symbol
+// `covers` it. Only the entries of the analyzed scope and of a gated kind can be pruned: `pruned` are
+// those whose finding is gone, and `kept` is the ledger without them. An entry of another scope is
+// kept as it is, since that run's callers are not this run's and so this run cannot say its finding
+// is gone.
 export type UnreachableReconciliation = {
   readonly scope: string;
   readonly gated: readonly UnreachableFindingKind[];
+  // How many of this run's gated findings an entry names.
+  readonly recorded: number;
   readonly unrecorded: readonly UnreachableFinding[];
   readonly pruned: readonly UnreachableLedgerEntry[];
   readonly kept: UnreachableLedger;
@@ -147,13 +190,17 @@ export function reconcileUnreachable(
   const isGated = (finding: UnreachableFinding) => gated.includes(finding.kind);
   const measured = findings.filter(isGated);
   const measuredKeys = new Set(measured.map(findingKey));
-  const recordedKeys = new Set(ledger.entries.map(findingKey));
+  const bySymbol = entriesBySymbol(ledger.entries);
   const gone = (entry: UnreachableLedgerEntry) =>
     entry.scope === scope && isGated(entry) && !measuredKeys.has(findingKey(entry));
+  const unrecorded = measured.filter(
+    (finding) => !bySymbol.get(repoSymbol(finding))?.some((entry) => covers(entry, finding)),
+  );
   return {
     scope,
     gated,
-    unrecorded: measured.filter((finding) => !recordedKeys.has(findingKey(finding))),
+    recorded: measured.length - unrecorded.length,
+    unrecorded,
     pruned: ledger.entries.filter(gone),
     kept: unreachableLedgerOf(ledger.entries.filter((entry) => !gone(entry))),
   };

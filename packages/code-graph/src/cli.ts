@@ -124,11 +124,11 @@ function analysisOptions(command: Command): Command {
     .option("--kinds", "classify each node entry|effect|auth|plain (implies --cross-runtime)")
     .option(
       "--unreachable",
-      "exported symbols with no path from any entry, and unused-export: an exported function, type, interface, enum, class or constant outside the public surface (barrels, worker mains, package.json main/module/types/browser/bin/exports targets, a target ending in * making every file below it public, and what those re-export) that no other file imports, re-exports or uses, a test file's import counting as a use (implies --kinds); with --ci, gates them against unreachable-ledger.json at the repo root instead of gating smells: fails on a finding (dead, only-called-from-tests or unused-export) the ledger does not name for this scope, and prunes this scope's entries whose finding is gone",
+      "exported symbols with no path from any entry, and unused-export: an exported function, type, interface, enum, class or constant outside the public surface (barrels, worker mains, package.json main/module/types/browser/bin/exports targets, a target ending in * making every file below it public, and what those re-export) that no other file imports, re-exports or uses, a test file's import counting as a use (implies --kinds); with --ci, gates them against unreachable-ledger.json at the repo root instead of gating smells: fails on a finding (dead, only-called-from-tests or unused-export) the ledger does not name, and prunes this scope's entries whose finding is gone",
     )
     .option(
       "--accept-dead",
-      'with --unreachable: add every finding unreachable-ledger.json does not name yet for this scope (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
+      'with --unreachable: add every finding of this scope unreachable-ledger.json does not record yet, counting an entry of another scope that covers it (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
     )
     .option(
       "--dead-only",

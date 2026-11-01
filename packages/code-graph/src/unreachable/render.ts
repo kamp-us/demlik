@@ -32,10 +32,9 @@ export function renderUnreachableGate(
       exitCode,
     };
   }
-  const recorded = result.kept.entries.filter((entry) => entry.scope === result.scope).length;
   const head = passed
     ? [
-        `unreachable ledger: PASS — scope ${result.scope}, ${recorded} recorded finding(s), none new.`,
+        `unreachable ledger: PASS — scope ${result.scope}, ${result.recorded} recorded finding(s), none new.`,
       ]
     : [
         `UNREACHABLE LEDGER FAILED — ${result.unrecorded.length} finding(s) in scope ${result.scope} not in ${UNREACHABLE_LEDGER_FILENAME}:`,
