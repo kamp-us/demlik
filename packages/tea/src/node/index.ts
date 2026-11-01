@@ -42,14 +42,7 @@
  * socket. Same shape as tea-do's `wsRegistry`.
  */
 
-import {
-  mkdir,
-  open,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
@@ -69,6 +62,9 @@ import {
   type Seq,
 } from "../internal/journal";
 import { dispatchIfPresent } from "../subs/types";
+import { withFileLock } from "./file-lock";
+
+export { type FileLockBlock, FileLockTimeoutError } from "./file-lock";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fileStore — `Store<S>` over a JSON file.
@@ -179,6 +175,19 @@ export interface FileStoreOptions {
    * that started from the same version is refused with a `StoreConflictError`
    * at its next save. Omit it and the store is exactly as it was — the last
    * writer wins, and single-writer is the caller's precondition to keep.
+   *
+   * Each save and `delete()` takes a lock file, `<path>.fence.lock`, and a
+   * writer that dies holding it leaves it behind. The next write steals a lock
+   * whose holder is proven gone: an empty one older than a short grace period,
+   * one from an earlier boot of this machine, or one whose process is dead.
+   *
+   * Any other lock is waited on for up to 10 seconds, and then the write rejects
+   * with a {@link FileLockTimeoutError} naming the file. That includes a lock
+   * from another host, which is never stolen because that host may be live on a
+   * shared volume. So a folder restored onto a new machine can need one clear
+   * step: once the old machine is known to be gone, delete the file. Hosts are
+   * told apart by `os.hostname()`, so give two live hosts on one volume two
+   * names.
    */
   readonly fenced?: true;
 }
@@ -232,9 +241,7 @@ function fenceFileStore<S>(
       return { raw: await base.load(), version };
     },
     async saveFenced(state: S, expectedVersion: number): Promise<number> {
-      await mkdir(dirname(path), { recursive: true });
-      await acquireFileLock(dirname(path), lockPath);
-      try {
+      return withFileLock(dirname(path), lockPath, async () => {
         const actual = await readVersion();
         if (actual !== expectedVersion) {
           throw new StoreConflictError(expectedVersion, actual);
@@ -248,19 +255,12 @@ function fenceFileStore<S>(
         await writeFile(tmp, String(next), "utf8");
         await rename(tmp, fencePath);
         return next;
-      } finally {
-        await unlink(lockPath).catch(() => {});
-      }
+      });
     },
     async delete(): Promise<void> {
       // Under the swap's own lock, so a delete never lands between another
       // writer's state write and its stamp write.
-      await acquireFileLock(dirname(path), lockPath);
-      try {
-        await base.delete();
-      } finally {
-        await unlink(lockPath).catch(() => {});
-      }
+      await withFileLock(dirname(path), lockPath, () => base.delete());
     },
   };
 }
@@ -268,8 +268,6 @@ function fenceFileStore<S>(
 // ─────────────────────────────────────────────────────────────────────────────
 // fileJournal — a `Journal<R>` over one on-disk JSONL file per stream.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const LOCK_SPIN_MS = 10;
 
 /**
  * The Node file substrate for the journal (`src/internal/journal/`), beside
@@ -286,12 +284,17 @@ const LOCK_SPIN_MS = 10;
  * O(n) in the stream's length; a durable record log a machine replays is read
  * whole anyway, so the atomic-rewrite guarantee is worth the cost.
  *
- * The ordering key is taken under a `wx` lock file (`<file>.lock`) holding the
- * writer's PID: a second writer racing the same stream blocks on the lock, so
- * `seq` is a single total order across processes. A crashed writer's lock is
- * stolen once its PID proves dead (`process.kill(pid, 0)` → `ESRCH`), so a
- * crash never wedges the stream. This is the lock phoenix spike #6673 proved:
- * its only job is an honest order key, not the win.
+ * The ordering key is taken under a `wx` lock file (`<file>.lock`) naming the
+ * writer's host, boot and PID: a second writer racing the same stream blocks on
+ * the lock, so `seq` is a single total order across processes. This is the lock
+ * phoenix spike #6673 proved: its only job is an honest order key, not the win.
+ *
+ * A leftover lock behaves as it does on a fenced {@link fileStore}: one whose
+ * holder is proven gone is stolen, so a crash on this machine does not wedge the
+ * stream. Any other lock, including one from another host, is waited on for up
+ * to 10 seconds, and then the append rejects with a
+ * {@link FileLockTimeoutError} naming the file. See
+ * {@link FileStoreOptions.fenced} for the cases and the clear step.
  *
  * `changes` fires for appends made through THIS instance; a cross-process
  * append lands on disk but is not broadcast here (that is a polling concern the
@@ -347,68 +350,9 @@ export function fileJournal<R>(
       return entry;
     },
     async lock(stream, fx) {
-      const lockPath = `${streamPath(stream)}.lock`;
-      await acquireFileLock(dir, lockPath);
-      try {
-        return await fx();
-      } finally {
-        await unlink(lockPath).catch(() => {});
-      }
+      return withFileLock(dir, `${streamPath(stream)}.lock`, fx);
     },
   });
-}
-
-/**
- * Acquire an exclusive lock by creating `lockPath` with `wx` (O_CREAT|O_EXCL) —
- * the one primitive that is atomic across processes. On contention, steal the
- * lock only once its holder's PID proves dead; otherwise spin. `process.kill(pid,
- * 0)` sends no signal — it tests existence: it throws `ESRCH` for a dead PID,
- * and `EPERM` for a live one this process may not signal (still alive, so hold
- * off). A lock that vanishes between the failed create and the read is already
- * free, so retry.
- */
-async function acquireFileLock(dir: string, lockPath: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  for (;;) {
-    try {
-      const handle = await open(lockPath, "wx");
-      try {
-        await handle.writeFile(String(process.pid));
-      } finally {
-        await handle.close();
-      }
-      return;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (await stealIfStale(lockPath)) continue;
-      await new Promise((resolve) => setTimeout(resolve, LOCK_SPIN_MS));
-    }
-  }
-}
-
-async function stealIfStale(lockPath: string): Promise<boolean> {
-  let holder: string;
-  try {
-    holder = await readFile(lockPath, "utf8");
-  } catch (err) {
-    // Vanished between the failed create and this read — already free.
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true;
-    throw err;
-  }
-  const pid = Number(holder.trim());
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  if (isProcessAlive(pid)) return false;
-  await unlink(lockPath).catch(() => {});
-  return true;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "EPERM";
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
