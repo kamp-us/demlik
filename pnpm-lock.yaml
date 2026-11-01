@@ -32,8 +32,8 @@ catalogs:
       specifier: 4.20260312.1
       version: 4.20260312.1
     '@kampus/fabrika-cli':
-      specifier: 0.9.0
-      version: 0.9.0
+      specifier: 0.10.0
+      version: 0.10.0
     '@langfuse/otel':
       specifier: 5.11.1
       version: 5.11.1
@@ -188,7 +188,7 @@ importers:
         version: 2.31.1(@types/node@22.20.1)
       '@kampus/fabrika-cli':
         specifier: 'catalog:'
-        version: 0.9.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
+        version: 0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       typescript:
         specifier: 'catalog:'
         version: 5.7.3
@@ -216,7 +216,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: 'catalog:'
-        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.0))
 
   packages/code-graph:
     dependencies:
@@ -262,7 +262,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: 'catalog:'
-        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.0))
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
 
   packages/structure-sweep:
     dependencies:
@@ -951,8 +951,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@kampus/fabrika-cli@0.9.0':
-    resolution: {integrity: sha512-rB5X7N7N2VCNzKGi1yeAfj9YjFlUyk8vPd+oVyjqmvanySa14Z3UcvhU5ffByM9qCN13dzwE6rJUkVzgb55rhw==}
+  '@kampus/fabrika-cli@0.10.0':
+    resolution: {integrity: sha512-KVVxu86TDR2Usf93yFWS+55c8bDMUsaQp2mZPFExUi3old8+JLrJFFV4CZ9AUy0+dCX9WW9bVnqMaLTC8QXDzA==}
     engines: {node: '>=22.12'}
     hasBin: true
 
@@ -3182,7 +3182,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@kampus/fabrika-cli@0.9.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
+  '@kampus/fabrika-cli@0.10.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
     dependencies:
       '@demlik/tea': 0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.9.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
