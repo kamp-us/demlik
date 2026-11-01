@@ -1,11 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Project } from "ts-morph";
-import { describe, expect, it } from "vitest";
-import { applyManifest } from "../src/move/apply.js";
+import { describe, expect, it, vi } from "vitest";
+import { applyHandPlan, applyManifest } from "../src/move/apply.js";
+import { moveCommand } from "../src/move/cli.js";
 import { onPath } from "../src/move/dependencies.js";
 import type { Manifest, MoveRow } from "../src/move/manifest.js";
 import { commit, gitIn, repo, write } from "./helpers.js";
@@ -232,6 +240,34 @@ function withoutPnpm<T>(body: () => T): T {
   }
 }
 
+/** The imports and declared dependencies of the three-file split, however it was asked for. */
+function expectSplit(root: string): void {
+  expect(specifiers(root, "packages/a/src/index.ts")).toEqual([
+    "@fixture/b/first",
+    "@fixture/b/second",
+    "@fixture/b/third",
+  ]);
+  expect(specifiers(root, "packages/a/src/uses-three.ts")).toEqual([
+    "@fixture/b/third",
+  ]);
+  expect(specifiers(root, "packages/c/src/index.ts")).toEqual([
+    "@fixture/b/first",
+  ]);
+  expect(specifiers(root, "packages/c/src/rel.ts")).toEqual([
+    "@fixture/b/second",
+    "@fixture/b/third",
+  ]);
+  expect(dependenciesOf(root, "packages/a/package.json")).toEqual({
+    "@fixture/b": "workspace:*",
+  });
+  expect(dependenciesOf(root, "packages/c/package.json")).toEqual({
+    "@fixture/a": "workspace:*",
+    "@fixture/b": "workspace:*",
+  });
+  expect(read(root, "pnpm-lock.yaml")).toContain("'@fixture/b':");
+  expect(git(root, "status", "--porcelain")).toBe("");
+}
+
 describe("applyManifest adds the workspace:* dependencies a split needs", () => {
   it("splits three files from a into b: imports by package name, dependencies declared, lockfile frozen-installable, typecheck green, no B19", () => {
     const root = workspace();
@@ -406,6 +442,132 @@ describe("applyManifest adds the workspace:* dependencies a split needs", () => 
       "  @fixture/a -> @fixture/b",
       "  @fixture/c -> @fixture/b",
     ]);
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("carries a workspace listed by a brace glob like the same one under packages/*", () => {
+    const root = workspace({
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/{a,b,c}"\n',
+    });
+
+    applyManifest(root, manifestOf(INTO_B));
+
+    expectSplit(root);
+  });
+
+  it("gives rows written ./packages/... the same result as rows written packages/...", () => {
+    const root = workspace();
+    const plain = workspace();
+    const written = INTO_B.map((r) => ({
+      ...r,
+      from: `./${r.from}`,
+      to: `./${r.to}`,
+    }));
+
+    applyManifest(root, manifestOf(written));
+    applyManifest(plain, manifestOf(INTO_B));
+
+    expectSplit(root);
+    expect(git(root, "log", "-2", "--format=%B")).toBe(
+      git(plain, "log", "-2", "--format=%B"),
+    );
+    expect(git(root, "rev-parse", "HEAD^{tree}")).toBe(
+      git(plain, "rev-parse", "HEAD^{tree}"),
+    );
+  });
+
+  it("carries a hand plan like the manifest: imports, dependencies, lockfile, no-op re-run, commits saying hand-planned", () => {
+    const plan = {
+      scope: "packages/a",
+      moves: INTO_B.map(({ from, to }) => ({ from, to })),
+    };
+    const root = workspace({ "plan.json": JSON.stringify(plan) });
+    const printed = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    moveCommand(["apply", "--plan", "plan.json"], root);
+
+    const report = JSON.parse(String(printed.mock.calls[0]?.[0]));
+    printed.mockRestore();
+    expect(report.dependenciesAdded).toEqual([
+      "@fixture/a -> @fixture/b",
+      "@fixture/c -> @fixture/b",
+    ]);
+    expectSplit(root);
+    expect(git(root, "log", "-1", "--format=%s", "HEAD~1")).toContain(
+      "hand-planned",
+    );
+    expect(git(root, "log", "-1", "--format=%s", "HEAD")).toContain(
+      "hand-planned",
+    );
+
+    const head = git(root, "rev-parse", "HEAD");
+    expect(applyHandPlan(root, plan).commits).toEqual({
+      rename: null,
+      rewrite: null,
+    });
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
+
+    pnpm(root, "install", "--frozen-lockfile", "--offline");
+    for (const p of ["packages/a", "packages/b", "packages/c"])
+      expect(typeErrors(root, p)).toEqual([]);
+  });
+
+  it("carries the split whichever package a hand plan names as its scope", () => {
+    const root = workspace();
+
+    applyHandPlan(root, {
+      scope: "packages/c",
+      moves: INTO_B.map(({ from, to }) => ({ from, to })),
+    });
+
+    expectSplit(root);
+  });
+
+  it("refuses a split that must add a dependency when git ignores the lockfile, naming it, before the rename commit", () => {
+    const root = repo({
+      ".gitignore": "node_modules\npnpm-lock.yaml\n",
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "package.json": `${JSON.stringify({ name: "fixture-root", private: true }, null, 2)}\n`,
+      "packages/a/package.json": pkg("@fixture/a", { ".": "./src/index.ts" }),
+      "packages/b/package.json": pkg("@fixture/b", { "./*": "./src/*.ts" }),
+      "packages/a/tsconfig.json": tsconfig,
+      "packages/b/tsconfig.json": tsconfig,
+      "packages/a/src/index.ts":
+        'import { one } from "./one";\n\nexport const a = one;\n',
+      "packages/a/src/one.ts": "export const one = 1;\n",
+    });
+    const before = snapshot(root);
+
+    const message = refusal(() =>
+      applyManifest(
+        root,
+        manifestOf([row("packages/a/src/one.ts", "packages/b/src/one.ts")]),
+      ),
+    );
+
+    expect(message).toContain("pnpm-lock.yaml");
+    expect(message).toContain("refusing before any commit");
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("refuses when pnpm install --lockfile-only fails, before the rename commit, with the tree put back", () => {
+    const root = workspace();
+    const before = snapshot(root);
+    const bin = mkdtempSync(join(tmpdir(), "failing-pnpm-"));
+    const fake = join(bin, "pnpm");
+    writeFileSync(fake, "#!/bin/sh\necho no network >&2\nexit 1\n");
+    chmodSync(fake, 0o755);
+    const saved = process.env.PATH;
+    process.env.PATH = `${bin}${delimiter}${saved}`;
+    let message = "";
+    try {
+      message = refusal(() => applyManifest(root, manifestOf(INTO_B)));
+    } finally {
+      process.env.PATH = saved;
+    }
+
+    expect(message).toContain("pnpm install --lockfile-only failed");
+    expect(message).toContain("no network");
     expect(snapshot(root)).toEqual(before);
   });
 

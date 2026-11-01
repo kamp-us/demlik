@@ -65,4 +65,50 @@ describe("exports inverted to source files", () => {
     expect(sourceOfSubpath(entries, "./api/x", has)).toBe("src/handlers/x.tsx");
     expect(sourceOfSubpath(entries, "./nope", has)).toBeUndefined();
   });
+
+  it("reaches nothing a narrower null entry blocks, in either direction", () => {
+    const entries = exportEntries(
+      "/nowhere",
+      {
+        "./*": "./dist/*.js",
+        "./internal/*": null,
+        "./secret": null,
+        "./gone": { import: null },
+      },
+      everywhere,
+    );
+
+    expect(subpathOf(entries, "src/open.ts")).toBe("./open");
+    expect(subpathOf(entries, "src/internal/x.ts")).toBeUndefined();
+    expect(subpathOf(entries, "src/secret.ts")).toBeUndefined();
+    expect(subpathOf(entries, "src/gone.ts")).toBeUndefined();
+    expect(
+      sourceOfSubpath(entries, "./internal/x", everywhere),
+    ).toBeUndefined();
+    expect(sourceOfSubpath(entries, "./secret", everywhere)).toBeUndefined();
+  });
+
+  it("leaves a subpath a narrower entry answers from outside src out of the broader pattern", () => {
+    const entries = exportEntries(
+      "/nowhere",
+      { "./*": "./src/*.ts", "./vendored/*": "./vendor/*.js" },
+      everywhere,
+    );
+
+    expect(subpathOf(entries, "src/vendored/x.ts")).toBeUndefined();
+    expect(subpathOf(entries, "src/plain.ts")).toBe("./plain");
+  });
+
+  it("matches a wildcard entry to the source extensions its target can build from", () => {
+    const entries = exportEntries(
+      "/nowhere",
+      { "./esm/*": "./dist/esm/*.mjs", "./any/*": "./dist/any/*.js" },
+      everywhere,
+    );
+
+    expect(subpathOf(entries, "src/esm/x.mts")).toBe("./esm/x");
+    expect(subpathOf(entries, "src/esm/x.ts")).toBeUndefined();
+    expect(subpathOf(entries, "src/any/x.mts")).toBeUndefined();
+    expect(subpathOf(entries, "src/any/x.tsx")).toBe("./any/x");
+  });
 });

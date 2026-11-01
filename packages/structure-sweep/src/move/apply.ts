@@ -6,6 +6,7 @@ import { absurd } from "../absurd.js";
 import {
   exactRenames,
   git,
+  ignoredPaths,
   stagedPaths,
   trackedPaths,
   uncommittedPaths,
@@ -19,6 +20,7 @@ import {
 } from "./crossing.js";
 import {
   describeCycle,
+  LOCKFILE,
   lockfileFor,
   type ManifestEdit,
   onPath,
@@ -32,7 +34,12 @@ import {
   type MovedModules,
   movedModules,
 } from "./heal.js";
-import type { HandPlan, Manifest, PathMove } from "./manifest.js";
+import {
+  type HandPlan,
+  Manifest,
+  type PathMove,
+  parseHandPlan,
+} from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
 import { moduleLiterals } from "./specifier.js";
@@ -90,9 +97,10 @@ const differing = (before: readonly string[], after: readonly string[]) =>
   before.reduce((n, spec, i) => n + (after[i] === spec ? 0 : 1), 0);
 
 /**
- * A path with a TypeScript extension. Only {@link staleRefs} reads it, to pick the rows whose
- * old path may still be spelled as a plain relative string beside them; which rows ts-morph moves
- * is decided in {@link planRewrite} by whether the move project holds the file as a module.
+ * A path with a TypeScript extension: the tracked files apply reads as sources, and in
+ * {@link staleRefs} the rows whose old path cannot be spelled as a plain relative string beside
+ * them. Which rows ts-morph moves is decided in {@link planRewrite} by whether the move project
+ * holds the file as a module.
  */
 const TS_EXTENSION = /\.[cm]?tsx?$/;
 
@@ -519,8 +527,8 @@ const NO_DEPENDENCIES: Dependencies = {
  * The `workspace:*` dependencies the rewrite's crossings leave undeclared, the `package.json` text
  * that declares each, and the lockfile pnpm writes for them — all worked out with the tree left as
  * it was. Throws, before any commit, when an added dependency closes a cycle between workspace
- * packages, or when one is owed and no `pnpm` is on `PATH`. A rewrite that adds no dependency never
- * looks for pnpm.
+ * packages, or when one is owed and git ignores the lockfile or no `pnpm` is on `PATH`. A rewrite
+ * that adds no dependency never looks for pnpm.
  */
 function planDependencies(
   repoRoot: string,
@@ -537,6 +545,10 @@ function planDependencies(
       `rows would make workspace packages depend on each other, which pnpm cannot order; refusing before any commit:\n${cycles.map((c) => `  ${describeCycle(c)}`).join("\n")}`,
     );
   const manifests = declared.edits(added);
+  if (ignoredPaths(repoRoot, [LOCKFILE]).size > 0)
+    throw new Error(
+      `git ignores ${LOCKFILE}, so the rewrite commit could not carry the lockfile the added workspace:* dependencies need; refusing before any commit. Track it or stop ignoring it, then apply again.`,
+    );
   const pnpm = onPath("pnpm");
   if (pnpm === undefined)
     throw new Error(
@@ -563,11 +575,9 @@ function untrackedEdits(
     .sort();
 }
 
-const SOURCE = /\.tsx?$/;
-
 function trackedSources(repoRoot: string, scope?: string): string[] {
   return trackedPaths(repoRoot, "index", scope)
-    .filter((p) => SOURCE.test(p) && existsSync(join(repoRoot, p)))
+    .filter((p) => TS_EXTENSION.test(p) && existsSync(join(repoRoot, p)))
     .map((p) => join(repoRoot, p));
 }
 
@@ -583,7 +593,8 @@ function trackedSources(repoRoot: string, scope?: string): string[] {
  * updates `pnpm-lock.yaml` to match, all in the rewrite commit. Refused before either commit: a row
  * whose destination no `exports` entry of its new package reaches, an import a move would carry
  * across a package line to a file no `exports` entry reaches, an added dependency that closes a
- * cycle between workspace packages, and an added dependency with no `pnpm` on `PATH`. Over the
+ * cycle between workspace packages, and an added dependency with no `pnpm` on `PATH` or with a
+ * lockfile git ignores. Over the
  * same HEAD it makes the same trees and messages, except that a manifest adding a dependency takes
  * its lockfile from the installed pnpm; one adding none never runs pnpm.
  */
@@ -591,10 +602,11 @@ export function applyManifest(
   repoRoot: string,
   manifest: Manifest,
 ): ApplyReport {
+  const parsed = Manifest.parse(manifest);
   return applyMoveSet(repoRoot, {
-    scope: manifest.scope,
-    moves: manifest.moves,
-    planner: { kind: "manifest", id: contentHash(canonicalJson(manifest)) },
+    scope: parsed.scope,
+    moves: parsed.moves,
+    planner: { kind: "manifest", id: contentHash(canonicalJson(parsed)) },
   });
 }
 
@@ -604,10 +616,11 @@ export function applyManifest(
  * naming the plan's content hash.
  */
 export function applyHandPlan(repoRoot: string, plan: HandPlan): ApplyReport {
+  const parsed = parseHandPlan(plan);
   return applyMoveSet(repoRoot, {
-    scope: plan.scope,
-    moves: plan.moves,
-    planner: { kind: "hand-plan", id: contentHash(canonicalJson(plan)) },
+    scope: parsed.scope,
+    moves: parsed.moves,
+    planner: { kind: "hand-plan", id: contentHash(canonicalJson(parsed)) },
   });
 }
 

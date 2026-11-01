@@ -140,6 +140,31 @@ describe("readWorkspace", () => {
     ]);
   });
 
+  it("reads every glob pnpm reads: braces, character classes, ./ and a trailing slash", () => {
+    const manifests = (dirs: string[]) =>
+      Object.fromEntries(
+        dirs.map((dir) => [
+          `${dir}/package.json`,
+          JSON.stringify({ name: dir }),
+        ]),
+      );
+    const members = (globs: string[]) =>
+      readWorkspace(
+        repo({
+          "pnpm-workspace.yaml": `packages: ${JSON.stringify(globs)}\n`,
+          ...manifests(["packages/a", "packages/b", "packages/c", "other/x"]),
+        }),
+      ).members.map((p) => p.root);
+    const ABC = ["packages/a", "packages/b", "packages/c"];
+
+    expect(members(["packages/{a,b,c}"])).toEqual(ABC);
+    expect(members(["packages/[abc]"])).toEqual(ABC);
+    expect(members(["packages/?"])).toEqual(ABC);
+    expect(members(["./packages/*/"])).toEqual(ABC);
+    expect(members(["packages/*", "!packages/{b,c}"])).toEqual(["packages/a"]);
+    expect(members([])).toEqual([]);
+  });
+
   it("places a path in the member that is its nearest ancestor, else in the root", () => {
     const ws = readWorkspace(workspace());
 
@@ -176,6 +201,33 @@ describe("applyManifest over a pnpm workspace", () => {
       ),
     );
     expect(message).not.toContain("four.ts");
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("refuses a row whose destination a null exports entry blocks, naming the row and the package", () => {
+    const root = workspace({
+      "packages/b/package.json": JSON.stringify({
+        name: "@fixture/b",
+        exports: { "./*": "./dist/*.js", "./internal/*": null },
+      }),
+    });
+    const before = snapshot(root);
+
+    let message = "";
+    try {
+      applyManifest(
+        root,
+        manifestOf([
+          row("packages/a/src/one.ts", "packages/b/src/internal/x.ts"),
+        ]),
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message.split("\n").filter((l) => l.includes(" -> "))).toEqual([
+      "  packages/a/src/one.ts -> packages/b/src/internal/x.ts  (no exports entry of @fixture/b reaches it)",
+    ]);
     expect(snapshot(root)).toEqual(before);
   });
 

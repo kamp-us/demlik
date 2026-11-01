@@ -500,26 +500,37 @@ naming the paths and writing nothing, while a tracked file has staged or unstage
 any file the rewrite would change is not tracked by git. That covers an untracked or gitignored
 importer of a moved file, whatever its extension (`.mts`, `.cts`, a `.js` under `allowJs`) and
 however the rewrite loaded it, including through the scope's `tsconfig.json` `include`: neither
-commit could carry it. Commit, move or delete such a file, then apply again. An untracked
-file the rewrite does not change is left alone and stays out of both commits. The commits are a function of `HEAD` and the manifest: two applies
-of one manifest over one `HEAD` make the same trees and messages. A run that stopped after the
-rename commit resumes with the rewrite commit alone, and a second `apply` over a finished manifest
+commit could carry it. Commit, move or delete such a file, then apply again. The lockfile is the one
+exception to "tracked": when a dependency is added, a `pnpm-lock.yaml` git does not yet hold is
+committed new, and only one git ignores is refused (see below). An untracked
+file the rewrite does not change is left alone and stays out of both commits. A manifest that adds
+no workspace dependency is a function of `HEAD` and the manifest: two applies of it over one `HEAD`
+make the same trees and messages. One that adds a dependency takes its lockfile from the installed
+pnpm, so that file can differ between pnpm versions. A run that stopped after the rename commit
+resumes with the rewrite commit alone, and a second `apply` over a finished manifest
 commits nothing and reports `lint: "untouched"`. It prints a JSON report, including `commits`
 (`{ rename, rewrite }`, the SHAs it made, `null` for one it did not) and `staleStringRefs` — old
 paths still written as plain text somewhere. A row whose source and destination both exist stops
 the run.
 
 Apply also reads the pnpm workspace: the `packages` globs in the repository's
-`pnpm-workspace.yaml`, and each matched package's `package.json`. A row may move a file from one
+`pnpm-workspace.yaml`, and each matched package's `package.json`. The globs are read by the library
+pnpm's own package search uses, so `packages/{a,b}`, `packages/[ab]`, `*`, `?`, `**` and `!` all
+select what they select for pnpm. A row may move a file from one
 workspace package into another. Then the rewrite also loads every workspace package that imports a
 moved file, and each import the move touched is written to match where its two ends now sit:
 across a package line it becomes `<package name>/<subpath>`, the subpath read off the target
 package's `exports` (wildcard entries such as `"./api/*": "./dist/handlers/*.js"` included); inside
-one package it is relative. That covers a moved file's own imports back into the package it left.
+one package it is relative, and where a package-name import becomes relative it takes the spelling
+the importer's `tsconfig.json` asks for: `./x.js` under NodeNext, `./x` otherwise, and `./x.mjs` or
+`./x.cjs` for an `.mts` or `.cts` file in every mode. That covers a moved file's own imports back
+into the package it left.
 
 A row whose destination no `exports` entry of its new package reaches is refused before either
-commit, naming the row and the package, since nothing could import the file there. So is a moved
-file's import of a file its old package does not export.
+commit, naming the row and the package, since nothing could import the file there. An entry reaches
+a file only as Node would answer it: a narrower `"./internal/*": null` keeps `src/internal/x.ts` out
+of a broader `"./*"`, and a wildcard target ending in `.js` does not reach an `.mts` file, which
+builds to `.mjs`. A moved file's import of a file its old package does not export is refused too.
 
 Each package whose files now import another workspace package gains `"<name>": "workspace:*"` in
 its `package.json` `dependencies`, unless it already names that package in any dependency field.
@@ -529,12 +540,12 @@ worked out before the rename commit, so these refusals leave `HEAD` and the tree
 
 - an added dependency that closes a cycle between workspace packages, named as the chain of
   packages (`@scope/a -> @scope/b -> @scope/a`), since pnpm could not order them;
+- a dependency to add while git ignores `pnpm-lock.yaml`, since the rewrite commit could not carry
+  the lockfile;
 - a dependency to add with no `pnpm` on `PATH`;
 - `pnpm install --lockfile-only` failing.
 
-A manifest that adds no dependency never runs pnpm, so its commits stay a function of `HEAD` and
-the manifest; one that adds a dependency takes its lockfile from the installed pnpm. Apply adds
-only `workspace:*` dependencies: an npm package a moved file imports is not added to its new
+A manifest that adds no dependency never runs pnpm. Apply adds only `workspace:*` dependencies: an npm package a moved file imports is not added to its new
 package. A repository with no `pnpm-workspace.yaml` is one package, so nothing there changes.
 
 #### A hand-written plan: `move apply --plan <file>`
@@ -551,7 +562,11 @@ When you already know where each file goes, write the moves yourself and skip th
 }
 ```
 
-`scope` is the folder whose `tsconfig.json` apply loads, and every path is repo-relative. A row
+`scope` is the folder whose `tsconfig.json` apply loads, and every path is repo-relative;
+`./packages/a/x.ts` and `packages/a/x.ts` are one path. A row may cross a workspace package line,
+with the rewrite, dependencies and refusals described above; `move plan` never writes such a row, so
+this is how you ask for one. Name the package the files leave as `scope`. Importers in other packages
+are loaded whichever package you name. A row
 holds `from` and `to` and nothing else: Jev's `feature`, `role` and `confidence`, or a manifest's
 `features`, `floor`, `review` and `pinned`, are refused, so a hand plan never reads as a sweep's
 judgment. List each file on its own row, colocated tests included; there are no folder rows. A plan
