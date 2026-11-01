@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
@@ -414,7 +420,7 @@ describe("sweep --redact resolves aliases only against a working tree that match
     // `@app/tax/rate` resolves through `src/tax`, which --ref points at `rates/a`.
     symlinkSync("../rates/a", join(root, "src/tax"));
     commit(root, "link the tax rates");
-    rmSync(join(root, "src/tax"));
+    unlinkSync(join(root, "src/tax"));
     symlinkSync("../rates/b", join(root, "src/tax"));
     expect(gitIn(root, "diff", "--name-status", "HEAD")).toBe("M\tsrc/tax\n");
     const { run, jev } = await sweep(root, "HEAD");
