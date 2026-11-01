@@ -17,7 +17,7 @@
 import { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type Sub } from "@demlik/tea";
+import { defineMachine, type Sub, SubFailedError } from "@demlik/tea";
 import { memoryStore } from "@demlik/tea/mem";
 import { downloader, type State } from "../../../examples/downloader";
 import {
@@ -162,6 +162,7 @@ import { useRuntime } from "@demlik/tea/react";
 const runtime = await run(downloader, {
   ctx: undefined,
   terminal: (s) => s.phase === "done",
+  onError: (error) => console.error("run error", error),
 }).ready;
 
 function Progress() {
@@ -174,9 +175,51 @@ function Progress() {
   );
 }
 
-// Elsewhere, the owner of the handle awaits the run and stops it.
-const finished = runtime.done().finally(() => runtime.stop());
+// Elsewhere, the owner of the handle waits for the run and stops it.
+function finish<S>(owned: { done(): Promise<S>; stop(): Promise<void> }) {
+  return owned
+    .done()
+    .catch((error: unknown) => {
+      console.error("run failed", error);
+      return undefined;
+    })
+    .finally(() => owned.stop());
+}
+
+const finished = finish(runtime);
 // #endregion use-runtime
+
+/** A machine that can reach each way a run ends, for `finish` to meet. */
+type Watch = Sub<"watch", { readonly on: true }>;
+interface EndingState {
+  readonly reached: boolean;
+  readonly watching: boolean;
+}
+type EndingMsg =
+  | { readonly type: "reach" }
+  | { readonly type: "watch" }
+  | { readonly type: "explode" };
+
+const reducerThrew = new Error("reducer threw");
+const subFailed = new Error("sub failed");
+
+const ending = defineMachine({
+  types: { model: {} as EndingState, msg: {} as EndingMsg, sub: {} as Watch },
+  init: () => [{ reached: false, watching: false }, []],
+  update: {
+    reach: (s) => [{ ...s, reached: true }, []],
+    watch: (s) => [{ ...s, watching: true }, []],
+    explode: () => {
+      throw reducerThrew;
+    },
+  },
+  subs: [
+    {
+      type: "watch",
+      deps: (s) => (s.watching ? { on: true as const } : null),
+    },
+  ],
+});
 
 let container: HTMLDivElement;
 let root: Root;
@@ -263,6 +306,78 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
       await runtime.dispatch({ type: "chunk", size: 1 });
     });
     expect(container.textContent).toBe("1/1");
-    expect((await finished).phase).toBe("done");
+    expect((await finished)?.phase).toBe("done");
+  });
+});
+
+describe("docs/how-to/drive-from-react.md — `finish` in a host with an `onError`", () => {
+  const unhandled: unknown[] = [];
+  const hearUnhandled = (reason: unknown) => {
+    unhandled.push(reason);
+  };
+
+  beforeEach(() => {
+    unhandled.length = 0;
+    process.on("unhandledRejection", hearUnhandled);
+  });
+
+  afterEach(() => {
+    process.off("unhandledRejection", hearUnhandled);
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Starts `finish` and leaves its promise unawaited, as a host that never
+   * awaits it would, until Node has had its chance to call the rejection unhandled.
+   */
+  async function endRun(msg: EndingMsg) {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const heard: unknown[] = [];
+    const owned = await run(ending, {
+      ctx: undefined,
+      terminal: (s) => s.reached,
+      onError: (error) => heard.push(error),
+      subscribe: {
+        watch: () => {
+          throw subFailed;
+        },
+      },
+    }).ready;
+    const stop = vi.spyOn(owned, "stop");
+
+    const unawaited = finish(owned);
+    await owned.dispatch(msg).catch(() => {});
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    await new Promise((settled) => setTimeout(settled, 0));
+
+    expect(unhandled).toEqual([]);
+    return { answer: await unawaited, logged, heard };
+  }
+
+  it("a terminal State: `stop()` ran and `finished` holds the State", async () => {
+    const { answer, logged, heard } = await endRun({ type: "reach" });
+
+    expect(answer?.reached).toBe(true);
+    expect(logged).not.toHaveBeenCalled();
+    expect(heard).toEqual([]);
+  });
+
+  it("a Sub failure: `stop()` ran and the host hears a `SubFailedError`", async () => {
+    const { answer, logged, heard } = await endRun({ type: "watch" });
+
+    expect(answer).toBeUndefined();
+    const [label, error] = logged.mock.calls[0] ?? [];
+    expect(label).toBe("run failed");
+    expect(error).toBeInstanceOf(SubFailedError);
+    expect((error as SubFailedError).cause).toBe(subFailed);
+    expect(heard).toContain(subFailed);
+  });
+
+  it("a reducer throw: `stop()` ran and the host hears what was thrown", async () => {
+    const { answer, logged, heard } = await endRun({ type: "explode" });
+
+    expect(answer).toBeUndefined();
+    expect(logged).toHaveBeenCalledWith("run failed", reducerThrew);
+    expect(heard).toContain(reducerThrew);
   });
 });
