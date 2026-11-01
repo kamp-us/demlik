@@ -9,19 +9,19 @@
 // `arbGuidedSequence(machine, ctx, cells, opts)` draws lists whose answers each
 // fit a Cmd really sent. It draws blind events first, then a `map` folds them
 // through the machine and gives each one its meaning, so a shrink can delete any
-// event and the rest still make a valid list. The route and its numbers are in
+// event and the rest still make a valid list. The fold is `./guided-fold.ts`,
+// which `@demlik/tea/testing/effect` shares. The route and its numbers are in
 // the ruling: https://github.com/kamp-us/demlik/issues/745#issuecomment-6552209764
 // ---------------------------------------------------------------------------
 
 import * as fc from "fast-check";
+import type { Cmd, Machine, Sub } from "../../index";
 import {
-  acceptedTypes,
-  applyCell,
-  type Cmd,
-  type Machine,
-  replay,
-  type Sub,
-} from "../../index";
+  type Answerer,
+  type BlindEvent,
+  MAX_PICK,
+  resolveGuided,
+} from "./guided-fold";
 
 /**
  * Build an arbitrary of Msg sequences over a per-Msg arbitrary. Optionally
@@ -104,21 +104,6 @@ export interface GuidedCells<
       : never;
   };
 }
-
-/** One drawn event. It means nothing until the fold reads it. */
-type BlindEvent<M> =
-  | { readonly kind: "outside"; readonly msg: M }
-  | {
-      readonly kind: "answer";
-      readonly pick: number;
-      readonly values: readonly unknown[];
-    };
-
-/**
- * Largest blind pick, read modulo the Cmds waiting. 5040 divides evenly by every
- * count from 1 to 10, so no Cmd is favoured among that many.
- */
-const MAX_PICK = 5039;
 
 /**
  * Draw Msg lists in which every answer answers a Cmd that was sent and not yet
@@ -213,7 +198,9 @@ export function arbGuidedSequence<
   type Cell = AnswerCell<C, unknown, M>;
   const outside = Object.values(cells.outside ?? {}) as fc.Arbitrary<M>[];
   const answers = Object.entries(cells.answers ?? {}) as [string, Cell][];
-  const cellIndex = new Map(answers.map(([type], index) => [type, index]));
+  const answerers = answers.map(
+    ([cmdType, cell]): Answerer<C, M> => ({ cmdType, make: cell.make }),
+  );
 
   const arms: fc.WeightedArbitrary<BlindEvent<M>>[] = [];
   if (outside.length > 0) {
@@ -247,57 +234,11 @@ export function arbGuidedSequence<
     );
   }
 
-  /** The Msg an event means now, or `null` with nothing waiting. */
-  const read = (event: BlindEvent<M>, waiting: readonly C[]): M | null => {
-    if (event.kind === "outside") return event.msg;
-    if (waiting.length === 0) return null;
-    const cmd = waiting[event.pick % waiting.length] as C;
-    const index = cellIndex.get(cmd.type) as number;
-    const [, cell] = answers[index] as [string, Cell];
-    return cell.make(cmd, event.values[index]);
-  };
-  const answerable = (cmds: readonly C[]): readonly C[] =>
-    cmds.filter((cmd) => cellIndex.has(cmd.type));
-
-  const resolve = (events: readonly BlindEvent<M>[]): readonly M[] => {
-    const msgs: M[] = [];
-    const waiting: C[] = [];
-    let state: S;
-    try {
-      const boot = replay(machine, {
-        msgs: [],
-        ctx,
-        loaded: opts?.loaded ?? null,
-      });
-      state = boot.state;
-      waiting.push(...answerable(boot.cmds));
-    } catch {
-      return msgs; // The runner's fold boots too, and fails on this same throw.
-    }
-    for (const event of events) {
-      const msg = read(event, waiting);
-      if (msg === null) continue;
-      // A refused answer takes nothing off `waiting`: its Cmd still has no answer.
-      if (!acceptedTypes(machine, state).includes(msg.type)) continue;
-      if (event.kind === "answer") {
-        waiting.splice(event.pick % waiting.length, 1);
-      }
-      msgs.push(msg);
-      try {
-        const [next, sent] = applyCell<S, M, C>(machine, state, msg);
-        state = next;
-        waiting.push(...answerable(sent));
-      } catch {
-        return msgs; // `msg` is last, so the runner's fold fails on this same throw.
-      }
-    }
-    return msgs;
-  };
-
+  const loaded = opts?.loaded ?? null;
   return fc
     .array(fc.oneof(...arms), {
       maxLength: opts?.maxLength ?? 60,
       size: opts?.size ?? "max",
     })
-    .map(resolve);
+    .map((events) => resolveGuided(machine, ctx, loaded, answerers, events));
 }

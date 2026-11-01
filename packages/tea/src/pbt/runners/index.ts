@@ -13,4 +13,4 @@ export {
   propertyTerminates,
   propertyTrace,
 } from "./property";
-export { foldEvents, type Step } from "./replay-fold";
+export { type Fold, foldEvents, type Step } from "./replay-fold";

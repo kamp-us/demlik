@@ -44,6 +44,17 @@ export interface Step<S, M, C> {
 }
 
 /**
+ * What {@link foldEvents} hands back: every state in order, one {@link Step} per
+ * Msg, the final state, and the Cmds `init` sent. A law reads one of these.
+ */
+export interface Fold<S, M, C> {
+  readonly states: readonly S[];
+  readonly steps: readonly Step<S, M, C>[];
+  readonly finalState: S;
+  readonly initCmds: readonly C[];
+}
+
+/**
  * Fold a Msg sequence through a machine's pure reducer, returning the
  * per-step trace, every state in order, the final state, and the Cmds `init`
  * sent. Initial state comes from `replay(machine, { msgs: [], ctx, loaded })`
@@ -86,12 +97,7 @@ export function foldEvents<
   ctx: NoInfer<Ctx>,
   loaded: NoInfer<S> | null,
   msgs: readonly NoInfer<M>[],
-): {
-  readonly states: readonly S[];
-  readonly steps: readonly Step<S, M, C>[];
-  readonly finalState: S;
-  readonly initCmds: readonly C[];
-} {
+): Fold<S, M, C> {
   // Boot through `replay` so `init` runs faithfully and we honor the
   // substrate's loaded-snapshot contract (init may transform the loaded
   // value before the first Msg lands — e.g. the audit machine flips

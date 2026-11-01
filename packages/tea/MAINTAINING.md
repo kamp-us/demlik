@@ -66,6 +66,14 @@ own — the table is per subpath, and a per-export list here would drift the mom
 split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
 and graduates with the rest of the layer rather than separately.
 
+**Property testing on Effect's `Arbitrary` is experimental on two stable subpaths**, the way
+`fileJournal` is on `./node` (below): `arbSchemaGuidedSequence` and its three errors on
+`./testing/effect`, and the laws `lawTerminates`, `lawInvariant` and `lawTrace` with `LawBreak`
+on both `./pbt` and `./testing/effect`. Each carries `@experimental` in its TSDoc, which makes
+its row on the generated reference page read `experimental` while the page reads `stable`. The
+laws import neither `fast-check` nor `effect`, which is how both entries export them
+([ADR 0032](../../.decisions/0032-effect-property-tests-draw-answers-from-cmd-schemas.md)).
+
 ### Internal parts
 
 Everything under `src/internal/` is **not** a tier and carries no promise: the flow family, the
