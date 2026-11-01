@@ -21,25 +21,38 @@ const EMITTED_EXTENSION: ReadonlyArray<readonly [RegExp, string]> = [
   [/\.tsx?$/, ".d.ts"],
 ];
 
-export function emittedFileOf(emit: DeclarationEmit, rootAbsolute: string, entry: string): string {
-  const relative = path.relative(rootAbsolute, entry);
-  for (const [source, declaration] of EMITTED_EXTENSION) {
-    if (source.test(relative)) return path.join(emit.out, relative.replace(source, declaration));
+// The emit as the read sees it: every source file that emitted keeps its path and reads as its
+// declarations. A specifier in the emitted text therefore resolves from where the compile resolved
+// it, through the same `node_modules` walk, `package.json`, `paths` and ambient modules, and nothing
+// has to be linked or copied (SPEC §13.3).
+export class EmittedTree {
+  constructor(
+    private readonly emit: DeclarationEmit,
+    private readonly rootAbsolute: string,
+  ) {}
+
+  // Where `sourceFile` emitted to, relative to the emit's `out`; undefined when it emitted nothing,
+  // as a dependency, a `.d.ts` or a file outside the package does not.
+  declarationOf(sourceFile: string): string | undefined {
+    const relative = path.relative(this.rootAbsolute, sourceFile);
+    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return undefined;
+    const emitted = EMITTED_EXTENSION.find(([source]) => source.test(relative));
+    if (emitted === undefined) return undefined;
+    const declaration = relative.replace(emitted[0], emitted[1]);
+    return fs.existsSync(path.join(this.emit.out, declaration)) ? declaration : undefined;
   }
-  return path.join(emit.out, relative);
+
+  readonly textOf = (sourceFile: string): string | undefined => {
+    const declaration = this.declarationOf(sourceFile);
+    if (declaration === undefined) return undefined;
+    return fs.readFileSync(path.join(this.emit.out, declaration), "utf8");
+  };
 }
 
 function diagnosticCount(output: string, status: number | null): number {
   const found = /Found (\d+) errors?/.exec(output);
   if (found !== null) return Number(found[1]);
   return status === 0 ? 0 : 1;
-}
-
-// The package's installed dependencies, seen from the temp folder, so the emitted files' bare
-// specifiers resolve as the source's did. The link lives in the temp folder, never the checkout.
-function linkDependencies(temp: string, rootAbsolute: string): void {
-  const installed = path.join(rootAbsolute, "node_modules");
-  if (fs.existsSync(installed)) fs.symlinkSync(installed, path.join(temp, "node_modules"), "dir");
 }
 
 export function removeEmit(emit: { readonly temp: string }): void {
@@ -65,25 +78,23 @@ export async function emitDeclarations(
     removeEmit({ temp });
     throw new ApiInputError(`tsgo failed to start: ${run.error.message}`);
   }
-  linkDependencies(temp, rootAbsolute);
   const diagnostics = diagnosticCount(`${run.stdout}${run.stderr}`, run.status);
   return { temp, out, compiler: tsgo.version, diagnostics };
 }
 
+// Each subpath's entry file, once the emit is known to hold its declarations.
 export function emittedEntries(
-  emit: DeclarationEmit,
-  rootAbsolute: string,
+  tree: EmittedTree,
   subpaths: readonly ApiSubpath[],
 ): ReadonlyMap<string, string> {
   const files = new Map<string, string>();
   for (const { subpath, entry, entryAbsolute } of subpaths) {
-    const emitted = emittedFileOf(emit, rootAbsolute, entryAbsolute);
-    if (!fs.existsSync(emitted)) {
+    if (tree.declarationOf(entryAbsolute) === undefined) {
       throw new ApiInputError(
         `${subpath}: entry ${entry} has no emitted declaration file (does the tsconfig include it?)`,
       );
     }
-    files.set(subpath, emitted);
+    files.set(subpath, entryAbsolute);
   }
   return files;
 }

@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as ts from "../engine/tsgo.js";
 import { moduleSymbolOf } from "../resolve.js";
+import type { EmittedTree } from "./emit.js";
 import { declarationText, statementOf } from "./text.js";
 
 // A published name as a consumer's types see it (SPEC §13.3): its own declaration text, plus the
@@ -104,7 +105,7 @@ class ReferenceWalk {
 
   constructor(
     private readonly program: ts.TypeProgram,
-    private readonly out: string,
+    private readonly tree: EmittedTree,
     private readonly published: ReadonlySet<string>,
   ) {}
 
@@ -133,7 +134,7 @@ class ReferenceWalk {
 
   #unpublished(declaration: ts.Node): ts.Node | null {
     if (!TOP_LEVEL_DECLARATION.some((is) => is(declaration))) return null;
-    if (!declaration.getSourceFile().fileName.startsWith(`${this.out}${path.sep}`)) return null;
+    if (this.tree.declarationOf(declaration.getSourceFile().fileName) === undefined) return null;
     const statement = statementOf(declaration);
     const holder = statement.parent;
     if (!ts.isSourceFile(holder) && !ts.isModuleBlock(holder)) return null;
@@ -145,8 +146,8 @@ class ReferenceWalk {
   }
 
   #record(declaration: ts.Node, statement: ts.Node): readonly ts.Node[] {
-    const file = path.relative(this.out, declaration.getSourceFile().fileName).split(path.sep);
-    const key = `${file.join("/")}#${declaredName(declaration)}`;
+    const file = this.tree.declarationOf(declaration.getSourceFile().fileName) ?? "";
+    const key = `${file.split(path.sep).join("/")}#${declaredName(declaration)}`;
     const statements = this.#references.get(key) ?? new Map<string, ts.Node>();
     statements.set(nodeKey(statement), statement);
     this.#references.set(key, statements);
@@ -167,15 +168,115 @@ class ReferenceWalk {
 // Every name the module at `entryFile` publishes, with its text and references.
 export function readSubpathNames(
   program: ts.TypeProgram,
-  out: string,
+  tree: EmittedTree,
   entryFile: string,
 ): SubpathNames {
   const names = publishedNames(program, entryFile);
   const published = new Set(names.flatMap((name) => name.declarations.map(nodeKey)));
   const read: Record<string, ApiEntryText> = {};
   for (const { name, declarations } of names) {
-    const references = new ReferenceWalk(program, out, published).from(declarations);
+    const references = new ReferenceWalk(program, tree, published).from(declarations);
     read[name] = { text: joinedText(declarations), references };
   }
   return read;
+}
+
+export type BlankName = { readonly subpath: string; readonly name: string };
+
+// Every name listed with no text. `import { a } from "nowhere"; export { a }` in a dependency hides
+// its missing module from the walk below, since the export names no module, but the name still comes
+// out with no declaration to read.
+export function blankNames(names: ReadonlyMap<string, SubpathNames>): readonly BlankName[] {
+  return [...names].flatMap(([subpath, read]) =>
+    Object.entries(read)
+      .filter(([, { text }]) => text === "")
+      .map(([name]) => ({ subpath, name })),
+  );
+}
+
+// One way a file names another module. A re-export hands that module's names on, so a name can
+// vanish behind it; an import only uses them.
+type ModuleReference = { readonly specifier: ts.Node; readonly reexport: boolean };
+
+// `import "x"` is absent: it brings in no name, and a script or a JS-only package resolves with no
+// module symbol, which would read as a failure.
+function moduleReference(node: ts.Node): ModuleReference | undefined {
+  if (ts.isExportDeclaration(node)) {
+    return node.moduleSpecifier === undefined
+      ? undefined
+      : { specifier: node.moduleSpecifier, reexport: true };
+  }
+  if (ts.isImportDeclaration(node)) {
+    return node.importClause === undefined
+      ? undefined
+      : { specifier: node.moduleSpecifier, reexport: false };
+  }
+  if (ts.isExternalModuleReference(node)) return { specifier: node.expression, reexport: false };
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+    return { specifier: node.argument.literal, reexport: false };
+  }
+  return undefined;
+}
+
+function moduleReferences(holder: ts.Node): readonly ModuleReference[] {
+  const found: ModuleReference[] = [];
+  const visit = (node: ts.Node): undefined => {
+    const reference = moduleReference(node);
+    if (reference !== undefined) found.push(reference);
+    node.forEachChild(visit);
+    return undefined;
+  };
+  visit(holder);
+  return found;
+}
+
+export type UnresolvedSpecifier = { readonly specifier: string; readonly file: string };
+
+// Every specifier the read could not resolve on the way to a published name. A name behind one is
+// missing or has no text, which reads exactly like a name the package does not publish.
+//
+// A re-export counts in any file it reaches, since a source `.d.ts`, a `.js` or a dependency is
+// never checked under `skipLibCheck` and can hand on a name like any other. An import counts only
+// in an emitted file: it adds no name to a dependency's exports, so a dependency's missing optional
+// type must not hold back pruning for good. The walk goes by declaration, so a `declare module`
+// block answers for itself and not for the other blocks in its file.
+export function unresolvedSpecifiers(
+  program: ts.TypeProgram,
+  tree: EmittedTree,
+  entryFiles: readonly string[],
+): readonly UnresolvedSpecifier[] {
+  const unresolved = new Map<string, UnresolvedSpecifier>();
+  const seen = new Set<string>();
+  const queue: ts.Node[] = [];
+  const enqueue = (holder: ts.Node): void => {
+    if (seen.has(nodeKey(holder))) return;
+    seen.add(nodeKey(holder));
+    queue.push(holder);
+  };
+  for (const file of entryFiles) {
+    const source = program.sourceFile(file);
+    if (source !== undefined) enqueue(source);
+  }
+  for (let holder = queue.shift(); holder !== undefined; holder = queue.shift()) {
+    const file = holder.getSourceFile().fileName;
+    const emitted = tree.declarationOf(file);
+    const references = moduleReferences(holder).filter(
+      ({ reexport }) => reexport || emitted !== undefined,
+    );
+    const symbols = program.symbolsAt(references.map(({ specifier }) => specifier));
+    references.forEach(({ specifier, reexport }, index) => {
+      const symbol = symbols[index];
+      if (symbol === undefined) {
+        const text = (specifier as ts.StringLiteral).text;
+        const named = emitted ?? file;
+        unresolved.set(`${named}\0${text}`, { specifier: text, file: named });
+        return;
+      }
+      for (const declaration of program.declarations(symbol)) {
+        const emits = tree.declarationOf(declaration.getSourceFile().fileName) !== undefined;
+        if (reexport || emits) enqueue(declaration);
+      }
+    });
+  }
+  return [...unresolved.keys()].sort().map((key) => unresolved.get(key) as UnresolvedSpecifier);
 }

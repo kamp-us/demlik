@@ -2,9 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import * as ts from "../engine/tsgo.js";
 import { findRepoRoot, resolveEdgeTsConfig } from "../extract/project.js";
-import { emitDeclarations, emittedEntries, removeEmit } from "./emit.js";
+import { EmittedTree, emitDeclarations, emittedEntries, removeEmit } from "./emit.js";
 import { ApiInputError, type ApiSubpath, apiSubpaths } from "./map.js";
-import { readSubpathNames, type SubpathNames } from "./read.js";
+import {
+  blankNames,
+  readSubpathNames,
+  type SubpathNames,
+  type UnresolvedSpecifier,
+  unresolvedSpecifiers,
+} from "./read.js";
 
 export type PublishedApi = {
   readonly root: string;
@@ -19,7 +25,8 @@ export type PublishedApi = {
 
 export type PublishedApiOptions = {
   readonly repoRoot?: string;
-  // Where the emit's diagnostic count goes as one warning line; stderr by default.
+  // Where the emit's diagnostic count, each specifier the read could not resolve and each published
+  // name with no text go, one warning line each; stderr by default.
   readonly warn?: (line: string) => void;
 };
 
@@ -39,27 +46,39 @@ function packageTsConfig(rootAbsolute: string, repoRoot: string): string {
   }
 }
 
+type ReadNames = {
+  readonly names: ReadonlyMap<string, SubpathNames>;
+  readonly unresolved: readonly UnresolvedSpecifier[];
+};
+
+// The program holds every file the compile held, so an ambient module in a source `.d.ts` is there
+// too; only the files that emitted read differently.
 function readNames(
   tsConfigPath: string,
-  out: string,
+  tree: EmittedTree,
   entries: ReadonlyMap<string, string>,
-): ReadonlyMap<string, SubpathNames> {
+): ReadNames {
+  const entryFiles = [...new Set(entries.values())].sort();
   const program = ts.openTypeProgram({
     tsConfigPath,
-    rootFiles: [...new Set(entries.values())].sort(),
-    includeConfigFiles: false,
+    rootFiles: entryFiles,
+    includeConfigFiles: true,
+    textOverlay: tree.textOf,
   });
   try {
-    return new Map(
-      [...entries].map(([subpath, file]) => [subpath, readSubpathNames(program, out, file)]),
-    );
+    return {
+      names: new Map(
+        [...entries].map(([subpath, file]) => [subpath, readSubpathNames(program, tree, file)]),
+      ),
+      unresolved: unresolvedSpecifiers(program, tree, entryFiles),
+    };
   } finally {
     program.close();
   }
 }
 
-// What one emit of one tree publishes: the compiler that emitted, how many diagnostics it reported,
-// and the names per subpath.
+// What one emit of one tree publishes: the compiler that emitted, how many diagnostics the emit and
+// the read counted between them, and the names per subpath.
 export type EmittedNames = {
   readonly compiler: string;
   readonly diagnostics: number;
@@ -83,25 +102,40 @@ export async function readEmittedNames(
   );
   const emit = await emitDeclarations(rootAbsolute, tsConfigPath);
   try {
+    const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
+    const context = options.context ?? "";
     if (emit.diagnostics > 0) {
-      const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
       warn(
-        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s)${options.context ?? ""}; the declarations were emitted anyway`,
+        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s)${context}; the declarations were emitted anyway`,
       );
     }
-    const entries = emittedEntries(emit, rootAbsolute, subpaths);
+    const tree = new EmittedTree(emit, rootAbsolute);
+    const { names, unresolved } = readNames(tsConfigPath, tree, emittedEntries(tree, subpaths));
+    for (const { specifier, file } of unresolved) {
+      warn(
+        `code-graph: warning: ${file} names "${specifier}", which the read could not resolve${context}; any name behind it is missing or has no text`,
+      );
+    }
+    // A blank name on a run that already warned has its explanation: a syntax error reads this way.
+    const explained = emit.diagnostics + unresolved.length > 0;
+    const blank = explained ? [] : blankNames(names);
+    for (const { subpath, name } of blank) {
+      warn(
+        `code-graph: warning: ${subpath} publishes "${name}", which the read found no text for${context}; a module behind it may not resolve`,
+      );
+    }
     return {
       compiler: emit.compiler,
-      diagnostics: emit.diagnostics,
-      names: readNames(tsConfigPath, emit.out, entries),
+      diagnostics: emit.diagnostics + unresolved.length + blank.length,
+      names,
     };
   } finally {
     removeEmit(emit);
   }
 }
 
-// The view beside the count of diagnostics its emit reported. The count stays out of `PublishedApi`
-// because `--api` prints that object as it is.
+// The view beside the count of diagnostics its emit and read reported. The count stays out of
+// `PublishedApi` because `--api` prints that object as it is.
 export type MeasuredApi = { readonly view: PublishedApi; readonly diagnostics: number };
 
 export async function readMeasuredApi(

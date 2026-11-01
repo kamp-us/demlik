@@ -7,7 +7,7 @@ import type { MeasuredApi } from "../view.js";
 // on a name the ledger does not hold and drops the entries whose name is gone, so adding a public
 // name is a change to this file, by name and with a reason. It holds names and never signatures:
 // what a signature change owes is `--api-policy`'s question. An entry is never dropped on a run
-// whose emit reported diagnostics, which cannot tell a removed name from one it could not read.
+// that counted diagnostics, which cannot tell a removed name from one it could not read.
 export const API_LEDGER_FILENAME = "api-ledger.json";
 
 const EntrySchema = z
