@@ -339,6 +339,17 @@ The ordinary smell gate is syntax-only unless call analysis is also requested.
 Boundary, comment, collapse, and unreachable gates use their own policies.
 Layers always gate, without needing `--ci`.
 
+**A run takes one gate.** A second one would never run, so two of `--layers`,
+`--boundaries`, `--comments`, `--collapse` and `--unreachable` in a run with
+`--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or
+`--migrate-ceilings` exit 2 with one line naming them, before any ledger or
+ceilings file is read. `--layers` counts with or without those flags.
+`--env-keys` and `--hexagon` beside a gate, `--ci` or `--accept-smells` exit 2
+the same way, since they run without one. A `--ci` that rides one named gate is
+not a second gate.
+To run several gates, run the command once per gate. Two reports in one run,
+such as `--cycles --kinds`, are not refused: one is dropped and no gate is lost.
+
 Boundary `--ci` can rewrite the ledger when it prunes resolved crossings.
 `--boundaries --write-ceilings` is retired. Acceptance, migration, and boundary
 CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundaries.md).

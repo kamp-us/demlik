@@ -35,6 +35,7 @@ import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
 import { renderHotspots } from "./hotspots/render.js";
 import { runLayerGate } from "./layers/gate.js";
+import { oneGateRefusal } from "./one-gate.js";
 import {
   renderClusters,
   renderCrossRuntime,
@@ -100,6 +101,12 @@ defineProgram()
     });
     if (apiRun !== null) {
       void apiRun.then(exitWith);
+      return;
+    }
+
+    const refusal = oneGateRefusal(opts);
+    if (refusal !== null) {
+      cleanExit(refusal);
       return;
     }
 
