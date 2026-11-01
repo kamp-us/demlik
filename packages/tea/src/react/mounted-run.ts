@@ -14,8 +14,14 @@
  *     that is all. The run stays live, so a Cmd in flight lands, its answer
  *     folds, and `init` never runs twice. An effect after it (a show) opens the
  *     gate again.
- *   - The insertion effect's cleanup, which neither of those cases runs, is the
- *     one that means the component is gone. It stops the run.
+ *   - The insertion effect's cleanup, which neither of those cases runs, means
+ *     the component is gone. It stops the run.
+ *
+ * That last signal is only good from React 19.2. Before it, React skips the
+ * insertion cleanup when it deletes a tree a Suspense fallback is hiding, so
+ * nothing would stop the run. Those Reacts have no stable `<Activity>` either, so
+ * a cleanup with nothing after it can only be an unmount, and it stops the run
+ * itself. `peer-range.test.tsx` runs all of this on each React in the peer range.
  */
 
 import type { BootedRunHandle, RunHandle } from "../index";
@@ -60,10 +66,13 @@ export class MountedRun<S, M extends { type: string }> {
   /**
    * @param startRun boots the run, its Sub runners going through `subs`.
    * @param initial  the value React reads until the run has booted.
+   * @param cleanupMayBeAHide whether this React can run a passive cleanup on a
+   *   hide, and so runs the insertion cleanup on every delete.
    */
   constructor(
     private readonly startRun: (subs: SubGate) => RunHandle<S, M>,
     initial: S,
+    private readonly cleanupMayBeAHide: boolean,
   ) {
     this.snapshot = initial;
   }
@@ -120,14 +129,15 @@ export class MountedRun<S, M extends { type: string }> {
     this.connected = false;
     queueMicrotask(() => {
       if (this.connected) return;
-      if (this.phase.type === "leaving") this.stop();
+      if (this.phase.type === "leaving" || !this.cleanupMayBeAHide) this.stop();
       else this.subs.close();
     });
   }
 
   /**
    * The component is gone for good: this runs from `useInsertionEffect`'s
-   * cleanup, which neither Strict Mode's double run nor `<Activity>` calls.
+   * cleanup, which neither Strict Mode's double run nor `<Activity>` calls. Before
+   * React 19.2 a deleted hidden tree never gets here, and `disconnect` stops it.
    */
   retire(): void {
     switch (this.phase.type) {

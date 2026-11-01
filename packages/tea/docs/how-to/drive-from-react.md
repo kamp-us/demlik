@@ -149,8 +149,9 @@ That does nothing here: one run starts, `run` is called once, and each Sub start
 once. The hook starts the run in an effect, so a render that React repeats or
 throws away starts nothing.
 
-**`<Activity>`** runs the cleanups on hide and the effects again on show. A hide
-stops the machine's Subs and nothing else. It is one run from mount to unmount:
+**`<Activity>`**, which needs React 19.2 or later, runs the cleanups on hide and
+the effects again on show. A hide stops the machine's Subs and nothing else. It
+is one run from mount to unmount:
 
 - **On hide**, every Sub's cleanup runs, the built-in `timer` included. A Sub the
   State asks for while hidden waits for the show.
@@ -172,7 +173,8 @@ show. A Msg dispatched before then waits, and its promise settles once it is
 folded.
 
 After a real unmount, a Msg still waiting and any later `dispatch` reject with
-`@demlik/tea: runtime stopped`.
+`@demlik/tea: runtime stopped`. That holds on every React from 18 on, a tree
+deleted while a Suspense fallback hides it included.
 
 ## 5. Render a run the component does not own
 

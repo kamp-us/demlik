@@ -47,12 +47,39 @@ describe("SubGate", () => {
 
   it("hands the engine a cleanup still settling from the hide, so `stop()` waits for it", async () => {
     const gate = new SubGate();
-    const settling = Promise.resolve();
+    let settle = (): void => {};
+    const settling = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
     gate.open();
     const release = gate.admit(() => () => settling);
 
     gate.close();
-    expect(release()).toBe(settling);
+    let waited = false;
+    const stopping = Promise.resolve(release()).then(() => {
+      waited = true;
+    });
+    await Promise.resolve();
+    expect(waited).toBe(false);
+
+    settle();
+    await stopping;
+    expect(waited).toBe(true);
+  });
+
+  it("raises an async cleanup's rejection at a hide once, and `stop()` does not see it again", async () => {
+    const raise = vi.fn();
+    const gate = new SubGate(raise);
+    const bad = new Error("cleanup bad");
+    gate.open();
+    const release = gate.admit(() => () => Promise.reject(bad));
+
+    gate.close();
+    gate.close();
+    await expect(release()).resolves.toBeUndefined();
+
+    expect(raise).toHaveBeenCalledTimes(1);
+    expect(raise).toHaveBeenCalledWith(bad);
   });
 
   it("starts every Sub though one throws, then throws the first error", () => {

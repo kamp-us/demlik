@@ -31,11 +31,29 @@ class GatedSub {
     if (dispose !== null) this.lastDisposal = dispose();
     return this.lastDisposal;
   }
+
+  /**
+   * A hide. The engine is not waiting on this cleanup, so a rejection would go
+   * unhandled: it goes to `raise`, and `stop()` later waits on a settled promise.
+   */
+  hide(raise: (error: unknown) => void): void {
+    this.lastDisposal = this.stop()?.then(undefined, raise);
+  }
 }
+
+/** The global error handler, as a throw from a hide's own microtask reaches it. */
+const raiseGlobally = (error: unknown): void => {
+  queueMicrotask(() => {
+    throw error;
+  });
+};
 
 export class SubGate {
   private isOpen = false;
   private readonly subs = new Set<GatedSub>();
+
+  /** @param raise where an async cleanup's rejection at a hide goes. */
+  constructor(private readonly raise = raiseGlobally) {}
 
   /**
    * The engine started a Sub. `begin` runs now if the gate is open, so a runner
@@ -58,7 +76,7 @@ export class SubGate {
 
   close(): void {
     this.isOpen = false;
-    this.forEachSub((sub) => void sub.stop());
+    this.forEachSub((sub) => sub.hide(this.raise));
   }
 
   /**

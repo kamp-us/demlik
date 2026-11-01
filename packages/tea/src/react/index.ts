@@ -6,12 +6,11 @@
  * React component. Three rules (PRD §"React adapter"):
  *
  *   1. The runtime is the source of truth, NOT React state. We subscribe via
- *      `useSyncExternalStore(runtime.subscribe, runtime.getState,
- *      runtime.getState)`. React renders are driven by runtime state changes;
- *      React never owns the state.
+ *      `useSyncExternalStore`, reading a snapshot of the run's state. React
+ *      renders are driven by runtime state changes; React never owns the state.
  *   2. The runtime is kept per component-mount, not per render. It is keyed on
  *      `[machine, opts.run, opts.ctx, opts.store]` — IDENTITY, not value. See
- *      `README.md` for the ctx-identity footgun + fix.
+ *      `docs/how-to/drive-from-react.md` for the ctx-identity footgun + fix.
  *   3. Concurrent React is the design target. `useSyncExternalStore` is the
  *      React-blessed primitive for tearing-free external state.
  *
@@ -23,6 +22,7 @@
 
 "use client";
 
+import * as React from "react";
 import {
   useEffect,
   useInsertionEffect,
@@ -46,6 +46,11 @@ import type {
 import { builtinRunners } from "../internal/engine/builtin-runners";
 import { MountedRun } from "./mounted-run";
 import type { SubGate } from "./sub-gate";
+
+// A stable `<Activity>` arrived in React 19.2. That is the first React where a
+// passive cleanup can be a hide, and the first to run an insertion cleanup in a
+// deleted hidden tree. `MountedRun` says why it needs to know.
+const cleanupMayBeAHide = "Activity" in React;
 
 /**
  * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
@@ -103,7 +108,7 @@ export type UseMachineOpts<
  * **Strict Mode:** its extra effect run on mount does nothing. One run starts,
  * `run` is called once, and each Sub starts once.
  *
- * **`<Activity>`:** a hide stops the machine's Subs, and nothing else: their
+ * **`<Activity>`** (React 19.2 and later): a hide stops the machine's Subs, and nothing else: their
  * cleanups run, and they start again on show. It is the same run across the hide,
  * so `state` keeps its value, `init` is not called again, and a Cmd in flight
  * lands and its answer folds, whether that comes during the hide or after the
@@ -163,6 +168,7 @@ export function useMachine<
             ) as Partial<Subscribe<M, U, Ctx>>,
           } as RunOptions<S, M, C, U, Ctx>),
         machine.init(null, ctx)[0],
+        cleanupMayBeAHide,
       ),
     [machine, run, ctx, store, interpret],
   );
@@ -175,7 +181,8 @@ export function useMachine<
 
   // The one cleanup React runs only when the component is really gone: neither
   // Strict Mode's double run nor `<Activity>` touches an insertion effect. It
-  // is what tells a hide from an unmount, which the effect below cannot.
+  // is what tells a hide from an unmount, which the effect below cannot. Reacts
+  // before 19.2 can skip it, and `MountedRun` covers them.
   useInsertionEffect(() => () => mounted.retire(), [mounted]);
 
   useEffect(() => {

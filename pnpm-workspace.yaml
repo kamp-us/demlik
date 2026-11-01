@@ -1,5 +1,7 @@
 packages:
   - packages/*
+  # Private, never published: one React per folder, for tea's peer range test (#764).
+  - packages/tea/react-peers/*
 
 # Every dependency specifier in a workspace package.json is `catalog:`, `catalog:<name>` or
 # `workspace:` — `fabrika guard catalog-guard check` enforces it in CI (#358). A pin lives here
@@ -57,6 +59,28 @@ catalogs:
     react-dom: ^18 || ^19
     vitest: ^2 || ^3 || ^4 || ^5
     ws: ^8
+
+  # The Reacts `packages/tea/react-peers/*` runs `useMachine` on (#764): the old end of the peer
+  # range, and each side of the 19.2 change in what a hidden tree's cleanups do. The dev pin above
+  # is the newest end.
+  react-18.2.0:
+    react: 18.2.0
+    react-dom: 18.2.0
+  react-18.3.1:
+    react: 18.3.1
+    react-dom: 18.3.1
+  react-19.0.0:
+    react: 19.0.0
+    react-dom: 19.0.0
+  react-19.1.10:
+    react: 19.1.10
+    react-dom: 19.1.10
+  react-19.2.0:
+    react: 19.2.0
+    react-dom: 19.2.0
+  react-19.2.9:
+    react: 19.2.9
+    react-dom: 19.2.9
 
   # `@demlik/code-graph`'s pins that differ from the default catalog's (`catalog:code-graph`).
   # Moved as they were; converging them on one version is a dependency change of its own.

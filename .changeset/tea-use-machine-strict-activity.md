@@ -11,4 +11,5 @@ abandoned render leaves no run behind. Strict Mode's extra effect run does
 nothing. A hide stops the machine's Subs, and a show starts them again. It stays
 one run from mount to unmount: the value survives, `init` runs once, a Cmd in
 flight at a hide lands and its answer folds, and `dispatch` stays the same
-function. After a real unmount it rejects.
+function. After a real unmount it rejects, on every React in the peer range, a
+tree deleted while a Suspense fallback hides it included.
