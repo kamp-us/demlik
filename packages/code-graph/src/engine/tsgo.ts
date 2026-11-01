@@ -51,7 +51,12 @@ export type TypeProgramInput = {
   readonly tsConfigPath: string;
   readonly rootFiles: readonly string[];
   readonly includeConfigFiles: boolean;
+  // The text a file reads as instead of what is on disk; undefined leaves that file alone. Module
+  // resolution is untouched, because the file keeps its path.
+  readonly textOverlay?: TextOverlay;
 };
+
+export type TextOverlay = (fileName: string) => string | undefined;
 
 function virtualConfigPath(tsConfigPath: string, ordinal: number): string {
   return path.join(
@@ -89,13 +94,13 @@ export type TypeSession = {
   readonly close: () => void;
 };
 
-export type SessionProgramInput = Omit<TypeProgramInput, "tsConfigPath">;
+export type SessionProgramInput = Omit<TypeProgramInput, "tsConfigPath" | "textOverlay">;
 
-export function openTypeSession(tsConfigPath: string): TypeSession {
+export function openTypeSession(tsConfigPath: string, textOverlay?: TextOverlay): TypeSession {
   const virtualFiles = new Map<string, string>();
   const api = new API({
     cwd: path.dirname(tsConfigPath),
-    fs: { readFile: (fileName) => virtualFiles.get(fileName) },
+    fs: { readFile: (fileName) => virtualFiles.get(fileName) ?? textOverlay?.(fileName) },
   });
   let opened = 0;
   const live = new Set<Snapshot>();
@@ -145,7 +150,7 @@ function killServer(api: API): void {
 }
 
 export function openTypeProgram(input: TypeProgramInput): TypeProgram {
-  const session = openTypeSession(input.tsConfigPath);
+  const session = openTypeSession(input.tsConfigPath, input.textOverlay);
   try {
     return { ...session.program(input), close: session.close };
   } catch (error) {

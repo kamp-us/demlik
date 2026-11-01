@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as ts from "../engine/tsgo.js";
 import { moduleSymbolOf } from "../resolve.js";
+import type { EmittedTree } from "./emit.js";
 import { declarationText, statementOf } from "./text.js";
 
 // A published name as a consumer's types see it (SPEC §13.3): its own declaration text, plus the
@@ -104,7 +105,7 @@ class ReferenceWalk {
 
   constructor(
     private readonly program: ts.TypeProgram,
-    private readonly out: string,
+    private readonly tree: EmittedTree,
     private readonly published: ReadonlySet<string>,
   ) {}
 
@@ -133,7 +134,7 @@ class ReferenceWalk {
 
   #unpublished(declaration: ts.Node): ts.Node | null {
     if (!TOP_LEVEL_DECLARATION.some((is) => is(declaration))) return null;
-    if (!declaration.getSourceFile().fileName.startsWith(`${this.out}${path.sep}`)) return null;
+    if (this.tree.declarationOf(declaration.getSourceFile().fileName) === undefined) return null;
     const statement = statementOf(declaration);
     const holder = statement.parent;
     if (!ts.isSourceFile(holder) && !ts.isModuleBlock(holder)) return null;
@@ -145,8 +146,8 @@ class ReferenceWalk {
   }
 
   #record(declaration: ts.Node, statement: ts.Node): readonly ts.Node[] {
-    const file = path.relative(this.out, declaration.getSourceFile().fileName).split(path.sep);
-    const key = `${file.join("/")}#${declaredName(declaration)}`;
+    const file = this.tree.declarationOf(declaration.getSourceFile().fileName) ?? "";
+    const key = `${file.split(path.sep).join("/")}#${declaredName(declaration)}`;
     const statements = this.#references.get(key) ?? new Map<string, ts.Node>();
     statements.set(nodeKey(statement), statement);
     this.#references.set(key, statements);
@@ -167,15 +168,70 @@ class ReferenceWalk {
 // Every name the module at `entryFile` publishes, with its text and references.
 export function readSubpathNames(
   program: ts.TypeProgram,
-  out: string,
+  tree: EmittedTree,
   entryFile: string,
 ): SubpathNames {
   const names = publishedNames(program, entryFile);
   const published = new Set(names.flatMap((name) => name.declarations.map(nodeKey)));
   const read: Record<string, ApiEntryText> = {};
   for (const { name, declarations } of names) {
-    const references = new ReferenceWalk(program, out, published).from(declarations);
+    const references = new ReferenceWalk(program, tree, published).from(declarations);
     read[name] = { text: joinedText(declarations), references };
   }
   return read;
+}
+
+// A module specifier an emitted file names, in each form a declaration file can name one.
+function moduleSpecifier(node: ts.Node): ts.Node | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isExternalModuleReference(node)) return node.expression;
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument))
+    return node.argument.literal;
+  return undefined;
+}
+
+function moduleSpecifiers(source: ts.Node): readonly ts.Node[] {
+  const found: ts.Node[] = [];
+  const visit = (node: ts.Node): undefined => {
+    const specifier = moduleSpecifier(node);
+    if (specifier !== undefined) found.push(specifier);
+    node.forEachChild(visit);
+    return undefined;
+  };
+  visit(source);
+  return found;
+}
+
+export type UnresolvedSpecifier = { readonly specifier: string; readonly file: string };
+
+// Every specifier the read could not resolve in the emitted files the entries reach. A name behind
+// one is missing or has no text, which reads exactly like a name the package does not publish.
+export function unresolvedSpecifiers(
+  program: ts.TypeProgram,
+  tree: EmittedTree,
+  entryFiles: readonly string[],
+): readonly UnresolvedSpecifier[] {
+  const unresolved = new Map<string, UnresolvedSpecifier>();
+  const seen = new Set(entryFiles);
+  const queue = [...seen];
+  for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+    const source = program.sourceFile(file);
+    if (source === undefined) continue;
+    const specifiers = moduleSpecifiers(source);
+    program.symbolsAt(specifiers).forEach((symbol, index) => {
+      if (symbol === undefined) {
+        const specifier = (specifiers[index] as ts.StringLiteral).text;
+        const emitted = tree.declarationOf(file) ?? file;
+        unresolved.set(`${emitted}\0${specifier}`, { specifier, file: emitted });
+        return;
+      }
+      for (const declaration of program.declarations(symbol)) {
+        const next = declaration.getSourceFile().fileName;
+        if (seen.has(next) || tree.declarationOf(next) === undefined) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    });
+  }
+  return [...unresolved.keys()].sort().map((key) => unresolved.get(key) as UnresolvedSpecifier);
 }

@@ -2,9 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import * as ts from "../engine/tsgo.js";
 import { findRepoRoot, resolveEdgeTsConfig } from "../extract/project.js";
-import { emitDeclarations, emittedEntries, removeEmit } from "./emit.js";
+import { EmittedTree, emitDeclarations, emittedEntries, removeEmit } from "./emit.js";
 import { ApiInputError, type ApiSubpath, apiSubpaths } from "./map.js";
-import { readSubpathNames, type SubpathNames } from "./read.js";
+import {
+  readSubpathNames,
+  type SubpathNames,
+  type UnresolvedSpecifier,
+  unresolvedSpecifiers,
+} from "./read.js";
 
 export type PublishedApi = {
   readonly root: string;
@@ -39,20 +44,32 @@ function packageTsConfig(rootAbsolute: string, repoRoot: string): string {
   }
 }
 
+type ReadNames = {
+  readonly names: ReadonlyMap<string, SubpathNames>;
+  readonly unresolved: readonly UnresolvedSpecifier[];
+};
+
+// The program holds every file the compile held, so an ambient module in a source `.d.ts` is there
+// too; only the files that emitted read differently.
 function readNames(
   tsConfigPath: string,
-  out: string,
+  tree: EmittedTree,
   entries: ReadonlyMap<string, string>,
-): ReadonlyMap<string, SubpathNames> {
+): ReadNames {
+  const entryFiles = [...new Set(entries.values())].sort();
   const program = ts.openTypeProgram({
     tsConfigPath,
-    rootFiles: [...new Set(entries.values())].sort(),
-    includeConfigFiles: false,
+    rootFiles: entryFiles,
+    includeConfigFiles: true,
+    textOverlay: tree.textOf,
   });
   try {
-    return new Map(
-      [...entries].map(([subpath, file]) => [subpath, readSubpathNames(program, out, file)]),
-    );
+    return {
+      names: new Map(
+        [...entries].map(([subpath, file]) => [subpath, readSubpathNames(program, tree, file)]),
+      ),
+      unresolved: unresolvedSpecifiers(program, tree, entryFiles),
+    };
   } finally {
     program.close();
   }
@@ -83,17 +100,24 @@ export async function readEmittedNames(
   );
   const emit = await emitDeclarations(rootAbsolute, tsConfigPath);
   try {
+    const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
+    const context = options.context ?? "";
     if (emit.diagnostics > 0) {
-      const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
       warn(
-        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s)${options.context ?? ""}; the declarations were emitted anyway`,
+        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s)${context}; the declarations were emitted anyway`,
       );
     }
-    const entries = emittedEntries(emit, rootAbsolute, subpaths);
+    const tree = new EmittedTree(emit, rootAbsolute);
+    const { names, unresolved } = readNames(tsConfigPath, tree, emittedEntries(tree, subpaths));
+    for (const { specifier, file } of unresolved) {
+      warn(
+        `code-graph: warning: ${file} names "${specifier}", which the read could not resolve${context}; any name behind it is missing or has no text`,
+      );
+    }
     return {
       compiler: emit.compiler,
-      diagnostics: emit.diagnostics,
-      names: readNames(tsConfigPath, emit.out, entries),
+      diagnostics: emit.diagnostics + unresolved.length,
+      names,
     };
   } finally {
     removeEmit(emit);

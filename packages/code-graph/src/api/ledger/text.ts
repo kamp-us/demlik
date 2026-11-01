@@ -15,11 +15,11 @@ function missingLines({ kind, entries }: MissingEntries): string[] {
   const head =
     kind === "pruned"
       ? `pruned ${entryCount(entries.length)} from ${API_LEDGER_FILENAME} — the name is gone:`
-      : `kept ${entryCount(entries.length)} in ${API_LEDGER_FILENAME} — the compiler reported errors, so this run cannot say these names were removed; the first clean run decides:`;
+      : `kept ${entryCount(entries.length)} in ${API_LEDGER_FILENAME} — the compiler reported errors or the read could not resolve a module, so this run cannot say these names were removed; the first clean run decides:`;
   return [head, ...entries.map(nameLine)];
 }
 
-// A clean run's JSON has `pruned` alone; `unmeasured` appears only when the compiler reported errors.
+// A clean run's JSON has `pruned` alone; `unmeasured` appears only on a run with diagnostics.
 const missingFields = ({ kind, entries }: MissingEntries) =>
   kind === "pruned" ? { pruned: entries } : { pruned: [], unmeasured: entries };
 
