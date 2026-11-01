@@ -7,6 +7,7 @@
 export type { MsgCount } from "./msg-tally";
 export {
   PropertyFailure,
+  type PropertyOpts,
   type PropertyRun,
   propertyInvariant,
   propertyTerminates,

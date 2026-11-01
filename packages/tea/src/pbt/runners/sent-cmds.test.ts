@@ -383,4 +383,38 @@ describe("the strict option", () => {
     );
     expect(passed.numRuns).toBe(200);
   });
+
+  it("fails every Cmd on a machine whose cmds list is empty", () => {
+    const emptyList = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as SentCmd,
+        ctx: {} as Record<string, never>,
+      },
+      cmds: [],
+      init: bootInit([]),
+      update,
+    });
+    const failure = failureOf(() =>
+      propertyInvariant(emptyList, {}, seqArb, () => true, {
+        seed: 1,
+        failOnUndeclaredCmd: true,
+      }),
+    );
+    expect(failure.message).toContain("isn't in machine.cmds: []");
+  });
+});
+
+describe("a check with its own optional second parameter", () => {
+  it("receives init's Cmds there instead of its default", () => {
+    const seen: unknown[] = [];
+    const check = (_step: unknown, verbose: unknown = "default") => {
+      seen.push(verbose);
+      return true;
+    };
+    propertyInvariant(defineApp({}), {}, seqArb, check, { numRuns: 20 });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((value) => Array.isArray(value))).toBe(true);
+  });
 });

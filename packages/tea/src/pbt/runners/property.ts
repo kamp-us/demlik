@@ -31,26 +31,23 @@ import { type MsgCount, MsgTally } from "./msg-tally";
 import { foldEvents, type Step } from "./replay-fold";
 
 /**
- * fast-check's settings a runner forwards. Four are left out, each because it
- * would break what a runner promises:
+ * What every property runner takes: the saved state to start from, the two checks
+ * below, and fast-check's `Parameters` (`numRuns` defaults to 200 here). Four of
+ * those settings are left out, each because it would break what a runner promises:
  *
- *   - `reporter` and `asyncReporter` stop a failing run from throwing.
+ *   - `reporter` and `asyncReporter` stop a failing run from throwing. One set
+ *     through `fc.configureGlobal` still applies, as it does for `fc.assert`.
  *   - `examples` has the shape of the drawn tuple, which an arbitrary `loaded`
  *     changes.
  *   - `timeout` applies only to async properties, and these runners are sync.
  *     `interruptAfterTimeLimit` with `markInterruptAsFailure` is the limit that
  *     works here.
  */
-type ForwardedSettings = Omit<
-  fc.Parameters,
-  "reporter" | "asyncReporter" | "examples" | "timeout"
->;
-
-/**
- * Common options shared by every property runner: fast-check's settings
- * (`numRuns` defaults to 200 here) plus the saved state to start from.
- */
-interface PropertyOpts<S> extends ForwardedSettings {
+export interface PropertyOpts<S>
+  extends Omit<
+    fc.Parameters,
+    "reporter" | "asyncReporter" | "examples" | "timeout"
+  > {
   /**
    * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
    * arbitrary draws one per run, and a failure's counterexample shows the drawn
@@ -60,9 +57,14 @@ interface PropertyOpts<S> extends ForwardedSettings {
   readonly loaded?: S | null | fc.Arbitrary<S | null>;
   /**
    * Fail a run whose laws all held when a Msg type never acted, naming each such
-   * type, so a cut path can't stay green. Default `false`. Draw long lists with
-   * `arbMsgSequence(msgArb, { size: "max" })`: short ones may never reach a healthy
-   * machine's deep states, and this fails on those too.
+   * type, so a cut path can't stay green. Default `false`.
+   *
+   * A deep path needs a `maxLength` well past its depth as well as `size: "max"`
+   * on `arbMsgSequence`. Lists too short to reach a healthy machine's deep state
+   * name that healthy path as never acted, in the same report a cut path gives. At
+   * the default `maxLength` of 30, a state 20 steps deep on 6 Msg types drawn evenly
+   * fails this way, since only one draw in 6 climbs. Allow about the depth times the
+   * number of Msg types, here `maxLength: 120`.
    *
    * This stays out of any run with a non-empty `path`, so drop `path` to have it
    * check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A
@@ -78,8 +80,9 @@ interface PropertyOpts<S> extends ForwardedSettings {
   /**
    * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
    * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
-   * keep a hand-written Cmd beside its defined ones. A machine that declares no
-   * `cmds` has no list to check against, so this adds nothing there.
+   * keep a hand-written Cmd beside its defined ones. A machine with no `cmds` field
+   * has no list to check against, so this adds nothing there. `cmds: []` is a list
+   * with nothing on it, so every Cmd fails.
    *
    * A value with no string `type` is never a Cmd, so it fails with this off too, on
    * every machine.
@@ -287,6 +290,11 @@ function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
  * A report leaves out what the check threw exactly when that went to the `cause`,
  * so a check's reason is added to the report there. The thrown error is the one
  * from the shrunk list, so the reason always describes the list printed beside it.
+ *
+ * A reporter set through `fc.configureGlobal` takes the details instead, on a pass
+ * and on a failure, and nothing throws: what `fc.assert` does. It is read from the
+ * global settings, not `details.runConfiguration`, which also holds one passed per
+ * call, so a `reporter` that slips past the types still can't hide a failure.
  */
 function settle<Ts>(details: fc.RunDetails<Ts>, tally: MsgTally): PropertyRun {
   const run: PropertyRun = {
@@ -296,6 +304,12 @@ function settle<Ts>(details: fc.RunDetails<Ts>, tally: MsgTally): PropertyRun {
     path: details.counterexamplePath,
     msgCounts: tally.counts,
   };
+  const { reporter } = fc.readConfigureGlobal();
+  if (reporter) {
+    // A global reporter takes any property's details, so `Ts` is nothing to it.
+    reporter(details as fc.RunDetails<unknown>);
+    return run;
+  }
   const report = fc.defaultReportMessage(details);
   if (report === undefined) return run;
   const cause = causeOf(details);
@@ -388,28 +402,30 @@ function runProperty<
     }
     tally.add(steps);
   };
-  const run = isArbitrary(loaded)
-    ? settle(
+  const checkActed = failOnNeverActed && !settings.path;
+  const finish = <Ts>(details: fc.RunDetails<Ts>): PropertyRun => {
+    const run = settle(details, tally);
+    // A failed run gets here only past a global reporter, and its laws didn't hold.
+    if (checkActed && !details.failed) assertEveryTypeActed(run, tally);
+    return run;
+  };
+  return isArbitrary(loaded)
+    ? finish(
         fc.check(
           fc.property(seqArb, loaded, (msgs, drawn) => {
             runList(msgs, drawn);
           }),
           params,
         ),
-        tally,
       )
-    : settle(
+    : finish(
         fc.check(
           fc.property(seqArb, (msgs) => {
             runList(msgs, loaded ?? null);
           }),
           params,
         ),
-        tally,
       );
-  const hasPath = Boolean(settings.path);
-  if (failOnNeverActed && !hasPath) assertEveryTypeActed(run, tally);
-  return run;
 }
 
 /**

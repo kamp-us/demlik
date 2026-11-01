@@ -35,6 +35,7 @@ export {
   foldEvents,
   type MsgCount,
   PropertyFailure,
+  type PropertyOpts,
   type PropertyRun,
   propertyInvariant,
   propertyTerminates,
