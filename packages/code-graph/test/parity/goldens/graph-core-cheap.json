@@ -9563,7 +9563,7 @@ exit 0
         "./signals.js"
       ],
       "isTest": false,
-      "loc": 258,
+      "loc": 257,
       "smells": []
     },
     {
@@ -9580,7 +9580,7 @@ exit 0
         "../render/json.js"
       ],
       "isTest": false,
-      "loc": 41,
+      "loc": 40,
       "smells": []
     },
     {
@@ -9601,7 +9601,7 @@ exit 0
         "./signals.js"
       ],
       "isTest": false,
-      "loc": 81,
+      "loc": 80,
       "smells": []
     },
     {
@@ -9630,7 +9630,7 @@ exit 0
         "node:path"
       ],
       "isTest": false,
-      "loc": 88,
+      "loc": 87,
       "smells": []
     },
     {
@@ -9656,7 +9656,7 @@ exit 0
         "./settings.js"
       ],
       "isTest": false,
-      "loc": 193,
+      "loc": 192,
       "smells": []
     },
     {
@@ -9686,7 +9686,7 @@ exit 0
         "./signals.js"
       ],
       "isTest": false,
-      "loc": 144,
+      "loc": 143,
       "smells": []
     },
     {
@@ -9699,7 +9699,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 35,
+      "loc": 34,
       "smells": []
     },
     {
@@ -9725,7 +9725,7 @@ exit 0
         "./tokens.js"
       ],
       "isTest": false,
-      "loc": 127,
+      "loc": 126,
       "smells": []
     },
     {
@@ -9740,7 +9740,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 111,
+      "loc": 110,
       "smells": []
     },
     {
@@ -9768,7 +9768,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 151,
+      "loc": 150,
       "smells": []
     },
     {
@@ -9794,7 +9794,7 @@ exit 0
         "vitest"
       ],
       "isTest": true,
-      "loc": 174,
+      "loc": 173,
       "smells": []
     },
     {
@@ -9822,7 +9822,7 @@ exit 0
         "node:path"
       ],
       "isTest": false,
-      "loc": 198,
+      "loc": 197,
       "smells": []
     },
     {
@@ -9840,7 +9840,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 69,
+      "loc": 68,
       "smells": []
     },
     {
@@ -9867,7 +9867,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 206,
+      "loc": 205,
       "smells": []
     },
     {
@@ -9885,7 +9885,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 62,
+      "loc": 61,
       "smells": []
     },
     {
@@ -9903,7 +9903,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 48,
+      "loc": 47,
       "smells": []
     },
     {
@@ -9927,7 +9927,7 @@ exit 0
         "./reach.js"
       ],
       "isTest": false,
-      "loc": 124,
+      "loc": 123,
       "smells": []
     },
     {
@@ -9951,7 +9951,7 @@ exit 0
         "./surface.js"
       ],
       "isTest": false,
-      "loc": 99,
+      "loc": 98,
       "smells": []
     },
     {
@@ -9976,7 +9976,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 118,
+      "loc": 117,
       "smells": []
     },
     {
@@ -10017,7 +10017,7 @@ exit 0
         "node:path"
       ],
       "isTest": false,
-      "loc": 263,
+      "loc": 262,
       "smells": []
     },
     {
@@ -10039,7 +10039,7 @@ exit 0
         "./json.js"
       ],
       "isTest": false,
-      "loc": 182,
+      "loc": 181,
       "smells": []
     },
     {
@@ -10056,7 +10056,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 44,
+      "loc": 43,
       "smells": []
     },
     {
@@ -10075,7 +10075,7 @@ exit 0
         "node:path"
       ],
       "isTest": false,
-      "loc": 47,
+      "loc": 46,
       "smells": []
     },
     {
@@ -10091,7 +10091,7 @@ exit 0
         "./json.js"
       ],
       "isTest": false,
-      "loc": 7,
+      "loc": 6,
       "smells": []
     },
     {
@@ -10121,7 +10121,7 @@ exit 0
         "../smells/plan.js"
       ],
       "isTest": false,
-      "loc": 223,
+      "loc": 222,
       "smells": []
     },
     {
@@ -10141,7 +10141,7 @@ exit 0
         "./json.js"
       ],
       "isTest": false,
-      "loc": 267,
+      "loc": 266,
       "smells": []
     },
     {
@@ -10158,7 +10158,7 @@ exit 0
         "./html-template.js"
       ],
       "isTest": false,
-      "loc": 20,
+      "loc": 19,
       "smells": []
     },
     {
@@ -10172,7 +10172,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 20,
+      "loc": 19,
       "smells": []
     },
     {
@@ -10191,7 +10191,7 @@ exit 0
         "./json.js"
       ],
       "isTest": false,
-      "loc": 35,
+      "loc": 34,
       "smells": []
     },
     {
@@ -10214,7 +10214,7 @@ exit 0
         "node:path"
       ],
       "isTest": false,
-      "loc": 115,
+      "loc": 114,
       "smells": []
     },
     {
@@ -10230,7 +10230,7 @@ exit 0
         "./json.js"
       ],
       "isTest": false,
-      "loc": 7,
+      "loc": 6,
       "smells": []
     },
     {
@@ -10249,7 +10249,7 @@ exit 0
         "chalk"
       ],
       "isTest": false,
-      "loc": 55,
+      "loc": 54,
       "smells": []
     },
     {
@@ -10260,7 +10260,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 7,
+      "loc": 6,
       "smells": []
     },
     {
@@ -10273,7 +10273,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 43,
+      "loc": 42,
       "smells": []
     },
     {
@@ -10287,7 +10287,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 183,
+      "loc": 182,
       "smells": []
     },
     {
@@ -10300,7 +10300,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 44,
+      "loc": 43,
       "smells": []
     },
     {
@@ -10318,7 +10318,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 39,
+      "loc": 38,
       "smells": []
     },
     {
@@ -10331,7 +10331,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 26,
+      "loc": 25,
       "smells": []
     },
     {
@@ -10345,7 +10345,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 48,
+      "loc": 47,
       "smells": []
     },
     {
@@ -10372,7 +10372,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 181,
+      "loc": 180,
       "smells": []
     },
     {
@@ -10397,7 +10397,7 @@ exit 0
         "./rules.js"
       ],
       "isTest": false,
-      "loc": 110,
+      "loc": 109,
       "smells": []
     },
     {
@@ -10412,7 +10412,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 14,
+      "loc": 13,
       "smells": []
     },
     {
@@ -10432,7 +10432,7 @@ exit 0
         "vitest"
       ],
       "isTest": true,
-      "loc": 116,
+      "loc": 115,
       "smells": []
     },
     {
@@ -10453,7 +10453,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 86,
+      "loc": 85,
       "smells": []
     },
     {
@@ -10479,7 +10479,7 @@ exit 0
         "../schema.js"
       ],
       "isTest": false,
-      "loc": 209,
+      "loc": 208,
       "smells": []
     },
     {
@@ -10495,7 +10495,7 @@ exit 0
         "./shapes"
       ],
       "isTest": true,
-      "loc": 10,
+      "loc": 9,
       "smells": []
     },
     {
@@ -10524,7 +10524,7 @@ exit 0
         "hashlib"
       ],
       "isTest": false,
-      "loc": 89,
+      "loc": 88,
       "smells": []
     },
     {
@@ -10535,7 +10535,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 14,
+      "loc": 13,
       "smells": []
     },
     {
@@ -10556,7 +10556,7 @@ exit 0
         "drizzle-orm"
       ],
       "isTest": false,
-      "loc": 32,
+      "loc": 31,
       "smells": []
     },
     {
@@ -10589,7 +10589,7 @@ exit 0
         "drizzle-orm"
       ],
       "isTest": false,
-      "loc": 47,
+      "loc": 46,
       "smells": []
     },
     {
@@ -10600,7 +10600,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 3,
+      "loc": 2,
       "smells": []
     },
     {
@@ -10621,7 +10621,7 @@ exit 0
         "./limits.js"
       ],
       "isTest": false,
-      "loc": 66,
+      "loc": 65,
       "smells": []
     },
     {
@@ -10635,7 +10635,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 9,
+      "loc": 8,
       "smells": []
     },
     {
@@ -10657,7 +10657,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 36,
+      "loc": 35,
       "smells": []
     },
     {
@@ -10676,7 +10676,7 @@ exit 0
         "drizzle-orm"
       ],
       "isTest": false,
-      "loc": 15,
+      "loc": 14,
       "smells": []
     },
     {
@@ -10698,7 +10698,7 @@ exit 0
         "./handler"
       ],
       "isTest": false,
-      "loc": 14,
+      "loc": 13,
       "smells": []
     },
     {
@@ -10718,7 +10718,7 @@ exit 0
         "./types"
       ],
       "isTest": false,
-      "loc": 172,
+      "loc": 171,
       "smells": []
     },
     {
@@ -10783,7 +10783,7 @@ exit 0
         "./types"
       ],
       "isTest": false,
-      "loc": 1401,
+      "loc": 1400,
       "smells": [
         {
           "kind": "big-file",
@@ -10793,7 +10793,7 @@ exit 0
             "type": "module"
           },
           "threshold": 400,
-          "value": 1401
+          "value": 1400
         }
       ]
     },
@@ -10807,7 +10807,7 @@ exit 0
       "importedBy": [],
       "imports": [],
       "isTest": false,
-      "loc": 30,
+      "loc": 29,
       "smells": []
     },
     {
@@ -10824,7 +10824,7 @@ exit 0
         "react"
       ],
       "isTest": false,
-      "loc": 89,
+      "loc": 88,
       "smells": []
     },
     {
@@ -10845,7 +10845,7 @@ exit 0
         "react"
       ],
       "isTest": false,
-      "loc": 253,
+      "loc": 252,
       "smells": []
     },
     {
@@ -10885,7 +10885,7 @@ exit 0
         "./pure/core"
       ],
       "isTest": false,
-      "loc": 1501,
+      "loc": 1500,
       "smells": [
         {
           "kind": "big-file",
@@ -10895,7 +10895,7 @@ exit 0
             "type": "module"
           },
           "threshold": 400,
-          "value": 1501
+          "value": 1500
         }
       ]
     }
@@ -10924,7 +10924,7 @@ exit 0
         "type": "module"
       },
       "threshold": 400,
-      "value": 1401
+      "value": 1400
     },
     {
       "kind": "long-function",
@@ -10958,7 +10958,7 @@ exit 0
         "type": "module"
       },
       "threshold": 400,
-      "value": 1501
+      "value": 1500
     }
   ],
   "stats": {
@@ -10969,7 +10969,7 @@ exit 0
     ],
     "smellCount": 5,
     "totalCommentLines": 1838,
-    "totalLoc": 8499
+    "totalLoc": 8437
   },
   "summary": {
     "fileCount": 62,

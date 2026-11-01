@@ -281,7 +281,7 @@ exit 0
         "./store/db.js"
       ],
       "isTest": false,
-      "loc": 2,
+      "loc": 1,
       "smells": []
     },
     {
@@ -296,7 +296,7 @@ exit 0
       ],
       "imports": [],
       "isTest": false,
-      "loc": 2,
+      "loc": 1,
       "smells": []
     },
     {
@@ -331,7 +331,7 @@ exit 0
         "../rules/score.js"
       ],
       "isTest": false,
-      "loc": 7,
+      "loc": 6,
       "smells": []
     },
     {
@@ -367,7 +367,7 @@ exit 0
         "../store/repo.js"
       ],
       "isTest": false,
-      "loc": 5,
+      "loc": 4,
       "smells": []
     },
     {
@@ -389,7 +389,7 @@ exit 0
         "./flows/run.js"
       ],
       "isTest": false,
-      "loc": 2,
+      "loc": 1,
       "smells": []
     },
     {
@@ -402,7 +402,7 @@ exit 0
       ],
       "imports": [],
       "isTest": false,
-      "loc": 2,
+      "loc": 1,
       "smells": []
     },
     {
@@ -445,7 +445,7 @@ exit 0
         "zod"
       ],
       "isTest": false,
-      "loc": 7,
+      "loc": 6,
       "smells": []
     },
     {
@@ -460,7 +460,7 @@ exit 0
       ],
       "imports": [],
       "isTest": false,
-      "loc": 2,
+      "loc": 1,
       "smells": []
     },
     {
@@ -480,7 +480,7 @@ exit 0
         "./findings/store/repo.js"
       ],
       "isTest": false,
-      "loc": 3,
+      "loc": 2,
       "smells": []
     },
     {
@@ -500,7 +500,7 @@ exit 0
         "../findings/index.js"
       ],
       "isTest": false,
-      "loc": 3,
+      "loc": 2,
       "smells": []
     }
   ],
@@ -518,7 +518,7 @@ exit 0
     "parseFailures": [],
     "smellCount": 0,
     "totalCommentLines": 0,
-    "totalLoc": 35
+    "totalLoc": 25
   },
   "summary": {
     "fileCount": 10,

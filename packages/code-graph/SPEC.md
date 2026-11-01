@@ -164,7 +164,7 @@ type FunctionNode = {
 
 type ModuleNode = {
   file: string;          // relative to the analyzed root (join with graph.root for absolute)
-  loc: number;
+  loc: number;           // lines a person counts: the empty text after a final newline is not one
   commentLines: number;  // ALL comment lines in the file (functions' counts are subsets of this)
   functionIds: string[];
   imports: string[];     // raw module specifiers

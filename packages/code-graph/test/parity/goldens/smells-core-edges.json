@@ -54,7 +54,7 @@ exit 0
       "type": "module"
     },
     "threshold": 400,
-    "value": 1401
+    "value": 1400
   },
   {
     "kind": "long-function",
@@ -148,6 +148,6 @@ exit 0
       "type": "module"
     },
     "threshold": 400,
-    "value": 1501
+    "value": 1500
   }
 ]
