@@ -33,130 +33,6 @@ exit 0
       ]
     },
     {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 78,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#1",
-      "bStartLine": 66,
-      "confidence": 0.5,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.5,
-      "signals": [
-        {
-          "detail": "loc 13/13 cx 3/3 nest 0/0",
-          "signal": "shape",
-          "strength": 1
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 93,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#2",
-      "bStartLine": 81,
-      "confidence": 0.5,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.5,
-      "signals": [
-        {
-          "detail": "loc 13/13 cx 3/3 nest 0/0",
-          "signal": "shape",
-          "strength": 1
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 123,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#4",
-      "bStartLine": 111,
-      "confidence": 0.5,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.5,
-      "signals": [
-        {
-          "detail": "loc 13/13 cx 3/3 nest 0/0",
-          "signal": "shape",
-          "strength": 1
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 170,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#7",
-      "bStartLine": 158,
-      "confidence": 0.5,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.5,
-      "signals": [
-        {
-          "detail": "loc 13/13 cx 3/3 nest 0/0",
-          "signal": "shape",
-          "strength": 1
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
       "aEndLine": 78,
       "aFile": "src/cg/smells/rules.ts",
       "aId": "src/cg/smells/rules.ts:evaluate#1",
@@ -534,37 +410,6 @@ exit 0
       ]
     },
     {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 108,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#3",
-      "bStartLine": 96,
-      "confidence": 0.4583,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.4583,
-      "signals": [
-        {
-          "detail": "loc 13/13 cx 3/4 nest 0/0",
-          "signal": "shape",
-          "strength": 0.8333
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
       "aEndLine": 78,
       "aFile": "src/cg/smells/rules.ts",
       "aId": "src/cg/smells/rules.ts:evaluate#1",
@@ -844,68 +689,6 @@ exit 0
       ]
     },
     {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 139,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#5",
-      "bStartLine": 126,
-      "confidence": 0.4375,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.4375,
-      "signals": [
-        {
-          "detail": "loc 13/14 cx 3/4 nest 0/0",
-          "signal": "shape",
-          "strength": 0.75
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
-      "aEndLine": 63,
-      "aFile": "src/cg/smells/rules.ts",
-      "aId": "src/cg/smells/rules.ts:evaluate#0",
-      "aStartLine": 51,
-      "bEndLine": 155,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#6",
-      "bStartLine": 142,
-      "confidence": 0.4375,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.4375,
-      "signals": [
-        {
-          "detail": "loc 13/14 cx 3/4 nest 0/0",
-          "signal": "shape",
-          "strength": 0.75
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
       "aEndLine": 78,
       "aFile": "src/cg/smells/rules.ts",
       "aId": "src/cg/smells/rules.ts:evaluate#1",
@@ -1269,37 +1052,6 @@ exit 0
           "detail": "loc 14/13 cx 4/5 nest 0/0",
           "signal": "shape",
           "strength": 0.75
-        },
-        {
-          "detail": "shared {evaluate}",
-          "signal": "name",
-          "strength": 1
-        }
-      ]
-    },
-    {
-      "aEndLine": 43,
-      "aFile": "src/cg/render/ci.ts",
-      "aId": "src/cg/render/ci.ts:evaluateCi",
-      "aStartLine": 29,
-      "bEndLine": 63,
-      "bFile": "src/cg/smells/rules.ts",
-      "bId": "src/cg/smells/rules.ts:evaluate#0",
-      "bStartLine": 51,
-      "confidence": 0.4167,
-      "cost": 1,
-      "costInputs": {
-        "callerUnion": 0,
-        "crossesPackage": false,
-        "effectOnPath": false,
-        "packagesSpanned": 1
-      },
-      "rank": 0.4167,
-      "signals": [
-        {
-          "detail": "loc 15/13 cx 3/3 nest 1/0",
-          "signal": "shape",
-          "strength": 0.6667
         },
         {
           "detail": "shared {evaluate}",
@@ -2507,6 +2259,130 @@ exit 0
       ]
     },
     {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 78,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#1",
+      "bStartLine": 66,
+      "confidence": 0.5,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1667,
+      "signals": [
+        {
+          "detail": "loc 13/13 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 93,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#2",
+      "bStartLine": 81,
+      "confidence": 0.5,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1667,
+      "signals": [
+        {
+          "detail": "loc 13/13 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 123,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#4",
+      "bStartLine": 111,
+      "confidence": 0.5,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1667,
+      "signals": [
+        {
+          "detail": "loc 13/13 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 170,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#7",
+      "bStartLine": 158,
+      "confidence": 0.5,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1667,
+      "signals": [
+        {
+          "detail": "loc 13/13 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
       "aEndLine": 45,
       "aFile": "src/cg/query/reach.ts",
       "aId": "src/cg/query/reach.ts:fullAdjacency",
@@ -2693,6 +2569,37 @@ exit 0
       ]
     },
     {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 108,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#3",
+      "bStartLine": 96,
+      "confidence": 0.4583,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1528,
+      "signals": [
+        {
+          "detail": "loc 13/13 cx 3/4 nest 0/0",
+          "signal": "shape",
+          "strength": 0.8333
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
       "aEndLine": 257,
       "aFile": "src/cg/collapse/candidates.ts",
       "aId": "src/cg/collapse/candidates.ts:findCollapseCandidates",
@@ -2780,6 +2687,68 @@ exit 0
         },
         {
           "detail": "shared {level}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 139,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#5",
+      "bStartLine": 126,
+      "confidence": 0.4375,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1458,
+      "signals": [
+        {
+          "detail": "loc 13/14 cx 3/4 nest 0/0",
+          "signal": "shape",
+          "strength": 0.75
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 63,
+      "aFile": "src/cg/smells/rules.ts",
+      "aId": "src/cg/smells/rules.ts:evaluate#0",
+      "aStartLine": 51,
+      "bEndLine": 155,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#6",
+      "bStartLine": 142,
+      "confidence": 0.4375,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1458,
+      "signals": [
+        {
+          "detail": "loc 13/14 cx 3/4 nest 0/0",
+          "signal": "shape",
+          "strength": 0.75
+        },
+        {
+          "detail": "shared {evaluate}",
           "signal": "name",
           "strength": 1
         }
@@ -2999,6 +2968,37 @@ exit 0
           "detail": "jaccard 0.6667 over 3/2 callees",
           "signal": "callees",
           "strength": 0.6667
+        }
+      ]
+    },
+    {
+      "aEndLine": 43,
+      "aFile": "src/cg/render/ci.ts",
+      "aId": "src/cg/render/ci.ts:evaluateCi",
+      "aStartLine": 29,
+      "bEndLine": 63,
+      "bFile": "src/cg/smells/rules.ts",
+      "bId": "src/cg/smells/rules.ts:evaluate#0",
+      "bStartLine": 51,
+      "confidence": 0.4167,
+      "cost": 3,
+      "costInputs": {
+        "callerUnion": 3,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.1389,
+      "signals": [
+        {
+          "detail": "loc 15/13 cx 3/3 nest 1/0",
+          "signal": "shape",
+          "strength": 0.6667
+        },
+        {
+          "detail": "shared {evaluate}",
+          "signal": "name",
+          "strength": 1
         }
       ]
     },
@@ -4826,14 +4826,14 @@ exit 0
       "pairCount": 29,
       "rank": 0.5,
       "representative": {
-        "aEndLine": 63,
+        "aEndLine": 78,
         "aFile": "src/cg/smells/rules.ts",
-        "aId": "src/cg/smells/rules.ts:evaluate#0",
-        "aStartLine": 51,
-        "bEndLine": 78,
+        "aId": "src/cg/smells/rules.ts:evaluate#1",
+        "aStartLine": 66,
+        "bEndLine": 93,
         "bFile": "src/cg/smells/rules.ts",
-        "bId": "src/cg/smells/rules.ts:evaluate#1",
-        "bStartLine": 66,
+        "bId": "src/cg/smells/rules.ts:evaluate#2",
+        "bStartLine": 81,
         "confidence": 0.5,
         "cost": 1,
         "costInputs": {
@@ -7326,7 +7326,7 @@ exit 0
     }
   ],
   "consideredFunctions": 220,
-  "pairsScored": 5499,
+  "pairsScored": 5501,
   "partialTwins": [
     {
       "aBlockLine": 181,

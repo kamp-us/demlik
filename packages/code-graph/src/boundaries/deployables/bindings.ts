@@ -67,7 +67,7 @@ export function bindingOwnerIssue(
     for (const owner of listed) {
       const named = `owner "${owner}" of binding "${binding}" in "${scope}"`;
       if (!files.has(owner)) {
-        return `${named} is no file the scope loads: an owner is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/orders-db.ts.`;
+        return `${named} is no file the scope loads: an owner is an exact scope-relative .ts/.tsx path.`;
       }
       const worker = workerOf(deployables, scope === "." ? owner : `${scope}/${owner}`);
       if (worker === null) {

@@ -1,5 +1,75 @@
 # @demlik/code-graph
 
+## 0.12.0
+
+### Minor Changes
+
+- 16e368e: `--unreachable` no longer reports a function as dead when its only caller is withheld. A function called only by a withheld function is now withheld as `called-by-withheld`, not reported as `dead` or `only-called-from-tests`. The walk starts from functions withheld as `public-entry-surface` or `referenced-in-non-test-file`, follows calls and references, and wins over `referenced-in-non-test-file`. Test-support functions start no walk, and `reachableCount` is unchanged. `called-by-withheld` is a new value of the `withheld[].reason` field in the JSON output.
+- 75de37e: Add `code-graph <featureDir> --hexagon` to print a deterministic Ports & Adapters inventory from source: commands, external systems, other bags, unbagged ports, use cases and adapters. Use `--json` for data, `--pretty` to indent JSON, and `--out` to save either view.
+
+### Patch Changes
+
+- e72e007: Calls to `const` arrow functions and function expressions now become call edges. A call like `innerArrow(x)` to `export const innerArrow = (x) => …` used to get a `workspace:<file>:<name>` callee id that no node had, so the arrow's `calledBy` stayed empty and `--unreachable` reported it as `dead`. The call now points at the arrow's own node, the same way a call to a `function` declaration does, so `--unreachable` stops reporting these as dead and `calledBy`, `--blast`, `callChainDepth` and fan-in count them. A target that lives in workspace source outside the analyzed folder still gets its `workspace:` id.
+
+## 0.11.0
+
+### Minor Changes
+
+- ee1dbb1: The smell gate can now be switched on at today's count. Name the rules to gate in `smell-ledger.json` at the repo root (`{ "gated": ["big-file"] }`), record today's smells once with `--accept-smells --reason "<why>"`, and from then on `--ci` fails only on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one that got worse, such as a 900-line file grown to 950. Improvements are written back: an entry whose smell shrank is lowered, and one whose smell is gone is pruned, so the ledger only tightens. Entries are keyed by rule and repo-relative target (a function by its id, never its line), so one file covers every package and `code-graph .` judges a package the same as `code-graph packages/core`. Gating an edge-pass rule turns the edge pass on. A repo that gates no rule keeps today's `--ci`, `--fail-on` and `--max` unchanged.
+- 34b13a4: `code-graph <dir> --unreachable --ci` now gates dead exports against `unreachable-ledger.json` at the repo root, instead of quietly running the smell gate. Record today's findings once with `--unreachable --accept-dead --reason "<why>"`; from then on `--ci` fails only on a finding the ledger does not name, and drops entries whose finding is gone, so the ledger only shrinks. Entries are keyed by scope, kind and id, so one file covers many packages. Both kinds (`dead`, `only-called-from-tests`) are gated by default; `--dead-only` gates only `dead`. `--reason` now also rides `--accept-dead`. A plain `--ci` is unchanged.
+
+### Patch Changes
+
+- 1fc9316: code-graph now reads vitest type-test files as tests: `*.test-d.ts`, `*.spec-d.ts`, `*.test-d.tsx` and `*.spec-d.tsx`, beside `*.test.ts` and `*.spec.ts`. Their exports no longer show up in `--unreachable` as `dead`, a call from one counts as a test call (`only-called-from-tests`), and `--clusters` leaves them out of the production clusters.
+
+## 0.10.0
+
+### Minor Changes
+
+- 22929da: `code-graph --boundaries` can license some names of a library to one importer. A rules file's new
+  `allowImportNames` key (`{ "<importer>": { "<imported library>": ["<name>", …] } }`, both directories
+  as `libraries` writes them, named as ESLint's `no-restricted-imports` option is) waives B12
+  `library-imports-up` for a file when the allowance lists every name it imports from that library, so a
+  repo whose client apps import a service's contract library directly can record today's imports with
+  `--accept-crossings`, keep the names a client legitimately produces out of the ledger, and watch the
+  ledger shrink as clients move to the generated types.
+
+  - A name is the exported name, summed over all of a file's imports of the library: `import { A as B }`
+    and `export { A } from` take `A`, a subpath and a type-only import count. A default import,
+    `import * as ns`, `export * from`, `import()` and `import "m"` take no readable name and stay B12
+    whatever the list says. The entry is unchanged: one per importing file and library.
+  - Exit 2 with nothing written, in one line naming `allowImportNames`, for an importer or an imported
+    library that is no declared library, an importer whose type already lists the imported library's
+    type, and a name the importer never imports from that library.
+  - A rules file without the key runs as before. There is no new kind, and `--graph`, the ledger and
+    `ImportEdgeSchema` are unchanged.
+
+  A port-layout scope now lists all three of `application`, `driving-adapters` and `driven-adapters`. A
+  scope that lists some of them, or lists none while its `src/` holds one, exits 2 with one line naming
+  the scope and the folders it leaves out and writes nothing, where it used to leave those folders'
+  files unjudged and unreported. The port layout's zone table no longer carries an `index` or an
+  `unknown` row, and a port scope can no longer produce an `unknown-zone` entry.
+
+- 6b8d68e: `code-graph --boundaries` reads a service laid out in Cockburn's top-level port shape, not only the
+  per-feature one. A scope whose `features` list `application`, `driving-adapters` and
+  `driven-adapters` is one hexagon with those three folders straight under `src/`: a binding used in
+  `driven-adapters/` is no longer a false B17, and B6 (an application importing an adapter) and B8 (a
+  driving adapter reaching an application use case or a driven adapter) now run on that shape, where
+  they were silent.
+
+  - `application/driving-ports/` and `application/driven-ports/` are the ports zone, the rest of
+    `application/` is the application, `driving-adapters/` and `driven-adapters/` are the driving
+    and driven zones. B7 judges them like the per-feature zones, and a file outside the three
+    folders, such as a worker entry, may import any of them, so B4 does not flag the wiring.
+  - A folder named for a port-layout zone makes the scope a port-layout scope. A scope that lists
+    one of them and a feature folder exits 2 with a message naming the scope and the two kinds, and
+    writes nothing.
+  - `bindingOwners` and `readAllowance` accept a file under `src/driven-adapters/`; their refusals
+    now name both the per-feature path and the port-layout path.
+  - The rules file gains no key. The zone paths of both layouts are one table in `rules.ts`, and B6
+    reads whether the target is an adapter from that table. The per-feature layout's verdicts and
+    ledger entries are unchanged.
+
 ## 0.9.0
 
 ### Minor Changes

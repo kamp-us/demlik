@@ -111,6 +111,23 @@ export class TypeContext {
     return functions.filter((fn) => !joined.has(fn.id)).map((fn) => fn.id);
   }
 
+  // The node id a declaration names. A function declaration or method is the node itself; a
+  // binding to an arrow or function expression (`const f = () => …`, `{ f: () => … }`, a class
+  // field) is the node of its initializer, a child the declaration holds rather than an ancestor.
+  idOfDeclaration(decl: ts.Node): string | null {
+    const direct = this.nodeToId.get(decl);
+    if (direct !== undefined) return direct;
+    if (
+      ts.isVariableDeclaration(decl) ||
+      ts.isPropertyAssignment(decl) ||
+      ts.isPropertyDeclaration(decl)
+    ) {
+      const initializer = decl.initializer;
+      if (initializer !== undefined) return this.nodeToId.get(initializer) ?? null;
+    }
+    return null;
+  }
+
   unitOf(source: ts.SourceFile): SourceUnit | undefined {
     return this.byFileName.get(source.fileName);
   }

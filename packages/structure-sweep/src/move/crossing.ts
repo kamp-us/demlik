@@ -9,9 +9,8 @@ import {
   subpathOf,
 } from "./entries.js";
 import type { Exists } from "./heal.js";
-import { moduleLiterals } from "./heal.js";
-import type { MoveRow } from "./manifest.js";
-import { splitSpecifierExtension } from "./mover.js";
+import type { PathMove } from "./manifest.js";
+import { moduleLiterals, splitSpecifierExtension } from "./specifier.js";
 import {
   packageLabel,
   packageOf,
@@ -108,7 +107,7 @@ export class PackageTree {
  * reaches: the row, the file importing, the file imported, and the package it sits in.
  */
 export type Unreachable = {
-  readonly row: MoveRow;
+  readonly row: PathMove;
   readonly importer: string;
   readonly target: string;
   readonly pkg: WorkspacePackage;
@@ -132,7 +131,7 @@ export const describeUnreachable = (
  */
 export function rewriteCrossings(
   sourceFiles: readonly SourceFile[],
-  rows: readonly MoveRow[],
+  rows: readonly PathMove[],
   before: PackageTree,
   after: PackageTree,
 ): { readonly unreachable: Unreachable[]; readonly edges: PackageEdge[] } {
@@ -183,7 +182,7 @@ const QUOTED = /["']([^"'\n]+)["']/g;
  */
 export function importerPackageSources(
   sources: readonly string[],
-  rows: readonly MoveRow[],
+  rows: readonly PathMove[],
   before: PackageTree,
 ): string[] {
   const moved = new Set(rows.map((r) => join(before.repoRoot, r.from)));

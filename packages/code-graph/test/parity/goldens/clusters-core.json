@@ -1,50 +1,12 @@
 exit 0
 {
   "algorithm": "louvain-deterministic",
-  "clusterCount": 10,
+  "clusterCount": 11,
   "clusteredFileCount": 48,
   "excludedTestFileCount": 3,
   "isolatedFileCount": 11,
-  "modularity": 0.663305,
+  "modularity": 0.670019,
   "scatteredClusters": [
-    {
-      "dirCount": 4,
-      "dirs": [
-        {
-          "dir": "src/cg/schema",
-          "files": [
-            "src/cg/schema/clusters.ts",
-            "src/cg/schema/core.ts",
-            "src/cg/schema/cross-runtime.ts",
-            "src/cg/schema/graph.ts",
-            "src/cg/schema/interface-width.ts",
-            "src/cg/schema/reachability.ts"
-          ]
-        },
-        {
-          "dir": "src/cg",
-          "files": [
-            "src/cg/config.ts",
-            "src/cg/schema.ts"
-          ]
-        },
-        {
-          "dir": "src/cg/smells",
-          "files": [
-            "src/cg/smells/evaluate.ts",
-            "src/cg/smells/rules.ts"
-          ]
-        },
-        {
-          "dir": "src/cg/collapse",
-          "files": [
-            "src/cg/collapse/settings.ts"
-          ]
-        }
-      ],
-      "id": "c01",
-      "size": 11
-    },
     {
       "dirCount": 3,
       "dirs": [
@@ -74,8 +36,39 @@ exit 0
           ]
         }
       ],
-      "id": "c02",
+      "id": "c01",
       "size": 10
+    },
+    {
+      "dirCount": 3,
+      "dirs": [
+        {
+          "dir": "src/cg/schema",
+          "files": [
+            "src/cg/schema/clusters.ts",
+            "src/cg/schema/core.ts",
+            "src/cg/schema/cross-runtime.ts",
+            "src/cg/schema/graph.ts",
+            "src/cg/schema/interface-width.ts",
+            "src/cg/schema/reachability.ts"
+          ]
+        },
+        {
+          "dir": "src/cg",
+          "files": [
+            "src/cg/config.ts",
+            "src/cg/schema.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/collapse",
+          "files": [
+            "src/cg/collapse/settings.ts"
+          ]
+        }
+      ],
+      "id": "c02",
+      "size": 9
     },
     {
       "dirCount": 2,
@@ -144,7 +137,7 @@ exit 0
           ]
         },
         {
-          "clusterId": "c01",
+          "clusterId": "c02",
           "files": [
             "src/cg/collapse/settings.ts"
           ]
@@ -158,14 +151,14 @@ exit 0
       "clusterCount": 3,
       "clusters": [
         {
-          "clusterId": "c01",
+          "clusterId": "c08",
           "files": [
             "src/cg/smells/evaluate.ts",
             "src/cg/smells/rules.ts"
           ]
         },
         {
-          "clusterId": "c02",
+          "clusterId": "c01",
           "files": [
             "src/cg/smells/coupling.ts"
           ]
@@ -187,7 +180,7 @@ exit 0
       "clusterCount": 2,
       "clusters": [
         {
-          "clusterId": "c02",
+          "clusterId": "c01",
           "files": [
             "src/cg/render/analysis.ts",
             "src/cg/render/blast.ts",
@@ -228,7 +221,7 @@ exit 0
           ]
         },
         {
-          "clusterId": "c02",
+          "clusterId": "c01",
           "files": [
             "src/cg/query/clusters.ts",
             "src/cg/query/louvain.ts"

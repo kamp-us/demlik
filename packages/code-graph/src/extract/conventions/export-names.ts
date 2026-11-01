@@ -10,7 +10,7 @@ function moduleExportName(node: SyntaxNode | null): string | null {
 
 // Local top-level name → the names the module exports it under, from `export { f, g as GET }`
 // and `export default f`. Re-exports (`export { x } from "./y"`) export no local binding.
-function localExportNames(syntax: SyntaxFile): ReadonlyMap<string, readonly string[]> {
+export function localExportNames(syntax: SyntaxFile): ReadonlyMap<string, readonly string[]> {
   const names = new Map<string, string[]>();
   const add = (local: string, exported: string): void => {
     const bucket = names.get(local);

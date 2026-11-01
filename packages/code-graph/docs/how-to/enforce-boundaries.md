@@ -23,6 +23,23 @@ with your project's directories:
 Declared features use `index.ts`, `ports.ts`, `application/`,
 `adapters/driving/`, and `adapters/driven/`.
 
+A service whose `src/` holds `application/`, `driving-adapters/` and
+`driven-adapters/` directly is one hexagon, not a set of features. List all
+three folders instead; the same rules then read it, with its ports in
+`application/driving-ports/` and `application/driven-ports/`:
+
+```json
+{
+  "features": { "services/mail": ["application", "driving-adapters", "driven-adapters"] }
+}
+```
+
+A scope lists one layout or the other, never both, and the port layout needs
+all three folders: a scope that lists only some of them, or whose `src/` holds
+one it does not list, exits 2. The
+[boundary reference](../reference/boundaries.md#features-and-layout) has the
+zone paths of each.
+
 ## 2. Inspect current crossings
 
 ```sh

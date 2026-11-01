@@ -93,7 +93,12 @@ export function renderUnreachable(graph: Graph, json: boolean, pretty: boolean):
   if (report === null) return REACH_NOT_RUN;
   if (json) {
     return stableStringify(
-      { entryCount: report.entryCount, unreachable: report.unreachable, withheld: report.withheld },
+      {
+        entryCount: report.entryCount,
+        unreachable: report.unreachable,
+        unusedExports: report.unusedExports,
+        withheld: report.withheld,
+      },
       pretty,
     );
   }
@@ -107,6 +112,12 @@ export function renderUnreachable(graph: Graph, json: boolean, pretty: boolean):
   }
   lines.push(`withheld (${report.withheld.length}) — an unmodelled construct may reach them:`);
   for (const [reason, count] of withheldTally(report)) lines.push(`  ${reason}  ${count}`);
+  lines.push(
+    `unused-export (${report.unusedExports.length}) — exported, but no other file uses it:`,
+  );
+  for (const u of report.unusedExports) {
+    lines.push(`  unused-export  ${u.id}  ${u.file}:${u.startLine}  (${u.symbolKind})`);
+  }
   return lines.join("\n");
 }
 

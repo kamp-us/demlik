@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import type { MoveRow } from "./manifest.js";
+import type { PathMove } from "./manifest.js";
 
 /**
  * A `package.json` `exports` value as Node reads it: a target path, a blocked target (`null`), a
@@ -166,12 +166,12 @@ export const packageLabel = (pkg: WorkspacePackage): string =>
 
 /** A manifest row with the package it leaves and the package it lands in. */
 export type PlacedRow = {
-  readonly row: MoveRow;
+  readonly row: PathMove;
   readonly from: WorkspacePackage;
   readonly to: WorkspacePackage;
 };
 
-export const placeRow = (workspace: Workspace, row: MoveRow): PlacedRow => ({
+export const placeRow = (workspace: Workspace, row: PathMove): PlacedRow => ({
   row,
   from: packageOf(workspace, row.from),
   to: packageOf(workspace, row.to),

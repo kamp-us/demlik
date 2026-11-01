@@ -29,8 +29,10 @@ function toSourcePath(target: string): string {
   return fromDist.replace(/\.d\.ts$/, ".ts").replace(/\.(js|mjs|cjs)$/, ".ts");
 }
 
+// A target that ends in a subpath pattern's `*` with no extension (`"./dist/*": "./dist/*"`)
+// exposes every file below it, so it matches every TypeScript file there.
 function toPattern(sourcePath: string): RegExp | null {
-  if (!/\.(ts|tsx)$/.test(sourcePath)) return null;
+  if (!/\.(ts|tsx)$/.test(sourcePath) && !sourcePath.endsWith("*")) return null;
   const withoutExt = sourcePath.replace(/\.(ts|tsx)$/, "");
   const escaped = withoutExt.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^\\n]*");
   return new RegExp(`^${escaped}\\.(ts|tsx)$`);

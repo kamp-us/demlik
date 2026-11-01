@@ -14,7 +14,7 @@ import {
   type LibraryType,
 } from "./schema.js";
 
-// The libraries a repo declares, read once: the rules file's four keys beside what the repo says
+// The libraries a repo declares, read once: the rules file's five keys beside what the repo says
 // about itself (which directories are packages, and what each is named). Every question the
 // judgments ask about a library, a package or a specifier is answered here and nowhere else.
 export type Libraries = {
@@ -35,6 +35,7 @@ const NO_RULES: LibraryRules = {
   libraries: {},
   libraryRoots: [],
   worldLibraries: [],
+  allowImportNames: {},
 };
 
 // What a rules file that declares no library key reads as: no library, no root and no world
@@ -165,7 +166,7 @@ export function isWorldLibrary(libraries: Libraries, specifier: string): boolean
 
 // Whether a file in `zone` may not import the declared library `dir`: its type names where it may
 // be imported from, and `zone` is not one of them (B14). A `null` zone is a place no `importedFrom`
-// names: a hexagonal feature's `application/`, `adapters/driving/`, `index.ts` and `ports.ts`.
+// names: a hexagon's application, driving and ports zones, and a feature's `index.ts`.
 export function importedFromOutside(
   libraries: Libraries,
   dir: string,

@@ -144,7 +144,7 @@ function resolveCallee(ctx: TypeContext, callExpr: ts.CallExpression): ResolvedC
   const target = ctx.aliasedSymbol(symbol) ?? symbol;
   const declarations = ctx.declarationsOf(target);
   for (const decl of declarations) {
-    const id = enclosingId(decl, ctx.nodeToId);
+    const id = ctx.idOfDeclaration(decl) ?? enclosingId(decl, ctx.nodeToId);
     if (id !== null) return { calleeId: id, declaration: null };
   }
   for (const decl of declarations) {

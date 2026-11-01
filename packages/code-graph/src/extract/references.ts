@@ -49,20 +49,6 @@ function ownerId(node: ts.Node, nodeToId: ReadonlyMap<ts.Node, string>): string 
   return MODULE_SCOPE;
 }
 
-function idOfDeclaration(decl: ts.Node, nodeToId: ReadonlyMap<ts.Node, string>): string | null {
-  const direct = nodeToId.get(decl);
-  if (direct !== undefined) return direct;
-  if (
-    ts.isVariableDeclaration(decl) ||
-    ts.isPropertyAssignment(decl) ||
-    ts.isPropertyDeclaration(decl)
-  ) {
-    const initializer = decl.initializer;
-    if (initializer !== undefined) return nodeToId.get(initializer) ?? null;
-  }
-  return null;
-}
-
 function candidateSymbols(ctx: TypeContext, node: ts.Node): ts.TsSymbol[] {
   const symbol = ctx.symbolOf(node);
   if (symbol === undefined) return [];
@@ -73,7 +59,7 @@ function candidateSymbols(ctx: TypeContext, node: ts.Node): ts.TsSymbol[] {
 function referencedId(ctx: TypeContext, node: ts.Node): string | null {
   for (const cand of candidateSymbols(ctx, node)) {
     for (const decl of ctx.declarationsOf(cand)) {
-      const id = idOfDeclaration(decl, ctx.nodeToId);
+      const id = ctx.idOfDeclaration(decl);
       if (id !== null) return id;
     }
   }

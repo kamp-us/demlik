@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { Command } from "commander";
 import { entryExportPresetNames } from "./kinds/presets.js";
 
@@ -8,6 +9,7 @@ export type Opts = {
   plan?: boolean;
   smells?: boolean;
   tree?: boolean;
+  hexagon?: boolean;
   by?: string;
   file?: string;
   edges?: boolean;
@@ -46,6 +48,9 @@ export type Opts = {
   writeCeilings?: boolean;
   acceptCrossings?: boolean;
   reason?: string;
+  acceptDead?: boolean;
+  acceptSmells?: boolean;
+  deadOnly?: boolean;
   migrateCeilings?: boolean;
   api?: string;
   apiBase?: string;
@@ -55,6 +60,19 @@ export type Opts = {
 export function cleanExit(message: string): void {
   process.stderr.write(`code-graph: ${message}\n`);
   process.exitCode = 2;
+}
+
+export function outputTo(destination: string | undefined): (payload: string) => void {
+  return (payload) => {
+    if (destination !== undefined) {
+      fs.writeFileSync(destination, payload);
+      process.stderr.write(
+        `code-graph: wrote ${Buffer.byteLength(payload)} bytes to ${destination}\n`,
+      );
+      return;
+    }
+    process.stdout.write(payload);
+  };
 }
 
 // Sets the process exit code a run resolved to; 0 leaves whatever is already set.
@@ -69,6 +87,7 @@ function graphOptions(command: Command): Command {
     .option("--by <axis>", "plan ranking axis: rot | impact | complexity | size", "rot")
     .option("--smells", "emit all smells grouped by kind (human; --json for Smell[])")
     .option("--tree", "emit an indented file → function tree with inline smell markers")
+    .option("--hexagon", "emit one feature's Ports & Adapters (human; --json for data)")
     .option("--file <f>", "emit one module + its functions")
     .option("--edges", "run the opt-in edge pass (calls/calledBy/importedBy/chain + edge smells)")
     .option(
@@ -82,9 +101,16 @@ function graphOptions(command: Command): Command {
       "every function and top-level declaration (type alias, interface, enum, class, constant) named <name>, as JSON: kind, file, line, exported flag and uses; implies the edge pass",
     )
     .option("--html", "emit a self-contained HTML report (human view); implies the edge pass")
-    .option("--ci", "CI gate: exit non-zero per --fail-on / --max policy")
+    .option(
+      "--ci",
+      'CI gate: exit non-zero per --fail-on / --max policy; when smell-ledger.json at the repo root names rules in its "gated" list, gates those rules\' smells against its entries instead (--fail-on and --max are ignored, and smells of other rules neither fail nor are recorded): fails on a smell of a gated rule the ledger does not name, at any severity, or on a recorded one whose value grew, and writes back entries whose smell shrank (value lowered) or is gone (pruned); an edge-pass rule gated turns the edge pass on',
+    )
     .option("--fail-on <level>", "CI severity to fail on: high | warn", "high")
     .option("--max <n>", "CI: fail if total smell count exceeds <n>")
+    .option(
+      "--accept-smells",
+      'record today\'s smells of the rules smell-ledger.json gates: add every one the ledger does not name (entries keyed by rule and repo-relative target), raise each recorded one that grew to its measured value, each carrying --reason "<why>" (required), and lower and prune as --ci does; exits 2 when no rule is gated; not with --ci',
+    )
     .option("--thresholds <file>", "JSON file of partial threshold overrides merged over defaults");
 }
 
@@ -95,7 +121,18 @@ function analysisOptions(command: Command): Command {
       "resolve env.<BINDING>.<method>() to the target worker (implies edges)",
     )
     .option("--kinds", "classify each node entry|effect|auth|plain (implies --cross-runtime)")
-    .option("--unreachable", "exported symbols with no path from any entry (implies --kinds)")
+    .option(
+      "--unreachable",
+      "exported symbols with no path from any entry, and unused-export: an exported function, type, interface, enum, class or constant outside the public surface (barrels, worker mains, package.json main/module/types/browser/bin/exports targets, a target ending in * making every file below it public, and what those re-export) that no other file imports, re-exports or uses, a test file's import counting as a use (implies --kinds); with --ci, gates them against unreachable-ledger.json at the repo root instead of gating smells: fails on a finding (dead, only-called-from-tests or unused-export) the ledger does not name for this scope, and prunes this scope's entries whose finding is gone",
+    )
+    .option(
+      "--accept-dead",
+      'with --unreachable: add every finding unreachable-ledger.json does not name yet for this scope (entries keyed by scope, kind and id), each carrying --reason "<why>" (required); not with --ci',
+    )
+    .option(
+      "--dead-only",
+      "with --unreachable --ci: gate only `dead` findings; an `only-called-from-tests` or `unused-export` finding neither fails the run nor is pruned from the ledger",
+    )
     .option("--unguarded", "effect nodes reachable from an entry with no auth on the path")
     .option(
       "--clusters",
@@ -128,13 +165,16 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--boundaries",
-      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4); a scope that declares features in --boundary-rules lays its features out as index.ts, ports.ts, application/, adapters/driving/ and adapters/driven/, and judges application/ importing its own adapters/ (B6 application-imports-adapter), a file touching the outside world in index.ts, ports.ts, application/ or adapters/driving/ through any process.<member> (process.env, process.hrtime, process.platform, …), fetch, the clock or a module such as node:fs (B7 impure; a type-only import of node:fs or node:child_process opens nothing), adapters/driving/ importing its own application/ or adapters/driven/ (B8 driving-reaches-driven) and a feature entry no zone names (B10 unknown-zone); libraries the rules file declares (libraryTypes, libraries, libraryRoots, worldLibraries of --boundary-rules) are judged between packages: a package under a library root no library names (B11 library-undeclared), a library importing a library whose type its own type does not list (B12 library-imports-up), a pure library touching the outside world or importing a world library (B7 impure) and a library imported from outside the zones its type names (B14 adapter-library-imported-outside-driven), with a census of the libraries; the shape of a hexagonal feature's own files, for the kinds the applicationShape key lists and none run until listed: an entry file (a library's src/index.ts, a feature's index.ts) that holds more than named re-exports (B15 index-not-exports-only) and an application/ import outside its allowlist of its own ports.ts and application/, another feature's index.ts, lib, a library whose type applicationMayImport lists and a pureDependencies package (B16 application-import-outside-allowlist), where testFiles, matched against a file's scope-relative and its repo-relative path, takes a test file out of the zones (B6-B8, B10, B15, B16 and B17 stop judging it), compositionRoots (globs of the files that assemble the whole app, matched the same way, with testFiles listed) turns on B20 test-reaches-composition-root, which reports a test file that opens, when it runs, a file from which a composition root is reached (one entry per file the test opens that is in reach, named for the first file on the way to a root; a test is a driving adapter on one application's ports in Cockburn's hexagon, and a composition root is the one place the wiring happens in Seemann's; a deliberate test of the wiring is accepted by name with --accept-crossings --reason), readAllowance lets a driving adapter import a listed driven file that holds no data write beside a library of a decidedBy type, or with no such import when the entry leaves decidedBy out (B8); across deployables, the kinds the acrossDeployables key of --boundary-rules lists are judged, and none run until listed: a worker binding its owning worker declares used outside a hexagonal feature's adapters/driven/ and outside that worker's wrangler main, which wires its own bindings (B17 binding-outside-driven-adapter), workers that bind each other in a loop (B18 worker-call-cycle, scope \".\", measured only by a run at the repo root) and a relative import into another workspace (B19 relative-import-crosses-workspace), with a census of the worker bindings read (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
+      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4); a scope that declares features in --boundary-rules lays its features out as index.ts, ports.ts, application/, adapters/driving/ and adapters/driven/ (or, when it lists all three of application, driving-adapters and driven-adapters, as one hexagon with those folders straight under src/ and its ports in application/driving-ports/ and application/driven-ports/; a scope lists one layout, never both, and never only some of the three), and judges application/ importing its own adapters/ (B6 application-imports-adapter), a file touching the outside world in index.ts, ports.ts, application/ or adapters/driving/ through any process.<member> (process.env, process.hrtime, process.platform, …), fetch, the clock or a module such as node:fs (B7 impure; a type-only import of node:fs or node:child_process opens nothing), adapters/driving/ importing its own application/ or adapters/driven/ (B8 driving-reaches-driven) and a feature entry no zone names (B10 unknown-zone); libraries the rules file declares (libraryTypes, libraries, libraryRoots, worldLibraries, allowImportNames of --boundary-rules) are judged between packages: a package under a library root no library names (B11 library-undeclared), a library importing a library whose type its own type does not list, unless allowImportNames (importer, then imported library, then names) licenses every name the file takes from it (B12 library-imports-up), a pure library touching the outside world or importing a world library (B7 impure) and a library imported from outside the zones its type names (B14 adapter-library-imported-outside-driven), with a census of the libraries; the shape of a hexagonal feature's own files, for the kinds the applicationShape key lists and none run until listed: an entry file (a library's src/index.ts, a feature's index.ts) that holds more than named re-exports (B15 index-not-exports-only) and an application/ import outside its allowlist of its own ports.ts and application/, another feature's index.ts, lib, a library whose type applicationMayImport lists and a pureDependencies package (B16 application-import-outside-allowlist), where testFiles, matched against a file's scope-relative and its repo-relative path, takes a test file out of the zones (B6-B8, B10, B15, B16 and B17 stop judging it), compositionRoots (globs of the files that assemble the whole app, matched the same way, with testFiles listed) turns on B20 test-reaches-composition-root, which reports a test file that opens, when it runs, a file from which a composition root is reached (one entry per file the test opens that is in reach, named for the first file on the way to a root; a test is a driving adapter on one application's ports in Cockburn's hexagon, and a composition root is the one place the wiring happens in Seemann's; a deliberate test of the wiring is accepted by name with --accept-crossings --reason), readAllowance lets a driving adapter import a listed driven file that holds no data write beside a library of a decidedBy type, or with no such import when the entry leaves decidedBy out (B8); across deployables, the kinds the acrossDeployables key of --boundary-rules lists are judged, and none run until listed: a worker binding its owning worker declares used outside a hexagonal feature's adapters/driven/ (driven-adapters/ in the port layout) and outside that worker's wrangler main, which wires its own bindings (B17 binding-outside-driven-adapter), workers that bind each other in a loop (B18 worker-call-cycle, scope \".\", measured only by a run at the repo root) and a relative import into another workspace (B19 relative-import-crosses-workspace), with a census of the worker bindings read (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
     )
     .option(
       "--accept-crossings",
       'with --boundaries: add every crossing boundary-ledger.json does not name yet, each carrying --reason "<why>" (required)',
     )
-    .option("--reason <text>", "with --boundaries --accept-crossings: why these crossings stay")
+    .option(
+      "--reason <text>",
+      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay",
+    )
     .option(
       "--migrate-ceilings",
       "with --boundaries: seed boundary-ledger.json from today's crossings (impure uses, library crossings B11, B12 and B14, shape crossings B15-B16, deployable crossings B17-B19 and test crossings B20 included) and delete boundary-ceilings.json; refuses if any scope's import crossings exceed its recorded count (library, shape, deployable and test crossings are not counted)",

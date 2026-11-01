@@ -36,10 +36,36 @@ function worldLibraryIssues(rules: LibraryRules): string[] {
   });
 }
 
+// An allowance names two declared libraries, and licenses names only where the importer's type does
+// not already list the imported library's type: then it would enforce nothing. What needs the scope's
+// files (a name the importer never imports) is judged where the scope is loaded.
+function allowanceIssues(rules: LibraryRules): string[] {
+  return Object.entries(rules.allowImportNames).flatMap(([importer, imported]) => {
+    const importerType = rules.libraries[importer];
+    if (importerType === undefined) {
+      return [
+        `allowImportNames importer "${importer}" is no declared library: add it to "libraries".`,
+      ];
+    }
+    return Object.keys(imported).flatMap((dir) => {
+      const importedType = rules.libraries[dir];
+      if (importedType === undefined) {
+        return [
+          `allowImportNames "${importer}" licenses names of "${dir}", which is no declared library: add it to "libraries".`,
+        ];
+      }
+      if (rules.libraryTypes[importerType]?.imports.includes(importedType) !== true) return [];
+      return [
+        `allowImportNames "${importer}" licenses names of "${dir}", but its type "${importerType}" already lists "${importedType}" in "imports": the allowance would enforce nothing.`,
+      ];
+    });
+  });
+}
+
 // The first problem in the library keys that the schema alone cannot see, or null: a type no
-// `libraryTypes` entry declares, and a world library that is no glob or names an impure global. What needs
-// the repo (a library that is no package, a root that is no directory) is judged where the repo is
-// read.
+// `libraryTypes` entry declares, a world library that is no glob or names an impure global, and an
+// allowance that names no declared library or enforces nothing. What needs the repo (a library that
+// is no package, a root that is no directory) is judged where the repo is read.
 export function libraryDeclarationIssue(rules: LibraryRules): string | null {
-  return [...typeIssues(rules), ...worldLibraryIssues(rules)][0] ?? null;
+  return [...typeIssues(rules), ...worldLibraryIssues(rules), ...allowanceIssues(rules)][0] ?? null;
 }

@@ -1,6 +1,7 @@
 import type { ImportEdge } from "../../schema.js";
 import { type ImpureUse, impureNamesOf } from "../impure-uses.js";
 import type { BoundaryViolation } from "../violation.js";
+import { isLicensed, type NamedFile } from "./allowance.js";
 import {
   importedFromOutside,
   importTargetOf,
@@ -13,8 +14,7 @@ import {
 import type { ImportedFrom } from "./schema.js";
 
 // The facts of one file the library rules read. `file` is repo-relative, as the ledger writes it.
-export type LibraryFile = {
-  readonly file: string;
+export type LibraryFile = NamedFile & {
   readonly importEdges: readonly ImportEdge[];
   readonly impureUses: readonly ImpureUse[];
   readonly runtimeSpecifiers: ReadonlySet<string>;
@@ -43,6 +43,7 @@ type Reach = {
   readonly dir: string;
   readonly type: string;
   readonly specifier: string;
+  readonly specifiers: ReadonlySet<string>;
   readonly typeOnly: boolean;
 };
 
@@ -58,14 +59,25 @@ function reaches(ctx: Context): { readonly found: Reach[]; readonly undeclared: 
       dir: target.dir,
       type: target.type,
       specifier: held?.specifier ?? edge.specifier,
+      specifiers: new Set([...(held?.specifiers ?? []), edge.specifier]),
       typeOnly: (held?.typeOnly ?? true) && edge.typeOnly,
     });
   }
   return { found: [...byDir.values()], undeclared };
 }
 
-// One verdict per import: a library importing a type its own type does not list is B12, and only
-// otherwise is the import judged by where the target may be imported from (B14).
+// Whether the importer's type does not list the type of the library, and its allowance does not
+// license every name the file takes from it.
+function isBarred(ctx: Context, reach: Reach): boolean {
+  if (ctx.importer === null) return false;
+  const importerType = libraryTypeOf(ctx.libraries, ctx.importer);
+  if (importerType === null || importerType.imports.includes(reach.type)) return false;
+  return !isLicensed(ctx.libraries, ctx.importer, reach.dir, reach.specifiers, ctx.file);
+}
+
+// One verdict per import: a library importing a type its own type does not list, and takes names its
+// allowance does not license, is B12, and only otherwise is the import judged by where the target may
+// be imported from (B14).
 function reachViolation(ctx: Context, reach: Reach): BoundaryViolation | null {
   const edge = {
     from: ctx.file.file,
@@ -73,10 +85,7 @@ function reachViolation(ctx: Context, reach: Reach): BoundaryViolation | null {
     specifier: reach.specifier,
     typeOnly: reach.typeOnly,
   };
-  const importerType = ctx.importer === null ? null : libraryTypeOf(ctx.libraries, ctx.importer);
-  if (importerType !== null && !importerType.imports.includes(reach.type)) {
-    return { kind: "library-imports-up", ...edge };
-  }
+  if (isBarred(ctx, reach)) return { kind: "library-imports-up", ...edge };
   if (!importedFromOutside(ctx.libraries, reach.dir, ctx.zone)) return null;
   return { kind: "adapter-library-imported-outside-driven", ...edge };
 }

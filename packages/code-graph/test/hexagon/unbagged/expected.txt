@@ -1,0 +1,34 @@
+Factory: not found
+
+Commands
+  none
+
+External systems
+  none
+
+Other bags
+  Watcher
+    aliased: Alias
+    generic: ForGeneric<string>
+    nested: Promise<ForNested>
+    scoped: Remote.ForScoped
+    shadowed: <ForShadowed>(value: ForShadowed) => void
+
+Ports declared in ports.ts but in no bag
+  ForAliased: () => void
+  ForNested: () => void
+  ForScoped: () => void
+  ForShadowed: () => void
+  ForWatching: (id: string) => AsyncIterable<string>
+
+Use cases
+  none
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:6 ForGeneric: generic port

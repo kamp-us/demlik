@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import type { SourceFile } from "ts-morph";
+import { dirname, join, relative, resolve } from "node:path";
+import { type Project, type SourceFile, ts } from "ts-morph";
 import { absurd } from "../absurd.js";
 import {
   exactRenames,
@@ -30,12 +30,12 @@ import {
   hasDangling,
   heal,
   type MovedModules,
-  moduleLiterals,
   movedModules,
 } from "./heal.js";
-import type { Manifest, MoveRow } from "./manifest.js";
+import type { HandPlan, Manifest, PathMove } from "./manifest.js";
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
+import { moduleLiterals } from "./specifier.js";
 import {
   crossesPackages,
   packageLabel,
@@ -45,12 +45,12 @@ import {
 } from "./workspace.js";
 
 export type RowState =
-  | { readonly kind: "pending"; readonly row: MoveRow }
-  | { readonly kind: "done"; readonly row: MoveRow }
-  | { readonly kind: "absent"; readonly row: MoveRow }
-  | { readonly kind: "conflict"; readonly row: MoveRow };
+  | { readonly kind: "pending"; readonly row: PathMove }
+  | { readonly kind: "done"; readonly row: PathMove }
+  | { readonly kind: "absent"; readonly row: PathMove }
+  | { readonly kind: "conflict"; readonly row: PathMove };
 
-export function stateOf(repoRoot: string, row: MoveRow): RowState {
+export function stateOf(repoRoot: string, row: PathMove): RowState {
   const from = existsSync(join(repoRoot, row.from));
   const to = existsSync(join(repoRoot, row.to));
   if (from && to) return { kind: "conflict", row };
@@ -89,9 +89,18 @@ const specifiersOf = (sf: SourceFile) =>
 const differing = (before: readonly string[], after: readonly string[]) =>
   before.reduce((n, spec, i) => n + (after[i] === spec ? 0 : 1), 0);
 
+/**
+ * A path with a TypeScript extension. Only {@link staleRefs} reads it, to pick the rows whose
+ * old path may still be spelled as a plain relative string beside them; which rows ts-morph moves
+ * is decided in {@link planRewrite} by whether the move project holds the file as a module.
+ */
+const TS_EXTENSION = /\.[cm]?tsx?$/;
+
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
-function staleRefs(repoRoot: string, moved: readonly MoveRow[]): string[] {
+function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
   const hits = new Set<string>();
+  for (const row of moved.filter((r) => !TS_EXTENSION.test(r.from)))
+    for (const line of relativeRefs(repoRoot, row.from)) hits.add(line);
   for (const { from } of moved) {
     const needle = from.replace(/\.tsx?$/, "");
     let out = "";
@@ -105,14 +114,44 @@ function staleRefs(repoRoot: string, moved: readonly MoveRow[]): string[] {
   return [...hits].sort();
 }
 
+const QUOTED_RELATIVE = /["'`](\.\.?\/[^"'`\n]+)["'`]/g;
+
+/**
+ * Lines holding a quoted relative path that, read from the directory of the file it is written in,
+ * still names `from` — a `new URL("./run.sh", import.meta.url)` beside a script that moved. The
+ * repo-relative grep in {@link staleRefs} cannot see these, since they spell only the file's name.
+ */
+function relativeRefs(repoRoot: string, from: string): string[] {
+  const name = from.split("/").at(-1) ?? from;
+  let out = "";
+  try {
+    out = git(repoRoot, ["grep", "-n", "-z", "-F", name, "--", ":!*.md"]);
+  } catch {
+    return [];
+  }
+  const hits: string[] = [];
+  for (const record of out.split("\n").filter(Boolean)) {
+    const [path, line, ...rest] = record.split("\0");
+    if (path === undefined || line === undefined) continue;
+    const text = rest.join("\0");
+    const dir = dirname(join(repoRoot, path));
+    const names = [...text.matchAll(QUOTED_RELATIVE)].some(
+      ([, literal]) =>
+        literal !== undefined && resolve(dir, literal) === join(repoRoot, from),
+    );
+    if (names) hits.push(`${path}:${line}:${text}`);
+  }
+  return hits;
+}
+
 type Ledger = {
-  readonly pending: MoveRow[];
-  readonly conflicts: MoveRow[];
+  readonly pending: PathMove[];
+  readonly conflicts: PathMove[];
   readonly absent: string[];
   done: number;
 };
 
-function classify(repoRoot: string, rows: readonly MoveRow[]): Ledger {
+function classify(repoRoot: string, rows: readonly PathMove[]): Ledger {
   const ledger: Ledger = { pending: [], conflicts: [], absent: [], done: 0 };
   for (const state of rows.map((row) => stateOf(repoRoot, row))) {
     switch (state.kind) {
@@ -156,28 +195,73 @@ function format(repoRoot: string, paths: readonly string[]): string {
   }
 }
 
-/** Names the manifest in both commit messages, so a re-run can tell its own rename commit at HEAD. */
-const MANIFEST_TRAILER = "Structure-Sweep-Manifest";
 const RENAME_TRAILER = "Structure-Sweep-Step: rename";
 
-const manifestId = (manifest: Manifest) => contentHash(canonicalJson(manifest));
+/**
+ * What made the rows, and the content hash of the file that holds them. The hash goes into a
+ * trailer on both commits, so a re-run can tell its own rename commit at HEAD.
+ */
+type Planner =
+  | { readonly kind: "manifest"; readonly id: string }
+  | { readonly kind: "hand-plan"; readonly id: string };
 
-const renameMessage = (count: number, id: string) =>
-  `structure-sweep move: rename ${count} file${count === 1 ? "" : "s"} into feature folders
+/** The input both kinds of plan share: the scope apply loads, the from/to rows, and their planner. */
+type MoveSet = {
+  readonly scope: string;
+  readonly moves: readonly PathMove[];
+  readonly planner: Planner;
+};
+
+const files = (count: number) => `${count} file${count === 1 ? "" : "s"}`;
+
+/** The trailer naming the plan, and each commit's subject and body, for one kind of planner. */
+const WORDING = {
+  manifest: {
+    trailer: "Structure-Sweep-Manifest",
+    rename: (count: number) =>
+      `structure-sweep move: rename ${files(count)} into feature folders
 
 Content unchanged, so git records each move as a 100% rename and history follows it.
-The import rewrites follow in the next commit.
+The import rewrites follow in the next commit.`,
+    rewrite: `structure-sweep move: rewrite imports after the renames
+
+Specifier rewrites, heals and formatting for the files the previous commit moved.`,
+  },
+  "hand-plan": {
+    trailer: "Structure-Sweep-Plan",
+    rename: (count: number) =>
+      `structure-sweep move: rename ${files(count)} as hand-planned
+
+The moves were hand-planned; no sweep judged them.
+Content unchanged, so git records each move as a 100% rename and history follows it.
+The import rewrites follow in the next commit.`,
+    rewrite: `structure-sweep move: rewrite imports after the hand-planned renames
+
+Specifier rewrites, heals and formatting for the files the previous commit moved.`,
+  },
+} as const satisfies Record<
+  Planner["kind"],
+  {
+    readonly trailer: string;
+    readonly rename: (count: number) => string;
+    readonly rewrite: string;
+  }
+>;
+
+const planTrailer = ({ kind, id }: Planner) =>
+  `${WORDING[kind].trailer}: ${id}`;
+
+const renameMessage = (count: number, planner: Planner) =>
+  `${WORDING[planner.kind].rename(count)}
 
 ${RENAME_TRAILER}
-${MANIFEST_TRAILER}: ${id}
+${planTrailer(planner)}
 `;
 
-const rewriteMessage = (id: string) =>
-  `structure-sweep move: rewrite imports after the renames
+const rewriteMessage = (planner: Planner) =>
+  `${WORDING[planner.kind].rewrite}
 
-Specifier rewrites, heals and formatting for the files the previous commit moved.
-
-${MANIFEST_TRAILER}: ${id}
+${planTrailer(planner)}
 `;
 
 function commit(repoRoot: string, message: string): string {
@@ -188,33 +272,29 @@ function commit(repoRoot: string, message: string): string {
 /** One commit holding only the pending renames, each file byte-identical at its new path. */
 function commitRenames(
   repoRoot: string,
-  pending: readonly MoveRow[],
-  id: string,
+  pending: readonly PathMove[],
+  planner: Planner,
 ): string {
   for (const row of pending) {
     mkdirSync(dirname(join(repoRoot, row.to)), { recursive: true });
     git(repoRoot, ["mv", "--", row.from, row.to]);
   }
-  return commit(repoRoot, renameMessage(pending.length, id));
+  return commit(repoRoot, renameMessage(pending.length, planner));
 }
 
 /**
- * The rows HEAD renamed, when HEAD is this manifest's rename commit — the renames whose import
+ * The rows HEAD renamed, when HEAD is this plan's rename commit — the renames whose import
  * rewrites are still owed, whether this run just made that commit or an earlier one stopped after it.
  */
-function renamedAtHead(
-  repoRoot: string,
-  manifest: Manifest,
-  id: string,
-): MoveRow[] {
+function renamedAtHead(repoRoot: string, set: MoveSet): PathMove[] {
   const message = git(repoRoot, ["log", "-1", "--format=%B", "HEAD"]);
   const lines = new Set(message.split("\n"));
-  if (!lines.has(RENAME_TRAILER) || !lines.has(`${MANIFEST_TRAILER}: ${id}`))
+  if (!lines.has(RENAME_TRAILER) || !lines.has(planTrailer(set.planner)))
     return [];
   const destinations = new Set(
     exactRenames(repoRoot, "HEAD").map(({ to }) => to),
   );
-  return manifest.moves.filter((row) => destinations.has(row.to));
+  return set.moves.filter((row) => destinations.has(row.to));
 }
 
 /** One file the rewrite changes: the path its text was read from, where it lands, and its new text. */
@@ -244,7 +324,7 @@ const NO_REWRITE: Rewrite = {
  * the disk holds now. Heal resolves specifiers against this, so the rewrite comes out the same
  * whether the renames are still to be made or an earlier run already committed them.
  */
-function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
+function renamedTree(repoRoot: string, rows: readonly PathMove[]): Exists {
   const sources = new Set(rows.map((r) => join(repoRoot, r.from)));
   const destinations = new Set(rows.map((r) => join(repoRoot, r.to)));
   return (path) =>
@@ -252,11 +332,47 @@ function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
 }
 
 /** The tree before any row is renamed: `renamedTree` the other way round. */
-function originalTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
+function originalTree(repoRoot: string, rows: readonly PathMove[]): Exists {
   const sources = new Set(rows.map((r) => join(repoRoot, r.from)));
   const destinations = new Set(rows.map((r) => join(repoRoot, r.to)));
   return (path) =>
     sources.has(path) || (!destinations.has(path) && existsSync(path));
+}
+
+const relativeSpecifier = (fromDir: string, to: string) => {
+  const rel = relative(fromDir, to);
+  return rel.startsWith(".") ? rel : `./${rel}`;
+};
+
+/**
+ * Point every module specifier that named a moved non-TypeScript file (a `.json` fixture, say) at
+ * its new path. ts-morph cannot move such a file, so it rewrites none of its importers; each
+ * specifier is read as it was written before any move, from the directory its file sat in then,
+ * and re-derived from the directory that file sits in now.
+ */
+function repointOtherFiles(
+  project: Project,
+  repoRoot: string,
+  rows: readonly PathMove[],
+  before: ReadonlyMap<SourceFile, { readonly specifiers: readonly string[] }>,
+  dirBefore: ReadonlyMap<SourceFile, string>,
+): void {
+  if (rows.length === 0) return;
+  const destination = new Map(
+    rows.map((r) => [join(repoRoot, r.from), join(repoRoot, r.to)]),
+  );
+  for (const sf of project.getSourceFiles()) {
+    const written = before.get(sf)?.specifiers;
+    const dir = dirBefore.get(sf);
+    if (written === undefined || dir === undefined) continue;
+    const now = dirname(sf.getFilePath());
+    moduleLiterals(sf).forEach((literal, i) => {
+      const was = written[i];
+      if (was === undefined || !was.startsWith(".")) return;
+      const to = destination.get(resolve(dir, was));
+      if (to !== undefined) literal.setLiteralValue(relativeSpecifier(now, to));
+    });
+  }
 }
 
 /**
@@ -274,7 +390,7 @@ function originalTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
 function planRewrite(
   repoRoot: string,
   scope: string,
-  rows: readonly MoveRow[],
+  rows: readonly PathMove[],
   moved: MovedModules,
   workspace: Workspace | null,
 ): Rewrite {
@@ -328,13 +444,33 @@ function planRewrite(
       },
     ]),
   );
+  const dirBefore = new Map(
+    project.getSourceFiles().map((sf) => [sf, dirname(sf.getFilePath())]),
+  );
+  // ts-morph moves every row whose file the move project holds as a module (a `.js` under
+  // allowJs too) and rewrites its importers. A file the project cannot hold goes through the
+  // repoint path, and so does a JSON file: resolveJsonModule pulls it into the project, but
+  // ts-morph's move rewrites its importers wrong (dropping `.json`, keeping the old directory).
+  const held = (r: PathMove) => {
+    const sf = project.getSourceFile(join(repoRoot, r.from));
+    return sf !== undefined && sf.getScriptKind() !== ts.ScriptKind.JSON;
+  };
   applyMoves(
     project,
     scopeRoot,
-    rows.map((r) => [
-      relative(scopeRoot, join(repoRoot, r.from)),
-      relative(scopeRoot, join(repoRoot, r.to)),
-    ]),
+    rows
+      .filter(held)
+      .map((r) => [
+        relative(scopeRoot, join(repoRoot, r.from)),
+        relative(scopeRoot, join(repoRoot, r.to)),
+      ]),
+  );
+  repointOtherFiles(
+    project,
+    repoRoot,
+    rows.filter((r) => !held(r)),
+    before,
+    dirBefore,
   );
   const healed = heal(
     project.getSourceFiles(),
@@ -455,6 +591,27 @@ export function applyManifest(
   repoRoot: string,
   manifest: Manifest,
 ): ApplyReport {
+  return applyMoveSet(repoRoot, {
+    scope: manifest.scope,
+    moves: manifest.moves,
+    planner: { kind: "manifest", id: contentHash(canonicalJson(manifest)) },
+  });
+}
+
+/**
+ * Carry out a hand-written plan exactly as {@link applyManifest} carries out a manifest: the same
+ * two commits, resume and no-op re-run, with both messages saying the moves were hand-planned and
+ * naming the plan's content hash.
+ */
+export function applyHandPlan(repoRoot: string, plan: HandPlan): ApplyReport {
+  return applyMoveSet(repoRoot, {
+    scope: plan.scope,
+    moves: plan.moves,
+    planner: { kind: "hand-plan", id: contentHash(canonicalJson(plan)) },
+  });
+}
+
+function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
   const started = performance.now();
   const dirty = uncommittedPaths(repoRoot);
   if (dirty.length > 0)
@@ -462,13 +619,13 @@ export function applyManifest(
       `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
     );
   const workspace = readWorkspace(repoRoot);
-  const crossing = manifest.moves
+  const crossing = set.moves
     .map((row) => placeRow(workspace, row))
     .filter(crossesPackages);
   const landed = new PackageTree(
     repoRoot,
     workspace,
-    renamedTree(repoRoot, manifest.moves),
+    renamedTree(repoRoot, set.moves),
   );
   const unexported = crossing.filter(
     ({ row }) => landed.specifierOf(join(repoRoot, row.to)) === undefined,
@@ -477,26 +634,20 @@ export function applyManifest(
     throw new Error(
       `rows move a file into another workspace package where no exports entry reaches it, so nothing could import it there; refusing before any commit:\n${unexported.map(({ row, to }) => `  ${row.from} -> ${row.to}  (${to.name === undefined ? `${packageLabel(to)} has no name to import it by` : `no exports entry of ${to.name} reaches it`})`).join("\n")}`,
     );
-  const { pending, conflicts, absent, done } = classify(
-    repoRoot,
-    manifest.moves,
-  );
+  const { pending, conflicts, absent, done } = classify(repoRoot, set.moves);
   if (conflicts.length > 0)
     throw new Error(
       `both ends exist, refusing to guess:\n${conflicts.map((r) => `  ${r.from} -> ${r.to}`).join("\n")}`,
     );
-  const id = manifestId(manifest);
-  const moved = movedModules(repoRoot, manifest.moves);
+  const moved = movedModules(repoRoot, set.moves);
 
-  const rows =
-    pending.length > 0 ? pending : renamedAtHead(repoRoot, manifest, id);
+  const rows = pending.length > 0 ? pending : renamedAtHead(repoRoot, set);
   const owed =
-    rows.length > 0 ||
-    hasDangling(trackedSources(repoRoot, manifest.scope), moved);
+    rows.length > 0 || hasDangling(trackedSources(repoRoot, set.scope), moved);
   const rewrite = owed
     ? planRewrite(
         repoRoot,
-        manifest.scope,
+        set.scope,
         rows,
         moved,
         crossing.length > 0 ? workspace : null,
@@ -510,7 +661,7 @@ export function applyManifest(
     );
 
   const rename =
-    pending.length > 0 ? commitRenames(repoRoot, pending, id) : null;
+    pending.length > 0 ? commitRenames(repoRoot, pending, set.planner) : null;
   for (const edit of rewrite.edits) writeFileSync(edit.path, edit.text);
   for (const edit of dependencies.manifests)
     writeFileSync(join(repoRoot, edit.path), edit.text);
@@ -531,7 +682,7 @@ export function applyManifest(
   if (written.length > 0) git(repoRoot, ["add", "--", ...written]);
   const changed = stagedPaths(repoRoot);
   const rewriteSha =
-    changed.length > 0 ? commit(repoRoot, rewriteMessage(id)) : null;
+    changed.length > 0 ? commit(repoRoot, rewriteMessage(set.planner)) : null;
 
   return {
     pending: pending.length,
@@ -546,7 +697,7 @@ export function applyManifest(
     filesTouched: changed.length,
     lint,
     commits: { rename, rewrite: rewriteSha },
-    staleStringRefs: staleRefs(repoRoot, manifest.moves),
+    staleStringRefs: staleRefs(repoRoot, set.moves),
     millis: Math.round(performance.now() - started),
   };
 }

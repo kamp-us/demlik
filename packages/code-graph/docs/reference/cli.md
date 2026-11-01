@@ -18,6 +18,7 @@ The default output is a JSON summary of counts, health, and refactor targets.
 | `--by <axis>` | Plan order: `rot` (default), `impact`, `complexity`, or `size` |
 | `--smells` | Findings grouped by kind; `--json` returns the finding list |
 | `--tree` | File/function tree with line ranges, metrics, and findings |
+| `--hexagon` | One feature's Ports & Adapters, human text; `--json` returns the inventory |
 | `--file <file>` | One module and its functions |
 | `--blast <id>` | Direct and transitive callers of a function |
 | `--find <name>` | Every function and top-level declaration with that name, as JSON |
@@ -33,6 +34,39 @@ Each match has `id`, `name`, `kind`, `file`, `line`, `isExported`, and `uses`, a
 list of `{ file, line }`. A function's uses are its call sites. A declaration's
 are every place the type checker resolves to it. Several matches exit 0. No
 match prints an empty list, warns on stderr, and exits 0.
+
+## Feature hexagon
+
+`code-graph <featureDir> --hexagon` reads `ports.ts`, immediate `application/*.ts`
+files, and adapter files recursively under `adapters/driving/` and
+`adapters/driven/`. It needs no tsconfig or model. `--json`, `--pretty` and `--out`
+work as on other views.
+
+Sections appear in this order: Commands, External systems, Other bags, Ports
+declared in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections
+print `none`. JSON fields are `feature`, `commands`, `externalSystems`,
+`otherBags`, `unbaggedPorts`, `useCases`, `adapters` and `notRead`.
+
+Only direct exported `ForX` function/reference type aliases and non-generic bags
+of plain typed properties are read. Optional properties are allowed. The factory
+must be a direct exported function declaration or `const` arrow/function
+expression at module top level in `application/*.ts`. Its exported binding name
+`createX` selects `X` and `XDriven`. Export lists, namespaces and re-exports are
+not factories. Without a factory, print `Factory: not found` and put every
+readable bag under Other bags; JSON `feature` is `null`.
+
+Every other export in `ports.ts` appears in Not read as `file:line Name: reason`.
+There is no alias, inheritance, intersection or scope expansion. Port expressions
+and property types stay as written. A port is used only when a readable bag
+member's entire type is exactly its name. Use cases list each file's direct
+exported functions. Standard source filters include tests. Lists and JSON keys
+are deterministic.
+
+Only missing `ports.ts` and unreadable selected directories exit 2. Unsupported
+shapes and source failures are listed under Not read and exit 0.
+The complete allowlist and ordering rules are in
+[SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
+
 
 ## Function headers
 
@@ -222,7 +256,7 @@ contract, with examples, is [SPEC.md §13](../../SPEC.md).
 | `--deep` | Call analysis using the workspace-root tsconfig |
 | `--cross-runtime` | Calls through Cloudflare worker bindings |
 | `--kinds` | Function roles: entry, auth, effect, or plain |
-| `--unreachable` | Exports with no modeled path from an entry |
+| `--unreachable` | Exports with no modeled path from an entry, and exports no other file uses (`unused-export`) |
 | `--unguarded` | Effects reached along a path without an auth check |
 | `--clusters` | Groups of connected files compared with their folders |
 | `--interface-width` | Exports and consumer files outside each package |
@@ -286,24 +320,147 @@ conventions apply alongside active presets.
 
 | Flag | Policy |
 |---|---|
-| `--ci` | Fail on high-severity smells by default |
+| `--ci` | Fail on high-severity smells by default; with a smell ledger, check gated smells against `smell-ledger.json` |
 | `--fail-on <level>` | `high` (default) or `warn`; `warn` fails on any smell |
 | `--max <n>` | Also fail if the total smell count exceeds `n` |
+| `--accept-smells` | Add unrecorded smells of the gated rules to `smell-ledger.json` |
 | `--comments --ci` | Check ratios against `comment-ceilings.json` |
 | `--collapse --ci` | Check shared-block counts against `collapse-ceilings.json` |
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
+| `--unreachable --ci` | Check unreachable and unused exports against `unreachable-ledger.json` |
 | `--write-ceilings` | With comments: rewrite ratios. With collapse: record this scope's count |
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
-| `--reason <text>` | Required, non-empty reason for accepting crossings |
+| `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
+| `--dead-only` | With `--unreachable --ci`: gate only `dead` findings, not `only-called-from-tests` or `unused-export` |
+| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead` or `--accept-smells` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
 The ordinary smell gate is syntax-only unless call analysis is also requested.
-Boundary, comment, and collapse gates use their own policies. Layers always
-gate, without needing `--ci`.
+Boundary, comment, collapse, and unreachable gates use their own policies.
+Layers always gate, without needing `--ci`.
 
 Boundary `--ci` can rewrite the ledger when it prunes resolved crossings.
 `--boundaries --write-ceilings` is retired. Acceptance, migration, and boundary
 CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundaries.md).
+
+### The unreachable ledger
+
+`--unreachable --ci` gates the `--unreachable` findings, and never the smells.
+`unreachable-ledger.json` sits at the repo root, beside `boundary-ledger.json`:
+
+```json
+{
+  "entries": [
+    {
+      "id": "src/shell/execute.ts:inWords",
+      "kind": "dead",
+      "reason": "kept for the move",
+      "scope": "packages/core"
+    }
+  ]
+}
+```
+
+- An entry is keyed by `(scope, kind, id)`. `scope` is the analyzed path relative
+  to the repo root (`.` for the root itself). `kind` is `dead`,
+  `only-called-from-tests` or `unused-export`. `id` is the finding's
+  scope-relative id. `reason` is required.
+- `unused-export` is an exported symbol, outside the public surface, that no
+  other loaded file imports, re-exports or uses; a test file's import counts as
+  a use. Public is the set `public-entry-surface` reads: barrels, worker mains,
+  every file a `package.json` entry or `exports` target maps to (a target ending
+  in `*` makes every file below it public), and what those re-export. See
+  [Unused exports](./analyses.md#unused-exports).
+- `--unreachable --accept-dead --reason "<why>"` adds every finding of this scope
+  that the ledger does not name yet. It also drops this scope's entries whose
+  finding is gone.
+- `--unreachable --ci` exits 1 on a finding of this scope that the ledger does not
+  name, and lists each one. It never fails on an entry whose finding is gone: it
+  rewrites the ledger without that entry and prints it, so the ledger only shrinks.
+- A run changes only entries of its own scope, but it reads and validates the
+  whole file first: a bad entry in any scope exits 2.
+- All three kinds are gated by default. `--dead-only` gates only `dead`: an
+  `only-called-from-tests` or `unused-export` finding neither fails the run nor
+  is pruned.
+- Upgrading past 0.12.0 can turn an existing `--unreachable --ci` run red: the
+  `unused-export` findings it now measures are not in the ledger yet. Record them
+  once with `--accept-dead --reason`, or drop their `export` keywords.
+- A finding whose kind changes is a new finding, and its old entry is pruned.
+- Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
+  `test-support-surface`, `called-by-withheld`) are not findings and never enter
+  the ledger.
+- `--json` prints `{ passed, scope, gated, unrecorded, pruned }` for `--ci`, and
+  `{ scope, accepted, pruned, reason }` for `--accept-dead`.
+- Exit 2, with one line on stderr and nothing written: `--accept-dead` without a
+  non-empty `--reason`, with `--ci`, or without `--unreachable`; `--dead-only`
+  without `--unreachable --ci`; `--reason` on `--unreachable` without
+  `--accept-dead`, unless `--boundaries` is also given (the boundary gate judges
+  `--reason` then); and an unreadable or schema-invalid `unreachable-ledger.json`.
+
+```sh
+code-graph packages/core --unreachable --accept-dead --reason "baseline"   # once
+code-graph packages/core --unreachable --ci                                # in CI
+```
+
+### The smell ledger
+
+A plain `--ci` judges every smell in the tree. The smell ledger lets a repo gate
+the rules it chooses at today's count: old smells may only shrink, and a new one
+fails. `smell-ledger.json` sits at the repo root, beside the other ledgers:
+
+```json
+{
+  "entries": [
+    {
+      "reason": "split in the core sweep",
+      "rule": "big-file",
+      "target": "packages/core/src/host.ts",
+      "value": 900
+    }
+  ],
+  "gated": ["big-file"]
+}
+```
+
+- `gated` names the rules the repo gates, from the ten smell rules. No rule is
+  gated until named. While the file is absent or `gated` is empty, `--ci` is the
+  plain gate above, with the same output and exit codes.
+- Once a rule is gated, `--ci` reads the ledger instead of `--fail-on` and
+  `--max`. Only smells of gated rules count, at any severity. A smell of another
+  rule neither fails nor is recorded.
+- An entry is keyed by `(rule, target)`. `target` is relative to the repo root:
+  a function's id (`<file>:<name>`, never its start line), a module's file, or a
+  directory's path. `value` is the measure it may not exceed, such as a file's
+  line count. `reason` is required.
+- `--ci` exits 1 on a smell the ledger does not name, and on a recorded smell
+  whose value grew. It lists each, with the recorded and measured value.
+- `--ci` writes improvements back: an entry whose smell shrank is lowered to the
+  new value, and an entry whose smell is gone is pruned. Both are printed.
+- `--accept-smells --reason "<why>"` is the only way the ledger grows. It adds
+  every unrecorded smell of a gated rule, and raises every recorded one that grew
+  to its measured value. It also lowers and prunes as `--ci` does.
+- A run changes only entries under the analyzed path, so `code-graph .` and
+  `code-graph packages/core` judge `packages/core` the same way.
+- `high-fan-in`, `deep-call-chain`, `dependency-cycle` and `cross-boundary-import`
+  are measured only by the edge pass. Gating one turns the edge pass on, so its
+  entries are always measured, never pruned unmeasured.
+- A function renamed, or a file moved, is a new smell, and its old entry is
+  pruned. A second function of the same name in one file renames the first id
+  (`#<n>` is added).
+- `--json` prints `{ passed, scope, gated, unrecorded, worsened, lowered, pruned }`
+  for `--ci`, and `{ scope, gated, accepted, raised, lowered, pruned, reason }`
+  for `--accept-smells`.
+- Exit 2, with one line on stderr and nothing written: an unreadable or
+  schema-invalid `smell-ledger.json`, including a rule name that is not a smell
+  rule; `--accept-smells` without a non-empty `--reason`, with `--ci`, with no
+  rule gated, or beside `--unreachable`, `--boundaries`, `--comments`,
+  `--collapse` or `--layers`.
+
+```sh
+echo '{ "gated": ["big-file"] }' > smell-ledger.json                        # name the rule
+code-graph packages/core --accept-smells --reason "split in the core sweep"  # once
+code-graph packages/core --ci                                                # in CI
+```
 
 ## Output and hotspots
 
@@ -319,7 +476,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
 
 `--out` keeps script-wrapper banners out of JSON and HTML. The write confirmation
 goes to stderr. The ordinary smell `--ci` verdict always goes to stdout, even
-when `--json` or `--out` is supplied.
+when `--json` or `--out` is supplied. The smell ledger verdict follows `--json`
+and `--out`.
 
 `--graph` includes requested analysis tables. Without it, an analysis flag
 selects that analysis's report. Standalone modes take precedence over graph

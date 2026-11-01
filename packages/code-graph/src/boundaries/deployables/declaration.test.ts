@@ -82,14 +82,14 @@ describe("a bad deployable declaration exits 2 with one line and writes nothing"
     expect(message).toContain("is no file the scope loads");
   });
 
-  it("refuses an owner file that is not under a feature's adapters/driven/", () => {
+  it("refuses an owner file that is not under a driven adapter", () => {
     const inApplication = { [API]: { DB: ["src/orders/application/place.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: inApplication })).toContain("adapters/driven/");
     const outsideFeatures = { [API]: { DB: ["src/orders-db.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: outsideFeatures })).toContain("could never be clean");
     const main = { [API]: { DB: ["src/index.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: main })).toContain(
-      `owner "src/index.ts" of binding "DB" in "${API}" is not under a hexagonal feature's adapters/driven/`,
+      `owner "src/index.ts" of binding "DB" in "${API}" is not under a driven adapter, src/<feature>/adapters/driven/ (per-feature layout) or src/driven-adapters/ (port layout)`,
     );
   });
 

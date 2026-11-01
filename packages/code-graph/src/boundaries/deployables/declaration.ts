@@ -1,4 +1,4 @@
-import { type BoundaryRules, featureFileOf, scopeZoning } from "../rules.js";
+import { type BoundaryRules, DRIVEN_HOMES, featureFileOf, scopeZoning } from "../rules.js";
 
 // The first problem in the deployable keys that the rules file alone can show, or null. A kind
 // outside the three is refused by the schema. What needs the repo (an owner that is no loaded file,
@@ -17,7 +17,7 @@ export function deployableDeclarationIssue(rules: BoundaryRules): string | null 
     for (const [binding, owners] of Object.entries(bindings)) {
       for (const owner of owners) {
         if (featureFileOf(owner, zoning)?.zone.rule.touchesBindings === true) continue;
-        return `owner "${owner}" of binding "${binding}" in "${scope}" is not under a hexagonal feature's adapters/driven/: only a driven adapter may use a binding, so an owner anywhere else could never be clean.`;
+        return `owner "${owner}" of binding "${binding}" in "${scope}" is not under a driven adapter, ${DRIVEN_HOMES}: only a driven adapter may use a binding, so an owner anywhere else could never be clean.`;
       }
     }
   }

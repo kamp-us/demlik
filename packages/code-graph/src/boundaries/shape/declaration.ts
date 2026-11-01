@@ -1,5 +1,5 @@
 import { GlobSyntaxError, globToRegExp } from "../../kinds/glob.js";
-import { type BoundaryRules, featureFileOf, scopeZoning } from "../rules.js";
+import { type BoundaryRules, DRIVEN_HOMES, featureFileOf, scopeZoning } from "../rules.js";
 
 const B16 = "application-import-outside-allowlist";
 
@@ -82,7 +82,7 @@ function allowanceIssues(rules: BoundaryRules): string[] {
       .filter((file) => featureFileOf(file, zoning)?.zone.name !== "driven")
       .map(
         (file) =>
-          `file "${file}" of "readAllowance" in "${scope}" is not under a hexagonal feature's adapters/driven/: only a driven file can be read through, so a listing anywhere else could never grant.`,
+          `file "${file}" of "readAllowance" in "${scope}" is not under a driven adapter, ${DRIVEN_HOMES}: only a driven file can be read through, so a listing anywhere else could never grant.`,
       );
     return [
       ...empty("driven", driven),

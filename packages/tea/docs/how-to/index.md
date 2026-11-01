@@ -29,6 +29,9 @@ guides use are each defined in the [glossary](../glossary.md).
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   [`Store`](../glossary.md#store) so the [Model](../glossary.md#model) survives a Durable Object eviction and resumes on the next
   boot.
+- [Reopen an investigation with retained history](./reopen-a-retained-case.md) —
+  run a file-journal case, recover settled evidence after completion, and attach
+  a client to complete committed views.
 - [Deploy an agent to a Durable Object](./deploy-an-agent-to-a-durable-object.md) —
   run a `defineAgent` [agent](../glossary.md#agent) inside a Cloudflare Durable Object with `doStore`
   as its `Store`, so an eviction mid-run resumes on the next request instead of
