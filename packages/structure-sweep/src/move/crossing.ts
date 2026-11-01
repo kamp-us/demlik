@@ -48,8 +48,8 @@ function specifierExtensionFrom(
  * builtin. `missing`: a relative path to no file. `file`: an absolute path. `package`: a workspace
  * package, by a subpath apply cannot follow to a file (a target with no source here, a `null` block).
  * Such an import still needs its package declared, wherever the importer lands. `alias`: a file in
- * this repository, through the importer's tsconfig `paths` or its package's `imports`, a name that
- * means something only from where the importer sits.
+ * this repository, through the importer's tsconfig `paths` or `baseUrl` or its package's `imports`,
+ * a name that means something only from where the importer sits.
  */
 export type Named =
   | { readonly kind: "outside" }
@@ -100,9 +100,10 @@ export class PackageTree {
   }
 
   /**
-   * The file in this repository `literal` names from `importer` through tsconfig `paths` or a
-   * package's `imports`. Only a specifier that looks like one is resolved, since this is asked of
-   * every quoted string in every tracked source.
+   * The file in this repository `literal` names from `importer` through tsconfig `paths`, tsconfig
+   * `baseUrl` or a package's `imports`. Only a specifier that looks like the first or the last goes
+   * to the compiler, since this is asked of every quoted string in every tracked source; `baseUrl`
+   * is read against `tree`, as the compiler would try it.
    */
   #aliased(importer: string, literal: string): string | undefined {
     const options = this.#optionsAt(dirname(importer));
@@ -111,7 +112,12 @@ export class PackageTree {
       Object.keys(options.paths ?? {}).some((key) =>
         matchesPathsKey(key, literal),
       );
-    if (!looksAliased) return undefined;
+    if (!looksAliased)
+      return options.baseUrl === undefined
+        ? undefined
+        : moduleFileCandidates(resolve(options.baseUrl, literal)).find(
+            this.tree,
+          );
     const { resolvedModule } = ts.resolveModuleName(
       literal,
       importer,
@@ -207,12 +213,17 @@ export class PackageTree {
     return subpath === "." ? pkg.name : `${pkg.name}/${subpath.slice(2)}`;
   }
 
-  /** The relative specifier `importer` names the absolute file `target` by, in its own resolution. */
+  /**
+   * The relative specifier `importer` names the absolute file `target` by, in its own resolution.
+   * An `.mjs` or `.cjs` importer runs under Node whatever the tsconfig says, so it keeps an extension.
+   */
   relativeSpecifier(importer: string, target: string): string {
     const dir = dirname(importer);
     return relativeSpecifierOf(
       relative(dir, target),
-      specifierExtensionFrom(this.#optionsAt(dir)),
+      /\.[cm]js$/.test(importer)
+        ? "js"
+        : specifierExtensionFrom(this.#optionsAt(dir)),
     );
   }
 }
@@ -257,7 +268,7 @@ const unfollowedReason = (unfollowed: Unfollowed): string => {
     case "unknown-file":
       return `and apply cannot tell which file of ${packageLabel(unfollowed.pkg)} that is, so a row may move it`;
     case "alias":
-      return "an alias from tsconfig paths or package.json imports, which apply does not rewrite";
+      return "an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite";
     default:
       return absurd(unfollowed);
   }
@@ -387,10 +398,10 @@ export function rewriteCrossings(
 const QUOTED = /["']([^"'\n]+)["']/g;
 
 /**
- * The tracked source files, absolute, of every workspace package holding a file whose text names
- * one of `rows`' sources, or names a package a row leaves by a subpath apply cannot follow to a
- * file, read in the tree before the renames. These are the packages a move across a package line
- * must load beyond its scope, since an importer there needs rewriting or refusing too.
+ * Those of `sources` in every workspace package holding one of them whose text names one of `rows`'
+ * sources, or names a package a row leaves by a subpath apply cannot follow to a file, read in the
+ * tree before the renames. These are the packages a move across a package line must load beyond its
+ * scope, since an importer there needs rewriting or refusing too.
  */
 export function importerPackageSources(
   sources: readonly string[],

@@ -399,7 +399,7 @@ describe("imports apply cannot follow", () => {
     const message = refusal(() => applyHandPlan(root, ONE_INTO_B));
 
     expect(message).toContain(
-      `  packages/a/src/one.ts -> packages/b/src/one.ts  (${importer} imports "${specifier}", an alias from tsconfig paths or package.json imports, which apply does not rewrite)`,
+      `  packages/a/src/one.ts -> packages/b/src/one.ts  (${importer} imports "${specifier}", an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite)`,
     );
     expect(snapshot(root)).toEqual(before);
   });
@@ -443,6 +443,255 @@ describe("imports apply cannot follow", () => {
     expect(read(root, "packages/c/src/uses.ts")).toContain(
       '"@fixture/a/styles.css"',
     );
+  });
+});
+
+describe("a JavaScript file importing a moved file", () => {
+  const CHECKED_JS = JSON.stringify({
+    compilerOptions: {
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      allowJs: true,
+      checkJs: true,
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      types: [],
+    },
+    include: ["src"],
+  });
+
+  const ONE = { "packages/a/src/one.ts": "export const one = 1;\n" };
+  const B = { "packages/b/src/index.ts": "export const b = 1;\n" };
+  const USES_ONE = (specifier: string) =>
+    `import { one } from "${specifier}";\n\nexport const uses = one;\n`;
+
+  it("is rewritten beside a TypeScript importer in every package, with the dependency added", () => {
+    const root = workspace(
+      {
+        a: { exports: WILD },
+        b: { exports: WILD },
+        c: { exports: WILD, dependencies: { "@fixture/a": "workspace:*" } },
+      },
+      {
+        ...ONE,
+        ...B,
+        "packages/a/scripts/s.mjs": USES_ONE("@fixture/a/one"),
+        "packages/c/tsconfig.json": CHECKED_JS,
+        "packages/c/next.config.mjs": USES_ONE("@fixture/a/one"),
+        "packages/c/src/rel.js": USES_ONE("../../a/src/one.js"),
+        "packages/c/src/rel.jsx": USES_ONE("../../a/src/one.js"),
+        "packages/c/src/req.cjs":
+          'const { one } = require("../../a/src/one.js");\n\nmodule.exports = { uses: one };\n',
+        "packages/c/src/uses.ts": USES_ONE("@fixture/a/one"),
+      },
+    );
+
+    const report = applyHandPlan(root, ONE_INTO_B);
+
+    for (const path of [
+      "packages/a/scripts/s.mjs",
+      "packages/c/next.config.mjs",
+      "packages/c/src/rel.js",
+      "packages/c/src/rel.jsx",
+      "packages/c/src/uses.ts",
+    ])
+      expect(read(root, path)).toContain('from "@fixture/b/one"');
+    expect(read(root, "packages/c/src/req.cjs")).toContain(
+      'require("@fixture/b/one")',
+    );
+    expect(report.dependenciesAdded).toEqual([
+      "@fixture/a -> @fixture/b",
+      "@fixture/c -> @fixture/b",
+    ]);
+    expect(report.staleStringRefs).toEqual([]);
+    expect(typecheck(root, "b", "c")).toEqual([]);
+  });
+
+  it("is rewritten when no TypeScript file in its package imports the moved file, and a second apply commits nothing", () => {
+    const root = workspace(
+      { a: { exports: WILD }, b: { exports: WILD }, c: { exports: WILD } },
+      {
+        ...ONE,
+        ...B,
+        "packages/c/next.config.mjs": USES_ONE("../a/src/one.js"),
+        "packages/c/src/rel.js": USES_ONE("../../a/src/one.js"),
+        "packages/c/src/plain.ts": "export const plain = 1;\n",
+      },
+    );
+
+    const report = applyHandPlan(root, ONE_INTO_B);
+
+    expect(report.commits.rewrite).not.toBeNull();
+    expect(report.dependenciesAdded).toEqual(["@fixture/c -> @fixture/b"]);
+    for (const path of ["packages/c/next.config.mjs", "packages/c/src/rel.js"])
+      expect(read(root, path)).toContain('from "@fixture/b/one"');
+
+    const head = gitIn(root, "rev-parse", "HEAD");
+    const again = applyHandPlan(root, ONE_INTO_B);
+    expect(again.commits).toEqual({ rename: null, rewrite: null });
+    expect(gitIn(root, "rev-parse", "HEAD")).toBe(head);
+  });
+
+  it("is rewritten when it names the file by a deep path into a package with no exports", () => {
+    const root = workspace(
+      { a: {}, b: { exports: WILD }, c: { exports: WILD } },
+      {
+        ...ONE,
+        ...B,
+        "packages/a/src/stays.ts": "export const stays = 0;\n",
+        "packages/c/scripts/run.mjs": USES_ONE("@fixture/a/src/one.js"),
+      },
+    );
+
+    const report = applyHandPlan(root, ONE_INTO_B);
+
+    expect(read(root, "packages/c/scripts/run.mjs")).toContain(
+      'from "@fixture/b/one"',
+    );
+    expect(report.dependenciesAdded).toEqual(["@fixture/c -> @fixture/b"]);
+  });
+
+  it("is refused, naming the row and the importer, when it names nothing apply can find", () => {
+    const root = workspace(
+      { a: {}, b: { exports: WILD }, c: { exports: WILD } },
+      {
+        ...ONE,
+        ...B,
+        "packages/c/scripts/run.mjs": USES_ONE("@fixture/a/lib/one.js"),
+      },
+    );
+    const before = snapshot(root);
+
+    const lines = refusal(() => applyHandPlan(root, ONE_INTO_B))
+      .split("\n")
+      .filter((l) => l.includes(" -> "));
+
+    expect(lines).toEqual([
+      '  packages/a/src/one.ts -> packages/b/src/one.ts  (packages/c/scripts/run.mjs imports "@fixture/a/lib/one.js", and apply cannot tell which file of @fixture/a that is, so a row may move it)',
+    ]);
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("keeps an extension Node needs when the import becomes relative, whatever the tsconfig asks", () => {
+    const root = workspace(
+      { a: { exports: WILD }, b: { exports: WILD } },
+      {
+        ...ONE,
+        ...B,
+        "packages/b/tsconfig.json": JSON.stringify({
+          compilerOptions: { module: "ESNext", moduleResolution: "Bundler" },
+          include: ["src"],
+        }),
+        "packages/b/scripts/s.mjs": USES_ONE("@fixture/a/one"),
+        "packages/b/src/rel.js": USES_ONE("@fixture/a/one"),
+      },
+    );
+
+    applyHandPlan(root, ONE_INTO_B);
+
+    expect(read(root, "packages/b/scripts/s.mjs")).toContain(
+      'from "../src/one.js"',
+    );
+    expect(read(root, "packages/b/src/rel.js")).toContain('from "./one"');
+  });
+});
+
+describe("an import through tsconfig baseUrl", () => {
+  const BASE_URL = JSON.stringify({
+    compilerOptions: {
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      baseUrl: ".",
+    },
+    include: ["src"],
+  });
+  const STAYS = "export const s = 1;\n";
+  const B = { "packages/b/src/index.ts": "export const b = 1;\n" };
+
+  it.each<{
+    readonly name: string;
+    readonly configs: Readonly<Record<string, string>>;
+  }>([
+    {
+      name: "written in the package's own tsconfig",
+      configs: { "packages/a/tsconfig.json": BASE_URL },
+    },
+    {
+      name: "inherited through extends",
+      configs: {
+        "packages/a/tsconfig.base.json": BASE_URL,
+        "packages/a/tsconfig.json": JSON.stringify({
+          extends: "./tsconfig.base.json",
+          include: ["src"],
+        }),
+      },
+    },
+  ])("is refused in a moved file, naming the row and the import ($name)", ({
+    configs,
+  }) => {
+    const root = workspace(
+      { a: { exports: WILD }, b: { exports: WILD } },
+      {
+        ...configs,
+        ...B,
+        "packages/a/src/one.ts":
+          'import { s } from "src/stays";\n\nexport const one = s;\n',
+        "packages/a/src/stays.ts": STAYS,
+      },
+    );
+    const before = snapshot(root);
+
+    const lines = refusal(() => applyHandPlan(root, ONE_INTO_B))
+      .split("\n")
+      .filter((l) => l.includes(" -> "));
+
+    expect(lines).toEqual([
+      '  packages/a/src/one.ts -> packages/b/src/one.ts  (packages/b/src/one.ts imports "src/stays", an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite)',
+    ]);
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("is refused in a staying file that names a moved file", () => {
+    const root = workspace(
+      { a: { exports: WILD }, b: { exports: WILD } },
+      {
+        ...B,
+        "packages/a/tsconfig.json": BASE_URL,
+        "packages/a/src/one.ts": "export const one = 1;\n",
+        "packages/a/src/uses.ts":
+          'import { one } from "src/one";\n\nexport const u = one;\n',
+      },
+    );
+    const before = snapshot(root);
+
+    const message = refusal(() => applyHandPlan(root, ONE_INTO_B));
+
+    expect(message).toContain(
+      '(packages/a/src/uses.ts imports "src/one", an alias from',
+    );
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it("leaves a staying file's import of a staying file and an npm package alone", () => {
+    const root = workspace(
+      { a: { exports: WILD }, b: { exports: WILD } },
+      {
+        ...B,
+        "packages/a/tsconfig.json": BASE_URL,
+        "packages/a/src/one.ts":
+          'import z from "zod";\n\nexport const one = z;\n',
+        "packages/a/src/stays.ts": STAYS,
+        "packages/a/src/uses.ts":
+          'import { s } from "src/stays";\n\nexport const u = s;\n',
+      },
+    );
+
+    const report = applyHandPlan(root, ONE_INTO_B);
+
+    expect(report.commits.rename).not.toBeNull();
+    expect(read(root, "packages/a/src/uses.ts")).toContain('from "src/stays"');
+    expect(read(root, "packages/b/src/one.ts")).toContain('from "zod"');
   });
 });
 
