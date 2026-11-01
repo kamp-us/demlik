@@ -6,6 +6,7 @@
 import * as fc from "fast-check";
 import type { Machine } from "../index";
 import {
+  type MsgCount,
   PropertyFailure,
   type PropertyRun,
   propertyInvariant,
@@ -64,6 +65,14 @@ const run: PropertyRun = propertyInvariant(machine, {}, seqArb, () => true, {
   markInterruptAsFailure: true,
 });
 
+// Counts read without parsing text, on both arms, and the option takes a boolean.
+const count: MsgCount | undefined = run.msgCounts.get("finish");
+propertyTerminates(machine, {}, seqArb, terminal, { failOnNeverActed: true });
+propertyTrace(machine, {}, seqArb, () => true, {
+  // @ts-expect-error the option is a switch, not a list of types to exempt
+  failOnNeverActed: ["finish"],
+});
+
 // A check answers `boolean | string | null`, on both runners that take one. A plain
 // boolean check, however it was declared, still compiles.
 declare const answer: boolean | string | null;
@@ -86,4 +95,9 @@ propertyTerminates(machine, {}, seqArb, () => answer);
 declare const failure: PropertyFailure;
 const failed: PropertyRun = failure.run;
 
-export const _witness = [run, failed, new PropertyFailure("report", run)];
+export const _witness = [
+  run,
+  failed,
+  count,
+  new PropertyFailure("report", run),
+];

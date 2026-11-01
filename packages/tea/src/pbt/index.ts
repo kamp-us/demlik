@@ -33,6 +33,7 @@ export {
 } from "./arbitraries";
 export {
   foldEvents,
+  type MsgCount,
   PropertyFailure,
   type PropertyRun,
   propertyInvariant,
