@@ -1,7 +1,7 @@
 import type { TellAnswer } from "../internal/engine/loop";
 import { tellRun } from "../internal/engine/tell";
 import type { Cmd, Machine, Sub } from "../pure/core";
-import type { BootingRun } from "./run";
+import type { Run } from "./run";
 
 export type { TellAnswer } from "../internal/engine/loop";
 
@@ -16,11 +16,11 @@ export type { TellAnswer } from "../internal/engine/loop";
  * already in line have not folded yet, so a Msg that only a queued one makes
  * acceptable answers `"no_cell"`.
  *
- * `runtime` is what `run` returned, what its `ready` resolved to, or a spread of
- * either. Those carry the run's line, and the type asks for it, so a `Runtime`
- * built by hand, a fake or `noopRuntime` is a compile error. A cast past the type
- * has no line to put a Msg on, and `tell` throws there. A handle still booting has
- * no State yet, so it answers `"no_cell"`.
+ * `runtime` is what `ready` resolved to, or a spread of it. Those carry the run's
+ * line, and the type asks for it, so a `Runtime` built by hand, a fake or
+ * `noopRuntime` is a compile error. So is the handle `run` returned, with a store
+ * or without one: wait for `ready`. A hand-built object cast past the type has no
+ * line to put a Msg on, and `tell` throws there.
  *
  * What happens after `"queued"` is the receiver's. Two `tell`s from one sender
  * fold in the order they were sent. A failed save or a handler's throw goes to
@@ -46,7 +46,7 @@ export function tell<
   E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: BootingRun<S, M, E>,
+  runtime: Run<S, M, E>,
   msg: NoInfer<M>,
 ): TellAnswer {
   return tellRun<S, M>(machine, runtime, msg);

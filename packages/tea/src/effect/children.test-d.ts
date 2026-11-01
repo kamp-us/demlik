@@ -1,7 +1,7 @@
 // Type-level test for #568, #639 and #782: `SpawnSteps.notify` cannot fail,
 // because `spawn` runs it on a fiber nothing reads, and `tell` carries no failure,
-// so it goes in bare. `tell` takes only a handle that came from `run`, so a
-// `notify` over a hand-built one does not compile. Compiled by `pnpm typecheck`;
+// so it goes in bare. `tell` takes only the handle `ready` gives, so a `notify`
+// over a hand-built one does not compile. Compiled by `pnpm typecheck`;
 // every `@ts-expect-error` must sit on a line that fails.
 
 import { Effect } from "effect";
@@ -70,22 +70,26 @@ const notices = (["a", "b", "c"] as const).map((id) => ({
   spreadOfHandBuilt: { notify: tell(parent, { ...handBuilt }, { ...msg, id }) },
 }));
 
-// A handle from `run`, one from `ready`, and a spread of either.
+// A handle from `ready`, and a spread of one. A handle from `run` waits for `ready`.
 const fromProgram = Effect.gen(function* () {
   const booting = yield* run(parent, {});
   const booted = yield* booting.ready;
-  yield* tell(parent, booting, msg);
   yield* tell(parent, booted, msg);
-  yield* tell(parent, { ...booting }, msg);
   yield* tell(parent, { ...booted }, msg);
+  // @ts-expect-error a booting handle does not compile: wait for `ready`
+  yield* tell(parent, booting, msg);
+  // @ts-expect-error a spread of a booting handle does not compile either
+  yield* tell(parent, { ...booting }, msg);
   // A real handle still fits where the plain types are asked for.
   const plain: EffectRuntime<ParentState, ParentMsg> = booted;
   const plainBooting: EffectBootingRuntime<ParentState, ParentMsg> = booting;
   return [plain, plainBooting];
 });
-const spreadOfBooting = tell(parent, { ...fromRun }, msg);
 
-// @ts-expect-error a booting handle not known to come from `run` has no line
+// @ts-expect-error a booting handle does not compile: wait for `ready`
+const fromRunAnswer = tell(parent, fromRun, msg);
+
+// @ts-expect-error a booting handle does not compile: wait for `ready`
 const handBuiltAnswer = tell(parent, handBuiltBooting, msg);
 
 void [
@@ -95,6 +99,6 @@ void [
   named,
   notices,
   fromProgram,
-  spreadOfBooting,
+  fromRunAnswer,
   handBuiltAnswer,
 ];

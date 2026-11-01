@@ -265,7 +265,21 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
     await runtime.stop();
   });
 
-  it("answers `no_cell` on a handle still booting, and takes the Msg once `ready` has run", async () => {
+  it("on a run with no store, the booting handle does not compile and `ready`'s handle queues", async () => {
+    const booting = run(line, { interpret: { wait: async () => {} } });
+    void (() => {
+      // @ts-expect-error a booting handle does not compile: wait for `ready`
+      tell(line, booting, ping("early"));
+    });
+
+    const runtime = await booting.ready;
+    expect(tell(line, runtime, ping("a"))).toBe("queued");
+    await runtime.idle();
+    expect(runtime.getState().folded).toEqual(["a"]);
+    await runtime.stop();
+  });
+
+  it("on a run whose store is still loading, the booting handle does not compile and answers `no_cell`, and `ready`'s handle queues", async () => {
     let loaded = (): void => {};
     const loading = new Promise<void>((resolve) => {
       loaded = resolve;
@@ -278,6 +292,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
     };
     const booting = run(line, { store, interpret: { wait: async () => {} } });
 
+    // @ts-expect-error a booting handle does not compile: wait for `ready`
     expect(tell(line, booting, ping("early"))).toBe("no_cell");
 
     loaded();

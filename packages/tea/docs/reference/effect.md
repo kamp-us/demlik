@@ -16,11 +16,11 @@ import { … } from "@demlik/tea/effect";
 | [`CheckingSchema`](#CheckingSchema) | Type | stable | An Effect schema that checks a value and hands the same type on. |
 | [`Cmd`](#Cmd) | Type | stable | A Cmd value, as the core types it. |
 | [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds on the Effect engine. |
-| [`EffectBootingRun`](#EffectBootingRun) | Interface | stable | The handle `run` yields: an EffectBootingRuntime that also carries the run's line, which is what `tell` asks for. |
+| [`EffectBootingRun`](#EffectBootingRun) | Interface | stable | The handle `run` yields: an EffectBootingRuntime whose `ready` succeeds with an EffectRun. |
 | [`EffectBootingRuntime`](#EffectBootingRuntime) | Interface | stable | What the Effect engine's `run` yields while boot is in flight. |
 | [`EffectInterpret`](#EffectInterpret) | Type | stable | The Effect engine's `interpret` map: one cell per Cmd variant, each reading services within `R`. |
 | [`EffectInterpretCell`](#EffectInterpretCell) | Type | stable | One Effect `interpret` cell. |
-| [`EffectRun`](#EffectRun) | Interface | stable | What an EffectBootingRun's `ready` succeeds with: a booted EffectRuntime that still carries the run's line. |
+| [`EffectRun`](#EffectRun) | Interface | stable | What an EffectBootingRun's `ready` succeeds with: a booted EffectRuntime that also carries the run's line, which is what `tell` asks for. |
 | [`EffectRunner`](#EffectRunner) | Type | stable | One Effect sub runner: the Sub in, a `Stream` of Msgs out. |
 | [`EffectRunOptions`](#EffectRunOptions) | Type | stable | The options of the Effect engine's `run`. |
 | [`EffectRuntime`](#EffectRuntime) | Interface | stable | The Effect engine's booted handle. |
@@ -170,7 +170,7 @@ const Cmd: {
 ### `EffectBootingRun`
 
 ```ts
-interface EffectBootingRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err>, Postable<S, M> {
+interface EffectBootingRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -419,10 +419,11 @@ interface SpawnSteps<A, E = never, R = never> {
    * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with. A `tell` has nothing to handle, and a parent handle
-   * built by hand does not compile as its argument. A defect in this step, such
-   * as a `tell` on a handle cast past that type, is not observed by `spawn` and
-   * ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. Its argument is the
+   * handle the parent's `ready` gave: a parent handle built by hand, or one straight
+   * from `run`, does not compile. A defect in this step, such as a `tell` on a
+   * hand-built object cast past that type, is not observed by `spawn` and ends the
+   * fiber unseen.
    */
   readonly notify: Effect<unknown>;
   /**
@@ -509,7 +510,7 @@ function tell<
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: EffectBootingRun<S, M, E, Err>,
+  runtime: EffectRun<S, M, E, Err>,
   msg: NoInfer<M>,
 ): Effect<TellAnswer>
 ```

@@ -124,25 +124,25 @@ export interface EffectRuntime<
 }
 
 /**
- * The handle `run` yields: an {@link EffectBootingRuntime} that also carries the
- * run's line, which is what `tell` asks for. A spread keeps the line. An object
- * built by hand cannot have one, because tea does not export its key, so an
- * {@link EffectBootingRuntime} that is not one of these does not compile as
- * `tell`'s argument.
+ * The handle `run` yields: an {@link EffectBootingRuntime} whose `ready` succeeds
+ * with an {@link EffectRun}. It does not compile as `tell`'s argument: wait for
+ * `ready`.
  */
 export interface EffectBootingRun<
   S,
   M extends { type: string },
   E extends { type: string } = never,
   Err = never,
-> extends EffectBootingRuntime<S, M, E, Err>,
-    Postable<S, M> {
+> extends EffectBootingRuntime<S, M, E, Err> {
   readonly ready: Effect.Effect<EffectRun<S, M, E, Err>, Err | StoreFailed>;
 }
 
 /**
  * What an {@link EffectBootingRun}'s `ready` succeeds with: a booted
- * {@link EffectRuntime} that still carries the run's line. It fits anywhere an
+ * {@link EffectRuntime} that also carries the run's line, which is what `tell`
+ * asks for. A spread keeps the line. An object built by hand cannot have one,
+ * because tea does not export its key, so an {@link EffectRuntime} that is not one
+ * of these does not compile as `tell`'s argument. It fits anywhere an
  * `EffectRuntime` is asked for.
  */
 export interface EffectRun<

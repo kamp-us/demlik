@@ -13,7 +13,7 @@ import { Effect, Exit, Scope } from "effect";
 import type { TellAnswer } from "../internal/engine/loop";
 import { tellRun } from "../internal/engine/tell";
 import type { Cmd, Machine, Sub } from "../pure/core";
-import type { EffectBootingRun } from "./handle";
+import type { EffectRun } from "./handle";
 
 /**
  * Put `msg` on a run's line and answer at once. The answer means queued, not
@@ -26,13 +26,13 @@ import type { EffectBootingRun } from "./handle";
  * already in line have not folded yet, so a Msg that only a queued one makes
  * acceptable answers `"no_cell"`.
  *
- * `runtime` is what `run` yielded, what its `ready` succeeded with, or a spread of
- * either. Those carry the run's line, and the type asks for it, so an
- * `EffectRuntime` built by hand is a compile error. A handle still booting has no
- * State yet, so it answers `"no_cell"`.
+ * `runtime` is what `ready` succeeded with, or a spread of it. Those carry the
+ * run's line, and the type asks for it, so an `EffectRuntime` built by hand is a
+ * compile error. So is the handle `run` yielded, with a store or without one: wait
+ * for `ready`.
  *
- * `tell` carries no failure in its type. A cast past the handle's type has no line
- * to put a Msg on, and `tell` dies with a defect there.
+ * `tell` carries no failure in its type. A hand-built object cast past the type
+ * has no line to put a Msg on, and `tell` dies with a defect there.
  *
  * What happens after `"queued"` is the receiver's. Two `tell`s from one sender
  * fold in the order they were sent. A failed save or a cell's failure goes to
@@ -59,7 +59,7 @@ export const tell = <
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: EffectBootingRun<S, M, E, Err>,
+  runtime: EffectRun<S, M, E, Err>,
   msg: NoInfer<M>,
 ): Effect.Effect<TellAnswer> =>
   Effect.sync(() => tellRun<S, M>(machine, runtime, msg));
@@ -92,10 +92,11 @@ export interface SpawnSteps<A, E = never, R = never> {
    * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with. A `tell` has nothing to handle, and a parent handle
-   * built by hand does not compile as its argument. A defect in this step, such
-   * as a `tell` on a handle cast past that type, is not observed by `spawn` and
-   * ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. Its argument is the
+   * handle the parent's `ready` gave: a parent handle built by hand, or one straight
+   * from `run`, does not compile. A defect in this step, such as a `tell` on a
+   * hand-built object cast past that type, is not observed by `spawn` and ends the
+   * fiber unseen.
    */
   readonly notify: Effect.Effect<unknown>;
 }

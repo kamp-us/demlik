@@ -180,11 +180,11 @@ Reference: [`replay`](./reference/tea.md#replay). Why:
 The function that starts a machine on an engine. It takes the machine and the
 `ctx`, `interpret`, `subscribe` and `store` the machine needs, and returns a
 handle that is still booting. Each engine exports its own. `run` from
-`@demlik/tea/promise` returns a `BootingRun`, a `BootingRuntime` that `tell`
-takes; `run` from `@demlik/tea/effect` returns an Effect that yields an
-`EffectBootingRun`, an `EffectBootingRuntime` that `tell` takes.
+`@demlik/tea/promise` returns a `BootingRun`, a `BootingRuntime` whose `ready`
+gives a `Run`; `run` from `@demlik/tea/effect` returns an Effect that yields an
+`EffectBootingRun`, an `EffectBootingRuntime` whose `ready` gives an `EffectRun`.
 On both, the handle has `dispatch` and `stop`, and its `ready` gives the
-runtime.
+runtime. `tell` takes the runtime, not this handle.
 Reference: [`run` on the Promise engine](./reference/promise.md#run),
 [`run` on the Effect engine](./reference/effect.md#run),
 [`BootingRun`](./reference/promise.md#BootingRun) and

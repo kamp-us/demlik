@@ -339,12 +339,11 @@ You do not guard any of these in host code.
   is not. `"no_cell"` means the receiver's current State has no cell for it, so
   it is not. Tuval sent a notice the parent no longer took and logged an error
   per spawn ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
-- **`tell` takes only a handle that came from `run`.** That is an `EffectRun`
-  from `ready`, an `EffectBootingRun` from `run`, or a spread of either (`Run`
-  and `BootingRun` on the Promise engine). They carry the run's line, and the
+- **`tell` takes only the handle `ready` gives.** That is an `EffectRun`, or a
+  spread of one (`Run` on the Promise engine). It carries the run's line, and the
   type asks for it. An `EffectRuntime` built by hand does not compile as `tell`'s
-  argument, so a `notify` cannot lose its notice to one. A handle still booting
-  has no State yet, so it answers `"no_cell"`.
+  argument, so a `notify` cannot lose its notice to one. The handle straight from
+  `run` does not compile either, with a store or without one. Wait for `ready`.
 - **Two `tell`s from one sender fold in the order they were sent.**
 - **A Msg whose cell is gone by its turn is dropped without a word.** It does
   not end the process, with or without an `onError`.
@@ -353,10 +352,10 @@ You do not guard any of these in host code.
 
 Four things stay yours:
 
-- **A cast past `tell`'s type loses the notice.** A cast handle has no line. On
-  it, `tell` throws on the Promise engine and dies with a defect on the Effect
-  engine. This is the one way `tell` fails. In `notify`, that defect ends the
-  fiber unseen, so the parent is never told.
+- **A cast past `tell`'s type can lose the notice.** A hand-built object cast
+  past it has no line. On it, `tell` throws on the Promise engine and dies with a
+  defect on the Effect engine. This is the one way `tell` fails. In `notify`, that
+  defect ends the fiber unseen, so the parent is never told.
 - **`"no_cell"` reads the State as it is now.** Msgs already on the line have
   not folded yet. A Msg that only a queued one makes acceptable answers
   `"no_cell"`, so wait for the first one's result before sending the second.

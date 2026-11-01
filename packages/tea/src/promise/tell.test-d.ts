@@ -1,7 +1,7 @@
 // Type-level test for #639 and #782: `tell` on the Promise engine answers with
-// one of three words and nothing else, and it takes only a handle that came from
-// `run`. Compiled by `pnpm typecheck`; every `@ts-expect-error` must sit on a
-// line that fails.
+// one of three words and nothing else, and it takes only the handle `ready` gives,
+// or a spread of one. Compiled by `pnpm typecheck`; every `@ts-expect-error` must
+// sit on a line that fails.
 
 import {
   type LineMsg,
@@ -21,23 +21,29 @@ declare const fromReady: Run<LineState, LineMsg>;
 const answer: TellAnswer = tell(line, fromReady, ping("a"));
 const words: "queued" | "stopped" | "no_cell" = answer;
 
-// A handle from `run`, a handle from `ready`, and a spread of either.
+// A handle from `ready`, and a spread of one.
 const handlers = { interpret: { wait: async () => {} } };
-tell(line, run(line, handlers), ping("a"));
 tell(line, await run(line, handlers).ready, ping("a"));
-tell(line, fromRun, ping("a"));
-tell(line, { ...fromRun }, ping("a"));
 tell(line, { ...fromReady }, ping("a"));
 const wrapped = { ...fromReady, label: "wrapped" };
 tell(line, wrapped, ping("a"));
 
+// @ts-expect-error a booting handle does not compile: wait for `ready`
+tell(line, run(line, handlers), ping("a"));
+
+// @ts-expect-error a booting handle does not compile: wait for `ready`
+tell(line, fromRun, ping("a"));
+
+// @ts-expect-error a spread of a booting handle does not compile either
+tell(line, { ...fromRun }, ping("a"));
+
 // @ts-expect-error `noopRuntime` has no line
 tell(line, noopRuntime<LineState, LineMsg>(), ping("a"));
 
-// @ts-expect-error a `Runtime` not known to come from `run` has no line
+// @ts-expect-error a `Runtime` not known to come from `ready` has no line
 tell(line, booted, ping("a"));
 
-// @ts-expect-error a `BootingRuntime` not known to come from `run` has no line
+// @ts-expect-error a booting handle does not compile: wait for `ready`
 tell(line, booting, ping("a"));
 
 const handBuilt: Runtime<LineState, LineMsg> = {

@@ -12,12 +12,12 @@ import { … } from "@demlik/tea/promise";
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`BootingRun`](#BootingRun) | Interface | stable | The handle `run` returns: a BootingRuntime that also carries the run's line, which is what `tell` asks for. |
+| [`BootingRun`](#BootingRun) | Interface | stable | The handle `run` returns: a BootingRuntime whose `ready` resolves to a Run. |
 | [`driveToDone`](#driveToDone) | Function | stable | Drive a machine from `start` to its terminal State in one call, then tear the runtime down. |
 | [`DriveToDoneOptions`](#DriveToDoneOptions) | Type | stable | Options for `driveToDone`. |
 | [`PromiseRunOptions`](#PromiseRunOptions) | Type | stable | The options of the Promise engine's `run`. |
 | [`run`](#run) | Function | stable | Start a machine on the Promise engine and return its runtime. |
-| [`Run`](#Run) | Interface | stable | What a BootingRun's `ready` resolves to: a booted Runtime that still carries the run's line. |
+| [`Run`](#Run) | Interface | stable | What a BootingRun's `ready` resolves to: a booted Runtime that also carries the run's line, which is what `tell` asks for. |
 | [`tell`](#tell) | Function | stable | Put `msg` on a run's line and return at once. |
 | [`TellAnswer`](#TellAnswer) | Type | stable | What `tell` answers, at once, about the Msg it was handed. |
 
@@ -28,7 +28,7 @@ import { … } from "@demlik/tea/promise";
 ### `BootingRun`
 
 ```ts
-interface BootingRun<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E>, Postable<S, M> {
+interface BootingRun<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E> {
   /**
    * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
    * the boot error). This is the ONLY way to obtain a `Runtime` — and a
@@ -204,7 +204,7 @@ function tell<
   E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  runtime: BootingRun<S, M, E>,
+  runtime: Run<S, M, E>,
   msg: NoInfer<M>,
 ): TellAnswer
 ```

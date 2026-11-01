@@ -343,7 +343,28 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
     );
   });
 
-  it("answers `no_cell` on a handle still booting, and takes the Msg once `ready` has run", async () => {
+  it("on a run with no store, the booting handle does not compile and `ready`'s handle queues", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make();
+        const booting = yield* run(line, {
+          interpret: { wait: () => Effect.succeed([] as readonly LineMsg[]) },
+        }).pipe(Scope.provide(scope));
+        void (() => {
+          // @ts-expect-error a booting handle does not compile: wait for `ready`
+          tell(line, booting, ping("early"));
+        });
+
+        const runtime = yield* booting.ready;
+        expect(yield* tell(line, runtime, ping("a"))).toBe("queued");
+        yield* runtime.idle();
+        expect(runtime.getState().folded).toEqual(["a"]);
+        yield* Scope.close(scope, Exit.void);
+      }),
+    );
+  });
+
+  it("on a run whose store is still loading, the booting handle does not compile and answers `no_cell`, and `ready`'s handle queues", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const scope = yield* Scope.make();
@@ -360,6 +381,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           interpret: { wait: () => Effect.succeed([] as readonly LineMsg[]) },
         }).pipe(Scope.provide(scope));
 
+        // @ts-expect-error a booting handle does not compile: wait for `ready`
         expect(yield* tell(line, booting, ping("early"))).toBe("no_cell");
 
         yield* Deferred.succeed(loading, undefined);
@@ -395,9 +417,9 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
   });
 });
 
-// The handle `tell` takes is one that came from `run`, as on the Promise engine.
+// The handle `tell` takes is the booted one, as on the Promise engine.
 declare const booting: EffectBootingRuntime<LineState, LineMsg>;
 void (() => {
-  // @ts-expect-error a booting handle not known to come from `run` has no line
+  // @ts-expect-error a booting handle does not compile: wait for `ready`
   tell(line, booting, ping("a"));
 });

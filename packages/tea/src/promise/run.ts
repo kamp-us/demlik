@@ -130,24 +130,23 @@ export type PromiseRunOptions<
   };
 
 /**
- * The handle `run` returns: a {@link BootingRuntime} that also carries the run's
- * line, which is what `tell` asks for. A spread keeps the line. An object built
- * by hand cannot have one, because tea does not export its key, so a
- * {@link BootingRuntime} that is not one of these does not compile as `tell`'s
- * argument.
+ * The handle `run` returns: a {@link BootingRuntime} whose `ready` resolves to a
+ * {@link Run}. It does not compile as `tell`'s argument: wait for `ready`.
  */
 export interface BootingRun<
   S,
   M extends { type: string },
   E extends { type: string } = never,
-> extends BootingRuntime<S, M, E>,
-    Postable<S, M> {
+> extends BootingRuntime<S, M, E> {
   ready: Promise<Run<S, M, E>>;
 }
 
 /**
  * What a {@link BootingRun}'s `ready` resolves to: a booted {@link Runtime} that
- * still carries the run's line. It fits anywhere a `Runtime` is asked for.
+ * also carries the run's line, which is what `tell` asks for. A spread keeps the
+ * line. An object built by hand cannot have one, because tea does not export its
+ * key, so a {@link Runtime} that is not one of these does not compile as `tell`'s
+ * argument. It fits anywhere a `Runtime` is asked for.
  */
 export interface Run<
   S,
