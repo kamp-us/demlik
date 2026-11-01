@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { sourceUnit } from "../test-helpers/source-unit.js";
 
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+
 const syntaxOf = (text: string) => sourceUnit(text).syntax;
 
 describe("lineCount counts the lines a person counts", () => {
@@ -12,7 +14,7 @@ describe("lineCount counts the lines a person counts", () => {
     ["two lines with no final newline", "a\nb", 2],
     ["two lines ending in CRLF", "a\r\nb\r\n", 2],
     ["two lines ending in CR", "a\rb\r", 2],
-    ["two lines ending in a line separator", "a b ", 2],
+    ["two lines ending in a line separator", `a${LINE_SEPARATOR}b${LINE_SEPARATOR}`, 2],
     ["only a newline", "\n", 1],
     ["blank lines at the end", "a\n\n\n", 3],
     ["blank lines at the end with CRLF", "a\r\n\r\n\r\n", 3],
