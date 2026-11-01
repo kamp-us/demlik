@@ -3,7 +3,7 @@
 // genuinely fails to type-check: if a setting that would break a runner's promise
 // ever comes back, the directive turns "unused" and `tsc` fails the package.
 
-import type * as fc from "fast-check";
+import * as fc from "fast-check";
 import type { Machine } from "../index";
 import {
   PropertyFailure,
@@ -41,10 +41,14 @@ propertyTrace(machine, {}, seqArb, () => true, {
   timeout: 1,
 });
 
-// `loaded` is a state, null, or an arbitrary of the machine's state.
+// `loaded` is a state, null, or an arbitrary of the machine's state that can
+// also draw null: what storage hands back on a fresh start.
 propertyTrace(machine, {}, seqArb, () => true, { loaded: { type: "idle" } });
 propertyTrace(machine, {}, seqArb, () => true, { loaded: null });
 propertyTrace(machine, {}, seqArb, () => true, { loaded: stateArb });
+propertyTrace(machine, {}, seqArb, () => true, {
+  loaded: fc.oneof(fc.constant(null), stateArb),
+});
 propertyTrace(machine, {}, seqArb, () => true, {
   // @ts-expect-error an arbitrary of something that is not the machine's state
   loaded: otherArb,

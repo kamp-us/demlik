@@ -192,8 +192,8 @@ interface PropertyRun {
   readonly numShrinks: number;
   /**
    * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
-   * that one failure. `null` when no list failed: on a pass, or an interrupt
-   * marked as a failure.
+   * that one failure. `null` when no list failed: on a pass, on an interrupt
+   * marked as a failure, or when too many `fc.pre` skips fail the run.
    */
   readonly path: string | null;
   /** The seed this run drew from. Pass it back as `seed` to draw the same lists. */

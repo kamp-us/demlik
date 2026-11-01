@@ -9,6 +9,7 @@ import {
   propertyTerminates,
   propertyTrace,
 } from "./property";
+import { foldEvents } from "./replay-fold";
 
 // A machine that lands a proved head, restarted from whatever storage hands
 // back. `land` lands the state's `proof`, so a saved state whose proof names
@@ -221,6 +222,24 @@ describe("a fixed loaded, null, and no loaded", () => {
     );
   });
 
+  it("boot fresh from a drawn null, beside the drawn states", () => {
+    const seen = new Set<string>();
+    propertyTrace(
+      trusting,
+      {},
+      arbMsgSequence(msgArb, { minLength: 1, maxLength: 5 }),
+      (steps) => {
+        seen.add(JSON.stringify(steps[0]?.prev));
+        return true;
+      },
+      { loaded: fc.constantFrom<State | null>(null, GOOD_STATE), seed: 1 },
+    );
+
+    expect(seen).toEqual(
+      new Set([JSON.stringify({ type: "idle" }), JSON.stringify(GOOD_STATE)]),
+    );
+  });
+
   it("reads a saved state that merely has a generate field as a value", () => {
     const lookalike = {
       type: "landed",
@@ -301,16 +320,6 @@ describe("fast-check's parameters", () => {
     expect(unshrunk.run.numShrinks).toBe(0);
   });
 
-  it("errorWithCause puts the check's own error on the failure", () => {
-    const { cause } = failureOf(() =>
-      failingRun({ seed: 1, errorWithCause: true }),
-    );
-    expect(cause).toBeInstanceOf(Error);
-    expect((cause as Error).message).toContain(
-      "propertyTerminates: final state did not match terminal predicate",
-    );
-  });
-
   describe("interruptAfterTimeLimit", () => {
     const slow = () => {
       const until = Date.now() + 2;
@@ -335,6 +344,101 @@ describe("fast-check's parameters", () => {
       expect(failure.run.path).toBeNull();
     });
   });
+});
+
+// tea promises fast-check ^3 and ^4, and they keep the check's error in different
+// places. This file also runs with fast-check aliased to 4, so nothing below may
+// assume one major: each row is either `fc.assert`'s own answer or keyed on the
+// major that is actually loaded.
+describe("what the check threw", () => {
+  const MAJOR = Number(fc.__version.split(".")[0]);
+  const WHY = "the check said why";
+
+  const throwsOnLand = (s: State): void => {
+    if (s.type === "landed") throw new Error(WHY);
+  };
+
+  const viaAssert = (settings: Opts): Error => {
+    try {
+      fc.assert(
+        fc.property(seqArb, (msgs) => {
+          throwsOnLand(foldEvents(trusting, {}, GOOD_STATE, msgs).finalState);
+        }),
+        { numRuns: 200, seed: 1, ...settings },
+      );
+    } catch (error) {
+      return error as Error;
+    }
+    throw new Error("expected fc.assert to fail, and it passed");
+  };
+
+  const viaRunner = (settings: Opts): PropertyFailure =>
+    failureOf(() =>
+      propertyTrace(
+        trusting,
+        {},
+        seqArb,
+        (_steps, final) => {
+          throwsOnLand(final);
+          return true;
+        },
+        { loaded: GOOD_STATE, seed: 1, ...settings },
+      ),
+    );
+
+  // A report quotes a stack on some settings, and two call sites never share one.
+  const withoutStack = (message: string): string =>
+    message.split(/\n\s*at /)[0] ?? message;
+  const causeMessage = (error: Error): string | undefined =>
+    error.cause instanceof Error ? error.cause.message : undefined;
+
+  // Each major ignores the setting it does not know, so one table covers both.
+  const SETTINGS = [
+    ["the defaults", {}],
+    ["errorWithCause", { errorWithCause: true }],
+    ["includeErrorInReport", { includeErrorInReport: true }],
+    ["verbose", { verbose: 2 }],
+  ] as readonly (readonly [string, Opts])[];
+
+  it.each(
+    SETTINGS,
+  )("sits where fc.assert puts it, on %s", (_name, settings) => {
+    const expected = viaAssert(settings);
+    const actual = viaRunner(settings);
+
+    expect(withoutStack(actual.message)).toBe(withoutStack(expected.message));
+    expect("cause" in actual).toBe("cause" in expected);
+    expect(causeMessage(actual)).toBe(causeMessage(expected));
+  });
+
+  // The reason a runner fails must reach its caller however the major files it:
+  // losing this text is what a runner on 4 did before.
+  it.each(RUNNERS)("%s keeps its own explanation", (name, run) => {
+    const failure = failureOf(() =>
+      run(trusting, { loaded: BAD_STATE, seed: 1 }),
+    );
+
+    if (MAJOR >= 4) {
+      expect(failure.cause).toBeInstanceOf(Error);
+      expect(causeMessage(failure)).toContain(`${name}:`);
+    } else {
+      expect(failure.message).toContain(`${name}:`);
+    }
+  });
+
+  it.runIf(MAJOR < 4)("errorWithCause moves it to the cause on 3", () => {
+    const failure = viaRunner({ errorWithCause: true });
+    expect(causeMessage(failure)).toBe(WHY);
+  });
+
+  it.runIf(MAJOR >= 4)(
+    "includeErrorInReport moves it to the message on 4",
+    () => {
+      const failure = viaRunner({ includeErrorInReport: true } as Opts);
+      expect(failure.cause).toBeUndefined();
+      expect(failure.message).toContain(WHY);
+    },
+  );
 });
 
 describe("what a run hands back", () => {

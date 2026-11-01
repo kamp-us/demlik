@@ -47,9 +47,10 @@ interface PropertyOpts<S> extends ForwardedSettings {
   /**
    * Saved state passed to `machine.init(loaded, ctx)`. Default `null`. An
    * arbitrary draws one per run, and a failure's counterexample shows the drawn
-   * state beside the shrunk list.
+   * state beside the shrunk list. It can draw `null` as well, the nothing storage
+   * hands back on a fresh start, which boots the machine fresh.
    */
-  readonly loaded?: S | null | fc.Arbitrary<S>;
+  readonly loaded?: S | null | fc.Arbitrary<S | null>;
 }
 
 /** The `foldEvents` result a runner's `check` inspects. */
@@ -73,8 +74,8 @@ export interface PropertyRun {
   readonly seed: number;
   /**
    * Where the shrunk failure sits. Pass it back as `path`, with `seed`, to replay
-   * that one failure. `null` when no list failed: on a pass, or an interrupt
-   * marked as a failure.
+   * that one failure. `null` when no list failed: on a pass, on an interrupt
+   * marked as a failure, or when too many `fc.pre` skips fail the run.
    */
   readonly path: string | null;
 }
@@ -82,6 +83,9 @@ export interface PropertyRun {
 /**
  * Raised when a property fails. The message is fast-check's report, and
  * {@link PropertyFailure.run} holds the same {@link PropertyRun} a pass returns.
+ * What the check threw sits where `fc.assert` puts it on the installed fast-check:
+ * on 4, in `cause` by default and in the message with `includeErrorInReport`; on 3,
+ * in the message by default and in `cause` with `errorWithCause`.
  *
  * @example
  * ```ts
@@ -124,11 +128,11 @@ export class PropertyFailure extends Error {
  * keeps working where `instanceof` breaks: two copies of fast-check installed.
  */
 function isArbitrary<S>(
-  loaded: S | null | fc.Arbitrary<S> | undefined,
-): loaded is fc.Arbitrary<S> {
+  loaded: S | null | fc.Arbitrary<S | null> | undefined,
+): loaded is fc.Arbitrary<S | null> {
   if (typeof loaded !== "object" || loaded === null) return false;
   const { generate, shrink, canShrinkWithoutContext } = loaded as Partial<
-    fc.Arbitrary<S>
+    fc.Arbitrary<S | null>
   >;
   return (
     typeof generate === "function" &&
@@ -138,10 +142,33 @@ function isArbitrary<S>(
 }
 
 /**
+ * The settings that decide whether `fc.assert` puts a `cause` on its error. tea
+ * promises two majors of fast-check, and each knows only one of these: 3 reads
+ * `errorWithCause` (off by default) and 4 reads `includeErrorInReport` (a `cause`
+ * unless it is on).
+ */
+interface CauseSettings {
+  readonly errorWithCause?: boolean;
+  readonly includeErrorInReport?: boolean;
+}
+
+/**
+ * The `cause` `fc.assert` would attach to this failure. `runConfiguration` holds
+ * `errorWithCause` only on 3, so its absence is what says the rule is 4's.
+ */
+function causeOf<Ts>(details: fc.RunDetails<Ts>): ErrorOptions | undefined {
+  const { errorWithCause, includeErrorInReport }: CauseSettings =
+    details.runConfiguration;
+  return (errorWithCause ?? !includeErrorInReport)
+    ? { cause: details.errorInstance }
+    : undefined;
+}
+
+/**
  * Turn fast-check's details into what the caller sees: the {@link PropertyRun}
  * on a pass, a thrown {@link PropertyFailure} on a failure. `fc.check` never
- * throws by itself, and this keeps the report and the `cause` `fc.assert` gives.
- * fast-check's report is `undefined` exactly when nothing failed.
+ * throws by itself, and this keeps the report and the `cause` `fc.assert` gives
+ * on either major. fast-check's report is `undefined` exactly when nothing failed.
  */
 function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
   const run: PropertyRun = {
@@ -152,13 +179,7 @@ function settle<Ts>(details: fc.RunDetails<Ts>): PropertyRun {
   };
   const report = fc.defaultReportMessage(details);
   if (report === undefined) return run;
-  throw new PropertyFailure(
-    report,
-    run,
-    details.runConfiguration.errorWithCause
-      ? { cause: details.errorInstance }
-      : undefined,
-  );
+  throw new PropertyFailure(report, run, causeOf(details));
 }
 
 /**
