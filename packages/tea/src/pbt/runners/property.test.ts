@@ -843,3 +843,76 @@ describe("a reporter set through fc.configureGlobal", () => {
     expect(seen).toEqual([]);
   });
 });
+
+// A helper like `(seed?: number) => propertyTrace(..., { seed })` hands the runner
+// a key set to `undefined`. That key has to leave the global setting in place, as
+// the runners' old `opts?.seed !== undefined` did, and `fc.assert` with no such key
+// is the answer to match.
+describe("a setting left undefined under fc.configureGlobal", () => {
+  const before = fc.readConfigureGlobal();
+  afterEach(() => {
+    fc.resetConfigureGlobal();
+    fc.configureGlobal(before);
+  });
+
+  const NUM_RUNS = 20;
+
+  const viaAssert = (): readonly (readonly Msg[])[] => {
+    const lists: (readonly Msg[])[] = [];
+    fc.assert(
+      fc.property(seqArb, (msgs) => {
+        lists.push(msgs);
+      }),
+      { numRuns: NUM_RUNS },
+    );
+    return lists;
+  };
+  const viaRunner = (seed: number | undefined): readonly (readonly Msg[])[] => {
+    const lists: (readonly Msg[])[] = [];
+    propertyTrace(
+      trusting,
+      {},
+      seqArb,
+      (steps) => {
+        lists.push(steps.map((step) => step.msg));
+        return true;
+      },
+      { numRuns: NUM_RUNS, seed },
+    );
+    return lists;
+  };
+
+  it.each(SEEDS)("seed: undefined draws global seed %i's lists", (seed) => {
+    fc.configureGlobal({ seed });
+
+    const expected = viaAssert();
+    expect(viaRunner(undefined)).toEqual(expected);
+  });
+
+  it("a seed of its own still wins over the global one", () => {
+    fc.configureGlobal({ seed: 1 });
+    const fromGlobal = viaRunner(undefined);
+
+    fc.resetConfigureGlobal();
+    fc.configureGlobal({ seed: 2 });
+    expect(viaRunner(1)).toEqual(fromGlobal);
+  });
+
+  it("holds for any forwarded setting, not only seed", () => {
+    fc.configureGlobal({ endOnFailure: true });
+
+    const failure = failureOf(() =>
+      failingRun({ seed: 1, endOnFailure: undefined }),
+    );
+    expect(failure.run.numShrinks).toBe(0);
+  });
+
+  it("numRuns: undefined still defaults to 200, whatever is global", () => {
+    fc.configureGlobal({ numRuns: NUM_RUNS });
+
+    const run = propertyTerminates(trusting, {}, seqArb, () => true, {
+      numRuns: undefined,
+    });
+    expect(run.numRuns).toBe(200);
+  });
+});

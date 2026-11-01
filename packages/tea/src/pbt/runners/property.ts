@@ -259,6 +259,17 @@ function isArbitrary<S>(
 }
 
 /**
+ * Drop the settings set to `undefined`. fast-check lays what it is handed over the
+ * settings from `fc.configureGlobal` key by key, so a key holding `undefined` would
+ * throw the global one away, and a global `seed` would turn into a random one.
+ */
+function withoutUndefined<T extends object>(settings: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
+/**
  * The settings that decide whether `fc.assert` puts a `cause` on its error. tea
  * promises two majors of fast-check, and each knows only one of these: 3 reads
  * `errorWithCause` (off by default) and 4 reads `includeErrorInReport` (a `cause`
@@ -380,7 +391,10 @@ function runProperty<
 ): PropertyRun {
   const { loaded, failOnNeverActed, failOnUndeclaredCmd, ...settings } =
     opts ?? {};
-  const params = { ...settings, numRuns: settings.numRuns ?? 200 };
+  const params = {
+    ...withoutUndefined(settings),
+    numRuns: settings.numRuns ?? 200,
+  };
   const tally = new MsgTally(msgKeysOf(machine));
   const declared =
     failOnUndeclaredCmd && machine.cmds
