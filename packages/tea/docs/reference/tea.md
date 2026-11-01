@@ -876,9 +876,15 @@ class DisposeTimeoutNotice extends RuntimeDiscardNotice {
 
 ```ts
 class DrainTimeoutNotice extends RuntimeDiscardNotice {
-  constructor(cmdTypes: readonly string[], pendingCmds: number, timeoutMs: number);
+  constructor(
+    cmdTypes: readonly string[],
+    pendingCmds: number,
+    timeoutMs: number,
+    droppedMsgs?: Readonly<Record<string, number>>,
+  );
   readonly _tag: "DrainTimeoutNotice";
   readonly cmdTypes: readonly string[];
+  readonly droppedMsgs: Readonly<Record<string, number>>;
   readonly name: "DrainTimeoutNotice";
   readonly pendingCmds: number;
   readonly timeoutMs: number;

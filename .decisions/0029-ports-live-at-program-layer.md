@@ -92,7 +92,7 @@ the table of running machines, the route graph, wiring from config, finding a ma
 | [#325](https://github.com/kamp-us/demlik/issues/325#issuecomment-5808832579) round R1.1 | **Back to the original.** 0026 narrowed it to "can a host do it correctly itself". tea-program did both things 0026 said a host could not: one source for an input's declaration, listing and check (on the program), and a hand-over that does not wait (on the program's own lines). So tea does not grow to fit a host. |
 | "No registry" ([#312](https://github.com/kamp-us/demlik/issues/312), [#554](https://github.com/kamp-us/demlik/issues/554)) | **Stands.** |
 | [ADR 0020](./0020-tea-owns-no-dependency-injection.md), [ADR 0022](./0022-no-battery-layer-plain-functions.md) | **Stand.** |
-| [ADR 0025](./0025-stop-gives-up-on-handlers.md) | **Stands.** The Msgs a `stop()` drops behind a stuck handler are still unnamed: [#698](https://github.com/kamp-us/demlik/issues/698). |
+| [ADR 0025](./0025-stop-gives-up-on-handlers.md) | **Stands.** The Msgs a `stop()` drops behind a stuck handler are counted per type in its notice since [#698](https://github.com/kamp-us/demlik/issues/698). |
 
 **Binding constraints.**
 

@@ -214,12 +214,41 @@ export function loadEdgeProject(
   return { ...loadCheapProject(rootAbsolute, listing), tsConfigPath, scope };
 }
 
-export function findRepoRoot(start: string): string {
+// A folder's `package.json` declares workspaces. A manifest that cannot be read or parsed declares
+// nothing, so a broken file costs that folder its claim and never the walk.
+function declaresWorkspaces(dir: string): boolean {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readSource(path.join(dir, "package.json")));
+  } catch {
+    return false;
+  }
+  return typeof manifest === "object" && manifest !== null && "workspaces" in manifest;
+}
+
+// What makes a folder a repo root, strongest first. Each is searched over the whole walk before the
+// next is tried, so a `pnpm-workspace.yaml` far above outranks a `workspaces` key close by. `.git`
+// exists as a directory in a clone and as a file in a linked worktree.
+const REPO_ROOT_MARKS: readonly ((dir: string) => boolean)[] = [
+  (dir) => fs.existsSync(path.join(dir, "pnpm-workspace.yaml")),
+  declaresWorkspaces,
+  (dir) => fs.existsSync(path.join(dir, ".git")),
+];
+
+function nearestAncestor(start: string, marked: (dir: string) => boolean): string | null {
   let dir = start;
   for (;;) {
-    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
+    if (marked(dir)) return dir;
     const parent = path.dirname(dir);
-    if (parent === dir) return start;
+    if (parent === dir) return null;
     dir = parent;
   }
+}
+
+export function findRepoRoot(start: string): string {
+  for (const marked of REPO_ROOT_MARKS) {
+    const root = nearestAncestor(start, marked);
+    if (root !== null) return root;
+  }
+  return start;
 }
