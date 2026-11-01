@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { stableStringify } from "../render/json.js";
 import { diffPublishedApi } from "./diff.js";
+import { type ApiLedgerMode, runApiLedger } from "./ledger/gate.js";
 import { ApiInputError } from "./map.js";
 import { readChangesetsSince } from "./ratchet/changesets.js";
 import { bumpPolicy } from "./ratchet/policy.js";
@@ -30,14 +31,25 @@ export type ApiRun = {
   readonly report: (message: string) => void;
 };
 
-// The mode's three flags as the command line gave them.
+// The mode's flags as the command line gave them.
 export type ApiFlags = {
   readonly api?: string;
   readonly apiBase?: string;
   readonly apiPolicy?: string;
+  readonly acceptApi?: boolean;
+  readonly ci?: boolean;
+  readonly reason?: string;
 };
 
+type ApiHost = Omit<ApiRun, "mapFile" | "base" | "policyFile">;
 type ApiOutcome = { readonly payload: string; readonly code: number };
+
+// The flags the API ledger (SPEC §13.6) combines with; a base or a policy is the ratchet's input and
+// has no place in it.
+const LEDGER_COMPANIONS: ReadonlySet<string> = new Set([
+  ...["api", "ci", "acceptApi", "reason"],
+  ...["json", "pretty", "out"],
+]);
 
 function readJsonFile(file: string, what: string): unknown {
   let raw: string;
@@ -91,24 +103,14 @@ export const API_CRASH_EXIT = 3;
 const crashLine = (error: unknown): string =>
   `unexpected error: ${(error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").trim()}`;
 
-// A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
-// reading the map and policy files and refusing flags the mode does not take. Resolves to the exit
-// code: 0, 1 when the ratchet finds a miss, 2 on a refused input, and `API_CRASH_EXIT` on any other
-// error, so it never rejects and a crash never reads as Node's exit 1, the ratchet's miss.
-export async function runApiView(run: ApiRun): Promise<number> {
-  const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
-    run.report(
-      `--api takes only --api-base, --api-policy, --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
-    );
-    return 2;
-  }
-  if (run.policyFile !== undefined && run.base === undefined) {
-    run.report("--api-policy needs --api-base <rev>");
-    return 2;
-  }
+// Resolves to the exit code: `outcome`'s own, 2 on a refused input, and `API_CRASH_EXIT` on any
+// other error, so it never rejects and a crash never reads as Node's exit 1, a gate's miss.
+async function settle(
+  run: Pick<ApiRun, "emit" | "report">,
+  outcome: () => Promise<ApiOutcome>,
+): Promise<number> {
   try {
-    const { payload, code } = await outcomeOf(run);
+    const { payload, code } = await outcome();
     run.emit(payload);
     return code;
   } catch (error) {
@@ -121,20 +123,93 @@ export async function runApiView(run: ApiRun): Promise<number> {
   }
 }
 
+// A base or a policy names the ratchet's run, whose refusal of every other flag stands as it was.
+const ownCompanions = (run: ApiRun): string =>
+  run.base === undefined && run.policyFile === undefined
+    ? "--api-base, --api-policy, --ci, --accept-api, --json, --pretty and --out"
+    : "--api-base, --api-policy, --json, --pretty and --out";
+
+// A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
+// reading the map and policy files and refusing flags the mode does not take.
+export async function runApiView(run: ApiRun): Promise<number> {
+  const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
+  if (stray.length > 0) {
+    run.report(`--api takes only ${ownCompanions(run)}; got ${stray.map(flagOf).join(", ")}`);
+    return 2;
+  }
+  if (run.policyFile !== undefined && run.base === undefined) {
+    run.report("--api-policy needs --api-base <rev>");
+    return 2;
+  }
+  return settle(run, () => outcomeOf(run));
+}
+
+type LedgerModeRead =
+  | { readonly kind: "refused"; readonly message: string }
+  | { readonly kind: "mode"; readonly mode: ApiLedgerMode };
+
+const refused = (message: string): LedgerModeRead => ({
+  kind: "refused",
+  message: `${message}; nothing was written.`,
+});
+
+// What the flags ask of the API ledger, decided before any file is read.
+function ledgerModeOf(flags: ApiFlags, given: readonly string[]): LedgerModeRead {
+  const stray = given.filter((attribute) => !LEDGER_COMPANIONS.has(attribute));
+  if (stray.length > 0) {
+    return refused(
+      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
+    );
+  }
+  if (flags.acceptApi !== true) {
+    return flags.reason === undefined
+      ? { kind: "mode", mode: { kind: "check" } }
+      : refused("--reason only rides `--api --accept-api`");
+  }
+  if (flags.ci === true) return refused("pass one of --ci, --accept-api with --api");
+  const reason = flags.reason?.trim() ?? "";
+  if (reason === "") return refused('`--accept-api` needs a non-empty `--reason "<why>"`');
+  return { kind: "mode", mode: { kind: "accept", reason } };
+}
+
+function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promise<number> {
+  const read = ledgerModeOf(flags, host.given);
+  if (read.kind === "refused") {
+    host.report(read.message);
+    return Promise.resolve(2);
+  }
+  return settle(host, () =>
+    runApiLedger({
+      rootAbsolute: host.rootAbsolute,
+      map: readJsonFile(mapFile, "API map"),
+      mode: read.mode,
+      json: host.json,
+      pretty: host.pretty,
+    }),
+  );
+}
+
+const asksForLedger = (flags: ApiFlags): boolean =>
+  (flags.ci === true || flags.acceptApi === true) &&
+  flags.apiBase === undefined &&
+  flags.apiPolicy === undefined;
+
 // The command line's entry to the mode: `null` when none of its flags is given, so every other
-// mode runs as before; otherwise the run's exit code. `--api-base` and `--api-policy` without
-// `--api` are refused here (SPEC §13.6).
-export function runApiFlags(
-  flags: ApiFlags,
-  host: Omit<ApiRun, "mapFile" | "base" | "policyFile">,
-): Promise<number> | null {
+// mode runs as before; otherwise the run's exit code. `--api-base`, `--api-policy` and
+// `--accept-api` without `--api` are refused here (SPEC §13.6).
+export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | null {
   if (flags.api !== undefined) {
+    if (asksForLedger(flags)) return runLedgerFlags(flags.api, flags, host);
     return runApiView({
       ...host,
       mapFile: flags.api,
       base: flags.apiBase,
       policyFile: flags.apiPolicy,
     });
+  }
+  if (flags.acceptApi === true) {
+    host.report("--accept-api needs --api <map>; nothing was written.");
+    return Promise.resolve(2);
   }
   if (flags.apiBase === undefined && flags.apiPolicy === undefined) return null;
   host.report(

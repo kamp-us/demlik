@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { API_LEDGER_FILENAME } from "../api/ledger/ledger.js";
 import { type FiveGateRepo, fiveGateRepo, LEDGER_FILES } from "../test-helpers/five-gate-repo.js";
 import { runCli } from "../test-helpers/ratchet-repo.js";
 
@@ -119,9 +120,28 @@ describe("a command that names several gates is refused", () => {
   });
 
   it("keeps the --api refusal its own", () => {
-    const run = runCli([repo.app, "--api", "map.json", "--layers", "--comments", "--ci"]);
+    const run = runCli([repo.app, "--api", "map.json", "--layers", "--comments"]);
     expect(run.code).toBe(2);
     expect(run.stderr).toContain("--api takes only");
+  });
+
+  it.each([
+    ["--api --ci", ["--ci"]],
+    ["--api --accept-api", ["--accept-api", "--reason", "kept"]],
+  ])("refuses every gate beside the API ledger's %s", (_form, ledgerFlags) => {
+    const map = path.join(repo.top, "api-map.json");
+    fs.writeFileSync(map, JSON.stringify({ ".": { entry: "src/commented.ts" } }));
+    for (const name of GATE_NAMES) {
+      const before = repo.ledgers();
+      const run = runCli([repo.app, "--api", map, ...ledgerFlags, ...repo.gates[name]]);
+      expect(run.code, name).toBe(2);
+      expect(run.stdout, name).toBe("");
+      expect(run.stderr.trimEnd().split("\n"), name).toHaveLength(1);
+      expect(run.stderr, name).toContain("--api --ci and --api --accept-api take only");
+      expect(run.stderr, name).toContain(`--${name}`);
+      expect(repo.ledgers(), name).toEqual(before);
+      expect(fs.existsSync(path.join(repo.top, API_LEDGER_FILENAME)), name).toBe(false);
+    }
   });
 });
 

@@ -525,7 +525,7 @@ exit 0
         "./platform"
       ],
       "isTest": false,
-      "loc": 12,
+      "loc": 11,
       "smells": []
     },
     {
@@ -549,7 +549,7 @@ exit 0
         "drizzle-orm"
       ],
       "isTest": false,
-      "loc": 8,
+      "loc": 7,
       "smells": []
     },
     {
@@ -572,7 +572,7 @@ exit 0
         "./platform"
       ],
       "isTest": false,
-      "loc": 16,
+      "loc": 15,
       "smells": []
     },
     {
@@ -596,7 +596,7 @@ exit 0
         "./platform"
       ],
       "isTest": false,
-      "loc": 21,
+      "loc": 20,
       "smells": []
     }
   ],
@@ -649,7 +649,7 @@ exit 0
     "parseFailures": [],
     "smellCount": 0,
     "totalCommentLines": 0,
-    "totalLoc": 57
+    "totalLoc": 53
   },
   "summary": {
     "fileCount": 4,

@@ -17,6 +17,7 @@ title, so renaming an arc cannot silently repoint it.
 | Arc | Milestone | State | What it covers |
 |---|---|---|---|
 | Kernel hardening | #1 | active | The reducer/runtime kernel and its host adapters — the surfaces `src/` already ships behind the kernel export tier. The v0.6 release lands the two-engine split (epic #273): the neutral core at `@demlik/tea`, the Promise engine at `./promise`, the Effect engine at `./effect`, with DI and the battery layer removed. |
+| Code-graph hardening | #8 | queued | Non-urgent gaps in `@demlik/code-graph`, about half of them in its `--boundaries` rules, that the active campaigns do not admit. Takes p2 work, and the kernel stays the active arc. |
 
 ## Campaigns
 

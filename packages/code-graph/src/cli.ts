@@ -55,6 +55,7 @@ export type Opts = {
   api?: string;
   apiBase?: string;
   apiPolicy?: string;
+  acceptApi?: boolean;
 };
 
 export function cleanExit(message: string): void {
@@ -158,7 +159,10 @@ function analysisOptions(command: Command): Command {
 
 function featureOptions(command: Command): Command {
   return command
-    .option("--layers", "layer gate: every import edge pointing UP the declared layer stack")
+    .option(
+      "--layers",
+      "layer gate: every import edge that points up the declared layer stack or leaves a layer's `imports`",
+    )
     .option(
       "--layer-rules <file>",
       "JSON file declaring the layer stack and allowlist (required by --layers)",
@@ -173,7 +177,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--reason <text>",
-      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay",
+      "with --boundaries --accept-crossings: why these crossings stay; with --unreachable --accept-dead: why these unreachable exports stay; with --accept-smells: why these smells stay; with --api --accept-api: why these public names are published",
     )
     .option(
       "--migrate-ceilings",
@@ -213,7 +217,11 @@ function apiOptions(command: Command): Command {
   return command
     .option(
       "--api <map>",
-      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --api-policy, --json, --pretty and --out',
+      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --api-policy, --ci, --accept-api, --json, --pretty and --out. With --ci, gates the published names against api-ledger.json at the repo root instead of gating smells, with no git base: fails on a name the ledger does not hold for this scope, and prunes this scope\'s entries whose name is gone',
+    )
+    .option(
+      "--accept-api",
+      'with --api: add every published name api-ledger.json does not hold yet for this scope (entries keyed by scope, subpath and name), each carrying --reason "<why>" (required); not with --ci',
     )
     .option(
       "--api-policy <file>",
