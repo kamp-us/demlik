@@ -105,6 +105,12 @@ const differing = (before: readonly string[], after: readonly string[]) =>
  */
 const TS_EXTENSION = /\.[cm]?tsx?$/;
 
+/**
+ * A file a move across a package line reads for importers. JavaScript counts here whatever the
+ * tsconfig says, since `next.config.mjs` breaks as surely as a `.ts` file on a stale import.
+ */
+const MODULE_EXTENSION = /\.[cm]?[jt]sx?$/;
+
 /** Old paths still written as text somewhere — a string a move cannot rewrite, for a human to read. */
 function staleRefs(repoRoot: string, moved: readonly PathMove[]): string[] {
   const hits = new Set<string>();
@@ -409,10 +415,10 @@ function isOtherFile(path: string): boolean {
  * names the path its text was read from, so apply can check git tracks it before committing.
  *
  * With a `workspace` — a manifest moving a file across a package line — the project also holds
- * every workspace package with an importer of a moved file, and each import the move touched is
- * rewritten to match its ends' packages (`rewriteCrossings`). An import no `exports` entry carries
- * across, and an import a row touches that apply cannot follow to a file, throw before anything is
- * written.
+ * every workspace package with an importer of a moved file, its tracked JavaScript included, and
+ * each import the move touched is rewritten to match its ends' packages (`rewriteCrossings`). An
+ * import no `exports` entry carries across, and an import a row touches that apply cannot follow to
+ * a file, throw before anything is written.
  */
 function planRewrite(
   repoRoot: string,
@@ -444,7 +450,11 @@ function planRewrite(
       .map((p) => join(repoRoot, p))
       .filter((p) => existsSync(p));
     for (const file of [
-      ...importerPackageSources(trackedSources(repoRoot), rows, trees.before),
+      ...importerPackageSources(
+        trackedMatching(repoRoot, MODULE_EXTENSION),
+        rows,
+        trees.before,
+      ),
       ...endpoints,
     ])
       if (project.getSourceFile(file) === undefined)
@@ -604,9 +614,13 @@ function untrackedEdits(
     .sort();
 }
 
-function trackedSources(repoRoot: string, scope?: string): string[] {
+function trackedMatching(
+  repoRoot: string,
+  extension: RegExp,
+  scope?: string,
+): string[] {
   return trackedPaths(repoRoot, "index", scope)
-    .filter((p) => TS_EXTENSION.test(p) && existsSync(join(repoRoot, p)))
+    .filter((p) => extension.test(p) && existsSync(join(repoRoot, p)))
     .map((p) => join(repoRoot, p));
 }
 
@@ -685,7 +699,8 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
 
   const rows = pending.length > 0 ? pending : renamedAtHead(repoRoot, set);
   const owed =
-    rows.length > 0 || hasDangling(trackedSources(repoRoot, set.scope), moved);
+    rows.length > 0 ||
+    hasDangling(trackedMatching(repoRoot, TS_EXTENSION, set.scope), moved);
   const rewrite = owed
     ? planRewrite(
         repoRoot,
