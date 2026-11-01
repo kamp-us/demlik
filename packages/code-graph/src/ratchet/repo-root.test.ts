@@ -291,6 +291,44 @@ describe(
       expect(unreachableCi(top).code).toBe(0);
     });
 
+    it("covers an unused-export the root measures on a package's test-only entry", () => {
+      // A test names `leaf` without importing it, so `c` alone reads it as test-only. The root reaches
+      // it from `b`'s public entry, and a name in a test is not a use, so the root reads it as unused.
+      write({
+        "packages/c/src/lone.ts":
+          "export function lone(n: number): number {\n  return leaf(n);\n}\n\nexport function leaf(n: number): number {\n  return n + 4;\n}\n",
+        "packages/c/src/other.test.ts":
+          'import { vi } from "vitest";\n\nvi.mock("./lone.js", () => ({ leaf: () => 1 }));\n',
+        "packages/b/package.json": '{ "name": "b", "private": true, "main": "src/api.ts" }\n',
+        "packages/b/src/api.ts":
+          'import { lone } from "../../c/src/lone.js";\n\nexport function api(n: number): number {\n  return lone(n);\n}\n',
+      });
+      for (const name of PACKAGES) {
+        expect(
+          runCli([at("packages", name), "--unreachable", "--accept-dead", "--reason", "x"]).code,
+        ).toBe(0);
+      }
+      const ledger = fs.readFileSync(at("unreachable-ledger.json"), "utf8");
+      expect(JSON.parse(ledger).entries).toContainEqual(
+        expect.objectContaining({
+          scope: "packages/c",
+          kind: "only-called-from-tests",
+          id: "src/lone.ts:leaf",
+        }),
+      );
+      const measured = JSON.parse(runCli([top, "--unreachable", "--json"]).stdout);
+      expect(measured.unusedExports).toContainEqual(
+        expect.objectContaining({ id: "packages/c/src/lone.ts:leaf" }),
+      );
+
+      for (let round = 0; round < 2; round++) {
+        for (const root of [...PACKAGES.map((name) => at("packages", name)), top]) {
+          expect(unreachableCi(root).code).toBe(0);
+        }
+        expect(fs.readFileSync(at("unreachable-ledger.json"), "utf8")).toBe(ledger);
+      }
+    });
+
     it("reads an entry the root run recorded from a package run", () => {
       expect(runCli([top, "--unreachable", "--accept-dead", "--reason", "x"]).code).toBe(0);
       expect(unreachableCi(top).code).toBe(0);

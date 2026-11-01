@@ -134,17 +134,25 @@ function repoSymbol(finding: UnreachableFinding): string {
   return path.posix.join(finding.scope, finding.id);
 }
 
+// How much use of a symbol each kind says a run saw: nothing, a name in a test, a production path.
+const USE_SEEN: Readonly<Record<UnreachableFindingKind, number>> = {
+  dead: 0,
+  "only-called-from-tests": 1,
+  [UNUSED_EXPORT]: 2,
+};
+
 // Whether an entry records a finding of the same symbol. The same kind always does, and within one
-// scope nothing else does. Across two scopes a wider run sees every caller a narrower run sees and
-// more, so a narrower `dead` can be anything wider: `packages/a` measures `dead` where the root, seeing
-// a test in `packages/b`, measures `only-called-from-tests`. Any other narrower kind means that run saw
-// a caller or a use the wider run sees too, so a split there is a code change and does not count. Two
-// scopes naming one symbol both hold its file, so one sits inside the other.
+// scope nothing else does. Across two scopes a wider run sees all a narrower run sees and more, so it
+// can only measure more use: `packages/a` measures `dead` where the root, seeing a test in `packages/b`,
+// measures `only-called-from-tests`, and `only-called-from-tests` where the root, seeing a path from
+// `packages/b`, measures `unused-export`. A wider run measuring less use is a code change and does not
+// count. Two scopes naming one symbol both hold its file, so one sits inside the other.
 function covers(entry: UnreachableLedgerEntry, finding: UnreachableFinding): boolean {
   if (entry.kind === finding.kind) return true;
   if (entry.scope === finding.scope) return false;
   const entryIsNarrower = finding.scope === "." || entry.scope.startsWith(`${finding.scope}/`);
-  return (entryIsNarrower ? entry : finding).kind === "dead";
+  const [narrower, wider] = entryIsNarrower ? [entry, finding] : [finding, entry];
+  return USE_SEEN[narrower.kind] < USE_SEEN[wider.kind];
 }
 
 function entriesBySymbol(

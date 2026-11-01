@@ -140,7 +140,7 @@ describe("reconcileUnreachable", () => {
       ["dead", "unused-export", true],
       ["only-called-from-tests", "dead", false],
       ["only-called-from-tests", "only-called-from-tests", true],
-      ["only-called-from-tests", "unused-export", false],
+      ["only-called-from-tests", "unused-export", true],
       ["unused-export", "dead", false],
       ["unused-export", "only-called-from-tests", false],
       ["unused-export", "unused-export", true],

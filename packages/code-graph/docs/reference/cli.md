@@ -445,16 +445,19 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   record, and lists each one. It never fails on an entry whose finding is gone: it
   rewrites the ledger without that entry and prints it, so the ledger only shrinks.
 - A finding counts as recorded when an entry in any scope names the same symbol at
-  the same kind, or an entry of another scope names the same symbol and the
-  narrower of the two scopes holds `dead`. `packages/core` with `src/x.ts:f` and `.`
-  with `packages/core/src/x.ts:f` are one symbol, so `code-graph .` and
+  the same kind, or an entry of another scope names the same symbol and the wider
+  of the two scopes holds the kind further along `dead`, `only-called-from-tests`,
+  `unused-export`. `packages/core` with `src/x.ts:f` and `.` with
+  `packages/core/src/x.ts:f` are one symbol, so `code-graph .` and
   `code-graph packages/core` read one entry the same way. The kinds may differ this
-  way because a run on a package alone cannot see a caller in another package: an
+  way because a run on a package alone cannot see what another package does: an
   export only another package's test calls is `dead` there and
-  `only-called-from-tests` at the root, and one entry covers both. Any other split
-  counts as a code change: a package's `only-called-from-tests` entry does not cover
-  a `dead` finding at the root, because the root sees that test too. For the same
-  reason a package run can find what the root does not.
+  `only-called-from-tests` at the root, and an export a test names and another
+  package's code reaches is `only-called-from-tests` there and `unused-export` at
+  the root. One entry covers both runs. The reverse split counts as a code change: a
+  package's `only-called-from-tests` entry does not cover a `dead` finding at the
+  root, because the root sees that test too. For the same reason a package run can
+  find what the root does not.
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.
 - All three kinds are gated by default. `--dead-only` gates only `dead`: an
@@ -469,7 +472,9 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   covers it, and its old entry is pruned either way. So one run can pass a change
   another run fails. A root run cannot tell a test added to a symbol a package
   recorded as `dead` from a test that was always in another package, so it passes
-  and that package's own run fails. If `.` and `packages/core` both record a symbol
+  and that package's own run fails. The same goes for a test deleted from a symbol a
+  package recorded as `only-called-from-tests` when the root measures it as
+  `unused-export`. If `.` and `packages/core` both record a symbol
   as `only-called-from-tests` and its only test is deleted, `packages/core` passes
   and `.` fails.
 - Withheld symbols (`public-entry-surface`, `referenced-in-non-test-file`,
