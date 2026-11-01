@@ -15,6 +15,7 @@ import {
   type Sub,
   SubFailedError,
   type Transitions,
+  type UnfencedStore,
 } from "../index";
 import { memoryStore } from "../mem";
 import { run as runOnPromise } from "../promise";
@@ -72,8 +73,9 @@ type Options = {
   /** What the armed Sub does. `failing` by default. */
   readonly sub?:
     | { readonly kind: "failing"; readonly error: unknown }
-    | { readonly kind: "mapped"; readonly to: Msg };
-  readonly store?: ReturnType<typeof memoryStore<Model>>;
+    | { readonly kind: "mapped"; readonly to: Msg }
+    | { readonly kind: "live"; readonly closed: () => void };
+  readonly store?: UnfencedStore<Model>;
 };
 
 type Harness = {
@@ -113,6 +115,7 @@ async function onPromise(options: Options): Promise<Harness> {
     subscribe: {
       watch: (_sub, _ctx, dispatch) => {
         if (sub.kind === "failing") throw sub.error;
+        if (sub.kind === "live") return sub.closed;
         dispatch(sub.to);
         return () => {};
       },
@@ -135,6 +138,19 @@ async function onPromise(options: Options): Promise<Harness> {
   };
 }
 
+function effectSub(
+  sub: NonNullable<Options["sub"]>,
+): Stream.Stream<Msg, unknown> {
+  switch (sub.kind) {
+    case "failing":
+      return Stream.fail(sub.error);
+    case "mapped":
+      return Stream.make(sub.to).pipe(Stream.concat(Stream.never));
+    case "live":
+      return Stream.never.pipe(Stream.ensuring(Effect.sync(sub.closed)));
+  }
+}
+
 async function onEffect(options: Options): Promise<Harness> {
   const { reports, onError } = sink();
   const sub = options.sub ?? {
@@ -150,10 +166,7 @@ async function onEffect(options: Options): Promise<Harness> {
         ...(options.supervision ? { supervision: options.supervision } : {}),
         ...(options.store ? { store: options.store } : {}),
         subscribe: {
-          watch: () =>
-            sub.kind === "failing"
-              ? Stream.fail(sub.error)
-              : Stream.make(sub.to).pipe(Stream.concat(Stream.never)),
+          watch: () => effectSub(sub),
         },
       }),
     ),
@@ -403,6 +416,79 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
   });
 });
 
+// === What a host must still do after a reducer throw ===
+
+/** A store that counts its saves, and the Sub's closing counted beside it. */
+function watched() {
+  const memory = memoryStore<Model>();
+  const seen = { saves: 0, closes: 0 };
+  const store: UnfencedStore<Model> = {
+    ...memory,
+    save: async (state) => {
+      seen.saves++;
+      await memory.save(state);
+    },
+  };
+  const closed = () => {
+    seen.closes++;
+  };
+  return { seen, store, sub: { kind: "live", closed } as const };
+}
+
+describe.each(
+  engines,
+)("%s engine: after a reducer throw fails done()", (_, start) => {
+  it("the Sub and the final save wait for the host's stop()", async () => {
+    const { seen, store, sub } = watched();
+    const rt = await start({ sub, store });
+    const waiting = rt.done();
+
+    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ type: "explode" });
+    expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
+
+    const savesBeforeStop = seen.saves;
+    expect(seen.closes).toBe(0);
+
+    await rt.stop();
+
+    expect(seen.closes).toBe(1);
+    expect(seen.saves).toBe(savesBeforeStop + 1);
+  });
+});
+
+describe("Effect engine: after a reducer throw fails done()", () => {
+  it("closing the Scope does what stop() does", async () => {
+    const { seen, store, sub } = watched();
+    const { onError } = sink();
+    const scope = await Effect.runPromise(Scope.make());
+    const booting = await Effect.runPromise(
+      Scope.provide(scope)(
+        runOnEffect(job, {
+          onError,
+          terminal,
+          store,
+          subscribe: { watch: () => effectSub(sub) },
+        }),
+      ),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    const waiting = Effect.runPromiseExit(rt.done());
+
+    await Effect.runPromiseExit(rt.dispatch({ type: "arm" }));
+    await Effect.runPromiseExit(rt.dispatch({ type: "explode" }));
+    expect(Exit.isFailure(await waiting)).toBe(true);
+
+    const savesBeforeClose = seen.saves;
+    expect(seen.closes).toBe(0);
+
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+
+    expect(seen.closes).toBe(1);
+    expect(seen.saves).toBe(savesBeforeClose + 1);
+  });
+});
+
 // === A State that was already final ===
 
 describe.each(engines)("%s engine: a saved terminal State", (_, start) => {
@@ -528,7 +614,7 @@ describe("a failed terminal save still fails done() as it did", () => {
 describe("a reducer throw reaches done() as it was thrown", () => {
   const throwing = defineMachine({
     types: { model: {} as { readonly on: true }, msg: {} as Msg },
-    init: () => [{ on: true }, []],
+    init: (loaded) => [loaded ?? { on: true }, []],
     update: {
       work: (m) => [m, []],
       finish: (m) => [m, []],
@@ -578,8 +664,8 @@ describe("a Msg with no cell is a refusal, not a failure", () => {
     open: { close: () => [{ type: "closed" }, []] },
   };
   const latch = defineMachine({
-    types: { model: {} as Latch, msg: {} as LatchMsg, ctx: undefined },
-    init: () => [{ type: "closed" }, []],
+    types: { model: {} as Latch, msg: {} as LatchMsg },
+    init: (loaded) => [loaded ?? { type: "closed" }, []],
     update: latchUpdate,
   });
   const isOpen = (state: Latch): boolean => state.type === "open";
@@ -587,7 +673,6 @@ describe("a Msg with no cell is a refusal, not a failure", () => {
   it("Promise engine: done() keeps waiting and the run goes on", async () => {
     const { onError } = sink();
     const rt = await runOnPromise(latch, {
-      ctx: undefined,
       onError,
       terminal: isOpen,
     }).ready;
@@ -606,9 +691,7 @@ describe("a Msg with no cell is a refusal, not a failure", () => {
     const { onError } = sink();
     const scope = await Effect.runPromise(Scope.make());
     const booting = await Effect.runPromise(
-      Scope.provide(scope)(
-        runOnEffect(latch, { ctx: undefined, onError, terminal: isOpen }),
-      ),
+      Scope.provide(scope)(runOnEffect(latch, { onError, terminal: isOpen })),
     );
     const rt = await Effect.runPromise(booting.ready);
     const waiting = Effect.runPromise(rt.done());
@@ -630,12 +713,12 @@ describe("a handler that never returns, in line behind a reducer throw", () => {
       msg: {} as { readonly type: "explode" } | { readonly type: "wait" },
       cmd: {} as Hang,
     },
-    init: () => [{ hung: false }, []],
+    init: (loaded) => [loaded ?? { hung: false }, []],
     update: {
       explode: () => {
         throw boom;
       },
-      wait: () => [{ hung: true }, [{ type: "hang" }]],
+      wait: (m) => [{ ...m, hung: true }, [{ type: "hang" }]],
     },
   });
 

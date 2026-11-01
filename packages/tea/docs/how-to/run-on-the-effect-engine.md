@@ -277,7 +277,17 @@ with no cell. It ends the Effect as a defect.
 
 `done()` follows the same split. A failed terminal save fails it with
 `StoreFailed`, and a Sub failure fails it with `SubFailed`. A reducer throw under
-the default `stop` strategy closes the run, and `done()` ends as a defect holding
-what was thrown, for waiting and later callers. `Effect.catchTags` does not see a
-defect, so read it with `Effect.catchDefect` or from the fiber's `Exit`. The Promise
-engine's `done()` rejects with what was thrown.
+the default `stop` strategy refuses every later Msg, and `done()` ends as a defect
+holding what was thrown, for waiting and later callers. `Effect.catchTags` does not
+see a defect, so read it with `Effect.catchDefect` or from the fiber's `Exit`. The
+Promise engine's `done()` rejects with what was thrown.
+
+A failed `done()` here does not mean the run is cleaned up. The Subs keep running,
+the final save has not happened, and the run's Scope stays open, unlike after a Sub
+failure, where the run stops by itself. All three wait for you, so call `stop()` or
+close the Scope you ran it in:
+
+```ts
+const answer = yield* Effect.exit(runtime.done());
+yield* runtime.stop();
+```
