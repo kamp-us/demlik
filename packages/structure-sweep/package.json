@@ -46,6 +46,7 @@
     "oxc-parser": "catalog:",
     "oxc-resolver": "catalog:",
     "smol-toml": "catalog:",
+    "tinyglobby": "catalog:",
     "ts-morph": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:code-graph"

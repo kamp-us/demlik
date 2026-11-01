@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import type { SourceFile } from "ts-morph";
+import { getCompilerOptionsFromTsConfig, type SourceFile, ts } from "ts-morph";
 import type { PackageEdge } from "./dependencies.js";
 import {
   type ExportEntry,
@@ -10,7 +10,11 @@ import {
 } from "./entries.js";
 import type { Exists } from "./heal.js";
 import type { PathMove } from "./manifest.js";
-import { moduleLiterals, splitSpecifierExtension } from "./specifier.js";
+import {
+  moduleLiterals,
+  relativeSpecifierOf,
+  sourceCandidates,
+} from "./specifier.js";
 import {
   packageLabel,
   packageOf,
@@ -18,8 +22,26 @@ import {
   type WorkspacePackage,
 } from "./workspace.js";
 
-/** Where a relative specifier's base can land: a module file, or a directory's index. */
-const MODULE_SUFFIXES = [".ts", ".tsx", "/index.ts", "/index.tsx"];
+/**
+ * Which extension a relative specifier written from `dir` must carry, by the compiler options of the
+ * nearest `tsconfig.json`: NodeNext (`module` or `moduleResolution`, in any of its versions) asks
+ * for one, `.ts` where the config lets imports name source files, `.js` otherwise.
+ */
+function specifierExtensionFrom(dir: string): "none" | "js" | "ts" {
+  const config = ts.findConfigFile(dir, ts.sys.fileExists);
+  if (config === undefined) return "none";
+  const { options } = getCompilerOptionsFromTsConfig(config);
+  const resolution = options.moduleResolution;
+  const nodeNext =
+    resolution === undefined
+      ? options.module !== undefined &&
+        options.module >= ts.ModuleKind.Node16 &&
+        options.module <= ts.ModuleKind.NodeNext
+      : resolution === ts.ModuleResolutionKind.Node16 ||
+        resolution === ts.ModuleResolutionKind.NodeNext;
+  if (!nodeNext) return "none";
+  return options.allowImportingTsExtensions === true ? "ts" : "js";
+}
 
 /**
  * A workspace read against one tree: which file each specifier names there, and the subpath each
@@ -28,6 +50,7 @@ const MODULE_SUFFIXES = [".ts", ".tsx", "/index.ts", "/index.tsx"];
  */
 export class PackageTree {
   readonly #entries = new Map<string, readonly ExportEntry[]>();
+  readonly #extensions = new Map<string, "none" | "js" | "ts">();
 
   constructor(
     readonly repoRoot: string,
@@ -70,11 +93,9 @@ export class PackageTree {
    */
   resolve(importer: string, literal: string): string | undefined {
     if (literal.startsWith(".")) {
-      const base = resolve(
-        dirname(importer),
-        splitSpecifierExtension(literal).base,
+      return sourceCandidates(resolve(dirname(importer), literal)).find(
+        this.tree,
       );
-      return MODULE_SUFFIXES.map((s) => `${base}${s}`).find(this.tree);
     }
     const pkg = this.#owner(literal);
     if (pkg?.name === undefined) return undefined;
@@ -99,6 +120,17 @@ export class PackageTree {
     const subpath = subpathOf(this.#entriesOf(pkg), file);
     if (subpath === undefined) return undefined;
     return subpath === "." ? pkg.name : `${pkg.name}/${subpath.slice(2)}`;
+  }
+
+  /** The relative specifier `importer` names the absolute file `target` by, in its own resolution. */
+  relativeSpecifier(importer: string, target: string): string {
+    const dir = dirname(importer);
+    let explicit = this.#extensions.get(dir);
+    if (explicit === undefined) {
+      explicit = specifierExtensionFrom(dir);
+      this.#extensions.set(dir, explicit);
+    }
+    return relativeSpecifierOf(relative(dir, target), explicit);
   }
 }
 
@@ -156,8 +188,7 @@ export function rewriteCrossings(
       const pkg = after.packageAt(target);
       if (pkg.root === home.root) {
         if (relativeSpecifier) continue;
-        const rel = relative(dirname(importer), target).replace(/\.tsx?$/, "");
-        literal.setLiteralValue(rel.startsWith(".") ? rel : `./${rel}`);
+        literal.setLiteralValue(after.relativeSpecifier(importer, target));
         continue;
       }
       const specifier = after.specifierOf(target);

@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
+import { globSync } from "tinyglobby";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import type { PathMove } from "./manifest.js";
@@ -53,57 +54,32 @@ const PnpmWorkspace = z
   .object({ packages: z.array(z.string()).optional() })
   .nullable();
 
-/** The directory names pnpm's package search never descends into (`@pnpm/fs.find-packages`). */
-const IGNORED = new Set([
-  "node_modules",
-  "bower_components",
-  "test",
-  "tests",
-  ".git",
-]);
+/** The directories pnpm's package search never descends into (`@pnpm/fs.find-packages`). */
+const IGNORED = ["node_modules", "bower_components", "test", "tests"].map(
+  (dir) => `**/${dir}/**`,
+);
 
-/** A pnpm workspace glob as a whole-path matcher: `*` and `?` stay in one segment, `**` spans any. */
-function globMatcher(glob: string): RegExp {
-  const segments = posix
-    .normalize(glob)
-    .replace(/^\.\//, "")
-    .replace(/\/+$/, "")
-    .split("/");
-  const body = segments
-    .map((segment, i) => {
-      const last = i === segments.length - 1;
-      if (segment === "**") return last ? ".*" : "(?:[^/]+/)*";
-      const one = segment
-        .split("")
-        .map((c) =>
-          c === "*"
-            ? "[^/]*"
-            : c === "?"
-              ? "[^/]"
-              : c.replace(/[.+^${}()|[\]\\]/g, "\\$&"),
-        )
-        .join("");
-      return last ? one : `${one}/`;
-    })
-    .join("");
-  return new RegExp(`^${body}$`);
+/** A `packages` glob as the `package.json` paths it selects, its `!` kept, as pnpm rewrites it. */
+function manifestPattern(glob: string): string {
+  const negated = glob.startsWith("!");
+  const path = posix.normalize(negated ? glob.slice(1) : glob);
+  return `${negated ? "!" : ""}${posix.join(path, "package.json")}`;
 }
 
-/** Every directory under `repoRoot` holding a `package.json`, repo-relative, outside pnpm's ignores. */
-function manifestDirs(repoRoot: string): string[] {
-  const found: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(join(repoRoot, dir), {
-      withFileTypes: true,
-    })) {
-      if (!entry.isDirectory() || IGNORED.has(entry.name)) continue;
-      const child = dir === "" ? entry.name : `${dir}/${entry.name}`;
-      if (existsSync(join(repoRoot, child, "package.json"))) found.push(child);
-      walk(child);
-    }
-  };
-  walk("");
-  return found;
+/**
+ * The directory of every `package.json` the `packages` globs select, repo-relative, read by the
+ * library pnpm's own package search reads them with, so every glob means here what it means to pnpm.
+ */
+function memberDirs(repoRoot: string, globs: readonly string[]): string[] {
+  if (globs.length === 0) return [];
+  return globSync(globs.map(manifestPattern), {
+    cwd: repoRoot,
+    ignore: IGNORED,
+    expandDirectories: false,
+  })
+    .map((manifest) => posix.dirname(manifest))
+    .filter((dir) => dir !== ".")
+    .sort();
 }
 
 function readPackage(repoRoot: string, root: string): WorkspacePackage {
@@ -130,17 +106,7 @@ export function readWorkspace(repoRoot: string): Workspace {
     throw new Error(
       `pnpm-workspace.yaml: unreadable packages list: ${parsed.error.message}`,
     );
-  const globs = parsed.data?.packages ?? [];
-  const included = globs.filter((g) => !g.startsWith("!")).map(globMatcher);
-  const excluded = globs
-    .filter((g) => g.startsWith("!"))
-    .map((g) => globMatcher(g.slice(1)));
-  const members = manifestDirs(repoRoot)
-    .filter(
-      (dir) =>
-        included.some((g) => g.test(dir)) && !excluded.some((g) => g.test(dir)),
-    )
-    .sort();
+  const members = memberDirs(repoRoot, parsed.data?.packages ?? []);
   return { root, members: members.map((dir) => readPackage(repoRoot, dir)) };
 }
 

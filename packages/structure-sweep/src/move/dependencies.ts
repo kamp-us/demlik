@@ -260,7 +260,7 @@ export function onPath(
   return undefined;
 }
 
-const LOCKFILE = "pnpm-lock.yaml";
+export const LOCKFILE = "pnpm-lock.yaml";
 
 /**
  * The `pnpm-lock.yaml` text pnpm writes for the workspace once `edits` are on disk. Each edit is
