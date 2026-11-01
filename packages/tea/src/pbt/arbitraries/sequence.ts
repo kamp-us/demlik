@@ -6,15 +6,22 @@
 // inside `msgArb` shrinks each variant. Optional `prefix` is prepended
 // verbatim (used by Test A: "the bug-triggering Msg leads the sequence").
 //
-// `arbGuidedSequence` is the state-aware sequence builder. In v1 it throws
-// — Phase 6 of the design doc lands the `fc.commands`-backed implementation.
-// The export exists today so the surface is forward-compatible: consumers
-// that need state-aware generation get a useful error pointing at the
-// design doc instead of "is not a function."
+// `arbGuidedSequence(machine, ctx, cells, opts)` draws lists whose answers each
+// fit a Cmd really sent. It draws blind events first, then a `map` folds them
+// through the machine and gives each one its meaning, so a shrink can delete any
+// event and the rest still make a valid list. The route and its numbers are in
+// the ruling: https://github.com/kamp-us/demlik/issues/745#issuecomment-6552209764
 // ---------------------------------------------------------------------------
 
 import * as fc from "fast-check";
-import type { Cmd, Machine, Sub } from "../../index";
+import {
+  acceptedTypes,
+  applyCell,
+  type Cmd,
+  type Machine,
+  replay,
+  type Sub,
+} from "../../index";
 
 /**
  * Build an arbitrary of Msg sequences over a per-Msg arbitrary. Optionally
@@ -67,13 +74,124 @@ export function arbMsgSequence<M extends { type: string }>(
 }
 
 /**
- * State-aware Msg sequence arbitrary — generates only msgs whose
- * precondition holds in the current state. Backed by `fc.commands`
- * internally. Planned for a later phase.
+ * How one type of Cmd gets answered. `draw` runs before the fold, so a shrink
+ * can shrink its value, and it cannot see the state. `make` runs in the fold and
+ * gets the Cmd really sent, so an answer is `make: (cmd, v) => fetch.ok(cmd, v)`.
+ * To draw both outcomes, have `draw` choose between them.
+ */
+export interface AnswerCell<K extends Cmd, V, M> {
+  readonly draw: fc.Arbitrary<V>;
+  readonly make: (cmd: K, value: V) => NoInfer<M>;
+}
+
+/**
+ * What {@link arbGuidedSequence} draws from. `outside` holds the Msgs nothing
+ * sends a Cmd for, by Msg type. `answers` holds an {@link AnswerCell} by Cmd type,
+ * and `A` is the value each one draws, inferred from its `draw`. A Cmd type with no
+ * cell is never answered. A Msg type in neither table is never drawn.
+ */
+export interface GuidedCells<
+  M extends { type: string },
+  C extends Cmd,
+  A extends { readonly [K in C["type"]]?: unknown },
+> {
+  readonly outside?: {
+    readonly [K in M["type"]]?: fc.Arbitrary<Extract<M, { type: K }>>;
+  };
+  readonly answers?: {
+    readonly [K in keyof A]: K extends C["type"]
+      ? AnswerCell<Extract<C, { type: K }>, A[K], M>
+      : never;
+  };
+}
+
+/** One drawn event. It means nothing until the fold reads it. */
+type BlindEvent<M> =
+  | { readonly kind: "outside"; readonly msg: M }
+  | {
+      readonly kind: "answer";
+      readonly pick: number;
+      readonly values: readonly unknown[];
+    };
+
+/**
+ * Largest blind pick, read modulo the Cmds waiting. 5040 divides evenly by every
+ * count from 1 to 10, so no Cmd is favoured among that many.
+ */
+const MAX_PICK = 5039;
+
+/**
+ * Draw Msg lists in which every answer answers a Cmd that was sent and not yet
+ * answered, so a law that something must happen can be checked on random lists.
+ * The result is a plain list for any runner, such as `propertyTerminates`.
  *
- * **NOT IMPLEMENTED IN v1.** The export exists today so the surface is
- * forward-compatible; this ships in a later phase alongside
- * shrinkers. Calling it throws.
+ * It draws blind events, then folds them through the machine. An answer event
+ * holds a pick and one value per answer cell, and the fold reads the pick modulo
+ * the Cmds waiting at that point. With nothing waiting, the event is dropped.
+ *
+ * **Refusals.** An event whose Msg the state at that point has no cell for is
+ * dropped too, in either update form, so a transitions machine can leave a Msg out
+ * of a state and no list holds it there. A Cmd whose answer was refused keeps
+ * waiting, and a later event can still answer it. A list therefore never tests
+ * that a state refuses a Msg: send that Msg by hand for that.
+ *
+ * **Waiting** holds every Cmd that `init` and the steps have sent, that has a cell
+ * in `answers`, and that has no answer yet. A Cmd sent twice waits twice. The fold
+ * reads it off what the reducer returned, not `machine.cmds`, so a machine with no
+ * `cmds` field gets the same lists, and a hand-written Cmd is answered like a
+ * defined one. No answer is matched by its `cmd` field: the pick names the Cmd.
+ *
+ * A shrink deletes events and shrinks picks and values, and the fold reads what
+ * is left, so a shrunk list holds to the same rule. Blind picks find a narrow
+ * order less often than a guided draw would, which more runs pay for.
+ *
+ * A step that throws ends its list on the Msg that threw, so a runner's fold meets
+ * the same throw and reports it as that list's failure.
+ *
+ * - `maxLength` (default 60) caps the events drawn, and dropped ones count, so a
+ *   list comes out shorter. `size` (default `"max"`) is forwarded to `fc.array`:
+ *   with most answers dropped, fast-check's `"small"` rarely gets a run anywhere.
+ * - `loaded` starts the fold from a saved state. Give a runner the same one, or
+ *   its fold reads the list from a different start.
+ *
+ * Throws when `cells` has no cell at all, since that could only draw empty lists.
+ *
+ * @example
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import {
+ *   arbConstantMsg,
+ *   arbGuidedSequence,
+ *   propertyTrace,
+ *   stubCtxThrowingProxy,
+ * } from "@demlik/tea/pbt";
+ * import * as fc from "fast-check";
+ *
+ * type Merge = { readonly type: "merge"; readonly pr: number };
+ * type State = { type: "idle" } | { type: "merging" } | { type: "landed" };
+ * type Msg = { type: "start" } | { type: "merged"; cmd: Merge; sha: string };
+ * declare const machine: Machine<State, Msg, Merge, never, object>;
+ * const ctx = stubCtxThrowingProxy<object>();
+ *
+ * const lists = arbGuidedSequence(machine, ctx, {
+ *   outside: { start: arbConstantMsg("start") },
+ *   answers: {
+ *     merge: {
+ *       draw: fc.string(),
+ *       make: (cmd, sha) => ({ type: "merged", cmd, sha }),
+ *     },
+ *   },
+ * });
+ *
+ * propertyTrace(
+ *   machine,
+ *   ctx,
+ *   lists,
+ *   (steps, final) =>
+ *     !steps.some((step) => step.msg.type === "merged") ||
+ *     final.type === "landed",
+ * );
+ * ```
  */
 export function arbGuidedSequence<
   S,
@@ -81,20 +199,105 @@ export function arbGuidedSequence<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  A extends { readonly [K in C["type"]]?: unknown },
 >(
-  _machine: Machine<S, M, C, U, Ctx>,
-  _ctx: Ctx,
-  _cells: {
-    [K in M["type"]]?: (
-      state: S,
-    ) => fc.Arbitrary<Extract<M, { type: K }>> | null;
+  machine: Machine<S, M, C, U, Ctx>,
+  ctx: NoInfer<Ctx>,
+  cells: GuidedCells<M, C, A>,
+  opts?: {
+    readonly maxLength?: number;
+    readonly size?: fc.SizeForArbitrary;
+    readonly loaded?: NoInfer<S> | null;
   },
-  _opts?: { maxLength?: number },
 ): fc.Arbitrary<readonly M[]> {
-  throw new Error(
-    "@demlik/tea/pbt: arbGuidedSequence is not implemented in v1. " +
-      "Use arbMsgSequence with " +
-      "an unguided arbMsg table for now; states that don't accept a given " +
-      "msg should noop in the reducer (mapped-type discipline).",
-  );
+  type Cell = AnswerCell<C, unknown, M>;
+  const outside = Object.values(cells.outside ?? {}) as fc.Arbitrary<M>[];
+  const answers = Object.entries(cells.answers ?? {}) as [string, Cell][];
+  const cellIndex = new Map(answers.map(([type], index) => [type, index]));
+
+  const arms: fc.WeightedArbitrary<BlindEvent<M>>[] = [];
+  if (outside.length > 0) {
+    arms.push({
+      weight: 1,
+      arbitrary: fc
+        .oneof(...outside)
+        .map((msg): BlindEvent<M> => ({ kind: "outside", msg })),
+    });
+  }
+  if (answers.length > 0) {
+    arms.push({
+      weight: 2,
+      arbitrary: fc
+        .tuple(
+          fc.nat(MAX_PICK),
+          fc.tuple(...answers.map(([, cell]) => cell.draw)),
+        )
+        .map(
+          ([pick, values]): BlindEvent<M> => ({
+            kind: "answer",
+            pick,
+            values,
+          }),
+        ),
+    });
+  }
+  if (arms.length === 0) {
+    throw new Error(
+      "@demlik/tea/pbt: arbGuidedSequence got no cells, in `outside` or `answers`, so it could only draw empty lists.",
+    );
+  }
+
+  /** The Msg an event means now, or `null` with nothing waiting. */
+  const read = (event: BlindEvent<M>, waiting: readonly C[]): M | null => {
+    if (event.kind === "outside") return event.msg;
+    if (waiting.length === 0) return null;
+    const cmd = waiting[event.pick % waiting.length] as C;
+    const index = cellIndex.get(cmd.type) as number;
+    const [, cell] = answers[index] as [string, Cell];
+    return cell.make(cmd, event.values[index]);
+  };
+  const answerable = (cmds: readonly C[]): readonly C[] =>
+    cmds.filter((cmd) => cellIndex.has(cmd.type));
+
+  const resolve = (events: readonly BlindEvent<M>[]): readonly M[] => {
+    const msgs: M[] = [];
+    const waiting: C[] = [];
+    let state: S;
+    try {
+      const boot = replay(machine, {
+        msgs: [],
+        ctx,
+        loaded: opts?.loaded ?? null,
+      });
+      state = boot.state;
+      waiting.push(...answerable(boot.cmds));
+    } catch {
+      return msgs; // The runner's fold boots too, and fails on this same throw.
+    }
+    for (const event of events) {
+      const msg = read(event, waiting);
+      if (msg === null) continue;
+      // A refused answer takes nothing off `waiting`: its Cmd still has no answer.
+      if (!acceptedTypes(machine, state).includes(msg.type)) continue;
+      if (event.kind === "answer") {
+        waiting.splice(event.pick % waiting.length, 1);
+      }
+      msgs.push(msg);
+      try {
+        const [next, sent] = applyCell<S, M, C>(machine, state, msg);
+        state = next;
+        waiting.push(...answerable(sent));
+      } catch {
+        return msgs; // `msg` is last, so the runner's fold fails on this same throw.
+      }
+    }
+    return msgs;
+  };
+
+  return fc
+    .array(fc.oneof(...arms), {
+      maxLength: opts?.maxLength ?? 60,
+      size: opts?.size ?? "max",
+    })
+    .map(resolve);
 }

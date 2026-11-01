@@ -8,16 +8,18 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (17)
+## Exports (19)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`AnswerCell`](#AnswerCell) | Interface | stable | How one type of Cmd gets answered. |
 | [`arbConstantMsg`](#arbConstantMsg) | Function | stable | Build a payload-free Msg variant arbitrary. |
-| [`arbGuidedSequence`](#arbGuidedSequence) | Function | stable | State-aware Msg sequence arbitrary — generates only msgs whose precondition holds in the current state. |
+| [`arbGuidedSequence`](#arbGuidedSequence) | Function | stable | Draw Msg lists in which every answer answers a Cmd that was sent and not yet answered, so a law that something must happen can be checked on random lists. |
 | [`arbMsg`](#arbMsg) | Function | stable | Build a single `fc.Arbitrary<M>` from a `MsgArbitraryTable<M>`. |
 | [`arbMsgSequence`](#arbMsgSequence) | Function | stable | Build an arbitrary of Msg sequences over a per-Msg arbitrary. |
 | [`arbRecordMsg`](#arbRecordMsg) | Function | stable | Build a record-shaped Msg variant arbitrary. |
 | [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, the final state, and the Cmds `init` sent. |
+| [`GuidedCells`](#GuidedCells) | Interface | stable | What arbGuidedSequence draws from. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
 | [`MsgCount`](#MsgCount) | Interface | stable | What a property run's lists did with one Msg type. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
@@ -31,6 +33,17 @@ import { … } from "@demlik/tea/pbt";
 | [`stubCtxThrowingProxy`](#stubCtxThrowingProxy) | Function | stable | Build a Ctx value whose every property access throws. |
 
 ## Declarations
+
+<a id="AnswerCell"></a>
+
+### `AnswerCell`
+
+```ts
+interface AnswerCell<K extends Cmd, V, M> {
+  readonly draw: Arbitrary<V>;
+  readonly make: (cmd: K, value: V) => NoInfer<M>;
+}
+```
 
 <a id="arbConstantMsg"></a>
 
@@ -51,11 +64,16 @@ function arbGuidedSequence<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  A extends { readonly [K in string]?: unknown },
 >(
-  _machine: Machine<S, M, C, U, Ctx>,
-  _ctx: Ctx,
-  _cells: { [K in string]?: (state: S) => Arbitrary<Extract<M, { type: K }>> | null },
-  _opts?: { maxLength?: number },
+  machine: Machine<S, M, C, U, Ctx>,
+  ctx: NoInfer<Ctx>,
+  cells: GuidedCells<M, C, A>,
+  opts?: {
+    readonly loaded?: NoInfer<S> | null;
+    readonly maxLength?: number;
+    readonly size?: SizeForArbitrary;
+  },
 ): Arbitrary<readonly M[]>
 ```
 
@@ -125,6 +143,21 @@ function foldEvents<
   readonly initCmds: readonly C[];
   readonly states: readonly S[];
   readonly steps: readonly Step<S, M, C>[];
+}
+```
+
+<a id="GuidedCells"></a>
+
+### `GuidedCells`
+
+```ts
+interface GuidedCells<
+  M extends { type: string },
+  C extends Cmd,
+  A extends { readonly [K in C["type"]]?: unknown },
+> {
+  readonly answers?: { readonly [K in string | number | symbol]: K extends C["type"] ? AnswerCell<Extract<C, { type: K }>, A[K], M> : never };
+  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { type: K }>> };
 }
 ```
 

@@ -10,4 +10,9 @@ export {
   arbRecordMsg,
   type MsgArbitraryTable,
 } from "./msg";
-export { arbGuidedSequence, arbMsgSequence } from "./sequence";
+export {
+  type AnswerCell,
+  arbGuidedSequence,
+  arbMsgSequence,
+  type GuidedCells,
+} from "./sequence";
