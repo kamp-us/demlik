@@ -5,6 +5,7 @@ import { findRepoRoot, resolveEdgeTsConfig } from "../extract/project.js";
 import { EmittedTree, emitDeclarations, emittedEntries, removeEmit } from "./emit.js";
 import { ApiInputError, type ApiSubpath, apiSubpaths } from "./map.js";
 import {
+  blankNames,
   readSubpathNames,
   type SubpathNames,
   type UnresolvedSpecifier,
@@ -24,7 +25,8 @@ export type PublishedApi = {
 
 export type PublishedApiOptions = {
   readonly repoRoot?: string;
-  // Where the emit's diagnostic count goes as one warning line; stderr by default.
+  // Where the emit's diagnostic count and each specifier the read could not resolve go, one warning
+  // line each; stderr by default.
   readonly warn?: (line: string) => void;
 };
 
@@ -75,8 +77,8 @@ function readNames(
   }
 }
 
-// What one emit of one tree publishes: the compiler that emitted, how many diagnostics it reported,
-// and the names per subpath.
+// What one emit of one tree publishes: the compiler that emitted, how many diagnostics the emit and
+// the read counted between them, and the names per subpath.
 export type EmittedNames = {
   readonly compiler: string;
   readonly diagnostics: number;
@@ -114,9 +116,17 @@ export async function readEmittedNames(
         `code-graph: warning: ${file} names "${specifier}", which the read could not resolve${context}; any name behind it is missing or has no text`,
       );
     }
+    // A blank name on a run that already warned has its explanation: a syntax error reads this way.
+    const explained = emit.diagnostics + unresolved.length > 0;
+    const blank = explained ? [] : blankNames(names);
+    for (const { subpath, name } of blank) {
+      warn(
+        `code-graph: warning: ${subpath} publishes "${name}", which the read found no text for${context}; a module behind it may not resolve`,
+      );
+    }
     return {
       compiler: emit.compiler,
-      diagnostics: emit.diagnostics + unresolved.length,
+      diagnostics: emit.diagnostics + unresolved.length + blank.length,
       names,
     };
   } finally {
@@ -124,8 +134,8 @@ export async function readEmittedNames(
   }
 }
 
-// The view beside the count of diagnostics its emit reported. The count stays out of `PublishedApi`
-// because `--api` prints that object as it is.
+// The view beside the count of diagnostics its emit and read reported. The count stays out of
+// `PublishedApi` because `--api` prints that object as it is.
 export type MeasuredApi = { readonly view: PublishedApi; readonly diagnostics: number };
 
 export async function readMeasuredApi(

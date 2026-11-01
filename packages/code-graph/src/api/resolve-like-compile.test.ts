@@ -45,6 +45,8 @@ const DEP2_NAMES = [...Array.from({ length: 8 }, (_, i) => `two${i}`), "TWOT"].s
 const STAR_LINES = 'export * from "dep";\nexport * from "@scope/dep2";\n';
 
 const WORKSPACE: Readonly<Record<string, string>> = {
+  // As a real repo has it, so a base commit holds no `node_modules` and `--api-base` has to link one.
+  ".gitignore": "node_modules\n",
   "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
   "package.json": '{ "name": "top", "private": true }\n',
   ...installed("dep", "dep", 12),
@@ -391,5 +393,171 @@ describe("--api on a read it cannot resolve", () => {
     const run = cli("packages/d", "--json");
     expect(run.stderr).toMatch(/^code-graph: warning: src\/index\.d\.ts names "nowhere"/);
     expect(run.stderr).not.toContain("tsgo reported");
+  });
+
+  const ALLOW_JS = `${JSON.stringify({
+    ...TSCONFIG,
+    compilerOptions: { ...TSCONFIG.compilerOptions, allowJs: true },
+  })}\n`;
+
+  const ENTRY = 'export const own = 1;\nexport * from "./shim";\n';
+  const NOWHERE = 'export * from "nowhere";\n';
+
+  it.each<[string, Readonly<Record<string, string>>]>([
+    [
+      "a source .d.ts the entry re-exports",
+      { "packages/d/src/index.ts": ENTRY, "packages/d/src/shim.d.ts": NOWHERE },
+    ],
+    [
+      "a source .d.ts two re-exports away",
+      {
+        "packages/d/src/index.ts": ENTRY,
+        "packages/d/src/shim.d.ts": 'export * from "./deeper";\n',
+        "packages/d/src/deeper.d.ts": NOWHERE,
+      },
+    ],
+    [
+      "a declare module block in a source .d.ts",
+      {
+        "packages/d/src/index.ts": 'export const own = 1;\nexport * from "virtual";\n',
+        "packages/d/src/ambient.d.ts": 'declare module "virtual" { export * from "nowhere"; }\n',
+      },
+    ],
+    [
+      "a .js file under allowJs",
+      {
+        "packages/d/tsconfig.json": ALLOW_JS,
+        "packages/d/src/index.ts": 'export const own = 1;\nexport * from "./legacy.js";\n',
+        "packages/d/src/legacy.js": NOWHERE,
+      },
+    ],
+    [
+      "a root-installed dependency",
+      {
+        "packages/d/src/index.ts": 'export const own = 1;\nexport * from "broken";\n',
+        "node_modules/broken/package.json": '{ "name": "broken", "types": "index.d.ts" }\n',
+        "node_modules/broken/index.d.ts": `export declare const kept: number;\n${NOWHERE}`,
+      },
+    ],
+  ])("warns and keeps the row when %s has an unresolved export *", (_, files) => {
+    write(packageFiles("packages/d", {}));
+    write(files);
+    writeLedger(["behindIt", "own"]);
+    const before = ledgerText();
+    // The dependency's fixture publishes an unrecorded name, so this reads the JSON and not the exit.
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.stderr).toContain('names "nowhere", which the read could not resolve');
+    expect(checked.stderr).not.toContain("tsgo reported");
+    const result = JSON.parse(checked.stdout) as { pruned: Entry[]; unmeasured: Entry[] };
+    expect(result.pruned).toEqual([]);
+    expect(result.unmeasured.map((entry) => entry.name)).toEqual(["behindIt"]);
+    expect(result.unmeasured[0]?.reason).toBe("why behindIt");
+    expect(ledgerText()).toBe(before);
+  });
+
+  it.each<[string, Readonly<Record<string, string>>]>([
+    [
+      "a source .d.ts",
+      {
+        "packages/d/src/index.ts": ENTRY,
+        "packages/d/src/shim.d.ts": 'import { a } from "nowhere";\nexport { a };\n',
+      },
+    ],
+    [
+      "a root-installed dependency",
+      {
+        "packages/d/src/index.ts": 'export * from "broken";\n',
+        "node_modules/broken/package.json": '{ "name": "broken", "types": "index.d.ts" }\n',
+        "node_modules/broken/index.d.ts": 'import { a } from "nowhere";\nexport { a };\n',
+      },
+    ],
+  ])("warns and keeps the row when %s exports a name it imported from nowhere", (_, files) => {
+    write(packageFiles("packages/d", {}));
+    write(files);
+    writeLedger(["a", "behindIt", "own"]);
+    const before = ledgerText();
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.stderr).toContain('. publishes "a", which the read found no text for');
+    const result = JSON.parse(checked.stdout) as { pruned: Entry[]; unmeasured: Entry[] };
+    expect(result.pruned).toEqual([]);
+    expect(result.unmeasured.map((entry) => entry.name)).toContain("behindIt");
+    expect(ledgerText()).toBe(before);
+  });
+
+  it.each<[string, string, Readonly<Record<string, string>>]>([
+    ["a script file", 'import "./script";\n', { "packages/d/src/script.ts": "const a = 1;\n" }],
+    [
+      "a JS-only root-installed package",
+      'import "polyjs";\n',
+      {
+        "node_modules/polyjs/package.json": '{ "name": "polyjs", "main": "index.js" }\n',
+        "node_modules/polyjs/index.js": "globalThis.poly = 1;\n",
+      },
+    ],
+  ])("does not read a side-effect import of %s as a failure", (_, line, files) => {
+    write(packageFiles("packages/d", { "src/index.ts": `${line}export const own = 1;\n` }));
+    write(files);
+    writeLedger(["gone", "own"]);
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.code, checked.stderr).toBe(0);
+    expect(checked.stderr).toBe("");
+    const result = JSON.parse(checked.stdout) as { pruned: Entry[]; unmeasured?: Entry[] };
+    expect(result.pruned.map((entry) => entry.name)).toEqual(["gone"]);
+    expect(result.unmeasured).toBeUndefined();
+    expect(ledgerNames("packages/d")).toEqual(["own"]);
+  });
+
+  it("does not hold pruning back over a dependency's own missing import", () => {
+    write(
+      packageFiles("packages/d", {
+        "src/index.ts": 'export const own = 1;\nexport * from "optional";\n',
+      }),
+    );
+    write({
+      "node_modules/optional/package.json": '{ "name": "optional", "types": "index.d.ts" }\n',
+      "node_modules/optional/index.d.ts":
+        'import type { Peer } from "absent-peer";\nexport declare const fromDep: Peer;\n',
+    });
+    writeLedger(["fromDep", "gone", "own"]);
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.code, checked.stderr).toBe(0);
+    expect(checked.stderr).toBe("");
+    expect(ledgerNames("packages/d")).toEqual(["fromDep", "own"]);
+  });
+
+  it("does not follow a plain import into a dependency", () => {
+    write(
+      packageFiles("packages/d", {
+        "src/index.ts":
+          'import type { Used } from "uses-broken";\nexport declare const own: Used;\n',
+      }),
+    );
+    write({
+      "node_modules/uses-broken/package.json": '{ "name": "uses-broken", "types": "index.d.ts" }\n',
+      "node_modules/uses-broken/index.d.ts": `export type Used = string;\n${NOWHERE}`,
+    });
+    writeLedger(["gone", "own"]);
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.code, checked.stderr).toBe(0);
+    expect(checked.stderr).toBe("");
+    expect(ledgerNames("packages/d")).toEqual(["own"]);
+  });
+
+  it("answers only for the declare module block the entry reaches", () => {
+    write(
+      packageFiles("packages/d", {
+        "src/index.ts": 'export const own = 1;\nexport * from "virtual";\n',
+        "src/ambient.d.ts": [
+          'declare module "virtual" { export const fromAmbient: number; }',
+          'declare module "other" { export * from "nowhere"; }',
+          "",
+        ].join("\n"),
+      }),
+    );
+    writeLedger(["fromAmbient", "gone", "own"]);
+    const checked = cli("packages/d", "--ci", "--json");
+    expect(checked.code, checked.stderr).toBe(0);
+    expect(checked.stderr).toBe("");
+    expect(ledgerNames("packages/d")).toEqual(["fromAmbient", "own"]);
   });
 });
