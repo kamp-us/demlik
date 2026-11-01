@@ -77,6 +77,14 @@ function arbMsgSequence<M extends { type: string }>(
     readonly maxLength?: number;
     readonly minLength?: number;
     readonly prefix?: readonly NoInfer<M>[];
+    /**
+     * Forwarded to `fc.array`. Left out, fast-check's default size applies:
+     * `"small"` unless `fc.configureGlobal` changed it, which draws at most
+     * `2 * minLength + 10` Msgs however large `maxLength` is. So `maxLength: 60`
+     * comes out about 10 long, and a state that takes more steps than that is
+     * never reached. Pass `"max"` to draw up to `maxLength`.
+     */
+    readonly size?: SizeForArbitrary;
   },
 ): Arbitrary<readonly M[]>
 ```
