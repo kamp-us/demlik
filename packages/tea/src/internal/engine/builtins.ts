@@ -270,10 +270,11 @@ export function ports<S, M, C>(): AnyExtension<S, M, C> {
 // === commit observers ===
 
 /**
- * `subscribe` (zero-arg change notifiers), then `observe` (every applied
- * transition's `(msg, state)`) or, at boot, `onBoot` (the initial State, once;
- * a handler registered after boot fires at once). Each fanout is
- * throw-isolated under its own phase.
+ * `subscribe` (zero-arg change notifiers, told after the save and before the
+ * Cmds, #695), then, after the Cmds, `observe` (every applied transition's
+ * `(msg, state)`) or, at boot, `onBoot` (the initial State, once; a handler
+ * registered after boot fires at once). Each fanout is throw-isolated under its
+ * own phase.
  */
 export function observation<S, M, C>(): AnyExtension<S, M, C> {
   return (loop) => {
@@ -282,8 +283,10 @@ export function observation<S, M, C>(): AnyExtension<S, M, C> {
     const bootHandlers = new Set<(state: S) => void>();
     let booted = false;
     return {
-      commit(msg, state) {
+      installed() {
         loop.fanout(listeners, "listener", (listener) => listener());
+      },
+      commit(msg, state) {
         if (msg === undefined) {
           booted = true;
           loop.fanout(bootHandlers, "boot", (handler) => handler(state));
@@ -366,8 +369,11 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
  * or rejects when that State's save fails. Storeless State is eligible as soon
  * as it is set. No predicate → never terminal.
  *
- * A Sub failure that stops the run rejects `done()` with `SubFailedError`,
- * unless the State is already terminal: that State's own save still decides.
+ * A Sub failure that stops the run answers `done()` only once `stop()` has
+ * finished with the queue, because a Msg the Sub sent before it failed can still
+ * reach a terminal State. A State terminal by then keeps its answer: its own save
+ * decides. Any other State rejects with `SubFailedError`. So a waiter, a later
+ * caller and `result()` read one outcome.
  */
 export function terminality<S, M, C>(
   isTerminal: ((state: S) => boolean) | undefined,
@@ -379,13 +385,26 @@ export function terminality<S, M, C>(
       reject(error: unknown): void;
     }>();
     let subFailure: SubFailedError | undefined;
+    // Set once the queue is finished with: the failure is now `done()`'s answer.
+    let stoppedBy: SubFailedError | undefined;
     return {
       subFailed(error) {
         subFailure = new SubFailedError(error);
-        if (holds(loop.state() as S)) return;
+      },
+      drained() {
+        if (subFailure === undefined) return;
+        stoppedBy = subFailure;
+        const state = loop.state() as S;
+        const terminal = holds(state);
+        // A terminal State still waiting on its save keeps its waiters. A saved
+        // one can have them too: a runner that throws skips its step's commit.
+        if (terminal && loop.saveStatus().type !== "saved") return;
         const parked = [...waiters];
         waiters.clear();
-        for (const waiter of parked) waiter.reject(subFailure);
+        for (const waiter of parked) {
+          if (terminal) waiter.resolve(state);
+          else waiter.reject(stoppedBy);
+        }
       },
       commit(_msg, state) {
         if (
@@ -417,8 +436,8 @@ export function terminality<S, M, C>(
             const saved = loop.saveStatus();
             if (saved.type === "saved") return Promise.resolve(current);
             if (saved.type === "failed") return Promise.reject(saved.error);
-          } else if (subFailure !== undefined) {
-            return Promise.reject(subFailure);
+          } else if (stoppedBy !== undefined) {
+            return Promise.reject(stoppedBy);
           }
           return new Promise<S>((resolve, reject) => {
             waiters.add({ resolve, reject });
@@ -482,9 +501,9 @@ export interface BuiltinOptions<
  * Update middleware nests first-outermost: supervision wraps the identity
  * filter (a throwing `ofMsg` is supervised like a reducer throw — spike #264
  * run 3), which wraps the dev checks around the reducer itself. A Msg with no
- * cell rejects through supervision unsupervised (#310). Commit
- * callbacks run in order: change listeners, then `observe` / `onBoot`, then
- * semantic events, then `done()` waiters, then telemetry.
+ * cell rejects through supervision unsupervised (#310). Change listeners hear
+ * before the Cmds. Commit callbacks run after them, in order: `observe` /
+ * `onBoot`, then semantic events, then `done()` waiters, then telemetry.
  */
 export function builtinExtensions<
   S,

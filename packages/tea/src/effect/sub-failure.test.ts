@@ -19,7 +19,12 @@ import {
   Stream,
 } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type RuntimeErrorContext, type Sub } from "../index";
+import {
+  defineMachine,
+  type RuntimeErrorContext,
+  type Store,
+  type Sub,
+} from "../index";
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
 import * as EffectEngine from "./index";
 
@@ -325,6 +330,359 @@ describe("Effect engine: what else lives in the caller's Scope", () => {
     expect(log).not.toContain("remove staying");
     await Effect.runPromise(staying.dispatch({ type: "poke" }));
     expect(staying.getState().pokes).toBe(1);
+  });
+});
+
+describe("Effect engine: what a run acquired through Scope.Scope", () => {
+  type Hold = { readonly type: "hold" };
+  type HoldMsg = { readonly type: "take" } | { readonly type: "poke" };
+  type HoldModel = { readonly pokes: number };
+  const holding = defineMachine({
+    types: {
+      model: {} as HoldModel,
+      msg: {} as HoldMsg,
+      cmd: {} as Hold,
+      sub: {} as Feed,
+    },
+    init: () => [{ pokes: 0 }, []],
+    update: {
+      take: (m) => [m, [{ type: "hold" }]],
+      poke: (m) => [{ pokes: m.pokes + 1 }, []],
+    },
+    subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+  });
+
+  it("a cell's resource is released with its run, while 5 sibling runs and the caller's Scope live", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    const released: string[] = [];
+    const caller = await Effect.runPromise(ScopeModule.make());
+    const callerExits: unknown[] = [];
+    await Effect.runPromise(
+      ScopeModule.addFinalizerExit(caller, (exit) =>
+        Effect.sync(() => callerExits.push(exit)),
+      ),
+    );
+    const go = Effect.runSync(Deferred.make<void>());
+
+    const start = async (
+      name: string,
+      feed: Stream.Stream<HoldMsg, Closed>,
+    ) => {
+      const booting = await Effect.runPromise(
+        ScopeModule.provide(caller)(
+          EffectEngine.run(holding, {
+            onError,
+            interpret: {
+              hold: () =>
+                Effect.asVoid(
+                  Effect.acquireRelease(Effect.void, () =>
+                    Effect.sync(() => released.push(name)),
+                  ),
+                ),
+            },
+            subscribe: { feed: () => feed },
+          }),
+        ) as Effect.Effect<
+          EffectEngine.EffectBootingRuntime<HoldModel, HoldMsg>
+        >,
+      );
+      const rt = await Effect.runPromise(booting.ready);
+      await Effect.runPromise(rt.dispatch({ type: "take" }));
+      return rt;
+    };
+
+    const siblings = await Promise.all(
+      ["a", "b", "c", "d", "e"].map((name) => start(name, Stream.never)),
+    );
+    const failing = await start(
+      "failing",
+      Stream.fromEffect(Deferred.await(go)).pipe(
+        Stream.flatMap(() => Stream.fail(closed)),
+      ),
+    );
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+    const failed = await Effect.runPromise(Effect.flip(failing.done()));
+
+    expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
+    await vi.waitFor(() => expect(released).toEqual(["failing"]));
+    expect(callerExits).toEqual([]);
+    for (const sibling of siblings) {
+      await Effect.runPromise(sibling.dispatch({ type: "poke" }));
+      expect(sibling.getState().pokes).toBe(1);
+    }
+
+    await Effect.runPromise(ScopeModule.close(caller, Exit.void));
+    expect([...released].sort()).toEqual(["a", "b", "c", "d", "e", "failing"]);
+    expect(callerExits).toHaveLength(1);
+  });
+
+  it("a runner's resource is released with its run", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    let released = false;
+    const { value: booting, exits } = await openScope(
+      EffectEngine.run(machine, {
+        onError,
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(
+              Effect.acquireRelease(
+                Effect.succeed({ type: "tick" } as Msg),
+                () =>
+                  Effect.sync(() => {
+                    released = true;
+                  }),
+              ),
+            ),
+          other: () => Stream.fail(closed),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+
+    await Effect.runPromise(Effect.flip(rt.done()));
+
+    await vi.waitFor(() => expect(released).toBe(true));
+    expect(exits).toEqual([]);
+  });
+
+  it("a child a cell spawned under Scope.Scope stops with the run", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    const go = Effect.runSync(Deferred.make<void>());
+    const log: string[] = [];
+    const { value: booting, exits } = await openScope(
+      EffectEngine.run(holding, {
+        onError,
+        interpret: {
+          hold: () =>
+            Effect.gen(function* () {
+              const scope = yield* ScopeModule.Scope;
+              yield* EffectEngine.spawn(scope, {
+                start: () => Effect.void,
+                enrol: () => Effect.void,
+                remove: Effect.sync(() => {
+                  log.push("remove");
+                }),
+                notify: Effect.void,
+              });
+            }),
+        },
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(Deferred.await(go)).pipe(
+              Stream.flatMap(() => Stream.fail(closed)),
+            ),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    await Effect.runPromise(rt.dispatch({ type: "take" }));
+    expect(log).toEqual([]);
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+    await Effect.runPromise(Effect.flip(rt.done()));
+
+    await vi.waitFor(() => expect(log).toEqual(["remove"]));
+    expect(exits).toEqual([]);
+  });
+
+  it("a parent's Sub failure leaves its workers up until the host closes the parent's scope", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    const log: string[] = [];
+    const go = Effect.runSync(Deferred.make<void>());
+    const parentScope = await Effect.runPromise(ScopeModule.make());
+    const parentRun = await Effect.runPromise(
+      (
+        await Effect.runPromise(
+          ScopeModule.provide(parentScope)(
+            EffectEngine.run(machine, {
+              onError,
+              subscribe: {
+                feed: () =>
+                  Stream.fromEffect(Deferred.await(go)).pipe(
+                    Stream.flatMap(() => Stream.fail(closed)),
+                  ),
+                other: () => forever(() => {}),
+              },
+            }),
+          ) as Effect.Effect<EffectEngine.EffectBootingRuntime<Model, Msg>>,
+        )
+      ).ready,
+    );
+    const workerBooting = await Effect.runPromise(
+      EffectEngine.spawn(parentScope, {
+        start: () =>
+          EffectEngine.run(machine, {
+            onError,
+            subscribe: {
+              feed: () => Stream.never,
+              other: () => forever(() => {}),
+            },
+          }),
+        enrol: () => Effect.void,
+        remove: Effect.sync(() => {
+          log.push("remove");
+        }),
+        notify: Effect.sync(() => {
+          log.push("notify");
+        }),
+      }),
+    );
+    const workerRun = await Effect.runPromise(workerBooting.ready);
+    // What the how-to tells a host to do.
+    const ended = Effect.runPromise(
+      Effect.ensuring(
+        Effect.ignore(parentRun.done()),
+        ScopeModule.close(parentScope, Exit.void),
+      ),
+    );
+
+    await Effect.runPromise(workerRun.dispatch({ type: "poke" }));
+    expect(log).toEqual([]);
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+    await ended;
+
+    await vi.waitFor(() => expect(log).toEqual(["remove", "notify"]));
+    const refused = await Effect.runPromise(
+      Effect.flip(workerRun.dispatch({ type: "poke" })),
+    );
+    expect(refused).toBeInstanceOf(EffectEngine.Stopped);
+  });
+});
+
+describe("Effect engine: done() gives one answer for one run", () => {
+  const closed = new Closed({ code: 1 });
+  // The Sub waits for `go`, sends `msgs` and fails, so a caller can already be
+  // waiting on `done()` and the Msgs are still in line when the failure lands.
+  const sending = async (msgs: readonly Msg[], save?: () => Promise<void>) => {
+    const go = Effect.runSync(Deferred.make<void>());
+    const { reports, onError } = sink();
+    const { value: booting, exits } = await openScope(
+      EffectEngine.run(machine, {
+        onError,
+        terminal: (s) => s.pokes > 0,
+        ...(save === undefined
+          ? {}
+          : {
+              store: {
+                load: async () => null,
+                save,
+                migrate: () => null,
+              } as Store<Model>,
+            }),
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(Deferred.await(go)).pipe(
+              Stream.flatMap(() => Stream.fromIterable(msgs)),
+              Stream.concat(Stream.fail(closed)),
+            ),
+          other: () => forever(() => {}),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    const send = () => Effect.runSync(Deferred.succeed(go, undefined));
+    return { rt, send, reports, exits };
+  };
+
+  it("a Sub that sends the terminal Msg and then fails: the waiter, a later done() and result() agree", async () => {
+    const { rt, send, exits } = await sending([{ type: "poke" }]);
+    const waiting = Effect.runPromiseExit(rt.done());
+
+    send();
+
+    const first = await waiting;
+    const later = await Effect.runPromiseExit(rt.done());
+    expect(Exit.isSuccess(first) && first.value.pokes).toBe(1);
+    expect(Exit.isSuccess(later) && later.value.pokes).toBe(1);
+    expect(rt.result()?.pokes).toBe(1);
+    expect(exits).toEqual([]);
+  });
+
+  it("a done() made while the terminal Msg is still in line waits for it too", async () => {
+    let finishSave!: () => void;
+    const saving = new Promise<void>((resolve) => {
+      finishSave = resolve;
+    });
+    let saves = 0;
+    const { rt, send, reports } = await sending(
+      [{ type: "tick" }, { type: "poke" }],
+      async () => {
+        saves += 1;
+        if (saves === 2) await saving;
+      },
+    );
+    const waiting = Effect.runPromiseExit(rt.done());
+
+    send();
+    // The `tick` step is held at its save, with `poke` in line behind it.
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(saves).toBe(2);
+    const racing = Effect.runPromiseExit(rt.done());
+    expect(rt.result()).toBeUndefined();
+
+    finishSave();
+    for (const answer of [await waiting, await racing]) {
+      expect(Exit.isSuccess(answer) && answer.value.pokes).toBe(1);
+    }
+    expect(rt.result()?.pokes).toBe(1);
+  });
+
+  it("a Msg in line that does not reach a terminal State folds before done() fails", async () => {
+    const { rt, send } = await sending([{ type: "tick" }]);
+    const waiting = Effect.runPromise(Effect.flip(rt.done()));
+
+    send();
+
+    const failed = await waiting;
+
+    expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
+    expect(rt.getState().ticks).toBe(1);
+    expect(rt.result()).toBeUndefined();
+  });
+
+  it("answers even with a handler that never returns, once stop() gives up on it", async () => {
+    type Stuck = { readonly type: "stuck" };
+    type StuckMsg = { readonly type: "begin" };
+    const stuck = defineMachine({
+      types: {
+        model: {} as { readonly begun: boolean },
+        msg: {} as StuckMsg,
+        cmd: {} as Stuck,
+        sub: {} as Feed,
+      },
+      init: () => [{ begun: false }, []],
+      update: { begin: () => [{ begun: true }, [{ type: "stuck" } as Stuck]] },
+      subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+    });
+    const go = Effect.runSync(Deferred.make<void>());
+    const { onError } = sink();
+    const { value: booting } = await openScope(
+      EffectEngine.run(stuck, {
+        onError,
+        disposeTimeoutMs: 20,
+        interpret: { stuck: () => Effect.uninterruptible(Effect.never) },
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(Deferred.await(go)).pipe(
+              Stream.flatMap(() => Stream.fail(closed)),
+            ),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    Effect.runFork(Effect.ignore(rt.dispatch({ type: "begin" })));
+    await vi.waitFor(() => expect(rt.getState().begun).toBe(true));
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+
+    const failed = await Effect.runPromise(Effect.flip(rt.done()));
+    expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
   });
 });
 

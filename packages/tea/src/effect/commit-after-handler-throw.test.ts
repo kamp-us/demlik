@@ -1,13 +1,12 @@
 /**
  * Commit callbacks fire even when a Cmd handler throws (#311).
  *
- * A transition installs its State, saves it, reconciles the Subs, runs its
- * Cmds, and then calls the commit callbacks — `subscribe`, `observe`, `on`,
- * `done()` and the telemetry sink. A hand-written Cmd handler that throws (or,
- * on the Effect engine, fails) still fails the dispatch with its own error,
- * but the State it left saved
- * reaches every one of those. Both engines share the loop, so each case runs
- * on both.
+ * A transition installs its State, saves it, reconciles the Subs, tells
+ * `subscribe` listeners (#695), runs its Cmds, and then calls the commit
+ * callbacks — `observe`, `on`, `done()` and the telemetry sink. A hand-written
+ * Cmd handler that throws (or, on the Effect engine, fails) still fails the
+ * dispatch with its own error, but the State it left saved reaches every one of
+ * those. Both engines share the loop, so each case runs on both.
  */
 
 import { Cause, Effect, Exit, Scope as ScopeModule, Stream } from "effect";
@@ -171,25 +170,27 @@ const engines: Record<"promise" | "effect", () => Promise<Harness>> = {
 };
 
 describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
-  it("orders save → subs → Cmds → commit callbacks when the handler succeeds", async () => {
+  it("orders save → subs → listeners → Cmds → commit callbacks when the handler succeeds", async () => {
     const { rt, log, stop } = await start();
     log.length = 0; // drop boot's save
-    rt.subscribe(() => log.push("commit"));
+    rt.subscribe(() => log.push("listener"));
+    rt.observe(() => log.push("commit"));
 
     await rt.dispatch({ type: "go", fail: false });
 
-    expect(log).toEqual(["save", "sub", "cmd", "commit"]);
+    expect(log).toEqual(["save", "sub", "listener", "cmd", "commit"]);
     await stop();
   });
 
   it("keeps that order when the handler throws, and rejects with its error", async () => {
     const { rt, log, stop } = await start();
     log.length = 0;
-    rt.subscribe(() => log.push("commit"));
+    rt.subscribe(() => log.push("listener"));
+    rt.observe(() => log.push("commit"));
 
     await expect(rt.dispatch({ type: "go", fail: true })).rejects.toBe(boom);
 
-    expect(log).toEqual(["save", "sub", "cmd", "commit"]);
+    expect(log).toEqual(["save", "sub", "listener", "cmd", "commit"]);
     await stop();
   });
 

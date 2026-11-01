@@ -190,7 +190,7 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
   /** Emit a value on a Port from outside a Cmd handler. */
   emitPort<T>(port: Port<T>, value: T): void;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
@@ -209,7 +209,10 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
    * the parent. Stop such a child with the `stop` helper.
    */
   stop(): Effect<void>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
   /** Subscribe to a typed Port. */
   subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
@@ -300,7 +303,8 @@ interface EffectRuntime<S, M extends { type: string }, E extends { type: string 
    * Succeeds with the terminal State only once it is saved. A failed terminal
    * save fails with `StoreFailed` (`operation: "save"`), and a Sub failure that
    * stopped the run short of a terminal State fails with `SubFailed`, both for
-   * waiting and later callers. Without a store, answers as soon as State is set.
+   * waiting and later callers. The Msgs already in line fold first, so one of
+   * them reaching a terminal State makes that State the answer. Without a store, answers as soon as State is set.
    */
   done(): Effect<S, StoreFailed | SubFailed>;
   /** The current State. Total. */

@@ -49,9 +49,12 @@ export interface EffectBootingRuntime<
   ): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
   dispatchOnce(msg: M): Effect.Effect<void, Err | Stopped | StoreFailed>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
@@ -105,7 +108,8 @@ export interface EffectRuntime<
    * Succeeds with the terminal State only once it is saved. A failed terminal
    * save fails with `StoreFailed` (`operation: "save"`), and a Sub failure that
    * stopped the run short of a terminal State fails with `SubFailed`, both for
-   * waiting and later callers. Without a store, answers as soon as State is set.
+   * waiting and later callers. The Msgs already in line fold first, so one of
+   * them reaching a terminal State makes that State the answer. Without a store, answers as soon as State is set.
    */
   done(): Effect.Effect<S, StoreFailed | SubFailed>;
 }

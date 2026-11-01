@@ -229,7 +229,11 @@ A failure the Sub does not catch stops that run and nothing else. `onError` sees
 it under `phase: "sub"`, and `done()` fails with `SubFailed`, whose `cause` is
 what the Sub failed with. `result()` stays `undefined`. The Scope you ran it in
 stays open, so whatever else lives there keeps going, and your program does not
-end by itself. To end it, wait on `done()`. There is no hook on the machine or
+end by itself. To end it, wait on `done()`. What the run's handlers and runners
+acquired through `Scope.Scope` is released with the run, because that service is
+the run's own child Scope there. The Msgs the Sub sent before it failed fold
+first, so if one of them reaches a terminal State, `done()` and `result()` both
+answer with that State. There is no hook on the machine or
 on `run` for it: a failure you expect belongs in the Sub.
 
 The Promise engine follows the same rule. Its runner dispatches the Msgs for

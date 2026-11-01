@@ -18,7 +18,16 @@
  *     (`./handle`, `./failures`).
  */
 
-import { Cause, Effect, Exit, Fiber, Result, Scope, Stream } from "effect";
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  Result,
+  Scope,
+  Stream,
+} from "effect";
 import { builtinExtensions } from "../internal/engine/builtins";
 import {
   defaultOnError,
@@ -290,7 +299,9 @@ export function settleCellExit(
  *
  * A Sub whose Stream fails with an error it did not map to a Msg stops this run
  * alone. The run forks its own child of that scope and closes only the child,
- * so the rest of the scope stays open, and `done()` fails with `SubFailed`.
+ * so the rest of the scope stays open, and `done()` fails with `SubFailed`. A
+ * handler or runner that reads `Scope.Scope` gets that child, so what it acquires
+ * is released with the run.
  *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
  * one of the built-ins both engines run.
@@ -339,14 +350,17 @@ export function run<
     // The run's own scope: the caller's closing closes it, and a Sub failure
     // closes it and leaves the caller's open (ADR 0030).
     const scope = yield* Scope.fork(callerScope);
-    const fork = Effect.runForkWith(services) as ForkEffect;
+    // Handlers and runners read that scope as `Scope.Scope`, so what they acquire
+    // is released with this run and not left in the caller's.
+    const runServices = Context.add(services, Scope.Scope, scope);
+    const fork = Effect.runForkWith(runServices) as ForkEffect;
     return yield* Effect.acquireRelease(
       Effect.sync(() =>
         effectHandle<S, M, E, CellErrors<C, I>>(
           start<S, M, C, U, Ctx, E>(
             machine,
             opts as EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
-            Effect.runPromiseExitWith(services) as RunEffect,
+            Effect.runPromiseExitWith(runServices) as RunEffect,
             fork,
             // Closing the Scope runs the release below, which stops the run.
             // A Scope that closes before that release is added runs it on add.

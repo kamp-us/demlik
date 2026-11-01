@@ -395,12 +395,16 @@ interface BootingRuntime<S, M extends { type: string }, E extends { type: string
   /** Stop the run; resolves once the engine has torn it down. */
   stop(): Promise<void>;
   /**
-   * Register a zero-arg change notifier, fired for every applied transition
-   * with the fold's State already committed — `getState()` inside the listener
-   * reads it, not the State before. A `dispatch` issued from the listener is
-   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
-   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
-   * deferral; two listeners issuing in order fold in that order.
+   * Register a zero-arg change notifier, fired once for every applied
+   * transition, after its save and before its first Cmd's handler starts, so a
+   * view shows the State while that State's Cmds run. `getState()` inside the
+   * listener reads the new State, not the State before. A failed save fires
+   * nothing. The listener does not mean the Cmds are done: `observe`, `on` and
+   * `done()` hear after them. A `dispatch` issued from the listener is SCHEDULED
+   * onto the serial tail behind the fold that fired it, never folded re-entrantly
+   * and never discarded, so it needs no `setTimeout(fn, 0)` deferral; it folds
+   * ahead of what that fold's Cmds return, and two listeners issuing in order
+   * fold in that order.
    */
   subscribe(listener: () => void): () => void;
   /**
@@ -1865,7 +1869,7 @@ interface RunHandle<S, M extends { type: string }, E extends { type: string } = 
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
   /** Put a Msg in the inbox; resolves once the engine has processed it. */
   dispatch(msg: M): Promise<void>;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
@@ -1876,7 +1880,10 @@ interface RunHandle<S, M extends { type: string }, E extends { type: string } = 
   onBoot(handler: (state: S) => void): () => void;
   /** Stop the run; resolves once the engine has torn it down. */
   stop(): Promise<void>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
 }
 ```
@@ -1921,7 +1928,9 @@ interface Runtime<S, M extends { type: string }, E extends { type: string } = ne
    * on that terminal commit. Rejects with the save failure if a terminal State
    * cannot be saved, for both waiting and later callers. Rejects with
    * `SubFailedError` once a Sub failure the Sub did not map to a Msg stops the
-   * run short of a terminal State, for both waiting and later callers too.
+   * run short of a terminal State, for both waiting and later callers too. It
+   * answers that only after the Msgs already in line have folded, because one of
+   * them can still reach a terminal State, and then the State is the answer.
    * Without a store, answers as soon as State is set. The awaitable companion to
    * `result()`. With no predicate this resolves never, and rejects only on that
    * Sub failure. Idempotent and multi-caller safe.

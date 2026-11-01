@@ -185,6 +185,13 @@ const program = Effect.gen(function* () {
 });
 ```
 
+The parent is not a worker. If the parent's own Sub fails, only the parent's run
+stops. `parentScope` stays open, because you opened it, so the workers keep
+running and `remove` and `notify` do not run. To stop the whole tree with the
+parent, wait on `parentRun.done()` on a fiber of its own, and close `parentScope`
+when it ends. Fork this right after the workers start:
+`Effect.forkDetach(Effect.ensuring(Effect.ignore(parentRun.done()), Scope.close(parentScope, Exit.void)))`.
+
 ## 4. Do your own work between the fork and the run
 
 A host often does more than start a run. This one gives every process its own
