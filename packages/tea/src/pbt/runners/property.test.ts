@@ -441,6 +441,223 @@ describe("what the check threw", () => {
   );
 });
 
+// A counter with three laws in one check. `up` runs past the cap, so only the
+// second law can break, and it first breaks on the fourth `up`.
+describe("a check that says why", () => {
+  type Count = { readonly count: number };
+  type CountMsg = { type: "up" } | { type: "down" } | { type: "reset" };
+
+  const counter = defineMachine({
+    types: {
+      model: {} as Count,
+      msg: {} as CountMsg,
+      ctx: {} as Record<string, never>,
+    },
+    init: () => [{ count: 0 }, []],
+    update: {
+      up: (s) => [{ count: s.count + 1 }, []],
+      down: (s) => [{ count: Math.max(0, s.count - 1) }, []],
+      reset: () => [{ count: 0 }, []],
+    } satisfies Reducer<Count, CountMsg, never>,
+  });
+
+  const countMsgs = arbMsgSequence(
+    arbMsg<CountMsg>({
+      up: fc.constant({ type: "up" as const }),
+      down: fc.constant({ type: "down" as const }),
+      reset: fc.constant({ type: "reset" as const }),
+    }),
+    { maxLength: 30 },
+  );
+
+  const FIRST = "the count went negative";
+  const SECOND = "the count passed its cap of 3";
+  const THIRD = "a reset left a count behind";
+
+  const firstLaw = (s: Count) => (s.count < 0 ? FIRST : null);
+  const secondLaw = (s: Count) => (s.count > 3 ? SECOND : null);
+  const thirdLaw = (msg: CountMsg, s: Count) =>
+    msg.type === "reset" && s.count !== 0 ? THIRD : null;
+
+  const threeLawsOnEachStep = (seed: number): PropertyRun =>
+    propertyInvariant(
+      counter,
+      {},
+      countMsgs,
+      ({ msg, next }) =>
+        firstLaw(next) ?? secondLaw(next) ?? thirdLaw(msg, next),
+      { seed },
+    );
+
+  const threeLawsOverTheTrace = (seed: number): PropertyRun =>
+    propertyTrace(
+      counter,
+      {},
+      countMsgs,
+      (steps) => {
+        for (const { msg, next } of steps) {
+          const broken =
+            firstLaw(next) ?? secondLaw(next) ?? thirdLaw(msg, next);
+          if (broken !== null) return broken;
+        }
+        return null;
+      },
+      { seed },
+    );
+
+  const THREE_LAWS = [
+    ["propertyInvariant", threeLawsOnEachStep],
+    ["propertyTrace", threeLawsOverTheTrace],
+  ] as const;
+
+  const up = JSON.stringify({ type: "up" });
+  const SHRUNK = `Counterexample: [[${[up, up, up, up].join(",")}]]`;
+
+  describe.each(THREE_LAWS)("%s with three laws", (_name, run) => {
+    it.each(SEEDS)("names the law that broke, seed %i", (seed) => {
+      const failure = failureOf(() => run(seed));
+
+      expect(failure.message).toContain(SECOND);
+      expect(failure.message).toContain(SHRUNK);
+      expect(failure.message).not.toContain(FIRST);
+      expect(failure.message).not.toContain(THIRD);
+      expect(failure.run.seed).toBe(seed);
+    });
+
+    it("says it once, wherever fast-check files what a check threw", () => {
+      const { message } = failureOf(() => run(1));
+      expect(message.split(SECOND)).toHaveLength(2);
+    });
+  });
+
+  const ANSWERS: readonly (readonly [
+    string,
+    boolean | string | null,
+    "holds" | "fails",
+  ])[] = [
+    ["true", true, "holds"],
+    ["null", null, "holds"],
+    ["false", false, "fails"],
+    ["a reason", "why", "fails"],
+    ["an empty string", "", "fails"],
+  ];
+
+  const ANSWERING: readonly (readonly [
+    string,
+    (answer: boolean | string | null) => PropertyRun,
+  ])[] = [
+    [
+      "propertyInvariant",
+      (answer) =>
+        propertyInvariant(counter, {}, countMsgs, () => answer, {
+          seed: 1,
+          numRuns: 20,
+        }),
+    ],
+    [
+      "propertyTrace",
+      (answer) =>
+        propertyTrace(counter, {}, countMsgs, () => answer, {
+          seed: 1,
+          numRuns: 20,
+        }),
+    ],
+  ];
+
+  describe.each(ANSWERING)("%s reads each answer", (_name, run) => {
+    it.each(ANSWERS)("%s", (_label, answer, expected) => {
+      if (expected === "holds") {
+        expect(run(answer).numRuns).toBe(20);
+      } else {
+        expect(failureOf(() => run(answer))).toBeInstanceOf(PropertyFailure);
+      }
+    });
+  });
+
+  // Where a runner's own text lands differs by major, so read both places.
+  const allText = (failure: PropertyFailure): string =>
+    failure.cause instanceof Error
+      ? `${failure.message}\n${failure.cause.message}`
+      : failure.message;
+
+  it("propertyTrace's failure carries the reason and what it prints today", () => {
+    const text = allText(failureOf(() => threeLawsOverTheTrace(1)));
+    expect(text).toContain(SECOND);
+    expect(text).toContain("propertyTrace: predicate failed on trace length=4");
+    expect(text).toContain(`final=${JSON.stringify({ count: 4 })}`);
+  });
+
+  it("propertyInvariant's failure carries the reason and the step", () => {
+    const text = allText(failureOf(() => threeLawsOnEachStep(1)));
+    expect(text).toContain(SECOND);
+    expect(text).toContain(`propertyInvariant: failed at step msg=${up}`);
+  });
+
+  it("a plain false reports exactly what fc.assert reports", () => {
+    const viaAssert = (): Error => {
+      try {
+        fc.assert(
+          fc.property(countMsgs, (msgs) => {
+            const { steps } = foldEvents(counter, {}, null, msgs);
+            for (const step of steps) {
+              if (step.next.count > 3) {
+                throw new Error(
+                  `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
+                    `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
+                    `cmds=${JSON.stringify(step.cmds)}`,
+                );
+              }
+            }
+          }),
+          { seed: 1, numRuns: 200 },
+        );
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error("expected fc.assert to fail, and it passed");
+    };
+    const failure = failureOf(() =>
+      propertyInvariant(counter, {}, countMsgs, ({ next }) => next.count <= 3, {
+        seed: 1,
+      }),
+    );
+
+    const withoutStack = (message: string): string =>
+      message.split(/\n\s*at /)[0] ?? message;
+    expect(withoutStack(failure.message)).toBe(
+      withoutStack(viaAssert().message),
+    );
+    expect(failure.message).not.toContain("reason:");
+  });
+
+  it("a check that throws still fails with its own message", () => {
+    const failure = failureOf(() =>
+      propertyInvariant(
+        counter,
+        {},
+        countMsgs,
+        ({ next }) => {
+          if (next.count > 3) throw new Error("the check threw this");
+          return null;
+        },
+        { seed: 1 },
+      ),
+    );
+    expect(allText(failure)).toContain("the check threw this");
+    expect(failure.message).not.toContain("reason:");
+  });
+
+  it("propertyTerminates still fails on a boolean alone", () => {
+    const failure = failureOf(() =>
+      propertyTerminates(counter, {}, countMsgs, (s) => s.count <= 3, {
+        seed: 1,
+      }),
+    );
+    expect(allText(failure)).toContain("propertyTerminates:");
+    expect(failure.message).not.toContain("reason:");
+  });
+});
+
 describe("what a run hands back", () => {
   it.each(RUNNERS)("%s returns its counts on a pass", (_name, run) => {
     expect(run(guarded, { loaded: savedStates, seed: 7, numRuns: 25 })).toEqual(

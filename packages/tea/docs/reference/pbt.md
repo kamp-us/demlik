@@ -175,7 +175,7 @@ function propertyInvariant<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
-  invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
+  invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
 ```
@@ -239,7 +239,7 @@ function propertyTrace<
   predicate: (
     steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
     finalState: NoInfer<S>,
-  ) => boolean,
+  ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
 ```
