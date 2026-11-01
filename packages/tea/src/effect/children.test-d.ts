@@ -8,7 +8,6 @@ import { defineMachine } from "../index";
 import {
   type EffectRuntime,
   type SpawnSteps,
-  type StoreFailed,
   type TellAnswer,
   tell,
 } from "./index";
@@ -49,12 +48,7 @@ const answered: Effect.Effect<"queued" | "stopped" | "no_cell", never> = tell(
   parentRun,
   msg,
 );
-const noWord: Effect.Effect<TellAnswer, never> = answered;
-// @ts-expect-error a failed save never comes back to the sender
-const noSaveFailure: Effect.Effect<StoreFailed, never> = tell(
-  parent,
-  parentRun,
-  msg,
-);
+// A save failure back in the failure channel breaks this line, `answered` and `bare`.
+const named: Effect.Effect<TellAnswer, never> = tell(parent, parentRun, msg);
 
-void [bare, failing, noWord, noSaveFailure];
+void [bare, failing, answered, named];

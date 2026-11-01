@@ -4,7 +4,7 @@
  * what `tell` does inside `spawn`'s `notify`; this file holds its own promise.
  */
 
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import {
   type LineMsg,
@@ -62,7 +62,8 @@ const openLine = (store?: Store<LineState>) =>
     };
   });
 
-describe("tell on the Effect engine", () => {
+// One timeout for the file: the ring test's `done()` limits are 10 seconds each.
+describe("tell on the Effect engine", { timeout: 20_000 }, () => {
   it("one parent and three spawned children answering each other from Cmd handlers, 100 round trips each: all finish, and each log replays to the same State", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
@@ -158,7 +159,7 @@ describe("tell on the Effect engine", () => {
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
-  }, 20_000);
+  });
 
   it("returns before the receiver's step runs: with its handler held, `tell` has answered and the Msg folds once it is released", async () => {
     await Effect.runPromise(
@@ -337,6 +338,28 @@ describe("tell on the Effect engine", () => {
 
         expect(reports).toEqual([disk]);
         full = false;
+        yield* Scope.close(scope, Exit.void);
+      }),
+    );
+  });
+
+  it("dies with a defect on a handle that did not come from `run`", async () => {
+    const handBuilt = {} as EffectRuntime<LineState, LineMsg>;
+    const exit = await Effect.runPromiseExit(tell(line, handBuilt, ping("a")));
+    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(
+      expect.objectContaining({
+        message: expect.stringMatching(/run handle from `run`/),
+      }),
+    );
+  });
+
+  it("takes a spread of a real handle, which keeps its line", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { scope, runtime } = yield* openLine();
+        expect(yield* tell(line, { ...runtime }, ping("a"))).toBe("queued");
+        yield* runtime.idle();
+        expect(runtime.getState().folded).toEqual(["a"]);
         yield* Scope.close(scope, Exit.void);
       }),
     );

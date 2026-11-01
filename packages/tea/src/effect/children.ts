@@ -24,7 +24,13 @@ import type { EffectRuntime } from "./handle";
  * The answer is `"queued"`, `"stopped"` for a run that is stopping or has
  * stopped, or `"no_cell"` when its current State has no cell for the Msg. Msgs
  * already in line have not folded yet, so a Msg that only a queued one makes
- * acceptable answers `"no_cell"`. `tell` itself never fails.
+ * acceptable answers `"no_cell"`.
+ *
+ * `tell` carries no failure in its type, with one exception the type cannot
+ * see. A handle that did not come from `run` has no line to put a Msg on, so
+ * `tell` dies with a defect. A spread of a real handle keeps its line; a plain
+ * object built by hand does not. Inside `spawn`'s `notify`, that defect ends the
+ * fiber unseen and the parent is never told.
  *
  * What happens after `"queued"` is the receiver's. Two `tell`s from one sender
  * fold in the order they were sent. A failed save or a cell's failure goes to
@@ -83,8 +89,9 @@ export interface SpawnSteps<A, E = never, R = never> {
    * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with. A `tell` has nothing to handle. A defect in it is
-   * not observed by `spawn` and ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. A defect in it,
+   * such as a `tell` on a handle that did not come from `run`, is not observed
+   * by `spawn` and ends the fiber unseen.
    */
   readonly notify: Effect.Effect<unknown>;
 }
@@ -105,9 +112,10 @@ export interface SpawnSteps<A, E = never, R = never> {
  *   - `remove` runs after the child's run has stopped.
  *
  * Nothing reads the fiber `notify` runs on, so `spawn` reports no failure of
- * it and `notify` is typed to have none. A `tell` never fails, and a failed
- * save of the parent reaches the parent's own `onError`. A defect in `notify`
- * ends that fiber unseen.
+ * it and `notify` is typed to have none. A `tell` carries no failure, and a
+ * failed save of the parent reaches the parent's own `onError`. A defect in
+ * `notify`, such as a `tell` on a handle that did not come from `run`, ends that
+ * fiber unseen.
  *
  * `child.run.stop()` is not one of the two ways to stop a child. It stops the
  * run and leaves the scope open, so the entry stays in the table and the

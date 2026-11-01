@@ -374,8 +374,9 @@ interface SpawnSteps<A, E = never, R = never> {
    * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with. A `tell` has nothing to handle. A defect in it is
-   * not observed by `spawn` and ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. A defect in it,
+   * such as a `tell` on a handle that did not come from `run`, is not observed
+   * by `spawn` and ends the fiber unseen.
    */
   readonly notify: Effect<unknown>;
   /**

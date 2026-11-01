@@ -16,6 +16,10 @@ export type { TellAnswer } from "../internal/engine/loop";
  * already in line have not folded yet, so a Msg that only a queued one makes
  * acceptable answers `"no_cell"`.
  *
+ * A handle that did not come from `run` has no line to put a Msg on, so `tell`
+ * throws, though the type accepts it. A spread of a real handle keeps its line;
+ * a plain object built by hand does not.
+ *
  * What happens after `"queued"` is the receiver's. Two `tell`s from one sender
  * fold in the order they were sent. A failed save or a handler's throw goes to
  * the receiver's `onError`, never back to the sender. A Msg whose cell is gone
