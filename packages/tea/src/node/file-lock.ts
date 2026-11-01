@@ -29,8 +29,9 @@ const SPIN_MS = 10;
 /**
  * How far apart two boot times may read and still be one boot. A boot time here
  * is derived from the clock, so one boot reads slightly differently from two
- * moments. Too small a tolerance would rob a live holder; too large only sends a
- * very quick reboot to the loud failure.
+ * moments. Too small a tolerance would rob a live holder; too large sends a very
+ * quick reboot to the loud failure. It cannot see a clock step: one larger than
+ * this during a hold reads as an earlier boot, and that live holder is stolen.
  */
 const BOOT_TOLERANCE_MS = 60_000;
 

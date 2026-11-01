@@ -120,8 +120,6 @@ describe("a folder restored from another machine", { timeout: 30_000 }, () => {
     const runtime = await run(noteMachine, {
       ctx: undefined,
       store: fileStore(path, parseNotes, { fenced: true }),
-      // Past the lock's limit, so the save ends before stop() gives up on it.
-      disposeTimeoutMs: 60_000,
       onError: (error, context) => {
         seen.push({ error, phase: context.phase });
       },
