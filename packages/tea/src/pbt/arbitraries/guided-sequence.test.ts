@@ -319,32 +319,40 @@ describe("every answer answers a Cmd really sent", () => {
   });
 });
 
-describe("a shrunk list", () => {
-  // Each list the property sees is folded, so the first failure is the list found.
-  const shrink = (seed: number) => {
-    let first: readonly Msg[] | null = null;
-    const details = fc.check(
-      fc.property(lists, (msgs) => {
-        const { steps, finalState, initCmds } = folded(dropsAnAnswer, msgs);
-        const held =
-          landsGivenEveryAnswer(steps, finalState, initCmds) === true;
-        if (!held) first ??= msgs;
-        return held;
-      }),
-      { seed, numRuns: 2000 },
-    );
-    const [shrunk] = details.counterexample ?? [];
-    if (first === null || shrunk === undefined) {
-      throw new Error(`seed ${seed} found no failure`);
-    }
-    return { first: first as readonly Msg[], shrunk };
-  };
-  const seeds = Array.from({ length: 30 }, (_, i) => 745 + i);
+const SHRINK_SEEDS = Array.from({ length: 30 }, (_, i) => 745 + i);
 
+/**
+ * Fail the "lands" law on a broken machine, and give back the list first found and
+ * its shrunk form. Each list the property sees is folded, so the first failure is
+ * the list found.
+ */
+const shrink = (
+  broken: typeof machine,
+  from: fc.Arbitrary<readonly Msg[]>,
+  seed: number,
+) => {
+  let first: readonly Msg[] | null = null;
+  const details = fc.check(
+    fc.property(from, (msgs) => {
+      const { steps, finalState, initCmds } = folded(broken, msgs);
+      const held = landsGivenEveryAnswer(steps, finalState, initCmds) === true;
+      if (!held) first ??= msgs;
+      return held;
+    }),
+    { seed, numRuns: 2000 },
+  );
+  const [shrunk] = details.counterexample ?? [];
+  if (first === null || shrunk === undefined) {
+    throw new Error(`seed ${seed} found no failure`);
+  }
+  return { first: first as readonly Msg[], shrunk };
+};
+
+describe("a shrunk list", () => {
   it.each(
-    seeds,
+    SHRINK_SEEDS,
   )("still answers only sent Cmds, and is no longer, seed %i", (seed) => {
-    const { first, shrunk } = shrink(seed);
+    const { first, shrunk } = shrink(dropsAnAnswer, lists, seed);
     const { steps, initCmds } = folded(dropsAnAnswer, shrunk);
     expect(walk(initCmds, steps).misfit).toBeNull();
     expect(shrunk.length).toBeLessThanOrEqual(first.length);
@@ -353,10 +361,12 @@ describe("a shrunk list", () => {
   it("reaches the true shortest on nearly every seed", () => {
     // start, then one good answer per check.
     const shortest = 4;
-    const lengths = seeds.map((seed) => shrink(seed).shrunk.length);
+    const lengths = SHRINK_SEEDS.map(
+      (seed) => shrink(dropsAnAnswer, lists, seed).shrunk.length,
+    );
     const atShortest = lengths.filter((length) => length === shortest);
     expect(Math.min(...lengths)).toBe(shortest);
-    expect(atShortest.length).toBeGreaterThanOrEqual(seeds.length * 0.8);
+    expect(atShortest.length).toBeGreaterThanOrEqual(SHRINK_SEEDS.length * 0.8);
   });
 
   it("shrinks a drawn value too", () => {
@@ -514,6 +524,10 @@ describe("a machine in the transitions form", () => {
     });
 
   const correct = phased();
+  const phasedDropsAnAnswer = phased({
+    ...table,
+    asking: { ...table.asking, test_ok: (s) => [s, []] },
+  });
   const phasedLists = arbGuidedSequence(correct, ctx, cells);
 
   it.each(SEEDS)("a law that always holds passes, seed %i", (seed) => {
@@ -542,21 +556,31 @@ describe("a machine in the transitions form", () => {
   it.each(
     SEEDS,
   )("a broken copy fails on its law and no refusal, seed %i", (seed) => {
-    const broken = phased({
-      ...table,
-      asking: { ...table.asking, test_ok: (s) => [s, []] },
-    });
     const failure = failureOf(() =>
       propertyTrace(
-        broken,
+        phasedDropsAnAnswer,
         ctx,
-        arbGuidedSequence(broken, ctx, cells),
+        arbGuidedSequence(phasedDropsAnAnswer, ctx, cells),
         landsGivenEveryAnswer,
         { seed, numRuns: 500 },
       ),
     );
     expect(failure.run.numShrinks).toBeGreaterThan(0);
     expect(told(failure)).toContain("sits in asking");
+  });
+
+  it.each(
+    SHRINK_SEEDS,
+  )("a shrunk failure still fits every state, and is no longer, seed %i", (seed) => {
+    const { first, shrunk } = shrink(
+      phasedDropsAnAnswer,
+      arbGuidedSequence(phasedDropsAnAnswer, ctx, cells),
+      seed,
+    );
+    // `folded` steps with `applyCell`, which throws on a refused Msg.
+    const { steps, initCmds } = folded(phasedDropsAnAnswer, shrunk);
+    expect(walk(initCmds, steps).misfit).toBeNull();
+    expect(shrunk.length).toBeLessThanOrEqual(first.length);
   });
 
   it.each(
