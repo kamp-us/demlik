@@ -8,6 +8,8 @@
  *
  *   - `arbMsg` / `arbMsgSequence` — build `fc.Arbitrary<M>` and `Arbitrary<M[]>`
  *     from a strict, mapped-type Msg-variant table.
+ *   - `arbGuidedSequence` — draw Msg lists whose answers each fit a Cmd really
+ *     sent, by folding blind picks through the machine.
  *   - `propertyTerminates` / `propertyInvariant` / `propertyTrace` — wrap
  *     `fc.check(fc.property(...))` with a TEA-shaped fold over Msg sequences,
  *     returning a `PropertyRun` and throwing a `PropertyFailure` that carries one.
@@ -23,11 +25,13 @@
  */
 
 export {
+  type AnswerCell,
   arbConstantMsg,
   arbGuidedSequence,
   arbMsg,
   arbMsgSequence,
   arbRecordMsg,
+  type GuidedCells,
   type MsgArbitraryTable,
   stubCtxThrowingProxy,
 } from "./arbitraries";
