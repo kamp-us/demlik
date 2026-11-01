@@ -17,7 +17,7 @@ import { … } from "@demlik/tea/pbt";
 | [`arbMsg`](#arbMsg) | Function | stable | Build a single `fc.Arbitrary<M>` from a `MsgArbitraryTable<M>`. |
 | [`arbMsgSequence`](#arbMsgSequence) | Function | stable | Build an arbitrary of Msg sequences over a per-Msg arbitrary. |
 | [`arbRecordMsg`](#arbRecordMsg) | Function | stable | Build a record-shaped Msg variant arbitrary. |
-| [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, and the final state. |
+| [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, the final state, and the Cmds `init` sent. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
 | [`MsgCount`](#MsgCount) | Interface | stable | What a property run's lists did with one Msg type. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
@@ -121,6 +121,7 @@ function foldEvents<
   msgs: readonly NoInfer<M>[],
 ): {
   readonly finalState: S;
+  readonly initCmds: readonly C[];
   readonly states: readonly S[];
   readonly steps: readonly Step<S, M, C>[];
 }
@@ -192,7 +193,10 @@ function propertyInvariant<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
-  invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => string | boolean | null,
+  invariant: (
+    step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>,
+    initCmds: readonly NoInfer<C>[],
+  ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
 ```
@@ -245,7 +249,7 @@ function propertyTerminates<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: Arbitrary<readonly NoInfer<M>[]>,
-  terminal: (state: NoInfer<S>) => boolean,
+  terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
 ```
@@ -268,6 +272,7 @@ function propertyTrace<
   predicate: (
     steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
     finalState: NoInfer<S>,
+    initCmds: readonly NoInfer<C>[],
   ) => string | boolean | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun
