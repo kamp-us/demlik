@@ -24,6 +24,15 @@ message dispatched behind it queues until the wait is over. Nothing throws,
 nothing warns; the machine simply stops folding, and you go looking for a
 deadlock that is really just a `setTimeout` you put in the wrong place.
 
+The same hold is why a handler that talks to another machine uses `tell`, from
+either engine's entry. `tell` promises *queued*, not *handled*: it puts the Msg
+on the receiver's line and returns at once, and any result comes back later as
+its own Msg. `dispatch` waits for the receiver's step, and that step waits for
+the receiver's handlers. So two hand-written waiting `dispatch` calls into each
+other, one from a handler in each machine, can still stop both machines, with
+no error and no lock-up detector to find it. With `tell` there is nothing to
+wait on, so the two keep moving.
+
 A Sub has no such hold. It is opened alongside the fold rather than inside it,
 and anything it produces arrives as an ordinary dispatched Msg — one the reducer
 folds in its turn, behind whatever else is queued.

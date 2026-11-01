@@ -8,7 +8,12 @@
  */
 
 import { Effect } from "effect";
-import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
+import {
+  type LiveWorkProbe,
+  liveWork,
+  type Postable,
+  post,
+} from "../internal/engine/loop";
 import type { Port } from "../pure/core";
 import type { DispatchSettle, Runtime } from "../runtime-types";
 import { exitOf, type Stopped, type StoreFailed } from "./failures";
@@ -118,10 +123,11 @@ export function effectHandle<
   E extends { type: string },
   Err,
 >(
-  loop: Runtime<S, M, E> & LiveWorkProbe,
-): EffectRuntime<S, M, E, Err> & LiveWorkProbe {
-  const handle: EffectRuntime<S, M, E, Err> & LiveWorkProbe = {
+  loop: Runtime<S, M, E> & LiveWorkProbe & Postable<S, M>,
+): EffectRuntime<S, M, E, Err> & LiveWorkProbe & Postable<S, M> {
+  const handle: EffectRuntime<S, M, E, Err> & LiveWorkProbe & Postable<S, M> = {
     [liveWork]: loop[liveWork],
+    [post]: loop[post],
     dispatch: (msg, opts) => settled(() => loop.dispatch(msg, opts)),
     dispatchOnce: (msg) => settled(() => loop.dispatchOnce(msg)),
     subscribe: (listener) => loop.subscribe(listener),

@@ -5,7 +5,8 @@ and Elm has none either. A tree of machines is built from Effect scopes, `run`
 from `@demlik/tea/effect`, and three helpers from the same entry:
 [`spawn`](../reference/effect.md#spawn) starts a child in a scope of its own,
 [`stop`](../reference/effect.md#stop) stops one child, and
-[`tell`](../reference/effect.md#tell) sends the parent a notice.
+[`tell`](../reference/effect.md#tell) puts a notice on the parent's line
+without waiting for it.
 
 This page starts workers under a parent. Each worker runs in a child scope of
 the parent's scope, the host keeps a table of live workers by id, and the
@@ -111,12 +112,7 @@ export const spawnWorker = (
       Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
-    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
-      Effect.catch((failure) =>
-        Effect.logError(`the parent did not take the stop of ${id}`, failure),
-      ),
-    ),
+    notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
 /** Stop one worker. An id not in the table is a no-op. */
@@ -140,11 +136,9 @@ export const stopWorker = (
 - **`remove`** takes it out again. It runs when the child's scope closes,
   after the worker has stopped.
 - **`notify`** runs after `remove`. Here it is `tell(parent, parentRun, msg)`,
-  which dispatches `msg` only when the parent's State has a cell for it.
-  `spawn` runs `notify` on a fiber nothing reads, so `notify` is typed to
-  never fail. `tell` fails with `StoreFailed` when the parent's save fails,
-  so a bare `notify: tell(...)` does not compile. The `Effect.catch` is where
-  this host says what happens to that failure: it logs it.
+  which puts `msg` on the parent's line when the parent's State has a cell for
+  it, and returns at once. `spawn` runs `notify` on a fiber nothing reads, so
+  `notify` is typed to never fail. `tell` never does, so it goes in bare.
 
 `stop(child.scope)` stops that one worker: its run stops, `remove` takes its
 entry out and `notify` tells the parent. The table lookup is yours, so
@@ -283,12 +277,7 @@ export const spawnProcess = <E>(
       }),
     enrol: (process) => Effect.sync(() => processes.set(id, process)),
     remove: Effect.sync(() => processes.delete(id)),
-    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
-    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
-      Effect.catch((failure) =>
-        Effect.logError(`the parent did not take the stop of ${id}`, failure),
-      ),
-    ),
+    notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
 /** Stop one running process. Any other id is a no-op. */
@@ -324,19 +313,35 @@ You do not guard any of these in host code.
   can call `stop`, even though the parent's `dispatch` waits for that handler.
 - **Stopping a child twice is safe.** The second `stop` succeeds and sends no
   second notice.
-- **A notice the parent no longer takes is dropped.** `tell` sends nothing
-  when the parent's State has no cell for the Msg. It also drops the
-  `NoCellError` of a State that changed after the check, and the `Stopped` of
-  a parent that stopped. Tuval sent the notice anyway and logged an error per
-  spawn ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
+- **`tell` promises queued, not handled.** It puts the Msg on the receiver's
+  line and answers at once, before the receiver's step has run. A result comes
+  back later as its own Msg. So a child can tell its parent from a Cmd handler,
+  the parent can answer from its own, and neither stops. The Promise engine has
+  the same `tell`, in `@demlik/tea/promise`.
+- **`tell` says where the Msg stands, in three words.** `"queued"` means it is
+  on the line. `"stopped"` means the receiver is stopping or has stopped, so it
+  is not. `"no_cell"` means the receiver's current State has no cell for it, so
+  it is not. `tell` itself never fails. Tuval sent the notice anyway and logged
+  an error per spawn
+  ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
+- **Two `tell`s from one sender fold in the order they were sent.**
+- **A Msg whose cell is gone by its turn is dropped without a word.** It does
+  not end the process, with or without an `onError`.
+- **A failed save of the receiver reaches the receiver's `onError`.** It does
+  not come back to the sender, and `spawn` does not report it.
 
-One thing stays yours:
+Three things stay yours:
 
-- **A failed save of the parent reaches only your `notify`.** `tell` fails
-  with `StoreFailed` when the parent's save fails. `spawn` does not report it
-  and the parent's `onError` is not handed it, so the type makes `notify`
-  handle it. Log it, send it somewhere, or turn it into a defect with
-  `Effect.orDie`. A defect in `notify` ends its fiber and nobody sees it.
+- **`"no_cell"` reads the State as it is now.** Msgs already on the line have
+  not folded yet. A Msg that only a queued one makes acceptable answers
+  `"no_cell"`, so wait for the first one's result before sending the second.
+- **`idle()` and `dispatch` speak for one run.** A machine waiting on a `tell`
+  from another run looks quiet to its own `idle()`. Wait for its State, or use
+  `done()` with a `terminal`.
+- **Two hand-written waiting `dispatch` calls into each other can still stop
+  both machines.** A step ends only when its Cmd handlers return, and `dispatch`
+  waits for the receiver's step. A handler in each machine waiting on the other
+  is a ring, and tea has no lock-up detector. Use `tell` there.
 
 Stop a child with `stop`, or by closing its scope. `child.run.stop()` is not
 one of them: it stops the run and leaves the scope open, so the entry stays in

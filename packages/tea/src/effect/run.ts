@@ -25,6 +25,7 @@ import {
   type LiveWorkProbe,
   type LoopHandler,
   type LoopRunner,
+  type Postable,
   startLoop,
 } from "../internal/engine/loop";
 import type {
@@ -380,7 +381,7 @@ function start<
   runEffect: RunEffect,
   fork: ForkEffect,
   closeScope: (exit: Exit.Exit<never, unknown>) => void,
-): Runtime<S, M, E> & LiveWorkProbe {
+): Runtime<S, M, E> & LiveWorkProbe & Postable<S, M> {
   const interpret = ((opts as { interpret?: unknown }).interpret ??
     {}) as Readonly<Record<string, AnyCell | undefined>>;
   const subscribe = ((opts as { subscribe?: unknown }).subscribe ??
@@ -474,5 +475,5 @@ function start<
     interruption.abort();
     return stopped;
   };
-  return handle as unknown as Runtime<S, M, E> & LiveWorkProbe;
+  return handle as unknown as Runtime<S, M, E> & LiveWorkProbe & Postable<S, M>;
 }

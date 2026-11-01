@@ -5,29 +5,39 @@
  * tea still runs one machine per `run` and keeps no table of runs (#312). A
  * host that builds a tree of runs keeps its own table, ids and Msg names, and
  * hands the steps that race to these functions: `spawn` starts a child and
- * enrols it as one step, `stop` stops one child, and `tell` sends the parent a
- * notice it may no longer take.
+ * enrols it as one step, `stop` stops one child, and `tell` puts a Msg on a
+ * run's line without waiting for it.
  */
 
 import { Effect, Exit, Scope } from "effect";
+import type { TellAnswer } from "../internal/engine/loop";
+import { tellRun } from "../internal/engine/tell";
 import type { Cmd, Machine, Sub } from "../pure/core";
-import { acceptedTypes, NoCellError } from "../pure/core";
-import type { StoreFailed } from "./failures";
 import type { EffectRuntime } from "./handle";
 
 /**
- * Hand `msg` to a run only when its State has a cell for it, and drop it when
- * the run no longer takes it.
+ * Put `msg` on a run's line and answer at once. The answer means queued, not
+ * handled: the receiver's step has not run yet, and any result comes back later
+ * as its own Msg. So two machines can tell each other from their Cmd handlers
+ * and neither stops. `machine` is the machine `runtime` runs.
  *
- * `machine` is the machine `runtime` runs. The dispatch lands a moment after
- * the check, so a State that changed in between refuses the Msg with a
- * `NoCellError`, and a run that stopped refuses it with `Stopped`. Both mean
- * the run no longer takes the notice, so both are dropped and `tell` succeeds.
- * A failed save stays a `StoreFailed`, and a hand-written cell's declared
- * failure stays that failure.
+ * The answer is `"queued"`, `"stopped"` for a run that is stopping or has
+ * stopped, or `"no_cell"` when its current State has no cell for the Msg. Msgs
+ * already in line have not folded yet, so a Msg that only a queued one makes
+ * acceptable answers `"no_cell"`. `tell` itself never fails.
+ *
+ * What happens after `"queued"` is the receiver's. Two `tell`s from one sender
+ * fold in the order they were sent. A failed save or a cell's failure goes to
+ * the receiver's `onError`, never back to the sender. A Msg whose cell is gone
+ * by its turn is dropped without a word, and a `stop()` that gives up drops
+ * what is still in line and reports each as a discard.
+ *
+ * Two hand-written waiting `runtime.dispatch(...)` calls into each other, one
+ * from each machine's Cmd handler, still stop both machines: `dispatch` waits,
+ * and tea has no lock-up detector. Use `tell` there.
  *
  * ```ts
- * yield* tell(parent, parentRun, { type: "child_stopped", id });
+ * const answer = yield* tell(parent, parentRun, { type: "child_stopped", id });
  * ```
  */
 export const tell = <
@@ -42,17 +52,8 @@ export const tell = <
   machine: Machine<S, M, C, U, Ctx>,
   runtime: EffectRuntime<S, M, E, Err>,
   msg: NoInfer<M>,
-): Effect.Effect<void, Err | StoreFailed> =>
-  Effect.suspend(() =>
-    acceptedTypes(machine, runtime.getState()).includes(msg.type)
-      ? runtime.dispatch(msg)
-      : Effect.void,
-  ).pipe(
-    Effect.catchTag("Stopped", () => Effect.void),
-    Effect.catchDefect((defect) =>
-      defect instanceof NoCellError ? Effect.void : Effect.die(defect),
-    ),
-  ) as Effect.Effect<void, Err | StoreFailed>;
+): Effect.Effect<TellAnswer> =>
+  Effect.sync(() => tellRun<S, M>(machine, runtime, msg));
 
 /**
  * The host's own steps of a {@link spawn}. The host owns the table of
@@ -79,11 +80,11 @@ export interface SpawnSteps<A, E = never, R = never> {
   /**
    * Say the child stopped, usually a {@link tell} to the parent. It runs
    * after `remove`, on a fiber of its own that the closing scope never waits
-   * for, so it may wait on the parent.
+   * for, so even a step that does wait cannot hold the close.
    *
    * It cannot fail: nothing reads that fiber, so the step itself handles what
-   * its notice can fail with, such as the `StoreFailed` of a `tell`. A defect
-   * in it is not observed by `spawn` and ends the fiber unseen.
+   * its notice can fail with. A `tell` has nothing to handle. A defect in it is
+   * not observed by `spawn` and ends the fiber unseen.
    */
   readonly notify: Effect.Effect<unknown>;
 }
@@ -104,9 +105,9 @@ export interface SpawnSteps<A, E = never, R = never> {
  *   - `remove` runs after the child's run has stopped.
  *
  * Nothing reads the fiber `notify` runs on, so `spawn` reports no failure of
- * it and `notify` is typed to have none. The host handles what its notice can
- * fail with inside the step, as the `Effect.catch` below does for a parent
- * whose save failed. A defect in `notify` ends that fiber unseen.
+ * it and `notify` is typed to have none. A `tell` never fails, and a failed
+ * save of the parent reaches the parent's own `onError`. A defect in `notify`
+ * ends that fiber unseen.
  *
  * `child.run.stop()` is not one of the two ways to stop a child. It stops the
  * run and leaves the scope open, so the entry stays in the table and the
@@ -118,9 +119,7 @@ export interface SpawnSteps<A, E = never, R = never> {
  *     Effect.map(run(worker, {}), (run) => ({ run, scope })),
  *   enrol: (child) => Effect.sync(() => children.set(id, child)),
  *   remove: Effect.sync(() => children.delete(id)),
- *   notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
- *     Effect.catch((failure) => Effect.logError("notice failed", failure)),
- *   ),
+ *   notify: tell(parent, parentRun, { type: "child_stopped", id }),
  * });
  * ```
  */

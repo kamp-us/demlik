@@ -24,7 +24,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./parity`](./parity.md) | stable | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | stable | Property-based testing primitives for `@demlik/tea` machines. |
 | [`./persistence`](./persistence.md) | battery | the durability batteries: record a run to a trace, replay that trace back, and checkpoint a long-running machine to a host store between evictions. |
-| [`./promise`](./promise.md) | stable | the Promise engine: `run` boots a machine and drives its serial dispatch loop on Promises, and `driveToDone` runs one to its terminal state. |
+| [`./promise`](./promise.md) | stable | the Promise engine: `run` boots a machine and drives its serial dispatch loop on Promises, `driveToDone` runs one to its terminal state, and `tell` puts a Msg on a run's line without waiting for it. |
 | [`./react`](./react.md) | stable | React host adapter for `@demlik/tea`. |
 | [`./resilience`](./resilience.md) | battery | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches and credential refresh, as plain functions and `Cmd.define`d Cmds you call from your own `update` (ADR 0022). |
 | [`./retry-backoff`](./retry-backoff.md) | battery | exponential backoff with jitter + cap, and the retry-attempt state every fallible `interpret` handler folds over. |

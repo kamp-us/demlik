@@ -76,7 +76,7 @@ What changes against 0026:
 | 2. A shape only checks, never translates | Withdrawn for tea. The program layer decides its own rule. |
 | 3. In port, checked before the line | Withdrawn for tea. |
 | 4. Out port always reports back (`_ok` / `_err`) | Withdrawn. |
-| 5. `tell` never waits | **Stands**, without the port words. `tell` puts the Msg on the receiver's line and returns at once. Being accepted and being done are two things: any result comes back later as its own Msg. Built under #639. Its answer words are #639's to settle. |
+| 5. `tell` never waits | **Stands**, without the port words. `tell` puts the Msg on the receiver's line and returns at once. Being accepted and being done are two things: any result comes back later as its own Msg. Built under #639, which settled its answer words: `queued` (on the line), `stopped` (the receiver is stopping or has stopped) and `no_cell` (the receiver's current State has no cell for it). They are the three things `tell` can know when it is called. |
 | 6. Ask-and-answer helper | Withdrawn for tea. |
 | 7. Fit is shape only, and exact | Withdrawn for tea. Fit is the program layer's. |
 | 8. The old port family goes | Withdrawn. `definePort` and its family stay until a reason of their own removes them. |
