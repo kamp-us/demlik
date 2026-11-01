@@ -25,7 +25,8 @@
     "@changesets/cli": "catalog:",
     "@kampus/fabrika-cli": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   },
   "packageManager": "pnpm@10.2.1",
   "volta": {
