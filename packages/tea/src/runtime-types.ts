@@ -163,10 +163,11 @@ export function __resetPortRegistry(): void {
  * - `"discard"` — work lost to a teardown the host asked for. Four witnesses,
  *   each carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
  *   handlers were still awaiting (`RuntimeDiscardedError`), a Msg that
- *   arrived DURING `stop()`'s drain, or was still queued when `stop()` gave up
- *   on it, and so could not be delivered (`DispatchDiscardedError`), a drain
- *   that did not finish inside `disposeTimeoutMs` (`DrainTimeoutNotice`), and
- *   teardown work that did not settle inside `disposeTimeoutMs`
+ *   arrived DURING `stop()`'s drain, or from a handler `stop()` gave up on, and
+ *   so could not be delivered (`DispatchDiscardedError`), a drain that did not
+ *   finish inside `disposeTimeoutMs`, which also counts the Msgs that were still
+ *   queued (`DrainTimeoutNotice`), and teardown work that did not settle inside
+ *   `disposeTimeoutMs`
  *   (`DisposeTimeoutNotice`). The one phase that is a
  *   LIFECYCLE report rather than a failure: legal, merely lossy.
  * - `"identity-drop"` — the `Identity` filter dropped a message addressed to a
@@ -458,10 +459,18 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * for it without limit. It then stops the Subs and runs the final save as it
  * always does. The work it gave up on is not recalled — a Promise cannot be
  * cancelled — so a handler may still be running after `stop()` has returned.
- * Whatever it returns later is dropped, and so are the Msgs queued behind it:
- * each dropped Msg is a `DispatchDiscardedError`. The rest of its step's
- * Cmds are skipped: no handler starts for them, and they get no notice of
- * their own. None of it is saved.
+ * Whatever it returns later is dropped, and so are the Msgs queued behind it.
+ * The rest of its step's Cmds are skipped: no handler starts for them, and they
+ * get no notice of their own. None of it is saved.
+ *
+ * `droppedMsgs` is how a host learns what it lost. It counts the Msgs queued
+ * behind the stuck work when `stop()` gave up, per Msg type: Msgs handed to
+ * `dispatch` or `tell`, and those a handler or a Sub sent. It carries types and
+ * counts only, never a payload, so a sink can log it. It is read once and does
+ * not change. A Msg it counts is not reported again: if the handler returns
+ * late, a `dispatch` caller's promise rejects with a `DispatchDiscardedError`,
+ * and a Msg with no caller reaches the sink no second time. If the handler
+ * never returns, those promises never settle, and this count is the only word.
  *
  * tea starts no store call after `stop()` has returned. A store call already
  * under way when `stop()` gave up is not cancelled and can finish afterwards;
@@ -479,12 +488,19 @@ export class DrainTimeoutNotice extends RuntimeDiscardNotice {
     public readonly cmdTypes: readonly string[],
     public readonly pendingCmds: number,
     public readonly timeoutMs: number,
+    public readonly droppedMsgs: Readonly<Record<string, number>> = {},
   ) {
+    const dropped = Object.entries(droppedMsgs);
     super(
       `@demlik/tea: stop() gave up waiting for the queue after ${timeoutMs}ms ` +
         `with ${pendingCmds} Cmd(s) still in flight` +
         (cmdTypes.length > 0
           ? ` (${cmdTypes.map((type) => `"${type}"`).join(", ")})`
+          : "") +
+        (dropped.length > 0
+          ? ` and these Msgs queued: ${dropped
+              .map(([type, count]) => `"${type}" x${count}`)
+              .join(", ")}`
           : "") +
         ` — whatever they return, the rest of their step and the Msgs queued ` +
         `behind them are dropped. No store call starts after stop() has ` +

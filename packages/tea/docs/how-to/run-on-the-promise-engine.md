@@ -116,7 +116,8 @@ What each piece does:
   a handler never returns, `stop()` gives up on it at that limit, reports a
   `DrainTimeoutNotice` to `onError`, then stops the Subs, runs the final save
   and returns. The handler is still running. What it returns later is dropped,
-  and so are the Msgs queued behind it. No store call starts after `stop()`
+  and so are the Msgs queued behind it; the notice's `droppedMsgs` counts those
+  per Msg type. No store call starts after `stop()`
   has returned, but a save or load already under way is not cancelled and can
   finish later. On a plain store that late save can overwrite what a newer run
   saved; a [fenced store](./make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
