@@ -1,12 +1,19 @@
+import { posix } from "node:path";
 import { z } from "zod";
 
+/**
+ * A repo-relative path in one spelling, whichever one it was written in: `./packages/a/x.ts`,
+ * `packages/a//x.ts` and `packages/a/x.ts` parse alike. Everything past the parse compares paths as
+ * strings, so a second spelling would read as a different place.
+ */
 const RepoPath = z
   .string()
   .min(1)
   .refine(
     (p) => !p.startsWith("/") && !p.split("/").includes(".."),
     "repo-relative path",
-  );
+  )
+  .transform((p) => posix.normalize(p).replace(/(?<=.)\/+$/, ""));
 
 /** A feature or role key as the vocabulary spells it; `plan` checks it against the vocabulary. */
 const VocabularyKey = z.string().min(1);

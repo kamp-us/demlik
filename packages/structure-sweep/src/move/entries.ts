@@ -188,6 +188,203 @@ function sourceEntryOf(
     : firstExisting(posix.join("src", rest));
 }
 
+/** The build layout of the package at `dir`: tsup's and tsconfig's, or the bare convention without one. */
+const layoutOf = (dir: string): BuildLayout =>
+  existsSync(dir)
+    ? { tsup: tsupEntries(dir), tsconfig: tsconfigDirs(dir) }
+    : { tsup: { outDir: "dist", entries: new Map() }, tsconfig: undefined };
+
+// ── exports subpaths and the sources behind them ───────────────────────────
+
+/**
+ * One `exports` subpath and what answers it, package-relative. An `exact` entry's source is a file,
+ * TypeScript or a plain one such as `package.json`; a `pattern` entry's key and source each hold the one `*` a wildcard subpath carries, its source
+ * is a stem with no extension, since a pattern names no single file, and `extensions` are the source
+ * files its target can be built from. A `sourceless` entry answers its key with no source in this
+ * tree: a `null` block, or a target that follows back to nothing. It reaches no file, and it still
+ * takes the subpaths a broader pattern would otherwise reach, exactly as Node picks.
+ */
+export type ExportEntry =
+  | { readonly kind: "exact"; readonly key: string; readonly source: string }
+  | {
+      readonly kind: "pattern";
+      readonly key: string;
+      readonly source: string;
+      readonly extensions: readonly string[];
+    }
+  | { readonly kind: "sourceless"; readonly key: string };
+
+/** A TypeScript source file, as against a declaration file or built output. */
+const SOURCE_FILE = /(?<!\.d)\.(c|m)?tsx?$/;
+
+/** Stands in for a pattern's `*` while the dist-to-src follow-back reads it as a path. */
+const STAR = "\u0000";
+
+/**
+ * Each `exports` key with its targets: a bare target or condition map answers `.`. A key whose
+ * value holds no target at all, `null` above all, comes back with none.
+ */
+function exportTargets(exports: unknown): [key: string, targets: string[]][] {
+  const keyed =
+    typeof exports === "object" &&
+    exports !== null &&
+    !Array.isArray(exports) &&
+    Object.keys(exports).some((key) => key.startsWith("."));
+  if (!keyed) return [[".", strings(exports)]];
+  return Object.entries(exports as Record<string, unknown>).map(
+    ([key, value]) => [key, strings(value)],
+  );
+}
+
+/** The source extensions a wildcard target can be built from: `.mjs` from `.mts` and no other. */
+const patternExtensions = (target: string): readonly string[] =>
+  /\.(d\.)?m[jt]s$/.test(target)
+    ? [".mts"]
+    : /\.(d\.)?c[jt]s$/.test(target)
+      ? [".cts"]
+      : [".ts", ".tsx"];
+
+/** The source stem a wildcard target builds from, `*` kept; `undefined` when none follows back. */
+function patternSource(
+  layout: BuildLayout,
+  target: string,
+): string | undefined {
+  if (SOURCE_FILE.test(target)) return target.replace(SOURCE_FILE, "");
+  const source = sourceEntryOf(layout, target.replace("*", STAR), (path) =>
+    path.includes(STAR),
+  );
+  return source?.replace(SOURCE_FILE, "").replace(STAR, "*");
+}
+
+/** The entry one `exports` target makes under `key`; `undefined` when it follows back to no source. */
+function entryOf(
+  layout: BuildLayout,
+  key: string,
+  raw: string,
+  exists: (packageRelative: string) => boolean,
+): ExportEntry | undefined {
+  const target = posix.normalize(raw);
+  const stars = target.split("*").length - 1;
+  if (stars !== key.split("*").length - 1 || stars > 1) return undefined;
+  if (stars === 1) {
+    const source = patternSource(layout, target);
+    return source === undefined
+      ? undefined
+      : { kind: "pattern", key, source, extensions: patternExtensions(target) };
+  }
+  const source = BUILT.test(target)
+    ? sourceEntryOf(layout, target, exists)
+    : exists(target)
+      ? target
+      : undefined;
+  return source === undefined ? undefined : { kind: "exact", key, source };
+}
+
+/**
+ * Every subpath of the package at `dir` with what answers it: each `exports` target that follows
+ * back to a source file, by the same follow-back `entryFiles` pins entries by, and a `sourceless`
+ * entry for a key none of whose targets does. `exists` answers for a package-relative path, so the
+ * caller picks the tree an exact target is resolved against.
+ */
+export function exportEntries(
+  dir: string,
+  exports: unknown,
+  exists: (packageRelative: string) => boolean,
+): ExportEntry[] {
+  const layout = layoutOf(dir);
+  return exportTargets(exports).flatMap(([key, targets]): ExportEntry[] => {
+    const sourced = targets.flatMap((raw) => {
+      const entry = entryOf(layout, key, raw, exists);
+      return entry === undefined ? [] : [entry];
+    });
+    return sourced.length > 0 ? sourced : [{ kind: "sourceless", key }];
+  });
+}
+
+/** A pattern's text either side of its `*`. */
+const sides = (pattern: string): [string, string] => {
+  const at = pattern.indexOf("*");
+  return [pattern.slice(0, at), pattern.slice(at + 1)];
+};
+
+/**
+ * The `exports` key Node answers `subpath` by: the exact key if there is one, else the pattern with
+ * the longest text before its `*`, then the longest key (`PATTERN_KEY_COMPARE`).
+ */
+function answeringKey(
+  entries: readonly ExportEntry[],
+  subpath: string,
+): string | undefined {
+  const keys = entries.map((entry) => entry.key);
+  if (keys.includes(subpath)) return subpath;
+  return keys
+    .filter((key) => key.includes("*") && capture(key, subpath) !== undefined)
+    .sort(
+      (a, b) => sides(b)[0].length - sides(a)[0].length || b.length - a.length,
+    )[0];
+}
+
+/** What `*` stands for when `pattern` matches `text`, or `undefined` when it does not. */
+function capture(pattern: string, text: string): string | undefined {
+  const [before, after] = sides(pattern);
+  if (
+    text.length < before.length + after.length ||
+    !text.startsWith(before) ||
+    !text.endsWith(after)
+  )
+    return undefined;
+  return text.slice(before.length, text.length - after.length);
+}
+
+/**
+ * The subpath an import names the package-relative source `file` by — `exports` inverted. An exact
+ * entry wins over a pattern, and a pattern reaches the file only where Node would answer the
+ * subpath by that same pattern, so a narrower `null` block keeps it out. `undefined` when no entry
+ * reaches the file.
+ */
+export function subpathOf(
+  entries: readonly ExportEntry[],
+  file: string,
+): string | undefined {
+  const exact = entries.find((e) => e.kind === "exact" && e.source === file);
+  if (exact !== undefined) return exact.key;
+  const extension = SOURCE_FILE.exec(file)?.[0];
+  if (extension === undefined) return undefined;
+  const stem = file.slice(0, file.length - extension.length);
+  for (const entry of entries) {
+    if (entry.kind !== "pattern" || !entry.extensions.includes(extension))
+      continue;
+    const star = capture(entry.source, stem);
+    if (star === undefined) continue;
+    const subpath = entry.key.replace("*", star);
+    if (answeringKey(entries, subpath) === entry.key) return subpath;
+  }
+  return undefined;
+}
+
+/**
+ * The package-relative source file `subpath` names, reading only the key Node answers it by.
+ * `exists` picks the source extension a pattern's stem is completed with.
+ */
+export function sourceOfSubpath(
+  entries: readonly ExportEntry[],
+  subpath: string,
+  exists: (packageRelative: string) => boolean,
+): string | undefined {
+  const key = answeringKey(entries, subpath);
+  for (const entry of entries) {
+    if (entry.key !== key) continue;
+    if (entry.kind === "exact") return entry.source;
+    if (entry.kind !== "pattern") continue;
+    const star = capture(entry.key, subpath);
+    if (star === undefined) continue;
+    const stem = entry.source.replace("*", star);
+    const found = entry.extensions.map((ext) => `${stem}${ext}`).find(exists);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 // ── assembling the set ─────────────────────────────────────────────────────
 
 /**
@@ -202,9 +399,7 @@ export function entryFiles(
   const dir = join(repoRoot, scope);
   const inTree = new Set(tree);
   const entries = new Map<string, string>();
-  const layout: BuildLayout = existsSync(dir)
-    ? { tsup: tsupEntries(dir), tsconfig: tsconfigDirs(dir) }
-    : { tsup: { outDir: "dist", entries: new Map() }, tsconfig: undefined };
+  const layout = layoutOf(dir);
   const repoPath = (scopeRelative: string) =>
     posix.join(scope, posix.normalize(scopeRelative));
   const exists = (scopeRelative: string) =>
