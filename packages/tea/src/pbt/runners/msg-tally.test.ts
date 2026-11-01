@@ -537,6 +537,22 @@ describe("a state that isn't plain data", () => {
 
       expect(actedOf(run, "swap")).toBe(run.msgCounts.get("swap")?.drawn);
     });
+
+    it("is reached when it sits ahead of the difference, by key order", () => {
+      const machine = rebuilding(
+        { at: new Date(0), n: 0 },
+        { at: new Date(0), n: 1 },
+      );
+
+      const failure = failureOf(() =>
+        propertyTrace(machine, {}, swaps, () => true, {
+          seed: 1,
+          failOnNeverActed: true,
+        }),
+      );
+
+      expect(failure.message).toContain("can't tell what acted");
+    });
   });
 });
 
