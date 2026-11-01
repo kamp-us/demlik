@@ -690,8 +690,9 @@ Every subpath in the map is a key, including one with no change, and so is every
 }
 ```
 
-- **`tiers`** maps a tier string to one row per change kind. Every row names all three kinds, `added`, `changed` and `removed`. A kind's rule is `bump`, one of `none` < `patch` < `minor` < `major`, and `callout`, a boolean that defaults to `false`.
+- **`tiers`** maps a tier string to one row per change kind. Every row names all three kinds, `added`, `changed` and `removed`. A kind's rule is `bump`, one of `none` < `patch` < `minor` < `major`, and `callout`, which defaults to `false`. A rule's `callout` is `false`, `true`, or `{ "or": "<second marker>" }`.
 - **`callout`** is the marker text, non-empty. A rule with `callout: true` is met only when a counted changeset's body contains this text. The marker is policy, not a constant, because each package marks a breaking change its own way.
+- **`{ "or": "<second marker>" }`** on a rule is met when a counted changeset's body contains the policy's `callout` text or this non-empty text. It is how a package lets an author state that a change is not a break, as `@demlik/tea` does on its `changed` rows ([ruling](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162)): `"changed": { "bump": "minor", "callout": { "or": "**Additive (declaration only)" } }`. Only the rule that names a marker accepts it, so a `removed` rule with `callout: true` beside it still needs the policy's marker. The ratchet reads markers and not the change, so either marker is the author's word: a real break under the second marker passes.
 - **`default`** is optional and has the shape of one `tiers` row. It applies to a subpath whose tier the policy does not name, and to a subpath with no tier. Without `default`, a diff row whose subpath's tier the policy does not name, or whose tier is `null`, exits 2 naming the subpath and tier, so no change passes unpoliced.
 - An unknown key exits 2. code-graph ships no policy and no default row: every rule is the caller's, and it adds none stricter.
 
@@ -704,17 +705,17 @@ Every subpath in the map is a key, including one with no change, and so is every
 
 The frontmatter is the changesets format: a block between two `---` lines whose lines read `"<package>": <bump>`. A file whose frontmatter does not parse exits 2 naming it. The body is everything after the closing `---`. A missing `<path>/package.json`, or one with no `name`, exits 2.
 
-The **highest bump** is the largest bump the counted files give the package, or `none` when no file counts. The **callout is found** when any counted file's body contains the policy's `callout` text.
+The **highest bump** is the largest bump the counted files give the package, or `none` when no file counts. The **callout is found** when any counted file's body contains the policy's `callout` text. A **second marker is found** when any counted file's body contains it.
 
-**Verdict.** Each diff row (subpath, kind, name) takes its rule from the policy by its subpath's tier. A row misses when its rule's `bump` is above the highest bump, or when its rule has `callout: true` and no callout is found. Exit 0 when nothing misses, 1 when anything does.
+**Verdict.** Each diff row (subpath, kind, name) takes its rule from the policy by its subpath's tier. A row misses when its rule's `bump` is above the highest bump, or when its rule asks for a callout and no marker it accepts is found. Exit 0 when nothing misses, 1 when anything does.
 
-**Output.** The default is human text on stdout. A pass is one line:
+**Output.** The default is human text on stdout. A pass is one line, which ends `callout found`, the second markers found when no callout is (`"**Additive (declaration only)" found`), or `no callout`:
 
 ```text
 API RATCHET: pass — 4 changes against 4b1c0de, highest changeset bump minor, callout found
 ```
 
-A miss is one block per missing row, then a summary line:
+A miss is one block per missing row, then a summary line. A rule with a second marker names both (`needs a minor changeset with a "**Breaking" or "**Additive (declaration only)" callout`):
 
 ```text
 API RATCHET: make in . (stable) changed — needs a minor changeset with a "**Breaking" callout; found none
@@ -743,12 +744,13 @@ type ApiRatchetVerdict = {
   changesets: string[];  // counted files, repo-relative, sorted
   highestBump: Bump;
   calloutFound: boolean;
+  otherMarkersFound: string[]; // second markers the policy's rules name that were found, sorted
   misses: Array<{        // sorted by subpath, then name, then kind
     subpath: string;
     tier: string | null;
     name: string;
     kind: "added" | "removed" | "changed";
-    needs: { bump: Bump; callout: boolean };
+    needs: { bump: Bump; callout: boolean | { or: string } };
     before: ApiEntryText | null; // null for added
     after: ApiEntryText | null;  // null for removed
   }>;
@@ -783,6 +785,7 @@ type ApiRatchetVerdict = {
       "tier": "stable"
     }
   ],
+  "otherMarkersFound": [],
   "package": "@demo/pkg",
   "passed": false
 }

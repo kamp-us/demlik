@@ -150,6 +150,24 @@ An added published name on an existing subpath owes at least a **minor** changes
 changelog callout on any tier — the changeset entry naming the export is the record
 ([ruling](https://github.com/kamp-us/demlik/issues/612#issuecomment-6102843973)).
 
+A changed published name on a `stable` or `battery` subpath owes at least a **minor**
+changeset, and that changeset says which kind of change it is
+([ruling](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162)):
+
+- **It breaks a call:** `**Breaking`, the changelog callout the tiers above ask for. A
+  removed name always takes this marker; the other one does not meet it.
+- **It only adds to the declaration,** such as a new optional option:
+  `**Additive (declaration only)`. The changelog then carries no break warning. It says
+  "declaration only" because an added option can still break a weak-type caller: given
+  `f(o: { a?: number })`, a variable typed `{ a: number; size: string }` compiles until
+  `f` gains `size?: number`.
+
+The API ratchet (`pnpm --filter @demlik/tea run api:ratchet`) passes a `changed` row on
+either marker and a `removed` row on `**Breaking` alone. It reads the markers and not the
+change, and one marker meets every row of its kind in the pull request, so the marker is
+the author's word: a real break labelled additive passes, and only reading the changeset
+catches it. A pull request holding both kinds states both, in separate changesets or one.
+
 ### Removal, while 0.x
 
 A subpath, module or exported name is removed in the **same PR** that replaces it — no

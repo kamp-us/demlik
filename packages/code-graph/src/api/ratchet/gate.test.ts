@@ -93,6 +93,44 @@ describe("code-graph --api-policy — a CI job gates a PR on its caller's policy
     expect(runGate(repo)).toEqual(called);
   });
 
+  it("names a rule's second marker on a miss and passes on it, reporting which marker it found", () => {
+    checkoutBranch(repo, "stable-changed");
+    const policy = fixturePolicy();
+    const withSecond = policyFile({
+      ...policy,
+      tiers: {
+        ...policy.tiers,
+        stable: {
+          added: { bump: "minor" },
+          changed: { bump: "minor", callout: { or: "**Additive" } },
+          removed: { bump: "major", callout: true },
+        },
+      },
+    });
+    const owed =
+      'API RATCHET: parse in . (stable) changed — needs a minor changeset with a "**Breaking" or "**Additive" callout';
+
+    expect(runGate(repo, [], withSecond).stdout).toContain(`${owed}; found none`);
+
+    const additive = changeset({ [PACKAGE_NAME]: "patch" }, "**Additive: parse takes radix.");
+    commitFiles(repo, { ".changeset/parse-radix.md": additive });
+    const low = runGate(repo, [], withSecond);
+    expect(low.code).toBe(1);
+    expect(low.stdout).toContain(`${owed}; found patch with the callout`);
+
+    commitFiles(repo, {
+      ".changeset/parse-radix.md": changeset(
+        { [PACKAGE_NAME]: "minor" },
+        "**Additive: parse takes radix.",
+      ),
+    });
+    expect(runGate(repo, [], withSecond)).toEqual({
+      code: 0,
+      stdout: `API RATCHET: pass — 1 change against ${sha}, highest changeset bump minor, "**Additive" found\n`,
+      stderr: "",
+    });
+  });
+
   // One branch per policy row. `below` is the strongest changeset that still misses the row
   // (`null`: no changeset at all), `at` the weakest that meets it.
   const rows = [
@@ -276,6 +314,7 @@ describe("code-graph --api-policy — a CI job gates a PR on its caller's policy
       changesets: [],
       highestBump: "none",
       calloutFound: false,
+      otherMarkersFound: [],
       misses: [],
     });
   });

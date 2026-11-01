@@ -177,6 +177,11 @@ policy and no default row:
   change needs. Its `callout` is optional and defaults to `false`.
 - `callout` is the marker text, required and non-empty. A rule with
   `callout: true` is met only when a counted changeset's body contains it.
+- A rule's `callout` can also be `{ "or": "<second marker>" }`, met when a
+  counted changeset's body contains the marker text or this text. Only the rule
+  that names it accepts it, so a package can let a `changed` row take a marker
+  saying the change is not a break while `removed` still needs the callout. The
+  check reads markers and not the change, so a marker is the author's word.
 - `default` is optional and has the shape of one tier's row. It covers a
   subpath whose tier `tiers` does not name, and a subpath with no tier.
   Without it, a changed name in such a subpath exits 2 naming the subpath and
@@ -191,7 +196,8 @@ is the bump found, `none` when no file counts, and the callout is found when
 any counted file's body contains the marker.
 
 A changed name misses when its rule's bump is above the bump found, or when
-its rule asks for the callout and none is found. A pass prints one line:
+its rule asks for a callout and no marker it accepts is found. A pass prints one
+line:
 
 ```text
 API RATCHET: pass — 4 changes against 4b1c0de, highest changeset bump minor, callout found
@@ -213,9 +219,10 @@ API RATCHET: 1 of 1 change misses its bump against 4b1c0de
 
 `--json` prints an `ApiRatchetVerdict` instead: `passed`, the full `base` sha,
 the `package` name, the counted `changesets` (repo-relative, sorted),
-`highestBump`, `calloutFound` and `misses`, each with `subpath`, `tier`,
-`name`, `kind`, `needs` (`{ bump, callout }`), `before` and `after` (`null`
-where the name has none). The same commits give the same bytes.
+`highestBump`, `calloutFound`, `otherMarkersFound` (the second markers found,
+sorted) and `misses`, each with `subpath`, `tier`, `name`, `kind`, `needs`
+(`{ bump, callout }`), `before` and `after` (`null` where the name has none).
+The same commits give the same bytes.
 
 ```sh
 git fetch origin main

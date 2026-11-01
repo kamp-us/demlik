@@ -10,6 +10,7 @@ import {
   type ApiDiff,
   type ApiEntryText,
   type ApiRatchetVerdict,
+  calloutMet,
   diffPublishedApi,
   ratchetApiDiff,
   readChangesetsSince,
@@ -59,15 +60,16 @@ function sideLines(
 
 function owed(needs: Miss["needs"], callout: string): string {
   const bump = `a ${needs.bump} changeset`;
-  return needs.callout
-    ? `${bump} with a ${JSON.stringify(callout)} callout`
-    : bump;
+  if (needs.callout === false) return bump;
+  const markers =
+    needs.callout === true ? [callout] : [callout, needs.callout.or];
+  return `${bump} with a ${markers.map((marker) => JSON.stringify(marker)).join(" or ")} callout`;
 }
 
 function found(verdict: ApiRatchetVerdict, needs: Miss["needs"]): string {
   if (verdict.highestBump === "none") return "no changeset";
   if (!needs.callout) return `a ${verdict.highestBump} changeset`;
-  const callout = verdict.calloutFound ? "the" : "no";
+  const callout = calloutMet(needs, verdict) ? "the" : "no";
   return `a ${verdict.highestBump} changeset with ${callout} callout`;
 }
 

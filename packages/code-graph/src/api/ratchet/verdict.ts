@@ -27,8 +27,20 @@ export type ApiRatchetVerdict = {
   readonly changesets: readonly string[];
   readonly highestBump: Bump;
   readonly calloutFound: boolean;
+  // The second markers the policy's rules name that a counted changeset's body carries, sorted.
+  readonly otherMarkersFound: readonly string[];
   readonly misses: readonly ApiRatchetMiss[];
 };
+
+// Whether a rule's callout is met by the markers a verdict found. A rule asking for none is met.
+export function calloutMet(
+  rule: BumpRule,
+  found: Pick<ApiRatchetVerdict, "calloutFound" | "otherMarkersFound">,
+): boolean {
+  const { callout } = rule;
+  if (callout === false) return true;
+  return found.calloutFound || (callout !== true && found.otherMarkersFound.includes(callout.or));
+}
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -71,11 +83,20 @@ function ruleFor(policy: BumpPolicy, change: ApiChange): BumpRule {
   );
 }
 
+// Every second marker a rule of `policy` names, sorted, once each.
+function otherMarkers(policy: BumpPolicy): readonly string[] {
+  const rows = [...Object.values(policy.tiers), ...(policy.default ? [policy.default] : [])];
+  const named = rows
+    .flatMap(({ added, changed, removed }) => [added, changed, removed])
+    .flatMap(({ callout }) => (typeof callout === "object" ? [callout.or] : []));
+  return [...new Set(named)].sort(byText);
+}
+
 // Judges `diff` against the caller's `policy` and the package's counted `changesets` (SPEC §13.5).
 // Pure: it reads nothing but its arguments. A change misses when its rule's bump is above the
-// highest counted bump, or when its rule asks for the callout and no counted changeset's body
-// carries the policy's marker. Throws `ApiInputError` on an invalid policy, or on a change whose
-// tier the policy does not cover.
+// highest counted bump, or when its rule asks for a callout and no counted changeset's body
+// carries a marker the rule accepts. Throws `ApiInputError` on an invalid policy, or on a change
+// whose tier the policy does not cover.
 export function ratchetApiDiff(
   diff: ApiDiff,
   policy: unknown,
@@ -87,10 +108,14 @@ export function ratchetApiDiff(
     (highest, { bump }) => (bumpRank(bump) > bumpRank(highest) ? bump : highest),
     "none",
   );
-  const calloutFound = counted.some(({ body }) => body.includes(rules.callout));
+  const carried = (marker: string) => counted.some(({ body }) => body.includes(marker));
+  const found = {
+    calloutFound: carried(rules.callout),
+    otherMarkersFound: otherMarkers(rules).filter(carried),
+  };
   const misses = apiChanges(diff).flatMap((change): ApiRatchetMiss[] => {
     const needs = ruleFor(rules, change);
-    const met = bumpRank(needs.bump) <= bumpRank(highestBump) && (!needs.callout || calloutFound);
+    const met = bumpRank(needs.bump) <= bumpRank(highestBump) && calloutMet(needs, found);
     return met ? [] : [{ ...change, needs }];
   });
   return {
@@ -99,7 +124,7 @@ export function ratchetApiDiff(
     package: changesets.package,
     changesets: counted.map(({ file }) => file).sort(byText),
     highestBump,
-    calloutFound,
+    ...found,
     misses,
   };
 }

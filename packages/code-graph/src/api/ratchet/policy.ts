@@ -8,9 +8,15 @@ export type Bump = (typeof BUMPS)[number];
 
 export const bumpRank = (bump: Bump): number => BUMPS.indexOf(bump);
 
+// `true` asks for the policy's marker; `{ or }` asks for it or this rule's second marker.
+const RuleCalloutSchema = z.union([
+  z.boolean(),
+  z.strictObject({ or: z.string().min(1, "the second marker must be non-empty") }),
+]);
+
 const BumpRuleSchema = z.strictObject({
   bump: z.enum(BUMPS),
-  callout: z.boolean().default(false),
+  callout: RuleCalloutSchema.default(false),
 });
 
 const TierRowSchema = z.strictObject({
