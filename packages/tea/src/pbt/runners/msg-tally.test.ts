@@ -174,6 +174,19 @@ describe("a cut path, with failOnNeverActed on", () => {
     )("is green on the cut machine with it off, seed %i", (seed) => {
       expect(actedOf(run(cut, { seed }), "merge")).toBe(0);
     });
+
+    // `path: ""` is what `{ path: failure.run.path ?? "" }` hands back for a run
+    // this option failed, and fast-check reads it as no path: the full run draws.
+    it.each(SEEDS)("still fails on an empty path, seed %i", (seed) => {
+      const failure = failureOf(() =>
+        run(cut, { seed, path: "", failOnNeverActed: true }),
+      );
+
+      expect(failure.run.numRuns).toBe(200);
+      expect(failure.message).toContain("2 Msg type(s) never acted");
+      expect(failure.message).toMatch(/\bapprove \(drawn [1-9]/);
+      expect(failure.message).toMatch(/\bmerge \(drawn [1-9]/);
+    });
   });
 });
 
@@ -226,6 +239,29 @@ describe("msgCounts", () => {
     expect(failure.run.msgCounts).toEqual(
       countsOver(lists.slice(0, failure.run.numRuns)),
     );
+  });
+
+  it("adds nothing for a list whose reducer threw, though numRuns includes it", () => {
+    const throwing = defineReview({
+      ...update,
+      edit: () => {
+        throw new Error("reducer threw");
+      },
+    });
+    const failure = failureOf(() =>
+      propertyTrace(
+        throwing,
+        {},
+        arbMsgSequence(fc.constant<Msg>({ type: "edit" }), { minLength: 1 }),
+        () => true,
+        { seed: 1 },
+      ),
+    );
+
+    expect(failure.run.numRuns).toBe(1);
+    for (const count of failure.run.msgCounts.values()) {
+      expect(count).toEqual({ drawn: 0, acted: 0 });
+    }
   });
 
   it("adds nothing for a list fc.pre skipped", () => {

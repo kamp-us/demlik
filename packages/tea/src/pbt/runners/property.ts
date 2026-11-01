@@ -59,9 +59,11 @@ interface PropertyOpts<S> extends ForwardedSettings {
    * `arbMsgSequence(msgArb, { size: "max" })`: short ones may never reach a healthy
    * machine's deep states, and this fails on those too.
    *
-   * A run with a `path` replays one failure rather than drawing the run's lists, so
-   * this stays out of it. A state `structuralHash` refuses (a `Date`, a `Map`, a
-   * class instance) leaves "acted" unreadable, so this fails the run saying so.
+   * A run with a non-empty `path` replays a failure rather than drawing the run's
+   * lists, so this stays out of it. `path: ""` is no path to fast-check, which draws
+   * the full run, so this applies there. A state `structuralHash` refuses (a `Date`,
+   * a `Map`, a class instance) leaves "acted" unreadable, so this fails the run
+   * saying so.
    */
   readonly failOnNeverActed?: boolean;
 }
@@ -96,7 +98,8 @@ export interface PropertyRun {
    * What the run's lists did, per Msg type: every type the machine has a cell for,
    * then any other that was drawn. A type never drawn reads zero. On a failure this
    * stops at the failing list, so shrinking adds nothing, and a list skipped with
-   * `fc.pre` adds nothing either.
+   * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
+   * though `numRuns` includes it: its fold hands back no steps to count.
    *
    * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
    * as acted whenever a cell returned a new object.
@@ -285,9 +288,10 @@ function assertEveryTypeActed(run: PropertyRun, tally: MsgTally): void {
  * A fixed `loaded` keeps a one-argument property, so a seed draws what it always
  * drew. An arbitrary `loaded` draws as a second argument.
  *
- * A list counts once its check has answered. A `fc.pre` skip adds nothing, as it
- * adds nothing to `numRuns`. Any other throw is the run's failure, so that list is
- * the last one counted.
+ * A list counts once its fold has finished. A `fc.pre` skip adds nothing, as it
+ * adds nothing to `numRuns`. Any other throw is the run's failure, so nothing after
+ * that list is counted. A check's throw still counts its list, but a reducer's adds
+ * nothing, though `numRuns` includes that list: `foldEvents` hands back no steps.
  */
 function runProperty<
   S,
@@ -339,9 +343,8 @@ function runProperty<
         ),
         tally,
       );
-  if (failOnNeverActed && settings.path === undefined) {
-    assertEveryTypeActed(run, tally);
-  }
+  const isReplay = Boolean(settings.path);
+  if (failOnNeverActed && !isReplay) assertEveryTypeActed(run, tally);
   return run;
 }
 

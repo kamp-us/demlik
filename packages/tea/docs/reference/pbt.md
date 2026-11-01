@@ -207,7 +207,8 @@ interface PropertyRun {
    * What the run's lists did, per Msg type: every type the machine has a cell for,
    * then any other that was drawn. A type never drawn reads zero. On a failure this
    * stops at the failing list, so shrinking adds nothing, and a list skipped with
-   * `fc.pre` adds nothing either.
+   * `fc.pre` adds nothing either. A list whose reducer threw adds nothing as well,
+   * though `numRuns` includes it: its fold hands back no steps to count.
    *
    * A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) counts
    * as acted whenever a cell returned a new object.
