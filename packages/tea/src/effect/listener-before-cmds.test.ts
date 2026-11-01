@@ -7,7 +7,7 @@
 
 import { Cause, Effect, Exit, Scope as ScopeModule } from "effect";
 import { describe, expect, it } from "vitest";
-import { defineMachine, type NoCtx, type Store } from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Store } from "../index";
 import { memoryStore } from "../mem";
 import { run as runPromise } from "../promise";
 import { type EffectRuntime, run as runEffect } from "./index";
@@ -15,6 +15,11 @@ import { type EffectRuntime, run as runEffect } from "./index";
 type Model = { readonly phase: "idle" | "working" | "finished" };
 type Msg = { readonly type: "go" } | { readonly type: "finish" };
 type Work = { readonly type: "work" };
+
+const update: Reducer<Model, Msg, Work> = {
+  go: () => [{ phase: "working" }, [{ type: "work" }]],
+  finish: () => [{ phase: "finished" }, []],
+};
 
 const machine = defineMachine({
   types: {
@@ -24,10 +29,7 @@ const machine = defineMachine({
     ctx: {} as NoCtx,
   },
   init: (loaded) => [loaded ?? { phase: "idle" }, []],
-  update: {
-    go: () => [{ phase: "working" }, [{ type: "work" }]],
-    finish: () => [{ phase: "finished" }, []],
-  },
+  update,
 });
 
 const boom = new Error("handler boom");

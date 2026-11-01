@@ -60,6 +60,7 @@ import {
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
 } from "../../runtime-types";
+import { type InstalledStateRead, installedState } from "./installed-state";
 import { restore } from "./restore";
 
 // === The extension points ===
@@ -213,7 +214,10 @@ export interface Postable<S, M> {
 }
 
 /** The members the core itself puts on the run handle. */
-export interface LoopHandle<S, M> extends LiveWorkProbe, Postable<S, M> {
+export interface LoopHandle<S, M>
+  extends LiveWorkProbe,
+    Postable<S, M>,
+    InstalledStateRead<S> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   getState(): S;
@@ -313,6 +317,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // `state` is late-initialized: synchronously when there is no store to read,
   // otherwise inside the boot step (the head of the tail).
   let state: S | undefined;
+  // The State the listeners were last told about. Behind `state` while a save is
+  // pending, and for good when one fails.
+  let installed: S | undefined;
   let saveStatus: SaveStatus = { type: "pending" };
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
@@ -718,6 +725,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
       }
     }
     reconcileSubs();
+    installed = next;
     for (const callback of installedCallbacks) callback();
     try {
       await runCmds(cmds);
@@ -895,6 +903,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   const core: LoopHandle<S, M> = {
     [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
     [post]: postMsg,
+    [installedState]: () => installed,
     dispatch: dispatchToQuiescence,
     dispatchOnce: (msg) => enqueueDispatch(msg),
     getState(): S {

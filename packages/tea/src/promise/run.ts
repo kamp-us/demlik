@@ -41,11 +41,12 @@ import { builtinRunners } from "./builtin-runners";
 // public method of the returned `BootingRuntime<S, M>` waits for it.
 //
 // Save-then-effects ordering is structural: every transition mutates state,
-// awaits `store.save(newState)`, then reconciles subscriptions, then runs
-// `interpret` for emitted cmds, then fires external listeners. The listeners
-// fire even when a Cmd handler throws: the dispatch rejects with the handler's
-// error, and every listener, observer, `on` handler and `done()` waiter still
-// hears the State that was installed and saved (#311). A throw in any effect
+// awaits `store.save(newState)`, then reconciles subscriptions, then tells
+// `subscribe` listeners, then runs `interpret` for emitted cmds, then fires
+// observers, `on` handlers and `done()` waiters. Those fire even when a Cmd
+// handler throws: the dispatch rejects with the handler's error, and each of
+// them still hears the State that was installed and saved (#311), as the
+// listeners already have. A throw in any effect
 // phase leaves the persisted state ahead of the host's belief about what
 // executed — the Railway discipline (`tryInterpret` in handlers) makes that
 // safe in practice.

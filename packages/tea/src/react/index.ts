@@ -43,6 +43,7 @@ import type {
   Sub,
   Subscribe,
 } from "../index";
+import { readInstalledState } from "../internal/engine/installed-state";
 
 /**
  * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
@@ -150,26 +151,24 @@ export function useMachine<
   );
 
   // Captures the booted handle once `ready` resolves. Until then it is
-  // `null` and `getSnapshot` serves `preliminaryState`. Reset whenever the
-  // booting handle identity changes (a new machine/ctx/store mount).
+  // `null` and `getSnapshot` reads the handle's installed State. Reset whenever
+  // the booting handle identity changes (a new machine/ctx/store mount).
   //
-  // The boot race the paired `bootedTick` bump exists for: the substrate's
-  // boot fanout fires BEFORE `ready` resolves (fireListeners runs inside the
-  // boot step; `ready` chains off the boot promise), so at notification time
-  // this ref is still null and `getSnapshot` returns the same
-  // `preliminaryState` reference — React sees an unchanged snapshot and
-  // skips the re-render. Nothing re-notifies after the ref is set, so a
-  // store-backed mount would stay stuck on the preliminary state until the
-  // next unrelated transition. Bumping a reducer when we capture the booted
-  // runtime forces the render that swaps preliminary → real state.
+  // The boot race the paired `bootedTick` bump exists for: an engine whose handle
+  // carries only what `RunHandle` names has no State to read before `ready`, so
+  // its boot fanout finds `getSnapshot` returning the same `preliminaryState`
+  // reference — React sees an unchanged snapshot and skips the re-render. Nothing
+  // re-notifies after the ref is set, so a store-backed mount would stay stuck on
+  // the preliminary state until the next unrelated transition. Bumping a reducer
+  // when we capture the booted runtime forces the render that swaps preliminary →
+  // real state.
   const readyRef = useRef<BootedRunHandle<S, M> | null>(null);
   const [, markBooted] = useReducer((tick: number) => tick + 1, 0);
 
   // Preliminary state computed sync from `machine.init(null, ctx)`. This is
-  // the snapshot React sees BEFORE the runtime finishes booting (matters
-  // only when `opts.store` is present — without a store, the substrate
-  // already sets state synchronously inside `run()`, so the boot fanout that
-  // captures `readyRef` lands on the same microtask as the first commit).
+  // the snapshot React sees BEFORE the runtime has a State of its own: while
+  // `opts.store` is loading and saving. Without a store the substrate already
+  // sets state synchronously inside `run()`.
   //
   // We deliberately recompute on each render but cache by `[machine,
   // opts.ctx]` — `init` is pure by convention, so cost is negligible. The
@@ -182,11 +181,15 @@ export function useMachine<
   );
 
   // `getSnapshot` reads the booted runtime if `ready` has resolved (the ref is
-  // populated), else falls back to the preliminary state. No try/catch dance
-  // anymore — pre-boot there is simply no booted handle to read from, so
-  // the fallback is structural, not exception-driven.
-  const getSnapshot = (): S =>
-    readyRef.current !== null ? readyRef.current.getState() : preliminaryState;
+  // populated). `ready` waits for boot's Cmds, so before it the snapshot reads
+  // the State the run told its listeners about, which is what a page reloaded
+  // mid-work shows while `init`'s Cmds run (#695). Only with neither does it fall
+  // back to the preliminary state.
+  const getSnapshot = (): S => {
+    if (readyRef.current !== null) return readyRef.current.getState();
+    const installed = readInstalledState<S>(booting);
+    return installed === undefined ? preliminaryState : installed;
+  };
 
   const state = useSyncExternalStore(
     booting.subscribe,
