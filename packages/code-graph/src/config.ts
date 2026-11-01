@@ -9,7 +9,7 @@ import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings
 import { GlobSyntaxError, globToRegExp } from "./kinds/glob.js";
 import { EntryExportPresetNameSchema, entryExportPresetNames } from "./kinds/presets.js";
 import { type NodeKindRules, NodeKindRulesSchema, regexSources } from "./kinds/rules.js";
-import { type LayerRules, LayerRulesSchema } from "./layers/rules.js";
+import { importsIssue, type LayerRules, LayerRulesSchema } from "./layers/rules.js";
 import { type Thresholds, ThresholdsSchema } from "./schema.js";
 
 export type Reporter = (message: string) => void;
@@ -138,6 +138,11 @@ export function resolveLayerRules(file: string | undefined, report: Reporter): L
       }
       patterns.set(pattern, layer.name);
     }
+  }
+  const issue = importsIssue(rules.layers);
+  if (issue !== null) {
+    report(issue);
+    return null;
   }
   return rules;
 }

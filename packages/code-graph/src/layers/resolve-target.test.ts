@@ -72,6 +72,7 @@ const EXPECTED_VIOLATIONS = [
     toLayer: "ui",
     specifier: "@app/ui/page",
     typeOnly: true,
+    rule: "upward",
   },
   {
     from: "apps/web/src/features/billing/total.ts",
@@ -82,6 +83,7 @@ const EXPECTED_VIOLATIONS = [
     toLayer: "ui",
     specifier: "@app/ui/page",
     typeOnly: false,
+    rule: "upward",
   },
 ];
 
