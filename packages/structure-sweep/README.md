@@ -562,10 +562,13 @@ Refused before either commit, naming the row and what stops it, with `HEAD` and 
 - a quoted string in a tracked `.vue`, `.svelte`, `.mdx` or `.astro` file that a row would leave
   naming the wrong file, whether or not a row crosses a package line, and a resumed run refuses the
   same way. Apply does not parse or rewrite these files. It reads every quoted string in them as a
-  relative path, package name or alias would resolve, so a string naming a moved file is refused, and
-  so is a moved file's string naming one left behind. Such a file moved together with what it names,
-  keeping their layout, applies unchanged. Prose quoting such a path is refused too, since the scan
-  cannot tell it from an import.
+  relative path, package name or alias would resolve, setting aside a bundler query or hash after the
+  path (`./one.ts?raw`). So a string naming a moved file is refused, and so are a moved file's string
+  naming one left behind and a string that a row's destination takes over from the file it names now
+  (`./one` naming `one.js` when a row moves another file to `one.ts`). A package-name string into a
+  package a row leaves that apply cannot follow to a file is refused too, as above, though it may name
+  no moved file. Such a file moved together with what it names, keeping their layout, applies
+  unchanged. Prose quoting such a path is refused too, since the scan cannot tell it from an import.
 
 A package with no `exports` answers its bare name by `main` (then `module`, then `types`) and a deep
 path as the file at that path, as Node reads them, so `@scope/a/src/one.js` is rewritten when a row
@@ -574,7 +577,9 @@ row crosses a package line: tracked `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`
 files, with or without `allowJs`. A row of either kind, inside one package or across a line, is
 refused over an import in a `.vue`, `.svelte`, `.mdx` or `.astro` file, as the refusal above says, but
 apply never rewrites one. That scan does not see a path built at run time, a bundler alias tsconfig
-does not declare, or an unquoted path. Any other file is not read, `.md` included. The forms:
+does not declare, an unquoted path, a path that opens with neither `.`, a package name nor an alias
+(`/src/one.ts`, `one.ts`, `raw-loader!./one`), or an extension the compiler would not try (`./Card`
+for `Card.vue`). Any other file is not read for imports, `.md` included. The forms:
 `import`, `export`, `import x = require()`, `require()`, `import()`, a
 type-position `import("...")`, `declare module` and the `vi.*` mock calls. A backtick path with no
 `${}` in it is read in `require()`, `import()` and the `vi.*` calls and rewritten like any other,

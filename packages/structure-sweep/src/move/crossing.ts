@@ -18,6 +18,7 @@ import {
   moduleLiterals,
   namesCode,
   relativeSpecifierOf,
+  withoutBundlerSuffix,
 } from "./specifier.js";
 import {
   packageLabel,
@@ -472,10 +473,12 @@ export function importerPackageSources(
 /**
  * The imports `rows` would break in `files`, which apply cannot parse or rewrite: each quoted string
  * that names a file in the tree before the renames and, read from where its file then sits, no longer
- * names that file after them. So a string naming a moved file is refused, and so is a moved file's
- * string naming one left behind, while a file moving together with what it names passes. A
- * package-name string into a package a row leaves that apply cannot follow to a file is refused too.
- * The scan cannot tell an import from prose quoting a path, so such prose is refused as well.
+ * names that file after them. A bundler's query or hash after the path does not change what it names.
+ * So a string naming a moved file is refused, and so is a moved file's string naming one left behind
+ * and a string a row's destination takes over from the file it named, while a file moving together
+ * with what it names passes. A package-name string into a package a row leaves that apply cannot
+ * follow to a file is refused too, though it may name no moved file. The scan cannot tell an import
+ * from prose quoting a path, so such prose is refused as well.
  */
 export function unreadImports(
   files: readonly string[],
@@ -498,22 +501,26 @@ export function unreadImports(
     const was = own === undefined ? importer : at(own.from);
     const now = own === undefined ? importer : at(own.to);
     const unread = (specifier: string): Unfollowed | undefined => {
-      const named = before.name(was, specifier);
+      const path = withoutBundlerSuffix(specifier);
+      const named = before.name(was, path);
       if (named.kind === "package") {
         const row = leaving.get(named.pkg.root);
-        return row !== undefined && namesCode(specifier)
+        return row !== undefined && namesCode(path)
           ? { kind: "unknown-file", row, importer, specifier, pkg: named.pkg }
           : undefined;
       }
       if (named.kind === "outside" || named.kind === "missing")
         return undefined;
       const moved = leavingFrom.get(named.path);
-      const row = moved ?? own;
-      if (row === undefined) return undefined;
       const target = moved === undefined ? named.path : at(moved.to);
-      const still = after.name(now, specifier);
-      return (still.kind === "file" || still.kind === "alias") &&
-        still.path === target
+      const still = after.name(now, path);
+      const landed =
+        still.kind === "file" || still.kind === "alias"
+          ? still.path
+          : undefined;
+      if (landed === target) return undefined;
+      const row = moved ?? own ?? arrivingAt.get(landed ?? "");
+      return row === undefined
         ? undefined
         : { kind: "unread-file", row, importer, specifier };
     };

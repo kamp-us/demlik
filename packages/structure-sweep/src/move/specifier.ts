@@ -86,6 +86,13 @@ export const namesCode = (specifier: string): boolean =>
   extname(specifier) === "" || SPECIFIER_EXTENSION.test(specifier);
 
 /**
+ * The path of a specifier a bundler reads, with the query or hash after it gone: `./one.ts?raw` is
+ * `./one.ts`. A `#` that opens the specifier stays, since it starts a `package.json` `imports` name.
+ */
+export const withoutBundlerSuffix = (specifier: string): string =>
+  specifier.replace(/(?<=.)[?#].*$/, "");
+
+/**
  * A relative specifier naming the source `file`, spelled for the importer's module resolution.
  * Without `explicit`, a `.ts`, `.tsx` or `.d.ts` loses its extension; `"js"` (NodeNext) gives it the
  * one the compiler reads back to that file, and `"ts"` (NodeNext with `allowImportingTsExtensions`)

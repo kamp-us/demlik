@@ -350,6 +350,139 @@ describe("an import in a .vue, .svelte, .mdx or .astro file", () => {
     expect(only).toContain("apply cannot tell which file");
   });
 
+  describe("with a bundler query or hash after the path", () => {
+    const row = [
+      "packages/a/src/one.ts",
+      "packages/a/src/deep/one.ts",
+    ] as const;
+
+    it.each([
+      { file: "packages/a/src/Card.vue", specifier: "./one.ts?raw" },
+      { file: "packages/a/src/List.svelte", specifier: "./one?worker" },
+      { file: "packages/a/src/guide.mdx", specifier: "./one.ts?url" },
+      { file: "packages/a/src/Home.astro", specifier: "./one.ts#part" },
+      { file: "packages/c/docs/guide.mdx", specifier: "@fixture/a/one?raw" },
+    ])("refuses $specifier in $file as written", ({ file, specifier }) => {
+      const root = workspace({
+        ...MODULES,
+        [file]: `import x from "${specifier}"\n`,
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, file, specifier)]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it("refuses a tsconfig alias", () => {
+      const page = "packages/a/src/Card.vue";
+      const root = workspace({
+        ...MODULES,
+        "packages/a/tsconfig.json": JSON.stringify({
+          compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } },
+        }),
+        [page]: 'import x from "@/one?url"\n',
+      });
+
+      expect(rowLines(refusal(() => applyHandPlan(root, planOf(row))))).toEqual(
+        [line(...row, page, "@/one?url")],
+      );
+    });
+
+    it("keeps the # that opens a package.json imports name", () => {
+      const page = "packages/a/src/Card.vue";
+      const root = workspace({
+        ...MODULES,
+        "packages/a/package.json": `${JSON.stringify({ name: "@fixture/a", private: true, type: "module", exports: WILD, imports: { "#one": "./src/one.ts" } }, null, 2)}\n`,
+        [page]: 'import x from "#one?raw"\n',
+      });
+
+      expect(rowLines(refusal(() => applyHandPlan(root, planOf(row))))).toEqual(
+        [line(...row, page, "#one?raw")],
+      );
+    });
+
+    it("changes nothing when the path names no moved file", () => {
+      const root = workspace({
+        ...MODULES,
+        "packages/a/src/Card.vue": 'import x from "./two.ts?raw"\n',
+      });
+
+      expect(applyHandPlan(root, planOf(row)).commits.rename).not.toBeNull();
+    });
+
+    it("refuses a package-name string apply cannot follow, as without the suffix", () => {
+      const across = [
+        "packages/a/src/one.ts",
+        "packages/b/src/one.ts",
+      ] as const;
+      const page = "packages/c/docs/guide.mdx";
+      const root = workspace({
+        ...MODULES,
+        "packages/a/package.json": `${JSON.stringify({ name: "@fixture/a", private: true, type: "module", exports: { ...WILD, "./built": "./dist/built.js" } }, null, 2)}\n`,
+        [page]: 'import x from "@fixture/a/built?raw"\n',
+      });
+
+      const [only, ...rest] = rowLines(
+        refusal(() => applyHandPlan(root, planOf(across))),
+      );
+
+      expect(rest).toEqual([]);
+      expect(only).toContain(`${page} imports "@fixture/a/built?raw"`);
+    });
+  });
+
+  describe("a string naming a file no row moves, when a row's destination arrives in its reach", () => {
+    const row = ["packages/a/src/x/one.ts", "packages/a/src/one.ts"] as const;
+    const files = {
+      "packages/a/src/x/one.ts": "export const one = 1;\n",
+      "packages/a/src/one.js": "export const old = 0;\n",
+    };
+
+    it.each([
+      { file: "packages/a/src/Card.vue", specifier: "./one" },
+      { file: "packages/a/src/List.svelte", specifier: "./one?raw" },
+      { file: "packages/a/docs/guide.mdx", specifier: "../src/one" },
+      { file: "packages/a/src/Home.astro", specifier: "./one.js" },
+    ])("refuses $specifier in $file", ({ file, specifier }) => {
+      const root = workspace({
+        ...files,
+        [file]: `import x from "${specifier}"\n`,
+      });
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, file, specifier)]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it("refuses on a run resumed over the rename commit", () => {
+      const page = "packages/a/src/Card.vue";
+      const root = workspace(files);
+      expect(applyHandPlan(root, planOf(row)).commits.rename).not.toBeNull();
+      write(root, { [page]: 'import x from "./one"\n' });
+      commit(root, "a page");
+      const before = snapshot(root);
+
+      const message = refusal(() => applyHandPlan(root, planOf(row)));
+
+      expect(rowLines(message)).toEqual([line(...row, page, "./one")]);
+      expect(snapshot(root)).toEqual(before);
+    });
+
+    it("does not refuse a string that keeps naming its file", () => {
+      const root = workspace({
+        ...files,
+        "packages/a/src/two.ts": "export const two = 2;\n",
+        "packages/a/src/Card.vue": 'import x from "./two"\n',
+      });
+
+      expect(applyHandPlan(root, planOf(row)).commits.rename).not.toBeNull();
+    });
+  });
+
   it("refuses a moved file's relative string naming a file left behind", () => {
     const row = [
       "packages/a/docs/guide.mdx",
