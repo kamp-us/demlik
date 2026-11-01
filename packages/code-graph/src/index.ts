@@ -31,11 +31,11 @@ import {
   loadCheapProject,
   loadEdgeProject,
 } from "./extract/project.js";
+import { oneGateRefusal } from "./gates/one-gate.js";
 import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
 import { renderHotspots } from "./hotspots/render.js";
 import { runLayerGate } from "./layers/gate.js";
-import { oneGateRefusal } from "./one-gate.js";
 import {
   renderClusters,
   renderCrossRuntime,

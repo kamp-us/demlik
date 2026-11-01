@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type FiveGateRepo, fiveGateRepo, LEDGER_FILES } from "./test-helpers/five-gate-repo.js";
-import { runCli } from "./test-helpers/ratchet-repo.js";
+import { type FiveGateRepo, fiveGateRepo, LEDGER_FILES } from "../test-helpers/five-gate-repo.js";
+import { runCli } from "../test-helpers/ratchet-repo.js";
 
 const GATE_NAMES = ["layers", "boundaries", "comments", "collapse", "unreachable"] as const;
 type GateName = (typeof GATE_NAMES)[number];
@@ -93,6 +93,20 @@ describe("a command that names several gates is refused", () => {
     expectRefused(
       [repo.app, "--unreachable", "--accept-dead", "--reason", "kept", "--boundaries"],
       ["--boundaries", "--unreachable"],
+    );
+  });
+
+  it("reads --accept-crossings as arming a second gate, with no other arming flag", () => {
+    expectRefused(
+      [repo.app, "--boundaries", "--comments", "--accept-crossings", "--reason", "kept"],
+      ["--boundaries", "--comments"],
+    );
+  });
+
+  it("reads --migrate-ceilings as arming a second gate, with no other arming flag", () => {
+    expectRefused(
+      [repo.app, "--boundaries", "--comments", "--migrate-ceilings"],
+      ["--boundaries", "--comments"],
     );
   });
 
