@@ -13,8 +13,8 @@ The demlik monorepo. Each package publishes to npm on its own version.
 
 ```sh
 pnpm install
-pnpm typecheck && pnpm lint && pnpm test   # every package, same as CI
-pnpm --filter @demlik/tea <script>         # one package
+pnpm typecheck && pnpm typecheck:test && pnpm lint && pnpm test   # across packages; CI runs more
+pnpm --filter @demlik/tea <script>                                # one package
 ```
 
 Code-graph runs from the repository root through its built CLI:
