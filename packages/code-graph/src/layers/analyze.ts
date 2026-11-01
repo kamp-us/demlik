@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { LoadedProject, SourceUnit } from "../extract/project.js";
 import { importLiterals } from "../syntax/imports.js";
-import { compileMatchers, directionOf, layerOf } from "./classify.js";
+import { compileMatchers, directionOf, type LayerRule, layerOf, ruleBroken } from "./classify.js";
 import { createTargetResolver, type ResolvedTarget } from "./resolve-target.js";
 import type { LayerRules } from "./rules.js";
 
@@ -14,6 +14,7 @@ export type LayerEdge = {
   readonly toLayer: string;
   readonly specifier: string;
   readonly typeOnly: boolean;
+  readonly rule: LayerRule;
 };
 
 export type LayerCensus = {
@@ -27,6 +28,8 @@ export type LayerCensus = {
 
 export type LayerReport = {
   readonly layers: readonly string[];
+  /** Whether any layer declares `imports`. Without one, every violation is upward and the report does not name rules. */
+  readonly importsDeclared: boolean;
   readonly filesScanned: number;
   readonly census: LayerCensus;
   readonly violations: readonly LayerEdge[];
@@ -71,6 +74,10 @@ function sortEdges(edges: LayerEdge[]): LayerEdge[] {
   );
 }
 
+function emptyCensus(): LayerCensus {
+  return { down: 0, sideways: 0, up: 0, unlayered: 0, external: 0, unresolved: 0 };
+}
+
 export function analyzeLayers(
   loaded: LoadedProject,
   repoRoot: string,
@@ -78,14 +85,7 @@ export function analyzeLayers(
 ): LayerReport {
   const matchers = compileMatchers(rules.layers);
   const resolveTarget = createTargetResolver(repoRoot);
-  const census: LayerCensus = {
-    down: 0,
-    sideways: 0,
-    up: 0,
-    unlayered: 0,
-    external: 0,
-    unresolved: 0,
-  };
+  const census = emptyCensus();
   const violations: LayerEdge[] = [];
   const unresolved: string[] = [];
 
@@ -108,7 +108,9 @@ export function analyzeLayers(
       const toLayer = layerOf(at.file, matchers);
       const { direction } = directionOf(fromLayer, toLayer);
       census[direction]++;
-      if (direction !== "up" || fromLayer === null || toLayer === null) continue;
+      if (fromLayer === null || toLayer === null) continue;
+      const rule = ruleBroken(fromLayer, toLayer);
+      if (rule === null) continue;
       violations.push({
         from,
         fromLine: spec.line,
@@ -118,12 +120,14 @@ export function analyzeLayers(
         toLayer: toLayer.name,
         specifier: spec.value,
         typeOnly: spec.typeOnly,
+        rule,
       });
     }
   }
 
   return {
     layers: rules.layers.map((l) => l.name),
+    importsDeclared: rules.layers.some((l) => l.imports !== undefined),
     filesScanned: loaded.sourceFiles.length,
     census,
     violations: sortEdges(violations),

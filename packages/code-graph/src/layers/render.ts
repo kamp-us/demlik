@@ -3,11 +3,12 @@ import type { LayerEdge, LayerReport } from "./analyze.js";
 import { type Reconciliation, reconcile } from "./reconcile.js";
 import type { AllowedEdge } from "./rules.js";
 
-function edgeLine(edge: LayerEdge): string {
+function edgeLine(edge: LayerEdge, importsDeclared: boolean): string {
+  const rule = importsDeclared ? `  [${edge.rule}]` : "";
   const tag = edge.typeOnly ? "  [type-only]" : "";
   return (
     `  ${edge.from}:${edge.fromLine}  ${edge.fromLayer} -> ${edge.toLayer}  ` +
-    `${edge.to}:${edge.toLine}  ("${edge.specifier}")${tag}`
+    `${edge.to}:${edge.toLine}  ("${edge.specifier}")${rule}${tag}`
   );
 }
 
@@ -22,11 +23,34 @@ function headerLines(report: LayerReport): string[] {
     `scanned ${report.filesScanned} files — ${c.down} down, ${c.sideways} sideways, ` +
       `${c.up} UP, ${c.unlayered} unlayered, ${c.external} external, ${c.unresolved} unresolved`,
     ...report.unresolved.map((u) => `  UNRESOLVED  ${u}`),
-    `violations (${report.violations.length} upward import sites):`,
+    report.importsDeclared
+      ? `violations (${report.violations.length} import sites breaking a layer rule):`
+      : `violations (${report.violations.length} upward import sites):`,
   ];
 }
 
-function verdictLines(result: Reconciliation): string[] {
+function undeclaredLines(undeclared: readonly LayerEdge[], importsDeclared: boolean): string[] {
+  const edges = undeclared.map((edge) => edgeLine(edge, importsDeclared));
+  if (!importsDeclared) {
+    return [
+      `  ${undeclared.length} undeclared violation(s) — an edge points UP the stack:`,
+      ...edges,
+      "  Fix: point the dependency down (move the shared thing into a lower layer, or",
+      "  invert it behind a contract). If it cannot move in this PR, add the pair to the",
+      "  `allowed` array in your --layer-rules file with its exact site count and a reason.",
+    ];
+  }
+  return [
+    `  ${undeclared.length} undeclared violation(s) — an edge breaks the rule in its tag:`,
+    ...edges,
+    "  Fix: for [upward], point the dependency down (move the shared thing into a lower layer, or",
+    "  invert it behind a contract). For [outside-imports], go through a layer the importer lists,",
+    "  or add the target to its `imports`. If it cannot move in this PR, add the pair to the",
+    "  `allowed` array in your --layer-rules file with its exact site count and a reason.",
+  ];
+}
+
+function verdictLines(result: Reconciliation, importsDeclared: boolean): string[] {
   if (result.passed) {
     return [
       `allowlist: OK — ${result.allowedSites} violating site(s), every one declared, ` +
@@ -35,13 +59,7 @@ function verdictLines(result: Reconciliation): string[] {
   }
   const lines = ["LAYER GATE FAILED."];
   if (result.undeclared.length > 0) {
-    lines.push(
-      `  ${result.undeclared.length} undeclared violation(s) — an edge points UP the stack:`,
-      ...result.undeclared.map(edgeLine),
-      "  Fix: point the dependency down (move the shared thing into a lower layer, or",
-      "  invert it behind a contract). If it cannot move in this PR, add the pair to the",
-      "  `allowed` array in your --layer-rules file with its exact site count and a reason.",
-    );
+    lines.push(...undeclaredLines(result.undeclared, importsDeclared));
   }
   if (result.stale.length > 0) {
     lines.push(
@@ -79,6 +97,8 @@ export function renderLayers(
   const result = reconcile(report, allowed);
   const exitCode = result.passed ? 0 : 1;
   if (json) {
+    const wire = (edges: readonly LayerEdge[]): readonly object[] =>
+      report.importsDeclared ? edges : edges.map(({ rule: _rule, ...edge }) => edge);
     return {
       stdout: stableStringify(
         {
@@ -86,9 +106,9 @@ export function renderLayers(
           filesScanned: report.filesScanned,
           census: report.census,
           unresolved: report.unresolved,
-          violations: report.violations,
+          violations: wire(report.violations),
           passed: result.passed,
-          undeclared: result.undeclared,
+          undeclared: wire(result.undeclared),
           stale: result.stale,
           miscounted: result.miscounted,
         },
@@ -99,8 +119,8 @@ export function renderLayers(
   }
   const lines = [
     ...headerLines(report),
-    ...report.violations.map(edgeLine),
-    ...verdictLines(result),
+    ...report.violations.map((edge) => edgeLine(edge, report.importsDeclared)),
+    ...verdictLines(result, report.importsDeclared),
   ];
   return { stdout: lines.join("\n"), exitCode };
 }

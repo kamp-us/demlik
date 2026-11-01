@@ -158,7 +158,10 @@ function analysisOptions(command: Command): Command {
 
 function featureOptions(command: Command): Command {
   return command
-    .option("--layers", "layer gate: every import edge pointing UP the declared layer stack")
+    .option(
+      "--layers",
+      "layer gate: every import edge that points up the declared layer stack or leaves a layer's `imports`",
+    )
     .option(
       "--layer-rules <file>",
       "JSON file declaring the layer stack and allowlist (required by --layers)",

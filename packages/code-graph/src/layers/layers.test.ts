@@ -49,6 +49,7 @@ describe("layer classification is declared, and the most specific declaration wi
 function reportOf(violations: ReadonlyArray<{ from: string; to: string; line: number }>) {
   return {
     layers: LAYERS.map((l) => l.name),
+    importsDeclared: false,
     filesScanned: 1,
     census: {
       down: 0,
@@ -68,6 +69,7 @@ function reportOf(violations: ReadonlyArray<{ from: string; to: string; line: nu
       toLayer: "service",
       specifier: "../x",
       typeOnly: false,
+      rule: "upward" as const,
     })),
   };
 }
