@@ -278,6 +278,19 @@ export type Supervision<S, M extends { type: string }> =
     };
 
 /**
+ * What `done()` rejects with once a Sub's failure the Sub did not map to a Msg
+ * has stopped the run, which can then never reach a terminal State. `cause` is
+ * what the Sub failed with, the same value `onError` heard under `"sub"`.
+ */
+export class SubFailedError extends Error {
+  override readonly name = "SubFailedError";
+  readonly _tag = "SubFailedError" as const;
+  constructor(public override readonly cause: unknown) {
+    super("@demlik/tea: a Sub failed and stopped the run.");
+  }
+}
+
+/**
  * Raised by `idle()` when the quiescence wait hits its iteration cap without the
  * dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving,
  * so a livelocking machine surfaces instead of masquerading as quiescent.
@@ -1085,16 +1098,20 @@ export interface Runtime<
    * product off the State the machine already owns, NOT scraped off the `observe`
    * firehose by matching an internal Msg name. With a store, returns `undefined`
    * until the current State's save succeeds, including after a failed save.
-   * Without a store, answers as soon as State is set. Total — never throws.
+   * Without a store, answers as soon as State is set. Total — never throws, so a
+   * run a Sub failure stopped reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
   /**
    * Resolves with the terminal State only once it is saved (per the `terminal`
    * predicate). If ALREADY saved and terminal, resolves immediately; otherwise
    * on that terminal commit. Rejects with the save failure if a terminal State
-   * cannot be saved, for both waiting and later callers. Without a store,
-   * answers as soon as State is set. The awaitable companion to `result()`.
-   * With no predicate this never resolves. Idempotent and multi-caller safe.
+   * cannot be saved, for both waiting and later callers. Rejects with
+   * `SubFailedError` once a Sub failure the Sub did not map to a Msg stops the
+   * run short of a terminal State, for both waiting and later callers too.
+   * Without a store, answers as soon as State is set. The awaitable companion to
+   * `result()`. With no predicate this resolves never, and rejects only on that
+   * Sub failure. Idempotent and multi-caller safe.
    */
   done(): Promise<S>;
 }

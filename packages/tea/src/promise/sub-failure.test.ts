@@ -12,6 +12,7 @@ import {
   defineMachine,
   type RuntimeErrorContext,
   type Sub,
+  SubFailedError,
   type Subscribe,
 } from "../index";
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
@@ -69,6 +70,43 @@ describe("Promise engine: an unhandled Sub failure", () => {
     await vi.waitFor(() => expect(otherDisposed).toBe(true));
     expect(liveSubs(booting)).toBe(0);
     await expect(booting.dispatch({ type: "poke" })).rejects.toThrow(/stopped/);
+  });
+
+  it("a Sub failure rejects done() with SubFailedError for waiting and later callers", async () => {
+    type Gate = { readonly open: boolean };
+    type GateMsg = { readonly type: "open" };
+    type Watch = Sub<"watch", { readonly on: true }>;
+    const gated = defineMachine({
+      types: { model: {} as Gate, msg: {} as GateMsg, sub: {} as Watch },
+      init: () => [{ open: false }, []],
+      update: { open: () => [{ open: true }, []] },
+      subs: [
+        {
+          type: "watch",
+          deps: (s) => (s.open ? { on: true as const } : null),
+        },
+      ],
+    });
+    const boom = new Error("watch failed");
+    const { onError } = sink();
+    const rt = await run(gated, {
+      onError,
+      subscribe: {
+        watch: () => {
+          throw boom;
+        },
+      },
+    }).ready;
+
+    const waiting = rt.done();
+    await expect(rt.dispatch({ type: "open" })).rejects.toBe(boom);
+
+    const first = await waiting.catch((error: unknown) => error);
+    const later = await rt.done().catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(SubFailedError);
+    expect((first as SubFailedError).cause).toBe(boom);
+    expect(later).toBe(first);
+    expect(rt.result()).toBeUndefined();
   });
 
   it("a runner that throws on a later transition rejects that dispatch and stops the run", async () => {

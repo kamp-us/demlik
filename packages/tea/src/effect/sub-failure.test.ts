@@ -3,12 +3,15 @@
  * R3.1 of #325) — the Effect engine's half; `src/promise/sub-failure.test.ts`
  * is the Promise engine's. The Elm way: a Sub maps the errors it expects into
  * Msgs itself, so any failure that reaches the engine is unhandled. It never
- * stays "logged, id still live": the run's Scope closes with the failure.
+ * stays "logged, id still live": the run closes its own child Scope, the
+ * caller's stays open, and `done()` fails with what the Sub failed with
+ * (ADR 0030, which narrows R3.1).
  */
 
 import {
   Cause,
   Data,
+  Deferred,
   Effect,
   Exit,
   type Scope,
@@ -87,7 +90,7 @@ function forever(onRelease: () => void): Stream.Stream<Msg> {
 }
 
 describe("Effect engine: an unhandled Sub failure", () => {
-  it("stops the run and closes its Scope with that failure; the Sub is not left running", async () => {
+  it("stops the run and leaves the caller's Scope open; done() says why and the Sub is not left running", async () => {
     const closed = new Closed({ code: 1006 });
     let otherReleased = false;
     const { reports, onError } = sink();
@@ -108,23 +111,24 @@ describe("Effect engine: an unhandled Sub failure", () => {
     );
     const rt = await Effect.runPromise(booting.ready);
 
-    await vi.waitFor(() => expect(exits).toHaveLength(1));
-    const exit = exits[0] as Exit.Exit<unknown, unknown>;
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(closed);
+    const failed = await Effect.runPromise(Effect.flip(rt.done()));
+    expect(failed).toBeInstanceOf(EffectEngine.SubFailed);
+    expect((failed as EffectEngine.SubFailed).cause).toBe(closed);
+    expect(rt.result()).toBeUndefined();
 
     expect(reports).toEqual([{ error: closed, phase: "sub" }]);
-    // Closing the Scope stopped the run: every Sub is torn down, none is
-    // counted as live, and the run takes no more Msgs.
+    // The run's own Scope closing stopped the run: every Sub is torn down, none
+    // is counted as live, and the run takes no more Msgs.
     await vi.waitFor(() => expect(otherReleased).toBe(true));
     expect(liveSubs(rt)).toBe(0);
     const refused = await Effect.runPromise(
       Effect.flip(rt.dispatch({ type: "poke" })),
     );
     expect(refused).toBeInstanceOf(EffectEngine.Stopped);
+    expect(exits).toEqual([]);
   });
 
-  it("a defect in the Stream closes the Scope with that defect", async () => {
+  it("a defect in the Stream reaches done() and leaves the caller's Scope open", async () => {
     const boom = new Error("boom");
     const { reports, onError } = sink();
     const { value: booting, exits } = await openScope(
@@ -136,12 +140,12 @@ describe("Effect engine: an unhandled Sub failure", () => {
         },
       }),
     );
-    await Effect.runPromise(booting.ready);
+    const rt = await Effect.runPromise(booting.ready);
 
-    await vi.waitFor(() => expect(exits).toHaveLength(1));
-    const exit = exits[0] as Exit.Exit<unknown, unknown>;
-    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
+    const failed = await Effect.runPromise(Effect.flip(rt.done()));
+    expect((failed as EffectEngine.SubFailed).cause).toBe(boom);
     expect(reports).toEqual([{ error: boom, phase: "sub" }]);
+    expect(exits).toEqual([]);
   });
 
   it("a runner that throws while starting stops the run the same way", async () => {
@@ -162,11 +166,165 @@ describe("Effect engine: an unhandled Sub failure", () => {
     const booted = await Effect.runPromiseExit(booting.ready);
     expect(Exit.isFailure(booted) && Cause.squash(booted.cause)).toBe(boom);
 
-    await vi.waitFor(() => expect(exits).toHaveLength(1));
-    const exit = exits[0] as Exit.Exit<unknown, unknown>;
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(boom);
     expect(reports).toEqual([{ error: boom, phase: "sub" }]);
+    await vi.waitFor(() => expect(liveSubs(booting)).toBe(0));
+    expect(exits).toEqual([]);
+  });
+
+  it("fails a done() already waiting, and one that comes later", async () => {
+    const closed = new Closed({ code: 1 });
+    const go = Effect.runSync(Deferred.make<void>());
+    const { onError } = sink();
+    const { value: booting } = await openScope(
+      EffectEngine.run(machine, {
+        onError,
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(Deferred.await(go)).pipe(
+              Stream.flatMap(() => Stream.fail(closed)),
+            ),
+          other: () => forever(() => {}),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    const waiting = Effect.runPromise(Effect.flip(rt.done()));
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+
+    const first = await waiting;
+    const later = await Effect.runPromise(Effect.flip(rt.done()));
+    expect((first as EffectEngine.SubFailed).cause).toBe(closed);
+    expect((later as EffectEngine.SubFailed).cause).toBe(closed);
+  });
+
+  it("leaves a terminal State's done() alone", async () => {
+    const closed = new Closed({ code: 1 });
+    const go = Effect.runSync(Deferred.make<void>());
+    const { onError } = sink();
+    const { value: booting } = await openScope(
+      EffectEngine.run(machine, {
+        onError,
+        terminal: (s) => s.pokes > 0,
+        subscribe: {
+          feed: () =>
+            Stream.fromEffect(Deferred.await(go)).pipe(
+              Stream.flatMap(() => Stream.fail(closed)),
+            ),
+          other: () => forever(() => {}),
+        },
+      }),
+    );
+    const rt = await Effect.runPromise(booting.ready);
+    await Effect.runPromise(rt.dispatch({ type: "poke" }));
+
+    Effect.runSync(Deferred.succeed(go, undefined));
+    await vi.waitFor(() => expect(liveSubs(rt)).toBe(0));
+
+    const state = await Effect.runPromise(rt.done());
+    expect(state.pokes).toBe(1);
+    expect(rt.result()?.pokes).toBe(1);
+  });
+});
+
+describe("Effect engine: what else lives in the caller's Scope", () => {
+  it("a sibling run survives another run's Sub failure, and closing the caller's Scope stops it", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    let siblingReleased = false;
+    let resourceReleased = false;
+    const caller = await Effect.runPromise(ScopeModule.make());
+    const start = <A>(effect: Effect.Effect<A, never, Scope.Scope>) =>
+      Effect.runPromise(
+        ScopeModule.provide(caller)(effect) as Effect.Effect<A>,
+      );
+
+    await start(
+      Effect.acquireRelease(Effect.void, () =>
+        Effect.sync(() => {
+          resourceReleased = true;
+        }),
+      ),
+    );
+    const sibling = await Effect.runPromise(
+      (
+        await start(
+          EffectEngine.run(machine, {
+            onError,
+            subscribe: {
+              feed: () =>
+                forever(() => {
+                  siblingReleased = true;
+                }),
+              other: () => forever(() => {}),
+            },
+          }),
+        )
+      ).ready,
+    );
+    const failing = await Effect.runPromise(
+      (
+        await start(
+          EffectEngine.run(machine, {
+            onError,
+            subscribe: {
+              feed: () => Stream.fail(closed),
+              other: () => forever(() => {}),
+            },
+          }),
+        )
+      ).ready,
+    );
+
+    await Effect.runPromise(Effect.flip(failing.done()));
+    await vi.waitFor(() => expect(liveSubs(failing)).toBe(0));
+
+    await Effect.runPromise(sibling.dispatch({ type: "poke" }));
+    expect(sibling.getState().pokes).toBe(1);
+    expect(siblingReleased).toBe(false);
+    expect(resourceReleased).toBe(false);
+
+    await Effect.runPromise(ScopeModule.close(caller, Exit.void));
+
+    expect(siblingReleased).toBe(true);
+    expect(resourceReleased).toBe(true);
+    const refused = await Effect.runPromise(
+      Effect.flip(sibling.dispatch({ type: "poke" })),
+    );
+    expect(refused).toBeInstanceOf(EffectEngine.Stopped);
+  });
+
+  it("a spawned worker's Sub failure runs remove and notify, and its sibling worker lives on", async () => {
+    const closed = new Closed({ code: 1 });
+    const { onError } = sink();
+    const log: string[] = [];
+    const parent = await Effect.runPromise(ScopeModule.make());
+    const worker = (name: string, feed: () => Stream.Stream<Msg, Closed>) =>
+      EffectEngine.spawn(parent, {
+        start: () =>
+          EffectEngine.run(machine, {
+            onError,
+            subscribe: { feed, other: () => forever(() => {}) },
+          }),
+        enrol: () => Effect.void,
+        remove: Effect.sync(() => {
+          log.push(`remove ${name}`);
+        }),
+        notify: Effect.sync(() => {
+          log.push(`notify ${name}`);
+        }),
+      });
+
+    const staying = await Effect.runPromise(
+      (await Effect.runPromise(worker("staying", () => Stream.never))).ready,
+    );
+    await Effect.runPromise(worker("failing", () => Stream.fail(closed)));
+
+    await vi.waitFor(() => expect(log).toContain("notify failing"));
+    expect(log).toContain("remove failing");
+    expect(log).not.toContain("remove staying");
+    await Effect.runPromise(staying.dispatch({ type: "poke" }));
+    expect(staying.getState().pokes).toBe(1);
   });
 });
 

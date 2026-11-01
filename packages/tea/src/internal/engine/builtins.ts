@@ -20,7 +20,11 @@ import type {
   TelemetryEvent,
   TelemetrySink,
 } from "../../runtime-types";
-import { IdentityDropNotice, isFencedStore } from "../../runtime-types";
+import {
+  IdentityDropNotice,
+  isFencedStore,
+  SubFailedError,
+} from "../../runtime-types";
 import type { Extension, ExtensionFactory, LoopServices } from "./loop";
 
 type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
@@ -361,6 +365,9 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
  * on a terminal commit (boot included — a rehydrated run can land terminal),
  * or rejects when that State's save fails. Storeless State is eligible as soon
  * as it is set. No predicate → never terminal.
+ *
+ * A Sub failure that stops the run rejects `done()` with `SubFailedError`,
+ * unless the State is already terminal: that State's own save still decides.
  */
 export function terminality<S, M, C>(
   isTerminal: ((state: S) => boolean) | undefined,
@@ -371,7 +378,15 @@ export function terminality<S, M, C>(
       resolve(state: S): void;
       reject(error: unknown): void;
     }>();
+    let subFailure: SubFailedError | undefined;
     return {
+      subFailed(error) {
+        subFailure = new SubFailedError(error);
+        if (holds(loop.state() as S)) return;
+        const parked = [...waiters];
+        waiters.clear();
+        for (const waiter of parked) waiter.reject(subFailure);
+      },
       commit(_msg, state) {
         if (
           loop.saveStatus().type !== "saved" ||
@@ -402,6 +417,8 @@ export function terminality<S, M, C>(
             const saved = loop.saveStatus();
             if (saved.type === "saved") return Promise.resolve(current);
             if (saved.type === "failed") return Promise.reject(saved.error);
+          } else if (subFailure !== undefined) {
+            return Promise.reject(subFailure);
           }
           return new Promise<S>((resolve, reject) => {
             waiters.add({ resolve, reject });

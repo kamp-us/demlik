@@ -19,6 +19,7 @@ import {
   DispatchDiscardedError,
   type Store,
   StoreRefusedError,
+  SubFailedError,
 } from "../runtime-types";
 
 /**
@@ -52,6 +53,19 @@ export class StoreFailed extends Data.TaggedError("StoreFailed")<{
 }> {
   override get message(): string {
     return `@demlik/tea: store ${this.operation} failed.`;
+  }
+}
+
+/**
+ * A Sub failed with an error it did not map to a Msg, and that stopped the run
+ * before it reached a terminal State. `cause` is what the Sub failed with, the
+ * value `onError` heard under `"sub"`. Only `done()` fails with it.
+ */
+export class SubFailed extends Data.TaggedError("SubFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "@demlik/tea: a Sub failed and stopped the run.";
   }
 }
 
@@ -118,4 +132,17 @@ export function exitOf<Err>(
     return Exit.fail(new Stopped({ msgType: error.msgType, when: "stopped" }));
   }
   return Exit.die(error);
+}
+
+/**
+ * The Exit `done()` ends with when the loop rejected with `error`: it rejects
+ * only at the terminal save boundary or on a Sub failure, never at the gate.
+ */
+export function doneExitOf(
+  error: unknown,
+): Exit.Exit<never, StoreFailed | SubFailed> {
+  if (error instanceof SubFailedError) {
+    return Exit.fail(new SubFailed({ cause: error.cause }));
+  }
+  return exitOf<never>(error) as Exit.Exit<never, StoreFailed>;
 }

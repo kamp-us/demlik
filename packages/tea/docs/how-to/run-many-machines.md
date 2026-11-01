@@ -147,6 +147,10 @@ entry out and `notify` tells the parent. The table lookup is yours, so
 `stopWorker` does it and then calls `stop`. Closing the parent's scope closes
 every child forked from it, so the whole tree stops with it.
 
+A worker whose Sub fails with an error it did not map to a Msg closes its own
+child scope the same way, so `remove` and `notify` run. The parent's scope and
+the other workers stay up.
+
 ## 3. Use it
 
 This goes in a third file beside the other two. It imports `Scope` as a value

@@ -96,6 +96,16 @@ export interface SpawnSteps<A, E = never, R = never> {
   readonly notify: Effect.Effect<unknown>;
 }
 
+const spawnedScopes = new WeakMap<Scope.Scope, Scope.Closeable>();
+
+/**
+ * The child scope `spawn` forked, when `scope` is one: the host's unit of work,
+ * so a run inside it that a Sub failure stops closes it, and `remove` and
+ * `notify` run. Every other Scope belongs to whoever opened it.
+ */
+export const spawnedScope = (scope: Scope.Scope): Scope.Closeable | undefined =>
+  spawnedScopes.get(scope);
+
 /**
  * Start a child in a scope forked from `parentScope` and enrol it in the
  * host's table, as one uninterruptible step. Stop a child with `stop`,
@@ -138,6 +148,7 @@ export const spawn = <A, E = never, R = never>(
   Effect.uninterruptible(
     Effect.gen(function* () {
       const scope = yield* Scope.fork(parentScope);
+      spawnedScopes.set(scope, scope);
       // Added before `start`, so it runs after everything `start` put in the
       // scope has been released, the child's run included.
       yield* Scope.addFinalizer(

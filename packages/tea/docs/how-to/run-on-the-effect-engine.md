@@ -225,15 +225,17 @@ The machine handles `disconnected` like any other Msg. To reconnect, its
 `update` changes the State so the Sub's `deps` change, and the engine starts
 the Sub again.
 
-A failure the Sub does not catch stops the run. `onError` sees it under
-`phase: "sub"`, and the engine closes the run's Scope with that failure, so
-everything else in that Scope is released too. There is no hook on the machine
-or on `run` for it: a failure you expect belongs in the Sub.
+A failure the Sub does not catch stops that run and nothing else. `onError` sees
+it under `phase: "sub"`, and `done()` fails with `SubFailed`, whose `cause` is
+what the Sub failed with. `result()` stays `undefined`. The Scope you ran it in
+stays open, so whatever else lives there keeps going, and your program does not
+end by itself. To end it, wait on `done()`. There is no hook on the machine or
+on `run` for it: a failure you expect belongs in the Sub.
 
 The Promise engine follows the same rule. Its runner dispatches the Msgs for
 the errors it expects (the `onError` option of `fromWebSocket` does this), and a
-runner that throws while it starts stops the run and reaches `onError` under
-`"sub"`.
+runner that throws while it starts stops the run, reaches `onError` under
+`"sub"` and rejects `done()` with `SubFailedError`.
 
 ## 5. Catch a run's failures by tag
 

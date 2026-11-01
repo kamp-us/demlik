@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (158)
+## Exports (159)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -140,6 +140,7 @@ import { … } from "@demlik/tea";
 | [`StoreRefusedError`](#StoreRefusedError) | Class | stable | `ready` rejects with this when the saved state could not be restored: `migrate` returned refuse, or `load` / `migrate` threw (that throw is the `cause`). |
 | [`structuralHash`](#structuralHash) | Function | stable | Turn a plain-data value into a stable string that does not depend on object key order. |
 | [`Sub`](#Sub) | Type | stable | A running subscription as its runner sees it: its `type`, the `deps` value the machine's `subs` entry returned, and an `id` derived from both. |
+| [`SubFailedError`](#SubFailedError) | Class | stable | What `done()` rejects with once a Sub's failure the Sub did not map to a Msg has stopped the run, which can then never reach a terminal State. |
 | [`subId`](#subId) | Function | stable | Construct a `SubId` from a string. |
 | [`SubId`](#SubId) | Type | stable | The branded string that identifies a running Sub. |
 | [`subIdOf`](#subIdOf) | Function | stable | The one `id` of a Sub: a structural hash of its `type` and its `deps` value. |
@@ -1918,9 +1919,12 @@ interface Runtime<S, M extends { type: string }, E extends { type: string } = ne
    * Resolves with the terminal State only once it is saved (per the `terminal`
    * predicate). If ALREADY saved and terminal, resolves immediately; otherwise
    * on that terminal commit. Rejects with the save failure if a terminal State
-   * cannot be saved, for both waiting and later callers. Without a store,
-   * answers as soon as State is set. The awaitable companion to `result()`.
-   * With no predicate this never resolves. Idempotent and multi-caller safe.
+   * cannot be saved, for both waiting and later callers. Rejects with
+   * `SubFailedError` once a Sub failure the Sub did not map to a Msg stops the
+   * run short of a terminal State, for both waiting and later callers too.
+   * Without a store, answers as soon as State is set. The awaitable companion to
+   * `result()`. With no predicate this resolves never, and rejects only on that
+   * Sub failure. Idempotent and multi-caller safe.
    */
   done(): Promise<S>;
   /**
@@ -1951,7 +1955,8 @@ interface Runtime<S, M extends { type: string }, E extends { type: string } = ne
    * product off the State the machine already owns, NOT scraped off the `observe`
    * firehose by matching an internal Msg name. With a store, returns `undefined`
    * until the current State's save succeeds, including after a failed save.
-   * Without a store, answers as soon as State is set. Total — never throws.
+   * Without a store, answers as soon as State is set. Total — never throws, so a
+   * run a Sub failure stopped reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
 }
@@ -2170,6 +2175,18 @@ type Sub<T extends string = string, D = unknown> = {
   readonly deps: D;
   readonly id: SubId;
   readonly type: T;
+}
+```
+
+<a id="SubFailedError"></a>
+
+### `SubFailedError`
+
+```ts
+class SubFailedError extends Error {
+  constructor(cause: unknown);
+  readonly _tag: "SubFailedError";
+  readonly name: "SubFailedError";
 }
 ```
 

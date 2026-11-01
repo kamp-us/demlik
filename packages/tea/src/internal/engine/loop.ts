@@ -25,7 +25,9 @@
  *                    passes `undefined` for the Msg.
  *   5. `saveFailed` — called when a transition's save rejects, before that
  *                    rejection reaches the dispatch caller.
- *   6. `ctx`       — keys added to the ctx every Cmd handler receives, so a
+ *   6. `subFailed` — called when a Sub's failure stops the run, before the
+ *                    engine is told to stop it.
+ *   7. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
  *
@@ -107,6 +109,7 @@ export interface Extension<S, M, C> {
   readonly store?: (store: Store<S>) => Store<S>;
   readonly commit?: (msg: M | undefined, state: S) => void;
   readonly saveFailed?: (state: S, error: unknown) => void;
+  readonly subFailed?: (error: unknown) => void;
   readonly ctx?: object;
   readonly handle?: object;
 }
@@ -568,8 +571,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * Msgs itself, so one that reaches here is unhandled, and the run stops
    * rather than keep a dead Sub counted as live. The Sub leaves the registry,
    * the error reaches the sink under `"sub"`, the gate starts draining so no
-   * new Msg is accepted, and the engine stops the run. A failure while the
-   * run is already stopping is reported and nothing more.
+   * new Msg is accepted, `done()` hears it, and the engine stops the run. A
+   * failure while the run is already stopping is reported and nothing more.
    */
   function subFailed(id: string, running: RunningSub, error: unknown): void {
     if (running.failed) return;
@@ -578,6 +581,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     report(error, "sub");
     if (gate !== "open") return;
     gate = "draining";
+    for (const ext of extensions) ext.subFailed?.(error);
     config.stopOnSubFailure(error);
   }
 

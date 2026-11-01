@@ -9,7 +9,7 @@ import {
 } from "../index";
 import { memoryStore } from "../mem";
 import { run as runPromise } from "../promise";
-import { run as runEffect, StoreFailed } from "./index";
+import { run as runEffect, StoreFailed, type SubFailed } from "./index";
 
 type State = { readonly type: "working" | "done" };
 type Msg = { readonly type: "finish" };
@@ -61,7 +61,7 @@ type Handle = Pick<
 interface Started {
   readonly rt: Handle;
   readonly reports: unknown[];
-  readonly completionFailures: StoreFailed[];
+  readonly completionFailures: (StoreFailed | SubFailed)[];
   close(): Promise<void>;
 }
 
@@ -94,7 +94,7 @@ const engines: Record<
   },
   Effect: async (store, work = Promise.resolve(), init = machine.init) => {
     const reports: unknown[] = [];
-    const completionFailures: StoreFailed[] = [];
+    const completionFailures: (StoreFailed | SubFailed)[] = [];
     const scope = await Effect.runPromise(Scope.make());
     const rt = await settle(
       Scope.provide(scope)(
@@ -115,7 +115,9 @@ const engines: Record<
       await Effect.runPromise(Scope.close(scope, Exit.void));
       throw error;
     });
-    expectTypeOf(rt.done()).toEqualTypeOf<Effect.Effect<State, StoreFailed>>();
+    expectTypeOf(rt.done()).toEqualTypeOf<
+      Effect.Effect<State, StoreFailed | SubFailed>
+    >();
     return {
       rt: {
         getState: rt.getState,
