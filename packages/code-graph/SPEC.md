@@ -285,7 +285,7 @@ Two node sets, widened from "named callables only" on the founder's ruling (http
 - `id` collisions within a file resolved by a stable **within-file occurrence ordinal** (`#0`, `#1`, … in source order), not by start line (so ids don't churn when lines shift).
 
 ### A3 — file filters
-Include `**/*.{ts,tsx}`. Exclude `**/*.d.ts`, `node_modules`, `dist`, `.next`, `**/__generated__/**`, `*.gen.ts`. Files matching `*.test.ts(x)` / `*.spec.ts(x)` are **included** but tagged `isTest: true`.
+Include `**/*.{ts,tsx}`. Exclude `**/*.d.ts`, `node_modules`, `dist`, `.next`, `**/__generated__/**`, `*.gen.ts`. Files matching `*.test.ts(x)` / `*.spec.ts(x)` / `*.test-d.ts(x)` / `*.spec-d.ts(x)` / `*.type-test.ts(x)` are **included** but tagged `isTest: true`.
 
 ### A4 — comment-line counting (no double-count)
 Source of truth: **`Node.getLeadingCommentRanges()`** (already includes JSDoc, so JSDoc is NOT added separately) **PLUS `Node.getTrailingCommentRanges()`** for comments inside the span. A trailing `// x` after code on the same line (e.g. on a branch) is invisible to the leading ranges, so it MUST be gathered too — otherwise a fully-commented complex function reports `commentLines: 0` and fires a false `dense-undocumented`. Both leading and trailing ranges fold into the SAME dedup-by-physical-line set. Count distinct physical lines spanned by those ranges plus inline `//` / `/* */` ranges inside the node span; dedup overlapping/consecutive line ranges so `// a\n// b` = 2 and a 5-line block = 5, never more.
