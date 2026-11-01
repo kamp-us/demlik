@@ -254,7 +254,7 @@ describe("move apply removes the entries a split leaves naming a file that left"
       execFileSync(join(BIN, "tsc"), ["-p", join(root, pkg)], {
         stdio: "pipe",
       });
-  }, 60_000);
+  });
 
   it("gives a manifest the same outcome as the hand plan", () => {
     const byPlan = splitWorkspace();
@@ -268,7 +268,7 @@ describe("move apply removes the entries a split leaves naming a file that left"
     expect(git(byManifest, "rev-parse", "HEAD^{tree}")).toBe(
       git(byPlan, "rev-parse", "HEAD^{tree}"),
     );
-  }, 60_000);
+  });
 
   it("removes an exports entry targeting the source itself and a tsup row of an entry array", () => {
     const root = twoPackages({
