@@ -804,7 +804,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * loop's own producers is the late work `stop()` gave up on, so it is a
    * discard; a caller's dispatch is still a retired runtime being used. A Msg
    * accepted before `stop()` gave up is dropped when its turn comes, unfolded
-   * and unsaved, as a discard whoever sent it (`enqueueStep`).
+   * and unsaved: a discard for a caller, and no word at all for a Msg with no
+   * caller, since the notice already counted it (`enqueueStep`).
    */
   function enqueueDispatch(
     msg: M,
