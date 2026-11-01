@@ -1,0 +1,10 @@
+{
+  "name": "@demlik/tea-react-peer-18.2.0",
+  "version": "0.0.0",
+  "private": true,
+  "description": "React 18.2.0, for the tea test that runs useMachine across the published peer range.",
+  "dependencies": {
+    "react": "catalog:react-18.2.0",
+    "react-dom": "catalog:react-18.2.0"
+  }
+}

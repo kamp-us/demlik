@@ -6,12 +6,11 @@
  * React component. Three rules (PRD §"React adapter"):
  *
  *   1. The runtime is the source of truth, NOT React state. We subscribe via
- *      `useSyncExternalStore(runtime.subscribe, runtime.getState,
- *      runtime.getState)`. React renders are driven by runtime state changes;
- *      React never owns the state.
- *   2. The runtime is memoized per component-mount, not per render. The deps
- *      array is `[machine, opts.ctx, opts.store]` — IDENTITY, not value. See
- *      `README.md` for the ctx-identity footgun + fix.
+ *      `useSyncExternalStore`, reading a snapshot of the run's state. React
+ *      renders are driven by runtime state changes; React never owns the state.
+ *   2. The runtime is kept per component-mount, not per render. It is keyed on
+ *      `[machine, opts.run, opts.ctx, opts.store]` — IDENTITY, not value. See
+ *      `docs/how-to/drive-from-react.md` for the ctx-identity footgun + fix.
  *   3. Concurrent React is the design target. `useSyncExternalStore` is the
  *      React-blessed primitive for tearing-free external state.
  *
@@ -23,26 +22,35 @@
 
 "use client";
 
+import * as React from "react";
 import {
   useEffect,
+  useInsertionEffect,
   useMemo,
-  useReducer,
   useRef,
   useSyncExternalStore,
 } from "react";
 import type {
   BootedRunHandle,
   Cmd,
+  Dispose,
   EngineRun,
   Interpret,
   Machine,
-  RunHandle,
   RunHandlers,
   RunOptions,
   Store,
   Sub,
   Subscribe,
 } from "../index";
+import { builtinRunners } from "../internal/engine/builtin-runners";
+import { MountedRun } from "./mounted-run";
+import type { SubGate } from "./sub-gate";
+
+// A stable `<Activity>` arrived in React 19.2. That is the first React where a
+// passive cleanup can be a hide, and the first to run an insertion cleanup in a
+// deleted hidden tree. `MountedRun` says why it needs to know.
+const cleanupMayBeAHide = "Activity" in React;
 
 /**
  * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
@@ -61,7 +69,7 @@ import type {
  * `subscribe` at the moment a Cmd runs or a Sub starts — a handler may close
  * over props and state freely.
  *
- * **Identity matters.** The runtime is memoized on `[machine, opts.run,
+ * **Identity matters.** The runtime is keyed on `[machine, opts.run,
  * opts.ctx, opts.store]`. A new `ctx` reference rebuilds the runtime, and so
  * does a new `run` — pass the engine's own function, not an inline wrapper. Always `useMemo`
  * (or otherwise stabilize) the ctx at the call site. See README.
@@ -86,17 +94,30 @@ export type UseMachineOpts<
  * Build and own a run of `machine` for the lifetime of the component mount, on
  * the engine whose `run` the caller hands in.
  *
- * - Builds via `useMemo(() => opts.run(machine, opts), [machine, opts.run,
- *   opts.ctx, opts.store])` — the run is recreated when ANY of those
- *   identities change.
- * - Subscribes via `useSyncExternalStore(runtime.subscribe, runtime.getState,
- *   runtime.getState)` — tearing-free under React 18 concurrent rendering.
- * - On unmount (or any dep change), `useEffect` cleanup calls
- *   `runtime.stop()` — drains the queue, up to `disposeTimeoutMs`, runs every
- *   active sub cleanup, flushes state, and — if Cmds were still in flight —
- *   reports `RuntimeDiscardedError` (`phase: "discard"`) rather than dropping
- *   them silently. A handler that has not returned by the limit is given up
- *   on and reported as a `DrainTimeoutNotice`.
+ * - Starts the run in an effect, never during render, and keys it on `[machine,
+ *   opts.run, opts.ctx, opts.store]`: the run is replaced when ANY of those
+ *   identities change. Until it has booted, `state` is `init(null, ctx)`'s.
+ * - Subscribes via `useSyncExternalStore` — tearing-free under React 18
+ *   concurrent rendering.
+ * - On unmount (or any dep change), calls `stop()` — drains the queue, up to
+ *   `disposeTimeoutMs`, runs every active sub cleanup, flushes state, and — if
+ *   Cmds were still in flight — reports `RuntimeDiscardedError` (`phase:
+ *   "discard"`) rather than dropping them silently. A handler that has not
+ *   returned by the limit is given up on and reported as a `DrainTimeoutNotice`.
+ *
+ * **Strict Mode:** its extra effect run on mount does nothing. One run starts,
+ * `run` is called once, and each Sub starts once.
+ *
+ * **`<Activity>`** (React 19.2 and later): a hide stops the machine's Subs, and nothing else: their
+ * cleanups run, and they start again on show. It is the same run across the hide,
+ * so `state` keeps its value, `init` is not called again, and a Cmd in flight
+ * lands and its answer folds, whether that comes during the hide or after the
+ * show. A Msg dispatched while hidden folds at once, and any Cmd it emits runs.
+ *
+ * `dispatch` stays the same function across a hide and show. A Msg dispatched
+ * before the run has started, which on a tree first mounted hidden means before
+ * its first show, waits for the run and its promise settles once it is folded.
+ * After an unmount, `dispatch` rejects with `@demlik/tea: runtime stopped`.
  *
  * Returns `[state, dispatch]` shaped like `useReducer`.
  */
@@ -123,104 +144,85 @@ export function useMachine<
   // that produced it, so the table it reads is never older than that render.
   const handlersRef = useRef<RunHandlers<M, C, U, Ctx>>(opts);
   handlersRef.current = opts;
-  const handlers = useMemo(
-    () => ({
-      interpret: latestTable(
+  const interpret = useMemo(
+    () =>
+      latestTable(
         () => (handlersRef.current as { interpret?: object }).interpret,
       ) as Interpret<M, C, Ctx>,
-      subscribe: latestTable(() => handlersRef.current.subscribe) as Partial<
-        Subscribe<M, U, Ctx>
-      >,
-    }),
     [],
   );
-  // `run()` returns a `RunHandle<S, M>` SYNCHRONOUSLY (issue #45) — exactly
-  // what `useMemo` needs. We never `await` here: awaiting would force an async
-  // memo, a null first-commit state, and a resolved-flag dance. Instead we hold
-  // the booting handle and capture the booted one (the only thing with a total
-  // `getState`) once `ready` resolves.
-  const booting = useMemo<RunHandle<S, M>>(
+  // Render only builds the holder and reads `init` for the first paint, which
+  // is pure. `useMemo` may call this twice under Strict Mode and an abandoned
+  // render may drop the result, so no run starts here: that would leak one.
+  const mounted = useMemo(
     () =>
-      run(machine, {
-        ctx,
-        store,
-        ...handlers,
-      } as RunOptions<S, M, C, U, Ctx>),
-    [machine, run, ctx, store, handlers],
+      new MountedRun<S, M>(
+        (subs) =>
+          run(machine, {
+            ctx,
+            store,
+            interpret,
+            subscribe: gatedRunners(
+              subs,
+              () => handlersRef.current.subscribe,
+            ) as Partial<Subscribe<M, U, Ctx>>,
+          } as RunOptions<S, M, C, U, Ctx>),
+        machine.init(null, ctx)[0],
+        cleanupMayBeAHide,
+      ),
+    [machine, run, ctx, store, interpret],
   );
-
-  // Captures the booted handle once `ready` resolves. Until then it is
-  // `null` and `getSnapshot` serves `preliminaryState`. Reset whenever the
-  // booting handle identity changes (a new machine/ctx/store mount).
-  //
-  // The boot race the paired `bootedTick` bump exists for: the substrate's
-  // boot fanout fires BEFORE `ready` resolves (fireListeners runs inside the
-  // boot step; `ready` chains off the boot promise), so at notification time
-  // this ref is still null and `getSnapshot` returns the same
-  // `preliminaryState` reference — React sees an unchanged snapshot and
-  // skips the re-render. Nothing re-notifies after the ref is set, so a
-  // store-backed mount would stay stuck on the preliminary state until the
-  // next unrelated transition. Bumping a reducer when we capture the booted
-  // runtime forces the render that swaps preliminary → real state.
-  const readyRef = useRef<BootedRunHandle<S, M> | null>(null);
-  const [, markBooted] = useReducer((tick: number) => tick + 1, 0);
-
-  // Preliminary state computed sync from `machine.init(null, ctx)`. This is
-  // the snapshot React sees BEFORE the runtime finishes booting (matters
-  // only when `opts.store` is present — without a store, the substrate
-  // already sets state synchronously inside `run()`, so the boot fanout that
-  // captures `readyRef` lands on the same microtask as the first commit).
-  //
-  // We deliberately recompute on each render but cache by `[machine,
-  // opts.ctx]` — `init` is pure by convention, so cost is negligible. The
-  // cached snapshot is also identity-stable across rerenders when the deps
-  // don't change, which `useSyncExternalStore` rewards (no spurious
-  // re-renders).
-  const preliminaryState = useMemo<S>(
-    () => machine.init(null, ctx)[0],
-    [machine, ctx],
-  );
-
-  // `getSnapshot` reads the booted runtime if `ready` has resolved (the ref is
-  // populated), else falls back to the preliminary state. No try/catch dance
-  // anymore — pre-boot there is simply no booted handle to read from, so
-  // the fallback is structural, not exception-driven.
-  const getSnapshot = (): S =>
-    readyRef.current !== null ? readyRef.current.getState() : preliminaryState;
 
   const state = useSyncExternalStore(
-    booting.subscribe,
-    getSnapshot,
-    getSnapshot,
+    mounted.subscribe,
+    mounted.getSnapshot,
+    mounted.getSnapshot,
   );
 
-  useEffect(() => {
-    let live = true;
-    // Capture the booted runtime when `ready` resolves, then force the
-    // render that swaps preliminary → real state (see the boot-race note on
-    // `readyRef` — the boot fanout fires too early to do it for us). Boot
-    // rejections are swallowed: a failed boot surfaces on every `dispatch`,
-    // which is where the consumer handles it.
-    booting.ready.then(
-      (r) => {
-        if (live) {
-          readyRef.current = r;
-          markBooted();
-        }
-      },
-      () => {},
-    );
-    return () => {
-      live = false;
-      readyRef.current = null;
-      // Fire-and-forget — `stop()` is async but `useEffect` cleanup is sync.
-      // The runtime swallows in-flight rejections internally, so this never
-      // rejects in practice; we still attach `.catch` for safety.
-      booting.stop().catch(() => {});
-    };
-  }, [booting]);
+  // The one cleanup React runs only when the component is really gone: neither
+  // Strict Mode's double run nor `<Activity>` touches an insertion effect. It
+  // is what tells a hide from an unmount, which the effect below cannot. Reacts
+  // before 19.2 can skip it, and `MountedRun` covers them.
+  useInsertionEffect(() => () => mounted.retire(), [mounted]);
 
-  return [state, booting.dispatch];
+  useEffect(() => {
+    mounted.connect();
+    return () => mounted.disconnect();
+  }, [mounted]);
+
+  return [state, mounted.dispatch];
+}
+
+/** A Sub runner as `run` calls it. */
+type GatedRunner = (sub: Sub, ctx: unknown, dispatch: unknown) => Dispose;
+
+/**
+ * The Sub runner table `run` is handed: each runner the latest render names goes
+ * through `subs`, read again each time the Sub starts. The built-ins are named
+ * here so they go through it too. A type with no runner at all stays `undefined`,
+ * which is what the engine reports as a missing runner.
+ */
+function gatedRunners(
+  subs: SubGate,
+  current: () => object | undefined,
+): object {
+  const runnerFor = (type: PropertyKey) =>
+    ((current() as Record<PropertyKey, unknown> | undefined)?.[type] ??
+      (builtinRunners as Record<PropertyKey, unknown>)[type]) as
+      | GatedRunner
+      | undefined;
+  return new Proxy(
+    {},
+    {
+      get: (_target, type) => {
+        const first = runnerFor(type);
+        if (first === undefined) return undefined;
+        const gated: GatedRunner = (sub, ctx, dispatch) =>
+          subs.admit(() => (runnerFor(type) ?? first)(sub, ctx, dispatch));
+        return gated;
+      },
+    },
+  );
 }
 
 /**
