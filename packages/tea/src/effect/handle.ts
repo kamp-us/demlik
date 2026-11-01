@@ -100,16 +100,22 @@ export interface EffectRuntime<
   idle(): Effect.Effect<void>;
   /**
    * The saved terminal State, or `undefined` while its save is pending or failed.
-   * Without a store, answers as soon as State is set. A run a Sub failure
-   * stopped reads `undefined` here; `done()` says why.
+   * Without a store, answers as soon as State is set. A run a failure closed
+   * reads `undefined` here; `done()` says why.
    */
   result(): S | undefined;
   /**
-   * Succeeds with the terminal State only once it is saved. A failed terminal
-   * save fails with `StoreFailed` (`operation: "save"`), and a Sub failure that
-   * stopped the run short of a terminal State fails with `SubFailed`, both for
-   * waiting and later callers. The Msgs already in line fold first, so one of
-   * them reaching a terminal State makes that State the answer. Without a store, answers as soon as State is set.
+   * Succeeds with the terminal State only once it is saved. When a failure
+   * closes the run short of a terminal State, it fails with that failure, for
+   * waiting and later callers: a failed terminal save with `StoreFailed`
+   * (`operation: "save"`), a Sub failure with `SubFailed`, and a reducer throw
+   * under the `stop` strategy with a defect, the thrown value itself. The defect
+   * is outside the error channel, so `Effect.catchTags` does not see it and
+   * `Effect.catchDefect` or the fiber's `Exit` does. The Msgs already in line
+   * fold first, so one of them reaching a terminal State makes that State the
+   * answer. A terminal State already saved keeps its answer whatever fails
+   * after it. A `stop()` with no failure leaves this waiting. Without a store,
+   * answers as soon as State is set.
    */
   done(): Effect.Effect<S, StoreFailed | SubFailed>;
 }

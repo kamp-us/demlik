@@ -274,3 +274,10 @@ const sent = runtime.dispatch({ type: "look_up", id }).pipe(
 
 Anything else is a bug in the program, like a reducer that throws or a Msg
 with no cell. It ends the Effect as a defect.
+
+`done()` follows the same split. A failed terminal save fails it with
+`StoreFailed`, and a Sub failure fails it with `SubFailed`. A reducer throw under
+the default `stop` strategy closes the run, and `done()` ends as a defect holding
+what was thrown, for waiting and later callers. `Effect.catchTags` does not see a
+defect, so read it with `Effect.catchDefect` or from the fiber's `Exit`. The Promise
+engine's `done()` rejects with what was thrown.

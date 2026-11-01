@@ -36,7 +36,8 @@ type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
  * inside this one) is reported under `"reduce"` for every strategy, then
  * `restart` commits the host's rehydrated State with no Cmds, `escalate`
  * rethrows with the runtime still live, and `stop` (the default) halts the gate
- * and rethrows, so THIS dispatch rejects too.
+ * and rethrows, so THIS dispatch rejects too and `done()` answers with the throw
+ * (see {@link terminality}).
  *
  * A Msg the current State has no cell for is not a reducer throw — no machine
  * code ran, the caller dispatched something this State does not accept (#310).
@@ -69,7 +70,7 @@ export function supervision<S, M extends { type: string }, C>(
           case "escalate":
             throw reduceError;
           default:
-            loop.halt();
+            loop.halt(reduceError);
             throw reduceError;
         }
       }
@@ -369,11 +370,14 @@ export function semanticEvents<S, M, C, E extends { type: string }>(
  * or rejects when that State's save fails. Storeless State is eligible as soon
  * as it is set. No predicate → never terminal.
  *
- * A Sub failure that stops the run answers `done()` only once `stop()` has
- * finished with the queue, because a Msg the Sub sent before it failed can still
- * reach a terminal State. A State terminal by then keeps its answer: its own save
- * decides. Any other State rejects with `SubFailedError`. So a waiter, a later
- * caller and `result()` read one outcome.
+ * When tea closes a run because of a failure, `done()` fails with it: a Sub
+ * failure as `SubFailedError`, and a reducer throw that halts the run as what was
+ * thrown. The first failure is the one that counts. It answers only once no Msg
+ * can fold any more, because a Msg already in line can still reach a terminal
+ * State. A State terminal by then keeps its answer: its own save decides. So a
+ * waiter, a later caller and `result()` read one outcome.
+ *
+ * A `stop()` with no failure leaves `done()` as it was.
  */
 export function terminality<S, M, C>(
   isTerminal: ((state: S) => boolean) | undefined,
@@ -384,16 +388,20 @@ export function terminality<S, M, C>(
       resolve(state: S): void;
       reject(error: unknown): void;
     }>();
-    let subFailure: SubFailedError | undefined;
+    // Boxed: a reducer can throw anything, `undefined` included.
+    let failure: { readonly answer: unknown } | undefined;
     // Set once the queue is finished with: the failure is now `done()`'s answer.
-    let stoppedBy: SubFailedError | undefined;
+    let stoppedBy: { readonly answer: unknown } | undefined;
     return {
       subFailed(error) {
-        subFailure = new SubFailedError(error);
+        failure ??= { answer: new SubFailedError(error) };
+      },
+      halted(error) {
+        failure ??= { answer: error };
       },
       drained() {
-        if (subFailure === undefined) return;
-        stoppedBy = subFailure;
+        if (failure === undefined) return;
+        stoppedBy = failure;
         const state = loop.state() as S;
         const terminal = holds(state);
         // A terminal State still waiting on its save keeps its waiters. A saved
@@ -403,7 +411,7 @@ export function terminality<S, M, C>(
         waiters.clear();
         for (const waiter of parked) {
           if (terminal) waiter.resolve(state);
-          else waiter.reject(stoppedBy);
+          else waiter.reject(stoppedBy.answer);
         }
       },
       commit(_msg, state) {
@@ -437,7 +445,7 @@ export function terminality<S, M, C>(
             if (saved.type === "saved") return Promise.resolve(current);
             if (saved.type === "failed") return Promise.reject(saved.error);
           } else if (stoppedBy !== undefined) {
-            return Promise.reject(stoppedBy);
+            return Promise.reject(stoppedBy.answer);
           }
           return new Promise<S>((resolve, reject) => {
             waiters.add({ resolve, reject });

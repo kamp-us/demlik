@@ -77,6 +77,11 @@ export type PromiseRunOptions<
     /**
      * The run-terminality predicate — makes the run's outcome first-class. Fed to
      * `Runtime.result()` and `Runtime.done()`. PURE. Omit → never terminal.
+     *
+     * `done()` resolves with a saved terminal State. When a failure closes the
+     * run short of one, it rejects with that failure, for waiting and later
+     * callers: the save's own error, a `SubFailedError`, or what a reducer threw
+     * under the `stop` strategy. A `stop()` with no failure leaves it pending.
      */
     terminal?: (state: S) => boolean;
     /**

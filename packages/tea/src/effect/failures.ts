@@ -135,8 +135,11 @@ export function exitOf<Err>(
 }
 
 /**
- * The Exit `done()` ends with when the loop rejected with `error`: it rejects
- * only at the terminal save boundary or on a Sub failure, never at the gate.
+ * The Exit `done()` ends with when the loop rejected with `error`: it rejects at
+ * the terminal save boundary and on a failure that closed the run, never at the
+ * gate. A Sub's failure is typed, because a Sub's failure is part of the program.
+ * A reducer throw that halted the run is a defect, the same contract breach it is
+ * on the dispatch that hit it (ADR 0011).
  */
 export function doneExitOf(
   error: unknown,
