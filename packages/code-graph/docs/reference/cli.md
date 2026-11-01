@@ -374,12 +374,15 @@ package has the same limit:
 - `--unreachable` withholds every export of the file that import lands on, because
   its uses are unknown. It reports none of them and names those files on stderr.
   A really unused export in such a file is reported by the package's own run and
-  not by the root run, so run the gate on the package as well.
+  not by the root run, so run the gate on the package as well. The next point is
+  the exception.
+- A package run withholds too when a file it loads reaches an export through a
+  tsconfig other than the run's own. That tsconfig is either a nested one with its
+  own `paths`, such as `e2e/tsconfig.json`, or a project the `tsconfig.json`
+  references, such as `tsconfig.app.json`. Neither the package run nor the root run
+  reports a really unused export in that file.
 - `--blast`, `calledBy` and the other graph modes still miss the calls made through
   that import.
-- A `tsconfig.json` that only lists `references`, with the `paths` in a referenced
-  file such as `tsconfig.app.json`, gets the same withholding in a package run too.
-  Neither run reports a really unused export in such a file.
 
 The repo root, called the workspace root above, is the first of these that exists,
 each searched upward from the analyzed directory before the next is tried:
@@ -503,7 +506,8 @@ CI are mutually exclusive. See [Adopt a boundary gate](../how-to/enforce-boundar
   root, because the root sees that test too. For the same reason a package run can
   find what the root does not. A package run also finds what the root withholds as
   `uses-unknown`, except when the package's `paths` sit in a project its
-  `tsconfig.json` references: its own run withholds it too, so neither run reports it
+  `tsconfig.json` references, or in a nested tsconfig such as `e2e/tsconfig.json`:
+  its own run withholds it too, so neither run reports it
   ([Pass selection and scope](#pass-selection-and-scope)).
 - A run changes only entries of its own scope, but it reads and validates the
   whole file first: a bad entry in any scope exits 2.

@@ -195,8 +195,9 @@ The fix is to drop the `export` keyword.
   package's own `@/*` in a root run, makes the uses of every export in the file
   it lands on unknown, and none of them is a finding. The package's own run still
   reports a really unused one, except when the package's `paths` sit in a project
-  its `tsconfig.json` references: its own run withholds them too, so neither run
-  reports it. See [Pass selection and scope](./cli.md#pass-selection-and-scope).
+  its `tsconfig.json` references, or in a nested tsconfig with its own `paths` such
+  as `e2e/tsconfig.json`: its own run withholds them too, so neither run reports it.
+  See [Pass selection and scope](./cli.md#pass-selection-and-scope).
 
 Source: [unused exports](../../src/query/unused-exports.ts).
 

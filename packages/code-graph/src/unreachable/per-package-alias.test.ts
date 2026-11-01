@@ -210,6 +210,20 @@ describe("the limit: a really unused export in a file reached that way", () => {
       expect(gate(scope).code).toBe(0);
     }
   });
+
+  it("is reported by neither run when a nested tsconfig holds its own alias to the file", () => {
+    writeTree({
+      "packages/b/e2e/tsconfig.json": `{ "compilerOptions": { ${OPTIONS}, "baseUrl": ".", "paths": { "@b/*": ["../src/*"] } } }\n`,
+      "packages/b/e2e/smoke.ts": 'import { useda } from "@b/useda";\n\nuseda();\n',
+    });
+    for (const scope of [".", "packages/b"]) {
+      const withheld = report(scope);
+      expect(withheld.unreachable).toEqual([]);
+      expect(withheld.unusedExports).toEqual([]);
+      expect(ids(withheld.withheld).some((id) => id.endsWith("src/useda.ts:lonely"))).toBe(true);
+      expect(gate(scope).code).toBe(0);
+    }
+  });
 });
 
 describe("what the withholding must not reach", () => {
