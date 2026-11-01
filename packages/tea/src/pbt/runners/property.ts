@@ -14,6 +14,11 @@
 // report, plus a check's reason when fast-check filed that reason in `cause`.
 // `failOnNeverActed` throws one too, naming the Msg types a clean run never acted on.
 //
+// Before any check runs, every Cmd `init` and the steps sent is held to two rules:
+// a value with no string `type` always fails, and with `failOnUndeclaredCmd` on, so
+// does a `type` outside `machine.cmds`. Each check also gets `init`'s Cmds as its
+// last argument, since no `Step` holds them.
+//
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
 // prefix shrinkers can be layered later but are opt-in, not default. The
 // built-in shrinker handles array-shape shrinking + per-element variant
@@ -70,6 +75,16 @@ interface PropertyOpts<S> extends ForwardedSettings {
    * "acted" unreadable, so this fails the run saying so.
    */
   readonly failOnNeverActed?: boolean;
+  /**
+   * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
+   * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
+   * keep a hand-written Cmd beside its defined ones. A machine that declares no
+   * `cmds` has no list to check against, so this adds nothing there.
+   *
+   * A value with no string `type` is never a Cmd, so it fails with this off too, on
+   * every machine.
+   */
+  readonly failOnUndeclaredCmd?: boolean;
 }
 
 /** The `foldEvents` result a runner's `check` inspects. */
@@ -77,6 +92,7 @@ type FoldResult<S, M, C> = {
   readonly states: readonly S[];
   readonly steps: readonly Step<S, M, C>[];
   readonly finalState: S;
+  readonly initCmds: readonly C[];
 };
 
 /**
@@ -183,6 +199,41 @@ function assertHolds(
   if (answer === true || answer === null) return;
   if (answer === false || answer === "") throw new Error(report());
   throw new BrokenLaw(report(), answer);
+}
+
+/**
+ * What is wrong with a sent Cmd, naming it, or `null` when nothing is. `declared`
+ * is the list to hold it to, or `null` when there is none to read. Types can't
+ * rule these out: a reducer's `as` or a mutated line reaches here at run time.
+ */
+function cmdFault(
+  cmd: unknown,
+  declared: ReadonlySet<string> | null,
+): string | null {
+  const { type } = Object(cmd) as { readonly type?: unknown };
+  if (typeof cmd !== "object" || typeof type !== "string") {
+    return `${fc.stringify(cmd)} isn't a Cmd: it has no string \`type\``;
+  }
+  if (declared === null || declared.has(type)) return null;
+  return `${fc.stringify(cmd)} isn't in machine.cmds: [${[...declared].join(", ")}]`;
+}
+
+/** Hold every Cmd one fold sent, `init`'s first, to {@link cmdFault}. */
+function assertSentCmds<S, M, C>(
+  { initCmds, steps }: FoldResult<S, M, C>,
+  declared: ReadonlySet<string> | null,
+): void {
+  for (const cmd of initCmds) {
+    assertHolds(cmdFault(cmd, declared), () => "init sent a bad Cmd");
+  }
+  for (const { msg, cmds } of steps) {
+    for (const cmd of cmds) {
+      assertHolds(
+        cmdFault(cmd, declared),
+        () => `step msg=${fc.stringify(msg)} sent a bad Cmd`,
+      );
+    }
+  }
 }
 
 /**
@@ -296,6 +347,9 @@ function assertEveryTypeActed(run: PropertyRun, tally: MsgTally): void {
  * adds nothing to `numRuns`. Any other throw is the run's failure, so nothing after
  * that list is counted. A check's throw still counts its list, but a reducer's adds
  * nothing, though `numRuns` includes that list: `foldEvents` hands back no steps.
+ *
+ * The sent Cmds are held to their rules ahead of `check`, so a law that reads a junk
+ * Cmd can't throw first and hide what is wrong.
  */
 function runProperty<
   S,
@@ -310,14 +364,20 @@ function runProperty<
   opts: PropertyOpts<S> | undefined,
   check: (result: FoldResult<S, M, C>) => void,
 ): PropertyRun {
-  const { loaded, failOnNeverActed, ...settings } = opts ?? {};
+  const { loaded, failOnNeverActed, failOnUndeclaredCmd, ...settings } =
+    opts ?? {};
   const params = { ...settings, numRuns: settings.numRuns ?? 200 };
   const tally = new MsgTally(msgKeysOf(machine));
+  const declared =
+    failOnUndeclaredCmd && machine.cmds
+      ? new Set(machine.cmds.map((def) => def.cmdType))
+      : null;
   const runList = (msgs: readonly M[], start: S | null): void => {
     let steps: readonly Step<S, M, C>[] = [];
     try {
       const result = foldEvents(machine, ctx, start, msgs);
       steps = result.steps;
+      assertSentCmds(result, declared);
       check(result);
     } catch (error) {
       if (!fc.PreconditionFailure.isFailure(error)) {
@@ -361,6 +421,8 @@ function runProperty<
  * non-terminal state and no further msg can escape) AND silent loops
  * (every msg variant is a noop from a given state).
  *
+ * `terminal` also gets the Cmds `init` sent on that list's start.
+ *
  * @example
  * ```ts
  * import type { Machine } from "@demlik/tea";
@@ -397,11 +459,11 @@ export function propertyTerminates<
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
-  terminal: (state: NoInfer<S>) => boolean,
+  terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(machine, ctx, seqArb, opts, ({ finalState }) => {
-    if (!terminal(finalState)) {
+  return runProperty(machine, ctx, seqArb, opts, ({ finalState, initCmds }) => {
+    if (!terminal(finalState, initCmds)) {
       // Throwing here (vs returning false) lets the error message carry
       // the offending final state — fast-check pretty-prints it inside
       // the shrunk counter-example.
@@ -419,6 +481,10 @@ export function propertyTerminates<
  * `true` or `null` to accept. Return `false`, or a string saying why, to fail: the
  * thrown error's message names that string. An empty string fails too. A throw
  * still fails with its own message.
+ *
+ * The predicate's second argument is the Cmds `init` sent on that list's start. It
+ * runs once per step, so an empty list never shows them to it: use `propertyTrace`
+ * for a rule about `init` alone.
  *
  * Use to pin a "when X happens in state Y, cmd Z must be emitted" rule.
  * The shrinker minimizes the offending sequence to the smallest Msg list
@@ -463,13 +529,14 @@ export function propertyInvariant<
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
   invariant: (
     step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>,
+    initCmds: readonly NoInfer<C>[],
   ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(machine, ctx, seqArb, opts, ({ steps }) => {
+  return runProperty(machine, ctx, seqArb, opts, ({ steps, initCmds }) => {
     for (const step of steps) {
       assertHolds(
-        invariant(step),
+        invariant(step, initCmds),
         () =>
           `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
           `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
@@ -487,7 +554,8 @@ export function propertyInvariant<
  *
  * Return `true` or `null` to accept. Return `false`, or a string saying why, to
  * fail: the thrown error's message names that string. An empty string fails too.
- * A throw still fails with its own message.
+ * A throw still fails with its own message. The last argument is the Cmds `init`
+ * sent on that list's start.
  *
  * @example
  * ```ts
@@ -525,15 +593,22 @@ export function propertyTrace<
   predicate: (
     steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
     finalState: NoInfer<S>,
+    initCmds: readonly NoInfer<C>[],
   ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(machine, ctx, seqArb, opts, ({ steps, finalState }) => {
-    assertHolds(
-      predicate(steps, finalState),
-      () =>
-        `propertyTrace: predicate failed on trace length=${steps.length}, ` +
-        `final=${JSON.stringify(finalState)}`,
-    );
-  });
+  return runProperty(
+    machine,
+    ctx,
+    seqArb,
+    opts,
+    ({ steps, finalState, initCmds }) => {
+      assertHolds(
+        predicate(steps, finalState, initCmds),
+        () =>
+          `propertyTrace: predicate failed on trace length=${steps.length}, ` +
+          `final=${JSON.stringify(finalState)}`,
+      );
+    },
+  );
 }

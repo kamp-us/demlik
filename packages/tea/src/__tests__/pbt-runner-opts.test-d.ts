@@ -55,6 +55,17 @@ propertyTrace(machine, {}, seqArb, () => true, {
   loaded: otherArb,
 });
 
+// Each check's last argument is what `init` sent, typed as the machine's Cmds.
+type Ping = { readonly type: "ping" };
+declare const pinging: Machine<State, Msg, Ping, never, object>;
+const isPing = (cmds: readonly Ping[]) => cmds.every((c) => c.type === "ping");
+propertyTerminates(pinging, {}, seqArb, (_s, initCmds) => isPing(initCmds));
+propertyInvariant(pinging, {}, seqArb, (_s, initCmds) => isPing(initCmds));
+propertyTrace(pinging, {}, seqArb, (_s, _f, initCmds) => isPing(initCmds));
+propertyInvariant(machine, {}, seqArb, () => true, {
+  failOnUndeclaredCmd: true,
+});
+
 // The rest of fast-check's settings reach the run.
 const run: PropertyRun = propertyInvariant(machine, {}, seqArb, () => true, {
   numRuns: 10,
