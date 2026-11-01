@@ -189,7 +189,7 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
   /** Emit a value on a Port from outside a Cmd handler. */
   emitPort<T>(port: Port<T>, value: T): void;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
@@ -208,7 +208,10 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
    * the parent. Stop such a child with the `stop` helper.
    */
   stop(): Effect<void>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
   /** Subscribe to a typed Port. */
   subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;

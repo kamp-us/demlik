@@ -43,9 +43,12 @@ export interface EffectBootingRuntime<
   ): Effect.Effect<void, Err | Stopped | StoreFailed>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
   dispatchOnce(msg: M): Effect.Effect<void, Err | Stopped | StoreFailed>;
-  /** A zero-arg change notifier, fired after each applied transition. */
+  /**
+   * A zero-arg change notifier, fired for each applied transition after its
+   * save and before its first Cmd's handler starts.
+   */
   subscribe(listener: () => void): () => void;
-  /** A `(msg, state)` hook, fired after each applied transition. */
+  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
