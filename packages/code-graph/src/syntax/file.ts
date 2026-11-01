@@ -171,8 +171,11 @@ export class SyntaxFile {
     return this.lineOf(node.end);
   }
 
+  // A line break ends a line. The empty text after the final one is a place `lineOf` can answer
+  // for, but it is not a line a person counts.
   lineCount(): number {
-    return this.lineOf(this.text.length);
+    const starts = this.lineStarts;
+    return starts.at(-1) === this.text.length ? starts.length - 1 : starts.length;
   }
 
   textOf(node: Node): string {

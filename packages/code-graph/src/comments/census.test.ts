@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -28,6 +30,42 @@ describe("comment census — one computation, not two", () => {
     for (const row of census.files) {
       expect(perModule.get(row.file)).toBe(row.commentLines);
     }
+  });
+});
+
+describe("comment census — a final newline moves no ceiling", () => {
+  // Numbers read off the census from before a final newline stopped counting as a line, when `loc`
+  // was one higher and that line counted as blank. Only those two move, so a recorded ceiling holds.
+  const SOURCE = "// one\n// two\nexport const a = 1;\n\n/* three */\nexport const b = 2;\n\n";
+
+  const rowOf = (source: string) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-census-"));
+    try {
+      fs.writeFileSync(path.join(root, "a.ts"), source);
+      const [row] = loadCommentCensus(root).files;
+      if (row === undefined) throw new Error("the fixture has one file");
+      return row;
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  it("keeps codeLines and ratio for a file ending in a newline", () => {
+    expect(rowOf(SOURCE)).toMatchObject({
+      loc: 7,
+      codeLines: 2,
+      commentLines: 3,
+      blankLines: 2,
+      ratio: 1.5,
+    });
+  });
+
+  it("gives the same codeLines and ratio with and without the final newline", () => {
+    const withNewline = rowOf(`${SOURCE.trimEnd()}\n`);
+    const withoutNewline = rowOf(SOURCE.trimEnd());
+    expect(withNewline.codeLines).toBe(withoutNewline.codeLines);
+    expect(withNewline.ratio).toBe(withoutNewline.ratio);
+    expect(withNewline.loc).toBe(withoutNewline.loc);
   });
 });
 
