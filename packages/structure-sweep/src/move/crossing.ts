@@ -8,11 +8,13 @@ import {
   exportEntries,
   sourceOfSubpath,
   subpathOf,
+  subpathsOf,
 } from "./entries.js";
 import type { Exists } from "./heal.js";
 import type { PathMove } from "./manifest.js";
 import {
   moduleFileCandidates,
+  moduleFileSpellings,
   moduleLiterals,
   namesCode,
   relativeSpecifierOf,
@@ -214,6 +216,25 @@ export class PackageTree {
   }
 
   /**
+   * Every package-name specifier that names the absolute file `target` in this tree, as {@link name}
+   * reads one: each `exports` subpath that reaches it, and with no `exports` the path under the package.
+   */
+  specifiersOf(target: string): string[] {
+    const pkg = this.packageAt(target);
+    if (pkg.name === undefined) return [];
+    const { name } = pkg;
+    const file = relative(join(this.repoRoot, pkg.root), target);
+    return [
+      ...subpathsOf(this.#entriesOf(pkg), file).map((subpath) =>
+        subpath === "." ? name : `${name}/${subpath.slice(2)}`,
+      ),
+      ...(pkg.exports === undefined
+        ? moduleFileSpellings(file).map((spelling) => `${name}/${spelling}`)
+        : []),
+    ];
+  }
+
+  /**
    * The relative specifier `importer` names the absolute file `target` by, in its own resolution.
    * An `.mjs` or `.cjs` importer runs under Node whatever the tsconfig says, so it keeps an extension.
    */
@@ -248,8 +269,9 @@ export const describeUnreachable = (
 /**
  * An import a row would leave broken with apply unable to say how, so it refuses: a relative
  * specifier in a file moving across a package line that names no file; a package-name specifier
- * into a package a row leaves that apply cannot follow to a file, so it may name a moved one; or an
- * alias in a file moving across a package line, or naming a moved file, which apply does not rewrite.
+ * into a package a row leaves that apply cannot follow to a file, so it may name a moved one; an
+ * alias in a file moving across a package line, or naming a moved file, which apply does not rewrite;
+ * or a path built at run time for which the row changes which file a value loads (`templates.ts`).
  */
 export type Unfollowed = {
   readonly row: PathMove;
@@ -259,6 +281,7 @@ export type Unfollowed = {
   | { readonly kind: "no-file" }
   | { readonly kind: "unknown-file"; readonly pkg: WorkspacePackage }
   | { readonly kind: "alias" }
+  | { readonly kind: "template" }
 );
 
 const unfollowedReason = (unfollowed: Unfollowed): string => {
@@ -269,6 +292,8 @@ const unfollowedReason = (unfollowed: Unfollowed): string => {
       return `and apply cannot tell which file of ${packageLabel(unfollowed.pkg)} that is, so a row may move it`;
     case "alias":
       return "an alias from tsconfig paths, tsconfig baseUrl or package.json imports, which apply does not rewrite";
+    case "template":
+      return "a path built at run time that apply cannot rewrite, and this row changes which file it loads";
     default:
       return absurd(unfollowed);
   }
@@ -394,8 +419,8 @@ export function rewriteCrossings(
   return { unreachable, unfollowed, edges };
 }
 
-/** Every quoted string in a file — a cheap superset of its module specifiers. */
-const QUOTED = /["']([^"'\n]+)["']/g;
+/** Every quoted or backtick string in a file — a cheap superset of its module specifiers. */
+const QUOTED = /["'`]([^"'`\n]+)["'`]/g;
 
 /**
  * Those of `sources` in every workspace package holding one of them whose text names one of `rows`'

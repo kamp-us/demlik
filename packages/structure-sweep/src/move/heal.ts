@@ -40,7 +40,7 @@ export function healedSpecifier(
   return `${rel.startsWith(".") ? rel : `./${rel}`}${extension}`;
 }
 
-const QUOTED_RELATIVE = /["'](\.\.?\/[^"'\n]+)["']/g;
+const QUOTED_RELATIVE = /["'`](\.\.?\/[^"'`\n]+)["'`]/g;
 
 export function hasDangling(
   files: readonly string[],

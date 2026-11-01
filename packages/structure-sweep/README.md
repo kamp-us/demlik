@@ -546,7 +546,18 @@ Refused before either commit, naming the row and what stops it, with `HEAD` and 
   with a non-code extension, such as `@scope/kit/styles.css`, is not refused for this;
 - an alias from tsconfig `paths`, tsconfig `baseUrl` or `package.json` `imports`, in a file crossing a
   package line or naming a moved file, since apply does not rewrite aliases. A bare specifier is read
-  as a `baseUrl` import when a file answers it under `baseUrl`, as the compiler reads it.
+  as a `baseUrl` import when a file answers it under `baseUrl`, as the compiler reads it;
+- a backtick path using `${}`, in any tracked TypeScript or JavaScript file, when a row changes
+  which file a run-time value loads, whether or not a row crosses a package line. Apply matches its
+  fixed text against tracked files before and after the move, trying what a written specifier could
+  name (no extension, `.js` for `.ts`, a directory's `index`), so a target moved away, an importer
+  moved away from its targets, a file moved into its reach and a file moved within a wide
+  `./${path}` are all refused, and a resumed run refuses the same way. `./locale/${lang}.js` moved together with every file it can load, keeping their
+  relative layout, applies with the import unchanged. A package-name start such as
+  `@scope/a/${name}` is matched through the names the package gives each file, so a wildcard `exports`
+  entry with no source in the tree matches nothing. A path with no fixed start (`${base}/one`), a
+  start that only an alias gives meaning (`@/locale/${x}`) or one naming no tracked file changes
+  nothing.
 
 A package with no `exports` answers its bare name by `main` (then `module`, then `types`) and a deep
 path as the file at that path, as Node reads them, so `@scope/a/src/one.js` is rewritten when a row
@@ -554,8 +565,11 @@ moves `src/one.ts`. Apply sees only the file kinds and module forms it reads. Th
 row crosses a package line: tracked `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs`
 files, with or without `allowJs`. An import in any other file, such as `.vue`, `.svelte` or `.mdx`,
 is not read. The forms: `import`, `export`, `import x = require()`, `require()`, `import()`, a
-type-position `import("...")`, `declare module` and the `vi.*` mock calls. A path built at run time,
-or a plain string, is reported under `staleStringRefs` at best.
+type-position `import("...")`, `declare module` and the `vi.*` mock calls. A backtick path with no
+`${}` in it is read in `require()`, `import()` and the `vi.*` calls and rewritten like any other,
+staying in backticks; one with `${}` is checked as the refusal above says. Still unread are string
+concatenation such as `import("./lib/" + name)`, a specifier held in a variable, and
+`import.meta.glob`: such a path, or a plain string, is reported under `staleStringRefs` at best.
 
 Each package whose files now import another workspace package gains `"<name>": "workspace:*"` in
 its `package.json` `dependencies`, unless it already names that package in any dependency field.
