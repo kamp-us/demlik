@@ -9,6 +9,9 @@ export type ExportEvidence = {
   readonly usesById: ReadonlyMap<string, readonly UseSite[]>;
   // File → the other files that take all of its exports at once (`import * as`, `export *`).
   readonly wholeModuleUsers: ReadonlyMap<string, ReadonlySet<string>>;
+  // Files an import reaches that this run's tsconfig does not follow there, so the uses of every
+  // export in them are unknown and none is a finding.
+  readonly usesUnknownFiles: ReadonlySet<string>;
 };
 
 export type ExportedSymbol = {
@@ -84,6 +87,7 @@ export type UnusedExportScope = {
 };
 
 function usedElsewhere(symbol: ExportedSymbol, evidence: ExportEvidence): boolean | null {
+  if (evidence.usesUnknownFiles.has(symbol.file)) return null;
   const sites = evidence.usesById.get(symbol.id);
   if (sites === undefined) return null;
   if (sites.some((site) => site.file !== symbol.file)) return true;

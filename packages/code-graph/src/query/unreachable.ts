@@ -51,6 +51,7 @@ type Verdict = { finding: UnreachableSymbol } | { withheld: WithheldSymbol };
 const LIVE_REASONS: ReadonlySet<WithheldReason> = new Set([
   "public-entry-surface",
   "referenced-in-non-test-file",
+  "uses-unknown",
 ]);
 
 /**
@@ -89,6 +90,7 @@ function judge(
   refs: ReferenceResult,
   surface: ReadonlySet<string>,
   isTestLike: (file: string) => boolean,
+  usesUnknownFiles: ReadonlySet<string>,
 ): Verdict {
   if (isTestLike(fn.file)) {
     return { withheld: { id: fn.id, reason: "test-support-surface" } };
@@ -103,6 +105,9 @@ function judge(
   );
   if (production.length > 0) {
     return { withheld: { id: fn.id, reason: "referenced-in-non-test-file" } };
+  }
+  if (usesUnknownFiles.has(fn.file)) {
+    return { withheld: { id: fn.id, reason: "uses-unknown" } };
   }
   return {
     finding: {
@@ -122,6 +127,7 @@ export function findUnreachable(
   extraEntryFiles: readonly string[],
   testSupport: readonly CompiledRule[],
   exportPatterns: readonly RegExp[],
+  usesUnknownFiles: ReadonlySet<string>,
 ): UnreachableResult {
   const adjacency = fullAdjacency(functions, refs.referencesById);
   const reachable = reachableFrom(adjacency, productionRoots(functions, refs));
@@ -134,7 +140,7 @@ export function findUnreachable(
     if (!fn.isExported || fn.isTest) continue;
     exportedCount++;
     if (reachable.has(fn.id)) continue;
-    verdicts.push(judge(fn, refs, surface, isTestLike));
+    verdicts.push(judge(fn, refs, surface, isTestLike, usesUnknownFiles));
   }
 
   const calledByWithheld = reachedFromWithheld(adjacency, verdicts);

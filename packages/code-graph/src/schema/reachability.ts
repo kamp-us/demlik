@@ -42,6 +42,7 @@ export const WithheldReasonSchema = z.enum([
   "public-entry-surface",
   "test-support-surface",
   "called-by-withheld",
+  "uses-unknown",
 ]);
 export type WithheldReason = z.infer<typeof WithheldReasonSchema>;
 
