@@ -9,7 +9,8 @@ packages:
 # carries the concrete specifier.
 #
 # What this repo installs stays at an exact version: `scripts/exact-catalog-pins.test.mjs` fails on
-# a range in the default or `code-graph` catalog (#795). Only `catalogs.peers` holds ranges.
+# a range in any catalog except `peers`, a new one included (#795, #814). Only `catalogs.peers` holds
+# ranges.
 
 # The default catalog (`catalog:`): dev and runtime pins.
 catalog:
