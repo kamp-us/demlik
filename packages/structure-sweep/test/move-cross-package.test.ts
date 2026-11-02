@@ -177,6 +177,14 @@ describe("applyManifest across workspace packages", () => {
     expect(specifiers(root, "packages/b/src/consumer.ts")).toEqual(["./one"]);
     expect(specifiers(root, "packages/b/src/one.ts")).toEqual(["./two"]);
     expect(git(root, "status", "--porcelain")).toBe("");
+    // a's `./one` entry named a file that left; it goes, and a's other entries stay.
+    expect(JSON.parse(read(root, "packages/a/package.json")).exports).toEqual({
+      ".": "./dist/index.js",
+      "./helper": "./dist/helper.js",
+    });
+    expect(report.entriesRemoved).toEqual([
+      "packages/a/package.json exports ./one",
+    ]);
 
     const head = git(root, "rev-parse", "HEAD");
     const again = applyManifest(root, manifestOf(INTO_B));

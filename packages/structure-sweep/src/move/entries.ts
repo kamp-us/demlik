@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { parse as parseToml } from "smol-toml";
-import { Node, Project, ts } from "ts-morph";
+import { Node, Project, type SourceFile, ts } from "ts-morph";
 import { z } from "zod";
 
 /**
@@ -74,51 +74,154 @@ function nextConventionEntries(
 const BUILT = /(\.d)?\.(c|m)?js$|\.d\.(c|m)?ts$/;
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts"];
 
-/** tsup's `entry`, as `{ outputName: sourcePath }` — read off the config's syntax, never executed. */
-function tsupEntries(dir: string): {
-  outDir: string;
-  entries: Map<string, string>;
+/** One row of a tsup `entry`: the output name it builds and the package-relative source it builds it from. */
+export type TsupEntry = { readonly name: string; readonly source: string };
+
+/** A row of a tsup `entry` with the edit that cuts it out of the syntax it was read from. */
+type TsupRow = TsupEntry & { readonly cut: () => void };
+
+/** A path a tsup `entry` names by a glob, which reaches files and names none of them. */
+const GLOB = /[*?[\]{}!]/;
+
+const literalText = (node: Node | undefined): string | undefined =>
+  Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)
+    ? node.getLiteralValue()
+    : undefined;
+
+/**
+ * Every `entry` row a tsup config's syntax writes, the `dts.entry` one included, and why each
+ * `entry` it cannot read is unreadable: a value held in a variable, built by a call, spread in, or
+ * keyed by a computed name. A glob row is no row, since it names no single file.
+ */
+function tsupRows(source: SourceFile): {
+  readonly rows: readonly TsupRow[];
+  readonly unreadable: readonly string[];
 } {
-  const entries = new Map<string, string>();
-  let outDir = "dist";
-  const file = readdirSync(dir).find((f) =>
-    /^tsup\.config\.(c|m)?(t|j)s$/.test(f),
-  );
-  if (file === undefined) return { outDir, entries };
-  const project = new Project({ useInMemoryFileSystem: true });
-  const source = project.createSourceFile(
-    file,
-    readFileSync(join(dir, file), "utf8"),
-  );
-  for (const property of source
+  const rows: TsupRow[] = [];
+  const unreadable: string[] = [];
+  const entries = source
     .getDescendants()
-    .filter(Node.isPropertyAssignment)) {
-    const value = property.getInitializer();
-    if (property.getName() === "outDir" && Node.isStringLiteral(value)) {
-      outDir = posix.normalize(value.getLiteralValue());
-    }
-    if (property.getName() !== "entry") continue;
+    .filter(
+      (node) =>
+        (Node.isPropertyAssignment(node) ||
+          Node.isShorthandPropertyAssignment(node)) &&
+        node.getName() === "entry",
+    );
+  for (const entry of entries) {
+    const at = `line ${entry.getStartLineNumber()}`;
+    const value = Node.isPropertyAssignment(entry)
+      ? entry.getInitializer()
+      : undefined;
     if (Node.isObjectLiteralExpression(value)) {
-      for (const item of value
-        .getProperties()
-        .filter(Node.isPropertyAssignment)) {
-        const target = item.getInitializer();
-        if (Node.isStringLiteral(target)) {
-          entries.set(
-            item.getName().replace(/^["']|["']$/g, ""),
-            target.getLiteralValue(),
-          );
+      for (const item of value.getProperties()) {
+        const path = Node.isPropertyAssignment(item)
+          ? literalText(item.getInitializer())
+          : undefined;
+        if (
+          !Node.isPropertyAssignment(item) ||
+          path === undefined ||
+          Node.isComputedPropertyName(item.getNameNode())
+        ) {
+          unreadable.push(`${at}: ${item.getText()}`);
+          continue;
         }
+        if (GLOB.test(path)) continue;
+        rows.push({
+          name: item.getName().replace(/^["'`]|["'`]$/g, ""),
+          source: posix.normalize(path),
+          cut: () => item.remove(),
+        });
       }
     } else if (Node.isArrayLiteralExpression(value)) {
-      for (const element of value.getElements().filter(Node.isStringLiteral)) {
-        const path = element.getLiteralValue();
-        entries.set(posix.basename(path).replace(/\.(c|m)?tsx?$/, ""), path);
+      for (const element of value.getElements()) {
+        const path = literalText(element);
+        if (path === undefined) {
+          unreadable.push(`${at}: ${element.getText()}`);
+          continue;
+        }
+        if (GLOB.test(path)) continue;
+        rows.push({
+          name: posix.basename(path).replace(/\.(c|m)?tsx?$/, ""),
+          source: posix.normalize(path),
+          cut: () => value.removeElement(element),
+        });
       }
+    } else {
+      unreadable.push(`${at}: ${entry.getText()}`);
     }
   }
-  return { outDir, entries };
+  return { rows, unreadable };
 }
+
+/**
+ * A package's tsup config, read off its syntax and never executed. `rows` are its `entry` rows,
+ * `unreadable` each `entry` written in a form syntax cannot read.
+ */
+export class TsupConfig {
+  private constructor(
+    /** The config's file name, in the package's directory. */
+    readonly file: string,
+    readonly outDir: string,
+    readonly rows: readonly TsupEntry[],
+    readonly unreadable: readonly string[],
+  ) {}
+
+  static read(dir: string): TsupConfig | undefined {
+    const file = readdirSync(dir).find((f) =>
+      /^tsup\.config\.(c|m)?(t|j)s$/.test(f),
+    );
+    if (file === undefined) return undefined;
+    const text = readFileSync(join(dir, file), "utf8");
+    const source = TsupConfig.#parse(file, text);
+    let outDir = "dist";
+    for (const property of source
+      .getDescendants()
+      .filter(Node.isPropertyAssignment)) {
+      const value = property.getInitializer();
+      if (property.getName() === "outDir" && Node.isStringLiteral(value))
+        outDir = posix.normalize(value.getLiteralValue());
+    }
+    const { rows, unreadable } = tsupRows(source);
+    return new TsupConfig(
+      file,
+      outDir,
+      rows.map(({ name, source }) => ({ name, source })),
+      unreadable,
+    );
+  }
+
+  static #parse(file: string, text: string): SourceFile {
+    return new Project({ useInMemoryFileSystem: true }).createSourceFile(
+      file,
+      text,
+    );
+  }
+
+  /** The `entry` map, output name to source; a later row of one name wins, as in an object literal. */
+  get entries(): ReadonlyMap<string, string> {
+    return new Map(this.rows.map(({ name, source }) => [name, source]));
+  }
+
+  /** `text`, a config of this file's kind, with every `entry` row whose source is in `sources` cut out. */
+  without(text: string, sources: ReadonlySet<string>): string {
+    const source = TsupConfig.#parse(this.file, text);
+    // Last row first, so a cut never shifts a row still to be cut.
+    for (const row of tsupRows(source).rows.toReversed())
+      if (sources.has(row.source)) row.cut();
+    return source.getFullText();
+  }
+}
+
+/** tsup's `entry` and `outDir`, or the defaults when the package has no tsup config. */
+type TsupLayout = {
+  readonly outDir: string;
+  readonly entries: ReadonlyMap<string, string>;
+};
+
+const tsupLayout = (config: TsupConfig | undefined): TsupLayout =>
+  config === undefined
+    ? { outDir: "dist", entries: new Map() }
+    : { outDir: config.outDir, entries: config.entries };
 
 /** tsconfig's `outDir` → `rootDir`, when it declares both. */
 function tsconfigDirs(
@@ -150,7 +253,7 @@ function tsconfigDirs(
  * tsconfig `outDir`/`rootDir`, then the `dist/` ↔ `src/` convention.
  */
 interface BuildLayout {
-  readonly tsup: ReturnType<typeof tsupEntries>;
+  readonly tsup: TsupLayout;
   readonly tsconfig: ReturnType<typeof tsconfigDirs>;
 }
 
@@ -188,11 +291,20 @@ function sourceEntryOf(
     : firstExisting(posix.join("src", rest));
 }
 
+/** The build layout of the package at `dir`, its tsup config read: tsup's and tsconfig's, or the bare convention without one. */
+const layoutWith = (
+  dir: string,
+  tsup: TsupConfig | undefined,
+): BuildLayout => ({
+  tsup: tsupLayout(tsup),
+  tsconfig: tsconfigDirs(dir),
+});
+
 /** The build layout of the package at `dir`: tsup's and tsconfig's, or the bare convention without one. */
 const layoutOf = (dir: string): BuildLayout =>
   existsSync(dir)
-    ? { tsup: tsupEntries(dir), tsconfig: tsconfigDirs(dir) }
-    : { tsup: { outDir: "dist", entries: new Map() }, tsconfig: undefined };
+    ? layoutWith(dir, TsupConfig.read(dir))
+    : { tsup: tsupLayout(undefined), tsconfig: undefined };
 
 // ── exports subpaths and the sources behind them ───────────────────────────
 
@@ -425,9 +537,113 @@ export function sourceOfSubpath(
 
 // ── assembling the set ─────────────────────────────────────────────────────
 
+/** A `package.json` field naming one file a runtime loads. */
+export type EntryField = "main" | "module" | "types" | "bin";
+
+/** What in a package names a file it loads by path. */
+export type EntryRef =
+  | { readonly kind: "field"; readonly field: EntryField }
+  | { readonly kind: "wrangler"; readonly file: string }
+  | { readonly kind: "export"; readonly key: string }
+  | { readonly kind: "tsup"; readonly file: string; readonly source: string };
+
+/**
+ * One file a package names, repo-relative, with what names it. `via` is the built target the file
+ * was followed back from, when the name points into the build output rather than at the file.
+ */
+export type NamedFile = {
+  readonly path: string;
+  readonly by: EntryRef;
+  readonly via?: string;
+};
+
+/** Where a reference sits, as a person reads it: `package.json exports ./one`. */
+export function describeRef(ref: EntryRef): string {
+  switch (ref.kind) {
+    case "field":
+      return `package.json ${ref.field}`;
+    case "wrangler":
+      return `${ref.file} main`;
+    case "export":
+      return `package.json exports ${ref.key}`;
+    case "tsup":
+      return `${ref.file} entry ${ref.source}`;
+  }
+}
+
+/** The why `entryFiles` pins a file for: the kind of name, without an `exports` key or tsup row. */
+function pinReason({ by, via }: NamedFile): string {
+  const why = by.kind === "export" ? "package.json exports" : describeRef(by);
+  return via === undefined ? why : `${why} (source of ${via})`;
+}
+
+/**
+ * Every file the package at `scope` names by path, in the order `entryFiles` reads them: each
+ * wrangler `main`, then `package.json` `main`, `module`, `types`, `bin` and `exports`, then each
+ * tsup `entry` row. A name pointing into the build output names the built path and, followed back,
+ * the source that builds it. A wildcard target names no file. `exists` answers for a scope-relative
+ * path, so the caller picks the tree a name is followed back against. `tsup` is the package's tsup
+ * config, `undefined` without one.
+ */
+export function packageEntries(
+  repoRoot: string,
+  scope: string,
+  exists: (scopeRelative: string) => boolean,
+): {
+  readonly named: readonly NamedFile[];
+  readonly tsup: TsupConfig | undefined;
+} {
+  const dir = join(repoRoot, scope);
+  if (!existsSync(dir)) return { named: [], tsup: undefined };
+  const tsup = TsupConfig.read(dir);
+  const layout = layoutWith(dir, tsup);
+  const repoPath = (scopeRelative: string) =>
+    posix.join(scope, posix.normalize(scopeRelative));
+  const named: NamedFile[] = [];
+  const name = (target: string | undefined, by: EntryRef) => {
+    if (target === undefined || target.includes("*")) return;
+    const normalized = posix.normalize(target);
+    named.push({ path: repoPath(normalized), by });
+    const source = sourceEntryOf(layout, normalized, exists);
+    if (source !== undefined)
+      named.push({ path: repoPath(source), by, via: normalized });
+  };
+
+  for (const file of readdirSync(dir)
+    .filter((f) => /^wrangler.*\.toml$/.test(f))
+    .sort()) {
+    const mains = WranglerMains.parse(
+      parseToml(readFileSync(join(dir, file), "utf8")),
+    );
+    for (const main of mains) name(main, { kind: "wrangler", file });
+  }
+
+  const pkgPath = join(dir, "package.json");
+  if (existsSync(pkgPath)) {
+    const pkg = PackageEntries.parse(JSON.parse(readFileSync(pkgPath, "utf8")));
+    name(pkg.main, { kind: "field", field: "main" });
+    name(pkg.module, { kind: "field", field: "module" });
+    name(pkg.types, { kind: "field", field: "types" });
+    for (const bin of strings(pkg.bin))
+      name(bin, { kind: "field", field: "bin" });
+    if (pkg.exports !== undefined)
+      for (const [key, targets] of exportTargets(pkg.exports))
+        for (const target of targets) name(target, { kind: "export", key });
+  }
+
+  if (tsup !== undefined)
+    for (const { source } of tsup.rows)
+      named.push({
+        path: repoPath(source),
+        by: { kind: "tsup", file: tsup.file, source },
+      });
+  return { named, tsup };
+}
+
 /**
  * Every file under `scope` that must not move, keyed by repo-relative path. `tree` is every file
- * under `scope`, repo-relative — the framework conventions are read off it, not off the disk.
+ * under `scope`, repo-relative — the framework conventions are read off it, not off the disk. A
+ * tsup `entry` row pins its source only when a `package.json` field follows back to it.
  */
 export function entryFiles(
   repoRoot: string,
@@ -437,46 +653,15 @@ export function entryFiles(
   const dir = join(repoRoot, scope);
   const inTree = new Set(tree);
   const entries = new Map<string, string>();
-  const layout = layoutOf(dir);
-  const repoPath = (scopeRelative: string) =>
-    posix.join(scope, posix.normalize(scopeRelative));
   const exists = (scopeRelative: string) =>
-    inTree.has(repoPath(scopeRelative)) || existsSync(join(dir, scopeRelative));
+    inTree.has(posix.join(scope, posix.normalize(scopeRelative))) ||
+    existsSync(join(dir, scopeRelative));
   // The first reason a file is pinned for is the one the manifest names.
   const record = (path: string, why: string) => {
     if (!entries.has(path)) entries.set(path, why);
   };
-  const pin = (target: string | undefined, why: string) => {
-    if (target === undefined || target.includes("*")) return;
-    const normalized = posix.normalize(target);
-    record(repoPath(normalized), why);
-    const source = sourceEntryOf(layout, normalized, exists);
-    if (source !== undefined)
-      record(repoPath(source), `${why} (source of ${normalized})`);
-  };
-
-  if (existsSync(dir)) {
-    for (const name of readdirSync(dir)
-      .filter((f) => /^wrangler.*\.toml$/.test(f))
-      .sort()) {
-      const mains = WranglerMains.parse(
-        parseToml(readFileSync(join(dir, name), "utf8")),
-      );
-      for (const main of mains) pin(main, `${name} main`);
-    }
-  }
-
-  const pkgPath = join(dir, "package.json");
-  if (existsSync(pkgPath)) {
-    const pkg = PackageEntries.parse(JSON.parse(readFileSync(pkgPath, "utf8")));
-    pin(pkg.main, "package.json main");
-    pin(pkg.module, "package.json module");
-    pin(pkg.types, "package.json types");
-    for (const bin of strings(pkg.bin)) pin(bin, "package.json bin");
-    for (const target of strings(pkg.exports))
-      pin(target, "package.json exports");
-  }
-
+  for (const named of packageEntries(repoRoot, scope, exists).named)
+    if (named.by.kind !== "tsup") record(named.path, pinReason(named));
   for (const [path, why] of nextConventionEntries(scope, tree))
     record(path, why);
   return entries;

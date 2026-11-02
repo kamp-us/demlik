@@ -509,9 +509,9 @@ make the same trees and messages. One that adds a dependency takes its lockfile 
 pnpm, so that file can differ between pnpm versions. A run that stopped after the rename commit
 resumes with the rewrite commit alone, and a second `apply` over a finished manifest
 commits nothing and reports `lint: "untouched"`. It prints a JSON report, including `commits`
-(`{ rename, rewrite }`, the SHAs it made, `null` for one it did not) and `staleStringRefs` — old
-paths still written as plain text somewhere. A row whose source and destination both exist stops
-the run.
+(`{ rename, rewrite }`, the SHAs it made, `null` for one it did not), `entriesRemoved` (below) and
+`staleStringRefs` — old paths still written as plain text somewhere. A row whose source and
+destination both exist stops the run.
 
 Apply also reads the pnpm workspace: the `packages` globs in the repository's
 `pnpm-workspace.yaml`, and each matched package's `package.json`. The globs are read by the library
@@ -531,8 +531,28 @@ runs it whatever the tsconfig says. That covers a moved file's own imports back 
 left, `import x = require()`, and a non-TypeScript file such as `./data.json`, which keeps its
 extension. A moved file's package-name import of a file that stays where it is keeps its spelling.
 
+A row moving a file out of its package often moves a file that package's build names. Apply reads
+the package a row leaves the way `move plan` reads it to pin entry files (above), against the tree
+before any rename, so a resumed run reads the same entries. Where a row crosses a package line and
+an `exports` subpath or a tsup `entry` row of the old package names the moved file, the rewrite
+commit removes that entry, since its file has gone: the `exports` key whole, condition map and all,
+and the tsup row from an `entry` map or array, `dts.entry` included, whether or not a `package.json`
+field points at it. A target in the build output names the source it follows back to. The report
+lists each removal under `entriesRemoved`, as `packages/a/package.json exports ./one` or
+`packages/a/tsup.config.ts entry src/one.ts`. Apply never adds an entry, and leaves a wildcard
+entry alone: a file only a pattern reaches is named by no entry. A Next.js file convention is not an
+entry here.
+
 Refused before either commit, naming the row and what stops it, with `HEAD` and the tree unchanged:
 
+- a row moving a file its old package names in `main`, `module`, `types`, `bin`, a wrangler `main`
+  or the `.` export, naming the package and the field, since apply has no sound edit for one;
+- a row inside one package moving a file an `exports` subpath or tsup `entry` row names, since the
+  entry should follow the file. Edit the entry to the new path or repoint the field, commit, and
+  apply again;
+- a row leaving a package whose tsup `entry` apply cannot read from the config's syntax, such as a
+  value held in a variable or built by a call, naming the config file, since apply cannot tell what
+  it names. A tsup config is never executed;
 - a row whose destination no `exports` entry of its new package reaches, since nothing could import
   the file there. An entry reaches a file only as Node would answer it: a narrower
   `"./internal/*": null` keeps `src/internal/x.ts` out of a broader `"./*"`, and a wildcard target
