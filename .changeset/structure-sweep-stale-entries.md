@@ -1,5 +1,0 @@
----
-"@demlik/structure-sweep": minor
----
-
-`move apply` no longer leaves a package's build pointing at a file that moved out of it. When a row moves a file from one workspace package into another, and the old package's `exports` subpath or tsup `entry` row names that file, apply removes the entry in the rewrite commit and lists it under the report's new `entriesRemoved` field (`packages/a/package.json exports ./one`, `packages/a/tsup.config.ts entry src/one.ts`). That covers an `exports` target in the build output followed back to its source or naming the source itself, a tsup `entry` map or array, its `dts.entry` too, and a tsup row no `package.json` field points at. A resumed run removes the same entries. Refused before any commit, naming the row, the package and the entry: a file `main`, `module`, `types`, `bin`, a wrangler `main` or the `.` export names, an `exports` or tsup entry naming a file moved inside one package, and any row leaving a package whose tsup `entry` apply cannot read from the config's syntax. Repoint the entry, commit, and apply again. A file only a wildcard entry reaches moves as before, with no entry removed.
