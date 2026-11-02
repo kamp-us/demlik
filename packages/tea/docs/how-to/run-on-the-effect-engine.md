@@ -282,12 +282,8 @@ holding what was thrown, for waiting and later callers. `Effect.catchTags` does 
 see a defect, so read it with `Effect.catchDefect` or from the fiber's `Exit`. The
 Promise engine's `done()` rejects with what was thrown.
 
-A failed `done()` here does not mean the run is cleaned up. The Subs keep running,
-the final save has not happened, and the run's Scope stays open, unlike after a Sub
-failure, where the run stops by itself. All three wait for you, so call `stop()` or
-close the Scope you ran it in:
-
-```ts
-const answer = yield* Effect.exit(runtime.done());
-yield* runtime.stop();
-```
+A reducer throw under `stop` also stops the run by itself, the same way a Sub
+failure does. Once the Msgs already in line have folded, the Subs close, the final
+save runs, and the run's own Scope closes. The Scope you ran it in stays open. You
+do not need to call `stop()` after a failed `done()`, and calling it, or closing
+your Scope, does nothing more.

@@ -2284,7 +2284,17 @@ type SubscribeHandler<S extends Sub, M, Ctx> = (sub: S, ctx: Ctx, dispatch: (msg
 type Supervision<S, M extends { type: string }> =
   | "stop"
   | "escalate"
-  | { readonly strategy: "stop" }
+  | {
+    /**
+     * The default. A reducer throw stops the run by itself, the same stop a
+     * Sub failure starts: the Msgs already in line fold, then the Subs close,
+     * the final save runs and, on the Effect engine, the run's own Scope
+     * closes, so a run `spawn` started leaves the host's table and its
+     * `notify` runs. `done()` fails with the throw. A later `stop()` from the
+     * host does nothing more.
+     */
+    readonly strategy: "stop";
+  }
   | { readonly strategy: "escalate" }
   | {
     /**

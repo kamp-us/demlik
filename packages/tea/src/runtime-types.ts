@@ -247,7 +247,10 @@ export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
 //
 //   - `stop`    — halt (SAFE DEFAULT). State is NOT advanced; the dispatch
 //                 promise rejects; every subsequent dispatch rejects; `done()`
-//                 rejects with the throw. Never a silent resume.
+//                 rejects with the throw. Never a silent resume. The run then
+//                 stops itself, as after a Sub failure and as a crashed OTP
+//                 process ends: its Subs close, the final save runs, and on the
+//                 Effect engine its Scope closes (ADR 0033).
 //   - `escalate`— surface + propagate: the dispatch promise rejects so the
 //                 failure bubbles to a parent supervisor. The runtime stays live.
 //   - `restart` — re-init from a host-provided last-known-good state and keep
@@ -272,7 +275,17 @@ export type SupervisionStrategy = "stop" | "escalate" | "restart";
 export type Supervision<S, M extends { type: string }> =
   | "stop"
   | "escalate"
-  | { readonly strategy: "stop" }
+  | {
+      /**
+       * The default. A reducer throw stops the run by itself, the same stop a
+       * Sub failure starts: the Msgs already in line fold, then the Subs close,
+       * the final save runs and, on the Effect engine, the run's own Scope
+       * closes, so a run `spawn` started leaves the host's table and its
+       * `notify` runs. `done()` fails with the throw. A later `stop()` from the
+       * host does nothing more.
+       */
+      readonly strategy: "stop";
+    }
   | { readonly strategy: "escalate" }
   | {
       readonly strategy: "restart";

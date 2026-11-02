@@ -239,9 +239,10 @@ export function run<
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: opts.__idleCap ?? 100_000,
     extensions: builtinExtensions<S, M, C, E>(machine, opts),
-    // Deferred: a runner that throws during a storeless boot fails before
-    // `startLoop` has returned the handle.
-    stopOnSubFailure: () => {
+    // A Sub failure and a halting reducer throw stop the run the same way
+    // (ADR 0033). Deferred: a runner that throws during a storeless boot fails
+    // before `startLoop` has returned the handle.
+    stopOnFailure: () => {
       queueMicrotask(() => void handle.stop());
     },
   });

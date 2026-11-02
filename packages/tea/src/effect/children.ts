@@ -105,8 +105,9 @@ const spawnedScopes = new WeakMap<Scope.Scope, Scope.Closeable>();
 
 /**
  * The child scope `spawn` forked, when `scope` is one: the host's unit of work,
- * so a run inside it that a Sub failure stops closes it, and `remove` and
- * `notify` run. Every other Scope belongs to whoever opened it.
+ * so a run inside it that a Sub failure or a reducer throw under `stop` stops
+ * closes it, and `remove` and `notify` run (ADR 0033). Every other Scope
+ * belongs to whoever opened it.
  */
 export const spawnedScope = (scope: Scope.Scope): Scope.Closeable | undefined =>
   spawnedScopes.get(scope);
@@ -131,6 +132,10 @@ export const spawnedScope = (scope: Scope.Scope): Scope.Closeable | undefined =>
  * failed save of the parent reaches the parent's own `onError`. A defect in
  * `notify`, such as a `tell` on a handle cast past its type, ends that fiber
  * unseen.
+ *
+ * A child whose run fails stops the same way, with no host call: a Sub failure
+ * the Sub did not map to a Msg, or a reducer throw under the default `stop`
+ * strategy, closes the child's scope, so `remove` and `notify` run.
  *
  * `child.run.stop()` is not one of the two ways to stop a child. It stops the
  * run and leaves the scope open, so the entry stays in the table and the

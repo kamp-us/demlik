@@ -344,8 +344,9 @@ describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a 
    * `reportFailure`, and awaits neither, until Node has had its chance to call a
    * rejection unhandled.
    *
-   * `stop` counts `finish`'s call alone. A Sub failure also makes the engine stop
-   * the handle itself, and that call does not go through here.
+   * `stop` counts `finish`'s call alone. A Sub failure and a reducer throw also
+   * make the engine stop the handle itself, and that call does not go through
+   * here.
    */
   async function endRun(msg: EndingMsg) {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});

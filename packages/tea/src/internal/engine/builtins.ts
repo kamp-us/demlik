@@ -36,9 +36,11 @@ type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
  * Supervision: a throw from the fold (the reducer, or any update middleware
  * inside this one) is reported under `"reduce"` for every strategy, then
  * `restart` commits the host's rehydrated State with no Cmds, `escalate`
- * rethrows with the runtime still live, and `stop` (the default) halts the gate
+ * rethrows with the runtime still live, and `stop` (the default) halts the run
  * and rethrows, so THIS dispatch rejects too and `done()` answers with the throw
- * (see {@link terminality}).
+ * (see {@link terminality}). The halt starts the same stop a Sub failure starts:
+ * the Msgs already in line fold, then the Subs close, the final save runs and,
+ * on the Effect engine, the run's Scope closes (ADR 0033).
  *
  * A Msg the current State has no cell for is not a reducer throw — no machine
  * code ran, the caller dispatched something this State does not accept (#310).

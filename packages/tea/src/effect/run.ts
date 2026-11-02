@@ -303,7 +303,9 @@ export function settleCellExit(
  * so the rest of the scope stays open, and `done()` fails with `SubFailed`. A
  * handler or runner that reads `Scope.Scope` gets that child, so what it acquires
  * is released with the run. With no `onError`, the default sink still rethrows
- * the failure and ends the process.
+ * the failure and ends the process. A reducer throw under the default `stop`
+ * strategy closes that same child, so the run stops and `done()` fails with
+ * what was thrown, as a defect (ADR 0033).
  *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
  * one of the built-ins both engines run. A run on a store that is fenced at
@@ -491,8 +493,15 @@ function start<
       saveFailures<S, M, C>(),
       ...builtinExtensions<S, M, C, E>(machine, opts),
     ],
-    stopOnSubFailure: (error) =>
-      closeScope(Exit.failCause(subFailure ?? Cause.die(error))),
+    // A Sub failure closes the run's Scope with the Stream's own Cause, and a
+    // halting reducer throw with what was thrown as a defect (ADR 0033).
+    stopOnFailure: (failure) =>
+      closeScope(
+        Exit.failCause(
+          (failure.kind === "sub" ? subFailure : undefined) ??
+            Cause.die(failure.error),
+        ),
+      ),
   });
 
   // Stop closes the gate first, so nothing an interrupted handler leaves
