@@ -1,5 +1,119 @@
 # @demlik/structure-sweep
 
+## 0.4.0
+
+### Minor Changes
+
+- 73ce3d1: `move apply` now carries a row that moves a file from one pnpm workspace package into another.
+  Before, such a row applied with relative imports into the other package's `src/`, which typechecked
+  while the package line was fake. Now apply loads every workspace package with a TypeScript or
+  JavaScript file that imports a moved file (tracked `.js`, `.jsx`, `.mjs` and `.cjs` files, with or
+  without `allowJs`), and writes each import that crosses a package line as
+  `<package name>/<subpath>`, the subpath read off the target package's `exports` (wildcard entries
+  included). Imports that stay inside one package stay relative, spelled as the importer's
+  `tsconfig.json` asks (`./x.js` under NodeNext), with an `.mjs` or `.cjs` importer always keeping an
+  extension. `.mts` and `.cts` files and their `.mjs` / `.cjs` importers, `import x = require()`
+  included, are carried the same way. Refused before any commit, naming the row: a destination no
+  `exports` entry reaches, a `null` entry included; a moved file's import of a file its old package
+  does not export, a non-TypeScript file included; a relative import in a moved file that names no
+  file; a package-name import into a package a row leaves that apply cannot follow to a file; and an
+  alias from tsconfig `paths`, tsconfig `baseUrl` or `package.json` `imports` in a moved file or
+  naming one. A package with no `exports` is read as Node reads it, by `main` and by the path under
+  the package. Files of other kinds, such as `.vue` or `.mdx`, are not read. A repository with no
+  `pnpm-workspace.yaml` applies exactly as before.
+
+  Every move now also reads `import x = require()`, `require()` and `declare module` as imports. A move
+  inside one package keeps a moved file's import of a `.json` or other non-TypeScript file
+  naming that file, where before it lost the extension or stayed as written.
+
+  Apply now reads the `pnpm-workspace.yaml` globs with `tinyglobby`, the library pnpm's own package
+  search uses, in place of its own matcher. So brace and character-class globs select what they select
+  for pnpm, rather than silently matching nothing. `**` follows pnpm too: `packages/**` also takes
+  `packages` itself when it holds a `package.json`, and a dot directory is no longer searched. Like
+  `pnpm -r`, it reads a member under `test` or `tests`, where the old matcher skipped them. A row path
+  is normalized when it is read, so `./packages/a/x.ts` and `packages/a/x.ts` apply alike.
+
+- bb5d563: Add `move apply --plan <file>`: apply a hand-written `{ scope, moves: [{ from, to }] }` plan in the
+  same two history-keeping commits a Jev manifest gets. Rows carry no Jev fields, a plan with two
+  rows sharing a `from` or a `to` is refused, and both commits say the moves were hand-planned with a
+  `Structure-Sweep-Plan` trailer naming the plan's content hash. `--plan` cannot be combined with
+  `--manifest`. The library exports `HandPlan`, `HandPlanRow`, `parseHandPlan`, `applyHandPlan` and
+  the `PathMove` type; manifest applies are unchanged.
+- 6882576: `move apply` no longer leaves a package's build pointing at a file that moved out of it. When a row moves a file from one workspace package into another, and the old package's `exports` subpath or tsup `entry` row names that file, apply removes the entry in the rewrite commit and lists it under the report's new `entriesRemoved` field (`packages/a/package.json exports ./one`, `packages/a/tsup.config.ts entry src/one.ts`). That covers an `exports` target in the build output followed back to its source or naming the source itself, a tsup `entry` map or array, its `dts.entry` too, and a tsup row no `package.json` field points at. A resumed run removes the same entries. Refused before any commit, naming the row, the package and the entry: a file `main`, `module`, `types`, `bin`, a wrangler `main` or the `.` export names, an `exports` or tsup entry naming a file moved inside one package, and any row leaving a package whose tsup `entry` apply cannot read from the config's syntax. Repoint the entry, commit, and apply again. A file only a wildcard entry reaches moves as before, with no entry removed.
+- 73ce3d1: `move apply` now finishes a move across pnpm workspace packages so the result installs. Each
+  package whose files now import another workspace package gains `"<name>": "workspace:*"` in its
+  `package.json` `dependencies` (one it already declares is left alone), a package a moved file
+  already imported included, and apply runs
+  `pnpm install --lockfile-only` so the updated `pnpm-lock.yaml` lands in the same rewrite commit.
+  The report lists the additions under `dependenciesAdded`. Refused before the rename commit, with
+  `HEAD` and the tree unchanged: a move whose added dependency would make workspace packages depend on
+  each other (the cycle is named package by package), and a move that must add a dependency when no
+  `pnpm` is on `PATH` or when git ignores `pnpm-lock.yaml`. A move that adds no dependency never runs
+  pnpm.
+
+### Patch Changes
+
+- c5cbf0f: **You now get exact versions of these dependencies instead of a range.** Each is pinned at the version this repo already tested against. A fresh install now gets the version listed here, which can be older than the one the range would have picked: `zod`'s old range could reach a newer 4.x, and `@demlik/backlog-sweep` now holds it at 4.5.4.
+
+  - `@demlik/tea`: `@standard-schema/spec` 1.1.0
+  - `@demlik/code-graph`: `chalk` 5.6.2, `commander` 11.1.0, `jsonc-parser` 3.3.1, `smol-toml` 1.9.0
+  - `@demlik/structure-sweep`: `smol-toml` 1.9.0, `tinyglobby` 0.2.17, `yaml` 2.9.0
+  - `@demlik/backlog-sweep`: `zod` 4.5.4
+
+  If your project uses a different version of one of these, your install now holds a second copy instead of sharing one. `@demlik/tea`'s peer ranges have not changed.
+
+- 4f6eb70: `move apply` keeps the extension each rewritten import specifier was written with. A `./check.ts`
+  or `./check.js` specifier stays `.ts` or `.js` after the move, in import and export declarations,
+  dynamic `import()` and type-position `import("…")`, and a `./x/index.js` keeps naming the index
+  file. NodeNext repos typecheck after a move again. Specifiers written without an extension are
+  rewritten as before.
+- b29efd7: `move apply` moves rows that name a non-TypeScript file (a `.json` fixture, a `.sh` script, a
+  README) instead of throwing "Could not find source file in project". Such a row is renamed with
+  `git mv` in the same rename commit as the TypeScript rows, a module specifier naming it (`import
+data from "./fixture.json" with { type: "json" }`) is rewritten to its new path, and a plain-string
+  relative reference to its old path (`new URL("./run.sh", import.meta.url)`) is listed in the
+  stale-string report and left as written.
+- a425715: `move apply` now reads backtick imports. A backtick path with no `${}` is rewritten like any other import and stays in backticks, in `import()`, `require()` and the `vi.*` calls. A backtick path with `${}` cannot be rewritten, so apply refuses before the rename commit, naming the row, importing file and specifier, when a row changes which file a run-time value loads. Moving such an import together with all it can load, keeping their layout, applies with it unchanged.
+- 3a1fb7e: `move apply` now refuses a move that would break an import in a `.vue`, `.svelte`, `.mdx` or `.astro` file. It does not parse or rewrite these files, so a quoted string in one that a row would leave naming the wrong file, by a relative path, a package name or an alias from tsconfig `paths` or `package.json` `imports`, with or without a bundler query or hash after the path (`./one.ts?raw`), stops the run before the rename commit, naming the row, importing file and specifier. So does a string a row's destination would take over from the file it names now. This holds for a row inside one package as well as one crossing a package line, for a manifest and a hand plan, and for a run resumed over an earlier rename commit. A package-name string into a package a row leaves that apply cannot follow to a file is refused too, since it may name a moved file. Any other string in these files changes nothing, and neither does a `.md` file.
+- Updated dependencies [dafceff]
+- Updated dependencies [c2b3caf]
+- Updated dependencies [a382e71]
+- Updated dependencies [7db34a4]
+- Updated dependencies [0b2dcba]
+- Updated dependencies [46b15a8]
+- Updated dependencies [ee79bab]
+- Updated dependencies [133cded]
+- Updated dependencies [3493f95]
+- Updated dependencies [1f81d82]
+- Updated dependencies [8fce4bc]
+- Updated dependencies [6eb8d69]
+- Updated dependencies [c5cbf0f]
+- Updated dependencies [7ef3b24]
+- Updated dependencies [ed88ab4]
+- Updated dependencies [88d1b8b]
+- Updated dependencies [4fb39ef]
+- Updated dependencies [74b2db9]
+- Updated dependencies [bde3d30]
+- Updated dependencies [e608bdd]
+- Updated dependencies [b1911cc]
+- Updated dependencies [c77558e]
+- Updated dependencies [a71d425]
+- Updated dependencies [076c8db]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c2ed401]
+- Updated dependencies [6415a01]
+- Updated dependencies [78f4557]
+- Updated dependencies [04a66f7]
+- Updated dependencies [13fe045]
+- Updated dependencies [26facbc]
+- Updated dependencies [854e0dc]
+- Updated dependencies [b9fb247]
+  - @demlik/code-graph@0.13.0
+  - @demlik/tea@0.22.0
+
 ## 0.3.9
 
 ### Patch Changes

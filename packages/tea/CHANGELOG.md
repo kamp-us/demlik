@@ -1,5 +1,221 @@
 # @demlik/tea
 
+## 0.22.0
+
+### Minor Changes
+
+- 7ef3b24: **Breaking: a run on a fenced store must now be given an `onError`, or it does not compile.** Losing a fence is routine for a host that moves runs between processes, and with no `onError` the default sink rethrew the conflict and ended the process, along with every other run in it. ADR 0031 records the owner's ruling.
+
+  The rule is the new `StoreAndOnError<S>` type, and it holds on `run` (both engines), `RunOptions`, `useMachine`, `createAgentHost`, a defined agent's `run`, and `agentTool`. To migrate, pass a sink beside the store:
+
+  ```ts
+  run(machine, {
+    store: fileStore(path, parse, { fenced: true }),
+    onError: (error, { phase }) => console.error(phase, error),
+  });
+  ```
+
+  `useMachine`, `createAgentHost`, a defined agent's `run` and `agentTool` now take an `onError` too, because they had no way to pass one. `useMachine` reads the latest render's, so a sink passed inline does not replace the run. `AgentHostConfig` is now a type alias rather than an interface, so nothing can `extends` it; `AgentHostWiring` is the new interface for everything but the store and its sink.
+
+  `doStore` called with options whose `fenced` is known only at runtime, such as a value typed `DoStoreOptions` or `DoStoreOptions | undefined`, now returns a store that may be fenced, as `fileStore` and `memoryStore` already do, so a run on it needs an `onError` too. The Promise engine's `run` options now have a name, the exported `PromiseRunOptions`, where the reference prints them.
+
+  The type reads a store's declared type, so a fenced store assigned to a variable typed plain `Store<S>` still compiles with no `onError`. Such a run is refused at start instead, on both engines.
+
+  The default sink does not change. A failing Sub on an unfenced run with no `onError` still ends the process.
+
+- ed88ab4: **Breaking: a run on a store that is fenced at runtime, with no `onError`, is now refused at start on both engines.** The type already refused it, but a fenced store held in a variable typed plain `Store<S>`, or passed from JavaScript, got past the type and ran on the default sink, where a lost fence ends the process and every run in it. The Promise engine's `run` now throws at once, and the Effect engine's `run` dies, before anything is loaded or saved. The error names `onError`. ADR 0031 records the owner's ruling.
+
+  To migrate, pass an `onError` beside the store. An unfenced store, or no store, still starts with no sink.
+
+- 88d1b8b: **Breaking: a reducer throw under the default `stop` strategy now stops the run by itself, and `done()` fails with the throw.** `done()` used to wait forever, and the run stayed half open until the host called `stop()`. ADR 0033 records the owner's ruling.
+
+  - The run stops the way a Sub failure stops it. The Msgs already in line fold first, then the Subs close, the final save runs, and on the Effect engine the run's own Scope closes. The Scope you ran it in stays open. A worker started with `spawn` leaves your table and its `notify` runs, so its parent hears `child_stopped`.
+  - A `stop()` from the host afterwards, or closing your Scope, does nothing more: no second save, no second close. A host that already called `stop()` after a failed `done()` stays correct.
+  - A host that kept using a run's Subs or Scope after a reducer throw, until its own `stop()`, now finds them closed. Move that work out of the run, or catch the throw with `escalate` or `restart`.
+  - `done()` fails with what was thrown, for waiting and later callers. On the Promise engine it rejects with it. On the Effect engine it ends as a defect holding it, and `done()`'s type stays `Effect<S, StoreFailed | SubFailed>`, the same way a dispatch hit by that throw ends. `Effect.catchTags` does not see a defect, so read it with `Effect.catchDefect` or from the fiber's `Exit`.
+  - On the Promise engine, a `done()` with no catch now raises an unhandled rejection in this case, which ends a Node process by default. Add a catch to every `done()` you do not await.
+  - If a Msg already in line reaches a terminal State, that State is the answer for every caller and for `result()`. A terminal State saved before the throw keeps its answer too. If a Sub failure closed the run first, `done()` keeps the Sub's answer.
+  - `escalate` and `restart` keep the run live and leave `done()` waiting, a Msg with no cell is still a refusal, and a plain `stop()` with no failure still leaves `done()` pending.
+
+- 4fb39ef: **Breaking: `@demlik/tea` now needs `effect` `~4.1.1`, and a Sub failure on the Effect engine no longer closes the Scope you ran the machine in.**
+
+  - The optional `effect` peer range moves from `^4.0.0-rc.0` to `~4.1.1`. It allows 4.1.x and refuses 4.0.x, the release candidates and 4.2, so a host on an older `effect` has to move with it.
+  - A Sub that fails with an error it did not map to a Msg still stops its run and still reaches `onError` under `"sub"`. The run now closes a child Scope of its own and leaves the caller's open, so whatever else lives in that Scope keeps going, sibling runs included. Before, the failure closed the caller's Scope, and a finalizer there saw it as its `Exit`. That no longer happens: code that relied on the Scope closing to end its work must now wait on `done()`. All of this needs an `onError`: with none, the default sink still rethrows the failure and ends the process, along with every other run in it.
+  - A Cmd handler or Sub runner that reads `Scope.Scope` now gets the run's child Scope, not the caller's. What it acquires, and any child it spawns under that Scope, is released with the run, as it was before when a Sub failed. A handler that wants something to outlive its run has to hold a different Scope.
+  - `done()` now reports the failure. It used to wait forever. On the Effect engine it fails with the new `SubFailed` (`done(): Effect<S, StoreFailed | SubFailed>`), and on the Promise engine it rejects with the new `SubFailedError`. Both carry what the Sub failed with as `cause`, for waiting and later callers. The Msgs already in line fold first, so if one of them reaches a terminal State, that State is the answer for every caller and for `result()`. Otherwise `result()` stays `undefined`. On a fenced store that another run has taken over, a terminal State the store refuses keeps `StoreFailed` as its answer. Any other State answers with the Sub failure, and the refused final save still reaches `onError` under `"stop-save"`.
+  - On the Promise engine, a `done()` with no catch now raises an unhandled rejection when a Sub fails, which ends a Node process by default. Add a catch to every `done()` you do not await.
+  - A worker started with `spawn` behaves as it did: its Sub failure closes its own child scope, so `remove` and `notify` run. The parent's scope and the other workers stay up.
+  - A parent's own Sub failure no longer stops its workers. Its scope stays open, they keep running, and `remove` and `notify` do not run until the host closes that scope. To stop the tree with the parent, wait on the parent's `done()` and then close its scope.
+
+  Closing the caller's Scope still stops the run.
+
+- 74b2db9: Property tests on the Effect engine no longer need their answers written by hand. The first two items below are experimental.
+
+  - `@demlik/tea/testing/effect` gains `arbSchemaGuidedSequence`. It draws Msg lists for Effect's `Arbitrary.checkEffect`, and each answer comes from its Cmd's own Effect schema: an `ok` answer from `schema.ok`, an `err` answer with one of its `errTags`. Every answer answers a Cmd that was sent and not yet answered. A machine it cannot draw for gets a failed `Result`: `NoCmdsError`, `NotEffectSchemaError` naming the Cmd, or `NothingToDrawError`. It imports no fast-check.
+  - The laws are plain check functions: `lawTerminates`, `lawInvariant` and `lawTrace`, with `LawBreak`. Each reads one `foldEvents` result and answers `null` or what broke. `propertyTerminates`, `propertyInvariant` and `propertyTrace` call them, with the same messages as before. `@demlik/tea/pbt` and `@demlik/tea/testing/effect` both export them.
+
+  Stable, on the promise of the subpath that exports them:
+
+  - `@demlik/tea/testing/effect` also exports `foldEvents`, `Fold` and `Step`, so an Effect test imports nothing from `@demlik/tea/pbt`. `Fold` is new on `@demlik/tea/pbt` too, as the named return type of `foldEvents`.
+
+  **Additive (declaration only):** `foldEvents` on `@demlik/tea/pbt` now declares its return type as `Fold<S, M, C>`, the same four fields it returned before under no name. No existing call needs editing.
+
+- bde3d30: A leftover file lock no longer hangs a write forever. The fenced `fileStore` and
+  `fileJournal` now steal a lock whose holder is proven gone: an empty one older
+  than a short grace period, one from an earlier boot of this machine, or one whose
+  process is dead. Any other lock is waited on for up to 10 seconds, and then the
+  write rejects with a new `FileLockTimeoutError` from `@demlik/tea/node`, which
+  names the lock file.
+
+  A lock from another host is never stolen, because that host may be live on a
+  shared volume. Restoring a folder onto a new machine can therefore end the first
+  write in that error; once the old machine is known to be gone, delete the file.
+
+  Lock files now record the writer's host and boot as well as its process id. The
+  old format, a bare process id, is still read.
+
+- e608bdd: `agentSpans` and `traceAgent` (`@demlik/tea/otel`) take an optional `parent` context. Give it a span the host already has open, as `trace.setSpan(context.active(), span)`, and every run starts under that span, in the host's trace, with its brain and tool spans below it. A host that traces its own work no longer has to wrap the `Tracer` to get an agent run into its trace.
+
+  `parent` wins over `traceIdOf`: when both are given, `traceIdOf` is never called. With a `parent`, keeping one trace across a kill is the host's job. Without one, nothing changes: same trace ids, same detached parent, same spans.
+
+- c77558e: `propertyInvariant` and `propertyTrace` (`@demlik/tea/pbt`) take a check returning `boolean | string | null`, so a check holding several laws can say which one broke. `true` and `null` hold. `false` and any string fail, and an empty string fails. A string lands in the thrown error's message beside the shrunk list, on both fast-check majors. A check returning a plain boolean, or one that throws, behaves as before. `propertyTerminates` does not change.
+
+  **Additive (declaration only):** the check's return type is wider. No existing call needs editing and no existing seed draws anything new.
+
+- a71d425: `@demlik/tea/pbt` now holds across the whole fast-check peer range, and tea's tests and typecheck run on 3.0.0, 3.23.2, 4.0.0 and 4.10.2. On the oldest 3s, a failing runner no longer carries a `cause` `fc.assert` would not give, and a check's reason appears once in the message.
+
+  **Additive (declaration only):** `PropertyOpts` does not take fast-check's `plugins` on any version. Only the newest 4s, such as 4.10.2, have that setting, so it could not work across the range. The published `PropertyOpts`, in tea 0.21.0, does not take it either, so no existing call needs editing and no existing seed draws anything new.
+
+- 076c8db: **Breaking (stable tier, `@demlik/tea/pbt`):** the cells of `arbGuidedSequence` change shape, and a cell no longer takes the state. `outside` holds an arbitrary per Msg type, and `answers` holds `{ draw, make }` per Cmd type, where `make` gets the Cmd really sent. A cell that reads the state can't shrink its value. The old shape could only ever throw, so no working call breaks.
+
+  `arbGuidedSequence` now works, where it used to throw "not implemented". It draws Msg lists in which every answer answers a Cmd that was sent and not yet answered, so a law that something must happen can be checked on random lists with `propertyTrace` or `propertyTerminates`.
+
+  It draws blind picks and values first, then folds them through the machine to give each pick its meaning, so a shrink can delete any event and the rest still make a valid list. An event whose Msg the state at that point refuses is dropped, in either update form, and a Cmd whose answer was refused keeps waiting. It needs no `machine.cmds`: what waits is read from what the reducer sent. `AnswerCell` and `GuidedCells` are new type exports.
+
+- c77558e: A property run (`@demlik/tea/pbt`) can say what its lists reached, so a cut path can't stay green.
+
+  - **`failOnNeverActed`, a new option on `propertyTerminates`, `propertyInvariant` and `propertyTrace`.** It fails a run whose laws all held when a Msg type never acted, with a `PropertyFailure` naming each such type. A type never drawn fails it too. Off by default. A deep path needs a `maxLength` well past its depth as well as `size: "max"`. Lists too short to reach a healthy machine's deep state name that healthy path as never acted, in the same report a cut path gives: at the default `maxLength` of 30, a state 20 steps deep on 6 Msg types drawn evenly fails this way. Allow about the depth times the number of Msg types, here `maxLength: 120`. The option stays out of any run given a non-empty `path`, so drop `path` to have it check again. A path with a colon, such as `"0:0"`, replays one shrunk failure. A path with no colon, such as `"3"`, is what a failure with no shrinks reports, and once that failure is gone it draws a full `numRuns` of lists from there, where a cut path reads green. A state `structuralHash` refuses (a `Date`, a `Map`, a class instance) fails the option, saying so, because what acted can't be read there.
+  - **`PropertyRun.msgCounts`, with a new `MsgCount` type.** A `ReadonlyMap` from Msg type to `{ drawn, acted }`, on a pass and on a failure, with the option on or off. A step acted when its `next` differs from its `prev` by `structuralHash`, or it sent a Cmd. Counts stop at the failing list, so shrinking adds nothing, and a list whose reducer threw adds nothing, though `numRuns` includes it.
+
+  **Additive (declaration only):** the option is optional, so an ordinary call needs no editing and no existing seed draws anything new. A variable passed as the options that already holds a `failOnNeverActed` of another type stops compiling.
+
+- c77558e: `propertyTerminates`, `propertyInvariant` and `propertyTrace` (`@demlik/tea/pbt`) gain four things:
+
+  - **Drawn saved states.** `loaded` takes an `fc.Arbitrary<S | null>` as well as a value. The state is drawn per run, a drawn `null` boots the machine fresh, and a failure's counterexample shows the drawn value beside the shrunk list. A fixed `loaded`, `null` or none draws what it drew before.
+  - **fast-check's settings.** The runners forward fast-check's `Parameters`, such as `path` to replay a failure, `endOnFailure`, and `interruptAfterTimeLimit` with `markInterruptAsFailure`. `numRuns` still defaults to 200. `reporter` and `asyncReporter` (they stop a failure from throwing), `examples` (its shape depends on what is drawn) and `timeout` (it applies only to async properties) are left out, and passing one is a compile error. A reporter set through `fc.configureGlobal` works as it did: it takes the details on a pass and on a failure, and nothing throws.
+  - **`PropertyRun` and `PropertyFailure`, two new exports.** Each runner returns a `PropertyRun` with `numRuns`, `numShrinks`, `seed` and the failing `path`. A failing run throws a `PropertyFailure`, an `Error` whose message is fast-check's report and whose `run` field holds that same `PropertyRun`. What the check threw sits where `fc.assert` puts it on your fast-check: in the error's `cause` on 4 unless `includeErrorInReport` is on, in the message on 3 unless `errorWithCause` is on.
+  - **`PropertyOpts`, a new type export.** It holds what the runners take, and the reference page shows the docs of each option.
+
+  **Additive (declaration only):** the runners now return a value where they returned `void`, and the options are wider. An ordinary call needs no editing and no existing seed draws anything new. A variable passed as the options that already holds one of the new names at another type stops compiling.
+
+- c77558e: A property run (`@demlik/tea/pbt`) looks at the Cmds a machine sends, so a reducer or `init` sending junk can't stay green.
+
+  - **A value with no string `type` fails the run.** It fails on every machine and every runner, with a `PropertyFailure` naming the value, whether `init` or a step sent it. This is the one change to a call using no new option: such a value was never a Cmd, and it used to pass unseen.
+  - **`failOnUndeclaredCmd`, a new option on `propertyTerminates`, `propertyInvariant` and `propertyTrace`.** It fails a run when `init` or a step sends a Cmd whose `type` isn't in `machine.cmds`, naming that Cmd. Off by default, because a machine can keep a hand-written Cmd beside its defined ones. It adds nothing on a machine with no `cmds` field. `cmds: []` is a list with nothing on it, so every Cmd fails.
+  - **`initCmds`, a new field on what `foldEvents` returns, and a new last argument on each runner's check.** They hold the Cmds `init` sent, on a fresh start and on a loaded state. No `Step` holds them. `propertyInvariant`'s check runs once per step, so an empty list never shows them to it.
+
+  **Breaking (declaration only):** the published signatures of `stable` names changed, so the API ratchet asks for this callout. The checks take one more argument and `foldEvents` returns one more field. No existing check needs editing unless it has its own optional parameter in that position: a check like `(s, verbose = "default")` now gets `initCmds` there instead of its default. No existing seed draws anything new.
+
+- c77558e: `arbMsgSequence` (`@demlik/tea/pbt`) takes a `size` option and forwards it to `fc.array`. fast-check's default size caps a list at `2 * minLength + 10`, so `maxLength: 60` came out about 10 long and a machine's deep states were never reached. Pass `size: "max"` to draw up to `maxLength`. With no `size`, a seed draws the same lists as before.
+
+  **Additive (declaration only):** the option is optional, so an ordinary call needs no editing and no existing seed draws anything new. A variable passed as the options that already holds a `size` of another type stops compiling.
+
+- c2ed401: Allow restored `init(loaded, ctx)` to return a new State and resume Cmds.
+  `replay` now collects those Cmds alongside update Cmds instead of throwing.
+
+  **Breaking:** recorded `replayTrace` and `goldenReplay` fold from
+  the captured post-init State without calling init again. An unanchored trace
+  is refused rather than reconstructed with fresh init. Existing-State `step`
+  and `bindMachine(...).step` call update directly, and event-store snapshot
+  recovery no longer initializes the snapshot before the runtime's live init.
+
+  Resume machine-owned work in init and reflect it in the returned State.
+  `bootResume` and `driveToDone` remain tools for a deliberate host Msg after
+  boot, when subscriptions are already open.
+
+- 6415a01: Add an optional `executed` store to `runStepLoop`, so hands that restart mid-run
+  do not run a step they already ran; they re-POST its saved result instead. Pass
+  an `ExecutedSteps<R>` that outlives the process. It saves and returns
+  `ExecutedStep<R>`, a `{ result }` box, so a step whose result is `undefined` still
+  reads as "ran". A `get` or `set` that fails ends the drive with `gave_up` carrying
+  the store's error. The window between `execute` finishing and `set` landing stays
+  open, so a step that must never repeat still has to be safe to repeat.
+
+  **Breaking (`./do`, stable tier):** `RunStepLoopConfig` is now
+  `RunStepLoopConfig<R = never>`, and `runStepLoop` takes `RunStepLoopConfig<R>`.
+  References with no type argument still compile. A config that carries a store
+  needs the argument. One behavior also changes with no store passed: a step whose
+  result is `undefined`, handed out again in the same drive, now runs once where it
+  used to run again.
+
+- 78f4557: `DrainTimeoutNotice` has a new field, `droppedMsgs`. When `stop()` gives up on a stuck Cmd handler, it counts the Msgs that were queued behind that handler, per Msg type, for example `{ item: 10, ping: 7, done: 3 }`. It covers Msgs handed to `dispatch` or `tell` and those a handler or a Sub sent, on both engines. It holds types and counts only, never a payload. Before, a Msg behind a handler that never returned was dropped and nothing named it.
+
+  **Breaking: a Msg with no caller that the notice counted no longer reaches `onError` on its own.** That is a Msg from `tell`, a handler or a Sub. When the handler returns late, it used to arrive as its own `DispatchDiscardedError`. A host that counted those errors now reads `droppedMsgs` instead, since the count already reported each one. A caller holding a dispatch promise still gets `DispatchDiscardedError`, or `Stopped` on the Effect engine.
+
+- 04a66f7: A `subscribe` listener now hears a new State right after its save and before that State's first Cmd handler starts, on both engines. Before, it heard only after every Cmd had answered, so a screen showed the old State for the whole of a slow Cmd. This is a changed timing on a stable export, and `useMachine` and `useRuntime` read it, so a machine that moves to `loading` and emits a slow read now shows `loading` during the read. A page reloaded in the middle of work does the same: with a `store` holding a State and an `init` that emits a Cmd for it, `useMachine` shows that State during the Cmd, not what `init` gives with nothing saved.
+
+  What to check in your code:
+
+  - A listener that assumed "the Cmds are done when I hear this" no longer can. Move it to `observe`, `on` or `done()`, which keep their timing and hear after the Cmds.
+  - A `dispatch` issued from a listener now folds ahead of the Msgs that transition's Cmds return, not behind them.
+
+  A listener still hears once per transition, a failed save still tells it nothing, and a listener that throws is still reported under `"listener"` while the step's Cmds run.
+
+- 13fe045: **Breaking: `tell` on `@demlik/tea/effect` no longer waits, and its promise is now queued, not handled.** It puts the Msg on the receiver's line and answers at once, so a parent and a child that tell each other from Cmd handlers keep moving instead of both stopping with no error.
+
+  - `tell` now succeeds with a `TellAnswer`: `"queued"`, `"stopped"` (the receiver is stopping or has stopped) or `"no_cell"` (its current State has no cell for the Msg).
+  - `StoreFailed` leaves `tell`'s type. A failed save of the receiver reaches the receiver's `onError`, and no longer comes back to the sender. Drop any `Effect.catch` around a `tell`, as `spawn`'s `notify` no longer needs one.
+  - A State read right after a `tell` no longer shows the Msg folded. Wait for the result as its own Msg, or use `idle()` on the receiver outside its Cmd handlers.
+  - A Msg whose cell is gone by its turn is dropped without a word. It never ends the process, with or without an `onError`.
+  - `tell` now needs the handle `ready` gives, or a spread of one: an `EffectRun`, or a `Run` on the Promise engine. A plain object built by hand worked before and no longer compiles, and neither does the handle straight from `run`.
+
+  Added: `tell` and `TellAnswer` on `@demlik/tea/promise`, and `TellAnswer` on `@demlik/tea/effect`. On the Promise engine `tell` returns its answer directly. `spawn` and `stop` keep their signatures. Two hand-written waiting `dispatch` calls into each other can still stop both machines.
+
+- 26facbc: **Breaking: `tell` is now a compile error on anything but the handle `ready` gives.** A hand-built handle compiled and worked on the Effect `tell` until now. This release puts each Msg on a run's line, and such a handle has none, so the type now refuses it.
+
+  - `ready` now gives a type that carries the line: `Run` on `@demlik/tea/promise`, `EffectRun` on `@demlik/tea/effect`. Each extends the type it replaces, so it fits anywhere that type is asked for. A spread of one keeps its line.
+  - `run` now gives `BootingRun` on `@demlik/tea/promise` and `EffectBootingRun` on `@demlik/tea/effect`. Each extends the type it replaces, and its `ready` gives the type above.
+  - `tell` asks for `Run` or `EffectRun`. A `Runtime`, `EffectRuntime`, `BootingRuntime` or `EffectBootingRuntime` that is not one does not compile as its argument, and neither does `noopRuntime()`. Change a host's own annotation from `EffectRuntime` to `EffectRun`, or from `Runtime` to `Run`, on any handle it passes to `tell`.
+  - `Runtime` and `EffectRuntime` are unchanged, so host fakes and `noopRuntime` stay valid as those types.
+  - This narrows `run`'s handle: it does not compile as `tell`'s argument, with a store or without one, so what compiles does not depend on whether a run has a store. A storeless host that told before `ready` must now wait for it. On a store-backed run that call could lose the Msg.
+  - A hand-built object cast past the type still has no line: `tell` throws on the Promise engine and dies with a defect on the Effect engine.
+
+- 854e0dc: Wait for the terminal State to be saved before `done()` succeeds or `result()`
+  returns it on both engines. While that save is pending or has failed, `result()`
+  returns `undefined`; a failed terminal save rejects waiting and later `done()`
+  calls. Runs without a store still answer as soon as State is set.
+
+  **Breaking:** Effect's `done()` now returns `Effect<S, StoreFailed>` instead of
+  `Effect<S>`. Handle `StoreFailed` with `operation: "save"`, the same failure
+  channel used by `dispatch`. Promise's `done()` rejects with the store's own error.
+
+### Patch Changes
+
+- c5cbf0f: **You now get exact versions of these dependencies instead of a range.** Each is pinned at the version this repo already tested against. A fresh install now gets the version listed here, which can be older than the one the range would have picked: `zod`'s old range could reach a newer 4.x, and `@demlik/backlog-sweep` now holds it at 4.5.4.
+
+  - `@demlik/tea`: `@standard-schema/spec` 1.1.0
+  - `@demlik/code-graph`: `chalk` 5.6.2, `commander` 11.1.0, `jsonc-parser` 3.3.1, `smol-toml` 1.9.0
+  - `@demlik/structure-sweep`: `smol-toml` 1.9.0, `tinyglobby` 0.2.17, `yaml` 2.9.0
+  - `@demlik/backlog-sweep`: `zod` 4.5.4
+
+  If your project uses a different version of one of these, your install now holds a second copy instead of sharing one. `@demlik/tea`'s peer ranges have not changed.
+
+- b1911cc: The `@demlik/tea/pbt` runners no longer hash both states of every changed step to fill `msgCounts`. A step's states are now compared by a walk that stops at the first difference and doesn't look inside an object both states share, so a property on a large state costs about what its fold costs, with `failOnNeverActed` on or off. On plain data the counts are what comparing `structuralHash` gives, and `structuralHash` itself is unchanged.
+
+  **`failOnNeverActed` refuses less.** A `Date`, `Map` or class instance now fails the run only when a step's comparison reaches it. One in an object `prev` and `next` share, or past a difference in the same step, stays unread, and the run gets a real answer instead of "can't tell what acted". A step with a refused value in a shared object now counts by what else changed, where it used to count as acted.
+
+- b9fb247: `useMachine` works under React's Strict Mode and across an `<Activity>` hide and
+  show. Before, Strict Mode stopped the run before the first click, and a hide left
+  a stopped run behind, so every `dispatch` rejected with `runtime stopped`.
+
+  The hook now starts its run in an effect, never during render, so a repeated or
+  abandoned render leaves no run behind. Strict Mode's extra effect run does
+  nothing. A hide stops the machine's Subs, and a show starts them again. It stays
+  one run from mount to unmount: the value survives, `init` runs once, a Cmd in
+  flight at a hide lands and its answer folds, and `dispatch` stays the same
+  function. After a real unmount it rejects, on every React in the peer range, a
+  tree deleted while a Suspense fallback hides it included.
+
 ## 0.21.0
 
 ### Minor Changes

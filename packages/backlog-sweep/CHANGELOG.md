@@ -1,5 +1,44 @@
 # @demlik/backlog-sweep
 
+## 0.1.3
+
+### Patch Changes
+
+- c5cbf0f: **You now get exact versions of these dependencies instead of a range.** Each is pinned at the version this repo already tested against. A fresh install now gets the version listed here, which can be older than the one the range would have picked: `zod`'s old range could reach a newer 4.x, and `@demlik/backlog-sweep` now holds it at 4.5.4.
+
+  - `@demlik/tea`: `@standard-schema/spec` 1.1.0
+  - `@demlik/code-graph`: `chalk` 5.6.2, `commander` 11.1.0, `jsonc-parser` 3.3.1, `smol-toml` 1.9.0
+  - `@demlik/structure-sweep`: `smol-toml` 1.9.0, `tinyglobby` 0.2.17, `yaml` 2.9.0
+  - `@demlik/backlog-sweep`: `zod` 4.5.4
+
+  If your project uses a different version of one of these, your install now holds a second copy instead of sharing one. `@demlik/tea`'s peer ranges have not changed.
+
+- Updated dependencies [c5cbf0f]
+- Updated dependencies [7ef3b24]
+- Updated dependencies [ed88ab4]
+- Updated dependencies [88d1b8b]
+- Updated dependencies [4fb39ef]
+- Updated dependencies [74b2db9]
+- Updated dependencies [bde3d30]
+- Updated dependencies [e608bdd]
+- Updated dependencies [b1911cc]
+- Updated dependencies [c77558e]
+- Updated dependencies [a71d425]
+- Updated dependencies [076c8db]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c77558e]
+- Updated dependencies [c2ed401]
+- Updated dependencies [6415a01]
+- Updated dependencies [78f4557]
+- Updated dependencies [04a66f7]
+- Updated dependencies [13fe045]
+- Updated dependencies [26facbc]
+- Updated dependencies [854e0dc]
+- Updated dependencies [b9fb247]
+  - @demlik/tea@0.22.0
+
 ## 0.1.2
 
 ### Patch Changes
