@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/pbt";
 ```
 
-## Exports (19)
+## Exports (24)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -18,8 +18,13 @@ import { … } from "@demlik/tea/pbt";
 | [`arbMsg`](#arbMsg) | Function | stable | Build a single `fc.Arbitrary<M>` from a `MsgArbitraryTable<M>`. |
 | [`arbMsgSequence`](#arbMsgSequence) | Function | stable | Build an arbitrary of Msg sequences over a per-Msg arbitrary. |
 | [`arbRecordMsg`](#arbRecordMsg) | Function | stable | Build a record-shaped Msg variant arbitrary. |
+| [`Fold`](#Fold) | Interface | stable | What foldEvents hands back: every state in order, one Step per Msg, the final state, and the Cmds `init` sent. |
 | [`foldEvents`](#foldEvents) | Function | stable | Fold a Msg sequence through a machine's pure reducer, returning the per-step trace, every state in order, the final state, and the Cmds `init` sent. |
 | [`GuidedCells`](#GuidedCells) | Interface | stable | What arbGuidedSequence draws from. |
+| [`LawBreak`](#LawBreak) | Interface | experimental | What a broken law says. |
+| [`lawInvariant`](#lawInvariant) | Function | experimental | The law `propertyInvariant` runs: `invariant` holds on every step of the fold. |
+| [`lawTerminates`](#lawTerminates) | Function | experimental | The law `propertyTerminates` runs: the fold's final state is one `terminal` accepts. |
+| [`lawTrace`](#lawTrace) | Function | experimental | The law `propertyTrace` runs: `predicate` holds on the fold's steps and final state together. |
 | [`MsgArbitraryTable`](#MsgArbitraryTable) | Type | stable | Strict per-variant Msg arbitrary table. |
 | [`MsgCount`](#MsgCount) | Interface | stable | What a property run's lists did with one Msg type. |
 | [`msgTypeKeys`](#msgTypeKeys) | Function | stable | Extract the Msg discriminant set at runtime from a machine. |
@@ -122,6 +127,19 @@ function arbRecordMsg<T extends string, R>(
 ): Arbitrary<{ type: T } & R>
 ```
 
+<a id="Fold"></a>
+
+### `Fold`
+
+```ts
+interface Fold<S, M, C> {
+  readonly finalState: S;
+  readonly initCmds: readonly C[];
+  readonly states: readonly S[];
+  readonly steps: readonly Step<S, M, C>[];
+}
+```
+
 <a id="foldEvents"></a>
 
 ### `foldEvents`
@@ -138,12 +156,7 @@ function foldEvents<
   ctx: NoInfer<Ctx>,
   loaded: NoInfer<S> | null,
   msgs: readonly NoInfer<M>[],
-): {
-  readonly finalState: S;
-  readonly initCmds: readonly C[];
-  readonly states: readonly S[];
-  readonly steps: readonly Step<S, M, C>[];
-}
+): Fold<S, M, C>
 ```
 
 <a id="GuidedCells"></a>
@@ -159,6 +172,57 @@ interface GuidedCells<
   readonly answers?: { readonly [K in string | number | symbol]: K extends C["type"] ? AnswerCell<Extract<C, { type: K }>, A[K], M> : never };
   readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { type: K }>> };
 }
+```
+
+<a id="LawBreak"></a>
+
+### `LawBreak`
+
+```ts
+interface LawBreak {
+  readonly reason: string | null;
+  readonly report: string;
+}
+```
+
+<a id="lawInvariant"></a>
+
+### `lawInvariant`
+
+```ts
+function lawInvariant<S, M, C>(
+  fold: Fold<S, M, C>,
+  invariant: (
+    step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>,
+    initCmds: readonly NoInfer<C>[],
+  ) => string | boolean | null,
+): LawBreak | null
+```
+
+<a id="lawTerminates"></a>
+
+### `lawTerminates`
+
+```ts
+function lawTerminates<S, M, C>(
+  fold: Fold<S, M, C>,
+  terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean,
+): LawBreak | null
+```
+
+<a id="lawTrace"></a>
+
+### `lawTrace`
+
+```ts
+function lawTrace<S, M, C>(
+  fold: Fold<S, M, C>,
+  predicate: (
+    steps: readonly Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>[],
+    finalState: NoInfer<S>,
+    initCmds: readonly NoInfer<C>[],
+  ) => string | boolean | null,
+): LawBreak | null
 ```
 
 <a id="MsgArbitraryTable"></a>
