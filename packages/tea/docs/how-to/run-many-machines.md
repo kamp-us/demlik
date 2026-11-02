@@ -149,10 +149,12 @@ entry out and `notify` tells the parent. The table lookup is yours, so
 every child forked from it, so the whole tree stops with it.
 
 A worker whose Sub fails with an error it did not map to a Msg closes its own
-child scope the same way, so `remove` and `notify` run. The parent's scope and
-the other workers stay up. That takes an `onError` on the worker's `run`: with
-none, the default sink rethrows the failure and ends the process, along with
-every run in it. The same goes for the parent.
+child scope the same way, so `remove` and `notify` run. So does a worker whose
+reducer throws under the default `stop` strategy: its Subs close, its final
+save runs, and the parent hears `child_stopped`, with no call from you. The
+parent's scope and the other workers stay up. That takes an `onError` on the
+worker's `run`: with none, the default sink rethrows the failure and ends the
+process, along with every run in it. The same goes for the parent.
 
 ## 3. Use it
 
@@ -188,8 +190,8 @@ const program = Effect.gen(function* () {
 });
 ```
 
-The parent is not a worker. If the parent's own Sub fails, only the parent's run
-stops. `parentScope` stays open, because you opened it, so the workers keep
+The parent is not a worker. If the parent's own Sub fails, or its reducer
+throws, only the parent's run stops. `parentScope` stays open, because you opened it, so the workers keep
 running and `remove` and `notify` do not run. To stop the whole tree with the
 parent, wait on `parentRun.done()` on a fiber of its own, and close `parentScope`
 when it ends. Fork this right after the workers start:

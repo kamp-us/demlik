@@ -251,8 +251,10 @@ never rejects. It holds the terminal State, or `undefined` if the run failed, so
 can leave it unawaited. Replace the `console.error` with whatever your host does
 about a failed run.
 
-The `finally` stays for the failures too. After a reducer throw the Subs keep running
-and the final save has not happened until `stop()` runs.
+A failed run stops by itself: after a Sub failure, and after a reducer throw under the
+default `stop` strategy, its Subs close and its final save runs with no call from you.
+The `finally` is still what stops a run that reached its terminal State, and on a run
+that already stopped itself, its `stop()` does nothing more.
 
 `dispatch` rejects too: with what the reducer threw, and with what a Sub threw when
 that Msg's State started the Sub and it threw at once. A `dispatch` nobody awaits, like

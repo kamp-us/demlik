@@ -69,7 +69,13 @@ type Answer =
   | { readonly kind: "failed"; readonly error: unknown };
 
 type Options = {
-  readonly supervision?: "stop" | "escalate";
+  readonly supervision?:
+    | "stop"
+    | "escalate"
+    | {
+        readonly strategy: "restart";
+        readonly rehydrate: (state: Model) => Model;
+      };
   /** What the armed Sub does. `failing` by default. */
   readonly sub?:
     | { readonly kind: "failing"; readonly error: unknown }
@@ -416,7 +422,16 @@ describe.each(engines)("%s engine: a reducer throw", (_, start) => {
   });
 });
 
-// === What a host must still do after a reducer throw ===
+// === A reducer throw stops the run by itself (ADR 0033) ===
+
+/** Resolves once `holds()` is true, or fails once the run has had ample time. */
+async function until(what: string, holds: () => boolean): Promise<void> {
+  const deadline = Date.now() + LIMIT_MS;
+  while (!holds()) {
+    if (Date.now() > deadline) throw new Error(`never saw: ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
 
 /** A store that counts its saves, and the Sub's closing counted beside it. */
 function watched() {
@@ -437,55 +452,111 @@ function watched() {
 
 describe.each(
   engines,
-)("%s engine: after a reducer throw fails done()", (_, start) => {
-  it("the Sub and the final save wait for the host's stop()", async () => {
+)("%s engine: a reducer throw under stop tears the run down", (_, start) => {
+  it("closes the Sub and runs the final save once, with no stop() from the host", async () => {
     const { seen, store, sub } = watched();
     const rt = await start({ sub, store });
     const waiting = rt.done();
 
     await rt.dispatch({ type: "arm" });
-    await rt.dispatch({ type: "explode" });
+    const savesBeforeThrow = seen.saves;
+    expect(await rt.dispatch({ type: "explode" })).toBe(boom);
+
     expect(await within(waiting)).toEqual({ kind: "failed", error: boom });
+    await until("the Sub close", () => seen.closes === 1);
+    await until("the final save", () => seen.saves === savesBeforeThrow + 1);
+    expect(await rt.dispatch({ type: "work" })).toBeInstanceOf(Error);
+    expect(await within(rt.done())).toEqual({ kind: "failed", error: boom });
+  });
 
-    const savesBeforeStop = seen.saves;
-    expect(seen.closes).toBe(0);
+  it("a later stop() by the host does nothing more", async () => {
+    const { seen, store, sub } = watched();
+    const rt = await start({ sub, store });
 
+    await rt.dispatch({ type: "arm" });
+    const savesBeforeThrow = seen.saves;
+    await rt.dispatch({ type: "explode" });
+    await until("the final save", () => seen.saves === savesBeforeThrow + 1);
+
+    await rt.stop();
     await rt.stop();
 
     expect(seen.closes).toBe(1);
-    expect(seen.saves).toBe(savesBeforeStop + 1);
+    expect(seen.saves).toBe(savesBeforeThrow + 1);
+    expect(rt.reports).toEqual([{ error: boom, phase: "reduce" }]);
   });
 });
 
-describe("Effect engine: after a reducer throw fails done()", () => {
-  it("closing the Scope does what stop() does", async () => {
+describe.each(engines)("%s engine: what tears nothing down", (_, start) => {
+  const restart = {
+    strategy: "restart",
+    rehydrate: (state: Model) => state,
+  } as const;
+
+  it.each([
+    ["escalate", "escalate"],
+    ["restart", restart],
+  ] as const)("a reducer throw under %s leaves the Sub running and saves nothing more", async (_name, supervision) => {
+    const { seen, store, sub } = watched();
+    const rt = await start({ sub, store, supervision });
+
+    await rt.dispatch({ type: "arm" });
+    await rt.dispatch({ type: "explode" });
+    const saves = seen.saves;
+    await new Promise((resolve) => setTimeout(resolve, STILL_WAITING_MS));
+
+    expect(seen.closes).toBe(0);
+    expect(seen.saves).toBe(saves);
+    expect(await rt.dispatch({ type: "work" })).toBe("resolved");
+    await rt.stop();
+    expect(seen.closes).toBe(1);
+  });
+});
+
+describe("Effect engine: a reducer throw under stop", () => {
+  it("closes the run's own Scope and leaves the caller's open, and closing that afterwards does nothing more", async () => {
     const { seen, store, sub } = watched();
     const { onError } = sink();
     const scope = await Effect.runPromise(Scope.make());
+    const released: string[] = [];
     const booting = await Effect.runPromise(
       Scope.provide(scope)(
         runOnEffect(job, {
           onError,
           terminal,
           store,
-          subscribe: { watch: () => effectSub(sub) },
+          subscribe: {
+            // A Sub runner reads the run's own Scope, so what it adds there is
+            // released when that Scope closes.
+            watch: () =>
+              Stream.unwrap(
+                Effect.as(
+                  Effect.addFinalizer(() =>
+                    Effect.sync(() => released.push("run scope")),
+                  ),
+                  effectSub(sub),
+                ),
+              ),
+          },
         }),
       ),
     );
     const rt = await Effect.runPromise(booting.ready);
-    const waiting = Effect.runPromiseExit(rt.done());
 
     await Effect.runPromiseExit(rt.dispatch({ type: "arm" }));
+    const savesBeforeThrow = seen.saves;
     await Effect.runPromiseExit(rt.dispatch({ type: "explode" }));
-    expect(Exit.isFailure(await waiting)).toBe(true);
 
-    const savesBeforeClose = seen.saves;
-    expect(seen.closes).toBe(0);
+    await until("the run's Scope close", () => released.length === 1);
+    await until("the final save", () => seen.saves === savesBeforeThrow + 1);
+    expect(seen.closes).toBe(1);
+    expect(scope.state._tag).not.toBe("Closed");
 
     await Effect.runPromise(Scope.close(scope, Exit.void));
 
+    expect(released).toEqual(["run scope"]);
     expect(seen.closes).toBe(1);
-    expect(seen.saves).toBe(savesBeforeClose + 1);
+    expect(seen.saves).toBe(savesBeforeThrow + 1);
   });
 });
 

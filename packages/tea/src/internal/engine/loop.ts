@@ -32,8 +32,8 @@
  *                    engine is told to stop it.
  *   8. `halted`    — called when an extension halts the run with an error.
  *   9. `drained`   — called once no Msg can fold any more, so the State is the
- *                    run's last: `stop()` has finished with the queue, or a
- *                    halted run's line has ended.
+ *                    run's last: `stop()` has finished with the queue, the
+ *                    host's or the one a failure started.
  *  10. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
@@ -104,8 +104,9 @@ export interface LoopServices<S> {
     fn: (item: T) => void,
   ): void;
   /**
-   * Close the gate for good because of `error`: every later dispatch is refused.
-   * The Msgs already in line still fold.
+   * Close the gate for good because of `error`, and have the engine stop the
+   * run: every later dispatch is refused, the Msgs already in line still fold,
+   * and then the Subs close and the final save runs (ADR 0033).
    */
   halt(error: unknown): void;
   /** The current State, or `undefined` before boot has produced one. */
@@ -168,15 +169,23 @@ export interface LoopConfig<S, M extends { type: string }, C, Ctx> {
   readonly idleCap: number;
   readonly extensions: readonly ExtensionFactory<S, M, C>[];
   /**
-   * How the engine stops the run once a Sub failed with an error it did not
-   * handle (#309). The loop has already dropped the Sub, reported the error
-   * under `"sub"` and closed the gate to new work; this does the rest —
-   * `stop()` on the Promise engine, closing the run's Scope with the failure on
-   * the Effect engine. Called at most once, possibly before `startLoop` has
-   * returned.
+   * How the engine stops the run once tea itself closed it because of a
+   * failure: a Sub failed with an error it did not handle (#309), or an
+   * extension halted the run, as the `stop` strategy does on a reducer throw
+   * (ADR 0033). The loop has already reported the error and closed the gate to
+   * new work; this does the rest — `stop()` on the Promise engine, closing the
+   * run's Scope with the failure on the Effect engine. Called at most once,
+   * possibly before `startLoop` has returned.
    */
-  readonly stopOnSubFailure: (error: unknown) => void;
+  readonly stopOnFailure: (failure: RunFailure) => void;
 }
+
+/** Why tea itself stops a run, as {@link LoopConfig.stopOnFailure} hears it. */
+export type RunFailure =
+  /** A Sub's source died with an error the Sub did not turn into a Msg. */
+  | { readonly kind: "sub"; readonly error: unknown }
+  /** An extension halted the run with `error`: a reducer throw under `stop`. */
+  | { readonly kind: "halt"; readonly error: unknown };
 
 // === liveWork: "can anything still transition me without a dispatch?" ===
 //
@@ -400,11 +409,15 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     report,
     fanout,
     halt(error) {
+      // Only a run that was open still needs stopping: past that, a Sub failure
+      // or the host's `stop()` has already started the teardown.
+      const stopping = gate !== "open";
       if (gate !== "abandoned") gate = "closed";
       for (const ext of extensions) ext.halted?.(error);
-      // The gate is shut, so nothing joins the line from here on, and `tail`
-      // already covers this step and every Msg behind it.
-      void tail.then(lastStateReached);
+      // The same stop a Sub failure starts (ADR 0033). Its teardown waits for
+      // `tail`, which already covers this step and every Msg behind it, so a
+      // Msg in line still folds before the Subs close and the final save runs.
+      if (!stopping) config.stopOnFailure({ kind: "halt", error });
     },
     state: () => state,
     saveStatus: () =>
@@ -654,7 +667,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     if (gate !== "open") return;
     gate = "draining";
     for (const ext of extensions) ext.subFailed?.(error);
-    config.stopOnSubFailure(error);
+    config.stopOnFailure({ kind: "sub", error });
   }
 
   // The ONE `(msg) => void` handed to every producer that cannot await its own
