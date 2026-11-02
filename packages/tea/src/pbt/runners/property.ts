@@ -7,6 +7,10 @@
 //   - `propertyInvariant`  — predicate holds on every (prev, msg, next, cmds) step.
 //   - `propertyTrace`      — predicate holds on the full (trace, final) shape.
 //
+// Each law is a plain function in `../laws.ts` (`lawTerminates`, `lawInvariant`,
+// `lawTrace`) that answers what broke, and the runner throws that with its own
+// name in front. The laws import no fast-check, so Effect's checker runs them too.
+//
 // Each runner takes the Msg-sequence arbitrary, an optional `loaded` saved
 // state (a value, or an arbitrary that draws one per run), and fast-check's
 // settings. A passing run returns a `PropertyRun`; a failing run throws a
@@ -27,8 +31,9 @@
 
 import * as fc from "fast-check";
 import { type Cmd, type Machine, msgKeysOf, type Sub } from "../../index";
+import { type LawBreak, lawInvariant, lawTerminates, lawTrace } from "../laws";
 import { type MsgCount, MsgTally } from "./msg-tally";
-import { foldEvents, type Step } from "./replay-fold";
+import { type Fold, foldEvents, type Step } from "./replay-fold";
 
 /**
  * What every property runner takes: the saved state to start from, the two checks
@@ -101,14 +106,6 @@ export interface PropertyOpts<S>
    */
   readonly failOnUndeclaredCmd?: boolean;
 }
-
-/** The `foldEvents` result a runner's `check` inspects. */
-type FoldResult<S, M, C> = {
-  readonly states: readonly S[];
-  readonly steps: readonly Step<S, M, C>[];
-  readonly finalState: S;
-  readonly initCmds: readonly C[];
-};
 
 /**
  * What a property run did. A passing runner returns it, and a failing one throws
@@ -225,6 +222,18 @@ function assertHolds(
 }
 
 /**
+ * Throw what a law said broke, its report led by the runner's name, the way
+ * {@link assertHolds} throws a check's answer. A held law throws nothing.
+ */
+function assertLaw(runner: string, broken: LawBreak | null): void {
+  if (broken === null) return;
+  const report = `${runner}: ${broken.report}`;
+  throw broken.reason === null
+    ? new Error(report)
+    : new BrokenLaw(report, broken.reason);
+}
+
+/**
  * What is wrong with a sent Cmd, naming it, or `null` when nothing is. `declared`
  * is the list to hold it to, or `null` when there is none to read. Types can't
  * rule these out: a reducer's `as` or a mutated line reaches here at run time.
@@ -243,7 +252,7 @@ function cmdFault(
 
 /** Hold every Cmd one fold sent, `init`'s first, to {@link cmdFault}. */
 function assertSentCmds<S, M, C>(
-  { initCmds, steps }: FoldResult<S, M, C>,
+  { initCmds, steps }: Fold<S, M, C>,
   declared: ReadonlySet<string> | null,
 ): void {
   for (const cmd of initCmds) {
@@ -408,7 +417,7 @@ function runProperty<
   ctx: Ctx,
   seqArb: fc.Arbitrary<readonly M[]>,
   opts: PropertyOpts<S> | undefined,
-  check: (result: FoldResult<S, M, C>) => void,
+  check: (result: Fold<S, M, C>) => void,
 ): PropertyRun {
   const { loaded, failOnNeverActed, failOnUndeclaredCmd, ...settings } =
     opts ?? {};
@@ -513,16 +522,10 @@ export function propertyTerminates<
   terminal: (state: NoInfer<S>, initCmds: readonly NoInfer<C>[]) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(machine, ctx, seqArb, opts, ({ finalState, initCmds }) => {
-    if (!terminal(finalState, initCmds)) {
-      // Throwing here (vs returning false) lets the error message carry
-      // the offending final state — fast-check pretty-prints it inside
-      // the shrunk counter-example.
-      throw new Error(
-        `propertyTerminates: final state did not match terminal predicate. ` +
-          `Final: ${JSON.stringify(finalState)}`,
-      );
-    }
+  // Throwing (vs returning false) lets the error message carry the offending
+  // final state — fast-check pretty-prints it inside the shrunk counter-example.
+  return runProperty(machine, ctx, seqArb, opts, (fold) => {
+    assertLaw("propertyTerminates", lawTerminates(fold, terminal));
   });
 }
 
@@ -584,16 +587,8 @@ export function propertyInvariant<
   ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(machine, ctx, seqArb, opts, ({ steps, initCmds }) => {
-    for (const step of steps) {
-      assertHolds(
-        invariant(step, initCmds),
-        () =>
-          `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
-          `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
-          `cmds=${JSON.stringify(step.cmds)}`,
-      );
-    }
+  return runProperty(machine, ctx, seqArb, opts, (fold) => {
+    assertLaw("propertyInvariant", lawInvariant(fold, invariant));
   });
 }
 
@@ -648,18 +643,7 @@ export function propertyTrace<
   ) => boolean | string | null,
   opts?: NoInfer<PropertyOpts<S>>,
 ): PropertyRun {
-  return runProperty(
-    machine,
-    ctx,
-    seqArb,
-    opts,
-    ({ steps, finalState, initCmds }) => {
-      assertHolds(
-        predicate(steps, finalState, initCmds),
-        () =>
-          `propertyTrace: predicate failed on trace length=${steps.length}, ` +
-          `final=${JSON.stringify(finalState)}`,
-      );
-    },
-  );
+  return runProperty(machine, ctx, seqArb, opts, (fold) => {
+    assertLaw("propertyTrace", lawTrace(fold, predicate));
+  });
 }

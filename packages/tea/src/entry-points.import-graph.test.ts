@@ -15,6 +15,15 @@
 //   4. `./testing` and `./testing/promise` reach neither `src/effect/` nor
 //      `src/testing/effect/`.
 //
+// Property testing runs on both engines with no bridge between their
+// generators (#749): `./pbt` is fast-check's and `./testing/effect` is Effect's
+// `Arbitrary`, and they share only the laws and the fold. Two more rules:
+//
+//   5. nothing reachable from `./testing/effect` imports `fast-check`, so it
+//      carries no fast-check runner;
+//   6. nothing reachable from `./pbt` imports `effect` or reaches
+//      `src/effect/` or `src/testing/effect/`.
+//
 // The walk is the one `src/pure/import-graph.test.ts` uses: every `from "…"`
 // and bare `import "…"` specifier, relative ones followed. Type-only imports
 // count too, so the rule reads the same whether or not a line is erased.
@@ -39,6 +48,16 @@ type Violation =
       readonly rule: "effect-outside-effect";
       readonly file: string;
       readonly specifier: string;
+    }
+  | {
+      readonly rule: "testing-effect-imports-fast-check";
+      readonly file: string;
+      readonly specifier: string;
+    }
+  | {
+      readonly rule: "pbt-reaches-effect";
+      readonly file: string;
+      readonly specifier: string | null;
     };
 
 const ENGINES = ["promise", "effect"] as const;
@@ -103,7 +122,10 @@ const isEffectPackage = (spec: string): boolean =>
   spec.startsWith("effect/") ||
   spec.startsWith("@effect/");
 
-/** Every way `tree` breaks the four entry-point rules. Empty means clean. */
+const isFastCheck = (spec: string): boolean =>
+  spec === "fast-check" || spec.startsWith("fast-check/");
+
+/** Every way `tree` breaks the six entry-point rules. Empty means clean. */
 function entryPointViolations(tree: Tree): Violation[] {
   const out: Violation[] = [];
 
@@ -139,6 +161,29 @@ function entryPointViolations(tree: Tree): Violation[] {
     }
   }
 
+  for (const file of graphOf(tree, "testing/effect/index.ts")) {
+    for (const specifier of specifiers(tree.get(file) ?? "")) {
+      if (isFastCheck(specifier)) {
+        out.push({
+          rule: "testing-effect-imports-fast-check",
+          file,
+          specifier,
+        });
+      }
+    }
+  }
+
+  for (const file of graphOf(tree, "pbt/index.ts")) {
+    if (inEffectHome(file)) {
+      out.push({ rule: "pbt-reaches-effect", file, specifier: null });
+    }
+    for (const specifier of specifiers(tree.get(file) ?? "")) {
+      if (isEffectPackage(specifier)) {
+        out.push({ rule: "pbt-reaches-effect", file, specifier });
+      }
+    }
+  }
+
   return out;
 }
 
@@ -165,6 +210,7 @@ function readSrcTree(): Tree {
 // Spelled through a variable so this file's own fixture text never reads as an
 // `effect` import when the real-tree scan below walks it.
 const EFFECT_PACKAGE = "effect";
+const FAST_CHECK = "fast-check";
 
 /** A tree that obeys every rule — each case below breaks exactly one. */
 const clean = (): Map<string, string> =>
@@ -185,8 +231,13 @@ const clean = (): Map<string, string> =>
     ["testing/promise/index.ts", 'export * from "../assertions";'],
     [
       "testing/effect/index.ts",
-      `import { Effect } from "${EFFECT_PACKAGE}";\nimport "../../effect";`,
+      `import { Effect } from "${EFFECT_PACKAGE}";\nimport "../../effect";\nexport * from "../../pbt/laws";`,
     ],
+    [
+      "pbt/index.ts",
+      `import * as fc from "${FAST_CHECK}";\nexport * from "./laws";`,
+    ],
+    ["pbt/laws.ts", 'import type { Machine } from "../pure";'],
   ]);
 
 describe("the entry-point rules fire on each break", () => {
@@ -287,6 +338,57 @@ describe("the testing entries keep Effect out of a Promise test (#321)", () => {
   });
 });
 
+describe("property testing keeps fast-check and Effect apart (#749)", () => {
+  it("lets ./pbt and ./testing/effect share the laws", () => {
+    expect(entryPointViolations(clean())).toEqual([]);
+  });
+
+  it("fails when a law ./testing/effect reaches imports fast-check", () => {
+    const tree = clean();
+    tree.set("pbt/laws.ts", `import * as fc from "${FAST_CHECK}";`);
+    expect(entryPointViolations(tree)).toEqual([
+      {
+        rule: "testing-effect-imports-fast-check",
+        file: "pbt/laws.ts",
+        specifier: FAST_CHECK,
+      },
+    ]);
+  });
+
+  it("fails when ./testing/effect reaches a fast-check runner", () => {
+    const tree = clean();
+    tree.set(
+      "testing/effect/index.ts",
+      `import { Effect } from "${EFFECT_PACKAGE}";\nexport * from "../../pbt";`,
+    );
+    expect(entryPointViolations(tree)).toContainEqual({
+      rule: "testing-effect-imports-fast-check",
+      file: "pbt/index.ts",
+      specifier: FAST_CHECK,
+    });
+  });
+
+  it("fails when ./pbt reaches ./testing/effect", () => {
+    const tree = clean();
+    tree.set("pbt/laws.ts", 'export * from "../testing/effect";');
+    expect(entryPointViolations(tree)).toContainEqual({
+      rule: "pbt-reaches-effect",
+      file: "testing/effect/index.ts",
+      specifier: null,
+    });
+  });
+
+  it("fails when a ./pbt module imports effect", () => {
+    const tree = clean();
+    tree.set("pbt/laws.ts", `import { Arbitrary } from "${EFFECT_PACKAGE}";`);
+    expect(entryPointViolations(tree)).toContainEqual({
+      rule: "pbt-reaches-effect",
+      file: "pbt/laws.ts",
+      specifier: EFFECT_PACKAGE,
+    });
+  });
+});
+
 describe("src/ obeys the entry-point rules", () => {
   const tree = readSrcTree();
 
@@ -297,6 +399,8 @@ describe("src/ obeys the entry-point rules", () => {
       "effect/index.ts",
       ...EFFECT_FREE_TESTING,
       "testing/effect/index.ts",
+      "pbt/index.ts",
+      "pbt/laws.ts",
     ]) {
       expect(tree.has(entry)).toBe(true);
     }
@@ -311,5 +415,23 @@ describe("src/ obeys the entry-point rules", () => {
     const promise = (await import("./promise")) as Record<string, unknown>;
     expect("run" in core).toBe(false);
     expect(typeof promise.run).toBe("function");
+  });
+
+  it("exports the laws from ./pbt and ./testing/effect, and no runner from ./testing/effect", async () => {
+    const pbt = (await import("./pbt")) as Record<string, unknown>;
+    const effect = (await import("./testing/effect")) as Record<
+      string,
+      unknown
+    >;
+    for (const law of ["lawInvariant", "lawTerminates", "lawTrace"]) {
+      expect(effect[law]).toBe(pbt[law]);
+    }
+    for (const runner of [
+      "propertyTerminates",
+      "propertyInvariant",
+      "propertyTrace",
+    ]) {
+      expect(runner in effect).toBe(false);
+    }
   });
 });

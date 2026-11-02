@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { type Project, type SourceFile, ts } from "ts-morph";
 import { absurd } from "../absurd.js";
@@ -47,6 +53,11 @@ import {
 import { applyMoves } from "./mover.js";
 import { loadMoveProject } from "./project.js";
 import { moduleLiterals, sourceCandidates } from "./specifier.js";
+import {
+  type EntryEdit,
+  refuseEntries,
+  staleEntries,
+} from "./stale-entries.js";
 import { checkTemplates } from "./templates.js";
 import {
   crossesPackages,
@@ -86,6 +97,11 @@ export type ApplyReport = {
   readonly specifiersRewritten: number;
   /** Each `workspace:*` dependency the rewrite commit added, as `<importing package> -> <name>`. */
   readonly dependenciesAdded: readonly string[];
+  /**
+   * Each entry the rewrite commit removed from a package a row left, because it named a moved file:
+   * `<package.json path> exports <key>` or `<tsup config path> entry <source>`.
+   */
+  readonly entriesRemoved: readonly string[];
   /** Files the rewrite commit changed. */
   readonly filesTouched: number;
   /** `untouched` when nothing needed rewriting, `no formatter` when the repo has no biome, else biome's verdict. */
@@ -628,15 +644,30 @@ function planDependencies(
 function untrackedEdits(
   repoRoot: string,
   rewrite: Rewrite,
-  dependencies: Dependencies,
+  configs: ReadonlyMap<string, string>,
 ): string[] {
   const tracked = new Set(trackedPaths(repoRoot, "index"));
-  return [
-    ...rewrite.edits.map((edit) => edit.origin),
-    ...dependencies.manifests.map((edit) => edit.path),
-  ]
+  return [...rewrite.edits.map((edit) => edit.origin), ...configs.keys()]
     .filter((path) => !tracked.has(path))
     .sort();
+}
+
+/**
+ * The text each `package.json` or tsup config the rewrite commit changes ends with, by repo-relative
+ * path: a manifest's added dependencies first, then the stale entries cut from that same text.
+ */
+function configTexts(
+  repoRoot: string,
+  dependencies: Dependencies,
+  edits: readonly EntryEdit[],
+): Map<string, string> {
+  const texts = new Map(dependencies.manifests.map((m) => [m.path, m.text]));
+  for (const { path, rewrite } of edits)
+    texts.set(
+      path,
+      rewrite(texts.get(path) ?? readFileSync(join(repoRoot, path), "utf8")),
+    );
+  return texts;
 }
 
 function trackedMatching(
@@ -658,9 +689,14 @@ function trackedMatching(
  * package for another: every import that then crosses a package line is written as the target
  * package's name and `exports` subpath, each importing package's `package.json` gains the
  * `"<name>": "workspace:*"` dependency it does not yet declare, and `pnpm install --lockfile-only`
- * updates `pnpm-lock.yaml` to match, all in the rewrite commit. Refused before either commit: a row
- * whose destination no `exports` entry of its new package reaches, an import a move would carry
- * across a package line to a file no `exports` entry reaches, an import in a file moving across a
+ * updates `pnpm-lock.yaml` to match, all in the rewrite commit. That commit also removes each
+ * `exports` subpath and tsup `entry` row of a package a row leaves that names the file it moves
+ * (`staleEntries`). Refused before either commit: a row moving a file its old package names in
+ * `main`, `module`, `types`, `bin`, a wrangler `main` or the `.` export, a row inside one package
+ * moving a file an `exports` or tsup entry names, a row leaving a package whose tsup `entry` its
+ * syntax does not carry, a row whose destination no `exports` entry of its new package reaches,
+ * an import a move would carry across a package line to a file no `exports` entry reaches, an
+ * import in a file moving across a
  * package line that names no file, a package-name import into a package a row leaves that apply
  * cannot follow to a file, an import built at run time for which a row changes which file a value
  * loads, a quoted string a row would break in a file apply does not parse (`.vue`, say), an added
@@ -733,6 +769,13 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
   );
 
   const rows = pending.length > 0 ? pending : renamedAtHead(repoRoot, set);
+  const entries = staleEntries(
+    repoRoot,
+    workspace,
+    rows,
+    originalTree(repoRoot, rows),
+  );
+  refuseEntries(entries.refused);
   const owed =
     rows.length > 0 ||
     hasDangling(trackedMatching(repoRoot, TS_EXTENSION, set.scope), moved);
@@ -751,7 +794,8 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
     ...unread,
   ]);
   const dependencies = planDependencies(repoRoot, workspace, rewrite.crossings);
-  const untracked = untrackedEdits(repoRoot, rewrite, dependencies);
+  const configs = configTexts(repoRoot, dependencies, entries.edits);
+  const untracked = untrackedEdits(repoRoot, rewrite, configs);
   if (untracked.length > 0)
     throw new Error(
       `the import rewrite would change files git does not track, refusing to apply; commit, move or delete them first:\n${untracked.map((p) => `  ${p}`).join("\n")}`,
@@ -760,11 +804,10 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
   const rename =
     pending.length > 0 ? commitRenames(repoRoot, pending, set.planner) : null;
   for (const edit of rewrite.edits) writeFileSync(edit.path, edit.text);
-  for (const edit of dependencies.manifests)
-    writeFileSync(join(repoRoot, edit.path), edit.text);
+  for (const [path, text] of configs) writeFileSync(join(repoRoot, path), text);
   const written = [
     ...rewrite.edits.map((edit) => relative(repoRoot, edit.path)),
-    ...dependencies.manifests.map((edit) => edit.path),
+    ...configs.keys(),
   ];
   const { healed, specifiersRewritten } = rewrite;
 
@@ -791,6 +834,7 @@ function applyMoveSet(repoRoot: string, set: MoveSet): ApplyReport {
     dependenciesAdded: dependencies.added.map(
       (e) => `${packageLabel(e.from)} -> ${e.to.name}`,
     ),
+    entriesRemoved: entries.removed,
     filesTouched: changed.length,
     lint,
     commits: { rename, rewrite: rewriteSha },

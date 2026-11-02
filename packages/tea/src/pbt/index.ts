@@ -13,6 +13,10 @@
  *   - `propertyTerminates` / `propertyInvariant` / `propertyTrace` — wrap
  *     `fc.check(fc.property(...))` with a TEA-shaped fold over Msg sequences,
  *     returning a `PropertyRun` and throwing a `PropertyFailure` that carries one.
+ *   - `lawTerminates` / `lawInvariant` / `lawTrace` — the laws those runners
+ *     judge each fold by, as plain check functions over one `foldEvents` result.
+ *     They import no `fast-check`, so `@demlik/tea/testing/effect` exports them
+ *     too, for Effect's `Arbitrary.checkEffect`. Experimental.
  *   - `stubCtxThrowingProxy<Ctx>()` — type-shaped Ctx value whose every access
  *     throws (PBT runs the reducer; Ctx must never be touched).
  *
@@ -35,7 +39,9 @@ export {
   type MsgArbitraryTable,
   stubCtxThrowingProxy,
 } from "./arbitraries";
+export { type LawBreak, lawInvariant, lawTerminates, lawTrace } from "./laws";
 export {
+  type Fold,
   foldEvents,
   type MsgCount,
   PropertyFailure,
