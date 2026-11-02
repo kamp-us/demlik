@@ -67,12 +67,15 @@ split. So the agent layer's `transcript` collector is `experimental`, on `./agen
 and graduates with the rest of the layer rather than separately.
 
 **Property testing on Effect's `Arbitrary` is experimental on two stable subpaths**, the way
-`fileJournal` is on `./node` (below): `arbSchemaGuidedSequence` and its three errors on
-`./testing/effect`, and the laws `lawTerminates`, `lawInvariant` and `lawTrace` with `LawBreak`
-on both `./pbt` and `./testing/effect`. Each carries `@experimental` in its TSDoc, which makes
-its row on the generated reference page read `experimental` while the page reads `stable`. The
-laws import neither `fast-check` nor `effect`, which is how both entries export them
+`fileJournal` is on `./node` (below): `arbSchemaGuidedSequence` on `./testing/effect`, with its
+option type `SchemaGuidedOptions`, its error union `SchemaAnswersError` and the three errors in
+it, and the laws `lawTerminates`, `lawInvariant` and `lawTrace` with `LawBreak` on both `./pbt`
+and `./testing/effect`. Each carries `@experimental` in its TSDoc, which makes its row on the
+generated reference page read `experimental` while the page reads `stable`. The laws import
+neither `fast-check` nor `effect`, which is how both entries export them
 ([ADR 0032](../../.decisions/0032-effect-property-tests-draw-answers-from-cmd-schemas.md)).
+`foldEvents`, `Fold` and `Step`, re-exported on `./testing/effect`, carry no `@experimental`:
+they keep the `stable` promise of the subpath they are exported from, as `Fold` does on `./pbt`.
 
 ### Internal parts
 
