@@ -2,7 +2,7 @@
 /**
  * The React how-to's compile-and-run gate (#542).
  *
- * `docs/how-to/drive-from-react.md` shows five pieces of a component. Each is
+ * `docs/how-to/drive-from-react.md` shows pieces of a component. Each is
  * a `#region` of this file, verbatim (`../page-mirrors.ts` holds the row), so
  * the page shows code the test program compiles. It renders here too, on a
  * real `react-dom/client` root: the machines are the tutorial's downloader and
@@ -188,6 +188,57 @@ function finish<S>(owned: { done(): Promise<S>; stop(): Promise<void> }) {
 const finished = finish(runtime);
 // #endregion use-runtime
 
+// #region select
+import type { ViewHandle } from "@demlik/tea/react";
+
+type TileId = "inbox" | "notes" | "timer";
+type TileMsg = { readonly type: "increment" };
+type DeskModel = {
+  readonly views: Readonly<Record<TileId, { readonly n: number }>>;
+};
+type DeskMsg = {
+  readonly type: "tile";
+  readonly id: TileId;
+  readonly msg: TileMsg;
+};
+type DeskRun = ViewHandle<DeskModel, DeskMsg>;
+
+function Tile({ run, id }: { run: DeskRun; id: TileId }) {
+  const [view, send] = useRuntime(run, (m) => m.views[id]);
+  const sendToTile = (msg: TileMsg) => send({ type: "tile", id, msg });
+
+  return (
+    <button type="button" onClick={() => sendToTile({ type: "increment" })}>
+      {id}: {view.n}
+    </button>
+  );
+}
+
+function Desk({ run }: { run: DeskRun }) {
+  return (
+    <div>
+      {(["inbox", "notes", "timer"] as const).map((id) => (
+        <Tile key={id} run={run} id={id} />
+      ))}
+    </div>
+  );
+}
+// #endregion select
+
+const desk = defineMachine({
+  types: { model: {} as DeskModel, msg: {} as DeskMsg },
+  init: () => [
+    { views: { inbox: { n: 0 }, notes: { n: 0 }, timer: { n: 0 } } },
+    [],
+  ],
+  update: {
+    tile: (s, m) => [
+      { views: { ...s.views, [m.id]: { n: s.views[m.id].n + 1 } } },
+      [],
+    ],
+  },
+});
+
 /** A machine that can reach each way a run ends, for `finish` to meet. */
 type Watch = Sub<"watch", { readonly on: true }>;
 interface EndingState {
@@ -306,6 +357,24 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
     await click("Receive chunk");
     expect(container.querySelector("p")?.textContent).toBe("1/1");
     expect((await finished)?.phase).toBe("done");
+  });
+
+  it("each tile reads its part and binds messages to its id", async () => {
+    const deskRun = await run(desk, { ctx: undefined }).ready;
+    try {
+      await render(<Desk run={deskRun} />);
+      await click("notes: 0");
+      await deskRun.idle();
+      await click("notes: 1");
+      await deskRun.idle();
+      await click("inbox: 0");
+      await deskRun.idle();
+      expect(
+        [...container.querySelectorAll("button")].map((b) => b.textContent),
+      ).toEqual(["inbox: 1", "notes: 2", "timer: 0"]);
+    } finally {
+      await deskRun.stop();
+    }
   });
 });
 

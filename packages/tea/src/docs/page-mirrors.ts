@@ -378,6 +378,7 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
         "subscribe",
         "store",
         "use-runtime",
+        "select",
       ),
     ],
     only: true,

@@ -79,6 +79,7 @@ under `phase: "discard"`. `useRuntime(run, { onError })` renders a booted run fr
 either engine, or a hand-built handle with a Promise-returning `dispatch`, with
 the same `[state, send]` contract. Its optional sink hears discards and hand-built
 dispatch failures; a run keeps its own step-error sink.
+`useRuntime(run, (model) => model.views[id])` reads one part and re-renders on runtime updates only when that selected value changes (`Object.is`).
 
 `useBackgroundRuntime` from `@demlik/tea/extension` keeps `{ state, dispatch }`,
 with a void-returning `dispatch`. Its optional `onError` hears transport failures

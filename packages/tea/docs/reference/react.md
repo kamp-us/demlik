@@ -54,6 +54,11 @@ function useRuntime<S, M extends { type: string }>(
   runtime: ViewHandle<S, M>,
   opts?: UseRuntimeOpts,
 ): [S, (msg: M) => void]
+function useRuntime<S, M extends { type: string }, V>(
+  runtime: ViewHandle<S, M>,
+  select: (state: S) => V,
+  opts?: UseRuntimeOpts,
+): [V, (msg: M) => void]
 ```
 
 <a id="UseRuntimeOpts"></a>

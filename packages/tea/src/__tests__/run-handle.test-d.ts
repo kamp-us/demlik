@@ -8,6 +8,7 @@
 // takes the engine's `run` as an option, so an engine that is not the Promise
 // one plugs in the same way.
 
+import { expectTypeOf } from "vitest";
 import type { AgentEvent } from "../agent/index";
 import {
   bootResume,
@@ -24,6 +25,7 @@ import {
   type EngineRun,
   type Machine,
   type NoCtx,
+  type OnError,
   type RunHandle,
   type RunOptions,
   type Runtime,
@@ -64,6 +66,20 @@ export function Viewer(): null {
   const n: number = state.n;
   void n;
   send({ type: "inc" });
+  return null;
+}
+
+export function SelectingViewer(): null {
+  const onError: OnError = () => {};
+  const selected = useRuntime(fake, (s) => s.n);
+  expectTypeOf(selected).toEqualTypeOf<[number, (msg: Msg) => void]>();
+  const whole = useRuntime(fake, { onError });
+  expectTypeOf(whole).toEqualTypeOf<[State, (msg: Msg) => void]>();
+  const withSink = useRuntime(fake, (s) => s.n, { onError });
+  expectTypeOf(withSink).toEqualTypeOf<[number, (msg: Msg) => void]>();
+  expectTypeOf(selected[1]({ type: "inc" })).toEqualTypeOf<void>();
+  // @ts-expect-error — send accepts only the run's Msg
+  selected[1]({ type: "unknown" });
   return null;
 }
 
