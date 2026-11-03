@@ -411,8 +411,10 @@ createAgentHost({ run, buildMachine, store, ctx, toSseFrame });
 - `AgentHost.runtime()` resolves to a `BootedRunHandle`, so it has no
   `result()` / `done()` / `idle()`. Read the terminal State from
   `host.result()`.
-- `useRuntime` takes any `BootedRunHandle`, and `bootResume` / `autoBoot` take
-  any `RunHandle`.
+- `useRuntime` takes a booted run from either engine or a hand-built handle with
+  `subscribe`, `getState`, and Promise-returning `dispatch`. It returns
+  `[state, send]`, with `(msg) => void`. `bootResume` / `autoBoot` take any
+  `RunHandle`.
 
 ## 11. Replace `assertWrapperFaithful` with `expectReplayDeterministic`
 
@@ -567,8 +569,11 @@ yield* runtime.dispatch(msg);
 - `dispatch` fails with `Stopped`, `StoreFailed` or a hand-written cell's own
   error. Sort them with `Effect.catchTags`. See
   [Catch a run's failures by tag](./run-on-the-effect-engine.md#5-catch-a-runs-failures-by-tag).
-- The handle is not a `BootingRuntime` or a `RunHandle`. Hosts typed on those,
-  like `useRuntime` from `@demlik/tea/react`, no longer take it.
+- The handle is not a `BootingRuntime` or a `RunHandle`. Hosts typed on those
+  need an adapter. `useRuntime` from `@demlik/tea/react` accepts the booted run
+  directly and returns a void sender. If you awaited a hook's `dispatch`,
+  remove the await and read state; host code that must wait uses the owned
+  handle's `dispatch`, `idle`, or `done` with the engine's execution model.
 
 ## 16. Read an agent run's output off `RunDone.status`
 

@@ -70,6 +70,28 @@ Coming from 0.15?
 [The migration guide](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/migrate-from-0-15.md)
 shows every removed or reshaped API, before and after.
 
+## React
+
+`useMachine` from `@demlik/tea/react` returns `[state, send]`; `send(msg)` returns
+`undefined` immediately, and the run's `onError` hears step failures once. A Msg
+held at unmount or sent after stop reaches the sink as `DispatchDiscardedError`
+under `phase: "discard"`. `useRuntime(run, { onError })` renders a booted run from
+either engine, or a hand-built handle with a Promise-returning `dispatch`, with
+the same `[state, send]` contract. Its optional sink hears discards and hand-built
+dispatch failures; a run keeps its own step-error sink.
+
+`useBackgroundRuntime` from `@demlik/tea/extension` keeps `{ state, dispatch }`,
+with a void-returning `dispatch`. Its optional `onError` hears transport failures
+under `phase: "follow-up"`; background step failures go to the background run.
+The context Provider and `useDispatch` follow the same contract.
+
+Read the state for the outcome. Code that previously awaited a hook's `dispatch`
+should remove the await; host code that needs to wait should own the run and use
+its engine's `dispatch`, `idle`, or `done`.
+
+[Drive a machine from React](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/drive-from-react.md)
+shows click handlers, lifecycle behavior, and error sinks.
+
 ## Durability
 
 With `fileStore` or `doStore`, state is saved before commands run. Restarting loads it.

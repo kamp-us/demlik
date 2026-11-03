@@ -135,12 +135,12 @@ const machine = defineMachine({
 
 // in a React component
 function Counter() {
-  const [count, dispatch] = useMachine(machine, { run, ctx: {} });
+  const [count, send] = useMachine(machine, { run, ctx: {} });
   return (
     <>
-      <button onClick={() => dispatch("dec")}>-</button>
+      <button onClick={() => send("dec")}>-</button>
       <span>{count}</span>
-      <button onClick={() => dispatch("inc")}>+</button>
+      <button onClick={() => send("inc")}>+</button>
     </>
   );
 }
@@ -821,12 +821,12 @@ four hosts.
 ### 3.1 React (`@demlik/tea/react`)
 
 Direct analogue to `Browser.element`. The three rules
-(`packages/tea-react/README.md`):
+(`packages/tea/README.md`):
 
 1. The runtime is source of truth, not React state.
    `useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState)`.
 2. The runtime is memoized per mount, not per render. Deps are *identity* —
-   `[machine, opts.ctx, opts.store]`. A new `ctx` reference rebuilds the
+   `[machine, opts.run, opts.ctx, opts.store]`. A new `ctx` reference rebuilds the
    runtime. **Memoize `ctx` with `useMemo` at the call site.**
 3. Concurrent React is the design target — that's why
    `useSyncExternalStore`, not the older `useState`-+-`useEffect` pattern.
@@ -837,14 +837,20 @@ import { useMachine } from "@demlik/tea/react";
 
 function CounterPage() {
   const ctx = useMemo(() => ({ random: cryptoRandom }), []);
-  const [state, dispatch] = useMachine(counterMachine, { run, ctx });
-  return <button onClick={() => dispatch({ type: "inc" })}>{state.count}</button>;
+  const [state, send] = useMachine(counterMachine, { run, ctx });
+  return <button onClick={() => send({ type: "inc" })}>{state.count}</button>;
 }
 ```
 
 `useRuntime` is the escape hatch when something *else* owns the runtime
 (parent component, test harness, singleton). The component does *not*
 call `runtime.stop()` on unmount in that case.
+It accepts a booted run from either engine, or a hand-built handle with a
+Promise-returning `dispatch`. Both hooks return `[state, send]`, and `send(msg)`
+returns `undefined` immediately. The run reports its own step failures once.
+`useMachine` reports held Msgs at unmount and later sends as
+`DispatchDiscardedError` under `phase: "discard"`; `useRuntime` takes an optional
+`{ onError }` for sends to a stopped run and hand-built dispatch failures.
 
 ### 3.2 Chrome extension (`@demlik/tea/extension`)
 

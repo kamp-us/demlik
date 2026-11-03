@@ -57,7 +57,7 @@ guides use are each defined in the [glossary](../glossary.md).
   keeps writing into. Any OpenTelemetry backend reads the same spans.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a [runtime](../glossary.md#runtime) for a component's lifetime and get a
-  `[state, dispatch]` pair.
+  `[state, send]` pair, with a returnless sender for click handlers.
 
 ## Give an agent a model
 

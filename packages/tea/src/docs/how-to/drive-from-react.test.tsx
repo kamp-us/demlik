@@ -34,23 +34,17 @@ import { run } from "@demlik/tea/promise";
 import { useMachine } from "@demlik/tea/react";
 
 function Downloader() {
-  const [state, dispatch] = useMachine(downloader, { run, ctx: undefined });
+  const [state, send] = useMachine(downloader, { run, ctx: undefined });
 
   return (
     <div>
       <p>
         {state.phase}: {state.received}/{state.total}
       </p>
-      <button
-        type="button"
-        onClick={() => dispatch({ type: "start", total: 3 })}
-      >
+      <button type="button" onClick={() => send({ type: "start", total: 3 })}>
         Start
       </button>
-      <button
-        type="button"
-        onClick={() => dispatch({ type: "chunk", size: 1 })}
-      >
+      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -64,7 +58,7 @@ function Fetcher() {
     () => ({ http: (url: string) => fetch(url).then((r) => r.text()) }),
     [],
   );
-  const [state, dispatch] = useMachine(resilientFetch, {
+  const [state, send] = useMachine(resilientFetch, {
     run,
     ctx,
     interpret: resilientFetchInterpret,
@@ -74,7 +68,7 @@ function Fetcher() {
   return (
     <button
       type="button"
-      onClick={() => dispatch({ type: "fetch", url: "/a", at: 0 })}
+      onClick={() => send({ type: "fetch", url: "/a", at: 0 })}
     >
       {state.phase}: {state.body}
     </button>
@@ -109,7 +103,7 @@ const jobWatcher = defineMachine({
 function JobWatcher() {
   const ctx = undefined;
   // #region subscribe
-  const [state, dispatch] = useMachine(jobWatcher, {
+  const [state, send] = useMachine(jobWatcher, {
     run,
     ctx,
     subscribe: {
@@ -125,10 +119,7 @@ function JobWatcher() {
   // #endregion subscribe
 
   return (
-    <button
-      type="button"
-      onClick={() => dispatch({ type: "watch", jobId: "j1" })}
-    >
+    <button type="button" onClick={() => send({ type: "watch", jobId: "j1" })}>
       {state.polls}
     </button>
   );
@@ -142,7 +133,7 @@ const store = memoryStore<State>({
 
 function SavedDownloader() {
   // #region store
-  const [state, dispatch] = useMachine(downloader, {
+  const [state, send] = useMachine(downloader, {
     run,
     ctx: undefined,
     store,
@@ -150,38 +141,33 @@ function SavedDownloader() {
   // #endregion store
 
   return (
-    <button type="button" onClick={() => dispatch({ type: "chunk", size: 1 })}>
+    <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
       {state.phase}
     </button>
   );
 }
 
 // #region use-runtime
+import type { OnError } from "@demlik/tea";
 import { useRuntime } from "@demlik/tea/react";
 
+const onError: OnError = (error, context) =>
+  console.error("run error", context.phase, error);
 const runtime = await run(downloader, {
   ctx: undefined,
   terminal: (s) => s.phase === "done",
-  onError: (error) => console.error("run error", error),
+  onError,
 }).ready;
 
-// A dispatch nobody awaits needs a catch of its own.
-function reportFailure(sent: Promise<unknown>) {
-  sent.catch((error: unknown) => console.error("dispatch failed", error));
-}
-
 function Progress() {
-  const [state, dispatch] = useRuntime(runtime);
+  const [state, send] = useRuntime(runtime, { onError });
 
   return (
     <div>
       <p>
         {state.received}/{state.total}
       </p>
-      <button
-        type="button"
-        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
-      >
+      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -323,7 +309,7 @@ describe("docs/how-to/drive-from-react.md — it renders", () => {
   });
 });
 
-describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a host with an `onError`", () => {
+describe("docs/how-to/drive-from-react.md — `finish` and `send` in a host with an `onError`", () => {
   const unhandled: unknown[] = [];
   const hearUnhandled = (reason: unknown) => {
     unhandled.push(reason);
@@ -340,8 +326,8 @@ describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a 
   });
 
   /**
-   * Does what the page tells a host to do: starts `finish`, dispatches through
-   * `reportFailure`, and awaits neither, until Node has had its chance to call a
+   * Does what the page tells a host to do: starts `finish`, sends through the
+   * hook, and awaits neither, until Node has had its chance to call a
    * rejection unhandled.
    *
    * `stop` counts `finish`'s call alone. A Sub failure and a reducer throw also
@@ -350,11 +336,11 @@ describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a 
    */
   async function endRun(msg: EndingMsg) {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    const heard: unknown[] = [];
+    const onError = vi.fn<OnError>();
     const owned = await run(ending, {
       ctx: undefined,
       terminal: (s) => s.reached,
-      onError: (error) => heard.push(error),
+      onError,
       subscribe: {
         watch: () => {
           throw subFailed;
@@ -364,40 +350,59 @@ describe("docs/how-to/drive-from-react.md — `finish` and `reportFailure` in a 
     const stop = vi.fn(() => owned.stop());
 
     const unawaited = finish({ done: () => owned.done(), stop });
-    reportFailure(owned.dispatch(msg));
+    function Ending() {
+      const [state, send] = useRuntime(owned, { onError });
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            expect(send(msg)).toBeUndefined();
+          }}
+        >
+          {String(state.reached)}
+        </button>
+      );
+    }
+    await render(<Ending />);
+    await click();
     await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
     await new Promise((settled) => setTimeout(settled, 0));
 
     expect(unhandled).toEqual([]);
-    return { answer: await unawaited, logged, heard };
+    return { answer: await unawaited, logged, onError };
   }
 
   it("a terminal State: `stop()` ran and `finished` holds the State", async () => {
-    const { answer, logged, heard } = await endRun({ type: "reach" });
+    const { answer, logged, onError } = await endRun({ type: "reach" });
 
     expect(answer?.reached).toBe(true);
     expect(logged).not.toHaveBeenCalled();
-    expect(heard).toEqual([]);
+    expect(onError).not.toHaveBeenCalled();
+    expect(container.textContent).toBe("true");
   });
 
-  it("a Sub failure: `stop()` ran and the host hears a `SubFailedError` from `done()` and the Sub's throw from `dispatch`", async () => {
-    const { answer, logged, heard } = await endRun({ type: "watch" });
+  it("a Sub failure: `stop()` ran, `done()` reports `SubFailedError`, and the sink hears the Sub's throw once", async () => {
+    const { answer, logged, onError } = await endRun({ type: "watch" });
 
     expect(answer).toBeUndefined();
     const [, error] =
       logged.mock.calls.find(([label]) => label === "run failed") ?? [];
     expect(error).toBeInstanceOf(SubFailedError);
     expect((error as SubFailedError).cause).toBe(subFailed);
-    expect(logged).toHaveBeenCalledWith("dispatch failed", subFailed);
-    expect(heard).toContain(subFailed);
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(subFailed, {
+      phase: "sub",
+    });
   });
 
-  it("a reducer throw: `stop()` ran and the host hears what was thrown, from `done()` and from `dispatch`", async () => {
-    const { answer, logged, heard } = await endRun({ type: "explode" });
+  it("a reducer throw: `stop()` ran, `done()` reports the failure, and the sink hears it once", async () => {
+    const { answer, logged, onError } = await endRun({ type: "explode" });
 
     expect(answer).toBeUndefined();
     expect(logged).toHaveBeenCalledWith("run failed", reducerThrew);
-    expect(logged).toHaveBeenCalledWith("dispatch failed", reducerThrew);
-    expect(heard).toContain(reducerThrew);
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(reducerThrew, {
+      phase: "reduce",
+    });
   });
 });

@@ -167,9 +167,11 @@ What changes from the Promise engine:
   names. Where the Promise engine returns a Promise (`ready`, `dispatch`,
   `dispatchOnce`, `idle`, `done`, `stop`), this one returns an Effect, so you
   `yield*` it. `getState`, `result` and the listeners (`subscribe`, `observe`,
-  `onBoot`, `on`) are the same functions on both engines. Hosts typed on the
-  Promise handle, like `useRuntime` from `@demlik/tea/react`, do not take this
-  one.
+  `onBoot`, `on`) are the same functions on both engines. `useRuntime` from
+  `@demlik/tea/react` accepts the booted run from either engine and returns
+  `[state, send]`; `send(msg)` returns `undefined` and runs no Effect in the
+  component. The run's sink hears step failures; pass `{ onError }` to the hook
+  for sends to a stopped run.
 
 The other options (`store`, `onError`, `clock`, `events`, `supervision`,
 `terminal`, `telemetry`, `disposeTimeoutMs`) mean what they mean on the Promise

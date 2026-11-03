@@ -2,8 +2,9 @@
 
 To use a `@demlik/tea` machine as a component's state, reach for `useMachine`
 from `@demlik/tea/react`. It builds and owns a runtime for the lifetime of the
-mount and hands you back a `[state, dispatch]` pair shaped exactly like
-`useReducer`. The hook imports no engine: you hand it the engine's `run`.
+mount and hands you back `[state, send]`. Like `useReducer`'s dispatch,
+`send(msg)` returns `undefined` immediately. The hook imports no engine: you
+hand it the engine's `run`.
 
 The machine driven here is the download from
 [Build and replay your first machine](../tutorial/build-your-first-machine.md):
@@ -48,23 +49,17 @@ import { run } from "@demlik/tea/promise";
 import { useMachine } from "@demlik/tea/react";
 
 function Downloader() {
-  const [state, dispatch] = useMachine(downloader, { run, ctx: undefined });
+  const [state, send] = useMachine(downloader, { run, ctx: undefined });
 
   return (
     <div>
       <p>
         {state.phase}: {state.received}/{state.total}
       </p>
-      <button
-        type="button"
-        onClick={() => dispatch({ type: "start", total: 3 })}
-      >
+      <button type="button" onClick={() => send({ type: "start", total: 3 })}>
         Start
       </button>
-      <button
-        type="button"
-        onClick={() => dispatch({ type: "chunk", size: 1 })}
-      >
+      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -72,7 +67,9 @@ function Downloader() {
 }
 ```
 
-Each `dispatch` folds a Msg through `update` and re-renders with the next state.
+Each `send` queues a Msg to fold through `update` and re-render with the next state.
+Read the rendered state for the outcome. Failures go once to the run's `onError`,
+under the phase that failed, such as `"reduce"`, `"boot"`, or `"sub"`.
 The page hears right after the save and before the first Cmd's handler starts, so
 a machine that moves to `loading` and emits a slow read shows `loading` for the
 whole read. It does not wait for the Cmd. A save that fails tells the page
@@ -101,7 +98,7 @@ const ctx = useMemo(
   () => ({ http: (url: string) => fetch(url).then((r) => r.text()) }),
   [],
 );
-const [state, dispatch] = useMachine(resilientFetch, {
+const [state, send] = useMachine(resilientFetch, {
   run,
   ctx,
   interpret: resilientFetchInterpret,
@@ -113,7 +110,7 @@ needs their runners too. Pass them as `subscribe`, again the same map `run`
 takes — the hook requires it exactly when `run` would:
 
 ```tsx
-const [state, dispatch] = useMachine(jobWatcher, {
+const [state, send] = useMachine(jobWatcher, {
   run,
   ctx,
   subscribe: {
@@ -140,7 +137,7 @@ Pass a `store` in the same options object to make the component's machine durabl
 as in "Make a machine durable and crash-recoverable":
 
 ```tsx
-const [state, dispatch] = useMachine(downloader, {
+const [state, send] = useMachine(downloader, {
   run,
   ctx: undefined,
   store,
@@ -177,15 +174,15 @@ is one run from mount to unmount:
 - **A Msg dispatched while hidden folds at once**, and any Cmd it emits runs. So a
   parent can keep talking to a hidden screen, and that screen does work off
   screen. If it should not, have the parent stop sending.
-- **`dispatch` stays the same function**, so a handler a child kept from before
+- **`send` stays the same function**, so a handler a child kept from before
   the hide still works after the show.
 
 A tree first mounted hidden runs no effects, so it has no run until its first
-show. A Msg dispatched before then waits, and its promise settles once it is
-folded.
+show. A Msg sent before then waits and folds when the run starts. `send` itself
+returns immediately, even while the Msg is waiting.
 
-After a real unmount, a Msg still waiting and any later `dispatch` reject with
-`@demlik/tea: runtime stopped`. That holds on every React from 18 on, a tree
+After a real unmount, a Msg still waiting and any later `send` reach `onError`
+as a `DispatchDiscardedError` under `phase: "discard"`. That holds on every React from 18 on, a tree
 deleted while a Suspense fallback hides it included.
 
 ## 5. Render a run the component does not own
@@ -194,34 +191,33 @@ deleted while a Suspense fallback hides it included.
 handle. When you need the handle itself (to call `done()`, attach an `observe`
 listener, or read `result()`), build the run yourself with `run(...)`, await
 its `ready`, and pass the booted handle to `useRuntime` from the same module.
-It returns the same `[state, dispatch]` pair:
+It accepts the run from either engine, or a hand-built handle with `subscribe`,
+`getState`, and a Promise-returning `dispatch`. It returns the same `[state, send]`
+pair. The optional `{ onError }` hears Msgs that never reached a stopped run and
+failures from a hand-built handle's `dispatch`. The run reports its own step
+failures to its own sink. Pass the same sink to both to hear all failures together:
 
 ```tsx
+import type { OnError } from "@demlik/tea";
 import { useRuntime } from "@demlik/tea/react";
 
+const onError: OnError = (error, context) =>
+  console.error("run error", context.phase, error);
 const runtime = await run(downloader, {
   ctx: undefined,
   terminal: (s) => s.phase === "done",
-  onError: (error) => console.error("run error", error),
+  onError,
 }).ready;
 
-// A dispatch nobody awaits needs a catch of its own.
-function reportFailure(sent: Promise<unknown>) {
-  sent.catch((error: unknown) => console.error("dispatch failed", error));
-}
-
 function Progress() {
-  const [state, dispatch] = useRuntime(runtime);
+  const [state, send] = useRuntime(runtime, { onError });
 
   return (
     <div>
       <p>
         {state.received}/{state.total}
       </p>
-      <button
-        type="button"
-        onClick={() => reportFailure(dispatch({ type: "chunk", size: 1 }))}
-      >
+      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -256,17 +252,32 @@ default `stop` strategy, its Subs close and its final save runs with no call fro
 The `finally` is still what stops a run that reached its terminal State, and on a run
 that already stopped itself, its `stop()` does nothing more.
 
-`dispatch` rejects too: with what the reducer threw, and with what a Sub threw when
-that Msg's State started the Sub and it threw at once. A `dispatch` nobody awaits, like
-the `onClick={() => dispatch(...)}` in step 1, needs a catch of its own, for the same
-reason `done()` does. That is the job of `reportFailure` above. Replace its
-`console.error` the same way.
+`send` has no Promise to catch. A reducer throw or Sub failure reaches the run's
+`onError` once. A send to a stopped run reaches the hook's sink as a
+`DispatchDiscardedError` under `phase: "discard"`; a hand-built handle's dispatch
+failure reaches it under `phase: "follow-up"`. Both hooks read the latest sink
+without replacing `send`.
 
-Together, the two catches and the `onError` keep a Node process alive through a
-failed run. With no `onError`, the default sink rethrows a Sub failure or a reducer
-throw on a later tick, and that ends a Node process whatever the catches do. In a
-browser, that rethrow only logs an error, and nothing ends.
+The `done()` catch and `onError` keep a Node process alive through a failed run.
+With no `onError`, the default sink rethrows a Sub failure or reducer throw on a
+later tick. Discard notices warn by default.
+
+If you previously awaited the hook's `dispatch`, remove that await and render the
+outcome from state. If host code must wait for a step, own the handle and use its
+engine's `dispatch`, `idle`, or `done`. On the Effect engine, execute those Effects.
 
 A listener hears before the Cmds run, so hearing one does not mean they are done.
 When your code needs that, use `observe` or `on`, which hear after a transition's
 Cmds, or `done()`.
+
+## 6. Send across an extension bridge
+
+`useBackgroundRuntime` from `@demlik/tea/extension` returns `{ state, dispatch }`.
+Its `dispatch(msg)` also returns `undefined` immediately. Supply `onError` beside
+`channel` and `parseState` to hear transport rejections under `phase: "follow-up"`.
+The background run's own `onError` hears its step failures. The bridge's low-level
+`bridgeClient.dispatch` still returns a Promise for hosts that need to wait.
+
+`createBackgroundRuntimeContext` keeps the same Provider and consumer names:
+`useDispatch()` returns the same returnless sender, and `useRuntime()` returns
+`{ state, dispatch }`. Set `opts.onError` on the Provider for transport failures.
