@@ -126,7 +126,8 @@ What each piece does:
 - **`onError` hears what has no caller to reject at.** That is a failing Sub
   (`"sub"`), a failed final save (`"stop-save"`), or a Msg sent with `tell`, by a
   Sub, or by a Cmd that failed (`"follow-up"`). A reducer's thrown object reaches
-  `onError` once, under `"reduce"`, on both engines. Primitive reducer throws
+  `onError` once, under `"reduce"`, and a Sub runner that throws as it starts
+  once, under `"sub"`, on both engines. Primitive reducer throws
   still reach both `"reduce"` and `"follow-up"` for Msgs with no caller.
   With no `onError` the default sink warns about a discard and rethrows the rest,
   which ends the process along with every other

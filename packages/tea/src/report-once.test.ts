@@ -13,6 +13,7 @@ import {
   type Interpret,
   type Reducer,
   type RuntimeErrorPhase,
+  type Sub,
 } from "./index";
 import { run, tell } from "./promise";
 
@@ -167,5 +168,43 @@ describe("known limit: primitive reducer throws are reported twice", () => {
       { error: "x", phase: "follow-up" },
     ]);
     await runtime.stop();
+  });
+});
+
+/** A machine whose one Sub's runner throws as it starts. */
+type Watch = Sub<"watch", { readonly on: true }>;
+const watcher = defineMachine({
+  types: {
+    model: {} as { readonly watching: boolean },
+    msg: {} as { readonly type: "watch" },
+    sub: {} as Watch,
+    ctx: undefined,
+  },
+  init: () => [{ watching: false }, []],
+  update: { watch: () => [{ watching: true }, []] },
+  subs: [
+    { type: "watch", deps: (s) => (s.watching ? { on: true as const } : null) },
+  ],
+});
+
+describe("a Sub that throws as it starts reaches the sink once", () => {
+  // The step that started it rejects with the same throw (`reconcileSubs`), as
+  // a reducer throw does, so a Msg with no caller must not report it again.
+  it("through `tell`", async () => {
+    const thrown = new Error("sub failed");
+    const reports: { error: unknown; phase: RuntimeErrorPhase }[] = [];
+    const runtime = await run(watcher, {
+      ctx: undefined,
+      subscribe: {
+        watch: () => {
+          throw thrown;
+        },
+      },
+      onError: (error, { phase }) => reports.push({ error, phase }),
+    }).ready;
+
+    expect(tell(watcher, runtime, { type: "watch" })).toBe("queued");
+    await runtime.done().catch(() => {});
+    expect(reports).toEqual([{ error: thrown, phase: "sub" }]);
   });
 });

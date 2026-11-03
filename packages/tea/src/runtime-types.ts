@@ -135,7 +135,8 @@ export function __resetPortRegistry(): void {
  *
  * - `"follow-up"` — a Msg sent with `tell`, by a Sub, or by a Cmd rejected with
  *   no caller to receive the rejection. A reducer's thrown object is already
- *   reported under `"reduce"` and is not reported again here. Primitive throws
+ *   reported under `"reduce"`, and a Sub runner's throw as it starts under
+ *   `"sub"`; neither is reported again here. Primitive throws
  *   cannot be tracked by identity and still reach both phases.
  *   A rejection caused by `stop()`'s own teardown is NOT this phase — see
  *   `"discard"`.
