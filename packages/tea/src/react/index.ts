@@ -24,6 +24,7 @@
 
 import * as React from "react";
 import {
+  useCallback,
   useEffect,
   useInsertionEffect,
   useMemo,
@@ -260,6 +261,8 @@ function latestTable(current: () => object | undefined): object {
   );
 }
 
+const identity = <T>(state: T): T => state;
+
 /**
  * Consume a booted run from either engine's `run`, or a hand-built
  * {@link ViewHandle} with a Promise-returning `dispatch`.
@@ -271,7 +274,18 @@ function latestTable(current: () => object | undefined): object {
  * For component tests, build a run with the engine's `run` and a pre-seeded
  * store, await `ready`, then pass it here to render in any phase.
  *
- * Returns `[state, send]`, where `send(msg)` returns `undefined` immediately.
+ * Pass a selector as the second argument to read only part of the model:
+ * `useRuntime(runtime, (state) => state.views[id])`. A runtime update redraws
+ * this reader only when the selected value changes according to `Object.is`.
+ * The selector should pick a part, not build a new object or array. A fresh
+ * object on every read makes `useSyncExternalStore` see a change every time;
+ * React warns that the snapshot should be cached and can loop. Pick stable
+ * parts and derive new objects or arrays from them during render instead.
+ * With a selector, pass options as the third argument.
+ *
+ * Returns `[state, send]` (or `[selected, send]` with a selector), where
+ * `send(msg)` returns `undefined` immediately. It sends the whole run's Msg
+ * and stays the same function for a given runtime, including selector changes.
  * Step failures go once to the run's own `onError`. `opts.onError` hears a
  * `DispatchDiscardedError` under `phase: "discard"` for a stopped run, or a
  * hand-built handle's dispatch failure under `phase: "follow-up"`. It defaults
@@ -279,18 +293,35 @@ function latestTable(current: () => object | undefined): object {
  */
 export function useRuntime<S, M extends { type: string }>(
   runtime: ViewHandle<S, M>,
+  opts?: UseRuntimeOpts,
+): [S, (msg: M) => void];
+export function useRuntime<S, M extends { type: string }, V>(
+  runtime: ViewHandle<S, M>,
+  select: (state: S) => V,
+  opts?: UseRuntimeOpts,
+): [V, (msg: M) => void];
+export function useRuntime<S, M extends { type: string }, V>(
+  runtime: ViewHandle<S, M>,
+  selectOrOpts: ((state: S) => V) | UseRuntimeOpts = {},
   opts: UseRuntimeOpts = {},
-): [S, (msg: M) => void] {
+): [S | V, (msg: M) => void] {
+  const select: (state: S) => S | V =
+    typeof selectOrOpts === "function" ? selectOrOpts : identity;
+  const options = typeof selectOrOpts === "function" ? opts : selectOrOpts;
+  const getSelected = useCallback(
+    () => select(runtime.getState()),
+    [runtime, select],
+  );
   const state = useSyncExternalStore(
     runtime.subscribe,
-    runtime.getState,
-    runtime.getState,
+    getSelected,
+    getSelected,
   );
   // The caller owns the run, so it owns the sink too: pass the one the run has,
   // and a Msg that never reached the run is heard where the run's failures are.
   // Read per call, so a sink passed inline gives no new `send`.
-  const onErrorRef = useRef<OnError | undefined>(opts.onError);
-  onErrorRef.current = opts.onError;
+  const onErrorRef = useRef<OnError | undefined>(options.onError);
+  onErrorRef.current = options.onError;
   const send = useMemo(
     () =>
       senderOf(runtime, (error, context) =>

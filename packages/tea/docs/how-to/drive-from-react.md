@@ -270,7 +270,61 @@ A listener hears before the Cmds run, so hearing one does not mean they are done
 When your code needs that, use `observe` or `on`, which hear after a transition's
 Cmds, or `done()`.
 
-## 6. Send across an extension bridge
+## 6. Read only part of the model
+
+For a desk of tiles, let each tile read its own part with
+`useRuntime(run, (m) => m.views[id])`. When another tile changes, this reader
+keeps the same selected object and does not re-render because of that update.
+React compares the selected value with `Object.is`; there is no equality option.
+To supply an error sink too, use `useRuntime(run, select, { onError })`.
+
+```tsx
+import type { ViewHandle } from "@demlik/tea/react";
+
+type TileId = "inbox" | "notes" | "timer";
+type TileMsg = { readonly type: "increment" };
+type DeskModel = {
+  readonly views: Readonly<Record<TileId, { readonly n: number }>>;
+};
+type DeskMsg = {
+  readonly type: "tile";
+  readonly id: TileId;
+  readonly msg: TileMsg;
+};
+type DeskRun = ViewHandle<DeskModel, DeskMsg>;
+
+function Tile({ run, id }: { run: DeskRun; id: TileId }) {
+  const [view, send] = useRuntime(run, (m) => m.views[id]);
+  const sendToTile = (msg: TileMsg) => send({ type: "tile", id, msg });
+
+  return (
+    <button type="button" onClick={() => sendToTile({ type: "increment" })}>
+      {id}: {view.n}
+    </button>
+  );
+}
+
+function Desk({ run }: { run: DeskRun }) {
+  return (
+    <div>
+      {(["inbox", "notes", "timer"] as const).map((id) => (
+        <Tile key={id} run={run} id={id} />
+      ))}
+    </div>
+  );
+}
+```
+
+Keep unchanged tile objects when updating the model. The selector should **pick**
+a part, not **build** a new object or array: a fresh value on every snapshot read
+makes React warn that the snapshot should be cached and can cause a render loop.
+Pick stable parts, then derive objects or arrays from them during render.
+
+The returned `send` still accepts the whole run's Msg and stays stable when the
+selector changes. `sendToTile` binds that sender to the tile's id in the caller,
+like Elm's `Html.map`.
+
+## 7. Send across an extension bridge
 
 `useBackgroundRuntime` from `@demlik/tea/extension` returns `{ state, dispatch }`.
 Its `dispatch(msg)` also returns `undefined` immediately. Supply `onError` beside
