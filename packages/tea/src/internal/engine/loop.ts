@@ -341,9 +341,24 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   const { idleCap, disposeTimeoutMs } = config;
   const onError: OnError = config.onError ?? defaultOnError;
 
+  // Two failures are reported where they happen and then reject the step that
+  // caused them: a throw an update middleware reports under "reduce" and
+  // rethrows, and a Sub runner that throws as it starts ("sub", in
+  // `reconcileSubs`). A Msg with no caller must not report that same error
+  // again on rejection. Other phases stay visible, including each refusal after
+  // a failed boot.
+  const reportedThenRejected = new WeakSet<object>();
+
   // A throwing sink routes THAT throw through `defaultOnError`, with the context
   // the sink was handling, so it cannot re-create a silent failure.
   function report(error: unknown, phase: RuntimeErrorPhase): void {
+    if (
+      (phase === "reduce" || phase === "sub") &&
+      typeof error === "object" &&
+      error !== null
+    ) {
+      reportedThenRejected.add(error);
+    }
     const context: RuntimeErrorContext = { phase };
     try {
       onError(error, context);
@@ -681,8 +696,16 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   }
 
   // A `DispatchDiscardedError` means the teardown refused the Msg (`"discard"`,
-  // warn-only); anything else is a genuine failure of the follow-up itself.
+  // warn-only); anything else is a genuine failure of the follow-up itself,
+  // unless the sink already heard it where it happened ("reduce" or "sub").
   function reportUndelivered(error: unknown): void {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      reportedThenRejected.has(error)
+    ) {
+      return;
+    }
     report(
       error,
       error instanceof DispatchDiscardedError ? "discard" : "follow-up",
