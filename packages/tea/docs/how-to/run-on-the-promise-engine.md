@@ -124,9 +124,12 @@ What each piece does:
   refuses it. Use a fenced store if you start a new run on the same store
   after a `stop()` that gave up.
 - **`onError` hears what has no caller to reject at.** That is a failing Sub
-  (`"sub"`), a failed final save (`"stop-save"`), a Msg a Sub or a Cmd sent that
-  failed (`"follow-up"`). With no `onError` the default sink warns about a
-  discard and rethrows the rest, which ends the process along with every other
+  (`"sub"`), a failed final save (`"stop-save"`), or a Msg sent with `tell`, by a
+  Sub, or by a Cmd that failed (`"follow-up"`). A reducer's thrown object reaches
+  `onError` once, under `"reduce"`, on both engines. Primitive reducer throws
+  still reach both `"reduce"` and `"follow-up"` for Msgs with no caller.
+  With no `onError` the default sink warns about a discard and rethrows the rest,
+  which ends the process along with every other
   run in it. A host running several machines in one process passes a sink. A
   fenced store must be given one, or it does not compile. A fenced store typed
   plain `Store<S>` with no sink compiles, and `run` throws at once.

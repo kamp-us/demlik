@@ -133,8 +133,10 @@ export function __resetPortRegistry(): void {
  * throw-isolated so one bad consumer never strands its siblings, and the
  * isolated throw routes to the `OnError` sink rather than a bare `console.error`.
  *
- * - `"follow-up"` — a follow-up Msg an interpret handler returned rejected when
- *   re-dispatched (the original dispatcher already resolved, so no caller).
+ * - `"follow-up"` — a Msg sent with `tell`, by a Sub, or by a Cmd rejected with
+ *   no caller to receive the rejection. A reducer's thrown object is already
+ *   reported under `"reduce"` and is not reported again here. Primitive throws
+ *   cannot be tracked by identity and still reach both phases.
  *   A rejection caused by `stop()`'s own teardown is NOT this phase — see
  *   `"discard"`.
  * - `"interpret"` — a `Cmd.define`d handler failed outside its declared
