@@ -2,7 +2,12 @@
 import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type OnError, StoreConflictError } from "../index";
+import {
+  DispatchDiscardedError,
+  defineMachine,
+  type OnError,
+  StoreConflictError,
+} from "../index";
 import { memoryStore } from "../mem";
 import { run } from "../promise";
 import { useMachine } from "./index";
@@ -26,13 +31,53 @@ const machine = defineMachine({
 
 describe("useMachine's onError", () => {
   let root: Root;
+  let container: HTMLDivElement;
 
   beforeEach(() => {
-    root = createRoot(document.createElement("div"));
+    container = document.createElement("div");
+    root = createRoot(container);
   });
 
   afterEach(async () => {
     await act(async () => root.unmount());
+  });
+
+  it("a failed step reaches the run's sink once, and a later send reports a discard", async () => {
+    const failure = new Error("reducer threw");
+    const failing = defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
+      init: () => [{ count: 0 }, []],
+      update: {
+        bump: () => {
+          throw failure;
+        },
+      },
+    });
+    const onError = vi.fn<OnError>();
+    let send!: (msg: Msg) => void;
+    function Page() {
+      const [state, sender] = useMachine(failing, {
+        run,
+        ctx: undefined,
+        onError,
+      });
+      send = sender;
+      return <span>{state.count}</span>;
+    }
+    await act(async () => root.render(<Page />));
+    await act(async () => {
+      expect(send({ type: "bump" })).toBeUndefined();
+    });
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure, {
+      phase: "reduce",
+    });
+    expect(container.textContent).toBe("0");
+    expect(send({ type: "bump" })).toBeUndefined();
+    expect(onError).toHaveBeenLastCalledWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
+    );
+    expect(onError).toHaveBeenCalledTimes(2);
   });
 
   it("a lost fence reaches the latest render's sink, and a new sink does not replace the run", async () => {
@@ -40,7 +85,7 @@ describe("useMachine's onError", () => {
     const first = vi.fn<OnError>();
     const latest = vi.fn<OnError>();
     const boots = vi.spyOn(store, "loadFenced");
-    let dispatch!: (msg: Msg) => Promise<void>;
+    let dispatch!: (msg: Msg) => void;
 
     function Page({ onError }: { readonly onError: OnError }) {
       const [, send] = useMachine(machine, {
@@ -56,7 +101,9 @@ describe("useMachine's onError", () => {
     }
 
     await act(async () => root.render(<Page onError={first} />));
-    await act(async () => dispatch({ type: "bump" }));
+    await act(async () => {
+      expect(dispatch({ type: "bump" })).toBeUndefined();
+    });
     await act(async () => root.render(<Page onError={latest} />));
     expect(boots).toHaveBeenCalledTimes(1);
 

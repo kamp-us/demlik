@@ -4,7 +4,14 @@ import { type ReactNode, StrictMode, Suspense, useEffect } from "react";
 import { version } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type Store, type Sub, type Subscribe } from "../index";
+import {
+  DispatchDiscardedError,
+  defineMachine,
+  type OnError,
+  type Store,
+  type Sub,
+  type Subscribe,
+} from "../index";
 import { memoryStore } from "../mem";
 import { run } from "../promise";
 import { useMachine } from "./index";
@@ -48,6 +55,7 @@ const Activity = (React as { Activity?: ActivityType }).Activity;
 
 /** One `useMachine` screen, with a counter on everything it starts and stops. */
 function screen() {
+  const onError = vi.fn<OnError>();
   const store: Store<Count> = memoryStore<Count>(undefined, parseCount);
   const counts = { started: 0, stopped: 0, liveSubs: 0, subCleanups: 0 };
   const counted = ((...args: Parameters<typeof run>) => {
@@ -69,8 +77,10 @@ function screen() {
       };
     },
   } satisfies Subscribe<Inc, Probe, undefined>;
-  const slot: { dispatch: (msg: Inc) => Promise<void> } = {
-    dispatch: () => Promise.reject(new Error("not rendered yet")),
+  const slot: { dispatch: (msg: Inc) => void } = {
+    dispatch: () => {
+      throw new Error("not rendered yet");
+    },
   };
   function Screen({ children }: { children?: ReactNode }) {
     const [state, dispatch] = useMachine(machine, {
@@ -78,6 +88,7 @@ function screen() {
       ctx: undefined,
       store,
       subscribe,
+      onError,
     });
     slot.dispatch = dispatch;
     return (
@@ -87,7 +98,7 @@ function screen() {
       </span>
     );
   }
-  return { store, counts, slot, Screen };
+  return { store, counts, slot, Screen, onError };
 }
 
 /** A child that suspends for as long as `gate.pending` is set. */
@@ -154,7 +165,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
       );
     await rendered(page(0), "n=0");
     await vi.waitFor(() => expect(parts.counts.liveSubs).toBe(1));
-    await parts.slot.dispatch({ type: "inc" });
+    expect(parts.slot.dispatch({ type: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(container.textContent).toContain("n=1"));
 
     suspense.suspend();
@@ -166,7 +177,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     ["rendering it away", () => root.render(null)],
     ["unmounting the root", () => root.unmount()],
   ] as const)("leaves no run behind when a tree hidden by Suspense is deleted by %s", async (_how, remove) => {
-    const { store, counts, slot, gate } = await suspended();
+    const { store, counts, slot, gate, onError } = await suspended();
     expect(counts).toMatchObject({ started: 1, stopped: 0, liveSubs: 1 });
 
     remove();
@@ -178,8 +189,10 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
       liveSubs: 0,
       subCleanups: 1,
     });
-    await expect(slot.dispatch({ type: "inc" })).rejects.toThrow(
-      "@demlik/tea: runtime stopped",
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
     );
     await expect(store.load()).resolves.toEqual({ n: 1 });
     gate.release();
@@ -190,19 +203,19 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
 
     gate.release();
     await rendered(page(2), "n=1");
-    await slot.dispatch({ type: "inc" });
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
 
     await vi.waitFor(() => expect(container.textContent).toContain("n=2"));
     expect(counts).toMatchObject({ started: 1, stopped: 0, liveSubs: 1 });
   });
 
   it("folds every Msg with one run and one Sub, then stops it on an unmount", async () => {
-    const { store, counts, slot, Screen } = screen();
+    const { store, counts, slot, Screen, onError } = screen();
     await rendered(wrap(<Screen />), "n=0");
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
 
-    await slot.dispatch({ type: "inc" });
-    await slot.dispatch({ type: "inc" });
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(container.textContent).toContain("n=2"));
     expect(counts).toMatchObject({ started: 1, stopped: 0, liveSubs: 1 });
 
@@ -211,8 +224,10 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     await vi.waitFor(() => expect(counts.stopped).toBe(1));
     expect(counts).toMatchObject({ started: 1, liveSubs: 0 });
     await expect(store.load()).resolves.toEqual({ n: 2 });
-    await expect(slot.dispatch({ type: "inc" })).rejects.toThrow(
-      "@demlik/tea: runtime stopped",
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
     );
   });
 
@@ -222,7 +237,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     function LastWord() {
       useEffect(
         () => () => {
-          void slot.dispatch({ type: "inc" }).catch(() => {});
+          slot.dispatch({ type: "inc" });
         },
         [],
       );
@@ -240,7 +255,7 @@ describe.each(wrappers)("useMachine %s", (_kind, wrap) => {
     // Strict Mode's extra cleanup sends a Msg of its own on mount.
     await rendered(page(0), "n=");
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
-    await slot.dispatch({ type: "inc" });
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
     suspend();
     await rendered(page(1), "loading");
     const before = parseCount(await store.load())?.n ?? 0;
@@ -260,7 +275,7 @@ describe.runIf(Activity !== undefined)("useMachine under `<Activity>`", () => {
   const Boundary = Activity as ActivityType;
 
   it("keeps one run across a hide and show, and stops it when the hidden tree is deleted", async () => {
-    const { counts, slot, Screen } = screen();
+    const { counts, slot, Screen, onError } = screen();
     const page = (mode: "visible" | "hidden") => (
       <Boundary mode={mode}>
         <Screen />
@@ -273,7 +288,8 @@ describe.runIf(Activity !== undefined)("useMachine under `<Activity>`", () => {
     await vi.waitFor(() => expect(counts.liveSubs).toBe(0));
     root.render(page("visible"));
     await vi.waitFor(() => expect(counts.liveSubs).toBe(1));
-    await slot.dispatch({ type: "inc" });
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    await vi.waitFor(() => expect(container.textContent).toContain("n=1"));
     expect(counts).toMatchObject({ started: 1, stopped: 0 });
 
     root.render(page("hidden"));
@@ -281,8 +297,10 @@ describe.runIf(Activity !== undefined)("useMachine under `<Activity>`", () => {
     root.render(null);
 
     await vi.waitFor(() => expect(counts.stopped).toBe(1));
-    await expect(slot.dispatch({ type: "inc" })).rejects.toThrow(
-      "@demlik/tea: runtime stopped",
+    expect(slot.dispatch({ type: "inc" })).toBeUndefined();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
     );
   });
 });

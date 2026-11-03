@@ -10,7 +10,9 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DispatchDiscardedError,
   defineMachine,
+  type OnError,
   RuntimeDiscardedError,
   type Store,
   type Sub,
@@ -127,7 +129,7 @@ describe("useMachine under Strict Mode", () => {
       const machine = counter(name);
       const probe = subProbe();
       const { counts, counted } = countedRun();
-      const slot: { dispatch?: (msg: Inc) => Promise<void> } = {};
+      const slot: { dispatch?: (msg: Inc) => void } = {};
       function Part() {
         const [state, dispatch] = useMachine(machine, {
           run: counted,
@@ -151,7 +153,8 @@ describe("useMachine under Strict Mode", () => {
     for (const [index, { name, probe, counts, slot }] of parts.entries()) {
       const msgs = index + 2;
       await act(async () => {
-        for (let i = 0; i < msgs; i++) await slot.dispatch?.({ type: "inc" });
+        for (let i = 0; i < msgs; i++)
+          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       });
       expect(
         container.querySelector(`[data-part="${name}"]`)?.textContent,
@@ -199,9 +202,9 @@ describe("useMachine under Strict Mode", () => {
   it("keeps a Msg a child dispatches from its own mount effect", async () => {
     const machine = counter();
     const probe = subProbe();
-    function Child({ inc }: { readonly inc: (msg: Inc) => Promise<void> }) {
+    function Child({ inc }: { readonly inc: (msg: Inc) => void }) {
       useEffect(() => {
-        void inc({ type: "inc" });
+        inc({ type: "inc" });
       }, [inc]);
       return null;
     }
@@ -241,17 +244,19 @@ describe.each([
     ],
   ] as const)("%s", (_kind, makeStore) => {
     function harness() {
+      const onError = vi.fn<OnError>();
       const store = makeStore();
       const machine = counter();
       const probe = subProbe();
       const { counts, counted } = countedRun();
-      const slot: { dispatch?: (msg: Inc) => Promise<void> } = {};
+      const slot: { dispatch?: (msg: Inc) => void } = {};
       function Part() {
         const [state, dispatch] = useMachine(machine, {
           run: counted,
           ctx: undefined,
           store,
           subscribe: probe.subscribe,
+          onError,
         });
         slot.dispatch = dispatch;
         return <span>{state.n}</span>;
@@ -262,7 +267,7 @@ describe.each([
             <Part />
           </Activity>,
         );
-      return { store, probe, counts, slot, shown };
+      return { store, probe, counts, slot, shown, onError };
     }
 
     it("keeps counting up through three hides and shows, with Msgs between", async () => {
@@ -272,8 +277,8 @@ describe.each([
       let expected = 0;
       for (let cycle = 0; cycle < 3; cycle++) {
         await act(async () => {
-          await slot.dispatch?.({ type: "inc" });
-          await slot.dispatch?.({ type: "inc" });
+          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
         });
         expected += 2;
         expect(container.textContent).toBe(String(expected));
@@ -304,7 +309,7 @@ describe.each([
       await settle(shown(true));
       const kept = slot.dispatch;
       await act(async () => {
-        await kept?.({ type: "inc" });
+        expect(kept?.({ type: "inc" })).toBeUndefined();
       });
 
       await settle(shown(false));
@@ -312,7 +317,7 @@ describe.each([
 
       expect(slot.dispatch).toBe(kept);
       await act(async () => {
-        await kept?.({ type: "inc" });
+        expect(kept?.({ type: "inc" })).toBeUndefined();
       });
       expect(container.textContent).toBe("2");
     });
@@ -323,7 +328,7 @@ describe.each([
       await settle(shown(false));
 
       await act(async () => {
-        await slot.dispatch?.({ type: "inc" });
+        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       });
       expect(probe.live).toBe(0);
 
@@ -342,15 +347,15 @@ describe.each([
     });
 
     it("leaves no run behind after a real unmount, and the final save happened", async () => {
-      const { store, probe, counts, slot, shown } = harness();
+      const { store, probe, counts, slot, shown, onError } = harness();
       await settle(shown(true));
       await act(async () => {
-        await slot.dispatch?.({ type: "inc" });
+        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       });
       await settle(shown(false));
       await settle(shown(true));
       await act(async () => {
-        await slot.dispatch?.({ type: "inc" });
+        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       });
 
       await settle(wrap(<div />));
@@ -361,16 +366,18 @@ describe.each([
       if (store !== undefined) {
         await expect(store.load()).resolves.toEqual({ n: 2 });
       }
-      await expect(slot.dispatch?.({ type: "inc" })).rejects.toThrow(
-        "@demlik/tea: runtime stopped",
+      expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(onError).toHaveBeenCalledExactlyOnceWith(
+        expect.any(DispatchDiscardedError),
+        { phase: "discard" },
       );
     });
 
     it("stops the run when the hidden component really unmounts", async () => {
-      const { store, probe, counts, slot, shown } = harness();
+      const { store, probe, counts, slot, shown, onError } = harness();
       await settle(shown(true));
       await act(async () => {
-        await slot.dispatch?.({ type: "inc" });
+        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       });
       await settle(shown(false));
 
@@ -381,39 +388,41 @@ describe.each([
       if (store !== undefined) {
         await expect(store.load()).resolves.toEqual({ n: 1 });
       }
-      await expect(slot.dispatch?.({ type: "inc" })).rejects.toThrow(
-        "@demlik/tea: runtime stopped",
+      expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(onError).toHaveBeenCalledExactlyOnceWith(
+        expect.any(DispatchDiscardedError),
+        { phase: "discard" },
       );
     });
 
     it("on a first mount hidden, starts no run and holds a Msg for the first show", async () => {
-      const { probe, counts, slot, shown } = harness();
+      const { probe, counts, slot, shown, onError } = harness();
       await settle(shown(false));
       expect(counts).toEqual({ started: 0, stopped: 0 });
 
-      let settled = false;
-      const held = slot.dispatch?.({ type: "inc" }).then(() => {
-        settled = true;
-      });
+      expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
       await act(beat);
-      expect(settled).toBe(false);
+      expect(counts).toEqual({ started: 0, stopped: 0 });
+      expect(onError).not.toHaveBeenCalled();
 
       await settle(shown(true));
-      await held;
       expect(container.textContent).toBe("1");
       expect(probe.live).toBe(1);
+      expect(onError).not.toHaveBeenCalled();
     });
 
     it("refuses a held Msg when a first mount hidden really unmounts", async () => {
-      const { counts, slot, shown } = harness();
+      const { counts, slot, shown, onError } = harness();
       await settle(shown(false));
 
-      const refused = expect(slot.dispatch?.({ type: "inc" })).rejects.toThrow(
-        "@demlik/tea: runtime stopped",
-      );
+      expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(onError).not.toHaveBeenCalled();
       await settle(wrap(<div />));
 
-      await refused;
+      expect(onError).toHaveBeenCalledExactlyOnceWith(
+        expect.any(DispatchDiscardedError),
+        { phase: "discard" },
+      );
       expect(counts).toEqual({ started: 0, stopped: 0 });
     });
   });
@@ -424,10 +433,10 @@ describe("useMachine: a real unmount", () => {
     const machine = counter();
     const store = memoryStore<Count>(undefined, parseCount);
     const probe = subProbe();
-    function Child({ inc }: { readonly inc: (msg: Inc) => Promise<void> }) {
+    function Child({ inc }: { readonly inc: (msg: Inc) => void }) {
       useEffect(
         () => () => {
-          void inc({ type: "inc" });
+          inc({ type: "inc" });
         },
         [inc],
       );
@@ -524,7 +533,7 @@ describe.each([
         });
         const store = makeStore();
         const { counts, counted } = countedRun();
-        let dispatch: ((msg: LoadMsg) => Promise<void>) | undefined;
+        let dispatch: ((msg: LoadMsg) => void) | undefined;
         function Part() {
           const [state, d] = useMachine(machines[startedBy], {
             run: counted,
@@ -545,7 +554,7 @@ describe.each([
         await settle(shown(true));
         if (startedBy === "update") {
           await act(async () => {
-            void dispatch?.({ type: "start" });
+            expect(dispatch?.({ type: "start" })).toBeUndefined();
           });
         }
         // The engine tells listeners before a State's Cmds start (#695), so both
@@ -815,7 +824,7 @@ describe("useMachine under <Activity>: which Subs run", () => {
       subs: [{ type: "probe", deps: (s) => (s.n > 0 ? { name: "p" } : null) }],
     });
     const probe = subProbe();
-    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    let dispatch: ((msg: Inc) => void) | undefined;
     function Part() {
       const [state, d] = useMachine(machine, {
         run,
@@ -834,7 +843,7 @@ describe("useMachine under <Activity>: which Subs run", () => {
     await settle(shown(true));
     await settle(shown(false));
     await act(async () => {
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     expect(probe).toMatchObject({ live: 0, starts: 0 });
 
@@ -857,7 +866,7 @@ describe("useMachine under <Activity>: which Subs run", () => {
       ],
     });
     const probe = subProbe();
-    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    let dispatch: ((msg: Inc) => void) | undefined;
     function Part() {
       const [state, d] = useMachine(machine, {
         run,
@@ -876,7 +885,7 @@ describe("useMachine under <Activity>: which Subs run", () => {
     await settle(shown(true));
     await settle(shown(false));
     await act(async () => {
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     await settle(shown(true));
 
@@ -914,20 +923,30 @@ describe("useMachine under <Activity>: which Subs run", () => {
 
   it("still reports a Sub type with no runner", async () => {
     const machine = counter();
-    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    const onError = vi.fn<OnError>();
+    let dispatch: ((msg: Inc) => void) | undefined;
     function Part() {
       const [state, d] = useMachine(machine, {
         run,
         ctx: undefined,
         subscribe: {} as Subscribe<Inc, Probe, undefined>,
+        onError,
       });
       dispatch = d;
       return <span>{state.n}</span>;
     }
 
     await settle(<Part />);
-    await expect(dispatch?.({ type: "inc" })).rejects.toThrow(
-      'no subscribe runner for Sub type "probe"',
+    await act(async () => {
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+    });
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'no subscribe runner for Sub type "probe"',
+        ),
+      }),
+      { phase: "follow-up" },
     );
   });
 });
@@ -939,7 +958,7 @@ describe("useMachine across a hide and show: the value and `init`", () => {
       init: () => [{ n: 0 }, []],
       update: { inc: (s) => [{ n: s.n + 1 }, []] },
     });
-    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    let dispatch: ((msg: Inc) => void) | undefined;
     function Part() {
       const [state, d] = useMachine(machine, { run, ctx: undefined });
       dispatch = d;
@@ -953,7 +972,7 @@ describe("useMachine across a hide and show: the value and `init`", () => {
 
     await settle(shown(true));
     await act(async () => {
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     await settle(shown(false));
     await settle(shown(true));
@@ -1010,9 +1029,7 @@ describe("useMachine across a hide and show: the value and `init`", () => {
         park: (s) => [s, [{ type: "wait" }]],
       },
     });
-    let dispatch:
-      | ((msg: Inc | { readonly type: "park" }) => Promise<void>)
-      | undefined;
+    let dispatch: ((msg: Inc | { readonly type: "park" }) => void) | undefined;
     function Part() {
       const [state, d] = useMachine(machine, {
         run,
@@ -1034,19 +1051,17 @@ describe("useMachine across a hide and show: the value and `init`", () => {
 
     await settle(shown(true));
     await act(async () => {
-      void dispatch?.({ type: "park" });
-      void dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "park" })).toBeUndefined();
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     // The run's queue is parked on the handler, with `inc` waiting behind it.
     await settle(shown(false));
     await settle(shown(true));
-    const late = dispatch?.({ type: "inc" });
+    expect(dispatch?.({ type: "inc" })).toBeUndefined();
     expect(container.textContent).toBe("0");
 
     release();
-    await act(async () => {
-      await late;
-    });
+    await act(beat);
     expect(container.textContent).toBe("2");
   });
 });
@@ -1069,7 +1084,7 @@ describe("useMachine: replacing the run under Strict Mode", () => {
       update: { inc: (s) => [{ n: s.n + 1 }, [{ type: "save" }]] },
     });
     const { counts, counted } = countedRun();
-    let dispatch: ((msg: Inc) => Promise<void>) | undefined;
+    let dispatch: ((msg: Inc) => void) | undefined;
     function Part({ userId }: { readonly userId: string }) {
       const ctx = useMemo(() => ({ userId }), [userId]);
       const [state, d] = useMachine(machine, {
@@ -1091,7 +1106,7 @@ describe("useMachine: replacing the run under Strict Mode", () => {
       </StrictMode>,
     );
     await act(async () => {
-      void dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     expect(warn).not.toHaveBeenCalled();
     expect(counts).toEqual({ started: 1, stopped: 0 });

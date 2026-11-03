@@ -60,10 +60,10 @@ const fakeAgent = fakeHandle<State, Msg, AgentEvent<string>>({ n: 0 });
 // ── Every helper takes the hand-built handle ─────────────────────────────────
 
 export function Viewer(): null {
-  const [state, dispatch] = useRuntime(fake);
+  const [state, send] = useRuntime(fake);
   const n: number = state.n;
   void n;
-  void dispatch({ type: "inc" });
+  send({ type: "inc" });
   return null;
 }
 

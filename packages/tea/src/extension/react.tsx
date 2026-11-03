@@ -52,13 +52,15 @@
 import {
   createContext,
   type ReactNode,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
 } from "react";
+import { defaultOnError } from "../internal/engine/loop";
+import { senderOf, sinkOrDefault } from "../react/send";
+import type { OnError } from "../runtime-types";
 import { bridgeClient, passThroughMsg } from "./bridge";
 
 /**
@@ -74,6 +76,10 @@ export interface UseBackgroundRuntimeOpts<S> {
    * `null` drops the payload silently.
    */
   parseState: (raw: unknown) => S | null;
+  /** Transport failures reach this sink under `phase: "follow-up"`.
+   * Defaults to the default sink. Background step failures belong to the
+   * background run's own `onError`. Read fresh on each send. */
+  onError?: OnError;
 }
 
 /**
@@ -85,19 +91,21 @@ export interface UseBackgroundRuntimeResult<S, M> {
    * or the first broadcast arrives. Surfaces SHOULD render a placeholder
    * for the null window. */
   state: S | null;
-  /** Send a msg to the host runtime. Resolves once the host's dispatch
-   * settles. */
-  dispatch(msg: M): Promise<void>;
+  /** Send a Msg to the host and return `undefined` immediately. Transport
+   * failures go to `opts.onError`, never a rejected Promise. */
+  dispatch(msg: M): void;
 }
 
 /**
  * React hook for an extension surface: it subscribes to the background
- * runtime's state and returns it with a `dispatch`. Use it in a popup or side
- * panel component.
+ * runtime's state and returns it with a returnless `dispatch`. Use it in a
+ * popup or side panel component. The bridge still waits for the host internally;
+ * the click handler waits for nothing. Read state for the outcome.
  */
 export function useBackgroundRuntime<S, M extends { type: string }>({
   channel,
   parseState,
+  onError,
 }: UseBackgroundRuntimeOpts<S>): UseBackgroundRuntimeResult<S, M> {
   // Pin the client across renders. Identity must be stable because
   // `useSyncExternalStore` deduplicates subscribe by reference; rebuilding
@@ -133,10 +141,13 @@ export function useBackgroundRuntime<S, M extends { type: string }>({
     });
   }, [client]);
 
-  const dispatch = useCallback(
-    async (msg: M): Promise<void> => {
-      await client.dispatch(msg);
-    },
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const dispatch = useMemo(
+    () =>
+      senderOf(client, (error, context) =>
+        sinkOrDefault(onErrorRef.current ?? defaultOnError, error, context),
+      ),
     [client],
   );
 
@@ -174,9 +185,10 @@ export interface BackgroundRuntimeContext<S, M> {
   /**
    * Returns the dispatch function bound to this Provider's bridge client.
    * Reference is stable across renders (per `useBackgroundRuntime`'s
-   * `useCallback`), so passing it to memoized children won't churn them.
+   * `useMemo`), so passing it to memoized children won't churn them.
+   * Returns `undefined`; failures follow the Provider's `opts.onError` contract.
    */
-  useDispatch: () => (msg: M) => Promise<void>;
+  useDispatch: () => (msg: M) => void;
   /**
    * Returns a slice of the latest state. `selector` defaults to identity
    * (returns the whole `S | null` snapshot). Selectors run on every state
@@ -198,8 +210,7 @@ export interface BackgroundRuntimeContext<S, M> {
    * fn in a single hook call (e.g. effects that read state THEN
    * dispatch in response).
    *
-   * Not a `@demlik/tea` `Runtime<S, M>` — the bridge surface is a thinner
-   * client. This hook returns the same shape as `useBackgroundRuntime`,
+   * This is a bridge client view. It returns the same shape as `useBackgroundRuntime`,
    * just sourced from context instead of mounting a fresh client.
    */
   useRuntime: () => UseBackgroundRuntimeResult<S, M>;
@@ -234,7 +245,7 @@ export function createBackgroundRuntimeContext<
     // `useContext` don't re-render unless `state` or `dispatch` actually
     // changes. `state` is reference-stable (bridge's `getSnapshot` returns
     // the same `S` until a new broadcast). `dispatch` is stable per
-    // `useBackgroundRuntime`'s `useCallback`. So `useMemo` keyed on both
+    // `useBackgroundRuntime`'s `useMemo`. So `useMemo` keyed on both
     // gives a stable value object across renders.
     const value = useMemo<UseBackgroundRuntimeResult<S, M>>(
       () => ({ state: result.state, dispatch: result.dispatch }),
@@ -249,7 +260,7 @@ export function createBackgroundRuntimeContext<
     return ctx;
   }
 
-  function useDispatch(): (msg: M) => Promise<void> {
+  function useDispatch(): (msg: M) => void {
     return useRuntime().dispatch;
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine } from "../index";
+import { DispatchDiscardedError, defineMachine, type OnError } from "../index";
 import { run } from "../promise";
 import { MountedRun } from "./mounted-run";
 
@@ -19,10 +19,12 @@ const machine = defineMachine({
 });
 
 function mountedRun(cleanupMayBeAHide = true) {
+  const report = vi.fn<OnError>();
   const startRun = vi.fn(() => run(machine, { ctx: undefined }));
   return {
     startRun,
-    mounted: new MountedRun(startRun, { n: 0 }, cleanupMayBeAHide),
+    report,
+    mounted: new MountedRun(startRun, { n: 0 }, cleanupMayBeAHide, report),
   };
 }
 
@@ -38,24 +40,27 @@ describe("MountedRun, if React ever retired it on a hide", () => {
     mounted.connect();
     await microtask();
 
-    await mounted.dispatch({ type: "inc" });
-    expect(mounted.getSnapshot()).toEqual({ n: 1 });
+    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(1);
   });
 
   it("starts a new run when the show comes after the run stopped", async () => {
-    const { startRun, mounted } = mountedRun();
+    const { startRun, mounted, report } = mountedRun();
     mounted.connect();
 
     mounted.retire();
     mounted.disconnect();
     await microtask();
-    await expect(mounted.dispatch({ type: "inc" })).rejects.toThrow(
-      "@demlik/tea: runtime stopped",
+    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
     );
 
     mounted.connect();
-    await mounted.dispatch({ type: "inc" });
+    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(2);
   });
 });
@@ -63,14 +68,16 @@ describe("MountedRun, if React ever retired it on a hide", () => {
 // `peer-range.test.tsx` runs this order on the real Reacts.
 describe("MountedRun, on a React where a cleanup cannot be a hide", () => {
   it("stops the run on a cleanup with nothing after it, with no insertion cleanup", async () => {
-    const { mounted } = mountedRun(false);
+    const { mounted, report } = mountedRun(false);
     mounted.connect();
 
     mounted.disconnect();
     await microtask();
 
-    await expect(mounted.dispatch({ type: "inc" })).rejects.toThrow(
-      "@demlik/tea: runtime stopped",
+    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      expect.any(DispatchDiscardedError),
+      { phase: "discard" },
     );
   });
 
@@ -82,8 +89,8 @@ describe("MountedRun, on a React where a cleanup cannot be a hide", () => {
     mounted.connect();
     await microtask();
 
-    await mounted.dispatch({ type: "inc" });
-    expect(mounted.getSnapshot()).toEqual({ n: 1 });
+    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(1);
   });
 });

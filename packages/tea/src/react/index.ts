@@ -31,7 +31,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import type {
-  BootedRunHandle,
   Cmd,
   Dispose,
   EngineRun,
@@ -45,7 +44,9 @@ import type {
   Subscribe,
 } from "../index";
 import { builtinRunners } from "../internal/engine/builtin-runners";
+import { defaultOnError } from "../internal/engine/loop";
 import { MountedRun } from "./mounted-run";
+import { type SendTarget, senderOf, sinkOrDefault } from "./send";
 import type { SubGate } from "./sub-gate";
 
 // A stable `<Activity>` arrived in React 19.2. That is the first React where a
@@ -116,12 +117,15 @@ export type UseMachineOpts<
  * lands and its answer folds, whether that comes during the hide or after the
  * show. A Msg dispatched while hidden folds at once, and any Cmd it emits runs.
  *
- * `dispatch` stays the same function across a hide and show. A Msg dispatched
+ * `send` stays the same function across a hide and show. A Msg sent
  * before the run has started, which on a tree first mounted hidden means before
- * its first show, waits for the run and its promise settles once it is folded.
- * After an unmount, `dispatch` rejects with `@demlik/tea: runtime stopped`.
+ * its first show, waits for the run and folds when it starts.
+ * A Msg still waiting at unmount, or sent afterwards, reaches `onError` as a
+ * `DispatchDiscardedError` under `phase: "discard"`. Step failures go to the
+ * run's `onError` once, under their own phase.
  *
- * Returns `[state, dispatch]` shaped like `useReducer`.
+ * Returns `[state, send]`, where `send(msg)` returns `undefined` immediately.
+ * Read the rendered State for the outcome; there is no Promise to await.
  */
 export function useMachine<
   S,
@@ -132,7 +136,7 @@ export function useMachine<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx>>,
-): [S, (msg: M) => Promise<void>] {
+): [S, (msg: M) => void] {
   // Deps are literal: machine, engine, ctx and store identity. NOT `[opts]`
   // (would rebuild every render — callers pass fresh objects). We pass
   // explicit fields to `run()` so the closure captures only the deps in the
@@ -184,6 +188,7 @@ export function useMachine<
           } as RunOptions<S, M, C, U, Ctx>),
         machine.init(null, ctx)[0],
         cleanupMayBeAHide,
+        (error, context) => sinkOrDefault(onError, error, context),
       ),
     [machine, run, ctx, store, onError, interpret],
   );
@@ -205,7 +210,7 @@ export function useMachine<
     return () => mounted.disconnect();
   }, [mounted]);
 
-  return [state, mounted.dispatch];
+  return [state, mounted.send];
 }
 
 /** A Sub runner as `run` calls it. */
@@ -256,28 +261,54 @@ function latestTable(current: () => object | undefined): object {
 }
 
 /**
- * Lower-level escape hatch: consume an externally-built, booted run — any
- * engine's {@link BootedRunHandle} (the Promise engine's `Runtime` is one).
+ * Consume a booted run from either engine's `run`, or a hand-built
+ * {@link ViewHandle} with a Promise-returning `dispatch`.
  *
  * Use this when the runtime is owned by something OTHER than the component —
  * a parent component, a test harness, a singleton. **The component does NOT
  * call `runtime.stop()` on unmount** — the caller owns the lifecycle.
  *
- * Primary use case in this repo: component tests. Build a runtime with
- * `@demlik/tea/mem` and pre-seed it via `replay`, then mount the component with
- * `useRuntime(testRuntime)` to render in any phase.
+ * For component tests, build a run with the engine's `run` and a pre-seeded
+ * store, await `ready`, then pass it here to render in any phase.
  *
- * Returns `[state, dispatch]` — same shape as `useMachine`.
+ * Returns `[state, send]`, where `send(msg)` returns `undefined` immediately.
+ * Step failures go once to the run's own `onError`. `opts.onError` hears a
+ * `DispatchDiscardedError` under `phase: "discard"` for a stopped run, or a
+ * hand-built handle's dispatch failure under `phase: "follow-up"`. It defaults
+ * to the default sink and is read fresh without replacing `send`.
  */
-export function useRuntime<
-  S,
-  M extends { type: string },
-  E extends { type: string } = never,
->(runtime: BootedRunHandle<S, M, E>): [S, (msg: M) => Promise<void>] {
+export function useRuntime<S, M extends { type: string }>(
+  runtime: ViewHandle<S, M>,
+  opts: UseRuntimeOpts = {},
+): [S, (msg: M) => void] {
   const state = useSyncExternalStore(
     runtime.subscribe,
     runtime.getState,
     runtime.getState,
   );
-  return [state, runtime.dispatch];
+  // The caller owns the run, so it owns the sink too: pass the one the run has,
+  // and a Msg that never reached the run is heard where the run's failures are.
+  // Read per call, so a sink passed inline gives no new `send`.
+  const onErrorRef = useRef<OnError | undefined>(opts.onError);
+  onErrorRef.current = opts.onError;
+  const send = useMemo(
+    () =>
+      senderOf(runtime, (error, context) =>
+        sinkOrDefault(onErrorRef.current ?? defaultOnError, error, context),
+      ),
+    [runtime],
+  );
+  return [state, send];
 }
+
+/** Options for `useRuntime`: the sink for a Msg that never reached the run. */
+export type UseRuntimeOpts = {
+  /** Where a send to a stopped run, or a hand-built `dispatch`'s failure, is reported. Default: the default sink. */
+  readonly onError?: OnError;
+};
+
+/** What `useRuntime` reads: a booted run from either engine's `run`, or a hand-built handle. */
+export type ViewHandle<S, M extends { type: string }> = {
+  subscribe(listener: () => void): () => void;
+  getState(): S;
+} & SendTarget<S, M>;

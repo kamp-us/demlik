@@ -26,19 +26,15 @@
 
 import type { BootedRunHandle, RunHandle } from "../index";
 import { readInstalledState } from "../internal/engine/installed-state";
+import { DispatchDiscardedError, type OnError } from "../runtime-types";
+import { senderOf } from "./send";
 import { SubGate } from "./sub-gate";
 
-/** A Msg dispatched before the run has started, and the promise its caller holds. */
-interface HeldMsg<M> {
-  readonly msg: M;
-  readonly resolve: () => void;
-  readonly reject: (error: unknown) => void;
-}
-
-/** A run and the listener this object holds on it. */
+/** A run, the listener this object holds on it, and the `send` built on it. */
 interface Started<S, M extends { type: string }> {
   readonly handle: RunHandle<S, M>;
   readonly unlisten: () => void;
+  readonly send: (msg: M) => void;
 }
 
 /**
@@ -50,8 +46,6 @@ type Phase<S, M extends { type: string }> =
   | ({ readonly type: "live" | "leaving" } & Started<S, M>)
   | { readonly type: "stopped" };
 
-const stoppedError = () => new Error("@demlik/tea: runtime stopped");
-
 export class MountedRun<S, M extends { type: string }> {
   private snapshot: S;
   private phase: Phase<S, M> = { type: "not-started" };
@@ -60,7 +54,7 @@ export class MountedRun<S, M extends { type: string }> {
   private booted: BootedRunHandle<S, M> | null = null;
   // An effect is standing, so the component is on screen.
   private connected = false;
-  private held: HeldMsg<M>[] = [];
+  private held: M[] = [];
   private readonly subs = new SubGate();
   private readonly listeners = new Set<() => void>();
 
@@ -69,11 +63,13 @@ export class MountedRun<S, M extends { type: string }> {
    * @param initial  the value React reads until the run has told it a State.
    * @param cleanupMayBeAHide whether this React can run a passive cleanup on a
    *   hide, and so runs the insertion cleanup on every delete.
+   * @param report where a Msg that never reached the run is reported.
    */
   constructor(
     private readonly startRun: (subs: SubGate) => RunHandle<S, M>,
     initial: S,
     private readonly cleanupMayBeAHide: boolean,
+    private readonly report: OnError,
   ) {
     this.snapshot = initial;
   }
@@ -89,23 +85,30 @@ export class MountedRun<S, M extends { type: string }> {
 
   /**
    * Stable for the life of this object. A hide changes nothing about it: the run
-   * is still there. A Msg dispatched before the first effect (a child's effects
+   * is still there. A Msg sent before the first effect (a child's effects
    * run before its parent's, and a tree first mounted hidden runs none) waits
-   * for the run, in order.
+   * for the run, in order. Returns `undefined` immediately. A Msg still held at
+   * unmount, or sent after stop, is reported as `DispatchDiscardedError` under
+   * `phase: "discard"`; the run reports its own step failures.
    */
-  readonly dispatch = (msg: M): Promise<void> => {
+  readonly send = (msg: M): void => {
     switch (this.phase.type) {
       case "live":
       case "leaving":
-        return this.phase.handle.dispatch(msg);
+        this.phase.send(msg);
+        return;
       case "stopped":
-        return Promise.reject(stoppedError());
+        this.discard(msg);
+        return;
       case "not-started":
-        return new Promise((resolve, reject) => {
-          this.held.push({ msg, resolve, reject });
-        });
+        this.held.push(msg);
+        return;
     }
   };
+
+  private discard(msg: M): void {
+    this.report(new DispatchDiscardedError(msg.type), { phase: "discard" });
+  }
 
   /** The effect ran: the component is on screen. */
   connect(): void {
@@ -146,7 +149,7 @@ export class MountedRun<S, M extends { type: string }> {
         this.phase = { type: "stopped" };
         const held = this.held;
         this.held = [];
-        for (const { reject } of held) reject(stoppedError());
+        for (const msg of held) this.discard(msg);
         return;
       }
       case "live":
@@ -174,8 +177,9 @@ export class MountedRun<S, M extends { type: string }> {
       const installed = readInstalledState<S>(handle);
       if (installed !== undefined) this.publish(installed);
     });
-    this.phase = { type: "live", handle, unlisten };
-    // A failed boot is not swallowed: it rejects every dispatch into this run.
+    const send = senderOf(handle, this.report);
+    this.phase = { type: "live", handle, unlisten, send };
+    // The run reports boot failures through its own sink.
     handle.ready.then(
       (booted) => {
         // A run stopped mid-boot still boots, and nobody is reading it.
@@ -187,9 +191,7 @@ export class MountedRun<S, M extends { type: string }> {
     );
     const held = this.held;
     this.held = [];
-    for (const { msg, resolve, reject } of held) {
-      handle.dispatch(msg).then(resolve, reject);
-    }
+    for (const msg of held) send(msg);
   }
 
   private stop(): void {

@@ -33,7 +33,7 @@ import { … } from "@demlik/tea/extension";
 | [`fromChromeTabsEvent`](#fromChromeTabsEvent) | Function | stable | Build a Sub runner that dispatches `msgFn(sub)` whenever one of the chosen `chrome.tabs` events fires. |
 | [`passThroughMsg`](#passThroughMsg) | Function | stable | The explicit opt-out of inbound msg parsing: an identity pass-through that casts the raw `unknown` to `M`. |
 | [`TabsEventName`](#TabsEventName) | Type | stable | The `chrome.tabs` events `fromChromeTabsEvent` can listen to. |
-| [`useBackgroundRuntime`](#useBackgroundRuntime) | Function | stable | React hook for an extension surface: it subscribes to the background runtime's state and returns it with a `dispatch`. |
+| [`useBackgroundRuntime`](#useBackgroundRuntime) | Function | stable | React hook for an extension surface: it subscribes to the background runtime's state and returns it with a returnless `dispatch`. |
 | [`UseBackgroundRuntimeOpts`](#UseBackgroundRuntimeOpts) | Interface | stable | Options for `useBackgroundRuntime`: the `channel` name and the required `parseState`. |
 | [`UseBackgroundRuntimeResult`](#UseBackgroundRuntimeResult) | Interface | stable | What `useBackgroundRuntime` returns: the latest `state`, which is `null` until the first one arrives, and `dispatch`. |
 
@@ -59,17 +59,17 @@ interface BackgroundRuntimeContext<S, M> {
   /**
    * Returns the dispatch function bound to this Provider's bridge client.
    * Reference is stable across renders (per `useBackgroundRuntime`'s
-   * `useCallback`), so passing it to memoized children won't churn them.
+   * `useMemo`), so passing it to memoized children won't churn them.
+   * Returns `undefined`; failures follow the Provider's `opts.onError` contract.
    */
-  useDispatch: () => (msg: M) => Promise<void>;
+  useDispatch: () => (msg: M) => void;
   /**
    * Escape hatch — returns the full `{ state, dispatch }` pair as-is.
    * Useful for consumers that want both the snapshot and the dispatch
    * fn in a single hook call (e.g. effects that read state THEN
    * dispatch in response).
    *
-   * Not a `@demlik/tea` `Runtime<S, M>` — the bridge surface is a thinner
-   * client. This hook returns the same shape as `useBackgroundRuntime`,
+   * This is a bridge client view. It returns the same shape as `useBackgroundRuntime`,
    * just sourced from context instead of mounting a fresh client.
    */
   useRuntime: () => UseBackgroundRuntimeResult<S, M>;
@@ -587,6 +587,12 @@ function useBackgroundRuntime<S, M extends { type: string }>(
 interface UseBackgroundRuntimeOpts<S> {
   channel: string;
   /**
+   * Transport failures reach this sink under `phase: "follow-up"`.
+   * Defaults to the default sink. Background step failures belong to the
+   * background run's own `onError`. Read fresh on each send.
+   */
+  onError?: OnError;
+  /**
    * REQUIRED parse for inbound `state` payloads. Forwarded to
    * `bridgeClient` — see `BridgeClientOpts.parseState`. Surfaces own this
    * because the chrome.runtime boundary is `unknown` (Inv 8). Returning
@@ -609,9 +615,9 @@ interface UseBackgroundRuntimeResult<S, M> {
    */
   state: S | null;
   /**
-   * Send a msg to the host runtime. Resolves once the host's dispatch
-   * settles.
+   * Send a Msg to the host and return `undefined` immediately. Transport
+   * failures go to `opts.onError`, never a rejected Promise.
    */
-  dispatch(msg: M): Promise<void>;
+  dispatch(msg: M): void;
 }
 ```

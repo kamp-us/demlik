@@ -157,7 +157,7 @@ describe.each(Object.keys(stores))("useMachine %s", (kind) => {
   function mount(machine: PhaseMachine) {
     const handlers = heldHandlers();
     const store = stores[kind]?.();
-    let dispatch: ((msg: Msg) => Promise<void>) | undefined;
+    let dispatch: ((msg: Msg) => void) | undefined;
     function Page() {
       const [state, send] = useMachine(machine, {
         run,
@@ -180,7 +180,7 @@ describe.each(Object.keys(stores))("useMachine %s", (kind) => {
     expect(container.textContent).toBe("idle");
 
     await act(async () => {
-      void go();
+      expect(go()).toBeUndefined();
     });
     await flush();
     await walksThePhases(handlers);

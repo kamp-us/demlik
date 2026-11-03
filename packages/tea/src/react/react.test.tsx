@@ -90,7 +90,7 @@ function labelMachine() {
 
 describe("useMachine — handlers at the hook (#278)", () => {
   it("runs the machine's Cmds through the `interpret` handed to the hook", async () => {
-    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: LabelMsg) => void) | null = null;
     const machine = labelMachine();
 
     function Label() {
@@ -109,13 +109,13 @@ describe("useMachine — handlers at the hook (#278)", () => {
       root.render(<Label />);
     });
     await act(async () => {
-      await dispatch?.({ type: "load" });
+      expect(dispatch?.({ type: "load" })).toBeUndefined();
     });
     expect(container.textContent).toBe("done");
   });
 
   it("reads the latest render's handler without rebooting the runtime", async () => {
-    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: LabelMsg) => void) | null = null;
     const machine = labelMachine();
     const runtimes = new Set<unknown>();
 
@@ -140,7 +140,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
       root.render(<Label suffix="2" />);
     });
     await act(async () => {
-      await dispatch?.({ type: "load" });
+      expect(dispatch?.({ type: "load" })).toBeUndefined();
     });
 
     expect(container.textContent).toBe("v-2");
@@ -151,7 +151,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
 
 describe("useMachine", () => {
   it("renders the machine's state and re-renders on dispatch", async () => {
-    let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: CounterMsg) => void) | null = null;
     const machine = counterMachine();
 
     function Counter() {
@@ -166,7 +166,7 @@ describe("useMachine", () => {
     expect(container.textContent).toBe("0");
 
     await act(async () => {
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     expect(container.textContent).toBe("1");
   });
@@ -255,7 +255,7 @@ describe("useMachine", () => {
   it("persists through the store across mount lives — the round-trip tracer", async () => {
     const store = memoryStore<CounterState>(undefined, parseCounter);
     const machine = counterMachine();
-    let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: CounterMsg) => void) | null = null;
 
     function Counter() {
       const [state, d] = useMachine(machine, { run, ctx: undefined, store });
@@ -267,8 +267,8 @@ describe("useMachine", () => {
       root.render(<Counter />);
     });
     await act(async () => {
-      await dispatch?.({ type: "inc" });
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
     expect(container.textContent).toBe("2");
 
@@ -337,7 +337,7 @@ describe("useMachine — loud on discard", () => {
     machine,
     interpret,
   }: ReturnType<typeof wizardMachine>) {
-    let dispatch: ((msg: WizardMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: WizardMsg) => void) | null = null;
     function Wizard({ userId }: { userId: string }) {
       // The defect's exact shape: the ctx is DERIVED from a value the flow
       // itself moves, memoized correctly on that value — so it is stable
@@ -367,10 +367,9 @@ describe("useMachine — loud on discard", () => {
     await act(async () => {
       root.render(<Wizard userId="u1" />);
     });
-    // Fire and forget — the Cmd parks, so this never settles before the
-    // re-render below.
+    // The sender returns immediately while the Cmd parks across the re-render.
     await act(async () => {
-      void dispatch({ type: "next" });
+      expect(dispatch({ type: "next" })).toBeUndefined();
     });
     expect(warn).not.toHaveBeenCalled();
 
@@ -403,7 +402,7 @@ describe("useMachine — loud on discard", () => {
       root.render(<Wizard userId="u1" />);
     });
     await act(async () => {
-      await dispatch({ type: "next" });
+      expect(dispatch({ type: "next" })).toBeUndefined();
     });
     await act(async () => {
       root.render(<Wizard userId="u2" />);
@@ -418,7 +417,7 @@ describe("useMachine — the engine is an input (#281)", () => {
   it("boots through the `run` it is handed, once per mount", async () => {
     const engine = vi.fn(run) as typeof run;
     const machine = counterMachine();
-    let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
+    let dispatch: ((msg: CounterMsg) => void) | null = null;
 
     function Counter() {
       const [state, d] = useMachine(machine, { run: engine, ctx: undefined });
@@ -430,7 +429,7 @@ describe("useMachine — the engine is an input (#281)", () => {
       root.render(<Counter />);
     });
     await act(async () => {
-      await dispatch?.({ type: "inc" });
+      expect(dispatch?.({ type: "inc" })).toBeUndefined();
     });
 
     expect(container.textContent).toBe("1");
