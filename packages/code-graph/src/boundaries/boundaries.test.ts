@@ -978,6 +978,7 @@ describe("a feature's table definitions", () => {
         ],
       }),
     );
+    expect(violations()).toEqual([]);
     expect(repo.run({ ci: true }).code).toBe(0);
     expect(ledgerOf(repo).entries).toEqual([]);
   });
