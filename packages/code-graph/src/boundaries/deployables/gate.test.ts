@@ -345,7 +345,7 @@ describe("B21 through the --boundaries CLI", () => {
           run.rulesFile,
           ...flags,
         ],
-        { encoding: "utf8" },
+        { cwd: fileURLToPath(new URL("../../..", import.meta.url)), encoding: "utf8" },
       );
     const report = cli("--json");
     expect(report.stderr).toBe("");
