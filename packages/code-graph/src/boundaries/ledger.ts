@@ -18,7 +18,7 @@ export const BOUNDARY_KINDS = Object.keys(CROSSINGS) as BoundaryKind[];
 // `index-not-exports-only` of an entry file, `library-undeclared` of a package, `worker-call-cycle`
 // of workers). Every other kind names its target file, or for an import of a library
 // (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
-// (`relative-import-crosses-workspace`) its directory.
+// (`relative-import-crosses-workspace`, `package-import-crosses-deployable`) its directory.
 const MAY_HAVE_NO_FILE = {
   "adapter-library-imported-outside-driven": false,
   "application-import-outside-allowlist": true,
@@ -33,6 +33,7 @@ const MAY_HAVE_NO_FILE = {
   "library-undeclared": true,
   "outside-imports-feature-internal": false,
   "relative-import-crosses-workspace": false,
+  "package-import-crosses-deployable": false,
   "test-reaches-composition-root": false,
   "unknown-zone": true,
   "worker-call-cycle": true,

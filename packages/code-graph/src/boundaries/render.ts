@@ -42,6 +42,7 @@ const KINDS = {
   "binding-outside-driven-adapter": { rule: "B17", advice: "deployable" },
   "worker-call-cycle": { rule: "B18", advice: "deployable" },
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
+  "package-import-crosses-deployable": { rule: "B21", advice: "deployable" },
   "test-reaches-composition-root": { rule: "B20", advice: "test" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
@@ -185,7 +186,8 @@ const DEPLOYABLE_FIX_LINES = [
   "  Use a worker binding only in a feature's adapters/driven/ (driven-adapters/ in the port layout)",
   "  or in its worker's wrangler main (`bindingOwners` narrows one to exact driven files), break a",
   "  loop of workers that bind each other, and reach another workspace by its package name, never a",
-  "  relative path.",
+  "  relative path. Reach another worker through its RPC binding and a shared contract, rather than",
+  "  importing its deployable package.",
 ];
 
 const TEST_FIX_LINES = [

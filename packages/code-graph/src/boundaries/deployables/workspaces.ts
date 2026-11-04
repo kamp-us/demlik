@@ -1,6 +1,8 @@
 import path from "node:path";
+import { matchPackage, type WorkspacePackage } from "../../layers/resolve-target.js";
 import type { ImportEdge } from "../../schema.js";
-import { isRelativeName } from "../../syntax/imports.js";
+import type { SyntaxFile } from "../../syntax/file.js";
+import { importLiterals, isRelativeName } from "../../syntax/imports.js";
 import type { BoundaryViolation } from "../violation.js";
 
 // The nearest workspace root at or above a repo-relative path, or null: the path itself counts, so
@@ -52,5 +54,48 @@ export function crossWorkspaceImports(
       to,
       ...reach,
     }),
+  );
+}
+
+export function crossDeployablePackageImports(
+  roots: ReadonlySet<string>,
+  packages: ReadonlyMap<string, WorkspacePackage>,
+  scope: string,
+  from: string,
+  edges: readonly ImportEdge[],
+): BoundaryViolation[] {
+  const home = workspaceAt(roots, path.posix.dirname(from)) ?? scope;
+  const reached = new Map<string, Reach>();
+  for (const edge of edges) {
+    if (isRelativeName(edge.specifier)) continue;
+    const target = matchPackage(edge.specifier, packages);
+    if (target === undefined || target.dir === home) continue;
+    const held = reached.get(target.dir);
+    reached.set(target.dir, {
+      specifier: held?.specifier ?? edge.specifier,
+      typeOnly: (held?.typeOnly ?? true) && edge.typeOnly,
+    });
+  }
+  return [...reached].map(
+    ([to, reach]): BoundaryViolation => ({
+      kind: "package-import-crosses-deployable",
+      from,
+      to,
+      ...reach,
+    }),
+  );
+}
+
+export function importsInSourceOrder(
+  syntax: SyntaxFile,
+  edges: readonly ImportEdge[],
+): ImportEdge[] {
+  const positions = new Map<string, number>();
+  for (const literal of importLiterals(syntax)) {
+    const first = positions.get(literal.specifier) ?? literal.start;
+    positions.set(literal.specifier, Math.min(first, literal.start));
+  }
+  return [...edges].sort(
+    (a, b) => (positions.get(a.specifier) ?? 0) - (positions.get(b.specifier) ?? 0),
   );
 }

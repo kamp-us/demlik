@@ -17,6 +17,7 @@ import { deployableCensus, type SiteRow } from "./deployables/census.js";
 import { workerCycles } from "./deployables/cycles.js";
 import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/deployables.js";
 import { declaresDeployables } from "./deployables/schema.js";
+import { importsInSourceOrder } from "./deployables/workspaces.js";
 import { detectImpureUses } from "./impure-uses.js";
 import {
   type BoundaryLedger,
@@ -120,15 +121,20 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
     loaded.sourceFiles,
     loaded.tsConfigPath,
   );
-  return loaded.sourceFiles.map(({ file, syntax }) => ({
-    file,
-    importEdges: importEdgesByFile.get(file) ?? [],
-    impureUses: detectImpureUses(syntax),
-    runtimeSpecifiers: runtimeSpecifiers(syntax),
-    importedNames: importedNamesFor(reads.libraries, scope, syntax),
-    bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
-    ...shapeFactsOf(reads.shape, scope, file, syntax),
-  }));
+  return loaded.sourceFiles.map(({ file, syntax }) => {
+    const importEdges = importEdgesByFile.get(file) ?? [];
+    return {
+      file,
+      importEdges: reads.deployables.kinds.has("package-import-crosses-deployable")
+        ? importsInSourceOrder(syntax, importEdges)
+        : importEdges,
+      impureUses: detectImpureUses(syntax),
+      runtimeSpecifiers: runtimeSpecifiers(syntax),
+      importedNames: importedNamesFor(reads.libraries, scope, syntax),
+      bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
+      ...shapeFactsOf(reads.shape, scope, file, syntax),
+    };
+  });
 }
 
 // The names of the entries directly under a scope's `src/`, none when it has no such directory.

@@ -217,3 +217,140 @@ describe("B19 relative-import-crosses-workspace", () => {
     ]);
   });
 });
+
+const B21 = "package-import-crosses-deployable";
+const PACKAGE_RULES = { ...RULES, acrossDeployables: [B21], testFiles: ["**/*.test.ts"] };
+const WORKER_PACKAGES = {
+  "services/billing/package.json": JSON.stringify({ name: "@shop/billing" }),
+  "services/billing/wrangler.jsonc": '{ "name": "billing" }',
+  "services/billing/src/index.ts": "export const x = 1;\n",
+};
+
+function packageCrossings(files: Record<string, string>, rules: unknown = PACKAGE_RULES) {
+  const run = open({ ...WORKER_PACKAGES, ...files }, rules).run({ json: true });
+  expect(run.errors).toEqual([]);
+  return reportOf(run).scopes.flatMap((s) => s.violations.filter((v) => v.kind === B21));
+}
+
+describe("B21 package-import-crosses-deployable", () => {
+  it("reports package roots and subpaths, including a named test file", () => {
+    const found = packageCrossings({
+      "services/api/wrangler.jsonc": '{ "name": "api" }',
+      [`${API}/src/orders/root.ts`]:
+        'import { x } from "@shop/billing";\nexport const value = x;\n',
+      [`${API}/src/orders/sub.test.ts`]:
+        'import { x } from "@shop/billing/testing";\nexport const value = x;\n',
+    });
+    expect(found).toEqual([
+      {
+        kind: B21,
+        from: `${API}/src/orders/root.ts`,
+        to: "services/billing",
+        specifier: "@shop/billing",
+        typeOnly: false,
+      },
+      {
+        kind: B21,
+        from: `${API}/src/orders/sub.test.ts`,
+        to: "services/billing",
+        specifier: "@shop/billing/testing",
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it("counts type-only imports and keeps the first spelling, with typeOnly true only when all are", () => {
+    const found = packageCrossings({
+      [`${API}/src/orders/types.ts`]:
+        'import type { X } from "@shop/billing/types";\nexport type { Y } from "@shop/billing";\n',
+      [`${API}/src/orders/mixed.ts`]:
+        'import type { X } from "@shop/billing/types";\nexport { x } from "@shop/billing";\n',
+    });
+    expect(found).toEqual([
+      {
+        kind: B21,
+        from: `${API}/src/orders/mixed.ts`,
+        to: "services/billing",
+        specifier: "@shop/billing/types",
+        typeOnly: false,
+      },
+      {
+        kind: B21,
+        from: `${API}/src/orders/types.ts`,
+        to: "services/billing",
+        specifier: "@shop/billing/types",
+        typeOnly: true,
+      },
+    ]);
+  });
+
+  it("leaves library packages, non-worker apps, external packages and the workspace's own name clean", () => {
+    expect(
+      packageCrossings({
+        "services/api/wrangler.toml": 'name = "api"',
+        "tools/cli/package.json": JSON.stringify({ name: "@shop/cli" }),
+        [`${API}/src/orders/clean.ts`]: [
+          'export { x } from "@shop/other-package";',
+          'export { y } from "@shop/cli/testing";',
+          'export { z } from "@shop/api/internal";',
+          'export { t } from "external";',
+        ].join("\n"),
+      }),
+    ).toEqual([]);
+  });
+
+  it("matches unscoped package subpaths and judges imports from a non-worker workspace", () => {
+    expect(
+      packageCrossings({
+        "services/billing/package.json": JSON.stringify({ name: "billing" }),
+        [`${API}/src/orders/load.ts`]: 'export const load = () => import("billing/testing");\n',
+      }),
+    ).toEqual([
+      {
+        kind: B21,
+        from: `${API}/src/orders/load.ts`,
+        to: "services/billing",
+        specifier: "billing/testing",
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it("keeps a dynamic import written before a static import as the first specifier", () => {
+    expect(
+      packageCrossings({
+        [`${API}/src/orders/load.ts`]:
+          'export const load = () => import("@shop/billing/testing");\nexport { x } from "@shop/billing";\n',
+      }),
+    ).toEqual([
+      {
+        kind: B21,
+        from: `${API}/src/orders/load.ts`,
+        to: "services/billing",
+        specifier: "@shop/billing/testing",
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it("requires the worker config at the package root, not in a child directory", () => {
+    expect(
+      packageCrossings({
+        "tools/cli/package.json": JSON.stringify({ name: "@shop/cli" }),
+        "tools/cli/worker/wrangler.jsonc": '{ "name": "nested" }',
+        [`${API}/src/orders/clean.ts`]: 'export { x } from "@shop/cli";\n',
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not run when the kind is not listed", () => {
+    expect(
+      packageCrossings(
+        {
+          [`${API}/src/orders/root.ts`]: 'export { x } from "@shop/billing";\n',
+        },
+        { ...PACKAGE_RULES, acrossDeployables: [] },
+      ),
+    ).toEqual([]);
+  });
+});

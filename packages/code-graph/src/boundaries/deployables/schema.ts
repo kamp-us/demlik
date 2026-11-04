@@ -1,13 +1,14 @@
 import { z } from "zod";
 import type { BoundaryKind } from "../violation.js";
 
-// The three rules across deployables. A rules file turns each on by naming it in
+// The rules across deployables. A rules file turns each on by naming it in
 // `acrossDeployables`; a kind it does not name does not run, so a release that adds a kind never
 // fails the merge gate of a repo that did not ask for it.
 export const DEPLOYABLE_KINDS = [
   "binding-outside-driven-adapter",
   "worker-call-cycle",
   "relative-import-crosses-workspace",
+  "package-import-crosses-deployable",
 ] as const satisfies readonly BoundaryKind[];
 
 export type DeployableKind = (typeof DEPLOYABLE_KINDS)[number];
