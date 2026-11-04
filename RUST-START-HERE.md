@@ -5,6 +5,9 @@ Rust machines with state, messages, commands, subscriptions, async effects,
 and persistence facilities. It is an experimental preview, with measured
 behavioral comparisons, rather than a completed full-parity release.
 
+To continue the port, read [Rust parity: remaining work](RUST_PARITY.md).
+It lists the paused work, source/evidence entry points and completion checks.
+
 Start with [Your first Rust TEA bot](examples/rust-discord-starter/README.md).
 That standalone application uses the public `demlik-tea` interface. Its default
 demo runs without Discord credentials. Its optional real Discord adapter uses
