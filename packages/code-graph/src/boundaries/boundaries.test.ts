@@ -865,17 +865,17 @@ describe("a feature's table definitions", () => {
     );
     return specifier;
   };
-  const kinds = () => {
+  const violations = () => {
     const run = repo.run({ json: true });
     expect(run.errors).toEqual([]);
     expect(run.code).toBe(0);
     const report: { scopes: { violations: BoundaryViolation[] }[] } = JSON.parse(run.stdout);
-    return report.scopes.flatMap((scope) => scope.violations.map((v) => v.kind));
+    return report.scopes.flatMap((scope) => scope.violations);
   };
 
   it("lets one feature's tables import another's without B1", () => {
     open("src/billing/adapters/driven/tables.ts", tables);
-    expect(kinds()).toEqual([]);
+    expect(violations()).toEqual([]);
   });
 
   it.each([
@@ -883,23 +883,57 @@ describe("a feature's table definitions", () => {
     "adapters/driving/x.ts",
     "adapters/driven/tables.ts",
   ])("keeps another feature's store B1 from %s", (file) => {
-    open(`src/billing/${file}`, "src/orders/adapters/driven/order-store.ts");
-    expect(kinds()).toEqual(["cross-feature"]);
+    const from = `src/billing/${file}`;
+    const to = "src/orders/adapters/driven/order-store.ts";
+    const specifier = open(from, to);
+    expect(violations()).toEqual([
+      {
+        kind: "cross-feature",
+        from: `${SCOPE}/${from}`,
+        fromFeature: "billing",
+        to: `${SCOPE}/${to}`,
+        toFeature: "orders",
+        specifier,
+        typeOnly: false,
+      },
+    ]);
   });
 
   it.each([false, true])("judges application imports with B16 enabled: %s", (enabled) => {
-    open("src/billing/application/x.ts", tables, {
+    const specifier = open("src/billing/application/x.ts", tables, {
       applicationShape: enabled ? ["application-import-outside-allowlist"] : [],
     });
-    expect(kinds()).toEqual(enabled ? ["application-import-outside-allowlist"] : []);
+    expect(violations()).toEqual(
+      enabled
+        ? [
+            {
+              kind: "application-import-outside-allowlist",
+              from: `${SCOPE}/src/billing/application/x.ts`,
+              to: `${SCOPE}/${tables}`,
+              specifier,
+              typeOnly: false,
+            },
+          ]
+        : [],
+    );
   });
 
   it.each([
     ["application/x.ts", "application-imports-adapter"],
     ["adapters/driving/x.ts", "driving-reaches-driven"],
   ])("keeps its own tables judged from %s", (file, kind) => {
-    open(`src/orders/${file}`, tables);
-    expect(kinds()).toEqual([kind]);
+    const from = `src/orders/${file}`;
+    const specifier = open(from, tables);
+    expect(violations()).toEqual([
+      {
+        kind,
+        from: `${SCOPE}/${from}`,
+        feature: "orders",
+        to: `${SCOPE}/${tables}`,
+        specifier,
+        typeOnly: false,
+      },
+    ]);
   });
 
   it("keeps a binding used in tables clean under B17", () => {
@@ -908,7 +942,7 @@ describe("a feature's table definitions", () => {
     });
     repo.put("wrangler.jsonc", JSON.stringify({ name: "svc", d1_databases: [{ binding: "DB" }] }));
     repo.put(tables, "export const table = env.DB.prepare('select 1');\n");
-    expect(kinds()).toEqual([]);
+    expect(violations()).toEqual([]);
     expect(JSON.parse(repo.run({ json: true }).stdout)).toMatchObject({
       deployables: { workers: [{ bindings: { DB: 1 } }] },
     });
@@ -916,14 +950,14 @@ describe("a feature's table definitions", () => {
 
   it("lets a file outside every feature import tables without B4", () => {
     open("src/schema.ts", tables);
-    expect(kinds()).toEqual([]);
+    expect(violations()).toEqual([]);
   });
 
   it("licenses its own tables through readAllowance as a driven file", () => {
     open("src/orders/adapters/driving/x.ts", tables, {
       readAllowance: { [SCOPE]: { driven: [tables] } },
     });
-    expect(kinds()).toEqual([]);
+    expect(violations()).toEqual([]);
   });
 
   it("prunes an existing table-to-table B1 ledger entry under --ci", () => {
