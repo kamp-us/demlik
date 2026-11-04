@@ -50,7 +50,8 @@ function outsideFile(
       return { to: target };
     case "feature":
       // Another feature's index.ts: its internals were B1's. Its own zones are an allowlist.
-      if (place.feature !== file.feature) return null;
+      if (place.feature !== file.feature)
+        return place.zone.rule.exportsOnly ? null : { to: target };
       return file.own.includes(place.zone.name) ? null : { to: target };
     default: {
       const exhaustive: never = place;

@@ -77,7 +77,7 @@ function withinFeature(
       return to.zone.adapter ? { kind, ...edge } : null;
     case "driving-reaches-driven": {
       if (to.zone.name === "application") return { kind, ...edge };
-      if (to.zone.name !== "driven") return null;
+      if (!to.zone.rule.touchesBindings) return null;
       const verdict = ctx.reads(target);
       if (verdict.licensed) return null;
       return { kind, ...edge, ...(verdict.write === undefined ? {} : { write: verdict.write }) };
