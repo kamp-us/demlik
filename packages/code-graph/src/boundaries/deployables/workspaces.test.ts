@@ -233,6 +233,20 @@ function packageCrossings(files: Record<string, string>, rules: unknown = PACKAG
 }
 
 describe("B21 package-import-crosses-deployable", () => {
+  it.each([
+    "fs",
+    "fs/promises",
+    "node:fs",
+    "node:fs/promises",
+  ])("leaves builtin %s clean even when a worker package is named fs", (specifier) => {
+    expect(
+      packageCrossings({
+        "services/billing/package.json": JSON.stringify({ name: "fs" }),
+        [`${API}/src/orders/builtin.ts`]: `export * from "${specifier}";\n`,
+      }),
+    ).toEqual([]);
+  });
+
   it("reports package roots and subpaths, including a named test file", () => {
     const found = packageCrossings({
       "services/api/wrangler.jsonc": '{ "name": "api" }',

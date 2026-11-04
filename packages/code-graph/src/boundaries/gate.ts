@@ -30,6 +30,7 @@ import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { declaresLibraries } from "./libraries/schema.js";
 import { migratedLedger } from "./migrate.js";
+import { readPackageFacts } from "./package-facts.js";
 import { reconcile, withAccepted } from "./reconcile.js";
 import {
   type Censuses,
@@ -309,12 +310,13 @@ function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
   const configs = declaresDeployables(rules) || declaresReadAllowance(rules);
   const listing = configs || declaresLibraries(rules) ? listRepo(args.repoRoot) : undefined;
   const catalog = configs ? loadBindingCatalog(args.repoRoot, listing) : NO_CATALOG;
-  const read = readLibraries(rules, args.repoRoot, listing);
+  const packages = readPackageFacts(rules, args.repoRoot, listing);
+  const read = readLibraries(rules, args.repoRoot, packages);
   if (read.kind === "refused") {
     args.report(read.message);
     return null;
   }
-  const deployables = readDeployables(rules, args.repoRoot, listing, catalog);
+  const deployables = readDeployables(rules, packages, catalog);
   if (deployables.kind === "refused") {
     args.report(deployables.message);
     return null;

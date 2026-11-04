@@ -1,3 +1,4 @@
+import { isBuiltin } from "node:module";
 import path from "node:path";
 import { matchPackage, type WorkspacePackage } from "../../layers/resolve-target.js";
 import type { ImportEdge } from "../../schema.js";
@@ -67,7 +68,7 @@ export function crossDeployablePackageImports(
   const home = workspaceAt(roots, path.posix.dirname(from)) ?? scope;
   const reached = new Map<string, Reach>();
   for (const edge of edges) {
-    if (isRelativeName(edge.specifier)) continue;
+    if (isRelativeName(edge.specifier) || isBuiltin(edge.specifier)) continue;
     const target = matchPackage(edge.specifier, packages);
     if (target === undefined || target.dir === home) continue;
     const held = reached.get(target.dir);

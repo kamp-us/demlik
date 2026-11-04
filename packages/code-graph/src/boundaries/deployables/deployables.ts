@@ -1,10 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
 import { ownerOf } from "../../extract/cross-runtime.js";
-import { discoverPackageRoots, listRepo, type RepoListing } from "../../extract/project.js";
 import type { BindingCatalog, ServiceManifest } from "../../extract/wrangler-config.js";
-import { type WorkspacePackage, workspacePackages } from "../../layers/resolve-target.js";
+import type { WorkspacePackage } from "../../layers/resolve-target.js";
 import type { BindingKind, DataBindingKind, ImportEdge } from "../../schema.js";
+import type { PackageFacts } from "../package-facts.js";
 import { NO_GRAPH, type WorkerGraph, workerGraph } from "./cycles.js";
 import { type DeployableKind, type DeployableRules, declaresDeployables } from "./schema.js";
 
@@ -93,12 +91,6 @@ function judgedBindings(manifest: ServiceManifest): ReadonlyMap<string, JudgedBi
   );
 }
 
-function workspaceRoots(repoRoot: string, listing: RepoListing): Set<string> {
-  const dirs = discoverPackageRoots(repoRoot, listing).filter((dir) => dir !== "");
-  const hasRootManifest = fs.existsSync(path.join(repoRoot, "package.json"));
-  return new Set(hasRootManifest ? [".", ...dirs] : dirs);
-}
-
 export type DeployablesRead =
   | { readonly kind: "read"; readonly deployables: Deployables }
   | { readonly kind: "refused"; readonly message: string };
@@ -119,22 +111,19 @@ function unreadableConfigsIssue(
 }
 
 // Reads the repo for the listed kinds, or says in one line why it cannot. A declaration that lists
-// none costs nothing: the repo is not read. `listing` is the repo's files, listed once for the run,
-// and `catalog` the wrangler configs, read once for the run beside whoever else needs them.
+// none costs nothing. Package facts and the wrangler catalog belong to the run.
 export function readDeployables(
   rules: DeployableRules,
-  repoRoot: string,
-  listing: RepoListing | undefined,
+  facts: PackageFacts,
   catalog: BindingCatalog,
 ): DeployablesRead {
   if (!declaresDeployables(rules)) return { kind: "read", deployables: NO_DEPLOYABLES };
-  const files = listing ?? listRepo(repoRoot);
   const kinds = new Set(rules.acrossDeployables);
   const message = unreadableConfigsIssue(kinds, catalog);
   if (message !== null) return { kind: "refused", message };
   const workspaces =
     kinds.has("relative-import-crosses-workspace") || kinds.has("package-import-crosses-deployable")
-      ? workspaceRoots(repoRoot, files)
+      ? facts.roots
       : new Set<string>();
   const workerDirs = new Set(catalog.manifests.map((manifest) => manifest.dir || "."));
   return {
@@ -145,10 +134,7 @@ export function readDeployables(
       graph: workerGraph(catalog),
       workspaces,
       packages: kinds.has("package-import-crosses-deployable")
-        ? workspacePackages(
-            repoRoot,
-            [...workspaces].filter((dir) => workerDirs.has(dir)),
-          )
+        ? new Map([...facts.packages].filter(([, pkg]) => workerDirs.has(pkg.dir)))
         : new Map(),
       judged: new Map(catalog.manifests.map((m) => [m, judgedBindings(m)])),
     },

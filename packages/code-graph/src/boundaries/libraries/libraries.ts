@@ -1,12 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { discoverPackageRoots, listRepo, type RepoListing } from "../../extract/project.js";
 import { globToRegExp } from "../../kinds/glob.js";
-import {
-  matchPackage,
-  type WorkspacePackage,
-  workspacePackages,
-} from "../../layers/resolve-target.js";
+import { matchPackage, type WorkspacePackage } from "../../layers/resolve-target.js";
+import type { PackageFacts } from "../package-facts.js";
 import {
   declaresLibraries,
   type ImportedFrom,
@@ -81,16 +77,14 @@ function libraryIssues(dir: string, packageDirs: ReadonlySet<string>): string[] 
 }
 
 // Reads the repo for the declared libraries, or says in one line why the declaration cannot stand.
-// A declaration that names no library key costs nothing: the repo is not read. `listing` is the
-// repo's files, listed once for the run.
+// A declaration that names no library key costs nothing. Package facts belong to the run.
 export function readLibraries(
   rules: LibraryRules,
   repoRoot: string,
-  listing: RepoListing | undefined,
+  facts: PackageFacts,
 ): LibrariesRead {
   if (!declaresLibraries(rules)) return { kind: "read", libraries: NO_LIBRARIES };
-  const files = listing ?? listRepo(repoRoot);
-  const packageDirs = discoverPackageRoots(repoRoot, files).filter((dir) => dir !== "");
+  const packageDirs = [...facts.roots].filter((dir) => dir !== ".");
   const known = new Set(packageDirs);
   const [message] = [
     ...rules.libraryRoots.flatMap((root) => rootIssues(root, repoRoot)),
@@ -104,7 +98,7 @@ export function readLibraries(
       rules,
       dirs: Object.keys(rules.libraries).sort((a, b) => b.length - a.length),
       typeOfDir: new Map(Object.entries(rules.libraries)),
-      packages: workspacePackages(repoRoot, packageDirs),
+      packages: new Map([...facts.packages].filter(([, pkg]) => pkg.dir !== ".")),
       packageDirs,
       world: rules.worldLibraries.map(globToRegExp),
     },

@@ -56,8 +56,11 @@ export function packageName(manifest: Record<string, unknown>): string | null {
   return typeof name === "string" && name.length > 0 ? name : null;
 }
 
-export function packageSourceEntry(repoRoot: string, dir: string): string | null {
-  const manifest = readManifest(repoRoot, dir);
+export function packageSourceEntry(
+  repoRoot: string,
+  dir: string,
+  manifest = readManifest(repoRoot, dir),
+): string | null {
   if (manifest === null) return null;
   const candidates = declaredTargets(manifest)
     .map(toSourcePath)

@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openTypeProgram, openTypeSession } from "../../engine/tsgo.js";
@@ -154,16 +155,37 @@ describe("a rules file that lists the kinds reads the repo once, on the cheap pa
     expect(vi.mocked(openTypeProgram)).not.toHaveBeenCalled();
   });
 
-  it("lists the repo once when libraries are declared beside the deployables", () => {
+  it("lists the repo and reads each manifest once per run with libraries and B21", () => {
     const run = open({
       ...SHOP_WORKER_RULES,
+      acrossDeployables: [...ALL, "package-import-crosses-deployable"],
       libraryTypes: { util: { imports: ["util"], pure: false } },
       libraries: { "packages/string-util": "util" },
     });
     execFileSync("git", ["init", "-q"], { cwd: run.root });
-    resetCounts();
-    run.run({ ci: true });
-    expect(listings()).toBe(1);
+    run.put("package.json", JSON.stringify({ name: "@shop/root" }));
+    const manifests = [
+      "package.json",
+      ...Object.keys(SHOP_WORKER_FILES).filter((file) => file.endsWith("/package.json")),
+    ];
+    const reads = vi.spyOn(fs, "readFileSync");
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        resetCounts();
+        reads.mockClear();
+        expect(run.run({ json: true }).errors).toEqual([]);
+        expect(listings()).toBe(1);
+        expect(vi.mocked(workspacePackages)).toHaveBeenCalledTimes(1);
+        for (const file of manifests) {
+          expect(
+            reads.mock.calls.filter(([read]) => read === path.join(run.root, file)),
+            file,
+          ).toHaveLength(1);
+        }
+      }
+    } finally {
+      reads.mockRestore();
+    }
   });
 });
 
