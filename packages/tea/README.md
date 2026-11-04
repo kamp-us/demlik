@@ -79,6 +79,11 @@ under `phase: "discard"`. `useRuntime(run, { onError })` renders a booted run fr
 either engine, or a hand-built handle with a Promise-returning `dispatch`, with
 the same `[state, send]` contract. Its optional sink hears discards and hand-built
 dispatch failures; a run keeps its own step-error sink.
+`useMachine` takes either engine's `run`. For the Effect engine pass
+`runIn(runtime)` from `@demlik/tea/effect`, with your `ManagedRuntime`; its
+`interpret` cells return an `Effect` and its `subscribe` runners a `Stream`, and the
+lifecycle (one run per mount under Strict Mode, Subs paused on an `<Activity>`
+hide, the run stopped on unmount) is the same.
 `useRuntime(run, (model) => model.views[id])` reads one part and re-renders on runtime updates only when that selected value changes (`Object.is`).
 
 `useBackgroundRuntime` from `@demlik/tea/extension` keeps `{ state, dispatch }`,

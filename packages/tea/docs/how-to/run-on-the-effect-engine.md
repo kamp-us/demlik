@@ -289,3 +289,10 @@ failure does. Once the Msgs already in line have folded, the Subs close, the fin
 save runs, and the run's own Scope closes. The Scope you ran it in stays open. You
 do not need to call `stop()` after a failed `done()`, and calling it, or closing
 your Scope, does nothing more.
+
+## 6. Drive it from a React component
+
+`useMachine` from `@demlik/tea/react` runs this engine too. Hand it
+`runIn(runtime)` from `@demlik/tea/effect`, with your `ManagedRuntime`, as its `run`,
+and the `interpret` cells above go beside it unchanged. See
+[step 8 of Drive a machine from React](./drive-from-react.md#8-run-the-hook-on-the-effect-engine).

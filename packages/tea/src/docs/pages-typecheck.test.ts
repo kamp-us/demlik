@@ -68,6 +68,9 @@ const PAGES: readonly Page[] = [
     skip: [
       "## 2. Hand it the handlers, and a `ctx` when they need one",
       "## 3. Persist across mounts with a `store`",
+      // `profile` is the Effect how-to's machine, and `effect` is an optional
+      // peer. `src/effect/use-machine-how-to.test.tsx` compiles and renders it.
+      "## 8. Run the hook on the Effect engine",
     ],
   },
   {

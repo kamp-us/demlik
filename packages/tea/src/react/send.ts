@@ -6,25 +6,8 @@
  * cannot, because the Msg never reached it.
  */
 
-import { defaultOnError, type Postable, post } from "../internal/engine/loop";
-import {
-  DispatchDiscardedError,
-  type OnError,
-  type RuntimeErrorContext,
-} from "../runtime-types";
-
-/** A failure outside the run falls back to the default sink if its sink throws. */
-export function sinkOrDefault(
-  sink: OnError,
-  error: unknown,
-  context: RuntimeErrorContext,
-): void {
-  try {
-    sink(error, context);
-  } catch (thrown) {
-    defaultOnError(thrown, context);
-  }
-}
+import { type Postable, post } from "../internal/engine/loop";
+import { DispatchDiscardedError, type OnError } from "../runtime-types";
 
 /** What a `send` can be built on: a run with a line to post to, or only its own `dispatch`. */
 export type SendTarget<S, M extends { type: string }> =

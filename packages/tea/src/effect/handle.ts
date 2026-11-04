@@ -9,6 +9,10 @@
 
 import { Effect } from "effect";
 import {
+  type InstalledStateRead,
+  installedState,
+} from "../internal/engine/installed-state";
+import {
   type LiveWorkProbe,
   liveWork,
   type Postable,
@@ -176,11 +180,17 @@ export function effectHandle<
   E extends { type: string },
   Err,
 >(
-  loop: Runtime<S, M, E> & LiveWorkProbe & Postable<S, M>,
-): EffectRun<S, M, E, Err> & LiveWorkProbe {
-  const handle: EffectRun<S, M, E, Err> & LiveWorkProbe = {
+  loop: Runtime<S, M, E> &
+    LiveWorkProbe &
+    Postable<S, M> &
+    InstalledStateRead<S>,
+): EffectRun<S, M, E, Err> & LiveWorkProbe & InstalledStateRead<S> {
+  const handle: EffectRun<S, M, E, Err> &
+    LiveWorkProbe &
+    InstalledStateRead<S> = {
     [liveWork]: loop[liveWork],
     [post]: loop[post],
+    [installedState]: loop[installedState],
     dispatch: (msg, opts) => settled(() => loop.dispatch(msg, opts)),
     dispatchOnce: (msg) => settled(() => loop.dispatchOnce(msg)),
     subscribe: (listener) => loop.subscribe(listener),

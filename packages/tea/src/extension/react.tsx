@@ -58,8 +58,8 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { defaultOnError } from "../internal/engine/loop";
-import { senderOf, sinkOrDefault } from "../react/send";
+import { defaultOnError, sinkOrDefault } from "../internal/engine/loop";
+import { senderOf } from "../react/send";
 import type { OnError } from "../runtime-types";
 import { bridgeClient, passThroughMsg } from "./bridge";
 

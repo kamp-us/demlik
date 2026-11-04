@@ -32,6 +32,7 @@ import {
   builtinExtensions,
   refuseFencedRunWithoutSink,
 } from "../internal/engine/builtins";
+import type { InstalledStateRead } from "../internal/engine/installed-state";
 import {
   defaultOnError,
   type LiveWorkProbe,
@@ -40,6 +41,7 @@ import {
   type Postable,
   startLoop,
 } from "../internal/engine/loop";
+import { subGateOf } from "../internal/engine/sub-gate";
 import type {
   BuiltinSub,
   BuiltinSubType,
@@ -175,7 +177,7 @@ type ServicesOfRunner<F> = F extends (
 // `interpret` is optional for a machine that emits no Cmd, and `subscribe` for
 // one that declares only built-in Subs — the same requiredness the Promise
 // engine's `RunHandlers` carries.
-type InterpretOption<C extends Cmd, I> = [C] extends [Cmd<never>]
+export type InterpretOption<C extends Cmd, I> = [C] extends [Cmd<never>]
   ? { readonly interpret?: I }
   : { readonly interpret: I };
 
@@ -412,7 +414,7 @@ function start<
   runEffect: RunEffect,
   fork: ForkEffect,
   closeScope: (exit: Exit.Exit<never, unknown>) => void,
-): Runtime<S, M, E> & LiveWorkProbe & Postable<S, M> {
+): Runtime<S, M, E> & LiveWorkProbe & Postable<S, M> & InstalledStateRead<S> {
   const interpret = ((opts as { interpret?: unknown }).interpret ??
     {}) as Readonly<Record<string, AnyCell | undefined>>;
   const subscribe = ((opts as { subscribe?: unknown }).subscribe ??
@@ -482,6 +484,7 @@ function start<
     reduce: (state, msg) => applyCell<S, M, C>(machine, state, msg),
     subs: subEntriesOf<S>(machine),
     runnerFor,
+    gate: subGateOf(opts),
     handlerFor,
     store: opts.store,
     ctx: (opts.ctx ?? {}) as Ctx,
@@ -513,5 +516,8 @@ function start<
     interruption.abort();
     return stopped;
   };
-  return handle as unknown as Runtime<S, M, E> & LiveWorkProbe & Postable<S, M>;
+  return handle as unknown as Runtime<S, M, E> &
+    LiveWorkProbe &
+    Postable<S, M> &
+    InstalledStateRead<S>;
 }

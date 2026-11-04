@@ -33,22 +33,20 @@ import {
 } from "react";
 import type {
   Cmd,
-  Dispose,
   EngineRun,
-  Interpret,
+  HandlerFamily,
+  HandlersFor,
   Machine,
   OnError,
-  RunHandlers,
+  PromiseHandlers,
   RunOptions,
   StoreAndOnError,
   Sub,
-  Subscribe,
 } from "../index";
-import { builtinRunners } from "../internal/engine/builtin-runners";
-import { defaultOnError } from "../internal/engine/loop";
+import { defaultOnError, sinkOrDefault } from "../internal/engine/loop";
+import { subGate } from "../internal/engine/sub-gate";
 import { MountedRun } from "./mounted-run";
-import { type SendTarget, senderOf, sinkOrDefault } from "./send";
-import type { SubGate } from "./sub-gate";
+import { type SendTarget, senderOf } from "./send";
 
 // A stable `<Activity>` arrived in React 19.2. That is the first React where a
 // passive cleanup can be a hide, and the first to run an insertion cleanup in a
@@ -57,13 +55,16 @@ const cleanupMayBeAHide = "Activity" in React;
 
 /**
  * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
- * `@demlik/tea/promise`, or any engine's; the hook imports no engine. `ctx`
- * is required (every machine has one), `store` is optional (omit it for
- * volatile-state machines), and the handlers are the ones `run` takes beside
- * the machine: `interpret` (required once the machine emits a Cmd) and the
- * `subscribe` runners (required once the machine declares a Sub type other
- * than the built-in `timer`) — see {@link RunHandlers}. Same requiredness as
- * `run`, because it is the same type.
+ * `@demlik/tea/promise`, or `runIn(runtime)` from `@demlik/tea/effect`; the hook
+ * imports no engine. `ctx` is required (every machine has one), `store` is
+ * optional (omit it for volatile-state machines), and the handlers are the ones
+ * `run` takes beside the machine: `interpret` (required once the machine emits
+ * a Cmd) and the `subscribe` runners (required once the machine declares a Sub
+ * type other than the built-in `timer`) — see {@link RunHandlers}. Same
+ * requiredness as `run`, because it is the same type. They are typed by the
+ * engine `run` belongs to (`F`, see {@link HandlerFamily}): Promise-returning
+ * cells for the Promise engine's, `Effect`-returning cells and `Stream` runners
+ * for the bridge's.
  *
  * **The handlers are read fresh, never memoized on.** A handler table written
  * inline in the component is a new object every render; keying the runtime on
@@ -87,11 +88,12 @@ export type UseMachineOpts<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  F extends HandlerFamily = PromiseHandlers,
 > = {
-  run: EngineRun<S, M, C, U, Ctx>;
+  run: EngineRun<S, M, C, U, Ctx, never, F>;
   ctx: Ctx;
 } & StoreAndOnError<S> &
-  RunHandlers<M, C, U, Ctx>;
+  HandlersFor<F, M, C, U, Ctx>;
 
 /**
  * Build and own a run of `machine` for the lifetime of the component mount, on
@@ -134,9 +136,13 @@ export function useMachine<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  F extends HandlerFamily = PromiseHandlers,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx>>,
+  // Everything but the family is checked against the machine, not inferred from
+  // it. The family is read off the `run` that is handed in, which is the one
+  // member inference may look at.
+  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx, F>> & FamilyOfRun<F>,
 ): [S, (msg: M) => void] {
   // Deps are literal: machine, engine, ctx and store identity. NOT `[opts]`
   // (would rebuild every render — callers pass fresh objects). We pass
@@ -149,13 +155,14 @@ export function useMachine<
   // The latest render's handlers, read per call (see `UseMachineOpts`). Written
   // during render on purpose: a Cmd a transition emits runs after the render
   // that produced it, so the table it reads is never older than that render.
-  const handlersRef = useRef<RunHandlers<M, C, U, Ctx>>(opts);
-  handlersRef.current = opts;
+  const handlersRef = useRef<LatestHandlers>(opts as LatestHandlers);
+  handlersRef.current = opts as LatestHandlers;
   const interpret = useMemo(
-    () =>
-      latestTable(
-        () => (handlersRef.current as { interpret?: object }).interpret,
-      ) as Interpret<M, C, Ctx>,
+    () => latestTable(() => handlersRef.current.interpret),
+    [],
+  );
+  const subscribe = useMemo(
+    () => latestTable(() => handlersRef.current.subscribe),
     [],
   );
   // The latest render's `onError`, on the same terms, so a sink passed inline
@@ -182,16 +189,14 @@ export function useMachine<
             store,
             onError,
             interpret,
-            subscribe: gatedRunners(
-              subs,
-              () => handlersRef.current.subscribe,
-            ) as Partial<Subscribe<M, U, Ctx>>,
-          } as RunOptions<S, M, C, U, Ctx>),
+            subscribe,
+            [subGate]: subs,
+          } as unknown as RunOptions<S, M, C, U, Ctx, never, F>),
         machine.init(null, ctx)[0],
         cleanupMayBeAHide,
         (error, context) => sinkOrDefault(onError, error, context),
       ),
-    [machine, run, ctx, store, onError, interpret],
+    [machine, run, ctx, store, onError, interpret, subscribe],
   );
 
   const state = useSyncExternalStore(
@@ -214,37 +219,21 @@ export function useMachine<
   return [state, mounted.send];
 }
 
-/** A Sub runner as `run` calls it. */
-type GatedRunner = (sub: Sub, ctx: unknown, dispatch: unknown) => Dispose;
-
 /**
- * The Sub runner table `run` is handed: each runner the latest render names goes
- * through `subs`, read again each time the Sub starts. The built-ins are named
- * here so they go through it too. A type with no runner at all stays `undefined`,
- * which is what the engine reports as a missing runner.
+ * The `run` of `UseMachineOpts`, seen only for the family it says it takes. A
+ * plain `run` says nothing, so the family is the Promise engine's.
  */
-function gatedRunners(
-  subs: SubGate,
-  current: () => object | undefined,
-): object {
-  const runnerFor = (type: PropertyKey) =>
-    ((current() as Record<PropertyKey, unknown> | undefined)?.[type] ??
-      (builtinRunners as Record<PropertyKey, unknown>)[type]) as
-      | GatedRunner
-      | undefined;
-  return new Proxy(
-    {},
-    {
-      get: (_target, type) => {
-        const first = runnerFor(type);
-        if (first === undefined) return undefined;
-        const gated: GatedRunner = (sub, ctx, dispatch) =>
-          subs.admit(() => (runnerFor(type) ?? first)(sub, ctx, dispatch));
-        return gated;
-      },
-    },
-  );
-}
+type FamilyOfRun<F extends HandlerFamily> = {
+  readonly run: ((...args: never) => unknown) & {
+    readonly "~demlik/tea/handlers"?: F;
+  };
+};
+
+/** The handler tables of the latest render, whichever engine they are for. */
+type LatestHandlers = {
+  readonly interpret?: object;
+  readonly subscribe?: object;
+};
 
 /**
  * A handler table whose every cell is looked up on `current()` at the moment it

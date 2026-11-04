@@ -4,7 +4,8 @@ To use a `@demlik/tea` machine as a component's state, reach for `useMachine`
 from `@demlik/tea/react`. It builds and owns a runtime for the lifetime of the
 mount and hands you back `[state, send]`. Like `useReducer`'s dispatch,
 `send(msg)` returns `undefined` immediately. The hook imports no engine: you
-hand it the engine's `run`.
+hand it the engine's `run`. The examples use the Promise engine's; the Effect
+engine's is [step 8](#8-run-the-hook-on-the-effect-engine).
 
 The machine driven here is the download from
 [Build and replay your first machine](../tutorial/build-your-first-machine.md):
@@ -335,3 +336,74 @@ The background run's own `onError` hears its step failures. The bridge's low-lev
 `createBackgroundRuntimeContext` keeps the same Provider and consumer names:
 `useDispatch()` returns the same returnless sender, and `useRuntime()` returns
 `{ state, dispatch }`. Set `opts.onError` on the Provider for transport failures.
+
+## 8. Run the hook on the Effect engine
+
+`useMachine` takes the engine's `run`, so the Effect engine drives the same hook.
+`runIn(runtime)` from `@demlik/tea/effect` turns your `ManagedRuntime` into that
+`run`. The machine is the one from
+[Run a machine on the Effect engine](./run-on-the-effect-engine.md). Each
+`interpret` cell returns an `Effect` and each `subscribe` runner returns a
+`Stream`, and they read their services from your runtime:
+
+```tsx
+import { runIn } from "@demlik/tea/effect";
+import { useMachine } from "@demlik/tea/react";
+import { Context, Effect, Layer, ManagedRuntime } from "effect";
+
+/** Where names come from, as an Effect service. */
+class Directory extends Context.Service<
+  Directory,
+  { readonly nameOf: (id: string) => Effect.Effect<string | undefined> }
+>()("Directory") {}
+
+// Build the runtime once, outside any component. It is yours: you dispose it.
+const runtime = ManagedRuntime.make(
+  Layer.succeed(Directory, {
+    nameOf: (id) => Effect.succeed(id === "u1" ? "Ada" : undefined),
+  }),
+);
+
+function Lookup() {
+  const [state, send] = useMachine(profile, {
+    run: runIn(runtime),
+    ctx: undefined,
+    interpret: {
+      fetch_user: (cmd) =>
+        Effect.gen(function* () {
+          const directory = yield* Directory;
+          const name = yield* directory.nameOf(cmd.id);
+          if (name === undefined) {
+            return yield* Effect.fail({ _tag: "not_found" as const });
+          }
+          return { name };
+        }),
+    },
+  });
+
+  return (
+    <button type="button" onClick={() => send({ type: "look_up", id: "u1" })}>
+      {state.status}: {state.name}
+    </button>
+  );
+}
+```
+
+Step 4 holds unchanged: one run per mount under Strict Mode, the Subs paused on an
+`<Activity>` hide, the run stopped on a real unmount. What `runIn` adds:
+
+- **The runtime is yours.** `runIn` uses it as it is. It never builds the runtime
+  for you, caches it or disposes it, and the runtime still works after the component
+  is gone. A cell or runner that reads a service your runtime does not provide does
+  not compile.
+- **An unmount closes the run's `Scope`.** A Cmd in flight is interrupted and its
+  finalizers run, each Sub's `Stream` ends, and the Msg the Cmd would have sent never
+  arrives. A handler may read `Scope.Scope`: it is the run's own, so what a handler
+  acquires from it is released with the run.
+- **An async Layer builds on first use.** A Msg sent before it is built waits and
+  folds, in order, once it is. A Layer that fails ends the run before it began:
+  `onError` hears the failure once under `phase: "boot"`, and each Msg that was
+  waiting reaches it as a `DispatchDiscardedError` under `phase: "discard"`.
+- **`runIn(runtime)` is the same function every time for the same runtime**, so
+  calling it in the render keeps one run, under the identity rule of step 2. Handing
+  the hook another runtime starts another run.

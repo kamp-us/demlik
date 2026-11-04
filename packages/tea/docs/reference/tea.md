@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (161)
+## Exports (164)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -74,6 +74,8 @@ import { … } from "@demlik/tea";
 | [`fromTransport`](#fromTransport) | Function | stable | Build the battery. |
 | [`FromTransportOpts`](#FromTransportOpts) | Interface | stable | Options for `fromTransport`: the seam's `name`, how to open the transport, and how inbound values, outbound values and a dropped connection map to and from Msgs. |
 | [`fromWebSocket`](#fromWebSocket) | Function | stable | Build a Sub runner that opens a WebSocket to `sub.deps.wsUrl` and dispatches a Msg for each socket event. |
+| [`HandlerFamily`](#HandlerFamily) | Interface | stable | What an engine's handler tables look like, as a function of the machine's types. |
+| [`HandlersFor`](#HandlersFor) | Type | stable | The handler options of family `F`, for a machine of these types. |
 | [`historyTracker`](#historyTracker) | Function | stable | Create a bounded history tracker over a Runtime. |
 | [`HistoryTracker`](#HistoryTracker) | Interface | stable | A bounded log of a runtime's recent `(msg, state)` transitions, returned by `historyTracker`. |
 | [`Identity`](#Identity) | Interface | stable | A machine's optional message filter: `ofState` names the identity this instance owns, and `ofMsg` the identity a Msg is addressed to. |
@@ -110,6 +112,7 @@ import { … } from "@demlik/tea";
 | [`Port`](#Port) | Interface | stable | A named, typed channel for values leaving the runtime. |
 | [`PortEmitter`](#PortEmitter) | Interface | stable | Augmentation injected onto `ctx` inside Cmd handlers. |
 | [`PortNameCollisionError`](#PortNameCollisionError) | Class | stable | Thrown by `definePort` when a name has already been registered in the current process. |
+| [`PromiseHandlers`](#PromiseHandlers) | Interface | stable | The Promise engine's handler tables: what `RunHandlers` says. |
 | [`QuiescenceTimeoutError`](#QuiescenceTimeoutError) | Class | stable | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
 | [`readInOrder`](#readInOrder) | Function | stable | Run a composed read through `order` and return the first answer any step gives, or `absent` when every one defers. |
 | [`ReadStep`](#ReadStep) | Interface | stable | One step of a composed read: the slice it consults, under the name that slice goes by. |
@@ -932,10 +935,11 @@ type EngineRun<
   U extends Sub,
   Ctx,
   E extends { type: string } = never,
-> = (
+  F extends HandlerFamily = PromiseHandlers,
+> = ((
   machine: Machine<S, M, C, U, Ctx>,
-  opts: RunOptions<S, M, C, U, Ctx, E>,
-) => RunHandle<S, M, E>
+  opts: RunOptions<S, M, C, U, Ctx, E, F>,
+) => RunHandle<S, M, E>) & { readonly "~demlik/tea/handlers"?: F }
 ```
 
 <a id="ErrOf"></a>
@@ -1209,6 +1213,34 @@ interface FromTransportOpts<N extends string, TKey, Inbound, Outbound, M, Ctx> {
 function fromWebSocket<S extends Sub<string, WebSocketSubData>, M>(
   opts: WebSocketFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown>
+```
+
+<a id="HandlerFamily"></a>
+
+### `HandlerFamily`
+
+```ts
+interface HandlerFamily {
+  readonly C: Cmd;
+  readonly Ctx: unknown;
+  /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
+  readonly handlers: unknown;
+  readonly M: { type: string };
+  readonly U: Sub;
+}
+```
+
+<a id="HandlersFor"></a>
+
+### `HandlersFor`
+
+```ts
+type HandlersFor<F extends HandlerFamily, M, C, U, Ctx> = (F & {
+  readonly C: C;
+  readonly Ctx: Ctx;
+  readonly M: M;
+  readonly U: U;
+})["handlers"]
 ```
 
 <a id="historyTracker"></a>
@@ -1730,6 +1762,17 @@ class PortNameCollisionError extends Error {
 }
 ```
 
+<a id="PromiseHandlers"></a>
+
+### `PromiseHandlers`
+
+```ts
+interface PromiseHandlers extends HandlerFamily {
+  /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
+  readonly handlers: RunHandlers<{ type: string }, Cmd, Sub, unknown>;
+}
+```
+
 <a id="QuiescenceTimeoutError"></a>
 
 ### `QuiescenceTimeoutError`
@@ -1916,7 +1959,8 @@ type RunOptions<
   U extends Sub,
   Ctx,
   E extends { type: string } = never,
-> = CtxArg<Ctx> & RunHandlers<M, C, U, Ctx> & StoreAndOnError<S> & {
+  F extends HandlerFamily = PromiseHandlers,
+> = CtxArg<Ctx> & HandlersFor<F, M, C, U, Ctx> & StoreAndOnError<S> & {
   readonly events?: (msg: M, state: S) => readonly E[];
 }
 ```
