@@ -1,5 +1,34 @@
 # @demlik/tea
 
+## 0.23.0
+
+### Minor Changes
+
+- a0197a2: **Breaking change:** React hooks now hand event handlers a sender that returns
+  `undefined` immediately. `useMachine` and `useRuntime` previously returned
+  `[state, dispatch]` with `(msg) => Promise<void>`; they now return `[state, send]`
+  with `(msg) => void`. `useRuntime` accepts booted runs from either engine, plus
+  hand-built handles with `subscribe`, `getState`, and Promise-returning `dispatch`.
+
+  `useBackgroundRuntime` keeps `{ state, dispatch }`, but its `dispatch` changes
+  from `(msg) => Promise<void>` to `(msg) => void`. The context's `useDispatch()`
+  and `useRuntime().dispatch` change the same way; Provider options now accept
+  `onError` for transport failures under `phase: "follow-up"`.
+
+  Remove awaits and `.catch` calls on hook senders and render the outcome from
+  state. If host code needs completion, own the run and use its engine's
+  `dispatch`, `idle`, or `done` (execute the Effects on the Effect engine).
+  Step failures reach the run's `onError` once. A Msg held at unmount or sent
+  after stop is reported as `DispatchDiscardedError` under `phase: "discard"`.
+  Pass `{ onError }` to `useRuntime` for these discards and hand-built handle
+  failures (`phase: "follow-up"`); background step failures keep their host sink.
+
+- 3196d43: **Additive (declaration only):** `useRuntime` from `@demlik/tea/react` takes an optional selector, so a reader takes only its part of the model: `useRuntime(run, (model) => model.views[id])` re-renders on a run update only when that part changes. Pass `{ onError }` as the third argument when needed. No existing call needs editing: `useRuntime(run)` and `useRuntime(run, { onError })` return the whole state and the same returnless `send` as before. Closes issue 853.
+
+### Patch Changes
+
+- ad63422: Report a reducer's thrown error object to `onError` once under `"reduce"`, and a Sub runner's throw as it starts once under `"sub"`, when the Msg that caused it arrives through `tell` or a Cmd reply. Before, each was reported a second time under `"follow-up"`.
+
 ## 0.22.0
 
 ### Minor Changes
