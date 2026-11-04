@@ -995,10 +995,51 @@ export interface BootedRunHandle<
 }
 
 /**
+ * What an engine's handler tables look like, as a function of the machine's
+ * types. The Promise engine's `interpret` cells return Promises and its
+ * `subscribe` runners return a `Dispose`; the Effect engine's return an `Effect`
+ * and a `Stream`, and a host adapter that takes either engine's `run` cannot
+ * name those types. So the engine names them: a family is an interface whose
+ * `handlers` is written against `this["M"]`, `this["C"]`, `this["U"]` and
+ * `this["Ctx"]`, and {@link HandlersFor} fills those in for one machine. A
+ * `run` says which family it takes by its `"~demlik/tea/handlers"` type, which
+ * is how `useMachine` types the handlers beside the `run` it is handed.
+ *
+ * ```ts
+ * interface PromiseHandlers extends HandlerFamily {
+ *   readonly handlers: RunHandlers<this["M"], this["C"], this["U"], this["Ctx"]>;
+ * }
+ * ```
+ */
+export interface HandlerFamily {
+  // Filled in by `HandlersFor`; the bounds are what a family may assume.
+  readonly M: { type: string };
+  readonly C: Cmd;
+  readonly U: Sub;
+  readonly Ctx: unknown;
+  /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
+  readonly handlers: unknown;
+}
+
+/** The handler options of family `F`, for a machine of these types. */
+export type HandlersFor<F extends HandlerFamily, M, C, U, Ctx> = (F & {
+  readonly M: M;
+  readonly C: C;
+  readonly U: U;
+  readonly Ctx: Ctx;
+})["handlers"];
+
+/** The Promise engine's handler tables: what `RunHandlers` says. The default family. */
+export interface PromiseHandlers extends HandlerFamily {
+  readonly handlers: RunHandlers<this["M"], this["C"], this["U"], this["Ctx"]>;
+}
+
+/**
  * The options every engine's `run` accepts: the `ctx`, the handlers the
  * machine runs under, an optional `store` with the `onError` a fenced one needs,
  * and the `events` projector that feeds `on`. An engine may take more; a host
- * adapter hands only these.
+ * adapter hands only these. `F` is the family of handlers the engine takes, the
+ * Promise engine's unless said otherwise.
  */
 export type RunOptions<
   S,
@@ -1007,8 +1048,9 @@ export type RunOptions<
   U extends Sub,
   Ctx,
   E extends { type: string } = never,
+  F extends HandlerFamily = PromiseHandlers,
 > = CtxArg<Ctx> &
-  RunHandlers<M, C, U, Ctx> &
+  HandlersFor<F, M, C, U, Ctx> &
   StoreAndOnError<S> & {
     readonly events?: (msg: M, state: S) => readonly E[];
   };
@@ -1017,7 +1059,10 @@ export type RunOptions<
  * An engine's `run`, seen from a host adapter: a machine and its
  * {@link RunOptions} in, a {@link RunHandle} out. `useMachine` and
  * `createAgentHost` take one — `run` from `@demlik/tea/promise` fits it as it
- * is.
+ * is. A `run` that takes another family of handlers says so at
+ * `"~demlik/tea/handlers"`, and a host adapter then types the handlers it is
+ * handed to match; `run` from `@demlik/tea/promise` says nothing and is the
+ * default {@link PromiseHandlers}. The property is a type and is never set.
  */
 export type EngineRun<
   S,
@@ -1026,10 +1071,11 @@ export type EngineRun<
   U extends Sub,
   Ctx,
   E extends { type: string } = never,
-> = (
+  F extends HandlerFamily = PromiseHandlers,
+> = ((
   machine: Machine<S, M, C, U, Ctx>,
-  opts: RunOptions<S, M, C, U, Ctx, E>,
-) => RunHandle<S, M, E>;
+  opts: RunOptions<S, M, C, U, Ctx, E, F>,
+) => RunHandle<S, M, E>) & { readonly "~demlik/tea/handlers"?: F };
 
 // === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
 

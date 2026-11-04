@@ -32,15 +32,15 @@ export is not done until it has a row here. The list itself is pinned by
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
-| `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
+| `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine; also `HandlerFamily`, `HandlersFor` and `PromiseHandlers`, the family `EngineRun` and `RunOptions` take to say whose handlers a `run` carries, the Promise engine's unless it says otherwise (#852) |
 | `./promise` | stable | the Promise engine: `run` and `driveToDone`, moved off `.`; also `tell`, the same helper `./effect` carries, which puts a Msg on a run's line without waiting (#639), and `BootingRun` and `Run`, the handle types `run` and `ready` give; `tell` asks for a `Run` (#782) |
-| `./effect` | stable | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect 4.1; `effect` is an optional peer, and only this entry and `./testing/effect` may import it; also `spawn`, `stop` and `tell`, the helpers a host runs child machines under a parent with, which keep no table of runs (#556, #567); also `EffectBootingRun` and `EffectRun`, the handle types `run` and `ready` give; `tell` asks for an `EffectRun` (#782); also `Cmd`, the core `Cmd` with a `Cmd.define` that takes plain Effect schemas (#631); graduated from `experimental` once it ran Tuval fully (kamp-us/phoenix#9798) |
+| `./effect` | stable | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect 4.1; `effect` is an optional peer, and only this entry and `./testing/effect` may import it; also `spawn`, `stop` and `tell`, the helpers a host runs child machines under a parent with, which keep no table of runs (#556, #567); also `EffectBootingRun` and `EffectRun`, the handle types `run` and `ready` give; `tell` asks for an `EffectRun` (#782); also `Cmd`, the core `Cmd` with a `Cmd.define` that takes plain Effect schemas (#631); graduated from `experimental` once it ran Tuval fully (kamp-us/phoenix#9798); also `runIn`, which turns the caller's `ManagedRuntime` into the `run` `useMachine` takes, and `BridgedRun`, `EffectHandlers` and `EffectHandlerTables`, the types that say which handlers it takes (#852) |
 | `./testing` | stable | testing infra is kernel: the engine-neutral helpers (`expectFinalState`, `step`, `expectReplayDeterministic`, …); it imports no engine |
 | `./testing/promise` | stable | `drive` for the Promise engine, moved off `./testing` (#321) |
 | `./testing/effect` | stable | `drive` for the Effect engine: Effect handlers, Layers for `R`, Subs; graduated with `./effect`, and is the one entry besides it that may import `effect` |
 | `./pbt` | stable | arbitraries + runners, one subpath |
 | `./do` | stable | durable/host seam |
-| `./react` | stable | |
+| `./react` | stable | `useMachine` takes either engine's `run`, and its declaration names no Effect type: the Effect engine's is `runIn(runtime)` on `./effect`, which carries its handler family in the type of `run` (#852) |
 | `./node` | stable | |
 | `./mem` | stable | |
 | `./extension` | stable | chrome host adapter: bridge, Subs, React hooks, `fakeChrome` |

@@ -8,16 +8,19 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (24)
+## Exports (28)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
+| [`BridgedRun`](#BridgedRun) | Type | stable | The `run` that runIn gives `useMachine`: any machine in, a handle out at once, with the handlers typed by EffectHandlers. |
 | [`CellErrors`](#CellErrors) | Type | stable | The failures a dispatch on the handle can end with from an `interpret` map: the error type of every hand-written Cmd's cell. |
 | [`CheckingSchema`](#CheckingSchema) | Type | stable | An Effect schema that checks a value and hands the same type on. |
 | [`Cmd`](#Cmd) | Type | stable | A Cmd value, as the core types it. |
 | [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds on the Effect engine. |
 | [`EffectBootingRun`](#EffectBootingRun) | Interface | stable | The handle `run` yields: an EffectBootingRuntime whose `ready` succeeds with an EffectRun. |
 | [`EffectBootingRuntime`](#EffectBootingRuntime) | Interface | stable | What the Effect engine's `run` yields while boot is in flight. |
+| [`EffectHandlers`](#EffectHandlers) | Interface | stable | The Effect engine's handler tables for a runtime that provides `R`: `interpret` cells that return an `Effect` and `subscribe` runners that return a `Stream`, each reading no service outside `R` but the run's own `Scope.Scope`. |
+| [`EffectHandlerTables`](#EffectHandlerTables) | Type | stable | The `interpret` and `subscribe` options of `run`, for a runtime providing `R`. |
 | [`EffectInterpret`](#EffectInterpret) | Type | stable | The Effect engine's `interpret` map: one cell per Cmd variant, each reading services within `R`. |
 | [`EffectInterpretCell`](#EffectInterpretCell) | Type | stable | One Effect `interpret` cell. |
 | [`EffectRun`](#EffectRun) | Interface | stable | What an EffectBootingRun's `ready` succeeds with: a booted EffectRuntime that also carries the run's line, which is what `tell` asks for. |
@@ -27,6 +30,7 @@ import { … } from "@demlik/tea/effect";
 | [`EffectSubscribe`](#EffectSubscribe) | Type | stable | The Effect engine's `subscribe` map: a runner for every Sub type the machine declares beyond the built-ins, and optionally one for a built-in, which replaces the engine's own (#270 R2.1). |
 | [`InterpretServices`](#InterpretServices) | Type | stable | The services every cell of an `interpret` map reads. |
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
+| [`runIn`](#runIn) | Function | stable | Turn the caller's `ManagedRuntime` into the `run` that `useMachine` takes: `useMachine(machine, { run: runIn(appRuntime), ctx, interpret })`. |
 | [`spawn`](#spawn) | Function | stable | Start a child in a scope forked from `parentScope` and enrol it in the host's table, as one uninterruptible step. |
 | [`SpawnSteps`](#SpawnSteps) | Interface | stable | The host's own steps of a spawn. |
 | [`stop`](#stop) | Function | stable | Stop one child that `spawn` started. |
@@ -38,6 +42,19 @@ import { … } from "@demlik/tea/effect";
 | [`TellAnswer`](#TellAnswer) | Type | stable | What `tell` answers, at once, about the Msg it was handed. |
 
 ## Declarations
+
+<a id="BridgedRun"></a>
+
+### `BridgedRun`
+
+```ts
+type BridgedRun<R> = (<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: RunOptions<S, M, C, U, Ctx, never, EffectHandlers<R>>,
+) => RunHandle<S, M>) & {
+  readonly "~demlik/tea/handlers"?: EffectHandlers<R>;
+}
+```
 
 <a id="CellErrors"></a>
 
@@ -237,6 +254,25 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
 }
 ```
 
+<a id="EffectHandlers"></a>
+
+### `EffectHandlers`
+
+```ts
+interface EffectHandlers<R> extends HandlerFamily {
+  /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
+  readonly handlers: EffectHandlerTables<{ type: string }, Cmd, Sub, Scope | R>;
+}
+```
+
+<a id="EffectHandlerTables"></a>
+
+### `EffectHandlerTables`
+
+```ts
+type EffectHandlerTables<M extends { type: string }, C extends Cmd, U extends Sub, R> = InterpretOption<C, EffectInterpret<M, C, R>> & SubscribeOption<U, EffectSubscribe<M, U, R>>
+```
+
 <a id="EffectInterpret"></a>
 
 ### `EffectInterpret`
@@ -392,6 +428,14 @@ function run<
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
 ): Effect<EffectBootingRun<S, M, E, CellErrors<C, I>>, never, Scope | InterpretServices<I> | SubscribeServices<B>>
+```
+
+<a id="runIn"></a>
+
+### `runIn`
+
+```ts
+function runIn<R, ER>(runtime: ManagedRuntime<R, ER>): BridgedRun<R>
 ```
 
 <a id="spawn"></a>

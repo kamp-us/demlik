@@ -68,6 +68,7 @@ import {
 } from "../../runtime-types";
 import { type InstalledStateRead, installedState } from "./installed-state";
 import { restore } from "./restore";
+import type { SubAdmission } from "./sub-gate";
 
 // === The extension points ===
 
@@ -161,6 +162,12 @@ export interface LoopConfig<S, M extends { type: string }, C, Ctx> {
   readonly reduce: (state: S, msg: M) => Transition<S, C>;
   readonly subs: readonly SubEntry<S>[];
   readonly runnerFor: (type: string) => LoopRunner<Ctx, M> | undefined;
+  /**
+   * A host's say over when a started Sub really runs (`./sub-gate`). Each runner
+   * the loop starts goes through it, and `runnerFor` is asked again whenever the
+   * gate starts that Sub over, so a restart uses the latest runner.
+   */
+  readonly gate?: SubAdmission;
   readonly handlerFor: (type: string) => LoopHandler<M> | undefined;
   readonly store: Store<S> | undefined;
   readonly ctx: Ctx;
@@ -283,6 +290,23 @@ export function defaultOnError(
   setTimeout(() => {
     throw error;
   }, 0);
+}
+
+/**
+ * Report to `sink`, and to the default sink if `sink` itself throws, so a broken
+ * sink cannot make a failure silent. For a failure outside the loop, which
+ * cannot reach its own `report`.
+ */
+export function sinkOrDefault(
+  sink: OnError,
+  error: unknown,
+  context: RuntimeErrorContext,
+): void {
+  try {
+    sink(error, context);
+  } catch (thrown) {
+    defaultOnError(thrown, context);
+  }
 }
 
 /**
@@ -636,13 +660,20 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
         continue;
       }
       const running = new RunningSub(sub.type);
-      try {
-        // A runner's dispatch is unawaited by construction, so it gets the
-        // wrapped form, which also queues the transition behind this step —
-        // never on the runner's own stack (spike #260).
-        running.dispose = runner(sub, config.ctx, dispatchUnawaited, (error) =>
+      // A runner's dispatch is unawaited by construction, so it gets the
+      // wrapped form, which also queues the transition behind this step —
+      // never on the runner's own stack (spike #260).
+      const begin = (use: LoopRunner<Ctx, M>): Dispose =>
+        use(sub, config.ctx, dispatchUnawaited, (error) =>
           subFailed(id, running, error),
         );
+      try {
+        running.dispose =
+          config.gate === undefined
+            ? begin(runner)
+            : config.gate.admit(() =>
+                begin(config.runnerFor(sub.type) ?? runner),
+              );
       } catch (err) {
         // A runner that throws while starting is a Sub failure too: the step
         // that started it rejects with the throw, and the run stops.

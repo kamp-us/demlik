@@ -21,6 +21,7 @@ import {
   type Postable,
   startLoop,
 } from "../internal/engine/loop";
+import { subGateOf } from "../internal/engine/sub-gate";
 import type {
   Dispose,
   Interpret,
@@ -230,6 +231,7 @@ export function run<
     reduce: (state, msg) => applyCell<S, M, C>(machine, state, msg),
     subs: subEntriesOf<S>(machine),
     runnerFor,
+    gate: subGateOf(opts),
     handlerFor: (type) => interpretMap[type],
     store: opts.store,
     // `ctx` is conditionally optional (see `CtxArg`); default the nullish case

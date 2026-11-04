@@ -35,7 +35,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0031](./0031-a-fenced-run-must-pass-on-error.md) | A fenced run must pass an `onError`, held by its type, never a quieter default sink | Accepted | 2026-10-31 |
 | [0032](./0032-effect-property-tests-draw-answers-from-cmd-schemas.md) | Effect property tests draw answers from each Cmd's schema, and the laws are plain functions | Accepted | 2026-11-01 |
 | [0033](./0033-a-reducer-throw-stops-the-run-like-a-sub-failure.md) | A reducer throw under `stop` stops the run, the way a Sub failure does | Accepted | 2026-11-01 |
-
+| [0034](./0034-use-machine-takes-either-engines-run.md) | `useMachine` takes either engine's `run`, and the Effect engine's is `runIn(runtime)`, never a second hook | Accepted | 2026-11-04 |
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
 convention) are decisions about that monorepo, not about this package, and stayed

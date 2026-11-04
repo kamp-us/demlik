@@ -380,6 +380,8 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
         "use-runtime",
         "select",
       ),
+      // Step 8 imports `effect`, which only `src/effect/` may do.
+      ...regions("src/effect/use-machine-how-to.test.tsx", "on-effect"),
     ],
     only: true,
   },

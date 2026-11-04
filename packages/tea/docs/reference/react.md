@@ -31,9 +31,10 @@ function useMachine<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  F extends HandlerFamily = PromiseHandlers,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx>>,
+  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx, F>> & FamilyOfRun<F>,
 ): [S, (msg: M) => void]
 ```
 
@@ -42,7 +43,17 @@ function useMachine<
 ### `UseMachineOpts`
 
 ```ts
-type UseMachineOpts<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = { ctx: Ctx; run: EngineRun<S, M, C, U, Ctx> } & StoreAndOnError<S> & RunHandlers<M, C, U, Ctx>
+type UseMachineOpts<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  F extends HandlerFamily = PromiseHandlers,
+> = {
+  ctx: Ctx;
+  run: EngineRun<S, M, C, U, Ctx, never, F>;
+} & StoreAndOnError<S> & HandlersFor<F, M, C, U, Ctx>
 ```
 
 <a id="useRuntime"></a>

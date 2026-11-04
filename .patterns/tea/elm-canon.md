@@ -842,6 +842,16 @@ function CounterPage() {
 }
 ```
 
+`useMachine` imports no engine, so either engine's `run` goes in. The Effect
+engine's is `runIn(runtime)` from `@demlik/tea/effect`: `useMachine(machine, {
+run: runIn(appRuntime), ctx, interpret })`, where `appRuntime` is the caller's
+`ManagedRuntime` (tea builds, caches and disposes none, ADR 0020) and `interpret`
+returns Effects and `subscribe` Streams. Each mount opens a `Scope` for its run and
+closes it on a real unmount (ADR 0030), and the lifecycle (one run per mount under
+Strict Mode, Subs paused on an `<Activity>` hide) is the same on both engines
+because it sits above the engine: the hook hands each engine's loop a Sub gate
+through a symbol-keyed run option (`src/internal/engine/sub-gate.ts`).
+
 `useRuntime` is the escape hatch when something *else* owns the runtime
 (parent component, test harness, singleton). The component does *not*
 call `runtime.stop()` on unmount in that case.
