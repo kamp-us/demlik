@@ -1,5 +1,9 @@
 # Run cross-language verification
 
+For current status, paused work and the remaining 1:1 requirements, start with
+[Rust parity: remaining work](../../RUST_PARITY.md). This page is the execution
+reference, not a completion report.
+
 Prerequisites: Node 22.21.1 (V8 12.4.254.21-node.33), the repository's pnpm dependencies, Rust 1.99.1 with
 rustfmt and clippy, and a built `@demlik/code-graph` package for full API discovery.
 The implementations live beside each other in `packages/` and `crates/`.

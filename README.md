@@ -2,6 +2,10 @@
 
 The demlik monorepo. Each package publishes to npm on its own version.
 
+Rust preview contributors: read [the remaining parity work](./RUST_PARITY.md)
+before continuing the port. It records the paused lanes, implementation boundaries
+and evidence required for full 1:1 parity.
+
 | Package | What it is |
 |---|---|
 | [`@demlik/tea`](./packages/tea) | A TEA / Elm-Architecture TypeScript library for durable, replayable state machines: one pure reducer, every host adapter. |
