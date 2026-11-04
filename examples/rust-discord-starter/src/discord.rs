@@ -66,7 +66,7 @@ impl EventHandler for Gateway {
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!(
-            "Connected as {}. Send !ping, !stats, or !help. Ctrl+C stops the bot.",
+            "Connected as {}. Send !help for the café commands (start with !cay 1 2). Ctrl+C stops the bot.",
             ready.user.name
         );
     }
@@ -249,7 +249,7 @@ mod tests {
                 for (channel, text) in [
                     (17, "!ping"),
                     (29, "!ping"),
-                    (43, "!ping"),
+                    (43, "!cay 2 2"),
                     (29, "!ping"),
                     (29, "!ping"),
                     (29, "!stats"),
@@ -298,6 +298,9 @@ mod tests {
                     (state.channels[&43].delivered, state.channels[&43].failed),
                     (2, 0)
                 );
+                assert_eq!(state.channels[&43].shop.orders[0].glasses, 2);
+                assert_eq!(state.channels[&43].shop.orders[0].table, 2);
+                assert!(state.channels[&17].shop.orders.is_empty());
                 assert!(
                     state.channels[&29].last_error.is_none(),
                     "success clears the prior failure"
@@ -325,6 +328,12 @@ mod tests {
             assert_eq!(authorization, "Bot offline-sdk-test");
         }
         assert_eq!(requests[0].2["content"], "pong 🫖");
+        assert!(
+            requests[2].2["content"]
+                .as_str()
+                .unwrap()
+                .contains("#1 · table 2 · 2 glasses · waiting")
+        );
         assert_eq!(
             requests[5].2["content"],
             "This channel: 2 delivered, 1 failed. This stats reply is not counted yet."

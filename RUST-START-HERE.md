@@ -13,6 +13,10 @@ That standalone application uses the public `demlik-tea` interface. Its default
 demo runs without Discord credentials. Its optional real Discord adapter uses
 Serenity.
 
+Run a shared tea shop with [the Discord café guide](examples/rust-discord-starter/docs/cafe.md).
+Everyone in a channel shares its orders and stock; native timers bring completion
+messages back to the machine. Use `cafe-demo` for the offline six-glass journey.
+
 The other Rust library, `demlik-code-graph`, analyzes source and provides CLI
 reports. It is separate from the machine runtime and is not needed by this bot.
 

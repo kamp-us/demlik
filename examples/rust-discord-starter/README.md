@@ -3,6 +3,9 @@
 Run a machine, watch its state change, then connect that same machine to Discord.
 Use Rust 1.99.1 and this source checkout or the delivered source bundle.
 
+For the multiplayer tea-house simulation, follow [Run a Discord çay ocağı](docs/cafe.md).
+Use `cafe-demo` for its offline journey; `!help` lists its live commands.
+
 ## 1. Run it locally
 
 From the repository or unpacked bundle:

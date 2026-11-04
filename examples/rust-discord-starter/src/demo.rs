@@ -93,3 +93,81 @@ pub async fn run() -> Result<Report, ReplyError> {
     runtime.stop().await;
     result
 }
+
+/// Real café timers and runtime, with replies printed locally instead of sent to Discord.
+pub async fn cafe_run() -> Result<Report, ReplyError> {
+    println!("Offline café: same Rust shop, simulated Discord replies, real 6s/8s/2.5s timers.");
+    let replies = DemoReplies::default();
+    let runtime = bot::start(replies.clone());
+    let result = async {
+        runtime
+            .ready()
+            .await
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        for text in ["!cay 1 2", "!heat", "!cay 2 2", "!cay 3 2"] {
+            println!("you → {text}");
+            cafe_request(&runtime, bot::parse_request(text).unwrap()).await?;
+        }
+        cafe_wait(&runtime, |m| {
+            m.channels[&17].shop.phase == crate::cafe::domain::Phase::Hot
+        })
+        .await?;
+        for batch in [
+            &["!brew"][..],
+            &["!serve 1", "!serve 2", "!serve 3"][..],
+            &["!orders"][..],
+        ] {
+            for text in batch {
+                println!("you → {text}");
+                cafe_request(&runtime, bot::parse_request(text).unwrap()).await?;
+            }
+            if batch[0] == "!brew" {
+                cafe_wait(&runtime, |m| {
+                    m.channels[&17].shop.phase == crate::cafe::domain::Phase::Ready
+                })
+                .await?;
+            } else if batch[0] == "!serve 1" {
+                cafe_wait(&runtime, |m| m.channels[&17].shop.served == 6).await?;
+            }
+        }
+        Ok(Report {
+            state: runtime.get_state().expect("running shop"),
+            attempts: replies.attempts.lock().unwrap().clone(),
+        })
+    }
+    .await;
+    runtime.stop().await;
+    result
+}
+
+async fn cafe_request(runtime: &BotRuntime, request: Request) -> Result<(), ReplyError> {
+    let ack = Arc::new(tokio::sync::Notify::new());
+    let observed = Arc::clone(&ack);
+    let _unsubscribe = runtime.observe(move |message, _| {
+        if matches!(message, Msg::ReplyFinished { channel_id: 17, .. }) {
+            observed.notify_one();
+        }
+    });
+    runtime
+        .producer()
+        .emit(Msg::Requested {
+            channel_id: 17,
+            request,
+        })
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    tokio::time::timeout(std::time::Duration::from_secs(18), ack.notified()).await?;
+    Ok(())
+}
+
+async fn cafe_wait(runtime: &BotRuntime, ready: impl Fn(&Model) -> bool) -> Result<(), ReplyError> {
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            if ready(&runtime.get_state().expect("running shop")) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await?;
+    Ok(())
+}

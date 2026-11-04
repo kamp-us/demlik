@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, convert::Infallible, error::Error, rc::Rc, time::Duration};
+use std::{
+    cell::RefCell, collections::BTreeMap, convert::Infallible, error::Error, rc::Rc, time::Duration,
+};
 
 use demlik_tea::{
     Machine, Step, Sub, Tagged, Update,
@@ -10,6 +12,8 @@ use demlik_tea::{
     },
 };
 
+use crate::cafe;
+
 pub type ReplyError = Box<dyn Error + Send + Sync>;
 pub type BotRuntime = Runtime<Model, Msg, Infallible, Infallible>;
 
@@ -18,6 +22,8 @@ pub enum Request {
     Ping,
     Stats,
     Help,
+    Cafe(cafe::Action),
+    Invalid(&'static str),
 }
 
 pub fn parse_request(text: &str) -> Option<Request> {
@@ -25,12 +31,16 @@ pub fn parse_request(text: &str) -> Option<Request> {
         "!ping" => Some(Request::Ping),
         "!stats" => Some(Request::Stats),
         "!help" => Some(Request::Help),
-        _ => None,
+        _ => cafe::parse(text).map(|action| match action {
+            Ok(action) => Request::Cafe(action),
+            Err(usage) => Request::Invalid(usage),
+        }),
     }
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Channel {
+    pub shop: cafe::domain::Model,
     pub requested: u64,
     pub delivered: u64,
     pub failed: u64,
@@ -53,16 +63,27 @@ messages! {
     pub enum Msg {
         Requested { channel_id: u64, request: Request },
         ReplyFinished { channel_id: u64, result: Result<(), ReplyError> },
+        CafeFinished { channel_id: u64, message: cafe::domain::Msg },
     }
 }
 
 pub enum Cmd {
-    Reply { channel_id: u64, text: String },
+    Reply {
+        channel_id: u64,
+        text: String,
+    },
+    Cafe {
+        channel_id: u64,
+        command: cafe::domain::Cmd,
+    },
 }
 
 impl Tagged for Cmd {
     fn tag(&self) -> &str {
-        "reply"
+        match self {
+            Self::Reply { .. } => "reply",
+            Self::Cafe { .. } => "cafe",
+        }
     }
 }
 
@@ -84,20 +105,61 @@ pub fn update(model: &Model, message: &Msg) -> Step<Model, Cmd> {
         } => {
             let channel = next.channels.entry(*channel_id).or_default();
             channel.requested += 1;
+            let mut effects = Vec::new();
             let text = match request {
                 Request::Ping => "pong 🫖".to_owned(),
                 Request::Stats => format!(
                     "This channel: {} delivered, {} failed. This stats reply is not counted yet.",
                     channel.delivered, channel.failed
                 ),
-                Request::Help => {
-                    "!ping: pong. !stats: this channel's reply counts. !help: this message."
-                        .to_owned()
+                Request::Help => cafe::HELP.to_owned(),
+                Request::Invalid(usage) => (*usage).to_owned(),
+                Request::Cafe(action) => {
+                    if let Some(message) = cafe::message(*action) {
+                        let step = cafe::domain::update(&channel.shop, &message);
+                        channel.shop = step.state;
+                        effects.extend(step.commands.into_iter().map(|command| Cmd::Cafe {
+                            channel_id: *channel_id,
+                            command,
+                        }));
+                    }
+                    if *action == cafe::Action::Orders {
+                        cafe::orders(&channel.shop)
+                    } else if matches!(action, cafe::Action::Order { .. })
+                        && channel.shop.error.is_none()
+                    {
+                        format!(
+                            "{}\n{}",
+                            cafe::status(&channel.shop),
+                            cafe::orders(&channel.shop)
+                        )
+                    } else {
+                        cafe::status(&channel.shop)
+                    }
                 }
             };
-            vec![Cmd::Reply {
+            let mut commands = vec![Cmd::Reply {
                 channel_id: *channel_id,
                 text,
+            }];
+            commands.extend(effects);
+            commands
+        }
+        Msg::CafeFinished {
+            channel_id,
+            message,
+        } => {
+            let Some(channel) = next.channels.get_mut(channel_id) else {
+                return Step::new(next, vec![]);
+            };
+            if cafe::generation(message) != Some(channel.shop.generation) {
+                return Step::new(next, vec![]);
+            }
+            let step = cafe::domain::update(&channel.shop, message);
+            channel.shop = step.state;
+            vec![Cmd::Reply {
+                channel_id: *channel_id,
+                text: cafe::status(&channel.shop),
             }]
         }
         Msg::ReplyFinished { channel_id, result } => {
@@ -122,7 +184,10 @@ pub trait ReplyClient {
     fn reply(&self, channel_id: u64, text: &str) -> impl Future<Output = Result<(), ReplyError>>;
 }
 
-struct Effects<C>(C);
+struct Effects<C> {
+    client: C,
+    timers: RefCell<tokio::task::JoinSet<()>>,
+}
 
 impl<C: ReplyClient> Interpreter<Cmd> for Effects<C> {
     type Error = Infallible;
@@ -130,13 +195,42 @@ impl<C: ReplyClient> Interpreter<Cmd> for Effects<C> {
     fn interpret<'a>(
         &'a self,
         command: &'a Cmd,
-        _: CommandContext<Msg, Self::Error>,
+        context: CommandContext<Msg, Self::Error>,
     ) -> Option<CommandWork<'a, Vec<Msg>, Self::Error>> {
+        if let Cmd::Cafe {
+            channel_id,
+            command,
+        } = command
+        {
+            let channel_id = *channel_id;
+            let command = command.clone();
+            let producer = context.producer();
+            return Some(CommandWork::new(async move {
+                let mut timers = self.timers.borrow_mut();
+                while let Some(result) = timers.try_join_next() {
+                    if let Err(error) = result {
+                        eprintln!("Café timer task failed: {error}");
+                    }
+                }
+                timers.spawn_local(async move {
+                    let message = cafe::perform(&command).await;
+                    if let Err(error) = producer.emit(Msg::CafeFinished {
+                        channel_id,
+                        message,
+                    }) {
+                        eprintln!("Café completion could not reach channel {channel_id}: {error}");
+                    }
+                });
+                Ok(vec![])
+            }));
+        }
         Some(CommandWork::new(async move {
-            let Cmd::Reply { channel_id, text } = command;
+            let Cmd::Reply { channel_id, text } = command else {
+                unreachable!()
+            };
             let result = match tokio::time::timeout(
                 Duration::from_secs(15),
-                self.0.reply(*channel_id, text),
+                self.client.reply(*channel_id, text),
             )
             .await
             {
@@ -173,7 +267,10 @@ pub fn start(client: impl ReplyClient + 'static) -> BotRuntime {
     launch(
         machine,
         (),
-        Effects(client),
+        Effects {
+            client,
+            timers: RefCell::new(tokio::task::JoinSet::new()),
+        },
         NoSubscriptions::new(),
         options,
     )

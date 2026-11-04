@@ -50,7 +50,9 @@ of every configuration:
   page owns its simulation; they have no shared deployed simulation backend.
 - [Native Discord starter](examples/rust-discord-starter/README.md), offline demo
   and Serenity adapter. Local real-SDK HTTP fixture tests passed; live Discord
-  authentication and messages were not verified at this checkpoint.
+  authentication and messages were not verified at this checkpoint. The later
+  [Discord café application](examples/rust-discord-starter/docs/cafe.md) reuses the
+  existing domain and does not close any library parity gap.
 
 Historical acceptance counted 16,580 outcomes (16,328 exact and 252 qualified),
 with later component receipts recorded separately. This is **not one final-head
