@@ -276,10 +276,13 @@ describe("--migrate-ceilings seeds the deployable kinds without counting them", 
 
 describe("the fix advice names the deployable rules only when one of them fails", () => {
   const ADVICE = "Use a worker binding only in a feature's adapters/driven/";
+  const PACKAGE_ADVICE = "Reach another worker through its RPC binding";
 
   it("prints it for a B17, B18 or B19 failure, and not for a B1", () => {
     const run = open();
-    expect(run.run({ ci: true }).stdout).toContain(ADVICE);
+    const gated = run.run({ ci: true });
+    expect(gated.stdout).toContain(ADVICE);
+    expect(gated.stdout).not.toContain(PACKAGE_ADVICE);
     const other = open(
       { features: { [API]: ["orders", "billing"] } },
       {
@@ -376,6 +379,7 @@ describe("B21 through the --boundaries CLI", () => {
     const failed = cli("--ci");
     expect(failed.status).toBe(1);
     expect(failed.stdout).toContain(`B21 ${kind}`);
+    expect(failed.stdout).toContain("Reach another worker through its RPC binding");
     expect(cli("--accept-crossings", "--reason", "adopt B21").status).toBe(0);
     expect(ledgerOf(run).entries).toHaveLength(3);
     expect(cli("--ci").status).toBe(0);
