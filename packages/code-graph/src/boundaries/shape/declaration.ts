@@ -79,7 +79,7 @@ function allowanceIssues(rules: BoundaryRules): string[] {
             `"readAllowance" in "${scope}" lists no "${key}" entry: an allowance that grants nothing.`,
           ];
     const notDriven = driven
-      .filter((file) => featureFileOf(file, zoning)?.zone.name !== "driven")
+      .filter((file) => !featureFileOf(file, zoning)?.zone.rule.touchesBindings)
       .map(
         (file) =>
           `file "${file}" of "readAllowance" in "${scope}" is not under a driven adapter, ${DRIVEN_HOMES}: only a driven file can be read through, so a listing anywhere else could never grant.`,

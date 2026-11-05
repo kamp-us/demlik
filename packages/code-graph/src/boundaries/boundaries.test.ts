@@ -846,3 +846,140 @@ describe("the rules file is parsed at the config boundary", () => {
     expect(featureOnly.stdout).not.toContain("Reach the outside world");
   });
 });
+
+describe("a feature's table definitions", () => {
+  let repo: BoundaryRepo;
+  afterEach(() => repo.dispose());
+
+  const tables = "src/orders/adapters/driven/tables.ts";
+  const open = (from: string, target: string, extra = {}) => {
+    const specifier = path.posix.relative(path.posix.dirname(from), target).replace(/\.ts$/, ".js");
+    repo = boundaryRepo(
+      SCOPE,
+      {
+        "tsconfig.json": FILES["tsconfig.json"] ?? "",
+        [target]: "export const table = 1;\n",
+        [from]: `import { table } from "${specifier}";\nexport const used = table;\n`,
+      },
+      { features: { [SCOPE]: ["orders", "billing"] }, ...extra },
+    );
+    return specifier;
+  };
+  const violations = () => {
+    const run = repo.run({ json: true });
+    expect(run.errors).toEqual([]);
+    expect(run.code).toBe(0);
+    const report: { scopes: { violations: BoundaryViolation[] }[] } = JSON.parse(run.stdout);
+    return report.scopes.flatMap((scope) => scope.violations);
+  };
+
+  it("lets one feature's tables import another's without B1", () => {
+    open("src/billing/adapters/driven/tables.ts", tables);
+    expect(violations()).toEqual([]);
+  });
+
+  it.each([
+    "application/x.ts",
+    "adapters/driving/x.ts",
+    "adapters/driven/tables.ts",
+  ])("keeps another feature's store B1 from %s", (file) => {
+    const from = `src/billing/${file}`;
+    const to = "src/orders/adapters/driven/order-store.ts";
+    const specifier = open(from, to);
+    expect(violations()).toEqual([
+      {
+        kind: "cross-feature",
+        from: `${SCOPE}/${from}`,
+        fromFeature: "billing",
+        to: `${SCOPE}/${to}`,
+        toFeature: "orders",
+        specifier,
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it.each([false, true])("judges application imports with B16 enabled: %s", (enabled) => {
+    const specifier = open("src/billing/application/x.ts", tables, {
+      applicationShape: enabled ? ["application-import-outside-allowlist"] : [],
+    });
+    expect(violations()).toEqual(
+      enabled
+        ? [
+            {
+              kind: "application-import-outside-allowlist",
+              from: `${SCOPE}/src/billing/application/x.ts`,
+              to: `${SCOPE}/${tables}`,
+              specifier,
+              typeOnly: false,
+            },
+          ]
+        : [],
+    );
+  });
+
+  it.each([
+    ["application/x.ts", "application-imports-adapter"],
+    ["adapters/driving/x.ts", "driving-reaches-driven"],
+  ])("keeps its own tables judged from %s", (file, kind) => {
+    const from = `src/orders/${file}`;
+    const specifier = open(from, tables);
+    expect(violations()).toEqual([
+      {
+        kind,
+        from: `${SCOPE}/${from}`,
+        feature: "orders",
+        to: `${SCOPE}/${tables}`,
+        specifier,
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it("keeps a binding used in tables clean under B17", () => {
+    open("src/billing/adapters/driven/tables.ts", tables, {
+      acrossDeployables: ["binding-outside-driven-adapter"],
+    });
+    repo.put("wrangler.jsonc", JSON.stringify({ name: "svc", d1_databases: [{ binding: "DB" }] }));
+    repo.put(tables, "export const table = env.DB.prepare('select 1');\n");
+    expect(violations()).toEqual([]);
+    expect(JSON.parse(repo.run({ json: true }).stdout)).toMatchObject({
+      deployables: { workers: [{ bindings: { DB: 1 } }] },
+    });
+  });
+
+  it("lets a file outside every feature import tables without B4", () => {
+    open("src/schema.ts", tables);
+    expect(violations()).toEqual([]);
+  });
+
+  it("licenses its own tables through readAllowance as a driven file", () => {
+    open("src/orders/adapters/driving/x.ts", tables, {
+      readAllowance: { [SCOPE]: { driven: [tables] } },
+    });
+    expect(violations()).toEqual([]);
+  });
+
+  it("prunes an existing table-to-table B1 ledger entry under --ci", () => {
+    const from = "src/billing/adapters/driven/tables.ts";
+    const specifier = open(from, tables);
+    fs.writeFileSync(
+      repo.ledgerFile,
+      JSON.stringify({
+        entries: [
+          {
+            scope: SCOPE,
+            kind: "cross-feature",
+            from: `${SCOPE}/${from}`,
+            to: `${SCOPE}/${tables}`,
+            specifier,
+            reason: "Table foreign key",
+          },
+        ],
+      }),
+    );
+    expect(violations()).toEqual([]);
+    expect(repo.run({ ci: true }).code).toBe(0);
+    expect(ledgerOf(repo).entries).toEqual([]);
+  });
+});

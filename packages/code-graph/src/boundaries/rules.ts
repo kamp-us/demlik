@@ -81,6 +81,13 @@ const HEXAGONAL_ZONES = {
     openToOutside: true,
   },
   driven: { ...CLOSED, openToOutside: true, libraryZone: "driven", touchesBindings: true },
+  tables: {
+    ...CLOSED,
+    openToOutside: true,
+    libraryZone: "driven",
+    touchesBindings: true,
+    openToFeatures: true,
+  },
   unknown: CLOSED,
 } as const satisfies Record<string, ZoneRule>;
 
@@ -88,8 +95,8 @@ type HexagonalZone = keyof typeof HEXAGONAL_ZONES;
 
 // The zones the port layout places a file in. It has no `index` row, because there is no `index.ts`
 // for a file outside the hexagon to go through, and no `unknown` row, because every file under its
-// three folders is in a zone.
-type PortZone = Exclude<HexagonalZone, "index" | "unknown">;
+// three folders is in a zone. The `tables` exception belongs to features alone.
+type PortZone = Exclude<HexagonalZone, "index" | "tables" | "unknown">;
 
 // A file outside the hexagon imports its use cases and its ports as well as its adapters.
 const PORT_ZONES = {
@@ -123,6 +130,7 @@ const LAYOUTS = {
       ["ports.ts", "ports"],
       ["application", "application"],
       ["adapters/driving", "driving"],
+      ["adapters/driven/tables.ts", "tables"],
       ["adapters/driven", "driven"],
     ],
     adapters: ["adapters"],
@@ -146,7 +154,7 @@ const LAYOUTS = {
 export const DRIVEN_HOMES = Object.entries(LAYOUTS)
   .flatMap(([layout, { root, zones }]) =>
     zones
-      .filter(([, zone]) => zone === "driven")
+      .filter(([folder, zone]) => !folder.endsWith(".ts") && HEXAGONAL_ZONES[zone].touchesBindings)
       .map(([folder]) => `${root}${folder}/ (${layout} layout)`),
   )
   .join(" or ");

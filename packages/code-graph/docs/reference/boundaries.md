@@ -33,6 +33,7 @@ src/billing/
   ports.ts             port types
   application/         use cases
   adapters/driving/    HTTP, RPC, cron, and other callers
+  adapters/driven/tables.ts  table definitions shared across features
   adapters/driven/     storage and other external operations
 ```
 
@@ -78,11 +79,12 @@ The zone paths of the two layouts, which every rule below reads:
 | Ports | `ports.ts` | `application/driving-ports/`, `application/driven-ports/` |
 | Application | `application/` | the rest of `application/` |
 | Driving | `adapters/driving/` | `driving-adapters/` |
-| Driven | `adapters/driven/` | `driven-adapters/` |
+| Tables | `adapters/driven/tables.ts` | none |
+| Driven | the rest of `adapters/driven/` | `driven-adapters/` |
 
 | Rule | Kind | Violation |
 |---|---|---|
-| B1 | `cross-feature` | Another feature's internals imported instead of its `index.ts` |
+| B1 | `cross-feature` | Another feature's internals imported instead of its `index.ts` or `adapters/driven/tables.ts` |
 | B3 | `lib-imports-feature` | A shared helper folder imports a feature |
 | B4 | `outside-imports-feature-internal` | A file outside features/helpers imports feature internals |
 
@@ -97,7 +99,9 @@ Features add these rules:
 
 A wiring file outside features and helpers may import hexagonal adapters.
 It still cannot import `application/` or `ports.ts`. Cross-feature imports
-remain limited to `index.ts`.
+remain limited to `index.ts` or `adapters/driven/tables.ts`. Table definitions
+otherwise follow every driven-zone rule. B16 still judges an application
+file importing another feature's tables when enabled.
 
 The port layout has no `index.ts` to go through, so a wiring file outside the
 three folders, such as a worker's entry, may import any of its zones. It has no
