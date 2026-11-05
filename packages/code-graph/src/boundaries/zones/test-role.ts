@@ -25,6 +25,7 @@ const JUDGES_TEST_FILES = {
   "binding-outside-driven-adapter": false,
   "worker-call-cycle": true,
   "relative-import-crosses-workspace": true,
+  "package-import-crosses-deployable": true,
   "test-reaches-composition-root": true,
 } as const satisfies Record<BoundaryKind, boolean>;
 

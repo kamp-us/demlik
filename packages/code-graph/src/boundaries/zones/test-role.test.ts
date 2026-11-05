@@ -25,6 +25,7 @@ const SAMPLES = {
   "binding-outside-driven-adapter": sample("binding-outside-driven-adapter"),
   "worker-call-cycle": sample("worker-call-cycle"),
   "relative-import-crosses-workspace": sample("relative-import-crosses-workspace"),
+  "package-import-crosses-deployable": sample("package-import-crosses-deployable"),
   "test-reaches-composition-root": sample("test-reaches-composition-root"),
 } as const satisfies Record<BoundaryKind, BoundaryViolation>;
 
@@ -40,6 +41,7 @@ describe("the table of kinds a test file is judged by", () => {
       "adapter-library-imported-outside-driven",
       "worker-call-cycle",
       "relative-import-crosses-workspace",
+      "package-import-crosses-deployable",
       "test-reaches-composition-root",
     ]);
   });

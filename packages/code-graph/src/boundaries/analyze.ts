@@ -176,7 +176,7 @@ type Found = {
 
 const NOT_JUDGED: Pick<Found, "violations" | "sites"> = { violations: [], sites: [] };
 
-// B17 and B19 for one file, and the sites it holds. A file inside a library nested in the scope
+// B17, B19 and B21 for one file, and the sites it holds. A file inside a library nested in the scope
 // belongs to that library's own scope and is judged there, as for B12-B14.
 function acrossDeployables(
   ctx: ScopeContext,

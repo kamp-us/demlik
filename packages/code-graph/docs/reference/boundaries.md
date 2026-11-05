@@ -330,6 +330,7 @@ declares read allowances, because write detection would be incomplete.
 | B17 | `binding-outside-driven-adapter` | A declared worker binding is referenced outside a driven adapter and its worker's `main` |
 | B18 | `worker-call-cycle` | Service-binding declarations form a cycle between workers |
 | B19 | `relative-import-crosses-workspace` | A relative import points into another package directory |
+| B21 | `package-import-crosses-deployable` | A package import names another workspace with a worker config at its root |
 
 `bindingOwners` can further limit a binding to exact scope-relative driven
 files, under `adapters/driven/` or, in the port layout, `driven-adapters/`. It
@@ -356,6 +357,25 @@ unknown target workers are counted separately.
 B19 compares the nearest package directories of importer and target, even
 when the target path does not exist. Bare specifiers and tsconfig aliases
 are outside B19. Type-only relative imports still count.
+
+B21 matches a bare specifier's package name, scoped or unscoped, with any
+subpath stripped, against workspace package names. A target is a deployable
+only when its package root holds a worker config in the existing manifest
+catalog. Libraries, non-worker apps and imports of the workspace's own
+package name are clean. The importing workspace need not itself be a worker.
+Static imports, re-exports, dynamic imports and type-only imports count,
+including in files matched by `testFiles`.
+
+Like B19, B21 writes one entry per importer and target workspace: `from` the
+importer, `to` the workspace directory, `specifier` the first spelling in
+source order and `typeOnly` true only when all imports of that workspace are
+type-only. Workspace roots and the package name map are read once per run
+when B21 is listed; roots are shared with B19. An unreadable worker config
+exits 2 and writes nothing when B17, B18 or B21 is listed.
+
+To require worker-to-worker access through RPC bindings and shared contracts,
+add `"package-import-crosses-deployable"` to `acrossDeployables`. No rule runs
+until listed, so adding this kind in a release does not enable it for a repo.
 
 ## Ledger and gate behavior
 

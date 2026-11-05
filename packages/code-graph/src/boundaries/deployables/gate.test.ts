@@ -1,8 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openTypeProgram, openTypeSession } from "../../engine/tsgo.js";
 import { loadBindingCatalog } from "../../extract/wrangler-config.js";
+import { workspacePackages } from "../../layers/resolve-target.js";
 import { type BoundaryRepo, boundaryRepo } from "../../test-helpers/boundary-repo.js";
 import { entryLines, ledgerOf, ledgerText, reportOf } from "../../test-helpers/library-report.js";
 import {
@@ -21,6 +24,10 @@ vi.mock("node:child_process", async (importOriginal) => {
 vi.mock("../../extract/wrangler-config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../extract/wrangler-config.js")>();
   return { ...actual, loadBindingCatalog: vi.fn(actual.loadBindingCatalog) };
+});
+vi.mock("../../layers/resolve-target.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../layers/resolve-target.js")>();
+  return { ...actual, workspacePackages: vi.fn(actual.workspacePackages) };
 });
 vi.mock("../../engine/tsgo.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../engine/tsgo.js")>();
@@ -48,6 +55,7 @@ function listings(): number {
 
 function resetCounts(): void {
   vi.mocked(execFileSync).mockClear();
+  vi.mocked(workspacePackages).mockClear();
   vi.mocked(loadBindingCatalog).mockClear();
   vi.mocked(openTypeSession).mockClear();
   vi.mocked(openTypeProgram).mockClear();
@@ -131,6 +139,7 @@ describe("a rules file that lists the kinds reads the repo once, on the cheap pa
     ["binding-outside-driven-adapter", ["binding-outside-driven-adapter"]],
     ["worker-call-cycle", ["worker-call-cycle"]],
     ["relative-import-crosses-workspace", ["relative-import-crosses-workspace"]],
+    ["package-import-crosses-deployable", ["package-import-crosses-deployable"]],
     ["all three kinds", ALL],
   ])("with %s listed lists the repo once, reads the catalog once and starts no type checker", (_, kinds) => {
     const run = open({ ...UNLISTED, acrossDeployables: kinds });
@@ -139,20 +148,44 @@ describe("a rules file that lists the kinds reads the repo once, on the cheap pa
     run.run({ ci: true });
     expect(listings()).toBe(1);
     expect(vi.mocked(loadBindingCatalog)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(workspacePackages)).toHaveBeenCalledTimes(
+      kinds.includes("package-import-crosses-deployable") ? 1 : 0,
+    );
     expect(vi.mocked(openTypeSession)).not.toHaveBeenCalled();
     expect(vi.mocked(openTypeProgram)).not.toHaveBeenCalled();
   });
 
-  it("lists the repo once when libraries are declared beside the deployables", () => {
+  it("lists the repo and reads each manifest once per run with libraries and B21", () => {
     const run = open({
       ...SHOP_WORKER_RULES,
+      acrossDeployables: [...ALL, "package-import-crosses-deployable"],
       libraryTypes: { util: { imports: ["util"], pure: false } },
       libraries: { "packages/string-util": "util" },
     });
     execFileSync("git", ["init", "-q"], { cwd: run.root });
-    resetCounts();
-    run.run({ ci: true });
-    expect(listings()).toBe(1);
+    run.put("package.json", JSON.stringify({ name: "@shop/root" }));
+    const manifests = [
+      "package.json",
+      ...Object.keys(SHOP_WORKER_FILES).filter((file) => file.endsWith("/package.json")),
+    ];
+    const reads = vi.spyOn(fs, "readFileSync");
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        resetCounts();
+        reads.mockClear();
+        expect(run.run({ json: true }).errors).toEqual([]);
+        expect(listings()).toBe(1);
+        expect(vi.mocked(workspacePackages)).toHaveBeenCalledTimes(1);
+        for (const file of manifests) {
+          expect(
+            reads.mock.calls.filter(([read]) => read === path.join(run.root, file)),
+            file,
+          ).toHaveLength(1);
+        }
+      }
+    } finally {
+      reads.mockRestore();
+    }
   });
 });
 
@@ -243,10 +276,13 @@ describe("--migrate-ceilings seeds the deployable kinds without counting them", 
 
 describe("the fix advice names the deployable rules only when one of them fails", () => {
   const ADVICE = "Use a worker binding only in a feature's adapters/driven/";
+  const PACKAGE_ADVICE = "Reach another worker through its RPC binding";
 
   it("prints it for a B17, B18 or B19 failure, and not for a B1", () => {
     const run = open();
-    expect(run.run({ ci: true }).stdout).toContain(ADVICE);
+    const gated = run.run({ ci: true });
+    expect(gated.stdout).toContain(ADVICE);
+    expect(gated.stdout).not.toContain(PACKAGE_ADVICE);
     const other = open(
       { features: { [API]: ["orders", "billing"] } },
       {
@@ -258,5 +294,100 @@ describe("the fix advice names the deployable rules only when one of them fails"
     const failed = other.run({ ci: true });
     expect(failed.code).toBe(1);
     expect(failed.stdout).not.toContain(ADVICE);
+  });
+});
+
+describe("B21 through the --boundaries CLI", () => {
+  it("gates three workers, accepts today's crossings and prunes a repaired import", () => {
+    const kind = "package-import-crosses-deployable";
+    const files: Record<string, string> = {
+      "tsconfig.json": '{ "compilerOptions": { "target": "ES2022", "module": "ESNext" } }',
+      "pnpm-workspace.yaml": 'packages: ["services/*", "packages/*"]',
+      "packages/contract/package.json": '{ "name": "@shop/contract" }',
+      "packages/contract/src/index.ts": "export type Port = unknown;\n",
+    };
+    for (const worker of ["api", "billing", "mailer"]) {
+      files[`services/${worker}/package.json`] = JSON.stringify({ name: `@shop/${worker}` });
+      files[`services/${worker}/wrangler.jsonc`] = JSON.stringify({ name: worker });
+    }
+    files["services/api/src/orders/adapters/driven/use.ts"] = [
+      'import type { Port } from "@shop/contract";',
+      'export { x } from "@shop/billing";',
+      'export { y } from "@shop/billing/testing";',
+    ].join("\n");
+    files["services/api/src/orders/adapters/driven/use.test.ts"] =
+      'export type { X } from "@shop/mailer/testing";\n';
+    files["services/billing/src/orders/adapters/driven/use.ts"] =
+      'export { x } from "@shop/mailer";\n';
+    files["services/mailer/src/orders/adapters/driven/use.ts"] =
+      'export type { Port } from "@shop/contract";\nexport { x } from "@shop/mailer/internal";\n';
+    const run = open(
+      {
+        features: Object.fromEntries(
+          ["api", "billing", "mailer"].map((w) => [`services/${w}`, ["orders"]]),
+        ),
+        acrossDeployables: [kind],
+        testFiles: ["**/*.test.ts"],
+      },
+      files,
+    );
+    execFileSync("git", ["init", "-q"], { cwd: run.root });
+    const cli = (...flags: string[]) =>
+      spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          fileURLToPath(new URL("../../index.ts", import.meta.url)),
+          fs.realpathSync(run.root),
+          "--boundaries",
+          "--boundary-rules",
+          run.rulesFile,
+          ...flags,
+        ],
+        { cwd: fileURLToPath(new URL("../../..", import.meta.url)), encoding: "utf8" },
+      );
+    const report = cli("--json");
+    expect(report.stderr).toBe("");
+    expect(report.status).toBe(0);
+    expect(
+      reportOf({ code: 0, stdout: report.stdout, errors: [] }).scopes.flatMap((s) => s.violations),
+    ).toEqual([
+      {
+        kind,
+        from: "services/api/src/orders/adapters/driven/use.test.ts",
+        to: "services/mailer",
+        specifier: "@shop/mailer/testing",
+        typeOnly: true,
+      },
+      {
+        kind,
+        from: "services/api/src/orders/adapters/driven/use.ts",
+        to: "services/billing",
+        specifier: "@shop/billing",
+        typeOnly: false,
+      },
+      {
+        kind,
+        from: "services/billing/src/orders/adapters/driven/use.ts",
+        to: "services/mailer",
+        specifier: "@shop/mailer",
+        typeOnly: false,
+      },
+    ]);
+    expect(cli("--json").stdout).toBe(report.stdout);
+    const failed = cli("--ci");
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toContain(`B21 ${kind}`);
+    expect(failed.stdout).toContain("Reach another worker through its RPC binding");
+    expect(cli("--accept-crossings", "--reason", "adopt B21").status).toBe(0);
+    expect(ledgerOf(run).entries).toHaveLength(3);
+    expect(cli("--ci").status).toBe(0);
+    run.put(
+      "services/api/src/orders/adapters/driven/use.ts",
+      'export type { Port } from "@shop/contract";\n',
+    );
+    expect(cli("--ci").status).toBe(0);
+    expect(ledgerOf(run).entries).toHaveLength(2);
   });
 });

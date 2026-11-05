@@ -23,7 +23,15 @@ export type BoundaryRender = { readonly stdout: string; readonly exitCode: numbe
 
 // Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, impure,
 // library, deployable, shape and test blocks only when a kind that needs them fails.
-type Advice = "feature" | "hexagonal" | "impure" | "library" | "deployable" | "shape" | "test";
+type Advice =
+  | "feature"
+  | "hexagonal"
+  | "impure"
+  | "library"
+  | "deployable"
+  | "package"
+  | "shape"
+  | "test";
 
 // Each kind's rule label, and the advice it adds.
 const KINDS = {
@@ -42,6 +50,7 @@ const KINDS = {
   "binding-outside-driven-adapter": { rule: "B17", advice: "deployable" },
   "worker-call-cycle": { rule: "B18", advice: "deployable" },
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
+  "package-import-crosses-deployable": { rule: "B21", advice: "package" },
   "test-reaches-composition-root": { rule: "B20", advice: "test" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
@@ -188,6 +197,11 @@ const DEPLOYABLE_FIX_LINES = [
   "  relative path.",
 ];
 
+const PACKAGE_FIX_LINES = [
+  "  Reach another worker through its RPC binding and a shared contract, rather than importing its",
+  "  deployable package.",
+];
+
 const TEST_FIX_LINES = [
   "  A test drives the one feature under test and wires its own fakes: it imports that feature's",
   "  index.ts, never a composition root (a worker entry, the module that assembles every feature) or",
@@ -201,6 +215,7 @@ const ADVICE_LINES = {
   impure: IMPURE_FIX_LINES,
   library: LIBRARY_FIX_LINES,
   deployable: DEPLOYABLE_FIX_LINES,
+  package: PACKAGE_FIX_LINES,
   shape: SHAPE_FIX_LINES,
   test: TEST_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;

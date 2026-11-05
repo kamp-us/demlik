@@ -35,6 +35,7 @@ const COUNTED = {
   "library-undeclared": false,
   "outside-imports-feature-internal": true,
   "relative-import-crosses-workspace": false,
+  "package-import-crosses-deployable": false,
   "test-reaches-composition-root": false,
   "unknown-zone": false,
   "worker-call-cycle": false,
