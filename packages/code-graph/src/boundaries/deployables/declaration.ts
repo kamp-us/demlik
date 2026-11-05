@@ -1,7 +1,7 @@
 import { type BoundaryRules, DRIVEN_HOMES, featureFileOf, scopeZoning } from "../rules.js";
 
 // The first problem in the deployable keys that the rules file alone can show, or null. A kind
-// outside the three is refused by the schema. What needs the repo (an owner that is no loaded file,
+// outside the known kinds is refused by the schema. What needs the repo (an owner that is no loaded file,
 // or a binding the owning worker does not declare) is judged where the scope is loaded.
 export function deployableDeclarationIssue(rules: BoundaryRules): string | null {
   const declared = Object.entries(rules.bindingOwners);

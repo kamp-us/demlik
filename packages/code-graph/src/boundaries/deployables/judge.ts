@@ -2,7 +2,7 @@ import type { BoundaryViolation } from "../violation.js";
 import { bindingViolations } from "./bindings.js";
 import type { DeployableFile, Deployables } from "./deployables.js";
 import type { DeployableKind } from "./schema.js";
-import { crossWorkspaceImports } from "./workspaces.js";
+import { crossDeployablePackageImports, crossWorkspaceImports } from "./workspaces.js";
 
 type FileJudge = (deployables: Deployables, file: DeployableFile) => BoundaryViolation[];
 
@@ -14,9 +14,17 @@ const FILE_JUDGES = {
   "worker-call-cycle": null,
   "relative-import-crosses-workspace": (deployables, file) =>
     crossWorkspaceImports(deployables.workspaces, file.scope, file.from, file.importEdges),
+  "package-import-crosses-deployable": (deployables, file) =>
+    crossDeployablePackageImports(
+      deployables.workspaces,
+      deployables.packages,
+      file.scope,
+      file.from,
+      file.importEdges,
+    ),
 } as const satisfies Record<DeployableKind, FileJudge | null>;
 
-// B17 and B19 for one file: the kinds the rules file lists, and nothing for one it does not.
+// B17, B19 and B21 for one file: the kinds the rules file lists, and nothing for one it does not.
 export function judgeDeployables(
   deployables: Deployables,
   file: DeployableFile,

@@ -17,6 +17,7 @@ import { deployableCensus, type SiteRow } from "./deployables/census.js";
 import { workerCycles } from "./deployables/cycles.js";
 import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/deployables.js";
 import { declaresDeployables } from "./deployables/schema.js";
+import { importsInSourceOrder } from "./deployables/workspaces.js";
 import { detectImpureUses } from "./impure-uses.js";
 import {
   type BoundaryLedger,
@@ -29,6 +30,7 @@ import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { declaresLibraries } from "./libraries/schema.js";
 import { migratedLedger } from "./migrate.js";
+import { readPackageFacts } from "./package-facts.js";
 import { reconcile, withAccepted } from "./reconcile.js";
 import {
   type Censuses,
@@ -120,15 +122,20 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
     loaded.sourceFiles,
     loaded.tsConfigPath,
   );
-  return loaded.sourceFiles.map(({ file, syntax }) => ({
-    file,
-    importEdges: importEdgesByFile.get(file) ?? [],
-    impureUses: detectImpureUses(syntax),
-    runtimeSpecifiers: runtimeSpecifiers(syntax),
-    importedNames: importedNamesFor(reads.libraries, scope, syntax),
-    bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
-    ...shapeFactsOf(reads.shape, scope, file, syntax),
-  }));
+  return loaded.sourceFiles.map(({ file, syntax }) => {
+    const importEdges = importEdgesByFile.get(file) ?? [];
+    return {
+      file,
+      importEdges: reads.deployables.kinds.has("package-import-crosses-deployable")
+        ? importsInSourceOrder(syntax, importEdges)
+        : importEdges,
+      impureUses: detectImpureUses(syntax),
+      runtimeSpecifiers: runtimeSpecifiers(syntax),
+      importedNames: importedNamesFor(reads.libraries, scope, syntax),
+      bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
+      ...shapeFactsOf(reads.shape, scope, file, syntax),
+    };
+  });
 }
 
 // The names of the entries directly under a scope's `src/`, none when it has no such directory.
@@ -303,12 +310,13 @@ function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
   const configs = declaresDeployables(rules) || declaresReadAllowance(rules);
   const listing = configs || declaresLibraries(rules) ? listRepo(args.repoRoot) : undefined;
   const catalog = configs ? loadBindingCatalog(args.repoRoot, listing) : NO_CATALOG;
-  const read = readLibraries(rules, args.repoRoot, listing);
+  const packages = readPackageFacts(rules, args.repoRoot, listing);
+  const read = readLibraries(rules, args.repoRoot, packages);
   if (read.kind === "refused") {
     args.report(read.message);
     return null;
   }
-  const deployables = readDeployables(rules, args.repoRoot, listing, catalog);
+  const deployables = readDeployables(rules, packages, catalog);
   if (deployables.kind === "refused") {
     args.report(deployables.message);
     return null;

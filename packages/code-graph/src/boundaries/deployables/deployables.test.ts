@@ -235,6 +235,7 @@ describe("a wrangler config the run cannot parse is never skipped silently", () 
     ["binding-outside-driven-adapter", true],
     ["worker-call-cycle", true],
     ["relative-import-crosses-workspace", false],
+    ["package-import-crosses-deployable", true],
   ])("with %s listed alone, refuses: %s", (kind, refused) => {
     const repo = boundaryRepo(".", SHOP_WORKER_FILES, {
       ...SHOP_WORKER_RULES,

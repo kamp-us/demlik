@@ -32,7 +32,7 @@ export function workspacePackages(
     if (manifest === null) continue;
     const name = packageName(manifest);
     if (name === null || byName.has(name)) continue;
-    byName.set(name, { name, dir, entry: packageSourceEntry(repoRoot, dir) });
+    byName.set(name, { name, dir, entry: packageSourceEntry(repoRoot, dir, manifest) });
   }
   return byName;
 }

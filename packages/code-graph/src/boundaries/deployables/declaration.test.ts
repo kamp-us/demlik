@@ -26,6 +26,7 @@ const KINDS = [
   "binding-outside-driven-adapter",
   "worker-call-cycle",
   "relative-import-crosses-workspace",
+  "package-import-crosses-deployable",
 ];
 
 const GOOD = {
@@ -55,7 +56,7 @@ describe("a bad deployable declaration exits 2 with one line and writes nothing"
     expect(repo.run({ ci: true }).code).toBe(0);
   });
 
-  it("refuses a kind outside the three", () => {
+  it("refuses an unknown kind", () => {
     const message = refusal({ ...GOOD, acrossDeployables: ["worker-call-cyle"] });
     expect(message).toContain("acrossDeployables");
     expect(message).toContain("worker-call-cycle");
