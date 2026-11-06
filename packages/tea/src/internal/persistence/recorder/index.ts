@@ -37,10 +37,10 @@ export interface Trace<S, M> {
    * `loaded` + `msgs` + `finalState`.
    *
    * Present iff the recorder was created with `captureSteps: true`, OR the
-   * Trace was re-hydrated from JSONL via {@link parseJSONL} (the JSONL format
-   * carries per-step state, so the parser populates `steps` whenever a step
-   * line had a non-null state). A trace dumped with `captureSteps: false` has
-   * `steps === undefined`.
+   * Trace was re-hydrated via {@link parseJSONL} from a JSONL whose every step
+   * line carries a state (one written with `captureSteps: true`). A trace
+   * dumped with `captureSteps: false` has `steps === undefined`, and so does
+   * its JSONL once re-hydrated.
    */
   readonly steps?: readonly { readonly msg: M; readonly state: S }[];
 }
@@ -358,7 +358,13 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
     );
   }
 
-  return { loaded, msgs, finalState, steps };
+  // `Trace.steps` holds exactly one entry per msg. A recording made without
+  // `captureSteps` leaves interior step states null, so its steps are partial:
+  // keeping them would misalign `steps[i]` with `msgs[i]`, and a per-step
+  // replay would blame the wrong msg. Partial steps are dropped.
+  return steps.length === msgs.length
+    ? { loaded, msgs, finalState, steps }
+    : { loaded, msgs, finalState };
 }
 
 // ---------------------------------------------------------------------------

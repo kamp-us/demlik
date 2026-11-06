@@ -295,6 +295,13 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Testing",
   },
   {
+    subpath: "./devtools/redux",
+    importPath: "@demlik/tea/devtools/redux",
+    file: "devtools-redux.md",
+    typedocName: "devtools/redux",
+    group: "Testing",
+  },
+  {
     subpath: "./machine-viz",
     importPath: "@demlik/tea/machine-viz",
     file: "machine-viz.md",

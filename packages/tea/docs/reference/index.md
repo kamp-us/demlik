@@ -54,5 +54,6 @@ defined in the [glossary](../glossary.md).
 - [`@demlik/tea/testing/effect`](./testing-effect.md) — stable
 - [`@demlik/tea/pbt`](./pbt.md) — stable
 - [`@demlik/tea/devtools`](./devtools.md) — stable
+- [`@demlik/tea/devtools/redux`](./devtools-redux.md) — experimental
 - [`@demlik/tea/machine-viz`](./machine-viz.md) — stable
 - [`@demlik/tea/parity`](./parity.md) — stable

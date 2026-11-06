@@ -1,6 +1,12 @@
 // Recorded replay folds captured post-init State and reports the first divergence.
 
-import { type Cmd, foldMsgs, type Machine, type Sub } from "../../../index";
+import {
+  applyCellChecked,
+  type Cmd,
+  type Machine,
+  NoCellError,
+  type Sub,
+} from "../../../index";
 import type { Trace } from "../recorder";
 import { indexPath, keyPath, typeOf, unionKeys } from "./state-walk";
 
@@ -8,33 +14,73 @@ import { indexPath, keyPath, typeOf, unionKeys } from "./state-walk";
  * The outcome of {@link replayTrace}.
  *
  * @typeParam S - the machine's State type.
+ * @typeParam M - the machine's Msg union.
  */
-export interface ReplayResult<S> {
-  /** `true` iff the recomputed final state deep-equals the trace's `finalState`. */
+export interface ReplayResult<S, M = unknown> {
+  /**
+   * `true` iff every recorded msg replayed and the recomputed states match the
+   * recording: each step's state when the trace carries `steps`, the final
+   * state otherwise.
+   */
   matches: boolean;
   /** The trace's recorded `finalState` — what the run originally produced. */
   expected: S;
-  /** The state the current reducer produced for the same input. */
+  /**
+   * The state the current reducer produced for the same input. On a
+   * {@link ReplayResult.refusal | refusal} it is the state the refused msg
+   * arrived in.
+   */
   actual: S;
   /**
-   * Present iff `matches` is `false`. The FIRST point of divergence found by
-   * a deterministic pre-order walk:
+   * The state the current reducer computed after each replayed msg, in order:
+   * `states[i]` follows `trace.msgs[i]`. It stops short of `msgs.length` on a
+   * refusal. A viewer draws the session from it as the current code sees it.
+   */
+  states: readonly S[];
+  /**
+   * Present iff the states differ. The FIRST point of divergence found by a
+   * deterministic pre-order walk:
    *   - `path`     — a dotted/indexed access path from the state root, e.g.
    *                  `state.queue[2].status` or `state` for a root-level
    *                  scalar mismatch.
    *   - `expected` — the recorded value at that path.
    *   - `actual`   — the recomputed value at that path.
+   *   - `at`       — the first msg after which the recomputed state differs
+   *                  from the recorded one. Present when the trace carries
+   *                  `steps`; a trace with only a final state can name the
+   *                  path but not the msg.
    */
-  divergence?: { path: string; expected: unknown; actual: unknown };
+  divergence?: {
+    path: string;
+    expected: unknown;
+    actual: unknown;
+    at?: { index: number; msg: M };
+  };
+  /**
+   * Present iff the current machine has no update cell for a recorded msg in
+   * the state it arrived in: a Msg renamed or removed since the recording, or
+   * a cell the state no longer has. Replay stops there; `states` holds the
+   * steps before it.
+   */
+  refusal?: {
+    index: number;
+    msg: M;
+    stateName: string;
+    acceptedTypes: readonly string[];
+  };
 }
 
 /**
  * Replay a recorded {@link Trace} against `machine` and diff the recomputed
- * final state against the recorded one.
+ * states against the recorded ones.
  *
  * Folds recorded messages from the captured post-init State, without calling
  * init, Cmd handlers, Store operations or Sub runners. A trace without that
  * anchor is refused; a fresh init cannot reconstruct its starting State.
+ *
+ * When the trace carries `steps`, every step is compared and the divergence
+ * names the msg it starts at. When the machine has no cell for a recorded msg,
+ * replay stops and the result carries a `refusal` instead of throwing.
  *
  * @param machine - the machine to replay against. Mutating its reducer (the
  *                  whole point of a regression check) is what makes a recorded
@@ -53,20 +99,46 @@ export function replayTrace<
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
   _ctx?: Ctx,
-): ReplayResult<S> {
+): ReplayResult<S, M> {
   if (trace.loaded === null) {
     throw new Error(
       "tea replayTrace: trace has no captured initial State; record boot before replaying.",
     );
   }
-  const actual = foldMsgs(machine, trace.loaded, trace.msgs);
   const expected = trace.finalState;
+  const steps = trace.steps;
+  const states: S[] = [];
+  let state: S = trace.loaded;
+  let firstStepDivergence: ReplayResult<S, M>["divergence"];
 
-  const divergence = firstDivergence(expected, actual, "state");
-  if (divergence === null) {
-    return { matches: true, expected, actual };
+  for (const [index, msg] of trace.msgs.entries()) {
+    try {
+      state = applyCellChecked<S, M, C>(machine, state, msg)[0];
+    } catch (err) {
+      if (!(err instanceof NoCellError)) throw err;
+      const { stateName, acceptedTypes } = err;
+      return {
+        matches: false,
+        expected,
+        actual: state,
+        states,
+        refusal: { index, msg, stateName, acceptedTypes },
+      };
+    }
+    states.push(state);
+    const recorded = steps?.[index];
+    if (firstStepDivergence === undefined && recorded !== undefined) {
+      const d = firstDivergence(recorded.state, state, "state");
+      if (d !== null) firstStepDivergence = { ...d, at: { index, msg } };
+    }
   }
-  return { matches: false, expected, actual, divergence };
+
+  const divergence =
+    firstStepDivergence ?? firstDivergence(expected, state, "state");
+  if (divergence === null) {
+    return { matches: true, expected, actual: state, states };
+  }
+  return { matches: false, expected, actual: state, states, divergence };
 }
 
 /**

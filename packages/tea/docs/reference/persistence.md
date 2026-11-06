@@ -21,7 +21,7 @@ import { … } from "@demlik/tea/persistence";
 | [`Recorder`](#Recorder) | Interface | battery | A live recorder attached to a Runtime. |
 | [`RecorderOptions`](#RecorderOptions) | Interface | battery | Options for recorder. |
 | [`ReplayResult`](#ReplayResult) | Interface | battery | The outcome of replayTrace. |
-| [`replayTrace`](#replayTrace) | Function | battery | Replay a recorded Trace against `machine` and diff the recomputed final state against the recorded one. |
+| [`replayTrace`](#replayTrace) | Function | battery | Replay a recorded Trace against `machine` and diff the recomputed states against the recorded ones. |
 | [`SnapshotConfig`](#SnapshotConfig) | Interface | battery | The snapshot knob. |
 | [`SnapshotFailedMsg`](#SnapshotFailedMsg) | Type | battery | The Msg the engine mints when a write fails. |
 | [`SnapshotKnob`](#SnapshotKnob) | Interface | battery | The bundle `createSnapshot` returns: plain functions plus the two Cmd defs to list in `cmds`. |
@@ -220,27 +220,58 @@ interface RecorderOptions {
 ### `ReplayResult`
 
 ```ts
-interface ReplayResult<S> {
-  /** The state the current reducer produced for the same input. */
+interface ReplayResult<S, M = unknown> {
+  /**
+   * The state the current reducer produced for the same input. On a
+   * refusal it is the state the refused msg
+   * arrived in.
+   */
   actual: S;
   /**
-   * Present iff `matches` is `false`. The FIRST point of divergence found by
-   * a deterministic pre-order walk:
+   * Present iff the states differ. The FIRST point of divergence found by a
+   * deterministic pre-order walk:
    *   - `path`     — a dotted/indexed access path from the state root, e.g.
    *                  `state.queue[2].status` or `state` for a root-level
    *                  scalar mismatch.
    *   - `expected` — the recorded value at that path.
    *   - `actual`   — the recomputed value at that path.
+   *   - `at`       — the first msg after which the recomputed state differs
+   *                  from the recorded one. Present when the trace carries
+   *                  `steps`; a trace with only a final state can name the
+   *                  path but not the msg.
    */
   divergence?: {
     actual: unknown;
+    at?: { index: number; msg: M };
     expected: unknown;
     path: string;
   };
   /** The trace's recorded `finalState` — what the run originally produced. */
   expected: S;
-  /** `true` iff the recomputed final state deep-equals the trace's `finalState`. */
+  /**
+   * `true` iff every recorded msg replayed and the recomputed states match the
+   * recording: each step's state when the trace carries `steps`, the final
+   * state otherwise.
+   */
   matches: boolean;
+  /**
+   * Present iff the current machine has no update cell for a recorded msg in
+   * the state it arrived in: a Msg renamed or removed since the recording, or
+   * a cell the state no longer has. Replay stops there; `states` holds the
+   * steps before it.
+   */
+  refusal?: {
+    acceptedTypes: readonly string[];
+    index: number;
+    msg: M;
+    stateName: string;
+  };
+  /**
+   * The state the current reducer computed after each replayed msg, in order:
+   * `states[i]` follows `trace.msgs[i]`. It stops short of `msgs.length` on a
+   * refusal. A viewer draws the session from it as the current code sees it.
+   */
+  states: readonly S[];
 }
 ```
 
@@ -259,7 +290,7 @@ function replayTrace<
   machine: Machine<S, M, C, U, Ctx>,
   trace: Trace<S, M>,
   _ctx?: Ctx,
-): ReplayResult<S>
+): ReplayResult<S, M>
 ```
 
 <a id="SnapshotConfig"></a>
@@ -501,10 +532,10 @@ interface Trace<S, M> {
    * `loaded` + `msgs` + `finalState`.
    *
    * Present iff the recorder was created with `captureSteps: true`, OR the
-   * Trace was re-hydrated from JSONL via parseJSONL (the JSONL format
-   * carries per-step state, so the parser populates `steps` whenever a step
-   * line had a non-null state). A trace dumped with `captureSteps: false` has
-   * `steps === undefined`.
+   * Trace was re-hydrated via parseJSONL from a JSONL whose every step
+   * line carries a state (one written with `captureSteps: true`). A trace
+   * dumped with `captureSteps: false` has `steps === undefined`, and so does
+   * its JSONL once re-hydrated.
    */
   readonly steps?: readonly { readonly msg: M; readonly state: S }[];
 }

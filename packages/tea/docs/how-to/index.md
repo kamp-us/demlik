@@ -67,6 +67,14 @@ guides use are each defined in the [glossary](../glossary.md).
   adapter over the `openai` SDK that reaches every provider behind an
   OpenAI-compatible endpoint such as Cloudflare AI Gateway or OpenRouter.
 
+## Debug a run
+
+- [Debug a run in Redux DevTools](./debug-a-run-in-redux-devtools.md) — connect a
+  run to the Redux DevTools extension with `@demlik/tea/devtools/redux`, watch
+  every Msg and the Model it produced, send a Msg from the panel, replay a saved
+  session through your current code to find the Msg it diverges at, and turn
+  the saved file into a `replayTrace` test.
+
 ## Test and verify
 
 - [Replay a recorded run in a test](./replay-in-a-test.md) — assert what a machine

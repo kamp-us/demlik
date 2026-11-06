@@ -47,6 +47,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./parity` | stable | grandfathered by production usage (audit-core) |
 | `./devtools` | stable | dev-tooling edge of the kernel |
 | `./devtools/styles.css` | stable | asset of `./devtools` |
+| `./devtools/redux` | experimental | a run watched, exported and imported in the Redux DevTools extension; it breaks when that extension's message contract does, and it imports no React, which is why it is not on `./devtools` |
 | `./machine-viz` | stable | |
 | `./package.json` | stable | metadata passthrough, not an API subpath |
 | `./retry-backoff` | battery | call-hardening |

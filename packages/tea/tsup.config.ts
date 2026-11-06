@@ -17,6 +17,7 @@ export default defineConfig({
     "mem/index": "src/mem/index.ts",
     "react/index": "src/react/index.ts",
     "devtools/index": "src/devtools/index.ts",
+    "devtools/redux/index": "src/devtools/redux/index.ts",
     "extension/index": "src/extension/index.ts",
     "node/index": "src/node/index.ts",
     "pbt/index": "src/pbt/index.ts",
