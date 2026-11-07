@@ -401,7 +401,7 @@ describe("a shopper's session, watched, exported and imported into a fresh tab",
 });
 
 describe("the panel's Dispatch box", () => {
-  it("sends a JSON Msg the current state accepts, and refuses one it does not", async () => {
+  it("sends a Msg typed the way the panel's box starts, and refuses one the state does not take", async () => {
     const panel = fakePanel();
     const runtime = run(checkout(), { ctx: {}, interpret: bank().interpret });
     connectReduxDevtools(checkout(), runtime, {
@@ -410,17 +410,34 @@ describe("the panel's Dispatch box", () => {
     });
     const booted = await runtime.ready;
 
-    panel.dispatch('{"type":"add","sku":"tea","price":10}');
+    // The box opens holding "{\n  type: ''\n}"; people fill it in place.
+    panel.dispatch("{\n  type: 'add',\n  sku: 'tea',\n  price: 10\n}");
+    panel.dispatch('{"type":"add","sku":"it\'s \\"cup\\"","price":4,}');
+    panel.dispatch(
+      "{ type: 'add', sku: 'pot', price: 6, gift: true, note: null, }",
+    );
     await vi.waitFor(() =>
-      expect(booted.getState()).toMatchObject({ cart: [{ sku: "tea" }] }),
+      expect(booted.getState()).toMatchObject({
+        cart: [
+          { sku: "tea", price: 10 },
+          { sku: 'it\'s "cup"', price: 4 },
+          { sku: "pot", price: 6 },
+        ],
+      }),
     );
 
-    panel.dispatch('{"type":"pay"}');
-    panel.dispatch("{ type: 'checkout' }");
+    const hint = `tea: type the Msg as an object with a string type, e.g. { type: 'increment' }.`;
+    panel.dispatch("{ type: 'pay' }");
+    panel.dispatch("{ type: increment }");
+    panel.dispatch("{ type: (globalThis.ran = 'add') }");
+    panel.dispatch("{ type: '' ");
     expect(panel.errors).toEqual([
       'tea: the current state takes no "pay" Msg. It accepts: add, remove, checkout.',
-      'tea: type the Msg as JSON with a string "type", e.g. {"type":"increment"}.',
+      hint,
+      hint,
+      hint,
     ]);
+    expect((globalThis as { ran?: unknown }).ran).toBeUndefined();
     expect(booted.getState().type).toBe("shopping");
     expect(panel.options[0]).toMatchObject({
       features: { dispatch: true, jump: false },

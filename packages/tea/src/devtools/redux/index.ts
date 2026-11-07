@@ -318,19 +318,68 @@ interface ImportPayload {
 
 /**
  * Read the Msg the panel's Dispatch box sends. The extension passes the typed
- * text through as a string; tea reads it as JSON rather than evaluating it.
+ * text through as a string, and the box starts out holding `{ type: '' }`, so
+ * tea reads the object syntax people type there: bare keys, single or double
+ * quotes, a trailing comma. It reads that text as data and never runs it.
  */
 function msgFromPanel(payload: unknown): { type: string } | string {
-  const hint =
-    'tea: type the Msg as JSON with a string "type", e.g. {"type":"increment"}.';
+  const hint = `tea: type the Msg as an object with a string type, e.g. { type: 'increment' }.`;
   if (typeof payload !== "string") return hint;
-  let value: unknown;
-  try {
-    value = JSON.parse(payload);
-  } catch {
-    return hint;
-  }
+  const value = readObjectLiteral(payload);
   return typeField(value) === undefined ? hint : (value as { type: string });
+}
+
+const BARE_WORD = /^[A-Za-z_$][\w$]*/;
+const JSON_WORDS = new Set(["true", "false", "null"]);
+
+/**
+ * Rewrite a JavaScript object literal made of plain data into JSON and parse
+ * it. Bare keys gain quotes, single-quoted strings become double-quoted, and a
+ * comma before `}` or `]` is dropped. Anything that is not data (a call, a
+ * variable, `undefined`) leaves a bare word JSON cannot parse, so the result
+ * is `undefined`.
+ */
+function readObjectLiteral(text: string): unknown {
+  let json = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i] as string;
+    if (ch === '"' || ch === "'") {
+      let body = "";
+      i++;
+      while (i < text.length && text[i] !== ch) {
+        if (text[i] === "\\" && i + 1 < text.length) {
+          const next = text[i + 1] as string;
+          body += next === "'" ? "'" : `\\${next}`;
+          i += 2;
+        } else {
+          body += text[i] === '"' ? '\\"' : text[i];
+          i++;
+        }
+      }
+      json += `"${body}"`;
+      i++;
+      continue;
+    }
+    const word = BARE_WORD.exec(text.slice(i))?.[0];
+    if (word !== undefined) {
+      const isKey = /^\s*:/.test(text.slice(i + word.length));
+      json += isKey ? `"${word}"` : JSON_WORDS.has(word) ? word : "\u0000";
+      i += word.length;
+      continue;
+    }
+    if (ch === "," && /^\s*[}\]]/.test(text.slice(i + 1))) {
+      i++;
+      continue;
+    }
+    json += ch;
+    i++;
+  }
+  try {
+    return JSON.parse(json);
+  } catch {
+    return undefined;
+  }
 }
 
 // === Sessions: the panel's lifted state <-> a tea Trace ===

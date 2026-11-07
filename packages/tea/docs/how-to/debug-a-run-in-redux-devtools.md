@@ -36,12 +36,16 @@ several runs apart in the instance picker.
 
 ## 3. Send a Msg from the panel
 
-The panel's **Dispatch** button is on when you pass `dispatch`. Type the Msg as
-JSON:
+The panel's **Dispatch** button is on when you pass `dispatch`. The box opens
+holding `{ type: '' }`; fill the Msg in as an object, the way you would write
+it in code:
 
-```json
-{ "type": "add", "sku": "tea", "price": 10 }
+```js
+{ type: 'add', sku: 'tea', price: 10 }
 ```
+
+JSON works too. The text is read as data and never run, so it can hold strings,
+numbers, booleans, `null`, arrays and objects, but not a variable or a call.
 
 A Msg the current state has no [cell](../glossary.md#cell) for is not sent; the
 panel shows the Msgs that state accepts instead. A Msg that is sent runs like
