@@ -11,5 +11,14 @@
 /biome.jsonc                        @kamp-us/control-plane
 /packages/code-graph/biome.jsonc    @kamp-us/control-plane
 
+# Compatibility entries required by the pinned Fabrika guard; remove after the upstream fix:
+# https://github.com/kamp-us/phoenix/issues/10542
+/.claude-plugin/                   @kamp-us/control-plane
+/packages/ci-required/             @kamp-us/control-plane
+/packages/fabrika-cli/src/ci/       @kamp-us/control-plane
+/biome-plugins/                    @kamp-us/control-plane
+**/lefthook*                       @kamp-us/control-plane
+**/.lefthook*                      @kamp-us/control-plane
+
 # `fabrika campaign` takes campaign authority from the control-plane team above (fabrika >= 0.8
 # retired `.fabrika.jsonc` `campaignAuthors`, phoenix#9852).

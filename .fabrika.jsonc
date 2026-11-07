@@ -15,6 +15,13 @@
 		{ "command": ["pnpm", "lint:worktree"] }
 	],
 
+	"configValidators": [
+		{
+			"command": ["node", "scripts/check-codeowners.mjs"],
+			"reads": [".github/CODEOWNERS", ".fabrika.jsonc"]
+		}
+	],
+
 	// The install `lane integrate` runs in an epic's assembly worktree after each child merge and
 	// before the validators, so a child that moves the lockfile is checked against what it pins
 	// (#292). `--frozen-lockfile` refuses a lockfile the merge left out of step with package.json.
