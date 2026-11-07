@@ -101,7 +101,7 @@ const Cmd: {
    * the core `Cmd.define` returns, with each schema passed through
    * `Schema.toStandardSchemaV1` for you:
    *
-   *   const fetchUser = Cmd.define("fetch_user", {
+   *   const fetchUser = Cmd.make("fetch_user", {
    *     input: Schema.Struct({ id: Schema.String }),
    *     ok: Schema.Struct({ name: Schema.String }),
    *     err: ["not_found"],
@@ -123,7 +123,7 @@ const Cmd: {
    * It takes Effect schemas only. A zod schema, or any other Standard Schema,
    * goes to `Cmd.define` from `@demlik/tea`.
    */
-  define: <
+  make: <
     const Name extends string,
     Input extends CmdInput,
     Ok,

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // `arbSchemaGuidedSequence(machine, ctx, opts)`: Msg lists for Effect's
 // `Arbitrary.checkEffect`, whose answers come from each Cmd's own Effect schema
-// (#749). A Cmd made with `Cmd.define` from `@demlik/tea/effect` already holds
+// (#749). A Cmd made with `Cmd.make` from `@demlik/tea/effect` already holds
 // its `ok` schema and its `err` tags, so nobody writes its answers a second time.
 //
 // The lists are drawn as blind events and folded through the machine by the
@@ -181,7 +181,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  * } from "@demlik/tea/testing/effect";
  * import { Arbitrary, Effect, Result, Schema } from "effect";
  *
- * const fetchCount = Cmd.define("fetch_count", {
+ * const fetchCount = Cmd.make("fetch_count", {
  *   input: Schema.Struct({}),
  *   ok: Schema.Struct({ n: Schema.Int }),
  *   err: ["offline"],
@@ -229,7 +229,7 @@ export function arbSchemaGuidedSequence<
   if (defs === undefined) {
     return Result.fail(
       new NoCmdsError({
-        message: `${PREFIX}: the machine has no \`cmds\`, so no Cmd has a schema to draw its answer from. List its \`Cmd.define\`d Cmds in \`defineMachine({ cmds })\`.`,
+        message: `${PREFIX}: the machine has no \`cmds\`, so no Cmd has a schema to draw its answer from. List its Cmd constructors in \`defineMachine({ cmds })\`.`,
       }),
     );
   }
@@ -242,7 +242,7 @@ export function arbSchemaGuidedSequence<
       return Result.fail(
         new NotEffectSchemaError({
           cmdType: def.cmdType,
-          message: `${PREFIX}: the "${def.cmdType}" Cmd's ok schema is not an Effect schema, so no answer can be drawn from it. Define it with \`Cmd.define\` from \`@demlik/tea/effect\`.`,
+          message: `${PREFIX}: the "${def.cmdType}" Cmd's ok schema is not an Effect schema, so no answer can be drawn from it. Define it with \`Cmd.make\` from \`@demlik/tea/effect\`.`,
         }),
       );
     }

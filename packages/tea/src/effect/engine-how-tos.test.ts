@@ -120,7 +120,7 @@ describe("the engine how-tos — they cannot rot", () => {
     );
   });
 
-  it("run-on-the-effect-engine.md shows the Effect Schema `Cmd.define` verbatim", async () => {
+  it("run-on-the-effect-engine.md shows the Effect Schema `Cmd.make` verbatim", async () => {
     await expectPageMirrors(
       new URL("../../docs/how-to/run-on-the-effect-engine.md", import.meta.url),
       [example("profile-lookup-effect-schema.ts")],
