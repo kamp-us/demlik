@@ -42,9 +42,10 @@ Grouped rather than one subpath per module on purpose: a subpath is a permanent
 promise and a maintenance cost, so a few of them is a bill this library can pay
 where forty was not. Within a subpath, the whole group moves at the group's tier.
 
-**`experimental` — no stability promise.** Today `./agent`, and `./otel`, which
-reads the agent's events and graduates with it. Either may change or disappear
-in **any** release. The agent layer carries the highest strategic weight and the
+**`experimental` — no stability promise.** Today `./agent`; `./otel`, which
+reads the agent's events and graduates with it; and `./devtools/redux`, which
+speaks the Redux DevTools extension's message contract and breaks when that
+contract does. Any of them may change or disappear in **any** release. The agent layer carries the highest strategic weight and the
 least mileage, which is exactly the combination that must not be dressed up as
 stable. Moving to `battery` or `stable` is a deliberate re-stamp, not something
 that happens by drift.
