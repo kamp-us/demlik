@@ -19,6 +19,7 @@ import {
   userFile,
 } from "./reexport.fixture.js";
 import {
+  ALIASED,
   ALIASING,
   NEAR_MISSES,
   UNFOLLOWED_FILES,
@@ -75,7 +76,7 @@ const reach = (table: string, access: string, file: string, place: unknown) => (
 });
 
 // Every row of the view for the fixture: the matrix of forms, the foreign keys, and the files beside
-// them. A file that aliases a table in a variable still reads it.
+// them. A file that aliases a table, in a variable or in an export, still reads it.
 function expectedReach(): Record<string, ReturnType<typeof reach>[]> {
   const rows: Record<string, ReturnType<typeof reach>[]> = Object.fromEntries(
     FEATURES.map((feature) => [feature, []]),
@@ -96,6 +97,7 @@ function expectedReach(): Record<string, ReturnType<typeof reach>[]> {
   put("shipping", reach("shipments", "write", CYCLE_WRITE, driven("audit")));
   put("audit", reach("entries", "write", DIAMOND_WRITE, driven("orders")));
   for (const file of ALIASING) put("orders", reach("orders", "read", file, driven("billing")));
+  put("orders", reach("orders", "read", ALIASED, { kind: "elsewhere" }));
   for (const list of Object.values(rows)) {
     list.sort((a, b) => byText(a.table, b.table) || byText(a.file, b.file));
   }
@@ -108,7 +110,7 @@ const EXPECTED_ROWS = Object.values(UNFOLLOWED_WRITES)
 
 const EXPECTED_CENSUS = {
   notFollowed: {
-    "untraced-write": 2,
+    "untraced-write": 4,
     "unloaded-module": 1,
     "default-export": 1,
     "ambiguous-star": 1,
@@ -231,7 +233,7 @@ describe("what is still not followed is counted and listed, never dropped", () =
     const plain = repo.run().stdout.trimEnd().split("\n");
     const at = plain.findIndex((line) => line.startsWith("tables: "));
     expect(plain.slice(at)).toEqual([
-      "tables: 7 not followed (untraced-write 2, unloaded-module 1, default-export 1, ambiguous-star 1, export-equals 1, raw-sql 1)",
+      "tables: 9 not followed (untraced-write 4, unloaded-module 1, default-export 1, ambiguous-star 1, export-equals 1, raw-sql 1)",
       ...EXPECTED_ROWS.map(
         ({ file, kind }) => `  ${file}  ${kind}  ${LABELS[kind as keyof typeof LABELS]}`,
       ),
@@ -276,7 +278,7 @@ describe("what is still not followed is counted and listed, never dropped", () =
 });
 
 const LABELS = {
-  "untraced-write": "write whose table is not an import",
+  "untraced-write": "write whose table the run cannot trace",
   "unloaded-module": "write whose table comes from a module the run did not load",
   "default-export": "write whose table is a default export",
   "ambiguous-star": "write whose table two export * both supply",

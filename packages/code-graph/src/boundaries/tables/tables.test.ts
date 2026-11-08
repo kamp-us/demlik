@@ -308,11 +308,19 @@ describe("a write is a call of insert, update or delete that takes the imported 
 
 // The cases at the edge of what the kinds follow, each next to the one write they follow plainly.
 // A write through a feature's `index.ts` or a schema barrel is followed to its owner's tables file.
-// The rest are counted where a write leaves a mark in the syntax, and where it leaves none it is not.
+// The rest are counted where a write leaves a mark the run can read, and where it leaves none it is not.
 const EDGE_CASES: Record<string, string> = {
   [at("src/orders/adapters/driven/tables.ts")]: tablesOf("orders"),
   [at("src/orders/index.ts")]: 'export { orders } from "./adapters/driven/tables";\n',
   [at("src/drizzle/schema.ts")]: 'export { orders } from "../orders/adapters/driven/tables";\n',
+  [at("src/drizzle/alias.ts")]: lines(
+    'import { orders } from "../orders/adapters/driven/tables";',
+    "export const alias = orders;",
+  ),
+  [at("src/billing/adapters/driven/imported-alias.ts")]: lines(
+    'import { alias } from "../../../drizzle/alias";',
+    "export const w = (db: Db) => db.insert(alias);",
+  ),
   [at("src/billing/adapters/driven/seen.ts")]: lines(
     `import { orders } from "${ORDERS_TABLES}";`,
     "export const w = (db: Db) => db.insert(orders);",
@@ -381,6 +389,7 @@ describe("what the table kinds follow only so far is reported, counted or told a
     expect(census.tables.rows).toEqual([
       { file: at(`${EDGE}/default-import.ts`), kind: "default-export" },
       { file: at(`${EDGE}/dynamic.ts`), kind: "untraced-write" },
+      { file: at(`${EDGE}/imported-alias.ts`), kind: "untraced-write" },
       { file: at(`${EDGE}/raw-sql.ts`), kind: "raw-sql" },
       { file: at(`${EDGE}/rebound.ts`), kind: "untraced-write" },
       { file: at(`${EDGE}/variable.ts`), kind: "untraced-write" },
@@ -391,6 +400,27 @@ describe("what the table kinds follow only so far is reported, counted or told a
     for (const name of ["helper.ts", "computed.ts", "schema-table.ts", "seen.ts"]) {
       expect(files).not.toContain(at(`${EDGE}/${name}`));
     }
+  });
+
+  it("counts a write of a table a file outside every tables file declares: no feature owns it to be written", () => {
+    const run = open({
+      [at("src/orders/adapters/driven/tables.ts")]: tablesOf("orders"),
+      [at("src/lib/shared.ts")]: tablesOf("shared"),
+      [at("src/billing/adapters/driven/shared-write.ts")]: lines(
+        'import { shared } from "../../../lib/shared";',
+        "export const w = (db: Db) => db.insert(shared);",
+      ),
+    });
+    expect(tableRows(run, "table-written-outside-owner")).toEqual([]);
+    expect(tableRows(run, "table-declared-outside-tables")).toEqual([
+      ["table-declared-outside-tables", at("src/lib/shared.ts"), "pgTable"],
+    ]);
+    const census = reportOf(run.run({ json: true })) as unknown as {
+      tables: { rows: { file: string; kind: string }[] };
+    };
+    expect(census.tables.rows).toEqual([
+      { file: at(`${EDGE}/shared-write.ts`), kind: "untraced-write" },
+    ]);
   });
 });
 

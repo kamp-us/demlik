@@ -3,9 +3,11 @@
 // re-exports does. B23 and the owners view stay silent about these writes; the census and the
 // view's `Not followed` block name them, so a gate that is green is never green by being blind.
 export const UNFOLLOWED = {
-  // `db.insert(t)` where `t` is no import the file binds once: a variable, a parameter, a helper's
-  // result, a spread, a member of a value the file got elsewhere.
-  "untraced-write": { label: "write whose table is not an import", syntax: true },
+  // `db.insert(t)` where `t` is no import the file binds once (a variable, a parameter, a helper's
+  // result, a spread), which its syntax shows; or is an import of a binding that no tables file
+  // holds (`export const o = orders`, a member of `export const schema = { orders }`), which only
+  // following the import shows.
+  "untraced-write": { label: "write whose table the run cannot trace", syntax: true },
   // The table's name is imported from a module the run did not load, or a chain of re-exports ends
   // at one (a barrel that re-exports a workspace package, an alias only another tsconfig resolves).
   "unloaded-module": {

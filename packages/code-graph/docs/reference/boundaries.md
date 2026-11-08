@@ -518,7 +518,7 @@ leave alone:
 | `export * as ns from "./m"`, and `import * as ns from "./m"; export { ns }`, written as `ns.t` or `b.ns.t` | followed | a namespace export, entered one name at a time |
 | `import { t } from "./m"; export { t }`, with or without `as` | followed | ECMA-262 files an imported, then exported, binding as an indirect export |
 | A feature's own `index.ts`, a schema barrel such as `drizzle/schema.ts`, a chain of them of any length, a circle of them | followed | the walk keeps the (module, name) pairs it has visited, as ResolveExport does, so a circle ends and a name no module defines comes to nothing |
-| A write whose table is not an import the file binds once: a variable, a call result, a parameter that shadows the import, a spread, the result of `require()` or `await import()`, a member of a value a file outside the tables files holds (`schema.t` of `export const schema = { t }`) | counted as `untraced-write` | no syntax says which table it is. `Map#delete(key)` with a variable key is counted too, since syntax cannot tell it from a write; a literal key is not |
+| A write whose table the run cannot trace: a variable, a call result, a parameter that shadows the import, a spread, the result of `require()` or `await import()`; or an import of a name that a file outside the tables files holds, or a member of one (`o` of `export const o = orders`, `schema.t` of `export const schema = { t }`, a table a `lib` or loose file declares) | counted as `untraced-write` | no syntax says which table it is, and the run follows a name, not a value (no data flow). A table a `lib` or loose file declares has no feature to own it, and B22 reports where it is declared. `Map#delete(key)` with a variable key is counted too, since syntax cannot tell it from a write; a literal key is not |
 | A write whose table is imported from a module the run did not load: a package, a path no loaded file answers | counted as `unloaded-module` | the module may define a table a feature owns |
 | A table written through `export default`, `import t from`, or `export { default as t }` | counted as `default-export` | no star supplies `default`, and a default carries no name to be the table's identity |
 | A name that two `export *` supply with different bindings | counted as `ambiguous-star` | ResolveExport answers ambiguous: the module has no such export |
@@ -526,19 +526,17 @@ leave alone:
 | Raw SQL that begins as a write (`INSERT INTO`, `REPLACE INTO`, `UPDATE … SET`, `DELETE FROM`) in a string or a template | counted as `raw-sql` | a table named in a string is no import |
 | `export type { t } from`, `export { type t } from`, `export type * from`, `import type` | neither | erased at run time: it writes nothing |
 | A table passed to a helper (`insertInto(db, t)`) or to a computed member (`db["insert"](t)`) | neither | `insertInto` is any function and `["insert"]` any key; only a static member named `insert`, `update` or `delete` is a write, so the file lists as a read |
-| A table bound to another name by a file that is no tables file, then written (`export const o = orders`) | neither | that follows a value, not a name: data flow, which the run does not read |
-| A write to a table no feature declares: a `lib` or loose file holds it | neither | followed, with no owner to name; B22 reports where it is declared |
 | A namespace taken whole (`...ns`, `use(ns)`), a member name (`row.orders`), an object key, an export list, a table named in raw SQL that only reads | neither | none of these is a table named at run time, and a read in raw SQL is no write to count |
 | A `pgSchema(...).table(...)` declaration, `pgView`, `pgEnum`, sequences | neither | B22 reads the three constructors by name; the schema object a `.table(…)` call is made on is not resolved |
 
-A write the table counts is not clean. When a rules file lists either kind, the
+A write the run counts is not clean. When a rules file lists either kind, the
 report, plain or `--json`, ends with a census beside the violations, as the
 library and deployable censuses do (`--ci` and `--accept-crossings` print none):
 one line of counts and one row per file and kind.
 
 ```text
 tables: 2 not followed (untraced-write 1, unloaded-module 0, default-export 0, ambiguous-star 0, export-equals 0, raw-sql 1)
-  services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table is not an import
+  services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table the run cannot trace
   services/api/src/billing/adapters/driven/seed.ts  raw-sql  raw SQL that writes
 ```
 

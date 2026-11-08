@@ -231,7 +231,7 @@ const SHOP_HUMAN = [
   "        services/api/src/orders/adapters/driven/queue-shape.ts  feature orders (driven)",
   "        services/api/src/shipping/adapters/driven/carrier.ts  feature shipping (driven)",
   "  Not followed",
-  "    services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table is not an import",
+  "    services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table the run cannot trace",
   "",
   "Not read",
   "  none",

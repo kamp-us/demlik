@@ -1,9 +1,10 @@
 import { at, BARRELS, lines, tablesOf } from "./reexport.fixture.js";
 import type { UnfollowedKind } from "./unfollowed.js";
 
-// What no re-export can be followed through, one file for each kind of the census: a variable and a
-// helper's result (two files of one kind), a module the run does not load, a chain that ends at a
-// default export, an ambiguous star, a module that exports with `=`, and raw SQL.
+// What no re-export can be followed through, one file for each kind of the census: a variable, a
+// helper's result, a name another file binds to a table and a member of a value another file holds
+// (four files of one kind), a module the run does not load, a chain that ends at a default export,
+// an ambiguous star, a module that exports with `=`, and raw SQL.
 const unfollowed = (kind: UnfollowedKind, name: string) => ({
   kind,
   file: at(`src/billing/adapters/driven/${name}.ts`),
@@ -12,6 +13,8 @@ const unfollowed = (kind: UnfollowedKind, name: string) => ({
 export const UNFOLLOWED_WRITES = {
   variable: unfollowed("untraced-write", "untraced-variable"),
   helper: unfollowed("untraced-write", "untraced-helper"),
+  alias: unfollowed("untraced-write", "untraced-alias"),
+  member: unfollowed("untraced-write", "untraced-member"),
   unloaded: unfollowed("unloaded-module", "unloaded"),
   default: unfollowed("default-export", "default-chain"),
   ambiguous: unfollowed("ambiguous-star", "ambiguous"),
@@ -22,6 +25,10 @@ export const UNFOLLOWED_WRITES = {
 // The two files that alias a table read it: that is a reach, which they also leave unfollowed.
 export const ALIASING = [UNFOLLOWED_WRITES.variable.file, UNFOLLOWED_WRITES.helper.file];
 
+// The module that binds `orders` to another name and to a member of an object, and so reads it. It
+// sits in no feature, so the view lists it as a reader of `orders` elsewhere.
+export const ALIASED = at("src/drizzle/aliased.ts");
+
 export const UNFOLLOWED_FILES: Record<string, string> = {
   [UNFOLLOWED_WRITES.variable.file]: lines(
     'import { orders } from "../../../orders";',
@@ -31,6 +38,19 @@ export const UNFOLLOWED_FILES: Record<string, string> = {
     'import { orders } from "../../../orders";',
     "declare function pick(table: unknown): unknown;",
     "export const go = (db: Db) => db.insert(pick(orders));",
+  ),
+  [UNFOLLOWED_WRITES.alias.file]: lines(
+    `import { alias } from "${BARRELS}/aliased";`,
+    "export const go = (db: Db) => db.insert(alias);",
+  ),
+  [UNFOLLOWED_WRITES.member.file]: lines(
+    `import * as held from "${BARRELS}/aliased";`,
+    "export const go = (db: Db) => db.delete(held.schema.orders);",
+  ),
+  [ALIASED]: lines(
+    `import { orders } from "${tablesOf("orders")}";`,
+    "export const alias = orders;",
+    "export const schema = { orders };",
   ),
   [UNFOLLOWED_WRITES.unloaded.file]: lines(
     'import { orders } from "@shop/outside";',
@@ -69,8 +89,9 @@ export const NEAR_MISSES: Record<string, string> = {
     'import type { orderLines } from "../../../orders/adapters/driven/tables";',
     `import defaulted from "${BARRELS}/default-source";`,
     'import { thing } from "@shop/outside";',
+    `import { alias } from "${BARRELS}/aliased";`,
     "export type Shape = typeof orderLines;",
-    "export const mentioned = [defaulted, thing];",
+    "export const mentioned = [defaulted, thing, alias];",
     "const seen = new Map<string, number>();",
     'export const forget = () => seen.delete("orders");',
     'export const actions = pgEnum("action", ["insert", "update", "delete"]);',

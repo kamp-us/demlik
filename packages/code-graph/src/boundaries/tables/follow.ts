@@ -16,9 +16,11 @@ import type { UnfollowedKind } from "./unfollowed.js";
 // What a name a file imports comes to.
 //  - `table`: the table `table`, defined in a tables file, which the feature `owner` declares. The
 //    table's identity is the name that file exports it under, whatever it was called on the way.
-//  - `none`: a followed name that is no feature's table: a function, an enum, a binding of a file that
-//    is no tables file, a namespace taken whole, a name no chain defines (a type-only re-export).
-//  - `unfollowed`: where the walk stops short of the answer, and why.
+//  - `none`: a followed name that holds no table: a namespace taken whole, a name no chain defines (a
+//    type-only re-export).
+//  - `unfollowed`: where the walk stops short of the answer, and why. A binding of a file that is no
+//    tables file is one: whatever it holds, the run does not follow the value, so a write of it is
+//    counted.
 export type Followed =
   | { readonly kind: "table"; readonly owner: string; readonly table: string }
   | { readonly kind: "none" }
@@ -164,23 +166,18 @@ function viaStars(entries: readonly ExportEntry[], name: string, ask: Ask): Reso
   return found ?? unread ?? MISSING;
 }
 
-// What the walk of a path ends on, and how many names of the path are left over: a member of what a
-// binding holds.
-type Walked = { readonly resolution: Resolution; readonly rest: number };
-
 // What a walk comes to, as the answer a file gets for the table it named. `declaring` says which
 // feature a file is the tables file of.
-function answerOf(
-  { resolution, rest }: Walked,
-  declaring: (file: string) => string | null,
-): Followed {
+function answerOf(resolution: Resolution, declaring: (file: string) => string | null): Followed {
   switch (resolution.kind) {
     case "binding": {
       const owner = declaring(resolution.file);
-      // A member of a value held outside every tables file (`schema.users` of `export const schema =
-      // { users }`) is a table the run cannot see into. A member of a table is a column.
-      if (owner === null) return rest > 0 ? { kind: "unfollowed", why: "untraced-write" } : NONE;
-      return { kind: "table", owner, table: resolution.name };
+      // A binding of a file that is no tables file (`export const o = orders`) holds a value, and so
+      // does a member of one (`schema.users` of `export const schema = { users }`): which table it
+      // is, if any, is data flow, which the run does not read. A member of a table is a column.
+      return owner === null
+        ? { kind: "unfollowed", why: "untraced-write" }
+        : { kind: "table", owner, table: resolution.name };
     }
     case "unfollowed":
       return resolution;
@@ -210,12 +207,12 @@ export function followerOf(files: readonly FollowedFile[], zoning: ScopeZoning):
   };
 
   // The walk of a path from a module's exports: a namespace is entered one name at a time, until a
-  // binding answers.
-  const walk = (file: string, [head, ...tail]: readonly string[]): Walked => {
+  // binding answers. What the path has left past a binding is a member of what the binding holds.
+  const walk = (file: string, [head, ...tail]: readonly string[]): Resolution => {
     const resolution = head === undefined ? MISSING : resolveFresh(file, head);
     return resolution.kind === "namespace" && tail.length > 0
       ? walk(resolution.file, tail)
-      : { resolution, rest: tail.length };
+      : resolution;
   };
 
   // The feature whose tables file is `file`, null for any other file.
