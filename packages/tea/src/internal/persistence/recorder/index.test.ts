@@ -83,10 +83,12 @@ describe("recorder", () => {
       {
         msg: { type: "inc", by: 1 },
         state: { type: "counting", count: 1, log: [] },
+        cmds: [],
       },
       {
         msg: { type: "inc", by: 1 },
         state: { type: "counting", count: 2, log: [] },
+        cmds: [],
       },
     ]);
 
@@ -184,18 +186,22 @@ describe("recorder", () => {
       {
         msg: { type: "inc", by: 5 },
         state: { type: "counting", count: 5, log: [] },
+        cmds: [],
       },
       {
         msg: { type: "note", text: "a" },
         state: { type: "counting", count: 5, log: ["a"] },
+        cmds: [],
       },
       {
         msg: { type: "dec", by: 2 },
         state: { type: "counting", count: 3, log: ["a"] },
+        cmds: [],
       },
       {
         msg: { type: "inc", by: 10 },
         state: { type: "counting", count: 13, log: ["a"] },
+        cmds: [],
       },
     ]);
     // The last step's state IS the finalState (the step invariant).

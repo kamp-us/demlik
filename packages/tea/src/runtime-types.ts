@@ -968,8 +968,13 @@ export interface RunHandle<
    * save and before its first Cmd's handler starts.
    */
   subscribe(listener: () => void): () => void;
-  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * A `(msg, state, cmds)` hook, fired after each applied transition's Cmds,
+   * with the Cmds that transition started.
+   */
+  observe(
+    observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void,
+  ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
@@ -1118,13 +1123,15 @@ export interface BootingRuntime<
    */
   subscribe(listener: () => void): () => void;
   /**
-   * Register a `(msg, state)` trace hook, fired for every applied transition
-   * with the fold's committed State. A `dispatch` issued from the observer is
+   * Register a `(msg, state, cmds)` trace hook, fired for every applied
+   * transition with the fold's committed State and the Cmds it started. A `dispatch` issued from the observer is
    * SCHEDULED onto the serial tail behind the fold that fired it, never folded
    * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
    * deferral; two listeners issuing in order fold in that order.
    */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  observe(
+    observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void,
+  ): () => void;
   /**
    * Subscribe to the INITIAL State — the boot transition. Fires exactly once:
    * immediately if boot already completed (so a late subscriber never misses

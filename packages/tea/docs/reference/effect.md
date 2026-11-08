@@ -227,8 +227,11 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
   /** Emit a value on a Port from outside a Cmd handler. */
   emitPort<T>(port: Port<T>, value: T): void;
-  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * A `(msg, state, cmds)` hook, fired after each applied transition's Cmds,
+   * with the Cmds that transition started.
+   */
+  observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
     type: K,
