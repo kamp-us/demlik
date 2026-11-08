@@ -21,8 +21,12 @@ expectTypeOf(desk).toEqualTypeOf<
     CmdOf<DeskCommands>,
     Sub<never>,
     unknown
-  >
+  > & {
+    readonly model: Schema.Schema<typeof DeskModel.Type>;
+    readonly msg: Schema.Schema<typeof DeskMsg.Type>;
+  }
 >();
+expectTypeOf(desk.msg.Type).toEqualTypeOf<typeof DeskMsg.Type>();
 const Count = Schema.Struct({ count: Schema.Number });
 const Incremented = Schema.Struct({ type: Schema.Literal("UserIncremented") });
 const plainSpec = {
@@ -44,9 +48,21 @@ expectTypeOf(plain).toEqualTypeOf<
     never,
     Sub<never>,
     unknown
-  >
+  > & {
+    readonly model: Schema.Schema<typeof Count.Type>;
+    readonly msg: Schema.Schema<typeof Incremented.Type>;
+  }
 >();
+expectTypeOf(plain.model.Type).toEqualTypeOf<{ readonly count: number }>();
+expectTypeOf(plain.msg.Type).toEqualTypeOf<{
+  readonly type: "UserIncremented";
+}>();
+// @ts-expect-error the returned model schema cannot be reassigned
+plain.model = Count;
+// @ts-expect-error the returned message schema cannot be reassigned
+plain.msg = Incremented;
 void run(plain, {});
+void PromiseEntry.run(plain, {});
 const plainMessages = [{ type: "UserIncremented" }] as const;
 void Core.replay(plain, { msgs: plainMessages, ctx: {} });
 

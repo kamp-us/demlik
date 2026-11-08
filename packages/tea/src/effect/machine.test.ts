@@ -2,7 +2,18 @@ import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { replay } from "../index";
 import { memoryStore } from "../mem";
-import { desk } from "./fixtures/schema-machine";
+import {
+  CounterModel,
+  CounterMsg,
+  counter,
+  NotebookModel,
+  NotebookMsg,
+  notebook,
+  PreferencesModel,
+  PreferencesMsg,
+  preferences,
+} from "./fixtures/schema-host";
+import { DeskModel, DeskMsg, desk } from "./fixtures/schema-machine";
 import { Machine, run } from "./index";
 
 const tickets = [
@@ -11,8 +22,94 @@ const tickets = [
   { id: "t3", title: "Export stalls" },
 ];
 
+function restoreAndDispatch<S, M extends { type: string }>(
+  machine: ReturnType<typeof Machine.make<S, M, never>>,
+  saved: unknown,
+  messages: readonly unknown[],
+) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const model = Schema.decodeUnknownSync(Schema.toType(machine.model))(
+        saved,
+      );
+      const decodeMsg = Schema.decodeUnknownSync(Schema.toType(machine.msg));
+      const handle = yield* run(machine, { store: memoryStore(model) });
+      const runtime = yield* handle.ready;
+      for (const raw of messages) yield* runtime.dispatch(decodeMsg(raw));
+      return runtime.getState();
+    }).pipe(Effect.scoped),
+  );
+}
+
 describe("Machine.make", () => {
+  it.each([
+    {
+      name: "counter",
+      machine: counter,
+      model: CounterModel,
+      msg: CounterMsg,
+      invalidModel: { count: "two" },
+      invalidMsg: { type: "UserIncremented", amount: "one" },
+      execute: () =>
+        restoreAndDispatch(counter, { count: 2 }, [
+          { type: "UserIncremented", amount: 1 },
+          { type: "UserIncremented", amount: 3 },
+        ]),
+      expected: { count: 6 },
+    },
+    {
+      name: "preferences",
+      machine: preferences,
+      model: PreferencesModel,
+      msg: PreferencesMsg,
+      invalidModel: { selected: 42 },
+      invalidMsg: { type: "UserSelectedTheme", theme: false },
+      execute: () =>
+        restoreAndDispatch(preferences, { selected: null }, [
+          { type: "UserSelectedTheme", theme: "light" },
+          { type: "UserSelectedTheme", theme: "dark" },
+        ]),
+      expected: { selected: "dark" },
+    },
+    {
+      name: "notebook",
+      machine: notebook,
+      model: NotebookModel,
+      msg: NotebookMsg,
+      invalidModel: { notes: [42] },
+      invalidMsg: { type: "UserAddedNote", text: null },
+      execute: () =>
+        restoreAndDispatch(notebook, { notes: ["first"] }, [
+          { type: "UserAddedNote", text: "second" },
+          { type: "UserAddedNote", text: "third" },
+        ]),
+      expected: { notes: ["first", "second", "third"] },
+    },
+  ])("hosts $name through its returned schemas", async (scenario) => {
+    expect(scenario.machine.model).toBe(scenario.model);
+    expect(scenario.machine.msg).toBe(scenario.msg);
+    const decodeModel = Schema.decodeUnknownSync(
+      Schema.toType(scenario.machine.model),
+    );
+    const decodeMsg = Schema.decodeUnknownSync(
+      Schema.toType(scenario.machine.msg),
+    );
+    expect(() => decodeModel(scenario.invalidModel)).toThrow();
+    expect(() => decodeMsg(scenario.invalidMsg)).toThrow();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect(await scenario.execute()).toEqual(scenario.expected);
+    }
+  });
+
   it("runs a schema-declared ticket desk repeatedly with three commands", async () => {
+    expect(desk.model).toBe(DeskModel);
+    expect(desk.msg).toBe(DeskMsg);
+    expect(() =>
+      Schema.decodeUnknownSync(Schema.toType(desk.msg))({
+        type: "LoadTickets_ok",
+        value: tickets,
+      }),
+    ).toThrow();
     for (let attempt = 0; attempt < 3; attempt++) {
       const result = await Effect.runPromise(
         Effect.gen(function* () {
@@ -114,21 +211,40 @@ describe("Machine.make", () => {
     );
     expect(actual).toEqual({ type: "active", count: 9 });
 
+    const decodeCalls = { model: 0, msg: 0 };
     const schemaTypesOnly = Machine.make({
-      model: Schema.FiniteFromString,
-      msg: Schema.Struct({ type: Schema.Literal("UserIncremented") }),
+      model: Schema.FiniteFromString.check(
+        Schema.makeFilter(() => {
+          decodeCalls.model++;
+          return true;
+        }),
+      ),
+      msg: Schema.Struct({ type: Schema.Literal("UserIncremented") }).check(
+        Schema.makeFilter(() => {
+          decodeCalls.msg++;
+          return true;
+        }),
+      ),
       cmds: [],
       init: () => [1, []],
       update: { UserIncremented: (state) => [state + 1, []] },
     });
+    expect(decodeCalls).toEqual({ model: 0, msg: 0 });
     const count = await Effect.runPromise(
       Effect.gen(function* () {
         const handle = yield* run(schemaTypesOnly, {});
         const runtime = yield* handle.ready;
+        expect(decodeCalls).toEqual({ model: 0, msg: 0 });
         yield* runtime.dispatch({ type: "UserIncremented" });
         return runtime.getState();
       }).pipe(Effect.scoped),
     );
     expect(count).toBe(2);
+    expect(decodeCalls).toEqual({ model: 0, msg: 0 });
+    Schema.decodeUnknownSync(Schema.toType(schemaTypesOnly.model))(2);
+    Schema.decodeUnknownSync(Schema.toType(schemaTypesOnly.msg))({
+      type: "UserIncremented",
+    });
+    expect(decodeCalls).toEqual({ model: 1, msg: 1 });
   });
 });
