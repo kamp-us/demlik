@@ -1,5 +1,5 @@
 /**
- * The Effect entry's `Cmd`: the core `Cmd` with a `define` that takes plain
+ * The Effect entry's `Cmd`: the core's list helpers and `make` for plain
  * Effect schemas (#631). It is a function over the core `Cmd.define`, so the
  * def it returns is the same `CmdDef` a hand-wrapped call builds.
  */
@@ -11,6 +11,8 @@ import {
   Cmd as CoreCmd,
   type TaggedError,
 } from "../pure/core";
+
+const { define: defineCoreCmd, ...coreHelpers } = CoreCmd;
 
 /**
  * An Effect schema that checks a value and hands the same type on. Both sides
@@ -24,7 +26,7 @@ import {
  */
 export type CheckingSchema<T> = Schema.Codec<T, NoInfer<T>>;
 
-function define<
+function make<
   const Name extends string,
   Input extends CmdInput,
   Ok,
@@ -37,7 +39,7 @@ function define<
     readonly err: Tags;
   },
 ): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>> {
-  return CoreCmd.define(name, {
+  return defineCoreCmd(name, {
     input: Schema.toStandardSchemaV1(spec.input),
     ok: Schema.toStandardSchemaV1(spec.ok),
     err: spec.err,
@@ -56,17 +58,17 @@ export type Cmd<T extends string = string, Ok = unknown, E = unknown> = CoreCmd<
 
 /**
  * The helpers for building Cmds on the Effect engine. `Cmd.none`, `Cmd.batch`,
- * `Cmd.when` and `Cmd.whenDefined` are the core's; `Cmd.define` is this
+ * `Cmd.when` and `Cmd.whenDefined` are the core's; `Cmd.make` is this
  * entry's own.
  */
 export const Cmd = {
-  ...CoreCmd,
+  ...coreHelpers,
   /**
    * Declare a typed Cmd constructor from plain Effect schemas. It returns what
    * the core `Cmd.define` returns, with each schema passed through
    * `Schema.toStandardSchemaV1` for you:
    *
-   *   const fetchUser = Cmd.define("fetch_user", {
+   *   const fetchUser = Cmd.make("fetch_user", {
    *     input: Schema.Struct({ id: Schema.String }),
    *     ok: Schema.Struct({ name: Schema.String }),
    *     err: ["not_found"],
@@ -88,5 +90,5 @@ export const Cmd = {
    * It takes Effect schemas only. A zod schema, or any other Standard Schema,
    * goes to `Cmd.define` from `@demlik/tea`.
    */
-  define,
+  make,
 } as const;

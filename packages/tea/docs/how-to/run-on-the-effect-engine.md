@@ -75,14 +75,14 @@ export const profile = defineMachine({
 ```
 
 To write the schemas in Effect Schema instead of zod, import `Cmd` from
-`@demlik/tea/effect`. Its `Cmd.define` takes plain Effect schemas:
+`@demlik/tea/effect`. Its `Cmd.make` takes plain Effect schemas:
 
 ```ts
 import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 
 /** `fetchUser` again, with its schemas written in Effect Schema. */
-export const fetchUser = Cmd.define("fetch_user", {
+export const fetchUser = Cmd.make("fetch_user", {
   input: Schema.Struct({ id: Schema.String }),
   ok: Schema.Struct({ name: Schema.String }),
   err: ["not_found"],

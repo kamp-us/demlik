@@ -1,5 +1,5 @@
 /**
- * `Cmd.define` from `@demlik/tea/effect` takes plain Effect schemas (#631).
+ * `Cmd.make` from `@demlik/tea/effect` takes plain Effect schemas (#631).
  *
  * The claims under test: a machine whose three Cmds are defined that way runs
  * on the Effect engine and settles the same Msgs every time; each def is the
@@ -34,21 +34,21 @@ const ById = Schema.Struct({ id: Schema.String });
 const Page = Schema.Struct({ id: Schema.String, limit: Schema.Finite });
 
 /** A struct input and a struct `ok`. */
-const readTicket = Cmd.define("ticket_read", {
+const readTicket = Cmd.make("ticket_read", {
   input: ById,
   ok: Ticket,
   err: ["unknown"],
 });
 
 /** An `ok` that is a union of three literals. */
-const rateTicket = Cmd.define("ticket_rate", {
+const rateTicket = Cmd.make("ticket_rate", {
   input: ById,
   ok: Urgency,
   err: ["closed"],
 });
 
 /** An `ok` that is a struct holding a nested struct and an array. */
-const readThread = Cmd.define("ticket_thread", {
+const readThread = Cmd.make("ticket_thread", {
   input: Page,
   ok: Thread,
   err: ["locked", "unknown"],
@@ -283,7 +283,9 @@ describe("a machine whose Cmds are defined from plain Effect schemas (runtime)",
     );
   });
 
-  it("carries the core's other helpers", () => {
+  it("has no define member and keeps the core's list helpers", () => {
+    expect(Cmd).not.toHaveProperty("define");
+    expectTypeOf(Cmd).not.toHaveProperty("define");
     expect(Cmd.none).toBe(CoreCmd.none);
     expect(Cmd.batch).toBe(CoreCmd.batch);
     expect(Cmd.when).toBe(CoreCmd.when);
@@ -339,7 +341,7 @@ describe("a schema whose two sides differ does not compile", () => {
   const Count = Schema.Struct({ count: Schema.FiniteFromString });
 
   it("refuses a transformation on `ok`", () => {
-    Cmd.define("count", {
+    Cmd.make("count", {
       input: ById,
       // @ts-expect-error a string comes in and a number goes on
       ok: Schema.FiniteFromString,
@@ -348,7 +350,7 @@ describe("a schema whose two sides differ does not compile", () => {
   });
 
   it("refuses a transformation inside a struct `ok`", () => {
-    Cmd.define("count", {
+    Cmd.make("count", {
       input: ById,
       // @ts-expect-error `count` is a string on one side and a number on the other
       ok: Count,
@@ -357,7 +359,7 @@ describe("a schema whose two sides differ does not compile", () => {
   });
 
   it("refuses a transformation on `input`", () => {
-    Cmd.define("count", {
+    Cmd.make("count", {
       // @ts-expect-error `count` is a string on one side and a number on the other
       input: Count,
       ok: Ticket,
@@ -366,7 +368,7 @@ describe("a schema whose two sides differ does not compile", () => {
   });
 
   it("refuses a brand on `ok`", () => {
-    Cmd.define("mint_id", {
+    Cmd.make("mint_id", {
       input: ById,
       // @ts-expect-error a plain string comes in and a branded one goes on
       ok: Id,
@@ -375,7 +377,7 @@ describe("a schema whose two sides differ does not compile", () => {
   });
 
   it("refuses a brand on `input`", () => {
-    Cmd.define("by_branded_id", {
+    Cmd.make("by_branded_id", {
       // @ts-expect-error `id` is a plain string on one side and branded on the other
       input: Schema.Struct({ id: Id }),
       ok: Ticket,
@@ -384,7 +386,7 @@ describe("a schema whose two sides differ does not compile", () => {
   });
 
   it("takes `Schema.toType` of either, which keeps the checks", async () => {
-    const mintId = Cmd.define("mint_id", {
+    const mintId = Cmd.make("mint_id", {
       input: Schema.toType(Schema.Struct({ id: Id })),
       ok: Schema.toType(Count),
       err: [],
@@ -466,7 +468,7 @@ describe("a schema that needs a service does not compile", () => {
         encode: SchemaGetter.passthrough(),
       }),
     );
-    Cmd.define("needs_backend", {
+    Cmd.make("needs_backend", {
       input: ById,
       // @ts-expect-error decoding needs `Backend`, and nothing here provides it
       ok: NeedsBackend,
@@ -485,7 +487,7 @@ describe("a schema whose validation needs a Promise is refused when the Cmd sett
     }),
   );
 
-  const slow = Cmd.define("slow_read", { input: ById, ok: Slow, err: [] });
+  const slow = Cmd.make("slow_read", { input: ById, ok: Slow, err: [] });
   const slowByHand = CoreCmd.define("slow_read", {
     input: Schema.toStandardSchemaV1(ById),
     ok: Schema.toStandardSchemaV1(Slow),

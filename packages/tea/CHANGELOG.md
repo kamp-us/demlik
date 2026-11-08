@@ -1,5 +1,18 @@
 # @demlik/tea
 
+## 0.24.0
+
+### Minor Changes
+
+- 60e46a5: Add `Machine.make` to `@demlik/tea/effect`. Required `model` and `msg` Effect schemas supply the model and plain message types. Required `cmds` supplies commands and their settled messages; use `[]` for no commands. Optional `types` holds only `sub` and `ctx`.
+
+  The maker returns tea's existing machine and uses schemas for types only. Core `defineMachine`, initialization and engine behavior stay unchanged.
+
+- 162aa32: **Breaking:** `Cmd.define` from `@demlik/tea/effect` is now `Cmd.make`. Replace Effect-entry calls with `Cmd.make(name, { input, ok, err })`. The old name is removed with no deprecated alias. Schema checks, inferred types and list helpers stay the same. The neutral core's `Cmd.define` and `defineCmd` are unchanged.
+- 5303bc0: `useMachine` from `@demlik/tea/react` now drives the Effect engine. Pass `runIn(runtime)` from `@demlik/tea/effect`, with your `ManagedRuntime`, as its `run`: `useMachine(machine, { run: runIn(appRuntime), ctx, interpret })`, where each `interpret` cell returns an `Effect` and each `subscribe` runner a `Stream`, within the services the runtime provides. One run starts per mount under Strict Mode, the Subs pause on an `<Activity>` hide, and a real unmount closes the run's `Scope`. A Msg sent before an async Layer is built waits and folds in order, and a Layer that fails reaches `onError` once under `phase: "boot"`. `runIn(runtime)` returns the same function for the same runtime. New on `@demlik/tea/effect`: `runIn`, `BridgedRun`, `EffectHandlers`, `EffectHandlerTables`; new on `@demlik/tea`: `HandlerFamily`, `HandlersFor`, `PromiseHandlers`.
+
+  **Additive (declaration only):** `useMachine`, `UseMachineOpts`, `EngineRun` and `RunOptions` take a final type parameter that names the engine whose handlers `run` carries, defaulting to the Promise engine's, so no existing call needs editing. The Effect engine's handle now carries the State a restored `init` installed, so a page reloaded in the middle of work shows it while `init`'s Cmd runs on that engine too (#695). Closes issue 852.
+
 ## 0.23.0
 
 ### Minor Changes
