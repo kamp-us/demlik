@@ -260,6 +260,9 @@ importers:
       smol-toml:
         specifier: 'catalog:'
         version: 1.9.0
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
       zod:
         specifier: catalog:code-graph
         version: 4.0.0

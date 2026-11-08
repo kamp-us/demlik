@@ -63,7 +63,7 @@ describe("the library keys are parsed at the config boundary", () => {
 
   it("refuses a `libraries` path that is no package root", () => {
     const message = (dir: string) =>
-      `library "${dir}" is no package root: a library is a directory below the repo root that holds a package.json.`;
+      `library "${dir}" is no package root: a library is a directory below the repo root that holds a package.json and belongs to the workspace when a workspace manifest exists.`;
     for (const dir of ["packages/nope", "packages/bare", ".", "packages/a/"]) {
       expect(refused({ libraryTypes: UTIL, libraries: { [dir]: "util" } })).toBe(message(dir));
     }

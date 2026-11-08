@@ -66,6 +66,7 @@
     "oxc-parser": "catalog:",
     "oxc-resolver": "catalog:",
     "smol-toml": "catalog:",
+    "yaml": "catalog:",
     "zod": "catalog:code-graph"
   },
   "devDependencies": {

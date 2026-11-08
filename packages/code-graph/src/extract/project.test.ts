@@ -62,6 +62,83 @@ describe("discoverPackageRoots (#2446)", () => {
   });
 });
 
+describe("discoverPackageRoots workspace membership", () => {
+  const repos: string[] = [];
+  const repo = (manifest: Record<string, string>, dirs: string[]): string => {
+    const root = fs.mkdtempSync("/tmp/code-graph-workspaces-");
+    repos.push(root);
+    for (const dir of ["", ...dirs]) {
+      fs.mkdirSync(path.join(root, dir), { recursive: true });
+      fs.writeFileSync(path.join(root, dir, "package.json"), "{}");
+    }
+    for (const [file, text] of Object.entries(manifest)) {
+      fs.writeFileSync(path.join(root, file), text);
+    }
+    return root;
+  };
+  afterAll(() => {
+    for (const root of repos) fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it.each<Record<string, string>>([
+    { "pnpm-workspace.yaml": 'packages: ["packages/*"]' },
+    { "package.json": JSON.stringify({ workspaces: ["packages/*"] }) },
+    { "package.json": JSON.stringify({ workspaces: { packages: ["packages/*"] } }) },
+  ])("excludes fixture manifests with workspace config %j, including scoped runs", (manifest) => {
+    const root = repo(manifest, ["packages/a", "packages/a/src/__fixtures__/f"]);
+    expect(discoverPackageRoots(root)).toEqual(["", "packages/a"]);
+    expect(discoverPackageRoots(path.join(root, "packages/a"))).toEqual([""]);
+  });
+
+  it("includes only the root package when pnpm-workspace.yaml omits packages", () => {
+    const root = repo({ "pnpm-workspace.yaml": "onlyBuiltDependencies: [esbuild]" }, [
+      "packages/a",
+      "packages/a/src/__fixtures__/f",
+    ]);
+    expect(discoverPackageRoots(root)).toEqual([""]);
+  });
+
+  it("matches recursive includes and exclusions regardless of their order", () => {
+    const root = repo({ "pnpm-workspace.yaml": 'packages: ["!**/test/**", "packages/**"]' }, [
+      "packages/a",
+      "packages/a/nested",
+      "packages/b/test/pkg",
+    ]);
+    expect(discoverPackageRoots(root)).toEqual(["", "packages/a", "packages/a/nested"]);
+  });
+
+  it("normalizes exact, ./ prefixed and trailing slash patterns, including exclusions", () => {
+    const root = repo(
+      { "pnpm-workspace.yaml": 'packages: ["my-app", "./components/*/", "!./components/legacy/"]' },
+      ["my-app", "my-app/fixture", "components/a", "components/legacy", "other"],
+    );
+    expect(discoverPackageRoots(root)).toEqual(["", "components/a", "my-app"]);
+  });
+
+  it.each<Record<string, string>>([
+    { "pnpm-workspace.yaml": "packages: 3" },
+    { "pnpm-workspace.yaml": "packages: [" },
+    { "package.json": JSON.stringify({ workspaces: 3 }) },
+    { "package.json": JSON.stringify({ workspaces: { packages: 3 } }) },
+  ])("rejects invalid workspace config %j with its file path", (manifest) => {
+    const root = repo(manifest, ["packages/a"]);
+    expect(() => discoverPackageRoots(root)).toThrow(
+      path.join(root, Object.keys(manifest)[0] ?? ""),
+    );
+  });
+
+  it("uses pnpm patterns in preference to npm workspaces, even when invalid", () => {
+    const root = repo(
+      {
+        "pnpm-workspace.yaml": "packages: 3",
+        "package.json": JSON.stringify({ workspaces: ["packages/*"] }),
+      },
+      ["packages/a"],
+    );
+    expect(() => discoverPackageRoots(root)).toThrow(path.join(root, "pnpm-workspace.yaml"));
+  });
+});
+
 describe("file discovery respects .gitignore", () => {
   let tmpRoot: string;
   const relFiles = (files: readonly { absolutePath: string }[]): string[] =>
