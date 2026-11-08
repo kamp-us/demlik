@@ -83,7 +83,7 @@ Each scope lists, in order:
 |---|---|
 | Features | Per feature: `tables` (the names its `adapters/driven/tables.ts` exports as tables), `reach`, and the `commands` and `externalSystems` of its `ports.ts`, as `--hexagon` prints them. A feature with no `ports.ts` lists empty ports |
 | Workers | Per worker, per binding: its kind, the files `bindingOwners` narrows it to, and every site with its line and place. `testFiles` are left out |
-| Technologies | Per technology the scope's `interpreters` declares: its root, its modules, and every file outside the root that imports a file under it |
+| Technologies | Per technology the scope's `interpreters` declares: its root, its modules, and every file outside the root that imports a file under it, a type-only import and a re-export included |
 | Not read | A wrangler config that does not parse |
 
 A `reach` row is one file's way into one table another feature owns, with the
@@ -102,8 +102,8 @@ names as `main`.
 The view reads table facts and wrangler configs whichever kinds the rules file
 lists. `testFiles` take a file out of it, and a scope not laid out per feature
 lists no features. It does not follow a re-export or barrel, does not read a
-namespace taken whole (`...ns`), does not count a type-only import, an enum or a
-schema object exported beside the tables, a name the file binds twice, or a
+namespace taken whole (`...ns`), does not count a type-only import of a table, an
+enum or a schema object exported beside the tables, a name the file binds twice, or a
 table named in raw SQL, and does not resolve the `pgSchema` object a
 `<schema>.table(…)` call is made on.
 

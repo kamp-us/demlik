@@ -989,12 +989,13 @@ so an enum or a schema object exported beside the tables makes no row.
 
 **What the view does not see.** It follows no re-export and no barrel and runs no type checker: a
 table read through a namespace that a barrel re-exports lists nothing. A namespace taken whole
-(`...ns`, `use(ns)`) names no table. A name the file binds twice, a type-only import, a member name
-(`row.orders`), an object key, an export list and a name written in raw SQL are no reach. A table
-declared by a call other than a drizzle constructor or a member call named `table`, or exported by
-a list, is not listed. The schema a `.table(…)` call is made on is not resolved, so a `pgSchema`
-object imported from another module is read as a name only. Nothing crosses scopes. No technology
-is inferred: the section lists those the rules file declares.
+(`...ns`, `use(ns)`) names no table. A name the file binds twice, a type-only import of a table, a
+member name (`row.orders`), an object key, an export list and a name written in raw SQL are no
+reach. A technology's importers are another matter: they count a type-only import and a re-export
+of the root. A table declared by a call other than a drizzle constructor or a member call named
+`table`, or exported by a list, is not listed. The schema a `.table(…)` call is made on is not
+resolved, so a `pgSchema` object imported from another module is read as a name only. Nothing
+crosses scopes. No technology is inferred: the section lists those the rules file declares.
 
 **Exit codes.** 0 whatever the scopes hold, including a repo full of B23 entries and a rules file
 declaring no scope. 2, with one stderr line and no report, where `--boundaries` would refuse to
