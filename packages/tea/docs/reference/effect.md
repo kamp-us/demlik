@@ -30,7 +30,7 @@ import { … } from "@demlik/tea/effect";
 | [`EffectSubscribe`](#EffectSubscribe) | Type | stable | The Effect engine's `subscribe` map: a runner for every Sub type the machine declares beyond the built-ins, and optionally one for a built-in, which replaces the engine's own (#270 R2.1). |
 | [`InterpretServices`](#InterpretServices) | Type | stable | The services every cell of an `interpret` map reads. |
 | [`Machine`](#Machine) | Type | stable | A core tea machine, with the same init, update and engine contracts. |
-| [`Machine`](#Machine) | Variable | stable | Build a tea machine with `Machine.make` from required `model` and `msg` Effect schemas and a required `cmds` list. |
+| [`Machine`](#Machine) | Variable | stable | Build a tea machine with readonly `model` and `msg` schema references for explicit host decoding. |
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
 | [`runIn`](#runIn) | Function | stable | Turn the caller's `ManagedRuntime` into the `run` that `useMachine` takes: `useMachine(machine, { run: runIn(appRuntime), ctx, interpret })`. |
 | [`spawn`](#spawn) | Function | stable | Start a child in a scope forked from `parentScope` and enrol it in the host's table, as one uninterruptible step. |
@@ -436,7 +436,10 @@ const Machine: {
       readonly msg: Schema<M>;
       readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "ctx" | "sub">;
     },
-  ) => Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+  ) => Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx> & {
+    readonly model: Schema<S>;
+    readonly msg: Schema<M>;
+  };
 }
 ```
 

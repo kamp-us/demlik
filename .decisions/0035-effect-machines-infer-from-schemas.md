@@ -1,12 +1,12 @@
 ---
 id: 0035
-title: Effect machines derive their types from schemas and command constructors
+title: Effect machines infer from schemas and command constructors and expose model and message schemas
 status: Accepted
 date: 2026-11-07
-tags: [tea, effect, types]
+tags: [tea, effect, types, schemas]
 ---
 
-# 0035 — Effect machines derive their types from schemas and command constructors
+# 0035 — Effect machines infer from schemas and command constructors and expose model and message schemas
 
 **What this decides:** Effect users declare a machine's model and plain messages with schemas and its commands with a required list.
 
@@ -33,3 +33,16 @@ One signature wraps the machine body in `NoInfer`, so initialization and cells m
 ## Consequences
 
 Effect users declare each model and message shape once and keep the existing engines and pure helpers. They still parse external data at its boundary. Authors declare every command, including an explicit empty list for a pure machine. Existing core machines need no migration.
+
+## Amendments
+
+- **#897 — Keep the declared model and plain-message schemas reachable (2026-11-08).**
+  The [owner's ruling](https://github.com/kamp-us/demlik/issues/897#issuecomment-6725677913)
+  adds typed, readonly `model: Schema.Schema<S>` and `msg: Schema.Schema<M>`
+  properties to the returned machine. Each is the same reference supplied to
+  `Machine.make`. The message schema describes plain messages, without command
+  settlements. The earlier "schemas supply types" constraint means the maker
+  adds no automatic decoding; hosts may use those references to validate data
+  explicitly. The core `Machine` type, `defineMachine`, engines, single
+  constructor signature and inference rules stay unchanged. Work on
+  `schemaMigrate` remains in [issue 872](https://github.com/kamp-us/demlik/issues/872).

@@ -24,11 +24,16 @@ function make<
     readonly cmds: readonly D[];
     readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "sub" | "ctx">;
   },
-): CoreMachine<S, M | Settled<D>, CmdOf<D>, U, Ctx> {
-  return defineMachine<S, M, D, U, Ctx>({
+): CoreMachine<S, M | Settled<D>, CmdOf<D>, U, Ctx> & {
+  readonly model: Schema.Schema<S>;
+  readonly msg: Schema.Schema<M>;
+} {
+  const machine = {
     ...spec,
     types: { ...spec.types, model: {} as S, msg: {} as M },
-  });
+  };
+  defineMachine<S, M, D, U, Ctx>(machine);
+  return machine;
 }
 
 /** A core tea machine, with the same init, update and engine contracts. */
@@ -41,9 +46,10 @@ export type Machine<
 > = CoreMachine<S, M, C, U, Ctx>;
 
 /**
- * Build a tea machine with `Machine.make` from required `model` and `msg`
- * Effect schemas and a required `cmds` list. The schemas supply the model and
- * plain message types. `cmds` supplies command values and their settled messages; use `[]`
+ * Build a tea machine with readonly `model` and `msg` schema references for
+ * explicit host decoding. Required `model` and `msg` Effect schemas supply the
+ * model and plain message types. A required `cmds` list supplies command values
+ * and their settled messages; use `[]`
  * for a machine without commands. No separate model, message or command type
  * declaration is needed.
  *
@@ -52,9 +58,15 @@ export type Machine<
  * model and commands, and `update` is a reducer or transitions table. For a
  * tagged model, name `loaded` in `init` to keep literal return values narrow.
  *
- * These schemas supply types only. The maker performs no decoding at
- * construction, boot or dispatch, and returns the existing tea `Machine` for
- * the engines and pure helpers.
+ * The result exposes the same schema references as readonly `model` and `msg`
+ * properties, typed as `Schema.Schema<S>` and `Schema.Schema<M>`. `msg` describes
+ * plain messages only, without command-settlement messages. The result remains
+ * a core tea `Machine` accepted by the engines and pure helpers.
+ *
+ * The maker performs no decoding at construction, boot or dispatch. Hosts parse
+ * external data explicitly. The exposed schema types track decoded values;
+ * `Schema.toType(machine.model)` and `Schema.toType(machine.msg)` let a host
+ * validate saved models and incoming messages already in those decoded shapes.
  *
  * @example
  * ```ts
@@ -69,6 +81,11 @@ export type Machine<
  *   update: {
  *     UserIncremented: (state) => [{ count: state.count + 1 }, []],
  *   },
+ * });
+ *
+ * Schema.decodeUnknownSync(Schema.toType(counter.model))({ count: 2 });
+ * Schema.decodeUnknownSync(Schema.toType(counter.msg))({
+ *   type: "UserIncremented",
  * });
  * ```
  */
