@@ -6,8 +6,14 @@
  */
 
 import { Cause, Effect, Exit, Scope as ScopeModule } from "effect";
-import { describe, expect, it } from "vitest";
-import { defineMachine, type NoCtx, type Reducer, type Store } from "../index";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type Cmd,
+  defineMachine,
+  type NoCtx,
+  type Reducer,
+  type Store,
+} from "../index";
 import { memoryStore } from "../mem";
 import { run as runPromise } from "../promise";
 import { type EffectRuntime, run as runEffect } from "./index";
@@ -46,7 +52,9 @@ interface Setup {
 /** One run on either engine, with its verbs as Promises. */
 interface Harness {
   subscribe(listener: () => void): () => void;
-  observe(observer: (msg: Msg, state: Model) => void): () => void;
+  observe(
+    observer: (msg: Msg, state: Model, cmds?: readonly Cmd[]) => void,
+  ): () => void;
   getState(): Model;
   dispatch(msg: Msg): Promise<void>;
   readonly log: string[];
@@ -139,6 +147,21 @@ const engines: Record<"promise" | "effect", (s: Setup) => Promise<Harness>> = {
 };
 
 describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
+  it("hands observe the Cmds each transition started", async () => {
+    const rt = await start({});
+    const seen: [string, readonly Cmd[] | undefined][] = [];
+    rt.observe((msg, _state, cmds) => seen.push([msg.type, cmds]));
+
+    await rt.dispatch({ type: "go" });
+    await vi.waitFor(() => expect(rt.getState().phase).toBe("finished"));
+
+    expect(seen).toEqual([
+      ["go", [{ type: "work" }]],
+      ["finish", []],
+    ]);
+    await rt.stop();
+  });
+
   it("tells a listener after the save and before the handler, with the new State", async () => {
     const rt = await start({});
     rt.log.length = 0;

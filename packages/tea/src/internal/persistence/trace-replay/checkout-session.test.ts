@@ -53,13 +53,25 @@ type Charge = Cmd<"charge"> & {
 type Ctx = Record<string, never>;
 
 const total = (cart: readonly Item[]) => cart.reduce((n, i) => n + i.price, 0);
-const charge = (cart: readonly Item[], attempt: number): Charge => ({
-  type: "charge",
-  total: total(cart),
-  attempt,
-});
-
-function checkout(opts: { discount?: number; withoutRetry?: boolean } = {}) {
+function checkout(
+  opts: { discount?: number; withoutRetry?: boolean; fee?: number } = {},
+) {
+  // A fee changes what the bank is asked for, and no State: the cart, the
+  // address and the order id stay as they were.
+  const charge = (cart: readonly Item[], attempt: number): Charge => ({
+    type: "charge",
+    total: total(cart) + (opts.fee ?? 0),
+    attempt,
+  });
+  const retryCell = (s: Declined): readonly [State, readonly Charge[]] => [
+    {
+      type: "paying",
+      cart: s.cart,
+      address: s.address,
+      attempt: s.attempt + 1,
+    },
+    [charge(s.cart, s.attempt + 1)],
+  ];
   const priceOf = (m: { price: number }) => m.price - (opts.discount ?? 0);
   return defineMachine({
     types: {
@@ -126,17 +138,6 @@ function checkout(opts: { discount?: number; withoutRetry?: boolean } = {}) {
 }
 
 type Declined = Extract<State, { type: "declined" }>;
-function retryCell(s: Declined): readonly [State, readonly Charge[]] {
-  return [
-    {
-      type: "paying",
-      cart: s.cart,
-      address: s.address,
-      attempt: s.attempt + 1,
-    },
-    [charge(s.cart, s.attempt + 1)],
-  ];
-}
 
 /** The card is declined on the first attempt and charged on the second. */
 function bank() {
@@ -195,7 +196,43 @@ describe("a saved checkout session replayed through your current code", () => {
     expect(result.refusal).toBeUndefined();
     expect(result.states).toHaveLength(23);
     expect(result.actual).toMatchObject({ type: "paid", orderId: "order-94" });
+    expect(result.cmds[19]).toEqual([
+      { type: "charge", total: 94, attempt: 1 },
+    ]);
     expect(charges).toHaveLength(2);
+  });
+
+  it("keeps each step's Cmds through the saved JSONL, as the run started them", async () => {
+    const { jsonl, charges } = await recordSession();
+
+    const steps = parseJSONL<State, Msg>(jsonl).steps ?? [];
+
+    expect(steps).toHaveLength(23);
+    expect(steps[19]?.msg).toEqual({ type: "pay" });
+    expect(steps[19]?.cmds).toEqual([charges[0]]);
+    expect(steps[21]?.cmds).toEqual([charges[1]]);
+    expect(steps.filter((step) => (step.cmds ?? []).length > 0)).toHaveLength(
+      2,
+    );
+  });
+
+  it("names the Msg whose Cmd a change altered, when every State stays the same", async () => {
+    const { jsonl } = await recordSession();
+
+    const result = replayTrace(
+      checkout({ fee: 2 }),
+      parseJSONL<State, Msg>(jsonl),
+    );
+
+    expect(result.matches).toBe(false);
+    expect(result.divergence).toEqual({
+      path: "cmds[0].total",
+      expected: 94,
+      actual: 96,
+      at: { index: 19, msg: { type: "pay" } },
+    });
+    expect(result.states).toHaveLength(23);
+    expect(result.actual).toMatchObject({ type: "paid", orderId: "order-94" });
   });
 
   it("names the first Msg where a changed price rule parts from the recording", async () => {

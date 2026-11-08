@@ -298,27 +298,29 @@ export function ports<S, M, C>(): AnyExtension<S, M, C> {
 /**
  * `subscribe` (zero-arg change notifiers, told after the save and before the
  * Cmds, #695), then, after the Cmds, `observe` (every applied transition's
- * `(msg, state)`) or, at boot, `onBoot` (the initial State, once; a handler
+ * `(msg, state, cmds)`) or, at boot, `onBoot` (the initial State, once; a handler
  * registered after boot fires at once). Each fanout is throw-isolated under its
  * own phase.
  */
 export function observation<S, M, C>(): AnyExtension<S, M, C> {
   return (loop) => {
     const listeners = new Set<() => void>();
-    const observers = new Set<(msg: M, state: S) => void>();
+    const observers = new Set<(msg: M, state: S, cmds: readonly C[]) => void>();
     const bootHandlers = new Set<(state: S) => void>();
     let booted = false;
     return {
       installed() {
         loop.fanout(listeners, "listener", (listener) => listener());
       },
-      commit(msg, state) {
+      commit(msg, state, cmds) {
         if (msg === undefined) {
           booted = true;
           loop.fanout(bootHandlers, "boot", (handler) => handler(state));
           return;
         }
-        loop.fanout(observers, "observer", (observer) => observer(msg, state));
+        loop.fanout(observers, "observer", (observer) =>
+          observer(msg, state, cmds),
+        );
       },
       handle: {
         subscribe: subscribeTo(listeners),

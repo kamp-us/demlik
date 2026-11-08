@@ -2,7 +2,7 @@
 // `loaded` is the replay anchor, not the raw value read from the Store.
 // `trace-replay` folds from it without init, handlers or host context.
 
-import type { BootingRuntime } from "../../../index";
+import type { BootingRuntime, Cmd } from "../../../index";
 
 /**
  * A recorded run, sufficient to reproduce it via `../trace-replay`.
@@ -41,8 +41,19 @@ export interface Trace<S, M> {
    * line carries a state (one written with `captureSteps: true`). A trace
    * dumped with `captureSteps: false` has `steps === undefined`, and so does
    * its JSONL once re-hydrated.
+   *
+   * `cmds`, when present, is the Cmds that msg's transition started, as the
+   * engine reported them. `replayTrace` compares them step by step, so a
+   * change that keeps every State but starts different effects is caught.
    */
-  readonly steps?: readonly { readonly msg: M; readonly state: S }[];
+  readonly steps?: readonly TraceStep<S, M>[];
+}
+
+/** One recorded transition: the msg, the State after it, and its Cmds. */
+export interface TraceStep<S, M> {
+  readonly msg: M;
+  readonly state: S;
+  readonly cmds?: readonly Cmd[];
 }
 
 /** Options for {@link recorder}. */
@@ -78,7 +89,8 @@ export interface RecorderOptions {
    *
    *   - `captureSteps: true` — the FULL-fidelity trace. The recorder also
    *     snapshots the post-transition state for every msg, so `dump().steps`
-   *     holds `{ msg, state }` for every transition (post-state) and
+   *     holds `{ msg, state, cmds }` for every transition (post-state and the
+   *     Cmds it started) and
    *     `toJSONL()` emits a non-null `state` on every step line. Memory is
    *     O(msgs × |state|) — a state ref per transition (refs, not deep
    *     copies; TEA states are conventionally immutable, so the runtime's
@@ -188,7 +200,7 @@ export function recorder<S, M extends { type: string }>(
   // bounded historyTracker).
   const msgs: M[] = [];
   // Per-step (msg, state) pairs — only populated when captureSteps is on.
-  const steps: { msg: M; state: S }[] = [];
+  const steps: TraceStep<S, M>[] = [];
   // The last observed state — boot state until the first step, then advances
   // with every recorded OR dropped transition (finalState must reflect the
   // true latest state even under sampling, so it stays a valid replay oracle
@@ -206,7 +218,7 @@ export function recorder<S, M extends { type: string }>(
     sawBoot = true;
   });
 
-  const unobserve = runtime.observe((msg, state) => {
+  const unobserve = runtime.observe((msg, state, cmds) => {
     // finalState tracks the latest state regardless of sampling — it is the
     // run's endpoint, an anchor, not a sample.
     finalState = state;
@@ -217,7 +229,8 @@ export function recorder<S, M extends { type: string }>(
     if (sampleRate < 1 && Math.random() >= sampleRate) return;
 
     msgs.push(msg);
-    if (captureSteps) steps.push({ msg, state });
+    if (captureSteps)
+      steps.push(cmds === undefined ? { msg, state } : { msg, state, cmds });
   });
 
   return {
@@ -267,7 +280,12 @@ export function recorder<S, M extends { type: string }>(
 /** One line of the JSONL format produced by {@link Recorder.toJSONL}. */
 type JsonlLine<S, M> =
   | { readonly kind: "boot"; readonly state: S | null }
-  | { readonly kind: "step"; readonly msg: M; readonly state: S | null };
+  | {
+      readonly kind: "step";
+      readonly msg: M;
+      readonly state: S | null;
+      readonly cmds?: readonly Cmd[];
+    };
 
 /**
  * Re-hydrate a {@link Trace} from the JSONL produced by
@@ -295,7 +313,7 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
   let loaded: S | null = null;
   let sawBoot = false;
   const msgs: M[] = [];
-  const steps: { msg: M; state: S }[] = [];
+  const steps: TraceStep<S, M>[] = [];
   let finalState: S | null = null;
   let finalKnown = false;
 
@@ -333,7 +351,11 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
       }
       msgs.push(parsed.msg);
       if (parsed.state !== null) {
-        steps.push({ msg: parsed.msg, state: parsed.state });
+        steps.push(
+          parsed.cmds === undefined
+            ? { msg: parsed.msg, state: parsed.state }
+            : { msg: parsed.msg, state: parsed.state, cmds: parsed.cmds },
+        );
         finalState = parsed.state;
         finalKnown = true;
       }
@@ -552,7 +574,14 @@ function traceToJSONL<S, M>(trace: Trace<S, M>): string {
       : i === trace.msgs.length - 1
         ? trace.finalState
         : null;
-    lines.push(JSON.stringify({ kind: "step", msg, state: stepState }));
+    const cmds = steps?.[i]?.cmds;
+    lines.push(
+      JSON.stringify(
+        cmds === undefined
+          ? { kind: "step", msg, state: stepState }
+          : { kind: "step", msg, state: stepState, cmds },
+      ),
+    );
   }
   return lines.join("\n");
 }
