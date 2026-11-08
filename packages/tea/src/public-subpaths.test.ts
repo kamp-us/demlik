@@ -35,7 +35,7 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
 
 /**
- * The public subpaths, exactly. Twenty-seven module subpaths plus the two non-module
+ * The public subpaths, exactly. Twenty-six module subpaths plus the two non-module
  * entries — `./package.json` (metadata passthrough) and
  * `./devtools/styles.css` (the asset stays with its subpath).
  *
@@ -50,10 +50,6 @@ const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
  * engine, beside the engine-neutral `./testing` (#321, ruled R13.1 in #325):
  * `./testing/effect` is the one subpath outside `./effect` that imports `effect`,
  * so a Promise test never installs it.
- *
- * `./devtools/redux` is a subpath beside `./devtools` because `./devtools` is
- * React components and the bridge is not: a page wiring a run to the Redux
- * DevTools extension must not have to install React to do it.
  *
  * `./otel` is a subpath because it is the one module that imports
  * `@opentelemetry/api`, an optional peer (#331): folding it into `./agent`
@@ -94,7 +90,6 @@ const PUBLIC_SUBPATHS = [
   "./work-queue",
   "./jev",
   "./devtools",
-  "./devtools/redux",
   "./machine-viz",
   "./parity",
   "./otel",

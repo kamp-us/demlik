@@ -977,13 +977,6 @@ history are props. You wire it: from `useMachine`, from an
 externally-built runtime, from a test harness. Same shape as Elm's
 debugger but optional, swappable, and not in the critical path.
 
-The debugger window itself is Redux DevTools, reached through
-`@demlik/tea/devtools/redux`, which does take a run (its `observe` and
-`onBoot`) and imports no React. Elm's debugger exports the Msgs and
-re-folds them through `update` on import, discarding the Cmds
-(`elm/browser` `Debugger/Main.elm`, `loadNewHistory`); the bridge's import
-does the same through `replayTrace`.
-
 ---
 
 ## Section 4 — What we have that Elm doesn't
@@ -1091,7 +1084,7 @@ Deliberate non-goals and known gaps. The list is short.
 | `Browser.document` `<title>` control | DOM-imperative outside the machine | **Gap.** Title sync is fine as-is; if it ever becomes a TEA-managed concern it's a Port. |
 | `Html.Lazy` referential-transparency cache | `React.memo` + `useMemo` | **Equivalent.** Different mechanism, same property. |
 | Effect managers (custom Cmd / Sub backends, à la `elm/random`'s internals) | Direct handler registry in `interpret` / `subscribe` | **By design.** Effect managers were removed from public Elm for a reason — they're too easy to misuse. Our registry is the simpler version. |
-| Time-travel debugger | `@demlik/tea/devtools/redux` (Redux DevTools) + `observe` | **Equivalent.** Watch, export and import a session in the Redux DevTools extension; import replays it through the current code and names the Msg it diverges at. Jump does not rewind a live run, because its effects already happened. |
+| Time-travel debugger | `@demlik/tea/devtools` + `observe` | **Equivalent.** Replay-from-history is a few lines of host code on top. |
 
 ---
 

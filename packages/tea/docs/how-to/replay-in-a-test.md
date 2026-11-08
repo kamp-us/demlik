@@ -72,5 +72,3 @@ cell for comes back as `refusal` rather than a throw. A trace without a captured
 record the boot rather than trying to reconstruct it with fresh init. That is how a stuck run becomes a diff at one field instead of a re-run;
 [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
 record-then-replay loop.
-A session saved from the Redux DevTools panel replays the same way; see
-[Debug a run in Redux DevTools](./debug-a-run-in-redux-devtools.md).

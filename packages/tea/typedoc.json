@@ -25,7 +25,6 @@
     "src/testing/effect/index.ts",
     "src/pbt/index.ts",
     "src/devtools/index.ts",
-    "src/devtools/redux/index.ts",
     "src/otel/index.ts",
     "src/machine-viz/index.ts",
     "src/parity/index.ts"

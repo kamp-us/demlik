@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 28 public subpaths. Curated
+The complete export catalog — all 27 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -9,7 +9,6 @@ discoverable here with a one-line gloss from their source barrel.
 | [`.`](./tea.md) | stable | TEA-faithful state machine substrate. |
 | [`./agent`](./agent.md) | experimental | THE headline Level-3 machine: a durable, crash-recoverable AI agent that runs an ordered stage pipeline, and inside the agentic stage drives the classic loop `llm → tools → fold → llm` until the model stops asking for tools. |
 | [`./devtools`](./devtools.md) | stable | presentational inspector for any tea machine. |
-| [`./devtools/redux`](./devtools-redux.md) | experimental | watch, export and import a running machine in the Redux DevTools browser extension. |
 | `./devtools/styles.css` | stable | visual defaults. |
 | [`./do`](./do.md) | stable | Durable Object adapter for `@demlik/tea`. |
 | [`./effect`](./effect.md) | stable | the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. |

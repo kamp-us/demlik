@@ -120,10 +120,6 @@
       "types": "./dist/devtools/index.d.ts",
       "import": "./dist/devtools/index.js"
     },
-    "./devtools/redux": {
-      "types": "./dist/devtools/redux/index.d.ts",
-      "import": "./dist/devtools/redux/index.js"
-    },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"
