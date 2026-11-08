@@ -1,3 +1,4 @@
+import { notFollowedLine } from "../boundaries/tables/unfollowed.js";
 import type { HexagonMember } from "../hexagon/ports.js";
 import { stableStringify } from "../render/json.js";
 import type { FeatureReach, OwnedFeature } from "./features.js";
@@ -78,6 +79,7 @@ function scopeLines(scope: ScopeOwners): string[] {
       : scope.features.flatMap(featureLines)),
     ...block(1, "Workers", scope.workers.flatMap(workerLines)),
     ...block(1, "Technologies", scope.technologies.flatMap(technologyLines)),
+    ...block(1, "Not followed", scope.notFollowed.map(notFollowedLine)),
   ];
 }
 

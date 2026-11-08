@@ -21,8 +21,10 @@ import {
 } from "./rules.js";
 import { judgeShape } from "./shape/judge.js";
 import type { Shape, ShapeFacts } from "./shape/shape.js";
-import { judgeTables } from "./tables/judge.js";
+import { type Follow, followerOf } from "./tables/follow.js";
+import { judgeTables, notFollowedOf } from "./tables/judge.js";
 import type { TableFacts, Tables } from "./tables/tables.js";
+import type { NotFollowed } from "./tables/unfollowed.js";
 import type { BoundaryViolation, ZoneEdge } from "./violation.js";
 import { impureViolations } from "./zones/impure-violations.js";
 import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
@@ -179,15 +181,20 @@ type ScopeContext = ScopeInputs & {
   // The scope's composition roots and every file that opens one when it runs, empty for a rules file
   // that lists no `compositionRoots`.
   readonly reach: RootReach;
+  // Says whose a table is, following every re-export: B23's, the owners view's and the census's one
+  // answer.
+  readonly follow: Follow;
 };
 
 // What one file of a scope crosses: its violations, how many imports of undeclared packages its
-// library left unjudged, and the binding sites the census counts. The scope's own entries (an
-// unknown zone, a package no library names) are the caller's.
+// library left unjudged, the binding sites the census counts and the writes it holds that the run
+// could not follow. The scope's own entries (an unknown zone, a package no library names) are the
+// caller's.
 type Found = {
   readonly violations: BoundaryViolation[];
   readonly unjudged: number;
   readonly sites: SiteRow[];
+  readonly notFollowed: NotFollowed[];
 };
 
 const NOT_JUDGED: Pick<Found, "violations" | "sites"> = { violations: [], sites: [] };
@@ -270,15 +277,18 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     violations: isTest ? judgedInTestFile(violations) : violations,
     unjudged: libs.unjudged,
     sites: across.sites,
+    // A test file is no part of the gate, so a write it makes is none the census counts.
+    notFollowed: isTest ? [] : notFollowedOf(ctx, module),
   };
 }
 
-// A scope's report, the imports of undeclared packages its libraries left unjudged, and every
-// binding site its files hold.
+// A scope's report, the imports of undeclared packages its libraries left unjudged, every binding
+// site its files hold and every write they make that the run could not follow.
 export type ScopeAnalysis = {
   readonly report: ScopeBoundaryReport;
   readonly unjudged: number;
   readonly sites: readonly SiteRow[];
+  readonly notFollowed: readonly NotFollowed[];
 };
 
 export function analyzeBoundaries(
@@ -291,9 +301,20 @@ export function analyzeBoundaries(
   const allowance = scopeReadsOf(inputs.shape.allowance, scope, modules);
   const reach = rootReachOf(inputs.shape.roots, scope, modules);
   const technologies = technologiesOf(rules, scope);
-  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, technologies, allowance, reach };
+  const follow = followerOf(modules, zoning);
+  const ctx: ScopeContext = {
+    ...inputs,
+    scope,
+    rules,
+    zoning,
+    technologies,
+    allowance,
+    reach,
+    follow,
+  };
   const violations: BoundaryViolation[] = [];
   const sites: SiteRow[] = [];
+  const notFollowed: NotFollowed[] = [];
   // One per entry, however many files sit under it.
   const unknownEntries = new Map<string, BoundaryViolation>();
   let unjudged = 0;
@@ -306,6 +327,7 @@ export function analyzeBoundaries(
     const found = analyzeModule(ctx, module, fromPlace);
     violations.push(...found.violations);
     sites.push(...found.sites);
+    notFollowed.push(...found.notFollowed);
     unjudged += found.unjudged;
   }
   violations.push(...unknownEntries.values(), ...undeclaredLibraries(inputs.libraries, scope));
@@ -320,5 +342,6 @@ export function analyzeBoundaries(
     report: { scope, features, filesScanned: modules.length, violations },
     unjudged,
     sites,
+    notFollowed,
   };
 }

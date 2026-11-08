@@ -306,11 +306,21 @@ describe("a write is a call of insert, update or delete that takes the imported 
   });
 });
 
-// Everything the kinds do not see, each next to the one write they do.
-const NOT_SEEN: Record<string, string> = {
+// The cases at the edge of what the kinds follow, each next to the one write they follow plainly.
+// A write through a feature's `index.ts` or a schema barrel is followed to its owner's tables file.
+// The rest are counted where a write leaves a mark the run can read, and where it leaves none it is not.
+const EDGE_CASES: Record<string, string> = {
   [at("src/orders/adapters/driven/tables.ts")]: tablesOf("orders"),
   [at("src/orders/index.ts")]: 'export { orders } from "./adapters/driven/tables";\n',
   [at("src/drizzle/schema.ts")]: 'export { orders } from "../orders/adapters/driven/tables";\n',
+  [at("src/drizzle/alias.ts")]: lines(
+    'import { orders } from "../orders/adapters/driven/tables";',
+    "export const alias = orders;",
+  ),
+  [at("src/billing/adapters/driven/imported-alias.ts")]: lines(
+    'import { alias } from "../../../drizzle/alias";',
+    "export const w = (db: Db) => db.insert(alias);",
+  ),
   [at("src/billing/adapters/driven/seen.ts")]: lines(
     `import { orders } from "${ORDERS_TABLES}";`,
     "export const w = (db: Db) => db.insert(orders);",
@@ -360,11 +370,56 @@ const NOT_SEEN: Record<string, string> = {
   ),
 };
 
-describe("what the table kinds do not see reports nothing", () => {
-  it("leaves every case alone but the one write it does see", () => {
-    const run = open(NOT_SEEN);
+const EDGE = "src/billing/adapters/driven";
+
+describe("what the table kinds follow only so far is reported, counted or told apart, never clean", () => {
+  it("reports a write through a feature's index.ts and through a schema barrel, beside the direct one", () => {
+    const run = open(EDGE_CASES);
     expect(crossingsOf(run.run({ json: true }))).toEqual([
-      ["table-written-outside-owner", at("src/billing/adapters/driven/seen.ts"), "orders"],
+      ["table-written-outside-owner", at(`${EDGE}/seen.ts`), "orders"],
+      ["table-written-outside-owner", at(`${EDGE}/through-barrel.ts`), "orders"],
+      ["table-written-outside-owner", at(`${EDGE}/through-index.ts`), "orders"],
+    ]);
+  });
+
+  it("counts the writes it cannot follow, one row per file per kind, and none of the rest", () => {
+    const census = reportOf(open(EDGE_CASES).run({ json: true })) as unknown as {
+      tables: { rows: { file: string; kind: string }[] };
+    };
+    expect(census.tables.rows).toEqual([
+      { file: at(`${EDGE}/default-import.ts`), kind: "default-export" },
+      { file: at(`${EDGE}/dynamic.ts`), kind: "untraced-write" },
+      { file: at(`${EDGE}/imported-alias.ts`), kind: "untraced-write" },
+      { file: at(`${EDGE}/raw-sql.ts`), kind: "raw-sql" },
+      { file: at(`${EDGE}/rebound.ts`), kind: "untraced-write" },
+      { file: at(`${EDGE}/variable.ts`), kind: "untraced-write" },
+    ]);
+    // A call of a helper and a computed member leave no mark that is a write: `insertInto(db, t)` is
+    // any call, and `db["insert"](t)` any computed one. They are named in the docs as such.
+    const files = census.tables.rows.map((row) => row.file);
+    for (const name of ["helper.ts", "computed.ts", "schema-table.ts", "seen.ts"]) {
+      expect(files).not.toContain(at(`${EDGE}/${name}`));
+    }
+  });
+
+  it("counts a write of a table a file outside every tables file declares: no feature owns it to be written", () => {
+    const run = open({
+      [at("src/orders/adapters/driven/tables.ts")]: tablesOf("orders"),
+      [at("src/lib/shared.ts")]: tablesOf("shared"),
+      [at("src/billing/adapters/driven/shared-write.ts")]: lines(
+        'import { shared } from "../../../lib/shared";',
+        "export const w = (db: Db) => db.insert(shared);",
+      ),
+    });
+    expect(tableRows(run, "table-written-outside-owner")).toEqual([]);
+    expect(tableRows(run, "table-declared-outside-tables")).toEqual([
+      ["table-declared-outside-tables", at("src/lib/shared.ts"), "pgTable"],
+    ]);
+    const census = reportOf(run.run({ json: true })) as unknown as {
+      tables: { rows: { file: string; kind: string }[] };
+    };
+    expect(census.tables.rows).toEqual([
+      { file: at(`${EDGE}/shared-write.ts`), kind: "untraced-write" },
     ]);
   });
 });
@@ -464,7 +519,7 @@ describe("a bad tableOwnership exits 2 with one line and writes nothing", () => 
 
 // What one file's syntax says about tables, whichever kinds the rules file lists.
 const factsOf = (source: string) => tableFactsOf(ALL_TABLES, sourceUnit(source).syntax);
-const orders = { source: "./tables", table: "orders" };
+const orders = { source: "./tables", path: ["orders"] };
 
 describe("a file's references to the tables it imports", () => {
   it("lists a table once where the file reads it, a write included, in source order", () => {
@@ -475,7 +530,7 @@ describe("a file's references to the tables it imports", () => {
         "export const b = (db: Db) => db.insert(orders);",
       ),
     );
-    expect(facts.references).toEqual([{ source: "./tables", table: "orderLines" }, orders]);
+    expect(facts.references).toEqual([{ source: "./tables", path: ["orderLines"] }, orders]);
     expect(facts.writes).toEqual([orders]);
   });
 
@@ -514,6 +569,81 @@ describe("a file's references to the tables it imports", () => {
       ),
     );
     expect([facts.references, facts.writes]).toEqual([[], []]);
+    expect(facts.unfollowed).toEqual(["untraced-write"]);
+  });
+
+  it("reads the names a table is reached by, one per hop: an import's own, then each member", () => {
+    const facts = factsOf(
+      lines(
+        'import { ns, orders as o } from "./barrel";',
+        'import * as b from "./barrel";',
+        'import tables from "./default";',
+        "export const a = (db: Db) => [db.insert(ns.orders), db.update(b.ns.orders), db.delete(o)];",
+        "export const c = (db: Db) => db.select().from(b.ns.orderLines.id);",
+        "export const d = (db: Db) => db.insert(tables);",
+        "export const e = (db: Db) => db.insert((b.orders as Table)!);",
+        "export const whole = [b, b.ns];",
+      ),
+    );
+    const at = (source: string, ...path: string[]) => ({ source, path });
+    // A name is listed once per module and path, so `ns.orders` and `b.ns.orders` are one.
+    expect(facts.writes).toEqual([
+      at("./barrel", "ns", "orders"),
+      at("./barrel", "orders"),
+      at("./default", "default"),
+    ]);
+    expect(facts.references).toEqual([
+      at("./barrel", "ns", "orders"),
+      at("./barrel", "orders"),
+      at("./barrel", "ns", "orderLines", "id"),
+      at("./default", "default"),
+      at("./barrel", "ns"),
+    ]);
+  });
+
+  it("counts a write whose table is no import, unless it can never be a table", () => {
+    const unfollowed = (...calls: string[]) =>
+      factsOf(lines(`export const w = (db: Db) => [${calls.join(", ")}];`)).unfollowed;
+    for (const call of [
+      "db.insert(t)",
+      "db.update(pick(t))",
+      "db.delete(...tables)",
+      "db.insert(a.b)",
+    ]) {
+      expect(unfollowed(call), call).toEqual(["untraced-write"]);
+    }
+    for (const call of [
+      'map.delete("key")',
+      "set.delete(1)",
+      "db.insert({})",
+      "db.update(`x`)",
+      "db.delete()",
+    ]) {
+      expect(unfollowed(call), call).toEqual([]);
+    }
+  });
+
+  it("counts raw SQL that starts as a write, and not text that only mentions the words", () => {
+    const unfollowed = (text: string) => factsOf(lines(`export const w = ${text};`)).unfollowed;
+    for (const text of [
+      '"INSERT INTO orders (id) VALUES (1)"',
+      '"  delete from orders where id = 1"',
+      `\`UPDATE \${table} SET a = 1\``,
+      '"update public.orders set a = 1"',
+      '"-- seed\\nINSERT OR REPLACE INTO orders (id) VALUES (1)"',
+      '"SELECT 1; DELETE FROM orders"',
+    ]) {
+      expect(unfollowed(text), text).toEqual(["raw-sql"]);
+    }
+    for (const text of [
+      '"select * from orders"',
+      "\"CREATE TYPE action AS ENUM ('insert', 'update', 'delete')\"",
+      '"update the row, then set it aside"',
+      '"we delete from the list"',
+      '"insert"',
+    ]) {
+      expect(unfollowed(text), text).toEqual([]);
+    }
   });
 
   it("reads nothing where the rules file lists no table kind", () => {
@@ -524,7 +654,14 @@ describe("a file's references to the tables it imports", () => {
       "export const b = (db: Db) => db.insert(orders);",
     );
     const none = tableFactsOf(readTables({ tableOwnership: [] }), sourceUnit(source).syntax);
-    expect(none).toEqual({ writes: [], references: [], constructors: [], declared: [] });
+    expect(none).toEqual({
+      writes: [],
+      references: [],
+      constructors: [],
+      declared: [],
+      exports: [],
+      unfollowed: [],
+    });
   });
 });
 

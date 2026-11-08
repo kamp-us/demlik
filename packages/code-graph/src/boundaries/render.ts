@@ -12,6 +12,7 @@ import { censusLines, type LibraryCensus } from "./libraries/census.js";
 import type { CeilingBreach } from "./migrate.js";
 import type { Reconciliation } from "./reconcile.js";
 import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import { type TableCensus, tableCensusLines } from "./tables/census.js";
 import { type BoundaryKind, type BoundaryViolation, crossingOf, noteOf } from "./violation.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
@@ -100,13 +101,15 @@ function scopeLines(report: ScopeBoundaryReport): string[] {
 export type Censuses = {
   readonly libraries: LibraryCensus | null;
   readonly deployables: DeployableCensus | null;
+  readonly tables: TableCensus | null;
 };
 
 function censusJson(censuses: Censuses): Record<string, unknown> {
-  const { libraries, deployables } = censuses;
+  const { libraries, deployables, tables } = censuses;
   return {
     ...(libraries === null ? {} : { libraries }),
     ...(deployables === null ? {} : { deployables }),
+    ...(tables === null ? {} : { tables }),
   };
 }
 
@@ -126,6 +129,7 @@ export function renderBoundaries(
     ...reports.flatMap(scopeLines),
     ...(censuses.libraries === null ? [] : censusLines(censuses.libraries)),
     ...(censuses.deployables === null ? [] : deployableCensusLines(censuses.deployables)),
+    ...(censuses.tables === null ? [] : tableCensusLines(censuses.tables)),
   ].join("\n");
 }
 

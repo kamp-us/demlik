@@ -20,6 +20,8 @@ import { type Censuses, renderBoundaries } from "./render.js";
 import { type BoundaryRules, LEGACY_CEILINGS_FILENAME } from "./rules.js";
 import { loadScope } from "./run/load.js";
 import { GATE_READER, type Reads, readRun } from "./run/reads.js";
+import { tableCensus } from "./tables/census.js";
+import type { NotFollowed } from "./tables/unfollowed.js";
 
 export type BoundaryFlags = {
   readonly ci: boolean;
@@ -91,11 +93,13 @@ function graphReports(deployables: Deployables, under: string): ScopeBoundaryRep
 }
 
 // What one run measured: each scope's report, the imports of undeclared packages its libraries
-// left unjudged, and every binding site its scopes hold.
+// left unjudged, every binding site its scopes hold and every write their files make that the run
+// could not follow.
 type Analysis = {
   readonly reports: ScopeBoundaryReport[];
   readonly unjudged: number;
   readonly sites: readonly SiteRow[];
+  readonly notFollowed: readonly NotFollowed[];
 };
 
 function analyzeAll(
@@ -114,6 +118,7 @@ function analyzeAll(
       ],
       unjudged: analyses.reduce((sum, analysis) => sum + analysis.unjudged, 0),
       sites: analyses.flatMap((analysis) => analysis.sites),
+      notFollowed: analyses.flatMap((analysis) => analysis.notFollowed),
     };
   } catch (error) {
     args.report(error instanceof Error ? error.message : String(error));
@@ -124,7 +129,7 @@ function analyzeAll(
 // What the report says beside its violations, per key family: nothing for a family the rules file
 // declares no key of.
 function censusesOf(reads: Reads, analysis: Analysis): Censuses {
-  const { reports, unjudged, sites } = analysis;
+  const { reports, unjudged, sites, notFollowed } = analysis;
   return {
     libraries: libraryCensus(reads.libraries, {
       scopes: reports.map((report) => report.scope),
@@ -134,6 +139,7 @@ function censusesOf(reads: Reads, analysis: Analysis): Censuses {
       unjudged,
     }),
     deployables: deployableCensus(reads.deployables, sites),
+    tables: tableCensus(reads.tables, notFollowed),
   };
 }
 
