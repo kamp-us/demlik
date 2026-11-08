@@ -18,7 +18,7 @@ import {
   type Postable,
   post,
 } from "../internal/engine/loop";
-import type { Port } from "../pure/core";
+import type { Cmd, Port } from "../pure/core";
 import type { DispatchSettle, Runtime } from "../runtime-types";
 import {
   doneExitOf,
@@ -58,8 +58,13 @@ export interface EffectBootingRuntime<
    * save and before its first Cmd's handler starts.
    */
   subscribe(listener: () => void): () => void;
-  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * A `(msg, state, cmds)` hook, fired after each applied transition's Cmds,
+   * with the Cmds that transition started.
+   */
+  observe(
+    observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void,
+  ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */

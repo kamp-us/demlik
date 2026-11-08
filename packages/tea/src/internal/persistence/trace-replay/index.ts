@@ -38,11 +38,19 @@ export interface ReplayResult<S, M = unknown> {
    */
   states: readonly S[];
   /**
-   * Present iff the states differ. The FIRST point of divergence found by a
+   * The Cmds the current reducer started for each replayed msg, in order:
+   * `cmds[i]` follows `trace.msgs[i]`, like `states`. Nothing runs them.
+   */
+  cmds: readonly (readonly Cmd[])[];
+  /**
+   * Present iff the states differ, or a step's Cmds differ from the recorded
+   * ones. The FIRST point of divergence found by a
    * deterministic pre-order walk:
    *   - `path`     — a dotted/indexed access path from the state root, e.g.
    *                  `state.queue[2].status` or `state` for a root-level
-   *                  scalar mismatch.
+   *                  scalar mismatch. When every State matches but a step's
+   *                  Cmds do not, the path starts at that step's Cmd list,
+   *                  e.g. `cmds[0].total`.
    *   - `expected` — the recorded value at that path.
    *   - `actual`   — the recomputed value at that path.
    *   - `at`       — the first msg after which the recomputed state differs
@@ -79,7 +87,9 @@ export interface ReplayResult<S, M = unknown> {
  * anchor is refused; a fresh init cannot reconstruct its starting State.
  *
  * When the trace carries `steps`, every step is compared and the divergence
- * names the msg it starts at. When the machine has no cell for a recorded msg,
+ * names the msg it starts at. A step that also carries its `cmds` has them
+ * compared after its State, so a change that starts different effects from
+ * the same States is caught too. When the machine has no cell for a recorded msg,
  * replay stops and the result carries a `refusal` instead of throwing.
  *
  * @param machine - the machine to replay against. Mutating its reducer (the
@@ -108,12 +118,14 @@ export function replayTrace<
   const expected = trace.finalState;
   const steps = trace.steps;
   const states: S[] = [];
+  const cmdsPerStep: (readonly C[])[] = [];
   let state: S = trace.loaded;
   let firstStepDivergence: ReplayResult<S, M>["divergence"];
 
   for (const [index, msg] of trace.msgs.entries()) {
+    let cmds: readonly C[];
     try {
-      state = applyCellChecked<S, M, C>(machine, state, msg)[0];
+      [state, cmds] = applyCellChecked<S, M, C>(machine, state, msg);
     } catch (err) {
       if (!(err instanceof NoCellError)) throw err;
       const { stateName, acceptedTypes } = err;
@@ -122,13 +134,19 @@ export function replayTrace<
         expected,
         actual: state,
         states,
+        cmds: cmdsPerStep,
         refusal: { index, msg, stateName, acceptedTypes },
       };
     }
     states.push(state);
+    cmdsPerStep.push(cmds);
     const recorded = steps?.[index];
     if (firstStepDivergence === undefined && recorded !== undefined) {
-      const d = firstDivergence(recorded.state, state, "state");
+      const d =
+        firstDivergence(recorded.state, state, "state") ??
+        (recorded.cmds === undefined
+          ? null
+          : firstDivergence(recorded.cmds, cmds, "cmds"));
       if (d !== null) firstStepDivergence = { ...d, at: { index, msg } };
     }
   }
@@ -136,9 +154,22 @@ export function replayTrace<
   const divergence =
     firstStepDivergence ?? firstDivergence(expected, state, "state");
   if (divergence === null) {
-    return { matches: true, expected, actual: state, states };
+    return {
+      matches: true,
+      expected,
+      actual: state,
+      states,
+      cmds: cmdsPerStep,
+    };
   }
-  return { matches: false, expected, actual: state, states, divergence };
+  return {
+    matches: false,
+    expected,
+    actual: state,
+    states,
+    cmds: cmdsPerStep,
+    divergence,
+  };
 }
 
 /**

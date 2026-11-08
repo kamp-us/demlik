@@ -103,7 +103,8 @@ interface RecorderOptions {
    *
    *   - `captureSteps: true` — the FULL-fidelity trace. The recorder also
    *     snapshots the post-transition state for every msg, so `dump().steps`
-   *     holds `{ msg, state }` for every transition (post-state) and
+   *     holds `{ msg, state, cmds }` for every transition (post-state and the
+   *     Cmds it started) and
    *     `toJSONL()` emits a non-null `state` on every step line. Memory is
    *     O(msgs × |state|) — a state ref per transition (refs, not deep
    *     copies; TEA states are conventionally immutable, so the runtime's
@@ -195,7 +196,11 @@ interface Trace<S, M> {
    * line carries a state (one written with `captureSteps: true`). A trace
    * dumped with `captureSteps: false` has `steps === undefined`, and so does
    * its JSONL once re-hydrated.
+   *
+   * `cmds`, when present, is the Cmds that msg's transition started, as the
+   * engine reported them. `replayTrace` compares them step by step, so a
+   * change that keeps every State but starts different effects is caught.
    */
-  readonly steps?: readonly { readonly msg: M; readonly state: S }[];
+  readonly steps?: readonly TraceStep<S, M>[];
 }
 ```

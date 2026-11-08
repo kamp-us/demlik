@@ -317,7 +317,9 @@ class HostedRun<S, M extends { type: string }>
     return this.onTarget((target) => target.subscribe(listener));
   }
 
-  observe(observer: (msg: M, state: S) => void): () => void {
+  observe(
+    observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void,
+  ): () => void {
     return this.onTarget((target) => target.observe(observer));
   }
 

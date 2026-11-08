@@ -122,7 +122,7 @@ export interface Extension<S, M, C> {
   readonly interpret?: (next: InterpretStep<C, M>) => InterpretStep<C, M>;
   readonly store?: (store: Store<S>) => Store<S>;
   readonly installed?: () => void;
-  readonly commit?: (msg: M | undefined, state: S) => void;
+  readonly commit?: (msg: M | undefined, state: S, cmds: readonly C[]) => void;
   readonly saveFailed?: (state: S, error: unknown) => void;
   readonly subFailed?: (error: unknown) => void;
   readonly halted?: (error: unknown) => void;
@@ -857,7 +857,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     try {
       await runCmds(cmds);
     } finally {
-      for (const callback of commitCallbacks) callback(msg, next);
+      for (const callback of commitCallbacks) callback(msg, next, cmds);
     }
   }
 

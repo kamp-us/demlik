@@ -373,13 +373,13 @@ interface BootingRuntime<S, M extends { type: string }, E extends { type: string
    */
   emitPort<T>(port: Port<T>, value: T): void;
   /**
-   * Register a `(msg, state)` trace hook, fired for every applied transition
-   * with the fold's committed State. A `dispatch` issued from the observer is
+   * Register a `(msg, state, cmds)` trace hook, fired for every applied
+   * transition with the fold's committed State and the Cmds it started. A `dispatch` issued from the observer is
    * SCHEDULED onto the serial tail behind the fold that fired it, never folded
    * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
    * deferral; two listeners issuing in order fold in that order.
    */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
   /**
    * Subscribe to a SEMANTIC event of `type`. The handler receives exactly the
    * `E` member whose `type` matches `K`, so a consumer never touches another
@@ -1920,8 +1920,11 @@ interface RunHandle<S, M extends { type: string }, E extends { type: string } = 
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
   /** Put a Msg in the inbox; resolves once the engine has processed it. */
   dispatch(msg: M): Promise<void>;
-  /** A `(msg, state)` hook, fired after each applied transition's Cmds. */
-  observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * A `(msg, state, cmds)` hook, fired after each applied transition's Cmds,
+   * with the Cmds that transition started.
+   */
+  observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
     type: K,
