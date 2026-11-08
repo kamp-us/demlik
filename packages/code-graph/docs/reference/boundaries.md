@@ -390,6 +390,11 @@ A file under a root is an adapter wherever another rule reads the zone table:
 - It satisfies a library whose type lists `importedFrom: ["driven"]`. A library
   that lists only `configurator` imported from it is B14.
 
+A file under an interpreter root is a file in no feature for B22 and B23, so its
+table declaration is B22, its write of a feature's table is B23, and its import
+of that feature's `tables.ts` is also B25. A root that keeps a table of its own
+accepts the B22 by name (`--accept-crossings --reason`).
+
 Each of these is refused with exit 2 and nothing written, in one line naming
 `interpreters` and the entry:
 
@@ -516,6 +521,11 @@ the owner: `owner` on the `--json` row, and `[owner: <feature>]` on the plain
 row and the `--ci` failure line. The ledger entry does not keep it. Reads,
 joins, foreign keys, a type-only import and a feature writing its own table are
 clean.
+
+A file under an interpreter root is a file in no feature for B22 and B23, so its
+table declaration is B22, its write of a feature's table is B23, and its import
+of that feature's `tables.ts` is also B25. A root that keeps a table of its own
+accepts the B22 by name (`--accept-crossings --reason`).
 
 Neither kind judges a file `testFiles` matches. Both read syntax only, with no
 type checker and no data flow. What they follow, what they count and what they
