@@ -87,6 +87,7 @@ packages/code-graph/
     layers/     Feature E — the --layers gate          collapse/   Feature C — --collapse
     hotspots/   Feature F — churn.ts + render.ts       env-keys/   Feature H2 — extract.ts + query.ts
     data/       --data — access.ts (read/write per binding method) + extract.ts (call sites) + render.ts
+    owners/     --owners (§15) — scope.ts (one scope) + features.ts + workers.ts + technologies.ts + locus.ts + render.ts + run.ts
     comments/   Feature I — classify.ts + census.ts + render.ts + ceilings.ts + ratchet.ts + gate.ts
     api.ts      barrel for the `./api` library subpath (§13.7)
     api/        the published-API mode (§13) — map.ts + emit.ts + read.ts + text.ts + view.ts +
@@ -360,7 +361,7 @@ Deterministic. Default axis `--by rot`: sort descending by `(1) smells.length, (
 code-graph <path> [flags]
 ```
 
-**A run takes one gate.** The modes below answer in a fixed order and each returns, so a second gate would never run and a green would say nothing about it. `gates/one-gate.ts` decides this from the flags alone, before any ledger or ceilings file is read, and exits 2 with one stderr line naming the flags: two of `--layers`, `--boundaries`, `--comments`, `--collapse` and `--unreachable` when a run also carries `--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or `--migrate-ceilings` (`--layers` counts without them, since it always gates), or `--env-keys` or `--hexagon` beside any such gate, plain `--ci` or `--accept-smells`. A `--ci` riding one named gate is not a second gate. The API ledger's `--api <map> --ci` and `--api <map> --accept-api` answer before this check and refuse any other gate flag with their own line (§13.9), so they keep to one gate too. Two report flags in one run, such as `--cycles --kinds`, are not refused: one report is dropped and no gate is lost.
+**A run takes one gate.** The modes below answer in a fixed order and each returns, so a second gate would never run and a green would say nothing about it. `gates/one-gate.ts` decides this from the flags alone, before any ledger or ceilings file is read, and exits 2 with one stderr line naming the flags: two of `--layers`, `--boundaries`, `--comments`, `--collapse` and `--unreachable` when a run also carries `--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or `--migrate-ceilings` (`--layers` counts without them, since it always gates), or `--env-keys`, `--hexagon` or `--owners` beside any such gate, plain `--ci` or `--accept-smells`, or `--owners` beside `--hexagon` or `--env-keys` (it is the one report that takes no other mode). A `--ci` riding one named gate is not a second gate. The API ledger's `--api <map> --ci` and `--api <map> --accept-api` answer before this check and refuse any other gate flag with their own line (§13.9), so they keep to one gate too. Two report flags in one run, such as `--cycles --kinds`, are not refused: one report is dropped and no gate is lost.
 
 | Flag | Behavior |
 |---|---|
@@ -370,6 +371,7 @@ code-graph <path> [flags]
 | `--smells` | All smells grouped by kind (human). `--json` → `Smell[]` |
 | `--tree` | Indented `file → function  L12-48  loc=36 cx=8 nest=3 [smell markers]` |
 | `--hexagon` | One feature's Ports & Adapters inventory (§14), human text; `--json` for data |
+| `--owners --boundary-rules <file>` | Who owns each table, binding and technology of every scope the rules file declares at or under the analyzed path, and who reaches into it (§15): human text; `--json` for data. A view, never a gate: exit 0 whatever the scopes hold, 2 only where `--boundaries` would refuse to start. Adds no rules-file key and reads and writes no ledger |
 | `--file <f>` | One module + its functions only. Warns if `<f>` is in `parseFailures` |
 | `--blast <id>` | Direct + transitive callers of `<id>`: list of `{ callerId, file, line, depth }` + `callChainDepth`. **Lists DISTINCT external callers only** — the target's own self-recursion is excluded from `callers` (so `callers.length` equals the target's `fanIn`) and surfaced separately as `recursiveSelfCalls` (count of self-call sites), shown as a `recursive: N self-calls` note in the human render. If a **bare name** matches >1 function, prints all candidate ids and exits non-zero. Output carries `scope`; in `package` scope sets `crossPackageCallersOmitted: true` and warns to re-run with `--deep` |
 | `--find <name>` | Name lookup over both node sets (§6 A1): every `FunctionNode` and `DeclarationNode` whose `name` is exactly `<name>`, printed as JSON `{ name, scope, matches }` (`--pretty` indents it). Each match is `{ id, name, kind, file, line, isExported, uses }`, sorted by (file, line, id); `line` is a function's `startLine` or a declaration's `line`. A declaration's `uses` are C6's; a function's are its `calledBy` sites as `{ file, line }` (the caller's file), one per (file, line). **Several matches are data, not an error:** exit 0 whatever the count, and no match prints `matches: []` with a stderr warning. Runs the edge pass (like `--blast`) |
@@ -924,3 +926,81 @@ work as on other views. No options or library subpaths are added.
 Only missing `ports.ts` or an unreadable selected directory exits 2, with a clear
 stderr message naming the path and no report. Cyclic bag aliases are Not read;
 readable properties referring to bags are printed without traversing them.
+
+## 15. Owners view (`--owners`)
+
+`code-graph <path> --owners --boundary-rules <file>` prints, for each scope the rules file declares
+at or under the analyzed path, who owns the scope's tables, bindings and technologies, and who
+reaches into the tables. It is a view and never a gate: it adds no rules-file key, reads and writes
+no ledger (`boundary-ledger.json` records accepted crossings, which are no fact about the code), and
+changes no byte of any `--boundaries` output. It loads a scope as `--boundaries` does (`loadScope`,
+`boundaries/run/load.ts`, after the same `readRun` of `boundaries/run/reads.ts`), so the two read the same
+files and refuse the same scopes. A file `testFiles` lists is no part of the view, as it is none of
+B23.
+
+Every row comes from a function the gate also calls; the view has no detector of its own.
+
+| Row | Source |
+|---|---|
+| The feature that owns a table: the one whose `adapters/driven/tables.ts` an import lands in | `ownerOf`, `boundaries/tables/judge.ts`, which B23 calls |
+| The tables a feature owns | `tableFactsOf(…).declared` of its tables file, `boundaries/tables/tables.ts` |
+| `write` reach | `outsideWrites`, `boundaries/tables/judge.ts`, the function B23 judges |
+| `foreign-key` and `read` reach | `tableFactsOf(…).references`, joined by `reachOf`, `boundaries/tables/reach.ts` |
+| Binding sites | `bindingSitesOf`, `boundaries/deployables/bindings.ts`, the rows of the deployable census |
+| Ports | `readHexagon`, `hexagon/read.ts` (§14) |
+| Technologies | the `interpreters` key (B24, B25) |
+
+**Facts read whether or not a gate is on.** The view reads the table facts of every kind and the
+wrangler configs, even where the rules file lists no `tableOwnership` kind and no `acrossDeployables`
+kind. Only a scope laid out per feature has owners: a port-layout scope is listed with no features.
+The analyzed path selects scopes as `--boundaries` does, so `code-graph services/auditer --owners`
+prints that scope only.
+
+**Output.** Human text, or `--json` for `{ scopes, notRead }`; `--pretty` and `--out` work as on the
+other views. Lists sort lexically, JSON keys go through the stable serializer, and no timestamp or
+absolute path enters the report, so two runs over one tree print the same bytes. Each scope lists:
+
+- **Features**, by name. A feature lists its `tables`, its `reach` and its ports, `commands` and
+  `externalSystems`, as `readHexagon` returns them for `src/<feature>`. A feature with no `ports.ts`
+  lists empty ports.
+- **Workers**, by the service name their config gives them, each with the bindings the scope's files
+  reference: the binding's kind, the files `bindingOwners` narrows it to, and every site with its
+  line and where the file sits. The sites are those of the deployable census, less the files
+  `testFiles` lists.
+- **Technologies**, by name, for each one the scope's `interpreters` declares: its root and its
+  modules as the rules file spells them, and every file outside the root that imports a file under
+  it, type-only imports and re-exports included, as B24 counts them.
+- **Not read**, once per run: a wrangler config that does not parse, whose worker's bindings are
+  then missing.
+
+**Reach rows.** One row per (file, owner, table), sorted by table then file, with the file and where
+it sits. `access` is the strongest of three, in this order:
+
+| `access` | The file |
+|---|---|
+| `write` | passes the table to `insert`, `update` or `delete`; B23's own fact, so the rows equal the `table-written-outside-owner` entries of `--boundaries` for the scope |
+| `foreign-key` | is itself a feature's `adapters/driven/tables.ts` and names the table, the one place #866 opens another feature's table to |
+| `read` | names the table at run time and does not write it: a select, a join or a condition, which syntax alone does not tell apart |
+
+A file's place is `feature <name> (<zone>)`, `lib`, `interpreter <technology>`, `elsewhere` (in the
+scope, in no feature), or, for a binding site, `worker main`. A table is a name that the owner's
+tables file declares as one, `export const x = <constructor>(…)` or `export const x = <schema>.table(…)`,
+so an enum or a schema object exported beside the tables makes no row.
+
+**What the view does not see.** It follows no re-export and no barrel and runs no type checker: a
+table read through a namespace that a barrel re-exports lists nothing. A namespace taken whole
+(`...ns`, `use(ns)`) names no table. A name the file binds twice, a type-only import, a member name
+(`row.orders`), an object key, an export list and a name written in raw SQL are no reach. A table
+declared by a call other than a drizzle constructor or a member call named `table`, or exported by
+a list, is not listed. The schema a `.table(…)` call is made on is not resolved, so a `pgSchema`
+object imported from another module is read as a name only. Nothing crosses scopes. No technology
+is inferred: the section lists those the rules file declares.
+
+**Exit codes.** 0 whatever the scopes hold, including a repo full of B23 entries and a rules file
+declaring no scope. 2, with one stderr line and no report, where `--boundaries` would refuse to
+start: an unreadable or invalid rules file, a path that is not a directory, or a scope the gate
+refuses at the edge (a library or a `bindingOwners` entry the repo cannot honour, a port folder the
+rules file does not list). A wrangler config that does not parse costs the view that worker's
+bindings, which it names under Not read, and costs the run only where the rules file names
+something that config must hold: a `bindingOwners` entry under it, or a `readAllowance`. `--owners` takes no other mode: beside a gate, `--hexagon`,
+`--env-keys` or `--accept-smells` it exits 2 under §10.

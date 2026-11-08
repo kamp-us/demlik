@@ -145,24 +145,73 @@ describe("a command that names several gates is refused", () => {
   });
 });
 
-describe("--env-keys and --hexagon run without a gate", () => {
-  it.each(["--env-keys", "--hexagon"])("%s exits 2 beside any gate or plain --ci", (mode) => {
+describe("--env-keys, --hexagon and --owners run without a gate", () => {
+  it.each([
+    "--env-keys",
+    "--hexagon",
+    "--owners",
+  ])("%s exits 2 beside any gate or plain --ci", (mode) => {
     for (const name of GATE_NAMES) {
       expectRefused([...commandOf([name]), mode], [mode, `--${name}`]);
     }
     expectRefused([repo.app, mode, "--ci"], [mode, "--ci"]);
   });
 
-  it("refuses them beside --accept-smells, whose write would be dropped", () => {
+  it.each([
+    "--env-keys",
+    "--hexagon",
+    "--owners",
+  ])("refuses %s beside --accept-smells, whose write would be dropped", (mode) => {
     expectRefused(
-      [repo.app, "--env-keys", "--accept-smells", "--reason", "kept"],
-      ["--env-keys", "--accept-smells"],
+      [repo.app, mode, "--accept-smells", "--reason", "kept"],
+      [mode, "--accept-smells"],
+    );
+  });
+
+  it("refuses --owners beside the writes that arm --boundaries, which would be dropped", () => {
+    expectRefused(
+      [repo.app, "--owners", "--boundaries", "--accept-crossings", "--reason", "kept"],
+      ["--owners", "--boundaries"],
+    );
+    expectRefused(
+      [repo.app, "--owners", "--boundaries", "--migrate-ceilings"],
+      ["--owners", "--boundaries"],
+    );
+  });
+
+  it("refuses --owners beside --hexagon and --env-keys, whichever of them would answer first", () => {
+    expectRefused([repo.app, "--owners", "--hexagon"], ["--hexagon", "--owners"]);
+    expectRefused([repo.app, "--owners", "--env-keys"], ["--env-keys", "--owners"]);
+    expectRefused(
+      [repo.app, "--owners", "--hexagon", "--env-keys"],
+      ["--hexagon", "--env-keys", "--owners"],
+    );
+  });
+
+  it("leaves --hexagon and --env-keys together as they were", () => {
+    expect(runCli([repo.app, "--hexagon", "--env-keys"]).stderr).not.toContain(
+      "a run takes one gate",
     );
   });
 
   it("leaves each running on its own", () => {
     expect(runCli([repo.app, "--env-keys"]).code).toBe(0);
     expect(runCli([repo.app, "--hexagon"]).stderr).not.toContain("a run takes one gate");
+    const boundaryRules = repo.gates.boundaries.slice(-2);
+    const owners = runCli([repo.app, "--owners", ...boundaryRules]);
+    expect(owners.code).toBe(0);
+    expect(owners.stderr).toBe("");
+    expect(owners.stdout).toContain("packages/app");
+  });
+
+  it("reads and writes no ledger when --owners runs, however many are there", () => {
+    const before = repo.ledgers();
+    for (const name of LEDGER_FILES) fs.writeFileSync(path.join(repo.top, name), "not json");
+    const junk = repo.ledgers();
+    expect(junk).not.toEqual(before);
+    const boundaryRules = repo.gates.boundaries.slice(-2);
+    expect(runCli([repo.app, "--owners", ...boundaryRules]).code).toBe(0);
+    expect(repo.ledgers()).toEqual(junk);
   });
 });
 

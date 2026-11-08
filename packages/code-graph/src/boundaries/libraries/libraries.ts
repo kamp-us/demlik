@@ -122,6 +122,13 @@ export function ownerOf(libraries: Libraries, file: string): string | null {
   return libraries.dirs.find((dir) => file.startsWith(`${dir}/`)) ?? null;
 }
 
+// Whether a repo-relative file sits in a library nested in the scope: that library's own scope
+// judges it, and the scope's does not.
+export function inNestedLibrary(libraries: Libraries, scope: string, file: string): boolean {
+  const nested = ownerOf(libraries, file);
+  return nested !== null && nested !== scope;
+}
+
 // What an import specifier names. A bare specifier resolves to a workspace package by name, a
 // subpath included (`@shop/pkg/sub` is `@shop/pkg`), and never through the package's `exports`.
 export type ImportTarget =

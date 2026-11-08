@@ -91,6 +91,24 @@ function judgedBindings(manifest: ServiceManifest): ReadonlyMap<string, JudgedBi
   );
 }
 
+function judgedByWorker(
+  catalog: BindingCatalog,
+): ReadonlyMap<ServiceManifest, ReadonlyMap<string, JudgedBinding>> {
+  return new Map(catalog.manifests.map((m) => [m, judgedBindings(m)]));
+}
+
+// What a view of the bindings reads: every worker config and the bindings it declares, judged
+// against no rule. B17's kind is the one listed because it is the kind that reads binding sites, so
+// the sites are found and counted as the gate counts them.
+export function bindingsOnly(catalog: BindingCatalog): Deployables {
+  return {
+    ...NO_DEPLOYABLES,
+    kinds: new Set<DeployableKind>(["binding-outside-driven-adapter"]),
+    catalog,
+    judged: judgedByWorker(catalog),
+  };
+}
+
 export type DeployablesRead =
   | { readonly kind: "read"; readonly deployables: Deployables }
   | { readonly kind: "refused"; readonly message: string };
@@ -136,7 +154,7 @@ export function readDeployables(
       packages: kinds.has("package-import-crosses-deployable")
         ? new Map([...facts.packages].filter(([, pkg]) => workerDirs.has(pkg.dir)))
         : new Map(),
-      judged: new Map(catalog.manifests.map((m) => [m, judgedBindings(m)])),
+      judged: judgedByWorker(catalog),
     },
   };
 }

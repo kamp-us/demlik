@@ -19,6 +19,7 @@ The default output is a JSON summary of counts, health, and refactor targets.
 | `--smells` | Findings grouped by kind; `--json` returns the finding list |
 | `--tree` | File/function tree with line ranges, metrics, and findings |
 | `--hexagon` | One feature's Ports & Adapters, human text; `--json` returns the inventory |
+| `--owners` | With `--boundary-rules`: who owns each table, binding and technology of the declared scopes, and who reaches into the tables; `--json` returns it as data |
 | `--file <file>` | One module and its functions |
 | `--blast <id>` | Direct and transitive callers of a function |
 | `--find <name>` | Every function and top-level declaration with that name, as JSON |
@@ -66,6 +67,51 @@ Only missing `ports.ts` and unreadable selected directories exit 2. Unsupported
 shapes and source failures are listed under Not read and exit 0.
 The complete allowlist and ordering rules are in
 [SPEC.md §14](../../SPEC.md#14-feature-hexagon---hexagon).
+
+## Owners
+
+`code-graph <path> --owners --boundary-rules <file>` prints, for each scope the
+rules file declares at or under `<path>`, who owns its tables, bindings and
+technologies and who reaches into the tables. It is a view and never a gate: it
+adds no rules-file key, reads and writes no ledger, and leaves every
+`--boundaries` output as it was. `--json`, `--pretty` and `--out` work as on
+other views. The output is sorted and holds no timestamp or absolute path.
+
+Each scope lists, in order:
+
+| Section | Rows |
+|---|---|
+| Features | Per feature: `tables` (the names its `adapters/driven/tables.ts` exports as tables), `reach`, and the `commands` and `externalSystems` of its `ports.ts`, as `--hexagon` prints them. A feature with no `ports.ts` lists empty ports |
+| Workers | Per worker, per binding: its kind, the files `bindingOwners` narrows it to, and every site with its line and place. `testFiles` are left out |
+| Technologies | Per technology the scope's `interpreters` declares: its root, its modules, and every file outside the root that imports a file under it |
+| Not read | A wrangler config that does not parse |
+
+A `reach` row is one file's way into one table another feature owns, with the
+file and its place (`feature <name> (<zone>)`, `lib`, `interpreter <technology>`
+or `elsewhere`). Its `access` is the strongest of these, in this order:
+
+| `access` | The file |
+|---|---|
+| `write` | Passes the table to `insert`, `update` or `delete`. These rows equal the `table-written-outside-owner` entries of `--boundaries` |
+| `foreign-key` | Is itself a feature's `adapters/driven/tables.ts` and names the table |
+| `read` | Names the table at run time without writing it: a select, a join or a condition |
+
+A binding site's place is also `worker main` for the file the worker's config
+names as `main`.
+
+The view reads table facts and wrangler configs whichever kinds the rules file
+lists. `testFiles` take a file out of it, and a scope not laid out per feature
+lists no features. It does not follow a re-export or barrel, does not read a
+namespace taken whole (`...ns`), does not count a type-only import, an enum or a
+schema object exported beside the tables, a name the file binds twice, or a
+table named in raw SQL, and does not resolve the `pgSchema` object a
+`<schema>.table(…)` call is made on.
+
+It exits 0 whatever the scopes hold. It exits 2, with one stderr line and no
+report, where `--boundaries` would refuse to start: an unreadable or invalid
+rules file, a path that is not a directory, or a scope the gate refuses at the
+edge. The complete rules and ordering are in
+[SPEC.md §15](../../SPEC.md#15-owners-view---owners).
 
 
 ## Function headers
@@ -452,8 +498,9 @@ Layers always gate, without needing `--ci`.
 `--ci`, `--write-ceilings`, `--accept-crossings`, `--accept-dead` or
 `--migrate-ceilings` exit 2 with one line naming them, before any ledger or
 ceilings file is read. `--layers` counts with or without those flags.
-`--env-keys` and `--hexagon` beside a gate, `--ci` or `--accept-smells` exit 2
-the same way, since they run without one. A `--ci` that rides one named gate is
+`--env-keys`, `--hexagon` and `--owners` beside a gate, `--ci` or `--accept-smells` exit 2
+the same way, since they run without one; `--owners` also takes neither
+`--hexagon` nor `--env-keys` beside it. A `--ci` that rides one named gate is
 not a second gate. `--api <map> --ci` and `--api <map> --accept-api` answer
 before this check and take only `--json`, `--pretty` and `--out` (plus `--reason`
 for the accept), so a gate flag beside them exits 2 with their own line.
