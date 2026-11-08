@@ -1,5 +1,44 @@
 # @demlik/code-graph
 
+## 0.15.0
+
+### Minor Changes
+
+- e5d595d: `code-graph --boundaries` (B23 `table-written-outside-owner`) and `--owners` now follow a table through every re-export to the `adapters/driven/tables.ts` that defines it, by ECMA-262's own algorithm, `ResolveExport`: `export { t } from`, `export { t as u } from`, `export * from`, `export * as ns from`, an imported binding exported again, a feature's `index.ts`, a schema barrel such as `drizzle/schema.ts`, chains of them of any length and circles of them, read as a named import, an alias, `ns.t` or `b.ns.t`. One function says whose a table is, for the gate, the view and the census alike; an entry still names the table by the name its tables file exports it under.
+
+  **What changes in a repo that has a schema barrel and lists a `tableOwnership` kind:** B23 is louder. Every write that reached a table through the barrel was silent before and is a `table-written-outside-owner` entry now, so `--ci` fails on each until it is fixed or accepted with `--accept-crossings --reason`. `--owners` lists the same files as `write`, `read` and `foreign-key` rows. A repo whose rules file lists no table kind prints the bytes it printed before.
+
+  What the run still cannot follow is counted instead of left silent. A rules file that lists a table kind gets a `tables:` census beside the violations (`tables` in `--json`) with one count per kind, `untraced-write`, `unloaded-module`, `default-export`, `ambiguous-star`, `export-equals` and `raw-sql`, an explicit `0` for a kind with none, and one row per file and kind. A write of a name that a file outside the tables files holds (`export const o = orders`, then `db.insert(o)`) is counted as `untraced-write` too: it is no B23 entry, since the run follows a name and not a value, and it is never read as clean. `--owners` lists the same rows under `Not followed`. The census is no gate and changes no exit code. The SPEC, `docs/reference/boundaries.md` and `docs/reference/cli.md` carry one table that lists every case as followed, counted or neither, with the reason for each case that is neither.
+
+- a37bf85: `code-graph --boundaries` gains `interpreters`, a rules key that gives each technology one interpreter, and two kinds that hold it: B24 `technology-outside-interpreter` and B25 `interpreter-imports-feature`. Naming a scope in `interpreters` is the switch, so a rules file without it, or with `{}`, reports, gates and writes the same bytes as before.
+
+  ```json
+  {
+    "interpreters": {
+      "apps/cli": {
+        "cli": {
+          "root": "src/interpreters/cli",
+          "modules": ["@b8e/kontrol-operations", "src/util/graphql"]
+        }
+      }
+    }
+  }
+  ```
+
+  B24 reports a feature's `ports.ts` or adapter file (either layout) that imports a module a technology of its scope covers, once per file per technology: static, type-only, `export … from`, dynamic and type-position `import()` and `import x = require()` all count, and test files and a technology no scope lists are not judged. B25 reports a file under a root that imports any file of a feature, `index.ts` included, and replaces B4 for those edges. A file under a root is an adapter in the zone table: it may be impure, may use a worker binding (and be a `bindingOwners` owner), and satisfies `importedFrom: ["driven"]`.
+
+  A scope with no `features`, an empty `modules`, a package entry that is no glob, a root that is, holds or sits inside a feature or `lib` folder, two roots where one holds the other, a root with no source file the scope loads, or a `src/` module that names no file or folder the scope loads exits 2 and writes nothing.
+
+- c4e8bc1: `code-graph <path> --owners --boundary-rules <file>` prints who owns what in the scopes the rules file declares under the path, and who reaches in. Per feature: the tables its `adapters/driven/tables.ts` declares, every other file that reaches one of them labelled `write` (passed to `insert`, `update` or `delete`, B23's own fact), `foreign-key` (the file is itself a feature's tables file) or `read` (named at run time and not written), with the file and where it sits, and the ports it offers and needs as `--hexagon` prints them. Per worker: each binding's kind, the files `bindingOwners` narrows it to, and every site. Per technology a scope's `interpreters` declares: the interpreter root and the files that import from it. `--json` returns the same as data.
+
+  It is a view and never a gate: it adds no rules-file key, reads and writes no ledger, exits 0 whatever the scopes hold, and exits 2 only where `--boundaries` would refuse to start. It exits 2 beside any gate flag, `--hexagon` or `--env-keys`. It reads syntax only, so a namespace taken whole and a table named in raw SQL are not matched. `--boundaries` prints the same bytes as before.
+
+- 7a43a43: `code-graph --boundaries` gains B22 `table-declared-outside-tables` and B23 `table-written-outside-owner`, enabled only when a rules file lists them in the new `tableOwnership` key. B22 reports a drizzle table constructor (`pgTable`, `sqliteTable`, `mysqlTable`) called outside a feature's `adapters/driven/tables.ts`. B23 reports a table a feature declares that a file outside that feature passes to `insert`, `update` or `delete`, one entry per file per table, and names the owner in the report. Reads, joins, foreign keys, a type-only import and test files stay clean.
+
+  Both read syntax only, so a table passed through a helper or written through raw SQL is not matched as a write; the SPEC and `docs/reference/boundaries.md` list each case and say which are counted. Neither judges a port-layout scope or a scope with no features, and an unknown kind name, or a kind listed where no scope uses the per-feature layout, exits 2 and writes nothing. Entries have a null `to` and work with `--ci`, `--accept-crossings` and `--migrate-ceilings`, which seeds them without counting them against a ceiling. A rules file that does not list a kind gets the same report, ledger and `--json` bytes as before.
+
+- b9e8f89: A package is now a workspace member per `pnpm-workspace.yaml` or the root `package.json`'s `workspaces` (array or Yarn object form). Workspace patterns are matched as pnpm matches them. A fixture `package.json` outside those patterns no longer counts as a package, so it no longer triggers B11 or creates a package boundary for B19, including in scoped runs. An empty `pnpm-workspace.yaml` or one without `packages` holds only the root package, as pnpm reads it. Repos without a workspace manifest are unchanged.
+
 ## 0.14.0
 
 ### Minor Changes
