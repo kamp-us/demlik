@@ -6,7 +6,7 @@
 pnpm exec code-graph . --boundaries --boundary-rules boundary-rules.json
 ```
 
-The rules file declares features, library types, worker constraints, which files are tests, and which files are composition roots.
+The rules file declares features, library types, worker constraints, which files are tests, which files are composition roots, and each technology's interpreter.
 The report checks declared scopes under the analyzed directory. It uses
 syntax and import resolution, without a full Graph or tsgo call analysis.
 Undeclared rules do not create a verdict.
@@ -251,7 +251,7 @@ The two allowlist keys require B16 to be enabled.
 `testFiles` globs match a file's scope-relative path or its
 repository-relative path. `src/**/*.test.ts` applies in every scope, and
 `services/*/test-support/**` in worker scopes alone. Matched tests are
-excluded from B6–B8, B10, and B15–B17; other import and ownership rules
+excluded from B6–B8, B10, B15–B17 and B22; other import and ownership rules
 still apply, and B20 judges test files only. Globs support `**`, `*`, `?`, and
 `{a,b}`.
 
@@ -320,6 +320,91 @@ A recognized storage write in a listed file always blocks the allowance.
 The B8 report names its first write site. ORM writes and `unknown` access
 remain outside this check. An unparsed worker config refuses a run that
 declares read allowances, because write detection would be incomplete.
+
+## Interpreters
+
+A technology gets one interpreter, the one adapter that reads every row of one
+kind, and a feature keeps no ports or adapters for it. `interpreters` declares
+that per scope, and naming a scope is what turns B22 and B23 on:
+
+```json
+{
+  "interpreters": {
+    "apps/cli": {
+      "cli": {
+        "root": "src/interpreters/cli",
+        "modules": ["@b8e/kontrol-operations", "graphql", "src/util/graphql"]
+      }
+    }
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `<scope>` | A scope that declares `features` |
+| `<technology>` | A name; several technologies may share a scope |
+| `root` | The scope-relative folder the interpreter sits in |
+| `modules` | What the technology covers: package globs, and scope-relative paths that start with `src/` |
+
+A package entry is a glob spelled as `worldLibraries` spells it: it matches the
+package and its subpaths, with `*` inside one segment. It is matched on the
+specifier as written. A `src/` entry names a file with its extension dropped, or
+a folder, and is matched on the file an import resolves to, however it was
+spelled. A module listed under two technologies of one scope is two entries on a
+file that imports it. `{}` is the same as leaving the key out, and there is no
+list of kinds.
+
+| Rule | Kind | Violation |
+|---|---|---|
+| B22 | `technology-outside-interpreter` | A feature's `ports.ts` or adapter file imports a module its scope's technology covers |
+| B23 | `interpreter-imports-feature` | A file under an interpreter root imports a file of a feature |
+
+B22 judges the ports (`ports.ts`, or the port folders under `application/` in the
+port layout) and every adapter zone: `adapters/driving/`, `adapters/driven/` with
+`tables.ts`, any other entry under `adapters/`, and the port layout's
+`driving-adapters/` and `driven-adapters/`. It does not judge `application/` or
+`index.ts`, and a file that a nested library owns belongs to that library's
+scope. Static, type-only, `export … from`, dynamic and type-position `import()`
+and `import x = require()` all count. The entry is one per file per technology:
+`from` the file, `to` null, `specifier` the technology's name, and `typeOnly`
+true only when every matching import is type-only. A technology no scope lists is
+never judged, so a local effect such as git, Playwright or the keychain stays
+in its feature. A file `testFiles` names is not judged, which is how Binclusive's
+F17 reads (Binclusive/monorepo#8540).
+
+B23 judges any import of a file under a root that lands in a file of any feature
+of its scope, `index.ts` included. It is one entry per file and target: `to` the
+feature file, `specifier` the first one written, `typeOnly` true only when every
+import of the target is. It is the only verdict for these edges, so B4 does not
+also fire, and it judges test files, as B4 does. Importing a `lib` file, a
+sibling in the root or the root's own modules is clean. No rule judges a feature
+importing an interpreter file.
+
+A file under a root is an adapter wherever another rule reads the zone table:
+
+- It may be impure, so `node:fs` and `fetch` there are not B7, where the same use
+  in a feature's `ports.ts` still is.
+- It may use a worker binding, so B17 is clean there, and `bindingOwners` accepts
+  a file under a root as an owner.
+- It satisfies a library whose type lists `importedFrom: ["driven"]`. A library
+  that lists only `configurator` imported from it is B14.
+
+Each of these is refused with exit 2 and nothing written, in one line naming
+`interpreters` and the entry:
+
+- A scope that declares no `features`.
+- A technology with an empty `modules`.
+- A package entry that is not a glob.
+- A `root` that is, holds or sits inside a declared feature folder or a `lib`
+  folder.
+- Two roots of one scope where one is, holds or sits inside the other.
+- A `root` that holds no source file the scope loads, and a `src/` module that
+  names no file or folder the scope loads. Both are judged where the scope is
+  loaded, so a stale name cannot quietly turn the check off.
+
+Resolving a `src/` module needs the scope's dependencies installed, because a
+path alias or a tsconfig that extends a package resolves nothing without them.
 
 ## Workers and workspace imports
 
@@ -399,7 +484,8 @@ for file targets. Reasons are optional in existing entries; accepting new
 entries requires a reason.
 
 Targets are files for ordinary imports, package directories for library and
-workspace crossings, or `null` for impure globals, bare imports, and structural findings.
+workspace crossings, or `null` for impure globals, bare imports, a technology
+(B22, whose identity is the file and the technology's name), and structural findings.
 The schema validates which kinds may use `null`.
 
 | Mode | Effect |
@@ -411,8 +497,8 @@ The schema validates which kinds may use `null`.
 
 Scopes outside the analyzed directory remain untouched. Invalid declarations
 exit 2 before writing. Migration refuses increases above legacy import
-ceilings; impure, structural, library, shape, deployable, and test-reach entries
-are seeded without counting toward those import ceilings.
+ceilings; impure, structural, library, shape, deployable, test-reach, and
+interpreter entries are seeded without counting toward those import ceilings.
 
 File movers can preserve ledger identities with
 [`@demlik/code-graph/boundaries`](./library.md#boundaries).
@@ -421,4 +507,5 @@ Source: [base rules](../../src/boundaries/rules.ts),
 [library schema](../../src/boundaries/libraries/schema.ts),
 [shape schema](../../src/boundaries/shape/schema.ts),
 [deployable schema](../../src/boundaries/deployables/schema.ts),
+[interpreter schema](../../src/boundaries/interpreters/schema.ts),
 [ledger](../../src/boundaries/ledger.ts), [gate](../../src/boundaries/gate.ts).

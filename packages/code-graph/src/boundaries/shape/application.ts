@@ -47,6 +47,7 @@ function outsideFile(
     case "lib":
       return null;
     case "elsewhere":
+    case "interpreter":
       return { to: target };
     case "feature":
       // Another feature's index.ts: its internals were B1's. Its own zones are an allowlist.

@@ -101,9 +101,10 @@ describe("the ledger file", () => {
     expect(parseBoundaryLedger(JSON.stringify({ entries: [{ ...crossing, to: null }] }))).toEqual({
       kind: "invalid",
       message:
-        "entries.0.to: only a bare-specifier import, an impure use or a feature's entry may have " +
-        "a null `to` (kinds application-import-outside-allowlist, binding-outside-driven-adapter, " +
-        "impure, index-not-exports-only, library-undeclared, unknown-zone, worker-call-cycle)",
+        "entries.0.to: only a bare-specifier import, an impure use, a technology or a feature's " +
+        "entry may have a null `to` (kinds application-import-outside-allowlist, " +
+        "binding-outside-driven-adapter, impure, index-not-exports-only, library-undeclared, " +
+        "technology-outside-interpreter, unknown-zone, worker-call-cycle)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
       "invalid",
@@ -155,11 +156,12 @@ describe("an impure use is a ledger entry with no target file", () => {
       "impure",
       "index-not-exports-only",
       "library-undeclared",
+      "technology-outside-interpreter",
       "unknown-zone",
       "worker-call-cycle",
     ];
     const namesAFile = BOUNDARY_KINDS.filter((kind) => !mayHaveNoFile.includes(kind));
-    expect(namesAFile).toHaveLength(10);
+    expect(namesAFile).toHaveLength(11);
     for (const kind of namesAFile) {
       const entry = { ...crossing, kind, to: null };
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");

@@ -19,8 +19,9 @@ export const MIGRATED_REASON = `grandfathered from ${LEGACY_CEILINGS_FILENAME}`;
 
 // The import crossings the count file ever held: B1, B3, B4, B6 and B8, edges between feature files.
 // An impure use, a feature's unknown entry and everything between packages (B11, B12, B14), across
-// deployables (B17-B19), about a feature's own shape (B15, B16) or a test's reach (B20) were never
-// counted, so a kind says here whether it was, and a new kind does not compile until it does.
+// deployables (B17-B19), about a feature's own shape (B15, B16), a test's reach (B20) or a
+// technology's interpreter (B22, B23) were never counted, so a kind says here whether it was, and a
+// new kind does not compile until it does.
 const COUNTED = {
   "adapter-library-imported-outside-driven": false,
   "application-import-outside-allowlist": false,
@@ -30,12 +31,14 @@ const COUNTED = {
   "driving-reaches-driven": true,
   impure: false,
   "index-not-exports-only": false,
+  "interpreter-imports-feature": false,
   "lib-imports-feature": true,
   "library-imports-up": false,
   "library-undeclared": false,
   "outside-imports-feature-internal": true,
   "relative-import-crosses-workspace": false,
   "package-import-crosses-deployable": false,
+  "technology-outside-interpreter": false,
   "test-reaches-composition-root": false,
   "unknown-zone": false,
   "worker-call-cycle": false,

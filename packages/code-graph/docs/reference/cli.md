@@ -344,7 +344,7 @@ The contract is [SPEC.md §13.9](../../SPEC.md).
 | `--env-keys` | Declared-but-unread and read-but-undeclared environment keys |
 | `--comments` | Comment counts by file, package, bucket, and class |
 | `--layers` | Imports that violate a declared layer stack |
-| `--boundaries` | Crossings of declared feature, library, and worker rules |
+| `--boundaries` | Crossings of declared feature, library, interpreter, and worker rules |
 
 Result fields and limitations are described in [Analyses](./analyses.md).
 [Layer rules](./layers.md) and [boundary rules](./boundaries.md) have their own

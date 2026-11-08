@@ -19,6 +19,7 @@ import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/dep
 import { declaresDeployables } from "./deployables/schema.js";
 import { importsInSourceOrder } from "./deployables/workspaces.js";
 import { detectImpureUses } from "./impure-uses.js";
+import { interpreterFilesIssue } from "./interpreters/declaration.js";
 import {
   type BoundaryLedger,
   LEDGER_FILENAME,
@@ -164,7 +165,8 @@ function analyzeScope(
   const owners = rules.bindingOwners[scope] ?? {};
   const issue =
     bindingOwnerIssue(scope, owners, files, reads.deployables) ??
-    allowanceIssue(reads.libraries, scope, modules);
+    allowanceIssue(reads.libraries, scope, modules) ??
+    interpreterFilesIssue(scope, rules.interpreters[scope] ?? {}, files);
   if (issue !== null) throw new Error(issue);
   const unread = unknownDriven(reads.shape.allowance, scope, files);
   if (unread.length > 0) {
