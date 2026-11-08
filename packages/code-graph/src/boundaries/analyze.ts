@@ -18,6 +18,8 @@ import {
 } from "./rules.js";
 import { judgeShape } from "./shape/judge.js";
 import type { Shape, ShapeFacts } from "./shape/shape.js";
+import { judgeTables } from "./tables/judge.js";
+import type { TableFacts, Tables } from "./tables/tables.js";
 import type { BoundaryViolation, ZoneEdge } from "./violation.js";
 import { impureViolations } from "./zones/impure-violations.js";
 import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
@@ -34,6 +36,9 @@ export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
     // The bindings of the worker that owns the file that it references, read only when the rules
     // file lists a deployable kind.
     readonly bindingSites: readonly BindingSite[];
+    // The tables the file writes and the table constructors it calls, read only when the rules file
+    // lists a table kind.
+    readonly tableFacts: TableFacts;
   };
 
 export type ScopeBoundaryReport = {
@@ -152,6 +157,7 @@ export type ScopeInputs = {
   readonly libraries: Libraries;
   readonly deployables: Deployables;
   readonly shape: Shape;
+  readonly tables: Tables;
 };
 
 type ScopeContext = ScopeInputs & {
@@ -231,6 +237,7 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     ...libs.violations,
     ...across.violations,
     ...judgeShape(ctx, module, fromPlace, judged),
+    ...judgeTables(ctx, module, fromPlace),
     ...(isTest ? testReachViolations(ctx.reach, scope, module) : []),
   ];
   return {

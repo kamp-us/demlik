@@ -1,4 +1,4 @@
-// What a boundary verdict is: one variant per rule (B1-B21, with B2, B5, B9 and B13 retired and not
+// What a boundary verdict is: one variant per rule (B1-B23, with B2, B5, B9 and B13 retired and not
 // reused), and the table that says what kind of crossing each is. `analyze.ts` judges a scope into
 // these; the ledger, the report and the migration read them.
 
@@ -165,14 +165,36 @@ export type BoundaryViolation =
       readonly to: string;
       readonly specifier: string;
       readonly typeOnly: false;
+    }
+  | {
+      // A call of a drizzle table constructor in a file of a feature scope that is not a feature's
+      // `adapters/driven/tables.ts`. `specifier` is the constructor's imported name, one entry per
+      // file per constructor.
+      readonly kind: "table-declared-outside-tables";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
+    }
+  | {
+      // A table a feature declares, passed to `insert`, `update` or `delete` by a file outside that
+      // feature. `specifier` is the table's exported name, one entry per file per table; `owner` is
+      // the feature that declares it, a diagnostic of the report that the ledger entry keeps no part
+      // of.
+      readonly kind: "table-written-outside-owner";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
+      readonly owner: string;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
 
 // What a crossing is: an import edge, an impure use (a row of `IMPURE_GLOBALS` used or opened, a
-// world library imported, a worker binding used), or an entry (a feature's, a package under a
-// library root, a loop of workers, an entry file that holds more than re-exports) that no rule
-// places.
+// world library imported, a worker binding used, a table constructor called, a table written), or
+// an entry (a feature's, a package under a library root, a loop of workers, an entry file that
+// holds more than re-exports) that no rule places.
 type Crossing = "import" | "impure" | "entry";
 
 export const CROSSINGS = {
@@ -190,6 +212,8 @@ export const CROSSINGS = {
   "outside-imports-feature-internal": "import",
   "relative-import-crosses-workspace": "import",
   "package-import-crosses-deployable": "import",
+  "table-declared-outside-tables": "impure",
+  "table-written-outside-owner": "impure",
   "test-reaches-composition-root": "import",
   "unknown-zone": "entry",
   "worker-call-cycle": "entry",
@@ -197,4 +221,21 @@ export const CROSSINGS = {
 
 export function crossingOf(entry: { readonly kind: BoundaryKind }): Crossing {
   return CROSSINGS[entry.kind];
+}
+
+// What a report row says beside its identity that the ledger entry never holds: the data write that
+// voids a read allowance (B8), and the feature that owns a table written from outside it (B23).
+export function noteOf(violation: BoundaryViolation): string {
+  switch (violation.kind) {
+    case "driving-reaches-driven": {
+      const { write } = violation;
+      return write === undefined
+        ? ""
+        : `  [write: ${write.binding} at ${write.file}:${write.line}]`;
+    }
+    case "table-written-outside-owner":
+      return `  [owner: ${violation.owner}]`;
+    default:
+      return "";
+  }
 }
