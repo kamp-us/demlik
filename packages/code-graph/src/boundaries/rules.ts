@@ -30,16 +30,18 @@ type ImportRule = "application-imports-adapter" | "driving-reaches-driven" | nul
 
 export type ZoneRule = {
   readonly imports: ImportRule;
-  // Whether a file here may reach the outside world through a row of `IMPURE_GLOBALS`. Only the
-  // driven zone may; an entry no zone names is judged as an entry (B10), not as impure.
+  // Whether a file here may reach the outside world through a row of `IMPURE_GLOBALS`. Only an
+  // adapter may: the driven zone, `tables.ts` and a file under an interpreter root. An entry no zone
+  // names is judged as an entry (B10), not as impure.
   readonly mayBeImpure: boolean;
   // Whether another feature, and a file in no feature and no `lib` folder, may import a file here.
   readonly openToFeatures: boolean;
   readonly openToOutside: boolean;
   // The `importedFrom` zone a file here satisfies, for the libraries that name where they may be
-  // imported from (B14): only the driven zone is one.
+  // imported from (B14): only an adapter is one, so the driven zone, `tables.ts` and a file under an
+  // interpreter root are `driven`.
   readonly libraryZone: ImportedFrom | null;
-  // Whether a worker binding may be used here (B17): only the driven zone may.
+  // Whether a worker binding may be used here (B17): only an adapter may, as for `libraryZone`.
   readonly touchesBindings: boolean;
   // Whether this zone's file is the feature's entry file, which holds named re-exports and nothing
   // else (B15): only `index.ts` is.

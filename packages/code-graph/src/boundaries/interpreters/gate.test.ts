@@ -174,6 +174,109 @@ describe("a team gives each technology one interpreter and holds the rule behind
   });
 });
 
+describe("a module two technologies of one scope list", () => {
+  // `queue-sdk` is also the scheduler's module, so a file importing it keeps two technologies'
+  // adapters. The queue alone lists the path module `src/lib/queue-client`.
+  const SCHEDULER = { root: "src/interpreters/scheduler", modules: ["queue-sdk"] };
+  const PORTS = `${SHOP}/src/orders/ports.ts`;
+  const HTTP = `${SHOP}/src/orders/adapters/driving/http.ts`;
+  const sharing = (): BoundaryRepo =>
+    open(
+      {
+        ...INTERPRETER_RULES,
+        interpreters: {
+          ...INTERPRETER_RULES.interpreters,
+          [SHOP]: { ...INTERPRETER_RULES.interpreters[SHOP], scheduler: SCHEDULER },
+        },
+      },
+      { ...INTERPRETER_FILES, [`${SHOP}/src/interpreters/scheduler/index.ts`]: "export {};\n" },
+    );
+  const of = (rows: string[][], from: string): string[][] => rows.filter((row) => row[2] === from);
+
+  it("is one entry per technology on a file that imports it, named by the technology", () => {
+    const run = sharing();
+    expect(of(listed(run), PORTS)).toEqual([
+      [SHOP, B22, PORTS, "queue"],
+      [SHOP, B22, PORTS, "scheduler"],
+    ]);
+    const entries = violationsOf(run)
+      .map(({ violation }) => violation)
+      .filter((violation) => violation.from === PORTS);
+    expect(entries.map(({ specifier, to, typeOnly }) => [specifier, to, typeOnly])).toEqual([
+      ["queue", null, true],
+      ["scheduler", null, true],
+    ]);
+    // A file that imports only the module one technology lists is that technology's entry alone.
+    expect(of(listed(run), HTTP)).toEqual([[SHOP, B22, HTTP, "queue"]]);
+  });
+
+  it("holds both entries in the ledger, and a gate that has them recorded stays green", () => {
+    const run = sharing();
+    expect(run.run({ ci: true }).code).toBe(1);
+    expect(run.run({ acceptCrossings: true, reason: "legacy" }).code).toBe(0);
+    const held = ledgerOf(run).entries.filter((entry) => entry.from === PORTS);
+    expect(
+      held.map((entry) => [entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)]),
+    ).toEqual([
+      [SHOP, B22, PORTS, "queue"],
+      [SHOP, B22, PORTS, "scheduler"],
+    ]);
+    const seeded = ledgerText(run);
+    expect([run.run({ ci: true }).code, run.run({ ci: true }).code]).toEqual([0, 0]);
+    expect(ledgerText(run)).toBe(seeded);
+  });
+});
+
+describe("a library nested in the scope", () => {
+  const ORDERS_LIBRARY = `${SHOP}/src/orders/adapters/driven/vendored`;
+  const ROOT_LIBRARY = `${SHOP}/src/interpreters/queue/vendored`;
+  const IN_ADAPTERS = `${ORDERS_LIBRARY}/send.ts`;
+  const IN_ROOT = `${ROOT_LIBRARY}/boot.ts`;
+  const FILES = {
+    ...INTERPRETER_FILES,
+    ...shopManifests([ORDERS_LIBRARY, ROOT_LIBRARY]),
+    // The same imports a driven adapter of the feature makes, from inside the library.
+    [IN_ADAPTERS]:
+      'import { enqueue } from "queue-sdk";\nimport { client } from "../../../../lib/queue-client";\nexport const s = [enqueue, client];\n',
+    // And the imports of a feature's `index.ts`, `application/` and adapter files B23 reports.
+    [IN_ROOT]: [
+      'import { place } from "../../../orders/index";',
+      'import type { Place } from "../../../billing/application/place";',
+      'export { jobs } from "../../../shipping/adapters/driven/jobs";',
+      "export const b = place;",
+      "",
+    ].join("\n"),
+  };
+  const NESTED = {
+    libraryTypes: { vendored: { imports: [], pure: false } },
+    libraries: { [ORDERS_LIBRARY]: "vendored", [ROOT_LIBRARY]: "vendored" },
+  };
+  const rows = (rules: unknown, kind: string): string[][] =>
+    listed(open(rules, FILES)).filter((row) => row[1] === kind);
+
+  it("is left to the library's own scope, so its imports of a covered module are not B22", () => {
+    // Undeclared, the folder is one of the feature's adapter folders and B22 judges it.
+    expect(rows(INTERPRETER_RULES, B22)).toContainEqual([SHOP, B22, IN_ADAPTERS, "queue"]);
+    repo?.dispose();
+    // Declared, only the library's file drops out: the feature's own adapters are judged as before.
+    expect(rows({ ...INTERPRETER_RULES, ...NESTED }, B22)).toEqual(sorted(INTERPRETER_CROSSINGS));
+  });
+
+  it("is still judged by B23 when it sits under an interpreter root, and B4 is not beside it", () => {
+    const run = open({ ...INTERPRETER_RULES, ...NESTED }, FILES);
+    const found = violationsOf(run).filter(({ violation }) => violation.from === IN_ROOT);
+    expect(
+      found.map(({ scope, violation }) => [scope, violation.kind, ledgerTargetOf(violation)]),
+    ).toEqual(
+      [
+        `${SHOP}/src/billing/application/place.ts`,
+        `${SHOP}/src/orders/index.ts`,
+        `${SHOP}/src/shipping/adapters/driven/jobs.ts`,
+      ].map((target) => [SHOP, B23, target]),
+    );
+  });
+});
+
 describe("an interpreter root imports no feature", () => {
   const ROOT = `${SHOP}/src/interpreters/queue`;
   const reaching = (extra: Record<string, string>): BoundaryRepo =>
