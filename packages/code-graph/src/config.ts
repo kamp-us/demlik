@@ -4,6 +4,7 @@ import { deployableDeclarationIssue } from "./boundaries/deployables/declaration
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
 import { type BoundaryRules, BoundaryRulesSchema, layoutIssue } from "./boundaries/rules.js";
 import { shapeDeclarationIssue } from "./boundaries/shape/declaration.js";
+import { tableDeclarationIssue } from "./boundaries/tables/declaration.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
 import { GlobSyntaxError, globToRegExp } from "./kinds/glob.js";
@@ -188,7 +189,8 @@ export function resolveBoundaryRules(
     featureDeclarationIssue(rules) ??
     libraryDeclarationIssue(rules) ??
     deployableDeclarationIssue(rules) ??
-    shapeDeclarationIssue(rules);
+    shapeDeclarationIssue(rules) ??
+    tableDeclarationIssue(rules);
   if (issue !== null) {
     report(issue);
     return null;

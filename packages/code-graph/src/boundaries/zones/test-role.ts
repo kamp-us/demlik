@@ -8,7 +8,8 @@ import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 // B1 and B4 still judge what a test imports across features, B3 a test in `lib`, B12 a library
 // test importing upward, B14 an adapter library imported from outside a driven adapter, and B19 a
 // relative path out of the workspace, whatever the file is named. B11 and B18 hold no file. B20
-// exists for the test role: it judges a test, and no other file.
+// exists for the test role: it judges a test, and no other file. B22 and B23 do not judge a test,
+// which seeds the tables it runs against.
 const JUDGES_TEST_FILES = {
   "cross-feature": true,
   "lib-imports-feature": true,
@@ -26,6 +27,8 @@ const JUDGES_TEST_FILES = {
   "worker-call-cycle": true,
   "relative-import-crosses-workspace": true,
   "package-import-crosses-deployable": true,
+  "table-declared-outside-tables": false,
+  "table-written-outside-owner": false,
   "test-reaches-composition-root": true,
 } as const satisfies Record<BoundaryKind, boolean>;
 

@@ -6,7 +6,7 @@
 pnpm exec code-graph . --boundaries --boundary-rules boundary-rules.json
 ```
 
-The rules file declares features, library types, worker constraints, which files are tests, and which files are composition roots.
+The rules file declares features, library types, worker constraints, table ownership, which files are tests, and which files are composition roots.
 The report checks declared scopes under the analyzed directory. It uses
 syntax and import resolution, without a full Graph or tsgo call analysis.
 Undeclared rules do not create a verdict.
@@ -251,9 +251,9 @@ The two allowlist keys require B16 to be enabled.
 `testFiles` globs match a file's scope-relative path or its
 repository-relative path. `src/**/*.test.ts` applies in every scope, and
 `services/*/test-support/**` in worker scopes alone. Matched tests are
-excluded from B6–B8, B10, and B15–B17; other import and ownership rules
-still apply, and B20 judges test files only. Globs support `**`, `*`, `?`, and
-`{a,b}`.
+excluded from B6–B8, B10, B15–B17, B22, and B23; other import and ownership
+rules still apply, and B20 judges test files only. Globs support `**`, `*`,
+`?`, and `{a,b}`.
 
 ### Tests that load the whole app
 
@@ -377,6 +377,64 @@ To require worker-to-worker access through RPC bindings and shared contracts,
 add `"package-import-crosses-deployable"` to `acrossDeployables`. No rule runs
 until listed, so adding this kind in a release does not enable it for a repo.
 
+## Tables
+
+`tableOwnership` enables either or both of these kinds. None run until listed,
+so adding a kind in a release does not enable it for a repo.
+
+| Rule | Kind | Violation |
+|---|---|---|
+| B22 | `table-declared-outside-tables` | A drizzle table constructor is called outside a feature's `adapters/driven/tables.ts` |
+| B23 | `table-written-outside-owner` | A table is passed to `insert`, `update` or `delete` by a file outside the feature that declares it |
+
+```json
+{ "tableOwnership": ["table-declared-outside-tables", "table-written-outside-owner"] }
+```
+
+A table's owner is the feature whose `adapters/driven/tables.ts` declares it.
+Both kinds judge a scope laid out per feature and no other: the port layout has
+no `tables` zone, and a scope with no `features` is a library. An unknown kind
+name exits 2, and so does a kind listed while no scope in the file uses the
+per-feature layout, in one line naming `tableOwnership`; nothing is written.
+
+B22 reports a call of `pgTable`, `sqliteTable` or `mysqlTable` bound by an
+import from `drizzle-orm/pg-core`, `drizzle-orm/sqlite-core` or
+`drizzle-orm/mysql-core`. An alias (`pgTable as table`) and a namespace member
+(`pg.pgTable(...)`) are followed. It writes one entry per file per constructor:
+`to` is `null` and `specifier` is the constructor's imported name. A function
+of the same name that the file defines or imports from elsewhere, and a mention
+in a string or comment, report nothing.
+
+B23 reports a call whose callee is a static member named `insert`, `update` or
+`delete` on any receiver, an optional call included, and whose first argument is
+a binding the file imports at run time from a feature's
+`adapters/driven/tables.ts`, or a member `ns.t` of a namespace import of it. It
+reports the call when the file is not in the owning feature: another feature,
+a `lib` folder, or a file in no feature. The owner is the feature of the tables
+file the import resolves to. It writes one entry per file per table: `to` is
+`null` and `specifier` is the table's exported name, so an alias changes no
+identity. The report names the owner: `owner` on the `--json` row, and
+`[owner: <feature>]` on the plain row and the `--ci` failure line. The ledger
+entry does not keep it. Reads, joins, foreign keys, a type-only import and a
+feature writing its own table are clean.
+
+Neither kind judges a file `testFiles` matches. Both read syntax only, with no
+type checker and no data flow, so they do not see:
+
+- a table put in a variable first, or imported under another name through a
+  feature's `index.ts`;
+- a table imported through a re-export: a feature's `index.ts`, or a barrel such
+  as `drizzle/schema.ts`;
+- a table passed through a helper function, a default import, `import()` and
+  `require()`;
+- a computed member (`db["insert"](t)`) and raw SQL;
+- a name the file also binds itself, such as a parameter or a local: judged per
+  file, and failing open;
+- a `pgSchema(...).table(...)` declaration, `pgView`, `pgEnum` and sequences.
+
+A write that has to stay is accepted by name with
+`--accept-crossings --reason "<why>"`.
+
 ## Ledger and gate behavior
 
 `boundary-ledger.json` stores accepted crossings, one entry per identity:
@@ -399,7 +457,7 @@ for file targets. Reasons are optional in existing entries; accepting new
 entries requires a reason.
 
 Targets are files for ordinary imports, package directories for library and
-workspace crossings, or `null` for impure globals, bare imports, and structural findings.
+workspace crossings, or `null` for impure globals, bare imports, tables, and structural findings.
 The schema validates which kinds may use `null`.
 
 | Mode | Effect |
@@ -411,8 +469,8 @@ The schema validates which kinds may use `null`.
 
 Scopes outside the analyzed directory remain untouched. Invalid declarations
 exit 2 before writing. Migration refuses increases above legacy import
-ceilings; impure, structural, library, shape, deployable, and test-reach entries
-are seeded without counting toward those import ceilings.
+ceilings; impure, structural, library, shape, deployable, test-reach, and table
+entries are seeded without counting toward those import ceilings.
 
 File movers can preserve ledger identities with
 [`@demlik/code-graph/boundaries`](./library.md#boundaries).
@@ -421,4 +479,5 @@ Source: [base rules](../../src/boundaries/rules.ts),
 [library schema](../../src/boundaries/libraries/schema.ts),
 [shape schema](../../src/boundaries/shape/schema.ts),
 [deployable schema](../../src/boundaries/deployables/schema.ts),
+[table schema](../../src/boundaries/tables/schema.ts),
 [ledger](../../src/boundaries/ledger.ts), [gate](../../src/boundaries/gate.ts).
