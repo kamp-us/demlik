@@ -26,13 +26,15 @@ const SAMPLES = {
   "worker-call-cycle": sample("worker-call-cycle"),
   "relative-import-crosses-workspace": sample("relative-import-crosses-workspace"),
   "package-import-crosses-deployable": sample("package-import-crosses-deployable"),
+  "table-declared-outside-tables": sample("table-declared-outside-tables"),
+  "table-written-outside-owner": sample("table-written-outside-owner"),
   "test-reaches-composition-root": sample("test-reaches-composition-root"),
   "technology-outside-interpreter": sample("technology-outside-interpreter"),
   "interpreter-imports-feature": sample("interpreter-imports-feature"),
 } as const satisfies Record<BoundaryKind, BoundaryViolation>;
 
 describe("the table of kinds a test file is judged by", () => {
-  it("keeps B1, B3, B4, B11, B12, B14, B18-B20 and B23, and drops B6-B8, B10, B15-B17 and B22", () => {
+  it("keeps B1, B3, B4, B11, B12, B14, B18-B20 and B25, and drops B6-B8, B10, B15-B17 and B22-B24", () => {
     const kept = judgedInTestFile(Object.values(SAMPLES)).map((v) => v.kind);
     expect(kept).toEqual([
       "cross-feature",
@@ -117,6 +119,18 @@ const CASES: readonly Case[] = [
     inTests: false,
   },
   {
+    kind: "table-declared-outside-tables",
+    dir: "src/billing/application",
+    body: 'import { pgTable } from "drizzle-orm/pg-core";\nexport const t = pgTable("t", {});\n',
+    inTests: false,
+  },
+  {
+    kind: "table-written-outside-owner",
+    dir: "src/billing/application",
+    body: 'import { orders } from "../../orders/adapters/driven/tables";\nexport const w = (db: Db) => db.insert(orders);\n',
+    inTests: false,
+  },
+  {
     kind: "cross-feature",
     dir: "src/orders/application",
     body: 'import { charge } from "../../billing/application/charge";\nexport const x = charge;\n',
@@ -161,6 +175,7 @@ const SUPPORT: Record<string, string> = {
   [at("src/orders/index.ts")]: "export {};\n",
   [at("src/orders/application/use.ts")]: "export const use = 1;\n",
   [at("src/orders/adapters/driven/db.ts")]: "export const db = 1;\n",
+  [at("src/orders/adapters/driven/tables.ts")]: "export const orders = 1;\n",
   [at("src/billing/index.ts")]: "export {};\n",
   [at("src/billing/application/charge.ts")]: "export const charge = 1;\n",
   "packages/util/src/index.ts": "export const util = 1;\n",
@@ -177,6 +192,7 @@ const RULES = {
     "packages/db-adapter": "adapter",
   },
   acrossDeployables: ["binding-outside-driven-adapter", "relative-import-crosses-workspace"],
+  tableOwnership: ["table-declared-outside-tables", "table-written-outside-owner"],
   testFiles: ["**/*.test.ts"],
 };
 

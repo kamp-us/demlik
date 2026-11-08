@@ -14,7 +14,7 @@ const TechnologySchema = z
   .strict();
 
 // The one key of the rules file that declares the interpreters, spread into `BoundaryRulesSchema`.
-// Naming a scope in it is the switch for B22 and B23, so a release that adds the rules never fails
+// Naming a scope in it is the switch for B24 and B25, so a release that adds the rules never fails
 // the merge gate of a repo that declared none, and `{}` is the same as leaving it out.
 export const INTERPRETER_KEYS = {
   interpreters: z

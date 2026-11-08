@@ -3,6 +3,7 @@ import { DEPLOYABLE_KEYS } from "./deployables/schema.js";
 import { INTERPRETER_KEYS } from "./interpreters/schema.js";
 import { type ImportedFrom, LIBRARY_KEYS } from "./libraries/schema.js";
 import { SHAPE_KEYS } from "./shape/schema.js";
+import { TABLE_KEYS } from "./tables/schema.js";
 
 // The per-scope count file the ledger replaced. `--boundaries --migrate-ceilings` reads it once,
 // and the gate refuses to run while it stands without a ledger.
@@ -20,6 +21,7 @@ export const BoundaryRulesSchema = z
     ...LIBRARY_KEYS,
     ...DEPLOYABLE_KEYS,
     ...SHAPE_KEYS,
+    ...TABLE_KEYS,
     ...INTERPRETER_KEYS,
   })
   .strict();
@@ -43,6 +45,9 @@ export type ZoneRule = {
   readonly libraryZone: ImportedFrom | null;
   // Whether a worker binding may be used here (B17): only an adapter may, as for `libraryZone`.
   readonly touchesBindings: boolean;
+  // Whether this zone's file is where a feature declares the tables it owns (B22), and so what B23
+  // reads a table's owner from: only `adapters/driven/tables.ts` is.
+  readonly declaresTables: boolean;
   // Whether this zone's file is the feature's entry file, which holds named re-exports and nothing
   // else (B15): only `index.ts` is.
   readonly exportsOnly: boolean;
@@ -58,6 +63,7 @@ const CLOSED = {
   openToOutside: false,
   libraryZone: null,
   touchesBindings: false,
+  declaresTables: false,
   exportsOnly: false,
   importAllowlist: null,
 } as const satisfies ZoneRule;
@@ -90,6 +96,7 @@ const HEXAGONAL_ZONES = {
     openToOutside: true,
     libraryZone: "driven",
     touchesBindings: true,
+    declaresTables: true,
     openToFeatures: true,
   },
   unknown: CLOSED,
@@ -109,6 +116,7 @@ const INTERPRETER_ZONE = {
   openToOutside: true,
   libraryZone: "driven",
   touchesBindings: true,
+  declaresTables: false,
   exportsOnly: false,
   importAllowlist: null,
 } as const satisfies ZoneRule;

@@ -6,7 +6,7 @@ import {
   boundaryLedgerOf,
   ledgerKey,
 } from "./ledger.js";
-import type { BoundaryViolation, WriteSite } from "./violation.js";
+import { type BoundaryViolation, noteOf } from "./violation.js";
 
 export function entryOf(scope: string, violation: BoundaryViolation): BoundaryLedgerEntry {
   return {
@@ -24,29 +24,30 @@ export function measuredEntries(reports: readonly ScopeBoundaryReport[]): Bounda
   ).entries.slice();
 }
 
-// The write a B8 report row names, by the ledger key of the entry it becomes: what the run says
-// beside an unrecorded entry that the ledger never holds.
-function writesOf(reports: readonly ScopeBoundaryReport[]): Map<string, WriteSite> {
-  const writes = new Map<string, WriteSite>();
+// The note a report row carries (`noteOf`), by the ledger key of the entry it becomes: what the run
+// says beside an unrecorded entry that the ledger never holds.
+function notesOf(reports: readonly ScopeBoundaryReport[]): Map<string, string> {
+  const notes = new Map<string, string>();
   for (const report of reports) {
     for (const violation of report.violations) {
-      if (violation.kind !== "driving-reaches-driven" || violation.write === undefined) continue;
-      writes.set(ledgerKey(entryOf(report.scope, violation)), violation.write);
+      const note = noteOf(violation);
+      if (note !== "") notes.set(ledgerKey(entryOf(report.scope, violation)), note);
     }
   }
-  return writes;
+  return notes;
 }
 
 // What one run found against the ledger. `kept` is the ledger minus `pruned`: the entries whose
 // crossing is gone, among the scopes this run measured. An entry for a scope outside the analyzed
-// path is out of reach and kept as it is. `writes` says why an unrecorded B8 stays one though its
-// driven file is on a read allowance.
+// path is out of reach and kept as it is. `notes` says what an unrecorded entry's report row said
+// beside it: why a B8 stays one though its driven file is on a read allowance, which feature owns
+// the table a B23 writes.
 export type Reconciliation = {
   readonly scopesChecked: number;
   readonly unrecorded: readonly BoundaryLedgerEntry[];
   readonly pruned: readonly BoundaryLedgerEntry[];
   readonly kept: BoundaryLedger;
-  readonly writes: ReadonlyMap<string, WriteSite>;
+  readonly notes: ReadonlyMap<string, string>;
 };
 
 export function reconcile(
@@ -65,7 +66,7 @@ export function reconcile(
     unrecorded: measured.filter((entry) => !recordedKeys.has(ledgerKey(entry))),
     pruned: ledger.entries.filter(gone),
     kept: boundaryLedgerOf(ledger.entries.filter((entry) => !gone(entry))),
-    writes: writesOf(reports),
+    notes: notesOf(reports),
   };
 }
 

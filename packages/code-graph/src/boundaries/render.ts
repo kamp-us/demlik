@@ -12,17 +12,13 @@ import { censusLines, type LibraryCensus } from "./libraries/census.js";
 import type { CeilingBreach } from "./migrate.js";
 import type { Reconciliation } from "./reconcile.js";
 import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
-import {
-  type BoundaryKind,
-  type BoundaryViolation,
-  crossingOf,
-  type WriteSite,
-} from "./violation.js";
+import { type BoundaryKind, type BoundaryViolation, crossingOf, noteOf } from "./violation.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
 // Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, impure,
-// library, deployable, shape, interpreter and test blocks only when a kind that needs them fails.
+// library, deployable, shape, table, interpreter and test blocks only when a kind that needs
+// them fails.
 type Advice =
   | "feature"
   | "hexagonal"
@@ -31,6 +27,7 @@ type Advice =
   | "deployable"
   | "package"
   | "shape"
+  | "table"
   | "interpreter"
   | "test";
 
@@ -52,9 +49,11 @@ const KINDS = {
   "worker-call-cycle": { rule: "B18", advice: "deployable" },
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
   "package-import-crosses-deployable": { rule: "B21", advice: "package" },
+  "table-declared-outside-tables": { rule: "B22", advice: "table" },
+  "table-written-outside-owner": { rule: "B23", advice: "table" },
   "test-reaches-composition-root": { rule: "B20", advice: "test" },
-  "technology-outside-interpreter": { rule: "B22", advice: "interpreter" },
-  "interpreter-imports-feature": { rule: "B23", advice: "interpreter" },
+  "technology-outside-interpreter": { rule: "B24", advice: "interpreter" },
+  "interpreter-imports-feature": { rule: "B25", advice: "interpreter" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
 // An impure use, a binding and an entry are their own target: no import specifier was written for
@@ -63,18 +62,11 @@ function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier">): stri
   return crossingOf(entry) === "import" ? `  ("${entry.specifier}")` : "";
 }
 
-// The data write that voids a read allowance: the one thing a B8 row says that its ledger entry
-// does not.
-function writeNote(write: WriteSite | undefined): string {
-  return write === undefined ? "" : `  [write: ${write.binding} at ${write.file}:${write.line}]`;
-}
-
 function violationLine(violation: BoundaryViolation): string {
   const tag = violation.typeOnly ? "  [type-only]" : "";
-  const write = violation.kind === "driving-reaches-driven" ? violation.write : undefined;
   return (
     `  ${KINDS[violation.kind].rule} ${violation.kind.padEnd(19)} ${violation.from} -> ` +
-    `${ledgerTargetOf(violation)}${writtenAs(violation)}${tag}${writeNote(write)}`
+    `${ledgerTargetOf(violation)}${writtenAs(violation)}${tag}${noteOf(violation)}`
   );
 }
 
@@ -137,17 +129,17 @@ export function renderBoundaries(
   ].join("\n");
 }
 
-function entryLine(entry: BoundaryLedgerEntry, write?: WriteSite): string {
+function entryLine(entry: BoundaryLedgerEntry, note = ""): string {
   const reason = entry.reason === undefined ? "" : `  — ${entry.reason}`;
   return (
     `  ${entry.scope}  ${KINDS[entry.kind].rule} ${entry.kind}  ${entry.from} -> ` +
-    `${ledgerTargetOf(entry)}${writtenAs(entry)}${writeNote(write)}${reason}`
+    `${ledgerTargetOf(entry)}${writtenAs(entry)}${note}${reason}`
   );
 }
 
-// The unrecorded entries a run lists, each with the write its report row named, if any.
+// The unrecorded entries a run lists, each with the note its report row carried, if any.
 function unrecordedLines(result: Reconciliation): string[] {
-  return result.unrecorded.map((entry) => entryLine(entry, result.writes.get(ledgerKey(entry))));
+  return result.unrecorded.map((entry) => entryLine(entry, result.notes.get(ledgerKey(entry))));
 }
 
 function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
@@ -205,6 +197,12 @@ const PACKAGE_FIX_LINES = [
   "  deployable package.",
 ];
 
+const TABLE_FIX_LINES = [
+  "  Declare a table only in its feature's adapters/driven/tables.ts, and write it only from that",
+  "  feature: another feature, lib or a file in no feature reaches its rows through the owner's",
+  "  index.ts. A write that has to stay is accepted by name and with a reason.",
+];
+
 const INTERPRETER_FIX_LINES = [
   "  A technology has one interpreter. Move a feature's adapter for a technology `interpreters`",
   "  covers into that technology's interpreter root and leave the feature its rows as data, and keep",
@@ -226,6 +224,7 @@ const ADVICE_LINES = {
   deployable: DEPLOYABLE_FIX_LINES,
   package: PACKAGE_FIX_LINES,
   shape: SHAPE_FIX_LINES,
+  table: TABLE_FIX_LINES,
   interpreter: INTERPRETER_FIX_LINES,
   test: TEST_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;

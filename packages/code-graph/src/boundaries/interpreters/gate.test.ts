@@ -22,8 +22,8 @@ import { SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js"
 import { ledgerTargetOf } from "../ledger.js";
 import type { BoundaryViolation } from "../violation.js";
 
-const B22 = "technology-outside-interpreter";
-const B23 = "interpreter-imports-feature";
+const B24 = "technology-outside-interpreter";
+const B25 = "interpreter-imports-feature";
 
 let repo: BoundaryRepo | null = null;
 const open = (
@@ -57,8 +57,8 @@ describe("a team gives each technology one interpreter and holds the rule behind
     expect(listed(run)).toEqual(sorted(INTERPRETER_CROSSINGS));
     const plain = run.run();
     expect(plain.code).toBe(0);
-    expect(plain.stdout.match(/^ {2}B22 /gm)).toHaveLength(19);
-    expect(plain.stdout).not.toContain("B23");
+    expect(plain.stdout.match(/^ {2}B24 /gm)).toHaveLength(19);
+    expect(plain.stdout).not.toContain("B25");
   });
 
   it("marks type-only only where every import of the file's queue modules is", () => {
@@ -110,7 +110,7 @@ describe("a team gives each technology one interpreter and holds the rule behind
     const found = listed(run);
     expect(found).toContainEqual([
       SHOP,
-      B22,
+      B24,
       `${SHOP}/src/orders/adapters/legacy/queue.ts`,
       "queue",
     ]);
@@ -134,7 +134,7 @@ describe("a team gives each technology one interpreter and holds the rule behind
     expect(gits).toEqual(
       ["billing", "orders", "shipping"].map((feature) => [
         SHOP,
-        B22,
+        B24,
         `${SHOP}/src/${feature}/adapters/driven/git.ts`,
         "git",
       ]),
@@ -165,7 +165,7 @@ describe("a team gives each technology one interpreter and holds the rule behind
       sorted(
         ["orders", "billing", "shipping"].map((feature) => [
           SHOP,
-          B22,
+          B24,
           `${SHOP}/src/${feature}/ports.ts`,
           "queue",
         ]),
@@ -196,8 +196,8 @@ describe("a module two technologies of one scope list", () => {
   it("is one entry per technology on a file that imports it, named by the technology", () => {
     const run = sharing();
     expect(of(listed(run), PORTS)).toEqual([
-      [SHOP, B22, PORTS, "queue"],
-      [SHOP, B22, PORTS, "scheduler"],
+      [SHOP, B24, PORTS, "queue"],
+      [SHOP, B24, PORTS, "scheduler"],
     ]);
     const entries = violationsOf(run)
       .map(({ violation }) => violation)
@@ -207,7 +207,7 @@ describe("a module two technologies of one scope list", () => {
       ["scheduler", null, true],
     ]);
     // A file that imports only the module one technology lists is that technology's entry alone.
-    expect(of(listed(run), HTTP)).toEqual([[SHOP, B22, HTTP, "queue"]]);
+    expect(of(listed(run), HTTP)).toEqual([[SHOP, B24, HTTP, "queue"]]);
   });
 
   it("holds both entries in the ledger, and a gate that has them recorded stays green", () => {
@@ -218,8 +218,8 @@ describe("a module two technologies of one scope list", () => {
     expect(
       held.map((entry) => [entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)]),
     ).toEqual([
-      [SHOP, B22, PORTS, "queue"],
-      [SHOP, B22, PORTS, "scheduler"],
+      [SHOP, B24, PORTS, "queue"],
+      [SHOP, B24, PORTS, "scheduler"],
     ]);
     const seeded = ledgerText(run);
     expect([run.run({ ci: true }).code, run.run({ ci: true }).code]).toEqual([0, 0]);
@@ -238,7 +238,7 @@ describe("a library nested in the scope", () => {
     // The same imports a driven adapter of the feature makes, from inside the library.
     [IN_ADAPTERS]:
       'import { enqueue } from "queue-sdk";\nimport { client } from "../../../../lib/queue-client";\nexport const s = [enqueue, client];\n',
-    // And the imports of a feature's `index.ts`, `application/` and adapter files B23 reports.
+    // And the imports of a feature's `index.ts`, `application/` and adapter files B25 reports.
     [IN_ROOT]: [
       'import { place } from "../../../orders/index";',
       'import type { Place } from "../../../billing/application/place";',
@@ -254,15 +254,15 @@ describe("a library nested in the scope", () => {
   const rows = (rules: unknown, kind: string): string[][] =>
     listed(open(rules, FILES)).filter((row) => row[1] === kind);
 
-  it("is left to the library's own scope, so its imports of a covered module are not B22", () => {
-    // Undeclared, the folder is one of the feature's adapter folders and B22 judges it.
-    expect(rows(INTERPRETER_RULES, B22)).toContainEqual([SHOP, B22, IN_ADAPTERS, "queue"]);
+  it("is left to the library's own scope, so its imports of a covered module are not B24", () => {
+    // Undeclared, the folder is one of the feature's adapter folders and B24 judges it.
+    expect(rows(INTERPRETER_RULES, B24)).toContainEqual([SHOP, B24, IN_ADAPTERS, "queue"]);
     repo?.dispose();
     // Declared, only the library's file drops out: the feature's own adapters are judged as before.
-    expect(rows({ ...INTERPRETER_RULES, ...NESTED }, B22)).toEqual(sorted(INTERPRETER_CROSSINGS));
+    expect(rows({ ...INTERPRETER_RULES, ...NESTED }, B24)).toEqual(sorted(INTERPRETER_CROSSINGS));
   });
 
-  it("is still judged by B23 when it sits under an interpreter root, and B4 is not beside it", () => {
+  it("is still judged by B25 when it sits under an interpreter root, and B4 is not beside it", () => {
     const run = open({ ...INTERPRETER_RULES, ...NESTED }, FILES);
     const found = violationsOf(run).filter(({ violation }) => violation.from === IN_ROOT);
     expect(
@@ -272,7 +272,7 @@ describe("a library nested in the scope", () => {
         `${SHOP}/src/billing/application/place.ts`,
         `${SHOP}/src/orders/index.ts`,
         `${SHOP}/src/shipping/adapters/driven/jobs.ts`,
-      ].map((target) => [SHOP, B23, target]),
+      ].map((target) => [SHOP, B25, target]),
     );
   });
 });
@@ -283,7 +283,7 @@ describe("an interpreter root imports no feature", () => {
     open(INTERPRETER_RULES, { ...INTERPRETER_FILES, ...extra });
   const b23 = (run: BoundaryRepo) =>
     violationsOf(run)
-      .filter(({ violation }) => violation.kind === B23)
+      .filter(({ violation }) => violation.kind === B25)
       .map(({ violation }) => violation);
 
   it("reports a feature's index, application and adapter file once per file and target, and no B4 beside it", () => {
@@ -457,10 +457,10 @@ describe("a rules file without interpreters runs as it did", () => {
     }
   });
 
-  it("reports nothing of B22 or B23 for the queue files when no scope lists them", () => {
+  it("reports nothing of B24 or B25 for the queue files when no scope lists them", () => {
     const kinds = new Set(
       listed(open(INTERPRETER_RULES_WITHOUT_INTERPRETERS)).map(([, kind]) => kind),
     );
-    expect(kinds.has(B22) || kinds.has(B23)).toBe(false);
+    expect(kinds.has(B24) || kinds.has(B25)).toBe(false);
   });
 });

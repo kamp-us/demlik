@@ -96,7 +96,8 @@ function specifierName(specifier: SyntaxNode): string | null {
   }
 }
 
-function moduleExportName(node: SyntaxNode | null): string | null {
+// The name a module export is spelled with: an identifier, or a string (`export { x as "a-b" }`).
+export function moduleExportName(node: SyntaxNode | null): string | null {
   if (node === null) return null;
   const name = field(node, "name");
   return typeof name === "string" ? name : stringValue(node);

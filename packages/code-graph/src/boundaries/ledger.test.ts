@@ -104,6 +104,7 @@ describe("the ledger file", () => {
         "entries.0.to: only a bare-specifier import, an impure use, a technology or a feature's " +
         "entry may have a null `to` (kinds application-import-outside-allowlist, " +
         "binding-outside-driven-adapter, impure, index-not-exports-only, library-undeclared, " +
+        "table-declared-outside-tables, table-written-outside-owner, " +
         "technology-outside-interpreter, unknown-zone, worker-call-cycle)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
@@ -156,6 +157,8 @@ describe("an impure use is a ledger entry with no target file", () => {
       "impure",
       "index-not-exports-only",
       "library-undeclared",
+      "table-declared-outside-tables",
+      "table-written-outside-owner",
       "technology-outside-interpreter",
       "unknown-zone",
       "worker-call-cycle",

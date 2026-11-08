@@ -8,10 +8,11 @@ import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 // B1 and B4 still judge what a test imports across features, B3 a test in `lib`, B12 a library
 // test importing upward, B14 an adapter library imported from outside a driven adapter, and B19 a
 // relative path out of the workspace, whatever the file is named. B11 and B18 hold no file. B20
-// exists for the test role: it judges a test, and no other file. B23 replaces B4 for a file under an
-// interpreter root, so it judges a test as B4 does. B22 leaves a test alone, as Binclusive's F17
-// does (Binclusive/monorepo#8540): it reads only `ports.ts` and adapter files, and a test that
-// imports a covered module is no adapter for the technology.
+// exists for the test role: it judges a test, and no other file. B22 and B23 do not judge a test,
+// which seeds the tables it runs against. B25 replaces B4 for a file under an interpreter root, so
+// it judges a test as B4 does. B24 leaves a test alone, as Binclusive's F17 does
+// (Binclusive/monorepo#8540): it reads only `ports.ts` and adapter files, and a test that imports a
+// covered module is no adapter for the technology.
 const JUDGES_TEST_FILES = {
   "cross-feature": true,
   "lib-imports-feature": true,
@@ -29,6 +30,8 @@ const JUDGES_TEST_FILES = {
   "worker-call-cycle": true,
   "relative-import-crosses-workspace": true,
   "package-import-crosses-deployable": true,
+  "table-declared-outside-tables": false,
+  "table-written-outside-owner": false,
   "test-reaches-composition-root": true,
   "technology-outside-interpreter": false,
   "interpreter-imports-feature": true,

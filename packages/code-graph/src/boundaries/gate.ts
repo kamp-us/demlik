@@ -43,6 +43,7 @@ import {
 } from "./rules.js";
 import { declaresReadAllowance } from "./shape/schema.js";
 import { readShape, shapeFactsOf } from "./shape/shape.js";
+import { readTables, tableFactsOf } from "./tables/tables.js";
 import { unknownDriven } from "./zones/reads.js";
 
 export type BoundaryFlags = {
@@ -95,9 +96,9 @@ function modeOf(flags: BoundaryFlags, report: Reporter): BoundaryMode | null {
   return flags.ci ? { kind: "gate" } : { kind: "report" };
 }
 
-// What a run reads once, before any scope is judged: the libraries, the deployables and the shape
-// the rules file declares, and the repo's files listed once for them. A rules file that declares no
-// library key, no deployable kind and no read allowance lists nothing, and each scope lists its own.
+// What a run reads once, before any scope is judged: the libraries, the deployables, the shape and
+// the table kinds the rules file declares, and the repo's files listed once for them. A rules file
+// that needs none of that listing leaves it to each scope, which lists its own.
 type Reads = ScopeInputs & { readonly listing: RepoListing | undefined };
 
 // A scope's files are read when it declares features or is a declared library. A library root has
@@ -125,6 +126,7 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
       runtimeSpecifiers: runtimeSpecifiers(syntax),
       importedNames: importedNamesFor(reads.libraries, scope, syntax),
       bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
+      tableFacts: tableFactsOf(reads.tables, syntax),
       ...shapeFactsOf(reads.shape, scope, file, syntax),
     };
   });
@@ -239,6 +241,7 @@ function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
     libraries: read.libraries,
     deployables: deployables.deployables,
     shape: shape.shape,
+    tables: readTables(rules),
     listing,
   };
 }

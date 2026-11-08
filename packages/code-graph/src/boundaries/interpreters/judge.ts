@@ -9,7 +9,7 @@ export type InterpreterFile = {
   readonly importEdges: readonly ImportEdge[];
 };
 
-// B22: a file that may hold a technology's adapter and imports a module the technology covers. Only
+// B24: a file that may hold a technology's adapter and imports a module the technology covers. Only
 // `ports.ts` and an adapter zone are judged (`adapter` is the layout's own flag, so the port layout
 // reads the same): `application/` and `index.ts` hold no adapter, and a technology no scope lists is
 // never judged. Every edge counts, type-only, re-export and dynamic ones included. One entry per file
@@ -38,7 +38,7 @@ export function technologyViolations(
 
 type Reach = { readonly toFeature: string; readonly specifier: string; readonly typeOnly: boolean };
 
-// B23: a file under an interpreter root importing any file of a feature, `index.ts` included. It is
+// B25: a file under an interpreter root importing any file of a feature, `index.ts` included. It is
 // the only verdict for these edges, where B4 would judge a file outside every feature. One entry per
 // file and target, the first specifier written, type-only only when every import of the target is.
 export function interpreterImportsFeature(

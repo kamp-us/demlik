@@ -14,11 +14,12 @@ export const BOUNDARY_KINDS = Object.keys(CROSSINGS) as BoundaryKind[];
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
 // (`application-import-outside-allowlist`), an impure global or world library (`impure`), a worker
-// binding (`binding-outside-driven-adapter`), a technology a file reaches
-// (`technology-outside-interpreter`) or an entry (`unknown-zone` of a feature,
-// `index-not-exports-only` of an entry file, `library-undeclared` of a package, `worker-call-cycle`
-// of workers). Every other kind names its target file, or for an import of a library
-// (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
+// binding (`binding-outside-driven-adapter`), a table (`table-declared-outside-tables`,
+// `table-written-outside-owner`), a technology a file reaches (`technology-outside-interpreter`) or
+// an entry (`unknown-zone` of a feature, `index-not-exports-only` of an entry file,
+// `library-undeclared` of a package, `worker-call-cycle` of workers). Every other kind names its
+// target file, or for an import of a library (`library-imports-up`,
+// `adapter-library-imported-outside-driven`) or of another workspace
 // (`relative-import-crosses-workspace`, `package-import-crosses-deployable`) its directory.
 const MAY_HAVE_NO_FILE = {
   "adapter-library-imported-outside-driven": false,
@@ -36,6 +37,8 @@ const MAY_HAVE_NO_FILE = {
   "outside-imports-feature-internal": false,
   "relative-import-crosses-workspace": false,
   "package-import-crosses-deployable": false,
+  "table-declared-outside-tables": true,
+  "table-written-outside-owner": true,
   "technology-outside-interpreter": true,
   "test-reaches-composition-root": false,
   "unknown-zone": true,

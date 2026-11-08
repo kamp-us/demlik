@@ -21,6 +21,8 @@ import {
 } from "./rules.js";
 import { judgeShape } from "./shape/judge.js";
 import type { Shape, ShapeFacts } from "./shape/shape.js";
+import { judgeTables } from "./tables/judge.js";
+import type { TableFacts, Tables } from "./tables/tables.js";
 import type { BoundaryViolation, ZoneEdge } from "./violation.js";
 import { impureViolations } from "./zones/impure-violations.js";
 import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
@@ -37,6 +39,9 @@ export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
     // The bindings of the worker that owns the file that it references, read only when the rules
     // file lists a deployable kind.
     readonly bindingSites: readonly BindingSite[];
+    // The tables the file writes and the table constructors it calls, read only when the rules file
+    // lists a table kind.
+    readonly tableFacts: TableFacts;
   };
 
 export type ScopeBoundaryReport = {
@@ -113,7 +118,7 @@ function crossingFrom(
     case "lib":
       return { kind: "lib-imports-feature", ...crossing };
     case "interpreter":
-      // B23 judges these edges, once per target, beside B22 (`interpreters/judge.ts`).
+      // B25 judges these edges, once per target, beside B24 (`interpreters/judge.ts`).
       return null;
     case "elsewhere":
       if (to.zone.rule.openToOutside) return null;
@@ -160,6 +165,7 @@ export type ScopeInputs = {
   readonly libraries: Libraries;
   readonly deployables: Deployables;
   readonly shape: Shape;
+  readonly tables: Tables;
 };
 
 type ScopeContext = ScopeInputs & {
@@ -212,8 +218,8 @@ function acrossDeployables(
   return { violations, sites };
 }
 
-// B22 and B23 for one file. B22 leaves a file inside a library nested in the scope to that
-// library's own scope, as B12-B14 and B17 do; B23 judges every file under a root, as B4 did.
+// B24 and B25 for one file. B24 leaves a file inside a library nested in the scope to that
+// library's own scope, as B12-B14 and B17 do; B25 judges every file under a root, as B4 did.
 function acrossInterpreters(
   ctx: ScopeContext,
   module: BoundaryModule,
@@ -259,6 +265,7 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     ...across.violations,
     ...acrossInterpreters(ctx, module, fromPlace),
     ...judgeShape(ctx, module, fromPlace, judged),
+    ...judgeTables(ctx, module, fromPlace),
     ...(isTest ? testReachViolations(ctx.reach, scope, module) : []),
   ];
   return {

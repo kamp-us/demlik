@@ -7,7 +7,7 @@ import { shopManifests } from "./shop-workspace.js";
 // `queue-sdk` and the path `src/lib/queue-client`. A second technology, `git`, is a local effect no
 // interpreter covers, so the adapters that use it must stay clean. Every name is made up.
 //
-// It plants nineteen B22 crossings, fifteen in `SHOP` (five files of each feature) and four in
+// It plants nineteen B24 crossings, fifteen in `SHOP` (five files of each feature) and four in
 // `MAIL`, and clean files beside them that import the same modules and must produce nothing.
 
 export const SHOP = "services/shop";
