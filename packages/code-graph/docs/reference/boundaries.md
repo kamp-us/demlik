@@ -165,7 +165,7 @@ Library types describe which package types may import each other.
 | Key | Meaning |
 |---|---|
 | `libraryTypes` | Allowed imported types, purity, and optional importer locations |
-| `libraries` | Package directory to type; each directory must hold `package.json` |
+| `libraries` | Package directory to type; each directory must hold `package.json` and belong to the workspace when a workspace manifest exists |
 | `libraryRoots` | Directories whose packages must all be declared |
 | `worldLibraries` | Package globs forbidden in pure libraries, including subpaths |
 | `allowImportNames` | Importer directory, to imported library directory, to the names the importer may take although its type does not list that library's type |
@@ -176,7 +176,7 @@ Library-to-library imports are configurator imports.
 
 | Rule | Kind | Violation |
 |---|---|---|
-| B11 | `library-undeclared` | A package under a library root has no declared type |
+| B11 | `library-undeclared` | A workspace package under a library root has no declared type |
 | B12 | `library-imports-up` | A library imports a type its own type does not allow, and takes a name its `allowImportNames` does not license |
 | B14 | `adapter-library-imported-outside-driven` | An import violates the target type's `importedFrom` list |
 
@@ -439,7 +439,17 @@ unused bindings. Self-bindings are ignored. Durable Object and Workflow
 bindings do not contribute B18 edges. Overlapping cycles form one component;
 unknown target workers are counted separately.
 
-B19 compares the nearest package directories of importer and target, even
+Package roots are directories holding a visible `package.json` that match the
+repo's `pnpm-workspace.yaml` `packages`, or, without that file, the root
+`package.json`'s `workspaces` (array or Yarn `{ "packages": [...] }` form).
+Workspace patterns are matched as pnpm matches them; the repo root package
+and the analyzed root are always included. An empty pnpm manifest or one without
+`packages` includes only the root package. A fixture manifest outside those
+patterns is neither a B11 library nor a B19 package boundary. Without a workspace
+manifest, every visible `package.json` directory remains a package root.
+Malformed workspace declarations fail with the manifest path.
+
+B19 compares the nearest package roots of importer and target, even
 when the target path does not exist. Bare specifiers and tsconfig aliases
 are outside B19. Type-only relative imports still count.
 

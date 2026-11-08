@@ -87,7 +87,7 @@ const files = (shipmentReads: string): Record<string, string> => ({
 
 const FEATURES = { features: { [API]: ["orders", "billing", "shipping", "catalog"] } };
 const WORKSPACE = {
-  "pnpm-workspace.yaml": 'packages:\n  - "services/*"\n',
+  "pnpm-workspace.yaml": 'packages:\n  - "services/*"\n  - "packages/*"\n',
   [`${API}/wrangler.jsonc`]: JSON.stringify({ name: "api", d1_databases: [{ binding: "DB" }] }),
 };
 const KERNEL = {

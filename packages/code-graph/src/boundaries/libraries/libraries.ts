@@ -72,7 +72,7 @@ function rootIssues(root: string, repoRoot: string): string[] {
 function libraryIssues(dir: string, packageDirs: ReadonlySet<string>): string[] {
   if (packageDirs.has(dir)) return [];
   return [
-    `library "${dir}" is no package root: a library is a directory below the repo root that holds a package.json.`,
+    `library "${dir}" is no package root: a library is a directory below the repo root that holds a package.json and belongs to the workspace when a workspace manifest exists.`,
   ];
 }
 
