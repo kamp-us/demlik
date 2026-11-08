@@ -107,6 +107,43 @@ describe("discoverPackageRoots workspace membership", () => {
     expect(discoverPackageRoots(root)).toEqual(["", "packages/a", "packages/a/nested"]);
   });
 
+  it("excludes dot directories from wildcard workspace members", () => {
+    const root = repo({ "pnpm-workspace.yaml": 'packages: ["packages/*"]' }, [
+      "packages/a",
+      "packages/.hidden",
+    ]);
+    expect(discoverPackageRoots(root)).toEqual(["", "packages/a"]);
+  });
+
+  it("includes the recursive pattern's own directory and its descendants", () => {
+    const root = repo({ "pnpm-workspace.yaml": 'packages: ["packages/**"]' }, [
+      "packages",
+      "packages/a",
+    ]);
+    expect(discoverPackageRoots(root)).toEqual(["", "packages", "packages/a"]);
+  });
+
+  it("excludes a recursive exclusion's own directory and its descendants", () => {
+    const root = repo({ "pnpm-workspace.yaml": 'packages: ["packages/**", "!**/test/**"]' }, [
+      "packages/a",
+      "packages/test",
+      "packages/b/test/pkg",
+    ]);
+    expect(discoverPackageRoots(root)).toEqual(["", "packages/a"]);
+  });
+
+  it("includes only the root package for empty and comment-only pnpm manifests", () => {
+    for (const text of ["", "# settings later"]) {
+      const root = repo({ "pnpm-workspace.yaml": text }, ["packages/a"]);
+      expect(discoverPackageRoots(root)).toEqual([""]);
+    }
+  });
+
+  it("rejects an empty pnpm package pattern with its file path", () => {
+    const root = repo({ "pnpm-workspace.yaml": 'packages: [""]' }, ["packages/a"]);
+    expect(() => discoverPackageRoots(root)).toThrow(path.join(root, "pnpm-workspace.yaml"));
+  });
+
   it("normalizes exact, ./ prefixed and trailing slash patterns, including exclusions", () => {
     const root = repo(
       { "pnpm-workspace.yaml": 'packages: ["my-app", "./components/*/", "!./components/legacy/"]' },

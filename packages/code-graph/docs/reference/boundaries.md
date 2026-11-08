@@ -442,8 +442,9 @@ unknown target workers are counted separately.
 Package roots are directories holding a visible `package.json` that match the
 repo's `pnpm-workspace.yaml` `packages`, or, without that file, the root
 `package.json`'s `workspaces` (array or Yarn `{ "packages": [...] }` form).
-Includes select members and `!` patterns exclude them; the repo root package
-and the analyzed root are always included. A fixture manifest outside those
+Workspace patterns are matched as pnpm matches them; the repo root package
+and the analyzed root are always included. An empty pnpm manifest or one without
+`packages` includes only the root package. A fixture manifest outside those
 patterns is neither a B11 library nor a B19 package boundary. Without a workspace
 manifest, every visible `package.json` directory remains a package root.
 Malformed workspace declarations fail with the manifest path.

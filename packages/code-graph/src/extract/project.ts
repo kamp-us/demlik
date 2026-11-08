@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { globSync } from "tinyglobby";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { parseTypeScript } from "../engine/oxc.js";
-import { globToRegExp } from "../kinds/glob.js";
 import { SyntaxFile } from "../syntax/file.js";
 
 const WALK_PRUNE = new Set([
@@ -123,7 +123,9 @@ export function toRelative(rootAbsolute: string, absolutePath: string): string {
 }
 
 const WorkspacePatternsSchema = z.array(z.string());
-const PnpmWorkspaceSchema = z.object({ packages: WorkspacePatternsSchema.default([]) });
+const PnpmWorkspaceSchema = z
+  .object({ packages: z.array(z.string().min(1)).default([]) })
+  .nullish();
 const NpmWorkspaceSchema = z.object({
   workspaces: z.union([WorkspacePatternsSchema, z.object({ packages: WorkspacePatternsSchema })]),
 });
@@ -134,7 +136,7 @@ function workspacePatterns(repoRoot: string): string[] | null {
   if (file !== yamlFile && !declaresWorkspaces(repoRoot)) return null;
   try {
     const text = readSource(file);
-    if (file === yamlFile) return PnpmWorkspaceSchema.parse(parseYaml(text)).packages;
+    if (file === yamlFile) return PnpmWorkspaceSchema.parse(parseYaml(text))?.packages ?? [];
     const { workspaces } = NpmWorkspaceSchema.parse(JSON.parse(text));
     return Array.isArray(workspaces) ? workspaces : workspaces.packages;
   } catch (cause) {
@@ -144,10 +146,17 @@ function workspacePatterns(repoRoot: string): string[] | null {
 
 export function discoverPackageRoots(rootAbsolute: string, listing?: RepoListing): string[] {
   const repoRoot = findRepoRoot(rootAbsolute);
-  const patterns = workspacePatterns(repoRoot)?.map((pattern) => ({
-    exclude: pattern.startsWith("!"),
-    matcher: globToRegExp(pattern.replace(/^!/, "").replace(/^\.\//, "").replace(/\/$/, "")),
-  }));
+  const patterns = workspacePatterns(repoRoot);
+  const members = new Set(
+    globSync(
+      patterns?.map((pattern) => pattern.replace(/\/?$/, "/package.{json,yaml,json5}")) ?? [],
+      {
+        cwd: repoRoot,
+        expandDirectories: false,
+        ignore: ["**/node_modules/**", "**/bower_components/**"],
+      },
+    ).map((manifest) => toRelative(repoRoot, path.dirname(path.join(repoRoot, manifest)))),
+  );
   const roots = new Set<string>([""]);
   for (const rel of listVisibleFiles(
     rootAbsolute,
@@ -156,14 +165,7 @@ export function discoverPackageRoots(rootAbsolute: string, listing?: RepoListing
   )) {
     if (rel.split("/").some((segment) => EXCLUDED_SEGMENTS.has(segment))) continue;
     const dir = path.posix.dirname(rel);
-    const repoRelative = toRelative(repoRoot, path.join(rootAbsolute, dir));
-    if (
-      patterns !== undefined &&
-      repoRelative !== "" &&
-      (!patterns.some(({ exclude, matcher }) => !exclude && matcher.test(repoRelative)) ||
-        patterns.some(({ exclude, matcher }) => exclude && matcher.test(repoRelative)))
-    )
-      continue;
+    if (patterns && !members.has(toRelative(repoRoot, path.join(rootAbsolute, dir)))) continue;
     roots.add(dir === "." ? "" : dir);
   }
   return [...roots].sort();
