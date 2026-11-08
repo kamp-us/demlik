@@ -36,6 +36,7 @@ import { runHexagon } from "./hexagon/cli.js";
 import { loadChurn, resolveChurnWindow, resolveHotspotsCliOptions } from "./hotspots/churn.js";
 import { renderHotspots } from "./hotspots/render.js";
 import { runLayerGate } from "./layers/gate.js";
+import { runOwners } from "./owners/run.js";
 import {
   renderClusters,
   renderCrossRuntime,
@@ -110,9 +111,9 @@ defineProgram()
       return;
     }
 
-    if (opts.hexagon === true) {
-      return runHexagon(rootAbsolute, { json, pretty, emit, report: cleanExit });
-    }
+    const view = { json, pretty, emit, report: cleanExit };
+    if (opts.hexagon === true) return runHexagon(rootAbsolute, view);
+    if (opts.owners === true) return exitWith(runOwners(rootAbsolute, opts.boundaryRules, view));
 
     const repoRoot = findRepoRoot(rootAbsolute);
     const unreachableGate = prepareUnreachableGate(opts, rootAbsolute, repoRoot, cleanExit);

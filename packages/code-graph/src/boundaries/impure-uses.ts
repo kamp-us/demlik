@@ -1,5 +1,5 @@
 import type { ImportEdge } from "../schema.js";
-import { bindingCounts, codeChildren } from "../syntax/bindings.js";
+import { bindingCounts, codeChildren, isNameSlot } from "../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import {
   GLOBAL_OBJECT,
@@ -114,38 +114,8 @@ function step(base: Chain, member: SyntaxNode): Chain {
   };
 }
 
-// Identifier slots that name something rather than read it: `a.b`'s `b`, `{ b: 1 }`'s `b`, a
-// label, an export's name. A computed key is an expression and is read.
-const COMPUTABLE_NAME = new Map([
-  ["MemberExpression", "property"],
-  ["Property", "key"],
-  ["MethodDefinition", "key"],
-  ["PropertyDefinition", "key"],
-  ["AccessorProperty", "key"],
-]);
-
-const PLAIN_NAMES = new Map([
-  ["LabeledStatement", ["label"]],
-  ["BreakStatement", ["label"]],
-  ["ContinueStatement", ["label"]],
-  ["MetaProperty", ["meta", "property"]],
-  ["ExportSpecifier", ["local", "exported"]],
-  ["ExportAllDeclaration", ["exported"]],
-  ["ImportAttribute", ["key"]],
-  ["TSModuleDeclaration", ["id"]],
-]);
-
-function isName(node: SyntaxNode, parent: SyntaxNode | undefined): boolean {
-  if (parent === undefined) return false;
-  const computable = COMPUTABLE_NAME.get(parent.type);
-  if (computable !== undefined && nodeField(parent, computable) === node) {
-    return field(parent, "computed") !== true;
-  }
-  return PLAIN_NAMES.get(parent.type)?.some((key) => nodeField(parent, key) === node) ?? false;
-}
-
 function visit(scan: Scan, node: SyntaxNode): void {
-  if (node.type === "ImportDeclaration" || isName(node, scan.syntax.parentOf(node))) return;
+  if (node.type === "ImportDeclaration" || isNameSlot(node, scan.syntax.parentOf(node))) return;
   const chain = chainOf(node);
   if (chain !== null) {
     recordChain(scan, chain);

@@ -1,7 +1,7 @@
-import { bindingCounts, codeChildren } from "../../syntax/bindings.js";
+import { bindingCounts, codeChildren, isNameSlot } from "../../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../../syntax/file.js";
 import { moduleExportName } from "../../syntax/imports.js";
-import type { TableKind, TableRules } from "./schema.js";
+import { TABLE_KINDS, type TableKind, type TableRules } from "./schema.js";
 
 // The table constructor each drizzle dialect exports, by the module that exports it.
 const TABLE_CONSTRUCTORS: Readonly<Record<string, string>> = {
@@ -22,18 +22,30 @@ export function readTables(rules: TableRules): Tables {
   return { kinds: new Set(rules.tableOwnership) };
 }
 
-// A table a file passes to a write: the module it imported the table from, as the import wrote it,
+// What a view reads: every fact, whichever kinds the rules file lists, since the view judges none.
+export const ALL_TABLES: Tables = { kinds: new Set(TABLE_KINDS) };
+
+// A table a file reaches by name: the module it imported the table from, as the import wrote it,
 // and the table's name in that module, whatever the file calls it.
-export type TableWrite = { readonly source: string; readonly table: string };
+export type ImportedTable = { readonly source: string; readonly table: string };
 
 // What a file's syntax tree says about tables, read where the file is loaded and only for a kind
-// the rules file lists: the tables it writes, and the drizzle constructors it calls, by name.
+// the rules file lists:
+//  - `writes`: the tables it passes to an insert, update or delete, in source order.
+//  - `references`: every table it names at run time, a write included, in source order. A name is a
+//    reference where the file reads it, not where it spells it as a member, a key, an export or a type.
+//  - `constructors`: the drizzle constructors it calls, by name.
+//  - `declared`: the names it exports bound to a table: `export const orders = pgTable(…)`, or a
+//    schema's `export const plan = billing.table(…)`. Only a feature's tables file is read for them,
+//    where a member call named `table` can be nothing else.
 export type TableFacts = {
-  readonly writes: readonly TableWrite[];
+  readonly writes: readonly ImportedTable[];
+  readonly references: readonly ImportedTable[];
   readonly constructors: readonly string[];
+  readonly declared: readonly string[];
 };
 
-const NO_FACTS: TableFacts = { writes: [], constructors: [] };
+const NO_FACTS: TableFacts = { writes: [], references: [], constructors: [], declared: [] };
 
 // A name an import binds: a named import (`{ users }`, `{ users as u }`), or a namespace
 // (`* as t`). A default import names nothing a table could be told by, and a type-only import is
@@ -98,7 +110,17 @@ function importedName(
   return bound?.kind === "namespace" ? { source: bound.source, name: member.name } : null;
 }
 
-type Found = { readonly writes: Map<string, TableWrite>; readonly constructors: Set<string> };
+type Found = {
+  readonly writes: Map<string, ImportedTable>;
+  readonly references: Map<string, ImportedTable>;
+  readonly constructors: Set<string>;
+  readonly declared: Set<string>;
+};
+
+// A table once per module and name, at the place it first appeared.
+function remember(into: Map<string, ImportedTable>, table: ImportedTable): void {
+  into.set(`${table.source}\0${table.table}`, table);
+}
 
 // A call of `<anything>.insert|update|delete(<imported table>, …)`, an optional call included.
 function recordWrite(call: SyntaxNode, imports: ReadonlyMap<string, Import>, found: Found): void {
@@ -107,32 +129,69 @@ function recordWrite(call: SyntaxNode, imports: ReadonlyMap<string, Import>, fou
   if (method === null || !WRITE_METHODS.has(method.name)) return;
   const first = (field(call, "arguments") as readonly SyntaxNode[])[0];
   const table = first === undefined ? null : importedName(first, imports);
-  if (table === null) return;
-  found.writes.set(`${table.source}\0${table.name}`, { source: table.source, table: table.name });
+  if (table !== null) remember(found.writes, { source: table.source, table: table.name });
 }
 
-// A call of the constructor a drizzle module exports, bound by an import of that module.
+// The name of the constructor a call invokes: one a drizzle module exports, bound by an import of
+// that module.
+function constructorOf(call: SyntaxNode, imports: ReadonlyMap<string, Import>): string | null {
+  const callee = nodeField(call, "callee");
+  const called = callee === null ? null : importedName(callee, imports);
+  return called !== null && TABLE_CONSTRUCTORS[called.source] === called.name ? called.name : null;
+}
+
 function recordConstructor(
   call: SyntaxNode,
   imports: ReadonlyMap<string, Import>,
   found: Found,
 ): void {
-  const callee = nodeField(call, "callee");
-  const called = callee === null ? null : importedName(callee, imports);
-  if (called !== null && TABLE_CONSTRUCTORS[called.source] === called.name) {
-    found.constructors.add(called.name);
-  }
+  const name = constructorOf(call, imports);
+  if (name !== null) found.constructors.add(name);
 }
 
+// Whether a call builds a table: a drizzle constructor, or a schema's `<schema>.table(…)`, the form
+// of a `pgSchema` object the file got from another module and so cannot name.
+function buildsTable(call: SyntaxNode, imports: ReadonlyMap<string, Import>): boolean {
+  if (constructorOf(call, imports) !== null) return true;
+  const callee = nodeField(call, "callee");
+  return callee !== null && staticMember(callee)?.name === "table";
+}
+
+// `export const <name> = <a call that builds a table>`.
+function recordDeclared(
+  syntax: SyntaxFile,
+  declarator: SyntaxNode,
+  imports: ReadonlyMap<string, Import>,
+  found: Found,
+): void {
+  const id = nodeField(declarator, "id");
+  const init = nodeField(declarator, "init");
+  if (id?.type !== "Identifier" || init?.type !== "CallExpression") return;
+  const statement = syntax.parentOf(declarator);
+  const host = statement === undefined ? undefined : syntax.parentOf(statement);
+  if (host?.type !== "ExportNamedDeclaration" || !buildsTable(init, imports)) return;
+  found.declared.add(String(field(id, "name")));
+}
+
+// One pass over the tree. A name an import binds is read where it is not a slot that only names
+// something (`a.b`'s `b`, an object key, an export list), and a namespace is read through its member,
+// so a namespace taken whole (`...ns`, `use(ns)`) names no table.
 function visit(
   syntax: SyntaxFile,
   node: SyntaxNode,
   found: Found,
   imports: ReadonlyMap<string, Import>,
 ): void {
+  if (node.type === "ImportDeclaration" || isNameSlot(node, syntax.parentOf(node))) return;
   if (node.type === "CallExpression") {
     recordWrite(node, imports, found);
     recordConstructor(node, imports, found);
+  }
+  if (node.type === "VariableDeclarator") recordDeclared(syntax, node, imports, found);
+  const read = importedName(node, imports);
+  if (read !== null) {
+    remember(found.references, { source: read.source, table: read.name });
+    return;
   }
   for (const child of codeChildren(syntax, node)) visit(syntax, child, found, imports);
 }
@@ -143,7 +202,17 @@ export function tableFactsOf(tables: Tables, syntax: SyntaxFile): TableFacts {
   if (tables.kinds.size === 0) return NO_FACTS;
   const imports = runtimeImports(syntax);
   if (imports.size === 0) return NO_FACTS;
-  const found: Found = { writes: new Map(), constructors: new Set() };
+  const found: Found = {
+    writes: new Map(),
+    references: new Map(),
+    constructors: new Set(),
+    declared: new Set(),
+  };
   visit(syntax, syntax.program, found, boundOnce(syntax, imports));
-  return { writes: [...found.writes.values()], constructors: [...found.constructors] };
+  return {
+    writes: [...found.writes.values()],
+    references: [...found.references.values()],
+    constructors: [...found.constructors],
+    declared: [...found.declared],
+  };
 }

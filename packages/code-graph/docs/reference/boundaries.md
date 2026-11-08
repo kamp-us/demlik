@@ -520,6 +520,10 @@ type checker and no data flow, so they do not see:
 A write that has to stay is accepted by name with
 `--accept-crossings --reason "<why>"`.
 
+The reads and foreign keys these kinds leave clean are listed by
+`code-graph <path> --owners --boundary-rules <file>`, beside the writes: see
+[Owners](cli.md#owners).
+
 ## Ledger and gate behavior
 
 `boundary-ledger.json` stores accepted crossings, one entry per identity:

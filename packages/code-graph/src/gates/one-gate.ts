@@ -15,6 +15,7 @@ type OneGateOpts = Pick<
   | "acceptSmells"
   | "hexagon"
   | "envKeys"
+  | "owners"
 >;
 
 // `--layers` always gates. These four only report until a flag points them at their ledger or
@@ -50,16 +51,22 @@ function gatelessModes(opts: OneGateOpts): string[] {
   return [
     ...(opts.hexagon === true ? ["--hexagon"] : []),
     ...(opts.envKeys === true ? ["--env-keys"] : []),
+    ...(opts.owners === true ? ["--owners"] : []),
   ];
 }
 
 // The run answers with the first mode its flags reach, so a second gate would never run and the
-// exit code would say nothing about it. Decided from the flags alone, before any ledger is read.
+// exit code would say nothing about it. `--owners` is the one report that takes no other mode: it
+// answers after `--hexagon` and before any gate, so a mode beside it would never run. Decided from
+// the flags alone, before any ledger is read.
 export function oneGateRefusal(opts: OneGateOpts): string | null {
   const named = namedGates(opts);
   const gates = named.length > 0 ? named : smellGate(opts);
   const gateless = gatelessModes(opts);
-  const clashes = gates.length > 1 || (gates.length === 1 && gateless.length > 0);
+  const clashes =
+    gates.length > 1 ||
+    (gates.length === 1 && gateless.length > 0) ||
+    (opts.owners === true && gateless.length > 1);
   if (!clashes) return null;
-  return `a run takes one gate, and --hexagon and --env-keys run without one; got ${[...gateless, ...gates].join(", ")}; no ledger was read or written.`;
+  return `a run takes one gate, and --hexagon, --env-keys and --owners run without one; got ${[...gateless, ...gates].join(", ")}; no ledger was read or written.`;
 }

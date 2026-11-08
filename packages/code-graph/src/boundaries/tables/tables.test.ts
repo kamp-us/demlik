@@ -9,7 +9,9 @@ import {
   reportOf,
 } from "../../test-helpers/library-report.js";
 import { SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js";
+import { sourceUnit } from "../../test-helpers/source-unit.js";
 import { MIGRATED_REASON } from "../migrate.js";
+import { ALL_TABLES, readTables, tableFactsOf } from "./tables.js";
 
 const API = "services/api";
 const at = (rel: string): string => `${API}/${rel}`;
@@ -457,5 +459,90 @@ describe("a bad tableOwnership exits 2 with one line and writes nothing", () => 
       expect(message).toContain('"tableOwnership"');
       expect(message).toContain("per-feature");
     }
+  });
+});
+
+// What one file's syntax says about tables, whichever kinds the rules file lists.
+const factsOf = (source: string) => tableFactsOf(ALL_TABLES, sourceUnit(source).syntax);
+const orders = { source: "./tables", table: "orders" };
+
+describe("a file's references to the tables it imports", () => {
+  it("lists a table once where the file reads it, a write included, in source order", () => {
+    const facts = factsOf(
+      lines(
+        'import { orders, orderLines as lines } from "./tables";',
+        "export const a = (db: Db) => db.select().from(lines).innerJoin(orders, eq(1, 1));",
+        "export const b = (db: Db) => db.insert(orders);",
+      ),
+    );
+    expect(facts.references).toEqual([{ source: "./tables", table: "orderLines" }, orders]);
+    expect(facts.writes).toEqual([orders]);
+  });
+
+  it("reads a namespace through its member, and a namespace taken whole names no table", () => {
+    const facts = factsOf(
+      lines(
+        'import * as t from "./tables";',
+        "export const a = (db: Db) => db.select().from(t.orders);",
+        "export const every = { ...t };",
+        "export const taken = use(t);",
+      ),
+    );
+    expect(facts.references).toEqual([orders]);
+  });
+
+  it("does not read a name that is only spelled: a member, a key, an export, a type or an import", () => {
+    const facts = factsOf(
+      lines(
+        'import { orders, orderLines, invoices } from "./tables";',
+        'import type { shipments } from "./tables";',
+        'import { type entries } from "./tables";',
+        "export const note = (row: { orders: number }) => row.orders;",
+        "export const keyed = { orderLines: 1 };",
+        "export type Shape = [typeof shipments, typeof entries];",
+        "export { invoices };",
+      ),
+    );
+    expect(facts.references).toEqual([]);
+  });
+
+  it("keeps neither reading of a name the file binds twice", () => {
+    const facts = factsOf(
+      lines(
+        'import { orders } from "./tables";',
+        "export const place = (db: Db, orders: Row) => db.insert(orders);",
+      ),
+    );
+    expect([facts.references, facts.writes]).toEqual([[], []]);
+  });
+
+  it("reads nothing where the rules file lists no table kind", () => {
+    const source = lines(
+      'import { pgTable } from "drizzle-orm/pg-core";',
+      'import { orders } from "./tables";',
+      "export const a = pgTable('a', {});",
+      "export const b = (db: Db) => db.insert(orders);",
+    );
+    const none = tableFactsOf(readTables({ tableOwnership: [] }), sourceUnit(source).syntax);
+    expect(none).toEqual({ writes: [], references: [], constructors: [], declared: [] });
+  });
+});
+
+describe("the tables a file declares", () => {
+  it("lists a name exported bound to a constructor call or to a schema's table, and nothing else", () => {
+    const facts = factsOf(
+      lines(
+        'import { pgEnum, pgSchema, pgTable, text } from "drizzle-orm/pg-core";',
+        'const billing = pgSchema("billing");',
+        'export const orderStatus = pgEnum("order_status", ["open"]);',
+        'export const orders = pgTable("orders", { id: text("id").primaryKey() });',
+        'export const invoices = billing.table("invoices", { id: text("id").primaryKey() });',
+        'const hidden = pgTable("hidden", {});',
+        "export const schema = billing;",
+        "export const rows = [orders];",
+      ),
+    );
+    expect(facts.declared).toEqual(["orders", "invoices"]);
+    expect(facts.constructors).toEqual(["pgTable"]);
   });
 });

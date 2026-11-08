@@ -6,7 +6,7 @@ import type { ImpureUse } from "./impure-uses.js";
 import { type Technology, technologiesOf } from "./interpreters/interpreters.js";
 import { interpreterImportsFeature, technologyViolations } from "./interpreters/judge.js";
 import type { NamedFile } from "./libraries/allowance.js";
-import { type Libraries, ownerOf } from "./libraries/libraries.js";
+import { inNestedLibrary, type Libraries } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
 import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
 import {
@@ -202,8 +202,7 @@ function acrossDeployables(
   const { scope, libraries, deployables } = ctx;
   if (deployables.kinds.size === 0) return NOT_JUDGED;
   const from = inScope(scope, module.file);
-  const nested = ownerOf(libraries, from);
-  if (nested !== null && nested !== scope) return NOT_JUDGED;
+  if (inNestedLibrary(libraries, scope, from)) return NOT_JUDGED;
   const violations = judgeDeployables(deployables, {
     scope,
     file: module.file,
@@ -227,8 +226,7 @@ function acrossInterpreters(
 ): BoundaryViolation[] {
   const { scope, libraries, technologies, zoning } = ctx;
   if (technologies.length === 0) return [];
-  const nested = ownerOf(libraries, inScope(scope, module.file));
-  const own = nested === null || nested === scope;
+  const own = !inNestedLibrary(libraries, scope, inScope(scope, module.file));
   return [
     ...(own ? technologyViolations(technologies, scope, module, place) : []),
     ...interpreterImportsFeature(scope, zoning, module, place),

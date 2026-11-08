@@ -89,3 +89,34 @@ export function bindingCounts(syntax: SyntaxFile): Map<string, number> {
   visit(syntax.program);
   return counts;
 }
+
+// Identifier slots that name something rather than read it: `a.b`'s `b`, `{ b: 1 }`'s `b`, a
+// label, an export's name. A computed key is an expression and is read.
+const COMPUTABLE_NAME = new Map([
+  ["MemberExpression", "property"],
+  ["Property", "key"],
+  ["MethodDefinition", "key"],
+  ["PropertyDefinition", "key"],
+  ["AccessorProperty", "key"],
+]);
+
+const PLAIN_NAMES = new Map([
+  ["LabeledStatement", ["label"]],
+  ["BreakStatement", ["label"]],
+  ["ContinueStatement", ["label"]],
+  ["MetaProperty", ["meta", "property"]],
+  ["ExportSpecifier", ["local", "exported"]],
+  ["ExportAllDeclaration", ["exported"]],
+  ["ImportAttribute", ["key"]],
+  ["TSModuleDeclaration", ["id"]],
+]);
+
+// Whether `node` sits in a slot of `parent` that names something instead of reading it.
+export function isNameSlot(node: SyntaxNode, parent: SyntaxNode | undefined): boolean {
+  if (parent === undefined) return false;
+  const computable = COMPUTABLE_NAME.get(parent.type);
+  if (computable !== undefined && nodeField(parent, computable) === node) {
+    return field(parent, "computed") !== true;
+  }
+  return PLAIN_NAMES.get(parent.type)?.some((key) => nodeField(parent, key) === node) ?? false;
+}

@@ -1,30 +1,13 @@
-import fs from "node:fs";
 import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
-import { listRepo, loadEdgeProject, type RepoListing } from "../extract/project.js";
-import { loadBindingCatalog } from "../extract/wrangler-config.js";
 import { scopeOf, scopesUnder } from "../ratchet/scope-count.js";
-import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
-import {
-  analyzeBoundaries,
-  type BoundaryModule,
-  type ScopeAnalysis,
-  type ScopeBoundaryReport,
-  type ScopeInputs,
-} from "./analyze.js";
-import { bindingOwnerIssue, bindingSitesOf } from "./deployables/bindings.js";
+import { analyzeBoundaries, type ScopeAnalysis, type ScopeBoundaryReport } from "./analyze.js";
 import { deployableCensus, type SiteRow } from "./deployables/census.js";
 import { workerCycles } from "./deployables/cycles.js";
-import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/deployables.js";
-import { declaresDeployables } from "./deployables/schema.js";
-import { importsInSourceOrder } from "./deployables/workspaces.js";
-import { detectImpureUses } from "./impure-uses.js";
-import { interpreterFilesIssue } from "./interpreters/declaration.js";
+import type { Deployables } from "./deployables/deployables.js";
 import { LEDGER_FILENAME } from "./ledger.js";
-import { allowanceIssue, importedNamesFor } from "./libraries/allowance.js";
 import { libraryCensus } from "./libraries/census.js";
-import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
-import { declaresLibraries } from "./libraries/schema.js";
+import { libraryScopes } from "./libraries/libraries.js";
 import {
   type Files,
   type LedgerOutput,
@@ -33,18 +16,10 @@ import {
   runGate,
   runMigrate,
 } from "./modes/runs.js";
-import { readPackageFacts } from "./package-facts.js";
 import { type Censuses, renderBoundaries } from "./render.js";
-import {
-  type BoundaryRules,
-  inScope,
-  LEGACY_CEILINGS_FILENAME,
-  unlistedPortFolderIssue,
-} from "./rules.js";
-import { declaresReadAllowance } from "./shape/schema.js";
-import { readShape, shapeFactsOf } from "./shape/shape.js";
-import { readTables, tableFactsOf } from "./tables/tables.js";
-import { unknownDriven } from "./zones/reads.js";
+import { type BoundaryRules, LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import { loadScope } from "./run/load.js";
+import { GATE_READER, type Reads, readRun } from "./run/reads.js";
 
 export type BoundaryFlags = {
   readonly ci: boolean;
@@ -96,79 +71,13 @@ function modeOf(flags: BoundaryFlags, report: Reporter): BoundaryMode | null {
   return flags.ci ? { kind: "gate" } : { kind: "report" };
 }
 
-// What a run reads once, before any scope is judged: the libraries, the deployables, the shape and
-// the table kinds the rules file declares, and the repo's files listed once for them. A rules file
-// that needs none of that listing leaves it to each scope, which lists its own.
-type Reads = ScopeInputs & { readonly listing: RepoListing | undefined };
-
-// A scope's files are read when it declares features or is a declared library. A library root has
-// none to judge: it holds the packages beneath it that no library names.
-function readsFiles(scope: string, rules: BoundaryRules, libraries: Libraries): boolean {
-  return rules.features[scope] !== undefined || libraries.typeOfDir.has(scope);
-}
-
-function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): BoundaryModule[] {
-  const scopeAbsolute = scope === "." ? args.repoRoot : path.join(args.repoRoot, scope);
-  const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot, reads.listing);
-  const { importEdgesByFile } = resolveImports(
-    loaded.rootAbsolute,
-    loaded.sourceFiles,
-    loaded.tsConfigPath,
-  );
-  return loaded.sourceFiles.map(({ file, syntax }) => {
-    const importEdges = importEdgesByFile.get(file) ?? [];
-    return {
-      file,
-      importEdges: reads.deployables.kinds.has("package-import-crosses-deployable")
-        ? importsInSourceOrder(syntax, importEdges)
-        : importEdges,
-      impureUses: detectImpureUses(syntax),
-      runtimeSpecifiers: runtimeSpecifiers(syntax),
-      importedNames: importedNamesFor(reads.libraries, scope, syntax),
-      bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
-      tableFacts: tableFactsOf(reads.tables, syntax),
-      ...shapeFactsOf(reads.shape, scope, file, syntax),
-    };
-  });
-}
-
-// The names of the entries directly under a scope's `src/`, none when it has no such directory.
-function srcEntries(scope: string, repoRoot: string): string[] {
-  try {
-    return fs.readdirSync(path.join(repoRoot, scope, "src"));
-  } catch {
-    return [];
-  }
-}
-
 function analyzeScope(
   scope: string,
   rules: BoundaryRules,
   reads: Reads,
   args: BoundaryGateArgs,
 ): ScopeAnalysis {
-  const listed = rules.features[scope];
-  const unlisted =
-    listed === undefined
-      ? null
-      : unlistedPortFolderIssue(scope, listed, srcEntries(scope, args.repoRoot));
-  if (unlisted !== null) throw new Error(unlisted);
-  const modules = readsFiles(scope, rules, reads.libraries) ? loadModules(scope, reads, args) : [];
-  const files = new Set(modules.map((module) => module.file));
-  const owners = rules.bindingOwners[scope] ?? {};
-  const issue =
-    bindingOwnerIssue(scope, owners, files, reads.deployables) ??
-    allowanceIssue(reads.libraries, scope, modules) ??
-    interpreterFilesIssue(scope, rules.interpreters[scope] ?? {}, files);
-  if (issue !== null) throw new Error(issue);
-  const unread = unknownDriven(reads.shape.allowance, scope, files);
-  if (unread.length > 0) {
-    throw new Error(
-      `driven file(s) of "readAllowance" in "${scope}" name no file the scope loads: ${unread.join("; ")}. ` +
-        "A listed file is an exact scope-relative .ts/.tsx path.",
-    );
-  }
-  return analyzeBoundaries(scope, modules, rules, reads);
+  return analyzeBoundaries(scope, loadScope(scope, rules, reads, args.repoRoot), rules, reads);
 }
 
 // The worker call graph is the repo's, not any scope's: its report is scope `.`, measured only by a
@@ -212,40 +121,6 @@ function analyzeAll(
   }
 }
 
-// Reads the libraries, the deployables and the shape the rules file declares, or says in one line
-// why it cannot: a declaration the repo cannot honour, or a wrangler config the listed kinds or a
-// read allowance need and the run cannot parse. The repo's files are listed once, and only when a
-// library key, a deployable kind or a read allowance is declared; the wrangler configs are read
-// once, and only for the last two.
-function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
-  const configs = declaresDeployables(rules) || declaresReadAllowance(rules);
-  const listing = configs || declaresLibraries(rules) ? listRepo(args.repoRoot) : undefined;
-  const catalog = configs ? loadBindingCatalog(args.repoRoot, listing) : NO_CATALOG;
-  const packages = readPackageFacts(rules, args.repoRoot, listing);
-  const read = readLibraries(rules, args.repoRoot, packages);
-  if (read.kind === "refused") {
-    args.report(read.message);
-    return null;
-  }
-  const deployables = readDeployables(rules, packages, catalog);
-  if (deployables.kind === "refused") {
-    args.report(deployables.message);
-    return null;
-  }
-  const shape = readShape(rules, catalog);
-  if (shape.kind === "refused") {
-    args.report(shape.message);
-    return null;
-  }
-  return {
-    libraries: read.libraries,
-    deployables: deployables.deployables,
-    shape: shape.shape,
-    tables: readTables(rules),
-    listing,
-  };
-}
-
 // What the report says beside its violations, per key family: nothing for a family the rules file
 // declares no key of.
 function censusesOf(reads: Reads, analysis: Analysis): Censuses {
@@ -267,7 +142,7 @@ export function runBoundaryGate(args: BoundaryGateArgs): number {
   if (mode === null) return 2;
   const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report);
   if (rules === null) return 2;
-  const reads = readRun(rules, args);
+  const reads = readRun(rules, args.repoRoot, GATE_READER, args.report);
   if (reads === null) return 2;
 
   const files: Files = {
