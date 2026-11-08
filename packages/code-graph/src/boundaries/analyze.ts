@@ -3,6 +3,8 @@ import type { SiteRow } from "./deployables/census.js";
 import { type BindingSite, type Deployables, isWorkerMain } from "./deployables/deployables.js";
 import { judgeDeployables } from "./deployables/judge.js";
 import type { ImpureUse } from "./impure-uses.js";
+import { type Technology, technologiesOf } from "./interpreters/interpreters.js";
+import { interpreterImportsFeature, technologyViolations } from "./interpreters/judge.js";
 import type { NamedFile } from "./libraries/allowance.js";
 import { type Libraries, ownerOf } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
@@ -15,6 +17,7 @@ import {
   placeOf,
   type ScopeZoning,
   scopeZoning,
+  zoneRuleOf,
 } from "./rules.js";
 import { judgeShape } from "./shape/judge.js";
 import type { Shape, ShapeFacts } from "./shape/shape.js";
@@ -114,6 +117,9 @@ function crossingFrom(
       return { kind: "cross-feature", fromFeature: fromPlace.feature, ...crossing };
     case "lib":
       return { kind: "lib-imports-feature", ...crossing };
+    case "interpreter":
+      // B25 judges these edges, once per target, beside B24 (`interpreters/judge.ts`).
+      return null;
     case "elsewhere":
       if (to.zone.rule.openToOutside) return null;
       return { kind: "outside-imports-feature-internal", ...crossing };
@@ -146,10 +152,12 @@ function unknownEntryOf(scope: string, place: Place): BoundaryViolation | null {
   };
 }
 
-// Which `importedFrom` zone a file satisfies: a hexagonal feature's driven zone is `driven`, and a
-// file outside every feature is a `configurator`.
+// Which `importedFrom` zone a file satisfies: what the zone row of a hexagonal feature's file or of
+// an interpreter's says (`driven` for the driven zone and an interpreter), and a file outside every
+// feature is a `configurator`.
 function libraryZoneOf(place: Place): ImportedFrom | null {
-  return place.kind === "feature" ? place.zone.rule.libraryZone : "configurator";
+  const rule = zoneRuleOf(place);
+  return rule === null ? "configurator" : rule.libraryZone;
 }
 
 // What a run reads once, before any scope is judged, that every scope's judgment asks of.
@@ -164,6 +172,8 @@ type ScopeContext = ScopeInputs & {
   readonly scope: string;
   readonly rules: BoundaryRules;
   readonly zoning: ScopeZoning;
+  // The technologies the scope gives one interpreter, none for a rules file without `interpreters`.
+  readonly technologies: readonly Technology[];
   // The scope's read allowance and the writes of the files it lists, or null for a scope with none.
   readonly allowance: ScopeReads | null;
   // The scope's composition roots and every file that opens one when it runs, empty for a rules file
@@ -200,12 +210,29 @@ function acrossDeployables(
     from,
     importEdges: module.importEdges,
     bindingSites: module.bindingSites,
-    driven: place.kind === "feature" && place.zone.rule.touchesBindings,
+    driven: zoneRuleOf(place)?.touchesBindings === true,
     isMain: isWorkerMain(deployables, from),
     owners: ctx.rules.bindingOwners[scope] ?? {},
   });
   const sites = module.bindingSites.map((site) => ({ file: from, ...site }));
   return { violations, sites };
+}
+
+// B24 and B25 for one file. B24 leaves a file inside a library nested in the scope to that
+// library's own scope, as B12-B14 and B17 do; B25 judges every file under a root, as B4 did.
+function acrossInterpreters(
+  ctx: ScopeContext,
+  module: BoundaryModule,
+  place: Place,
+): BoundaryViolation[] {
+  const { scope, libraries, technologies, zoning } = ctx;
+  if (technologies.length === 0) return [];
+  const nested = ownerOf(libraries, inScope(scope, module.file));
+  const own = nested === null || nested === scope;
+  return [
+    ...(own ? technologyViolations(technologies, scope, module, place) : []),
+    ...interpreterImportsFeature(scope, zoning, module, place),
+  ];
 }
 
 // One file's verdicts. Every kind judges it, and then the test role drops the kinds that do not
@@ -236,6 +263,7 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     ...impure,
     ...libs.violations,
     ...across.violations,
+    ...acrossInterpreters(ctx, module, fromPlace),
     ...judgeShape(ctx, module, fromPlace, judged),
     ...judgeTables(ctx, module, fromPlace),
     ...(isTest ? testReachViolations(ctx.reach, scope, module) : []),
@@ -264,7 +292,8 @@ export function analyzeBoundaries(
   const zoning = scopeZoning(rules, scope);
   const allowance = scopeReadsOf(inputs.shape.allowance, scope, modules);
   const reach = rootReachOf(inputs.shape.roots, scope, modules);
-  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, allowance, reach };
+  const technologies = technologiesOf(rules, scope);
+  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, technologies, allowance, reach };
   const violations: BoundaryViolation[] = [];
   const sites: SiteRow[] = [];
   // One per entry, however many files sit under it.

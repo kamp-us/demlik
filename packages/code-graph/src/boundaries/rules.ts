@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEPLOYABLE_KEYS } from "./deployables/schema.js";
+import { INTERPRETER_KEYS } from "./interpreters/schema.js";
 import { type ImportedFrom, LIBRARY_KEYS } from "./libraries/schema.js";
 import { SHAPE_KEYS } from "./shape/schema.js";
 import { TABLE_KEYS } from "./tables/schema.js";
@@ -21,6 +22,7 @@ export const BoundaryRulesSchema = z
     ...DEPLOYABLE_KEYS,
     ...SHAPE_KEYS,
     ...TABLE_KEYS,
+    ...INTERPRETER_KEYS,
   })
   .strict();
 export type BoundaryRules = z.infer<typeof BoundaryRulesSchema>;
@@ -28,18 +30,20 @@ export type BoundaryRules = z.infer<typeof BoundaryRulesSchema>;
 // What a zone's own imports are judged as, past B1: an edge into a zone of the same feature.
 type ImportRule = "application-imports-adapter" | "driving-reaches-driven" | null;
 
-type ZoneRule = {
+export type ZoneRule = {
   readonly imports: ImportRule;
-  // Whether a file here may reach the outside world through a row of `IMPURE_GLOBALS`. Only the
-  // driven zone may; an entry no zone names is judged as an entry (B10), not as impure.
+  // Whether a file here may reach the outside world through a row of `IMPURE_GLOBALS`. Only an
+  // adapter may: the driven zone, `tables.ts` and a file under an interpreter root. An entry no zone
+  // names is judged as an entry (B10), not as impure.
   readonly mayBeImpure: boolean;
   // Whether another feature, and a file in no feature and no `lib` folder, may import a file here.
   readonly openToFeatures: boolean;
   readonly openToOutside: boolean;
   // The `importedFrom` zone a file here satisfies, for the libraries that name where they may be
-  // imported from (B14): only the driven zone is one.
+  // imported from (B14): only an adapter is one, so the driven zone, `tables.ts` and a file under an
+  // interpreter root are `driven`.
   readonly libraryZone: ImportedFrom | null;
-  // Whether a worker binding may be used here (B17): only the driven zone may.
+  // Whether a worker binding may be used here (B17): only an adapter may, as for `libraryZone`.
   readonly touchesBindings: boolean;
   // Whether this zone's file is where a feature declares the tables it owns (B22), and so what B23
   // reads a table's owner from: only `adapters/driven/tables.ts` is.
@@ -99,6 +103,23 @@ const HEXAGONAL_ZONES = {
 } as const satisfies Record<string, ZoneRule>;
 
 type HexagonalZone = keyof typeof HEXAGONAL_ZONES;
+
+// The row of the one place that is no zone of a hexagon: a file under an interpreter root, the
+// one adapter of a technology. It is an adapter, so it is the driven zone's row where that matters:
+// it may be impure, may use a binding, and satisfies a library that lists `importedFrom:
+// ["driven"]`. The two `openTo` columns are read only for an edge into a feature zone, and no rule
+// judges a feature importing an interpreter, so they hold the values that compile and say nothing.
+const INTERPRETER_ZONE = {
+  imports: null,
+  mayBeImpure: true,
+  openToFeatures: false,
+  openToOutside: true,
+  libraryZone: "driven",
+  touchesBindings: true,
+  declaresTables: false,
+  exportsOnly: false,
+  importAllowlist: null,
+} as const satisfies ZoneRule;
 
 // The zones the port layout places a file in. It has no `index` row, because there is no `index.ts`
 // for a file outside the hexagon to go through, and no `unknown` row, because every file under its
@@ -273,11 +294,15 @@ const FILE_OF = {
   (top: string, rest: readonly string[], scope: string) => FeatureFile | null
 >;
 
+// The folder one technology's interpreter sits in, scope-relative.
+type InterpreterRoot = { readonly technology: string; readonly root: string };
+
 export type ScopeZoning = {
   readonly layout: Layout;
   readonly scope: string;
   readonly features: ReadonlySet<string>;
   readonly lib: ReadonlySet<string>;
+  readonly interpreters: readonly InterpreterRoot[];
 };
 
 export function scopeZoning(rules: BoundaryRules, scope: string): ScopeZoning {
@@ -287,6 +312,10 @@ export function scopeZoning(rules: BoundaryRules, scope: string): ScopeZoning {
     scope,
     features: new Set(folders),
     lib: new Set(rules.lib),
+    interpreters: Object.entries(rules.interpreters[scope] ?? {}).map(([technology, { root }]) => ({
+      technology,
+      root,
+    })),
   };
 }
 
@@ -300,8 +329,14 @@ export function featureFileOf(file: string, zoning: ScopeZoning): FeatureFile | 
 
 export type FeaturePlace = { readonly kind: "feature" } & FeatureFile;
 
-// Where a scope-relative file sits: in a feature, in a `lib` folder, or elsewhere in the scope.
-export type Place = FeaturePlace | { readonly kind: "lib" } | { readonly kind: "elsewhere" };
+// Where a scope-relative file sits: in a feature, in a `lib` folder, under a technology's
+// interpreter root, or elsewhere in the scope. A declared root is never a feature or `lib` folder,
+// nor holds or sits in one, so the order of the first three is no choice.
+export type Place =
+  | FeaturePlace
+  | { readonly kind: "lib" }
+  | { readonly kind: "interpreter"; readonly technology: string }
+  | { readonly kind: "elsewhere" };
 
 export function placeOf(file: string, zoning: ScopeZoning): Place {
   const inFeature = featureFileOf(file, zoning);
@@ -310,7 +345,35 @@ export function placeOf(file: string, zoning: ScopeZoning): Place {
   if (src === "src" && folder !== undefined && rest.length > 0 && zoning.lib.has(folder)) {
     return { kind: "lib" };
   }
+  const interpreter = zoning.interpreters.find(({ root }) => file.startsWith(`${root}/`));
+  if (interpreter !== undefined) return { kind: "interpreter", technology: interpreter.technology };
   return { kind: "elsewhere" };
+}
+
+// The zone row a place is judged by, or null for a place no row names: a `lib` file and a file
+// elsewhere in the scope.
+export function zoneRuleOf(place: Place): ZoneRule | null {
+  switch (place.kind) {
+    case "feature":
+      return place.zone.rule;
+    case "interpreter":
+      return INTERPRETER_ZONE;
+    case "lib":
+    case "elsewhere":
+      return null;
+    default: {
+      const exhaustive: never = place;
+      return exhaustive;
+    }
+  }
+}
+
+// Where a binding may be used, as a message names it: the driven zone of either layout, and the
+// interpreter roots of a scope that declares any.
+export function bindingHomes(zoning: ScopeZoning): string {
+  if (zoning.interpreters.length === 0) return DRIVEN_HOMES;
+  const roots = zoning.interpreters.map(({ root }) => `${root}/`).join(", ");
+  return `${DRIVEN_HOMES} or an interpreter root (${roots})`;
 }
 
 // A scope-relative file as the ledger writes it, repo-relative.

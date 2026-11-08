@@ -15,9 +15,10 @@ export const BOUNDARY_KINDS = Object.keys(CROSSINGS) as BoundaryKind[];
 // Whether a kind can cross to something that is not a file of the scope: a bare import
 // (`application-import-outside-allowlist`), an impure global or world library (`impure`), a worker
 // binding (`binding-outside-driven-adapter`), a table (`table-declared-outside-tables`,
-// `table-written-outside-owner`) or an entry (`unknown-zone` of a feature, `index-not-exports-only`
-// of an entry file, `library-undeclared` of a package, `worker-call-cycle` of workers). Every other
-// kind names its target file, or for an import of a library (`library-imports-up`,
+// `table-written-outside-owner`), a technology a file reaches (`technology-outside-interpreter`) or
+// an entry (`unknown-zone` of a feature, `index-not-exports-only` of an entry file,
+// `library-undeclared` of a package, `worker-call-cycle` of workers). Every other kind names its
+// target file, or for an import of a library (`library-imports-up`,
 // `adapter-library-imported-outside-driven`) or of another workspace
 // (`relative-import-crosses-workspace`, `package-import-crosses-deployable`) its directory.
 const MAY_HAVE_NO_FILE = {
@@ -29,6 +30,7 @@ const MAY_HAVE_NO_FILE = {
   "driving-reaches-driven": false,
   impure: true,
   "index-not-exports-only": true,
+  "interpreter-imports-feature": false,
   "lib-imports-feature": false,
   "library-imports-up": false,
   "library-undeclared": true,
@@ -37,6 +39,7 @@ const MAY_HAVE_NO_FILE = {
   "package-import-crosses-deployable": false,
   "table-declared-outside-tables": true,
   "table-written-outside-owner": true,
+  "technology-outside-interpreter": true,
   "test-reaches-composition-root": false,
   "unknown-zone": true,
   "worker-call-cycle": true,
@@ -56,7 +59,7 @@ const EntrySchema = z
   .strict()
   .refine((entry) => entry.to !== null || MAY_HAVE_NO_FILE[entry.kind], {
     message:
-      "only a bare-specifier import, an impure use or a feature's entry may have a null `to` " +
+      "only a bare-specifier import, an impure use, a technology or a feature's entry may have a null `to` " +
       `(kinds ${NO_FILE_KINDS})`,
     path: ["to"],
   });

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { z } from "zod";
 import { deployableDeclarationIssue } from "./boundaries/deployables/declaration.js";
+import { interpreterDeclarationIssue } from "./boundaries/interpreters/declaration.js";
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
 import { type BoundaryRules, BoundaryRulesSchema, layoutIssue } from "./boundaries/rules.js";
 import { shapeDeclarationIssue } from "./boundaries/shape/declaration.js";
@@ -190,7 +191,8 @@ export function resolveBoundaryRules(
     libraryDeclarationIssue(rules) ??
     deployableDeclarationIssue(rules) ??
     shapeDeclarationIssue(rules) ??
-    tableDeclarationIssue(rules);
+    tableDeclarationIssue(rules) ??
+    interpreterDeclarationIssue(rules);
   if (issue !== null) {
     report(issue);
     return null;

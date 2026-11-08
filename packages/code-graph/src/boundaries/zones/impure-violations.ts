@@ -1,6 +1,6 @@
 import type { ImportEdge } from "../../schema.js";
 import { type ImpureUse, impureNamesOf } from "../impure-uses.js";
-import { inScope, type Place } from "../rules.js";
+import { inScope, type Place, zoneRuleOf } from "../rules.js";
 import type { BoundaryViolation } from "../violation.js";
 
 // The facts of one file the impure rule reads. `file` is scope-relative.
@@ -19,11 +19,12 @@ export type ImpureContext = {
 };
 
 // A file in a zone that may not be impure, once per row of `IMPURE_GLOBALS` it uses by name or
-// opens as a module. A place outside every feature is no zone: a pure library is judged beside its
+// opens as a module. A place no zone row names is none of this: a pure library is judged beside its
 // imports, in `libraries/violations.ts`.
 export function impureViolations(ctx: ImpureContext): BoundaryViolation[] {
   const { place } = ctx;
-  if (place.kind !== "feature" || place.zone.rule.mayBeImpure) return [];
+  const rule = zoneRuleOf(place);
+  if (rule === null || rule.mayBeImpure) return [];
   return impureNamesOf(ctx.module).map((name) => ({
     kind: "impure",
     from: inScope(ctx.scope, ctx.module.file),

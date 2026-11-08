@@ -17,7 +17,8 @@ import { type BoundaryKind, type BoundaryViolation, crossingOf, noteOf } from ".
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
 // Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, impure,
-// library, deployable, shape, table and test blocks only when a kind that needs them fails.
+// library, deployable, shape, table, interpreter and test blocks only when a kind that needs
+// them fails.
 type Advice =
   | "feature"
   | "hexagonal"
@@ -27,6 +28,7 @@ type Advice =
   | "package"
   | "shape"
   | "table"
+  | "interpreter"
   | "test";
 
 // Each kind's rule label, and the advice it adds.
@@ -50,6 +52,8 @@ const KINDS = {
   "table-declared-outside-tables": { rule: "B22", advice: "table" },
   "table-written-outside-owner": { rule: "B23", advice: "table" },
   "test-reaches-composition-root": { rule: "B20", advice: "test" },
+  "technology-outside-interpreter": { rule: "B24", advice: "interpreter" },
+  "interpreter-imports-feature": { rule: "B25", advice: "interpreter" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
 // An impure use, a binding and an entry are their own target: no import specifier was written for
@@ -199,6 +203,12 @@ const TABLE_FIX_LINES = [
   "  index.ts. A write that has to stay is accepted by name and with a reason.",
 ];
 
+const INTERPRETER_FIX_LINES = [
+  "  A technology has one interpreter. Move a feature's adapter for a technology `interpreters`",
+  "  covers into that technology's interpreter root and leave the feature its rows as data, and keep",
+  "  an interpreter root from importing any feature.",
+];
+
 const TEST_FIX_LINES = [
   "  A test drives the one feature under test and wires its own fakes: it imports that feature's",
   "  index.ts, never a composition root (a worker entry, the module that assembles every feature) or",
@@ -215,6 +225,7 @@ const ADVICE_LINES = {
   package: PACKAGE_FIX_LINES,
   shape: SHAPE_FIX_LINES,
   table: TABLE_FIX_LINES,
+  interpreter: INTERPRETER_FIX_LINES,
   test: TEST_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;
 

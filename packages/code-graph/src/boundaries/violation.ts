@@ -1,4 +1,4 @@
-// What a boundary verdict is: one variant per rule (B1-B23, with B2, B5, B9 and B13 retired and not
+// What a boundary verdict is: one variant per rule (B1-B25, with B2, B5, B9 and B13 retired and not
 // reused), and the table that says what kind of crossing each is. `analyze.ts` judges a scope into
 // these; the ledger, the report and the migration read them.
 
@@ -187,15 +187,37 @@ export type BoundaryViolation =
       readonly specifier: string;
       readonly typeOnly: false;
       readonly owner: string;
+    }
+  | {
+      // A feature's `ports.ts` or adapter file importing a module its scope's `interpreters` lists
+      // for a technology, so the technology's one interpreter is not the only place that reaches
+      // it. One entry per file per technology: `specifier` is the technology's name, `typeOnly`
+      // only when every import of its modules is.
+      readonly kind: "technology-outside-interpreter";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: boolean;
+    }
+  | {
+      // A file under an interpreter root importing a feature's file, `index.ts` included. `to` is
+      // that file, one entry per file and target.
+      readonly kind: "interpreter-imports-feature";
+      readonly from: string;
+      readonly to: string;
+      readonly toFeature: string;
+      readonly specifier: string;
+      readonly typeOnly: boolean;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
 
 // What a crossing is: an import edge, an impure use (a row of `IMPURE_GLOBALS` used or opened, a
-// world library imported, a worker binding used, a table constructor called, a table written), or
-// an entry (a feature's, a package under a library root, a loop of workers, an entry file that
-// holds more than re-exports) that no rule places.
-type Crossing = "import" | "impure" | "entry";
+// world library imported, a worker binding used, a table constructor called, a table written), a
+// technology a file reaches that is not its own to reach (named, with no import specifier of its
+// own), or an entry (a feature's, a package under a library root, a loop of workers, an entry file
+// that holds more than re-exports) that no rule places.
+type Crossing = "import" | "impure" | "technology" | "entry";
 
 export const CROSSINGS = {
   "adapter-library-imported-outside-driven": "import",
@@ -206,6 +228,7 @@ export const CROSSINGS = {
   "driving-reaches-driven": "import",
   impure: "impure",
   "index-not-exports-only": "entry",
+  "interpreter-imports-feature": "import",
   "lib-imports-feature": "import",
   "library-imports-up": "import",
   "library-undeclared": "entry",
@@ -214,6 +237,7 @@ export const CROSSINGS = {
   "package-import-crosses-deployable": "import",
   "table-declared-outside-tables": "impure",
   "table-written-outside-owner": "impure",
+  "technology-outside-interpreter": "technology",
   "test-reaches-composition-root": "import",
   "unknown-zone": "entry",
   "worker-call-cycle": "entry",

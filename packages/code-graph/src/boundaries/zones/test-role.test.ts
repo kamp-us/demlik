@@ -29,10 +29,12 @@ const SAMPLES = {
   "table-declared-outside-tables": sample("table-declared-outside-tables"),
   "table-written-outside-owner": sample("table-written-outside-owner"),
   "test-reaches-composition-root": sample("test-reaches-composition-root"),
+  "technology-outside-interpreter": sample("technology-outside-interpreter"),
+  "interpreter-imports-feature": sample("interpreter-imports-feature"),
 } as const satisfies Record<BoundaryKind, BoundaryViolation>;
 
 describe("the table of kinds a test file is judged by", () => {
-  it("keeps B1, B3, B4, B11, B12, B14 and B18-B20, and drops B6-B8, B10, B15, B16, B17, B22 and B23", () => {
+  it("keeps B1, B3, B4, B11, B12, B14, B18-B20 and B25, and drops B6-B8, B10, B15-B17 and B22-B24", () => {
     const kept = judgedInTestFile(Object.values(SAMPLES)).map((v) => v.kind);
     expect(kept).toEqual([
       "cross-feature",
@@ -45,6 +47,7 @@ describe("the table of kinds a test file is judged by", () => {
       "relative-import-crosses-workspace",
       "package-import-crosses-deployable",
       "test-reaches-composition-root",
+      "interpreter-imports-feature",
     ]);
   });
 

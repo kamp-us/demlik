@@ -1,8 +1,9 @@
-import { type BoundaryRules, DRIVEN_HOMES, featureFileOf, scopeZoning } from "../rules.js";
+import { type BoundaryRules, bindingHomes, placeOf, scopeZoning, zoneRuleOf } from "../rules.js";
 
 // The first problem in the deployable keys that the rules file alone can show, or null. A kind
 // outside the known kinds is refused by the schema. What needs the repo (an owner that is no loaded file,
-// or a binding the owning worker does not declare) is judged where the scope is loaded.
+// or a binding the owning worker does not declare) is judged where the scope is loaded. An owner may
+// sit in a driven adapter or, in a scope that declares interpreters, under an interpreter root.
 export function deployableDeclarationIssue(rules: BoundaryRules): string | null {
   const declared = Object.entries(rules.bindingOwners);
   if (declared.length === 0) return null;
@@ -16,8 +17,8 @@ export function deployableDeclarationIssue(rules: BoundaryRules): string | null 
     const zoning = scopeZoning(rules, scope);
     for (const [binding, owners] of Object.entries(bindings)) {
       for (const owner of owners) {
-        if (featureFileOf(owner, zoning)?.zone.rule.touchesBindings === true) continue;
-        return `owner "${owner}" of binding "${binding}" in "${scope}" is not under a driven adapter, ${DRIVEN_HOMES}: only a driven adapter may use a binding, so an owner anywhere else could never be clean.`;
+        if (zoneRuleOf(placeOf(owner, zoning))?.touchesBindings === true) continue;
+        return `owner "${owner}" of binding "${binding}" in "${scope}" is not under a driven adapter, ${bindingHomes(zoning)}: only a driven adapter may use a binding, so an owner anywhere else could never be clean.`;
       }
     }
   }
