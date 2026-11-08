@@ -168,6 +168,17 @@ describe("--env-keys, --hexagon and --owners run without a gate", () => {
     );
   });
 
+  it.each([
+    "--env-keys",
+    "--hexagon",
+    "--owners",
+  ])("names %s in the rule the --ci help states, which a person reads before a refusal", (mode) => {
+    const help = runCli(["--help"]).stdout.replace(/\s+/g, " ");
+    const rule = /A run takes one gate:(.*?), exit 2/.exec(help)?.[1] ?? "";
+    expect(rule, "the --ci help states the one-gate rule").not.toBe("");
+    expect(rule).toContain(mode);
+  });
+
   it("refuses --owners beside the writes that arm --boundaries, which would be dropped", () => {
     expectRefused(
       [repo.app, "--owners", "--boundaries", "--accept-crossings", "--reason", "kept"],

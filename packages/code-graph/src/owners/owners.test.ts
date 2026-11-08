@@ -32,6 +32,7 @@ const feature = (name: string, zone: string) => ({ kind: "feature", feature: nam
 const driven = (name: string) => feature(name, "driven");
 const LIB = { kind: "lib" };
 const ELSEWHERE = { kind: "elsewhere" };
+const INTERPRETER = { kind: "interpreter", technology: "queue" };
 
 const PORT = "(id: string) => Promise<void>";
 const command = (name: string, type: string) => ({ name, type, signature: PORT });
@@ -70,6 +71,12 @@ const SHOP_SCOPE = {
           access: "read",
           file: at("src/audit/adapters/driven/audit-reads.ts"),
           place: driven("audit"),
+        },
+        {
+          table: "orderLines",
+          access: "read",
+          file: at("src/interpreters/queue/outbox.ts"),
+          place: INTERPRETER,
         },
         {
           table: "orders",
@@ -141,7 +148,9 @@ const SHOP_SCOPE = {
       root: at("src/interpreters/queue"),
       modules: ["@shop/queue-sdk"],
       reach: [
+        { file: at("src/audit/adapters/driven/queue-reexport.ts"), place: driven("audit") },
         { file: at("src/billing/adapters/driven/enqueue.ts"), place: driven("billing") },
+        { file: at("src/orders/adapters/driven/queue-shape.ts"), place: driven("orders") },
         { file: at("src/shipping/adapters/driven/carrier.ts"), place: driven("shipping") },
       ],
     },
@@ -176,6 +185,7 @@ const SHOP_HUMAN = [
   "      orderLines, orders",
   "    Reach into its tables",
   "      orderLines  read         services/api/src/audit/adapters/driven/audit-reads.ts  feature audit (driven)",
+  "      orderLines  read         services/api/src/interpreters/queue/outbox.ts  interpreter queue",
   "      orders  write        services/api/src/audit/adapters/driven/audit-store.ts  feature audit (driven)",
   "      orders  write        services/api/src/billing/adapters/driven/invoice-store.ts  feature billing (driven)",
   "      orders  read         services/api/src/lib/seed.ts  lib",
@@ -206,7 +216,9 @@ const SHOP_HUMAN = [
   "      root: services/api/src/interpreters/queue",
   "      modules: @shop/queue-sdk",
   "      Imported from",
+  "        services/api/src/audit/adapters/driven/queue-reexport.ts  feature audit (driven)",
   "        services/api/src/billing/adapters/driven/enqueue.ts  feature billing (driven)",
+  "        services/api/src/orders/adapters/driven/queue-shape.ts  feature orders (driven)",
   "        services/api/src/shipping/adapters/driven/carrier.ts  feature shipping (driven)",
   "",
   "Not read",

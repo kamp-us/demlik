@@ -1002,5 +1002,6 @@ start: an unreadable or invalid rules file, a path that is not a directory, or a
 refuses at the edge (a library or a `bindingOwners` entry the repo cannot honour, a port folder the
 rules file does not list). A wrangler config that does not parse costs the view that worker's
 bindings, which it names under Not read, and costs the run only where the rules file names
-something that config must hold: a `bindingOwners` entry under it, or a `readAllowance`. `--owners` takes no other mode: beside a gate, `--hexagon`,
-`--env-keys` or `--accept-smells` it exits 2 under §10.
+something that config must hold: a `bindingOwners` entry under it, or a `readAllowance`. `--owners`
+takes no other mode: beside a gate, `--hexagon`, `--env-keys` or `--accept-smells` it exits 2 under
+§10.

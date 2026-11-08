@@ -188,21 +188,36 @@ const BINDING: Record<string, string> = {
   ),
 };
 
-// One technology, `queue`, whose interpreter sits under `src/interpreters/queue`. A driven adapter of
-// `billing` and the worker's `main` import from the root; the root imports nothing of a feature.
+// One technology, `queue`, whose interpreter sits under `src/interpreters/queue`. Four files outside
+// the root import from it, each a different way: `billing` and `shipping` by a value import, `orders`
+// by a type-only import and `audit` by a re-export. `inner.ts` imports the root from inside it, so it
+// is no reach. `outbox.ts` sits in the root and reads a table `orders` owns, a reach row whose place
+// is the interpreter.
+const QUEUE_ROOT = "../../../interpreters/queue/index";
 const INTERPRETER: Record<string, string> = {
   [at("src/interpreters/queue/index.ts")]: "export const send = (message: string) => message;\n",
   [at("src/billing/adapters/driven/enqueue.ts")]: lines(
-    'import { send } from "../../../interpreters/queue/index";',
+    `import { send } from "${QUEUE_ROOT}";`,
     "export const enqueue = (id: string) => send(id);",
+  ),
+  [at("src/orders/adapters/driven/queue-shape.ts")]: lines(
+    `import type { send } from "${QUEUE_ROOT}";`,
+    "export type Send = typeof send;",
+  ),
+  [at("src/audit/adapters/driven/queue-reexport.ts")]: lines(
+    `export { send } from "${QUEUE_ROOT}";`,
   ),
   [at("src/interpreters/queue/inner.ts")]: lines(
     'import { send } from "./index";',
     "export const again = (id: string) => send(id);",
   ),
+  [at("src/interpreters/queue/outbox.ts")]: lines(
+    'import { orderLines } from "../../orders/adapters/driven/tables";',
+    "export const pending = (db: Db) => db.select().from(orderLines);",
+  ),
   [at("src/shipping/adapters/driven/carrier.ts")]: lines(
     `import { shipments } from "./tables";`,
-    `import { send } from "../../../interpreters/queue/index";`,
+    `import { send } from "${QUEUE_ROOT}";`,
     "export const notify = (db: Db) => [db.insert(shipments), send('shipped')];",
   ),
 };
