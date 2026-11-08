@@ -281,7 +281,7 @@ describe("an interpreter root imports no feature", () => {
   const ROOT = `${SHOP}/src/interpreters/queue`;
   const reaching = (extra: Record<string, string>): BoundaryRepo =>
     open(INTERPRETER_RULES, { ...INTERPRETER_FILES, ...extra });
-  const b23 = (run: BoundaryRepo) =>
+  const b25 = (run: BoundaryRepo) =>
     violationsOf(run)
       .filter(({ violation }) => violation.kind === B25)
       .map(({ violation }) => violation);
@@ -299,7 +299,7 @@ describe("an interpreter root imports no feature", () => {
         "",
       ].join("\n"),
     });
-    const found = b23(run);
+    const found = b25(run);
     expect(
       found
         .map((v) => [v.from, ledgerTargetOf(v), v.typeOnly])
@@ -332,7 +332,7 @@ describe("an interpreter root imports no feature", () => {
         "",
       ].join("\n"),
     });
-    expect(b23(run).map((v) => v.from)).toEqual([`${ROOT}/features.test.ts`]);
+    expect(b25(run).map((v) => v.from)).toEqual([`${ROOT}/features.test.ts`]);
   });
 
   it("is judged in the port layout by the same code", () => {
@@ -340,7 +340,7 @@ describe("an interpreter root imports no feature", () => {
       [`${MAIL}/src/interpreters/queue/boot.ts`]:
         'import { send } from "../../application/send-mail";\nexport const s = send;\n',
     });
-    expect(b23(run).map((v) => [v.from, ledgerTargetOf(v)])).toEqual([
+    expect(b25(run).map((v) => [v.from, ledgerTargetOf(v)])).toEqual([
       [`${MAIL}/src/interpreters/queue/boot.ts`, `${MAIL}/src/application/send-mail.ts`],
     ]);
   });
