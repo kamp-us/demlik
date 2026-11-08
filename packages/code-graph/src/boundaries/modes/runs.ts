@@ -1,22 +1,22 @@
 import fs from "node:fs";
-import type { Reporter } from "../config.js";
-import { readScopeCeilings } from "../ratchet/scope-count.js";
-import type { ScopeBoundaryReport } from "./analyze.js";
+import type { Reporter } from "../../config.js";
+import { readScopeCeilings } from "../../ratchet/scope-count.js";
+import type { ScopeBoundaryReport } from "../analyze.js";
 import {
   type BoundaryLedger,
   LEDGER_FILENAME,
   readBoundaryLedger,
   writeBoundaryLedger,
-} from "./ledger.js";
-import { migratedLedger } from "./migrate.js";
-import { reconcile, withAccepted } from "./reconcile.js";
+} from "../ledger.js";
+import { migratedLedger } from "../migrate.js";
+import { reconcile, withAccepted } from "../reconcile.js";
 import {
   renderAccepted,
   renderLedgerGate,
   renderMigrated,
   renderMigrationRefused,
-} from "./render.js";
-import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
+} from "../render.js";
+import { LEGACY_CEILINGS_FILENAME } from "../rules.js";
 
 // What a ledger mode needs of the run: where it speaks and in what shape. The gate's own arguments
 // carry these four beside the rest.

@@ -21,6 +21,10 @@ import { importsInSourceOrder } from "./deployables/workspaces.js";
 import { detectImpureUses } from "./impure-uses.js";
 import { interpreterFilesIssue } from "./interpreters/declaration.js";
 import { LEDGER_FILENAME } from "./ledger.js";
+import { allowanceIssue, importedNamesFor } from "./libraries/allowance.js";
+import { libraryCensus } from "./libraries/census.js";
+import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
+import { declaresLibraries } from "./libraries/schema.js";
 import {
   type Files,
   type LedgerOutput,
@@ -28,11 +32,7 @@ import {
   runAccept,
   runGate,
   runMigrate,
-} from "./ledger-modes.js";
-import { allowanceIssue, importedNamesFor } from "./libraries/allowance.js";
-import { libraryCensus } from "./libraries/census.js";
-import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
-import { declaresLibraries } from "./libraries/schema.js";
+} from "./modes/runs.js";
 import { readPackageFacts } from "./package-facts.js";
 import { type Censuses, renderBoundaries } from "./render.js";
 import {
