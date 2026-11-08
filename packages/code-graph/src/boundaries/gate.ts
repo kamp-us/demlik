@@ -3,7 +3,7 @@ import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
 import { listRepo, loadEdgeProject, type RepoListing } from "../extract/project.js";
 import { loadBindingCatalog } from "../extract/wrangler-config.js";
-import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
+import { scopeOf, scopesUnder } from "../ratchet/scope-count.js";
 import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
 import {
   analyzeBoundaries,
@@ -20,27 +20,21 @@ import { declaresDeployables } from "./deployables/schema.js";
 import { importsInSourceOrder } from "./deployables/workspaces.js";
 import { detectImpureUses } from "./impure-uses.js";
 import { interpreterFilesIssue } from "./interpreters/declaration.js";
+import { LEDGER_FILENAME } from "./ledger.js";
 import {
-  type BoundaryLedger,
-  LEDGER_FILENAME,
-  readBoundaryLedger,
-  writeBoundaryLedger,
-} from "./ledger.js";
+  type Files,
+  type LedgerOutput,
+  type Measured,
+  runAccept,
+  runGate,
+  runMigrate,
+} from "./ledger-modes.js";
 import { allowanceIssue, importedNamesFor } from "./libraries/allowance.js";
 import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { declaresLibraries } from "./libraries/schema.js";
-import { migratedLedger } from "./migrate.js";
 import { readPackageFacts } from "./package-facts.js";
-import { reconcile, withAccepted } from "./reconcile.js";
-import {
-  type Censuses,
-  renderAccepted,
-  renderBoundaries,
-  renderLedgerGate,
-  renderMigrated,
-  renderMigrationRefused,
-} from "./render.js";
+import { type Censuses, renderBoundaries } from "./render.js";
 import {
   type BoundaryRules,
   inScope,
@@ -59,15 +53,12 @@ export type BoundaryFlags = {
   readonly migrateCeilings: boolean;
 };
 
-export type BoundaryGateArgs = BoundaryFlags & {
-  readonly rootAbsolute: string;
-  readonly repoRoot: string;
-  readonly boundaryRulesFile: string | undefined;
-  readonly emit: (payload: string) => void;
-  readonly report: Reporter;
-  readonly json: boolean;
-  readonly pretty: boolean;
-};
+export type BoundaryGateArgs = BoundaryFlags &
+  LedgerOutput & {
+    readonly rootAbsolute: string;
+    readonly repoRoot: string;
+    readonly boundaryRulesFile: string | undefined;
+  };
 
 type BoundaryMode =
   | { readonly kind: "report" }
@@ -217,90 +208,6 @@ function analyzeAll(
     args.report(error instanceof Error ? error.message : String(error));
     return null;
   }
-}
-
-type Files = { readonly ledger: string; readonly legacy: string };
-
-// The ledger the gate and `--accept-crossings` read. A repo still on the count file has no ledger
-// yet, and gating it against an empty one would pass nothing and fail everything, so it is refused.
-function currentLedger(files: Files, report: Reporter): BoundaryLedger | null {
-  const read = readBoundaryLedger(files.ledger);
-  switch (read.kind) {
-    case "read":
-      return read.ledger;
-    case "invalid":
-      report(`invalid boundary ledger "${files.ledger}": ${read.message}`);
-      return null;
-    case "absent":
-      if (fs.existsSync(files.legacy)) {
-        report(
-          `${LEGACY_CEILINGS_FILENAME} holds per-scope counts and there is no ${LEDGER_FILENAME}: ` +
-            "run `code-graph . --boundaries --migrate-ceilings` once to seed the ledger.",
-        );
-        return null;
-      }
-      return { entries: [] };
-    default: {
-      const exhaustive: never = read;
-      return exhaustive;
-    }
-  }
-}
-
-type Measured = {
-  readonly args: BoundaryGateArgs;
-  readonly files: Files;
-  readonly under: string;
-  readonly reports: readonly ScopeBoundaryReport[];
-};
-
-function runGate({ args, files, under, reports }: Measured): number {
-  const ledger = currentLedger(files, args.report);
-  if (ledger === null) return 2;
-  const result = reconcile(ledger, reports, under);
-  if (result.pruned.length > 0) writeBoundaryLedger(files.ledger, result.kept);
-  const { stdout, exitCode } = renderLedgerGate(result, args.json, args.pretty);
-  args.emit(`${stdout}\n`);
-  return exitCode;
-}
-
-function runAccept({ args, files, under, reports }: Measured, reason: string): number {
-  const ledger = currentLedger(files, args.report);
-  if (ledger === null) return 2;
-  const result = reconcile(ledger, reports, under);
-  if (result.pruned.length > 0 || result.unrecorded.length > 0) {
-    writeBoundaryLedger(files.ledger, withAccepted(result.kept, result.unrecorded, reason));
-  }
-  args.emit(`${renderAccepted(result, reason, args.json, args.pretty)}\n`);
-  return 0;
-}
-
-function runMigrate(
-  args: BoundaryGateArgs,
-  files: Files,
-  measure: () => ScopeBoundaryReport[] | null,
-): number {
-  if (fs.existsSync(files.ledger)) {
-    args.report(`${LEDGER_FILENAME} already exists; there is nothing to migrate.`);
-    return 2;
-  }
-  if (!fs.existsSync(files.legacy)) {
-    args.report(`no ${LEGACY_CEILINGS_FILENAME} at the repo root to migrate.`);
-    return 2;
-  }
-  const ceilings = readScopeCeilings(files.legacy, args.report);
-  if (ceilings === null) return 2;
-  const reports = measure();
-  if (reports === null) return 2;
-  const migrated = migratedLedger(reports, ceilings);
-  if (migrated.kind === "refused") {
-    args.report(renderMigrationRefused(migrated.breaches));
-    return 2;
-  }
-  writeBoundaryLedger(files.ledger, migrated.ledger);
-  fs.rmSync(files.legacy);
-  args.emit(`${renderMigrated(migrated.ledger, reports.length, args.json, args.pretty)}\n`);
-  return 0;
 }
 
 // Reads the libraries, the deployables and the shape the rules file declares, or says in one line
