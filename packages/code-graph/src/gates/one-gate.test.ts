@@ -204,6 +204,14 @@ describe("--env-keys, --hexagon and --owners run without a gate", () => {
     expect(owners.stdout).toContain("packages/app");
   });
 
+  it("exits 2 on a path that is not a directory, with one line and no report", () => {
+    const run = runCli([path.join(repo.top, "smell-ledger.json"), "--owners"]);
+    expect(run.code).toBe(2);
+    expect(run.stdout).toBe("");
+    expect(run.stderr.trimEnd().split("\n")).toHaveLength(1);
+    expect(run.stderr).toContain("is not a directory");
+  });
+
   it("reads and writes no ledger when --owners runs, however many are there", () => {
     const before = repo.ledgers();
     for (const name of LEDGER_FILES) fs.writeFileSync(path.join(repo.top, name), "not json");
