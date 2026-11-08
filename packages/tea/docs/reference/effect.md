@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (28)
+## Exports (30)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -29,6 +29,8 @@ import { … } from "@demlik/tea/effect";
 | [`EffectRuntime`](#EffectRuntime) | Interface | stable | The Effect engine's booted handle. |
 | [`EffectSubscribe`](#EffectSubscribe) | Type | stable | The Effect engine's `subscribe` map: a runner for every Sub type the machine declares beyond the built-ins, and optionally one for a built-in, which replaces the engine's own (#270 R2.1). |
 | [`InterpretServices`](#InterpretServices) | Type | stable | The services every cell of an `interpret` map reads. |
+| [`Machine`](#Machine) | Type | stable | A core tea machine, with the same init, update and engine contracts. |
+| [`Machine`](#Machine) | Variable | stable | Build a tea machine with `Machine.make` from required `model` and `msg` Effect schemas and a required `cmds` list. |
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
 | [`runIn`](#runIn) | Function | stable | Turn the caller's `ManagedRuntime` into the `run` that `useMachine` takes: `useMachine(machine, { run: runIn(appRuntime), ctx, interpret })`. |
 | [`spawn`](#spawn) | Function | stable | Start a child in a scope forked from `parentScope` and enrol it in the host's table, as one uninterruptible step. |
@@ -408,6 +410,31 @@ type EffectSubscribe<M extends { type: string }, U extends Sub, R = unknown> = {
 
 ```ts
 type InterpretServices<I> = { [K in keyof I]: ServicesOfCell<I[K]> }[keyof I]
+```
+
+<a id="Machine"></a>
+
+### `Machine`
+
+```ts
+type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = CoreMachine<S, M, C, U, Ctx>
+
+const Machine: {
+  make: <
+    S,
+    M extends { type: string },
+    D extends AnyCmdDef,
+    U extends Sub = Sub<never>,
+    Ctx = unknown,
+  >(
+    spec: NoInfer<Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
+      readonly cmds: readonly D[];
+      readonly model: Schema<S>;
+      readonly msg: Schema<M>;
+      readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "ctx" | "sub">;
+    },
+  ) => Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+}
 ```
 
 <a id="run"></a>

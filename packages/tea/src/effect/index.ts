@@ -8,10 +8,11 @@
  * host that runs child machines under a parent: it keeps its own table of
  * children, and they run the steps that race.
  *
- * The machine you hand it is built from the neutral core at `@demlik/tea` —
- * the same file runs on `@demlik/tea/promise`. `effect` is an optional peer
- * dependency, and this entry is the only place in the package allowed to
- * import it.
+ * `Machine.make` builds a machine from required `model` and `msg` Effect
+ * schemas and a required `cmds` list. The neutral core's `defineMachine` is
+ * also accepted; either result runs on `@demlik/tea/promise`. `effect` is an
+ * optional peer dependency, and this entry is the only place in the package
+ * allowed to import it.
  */
 
 export type { TellAnswer } from "../internal/engine/loop";
@@ -24,6 +25,7 @@ export type {
   EffectRun,
   EffectRuntime,
 } from "./handle";
+export { Machine } from "./machine";
 export {
   type CellErrors,
   type EffectInterpret,
