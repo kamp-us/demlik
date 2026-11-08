@@ -66,7 +66,9 @@ with `@demlik/tea/parity`'s `recordRun` and re-fold the captured trace with its
 `goldenReplay`. It folds from the captured post-init State without calling
 init again or executing any commands. `replayTrace` from
 `@demlik/tea/persistence` uses the same captured-State fold and reports the
-first differing field. A trace without a captured starting State is refused;
+first differing field. A trace recorded with `captureSteps: true` also names
+the Msg it starts at (`divergence.at`), and a Msg the machine no longer has a
+cell for comes back as `refusal` rather than a throw. A trace without a captured starting State is refused;
 record the boot rather than trying to reconstruct it with fresh init. That is how a stuck run becomes a diff at one field instead of a re-run;
 [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
 record-then-replay loop.

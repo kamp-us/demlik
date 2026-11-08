@@ -3,7 +3,7 @@ import { Cmd, defineMachine } from "../../../index";
 import { memoryStore } from "../../../mem";
 import { goldenReplay } from "../../../parity";
 import { run } from "../../../promise";
-import { recorder } from "../recorder";
+import { parseJSONL, recorder } from "../recorder";
 import { replayTrace } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -175,5 +175,73 @@ describe("replayTrace", () => {
     // the walk reports the deepest-first deterministic path, not `processed`.
     const result = replayTrace(queueMachineBuggyStatus(), trace, {});
     expect(result.divergence?.path).not.toBe("state.processed");
+  });
+});
+
+describe("replayTrace names the msg a replay breaks at", () => {
+  async function recordSteps(captureSteps: boolean) {
+    const runtime = run(queueMachine(), { ctx: {} });
+    const rec = recorder(runtime, { captureSteps });
+    await runtime.ready;
+    for (const id of ["a", "b", "c", "d", "e"]) {
+      await runtime.dispatch({ type: "enqueue", id });
+    }
+    await runtime.dispatch({ type: "complete", id: "b" });
+    await runtime.dispatch({ type: "enqueue", id: "f" });
+    await runtime.dispatch({ type: "complete", id: "d" });
+    const jsonl = rec.toJSONL();
+    await runtime.stop();
+    return jsonl;
+  }
+
+  it("a trace with steps diverges at the first msg whose state differs", async () => {
+    const trace = parseJSONL<State, Msg>(await recordSteps(true));
+    const result = replayTrace(queueMachineBuggyStatus(), trace);
+    expect(result.matches).toBe(false);
+    expect(result.divergence).toEqual({
+      path: "state.items[1].status",
+      expected: "done",
+      actual: "pending",
+      at: { index: 5, msg: { type: "complete", id: "b" } },
+    });
+    expect(result.states).toHaveLength(8);
+  });
+
+  it("a trace without steps names the path but not the msg", async () => {
+    const trace = parseJSONL<State, Msg>(await recordSteps(false));
+    // Interior step lines carry no state, so no partial steps survive parsing.
+    expect(trace.steps).toBeUndefined();
+    const result = replayTrace(queueMachineBuggyStatus(), trace);
+    expect(result.divergence?.path).toBe("state.items[1].status");
+    expect(result.divergence?.at).toBeUndefined();
+    // Against the same machine it matches: no step is wrongly compared.
+    expect(replayTrace(queueMachine(), trace).matches).toBe(true);
+  });
+
+  it("refuses a msg the machine has no cell for, without throwing", async () => {
+    const trace = parseJSONL<State, Msg>(await recordSteps(true));
+    // A refactor dropped `complete`: the queue only takes `enqueue` now. The
+    // cast stands for the Msg union losing `complete` too, while the recording
+    // still holds one.
+    const renamed = defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
+      init: queueMachine().init,
+      update: {
+        enqueue: (s: State, m: Extract<Msg, { type: "enqueue" }>) => [
+          { ...s, items: [...s.items, { id: m.id, status: "pending" }] },
+          Cmd.none,
+        ],
+      } as never,
+    });
+    const result = replayTrace(renamed, trace);
+    expect(result.matches).toBe(false);
+    expect(result.refusal).toEqual({
+      index: 5,
+      msg: { type: "complete", id: "b" },
+      stateName: "queue",
+      acceptedTypes: ["enqueue"],
+    });
+    expect(result.states).toHaveLength(5);
+    expect(result.actual).toEqual(trace.steps?.[4]?.state);
   });
 });
