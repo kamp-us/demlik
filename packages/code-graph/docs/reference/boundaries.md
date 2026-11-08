@@ -491,31 +491,63 @@ of the same name that the file defines or imports from elsewhere, and a mention
 in a string or comment, report nothing.
 
 B23 reports a call whose callee is a static member named `insert`, `update` or
-`delete` on any receiver, an optional call included, and whose first argument is
-a binding the file imports at run time from a feature's
-`adapters/driven/tables.ts`, or a member `ns.t` of a namespace import of it. It
-reports the call when the file is not in the owning feature: another feature,
-a `lib` folder, or a file in no feature. The owner is the feature of the tables
-file the import resolves to. It writes one entry per file per table: `to` is
-`null` and `specifier` is the table's exported name, so an alias changes no
-identity. The report names the owner: `owner` on the `--json` row, and
-`[owner: <feature>]` on the plain row and the `--ci` failure line. The ledger
-entry does not keep it. Reads, joins, foreign keys, a type-only import and a
-feature writing its own table are clean.
+`delete` on any receiver, an optional call included, and whose first argument
+names a table: a binding the file imports at run time, or a member `ns.t` of a
+namespace import. The name is followed through every re-export to the module
+that defines it, by ECMAScript's own algorithm,
+[ResolveExport](https://tc39.es/ecma262/#sec-resolveexport), and the table is
+one when that module is a feature's `adapters/driven/tables.ts`. The call is
+reported when the file is not in the owning feature: another feature, a `lib`
+folder, or a file in no feature. The owner is the feature of the tables file
+the name comes to. It writes one entry per file per table: `to` is `null` and
+`specifier` is the name the tables file exports the table under, so an alias,
+or a rename on the way through a barrel, changes no identity. The report names
+the owner: `owner` on the `--json` row, and `[owner: <feature>]` on the plain
+row and the `--ci` failure line. The ledger entry does not keep it. Reads,
+joins, foreign keys, a type-only import and a feature writing its own table are
+clean.
 
 Neither kind judges a file `testFiles` matches. Both read syntax only, with no
-type checker and no data flow, so they do not see:
+type checker and no data flow. What they follow, what they count and what they
+leave alone:
 
-- a table put in a variable first, or imported under another name through a
-  feature's `index.ts`;
-- a table imported through a re-export: a feature's `index.ts`, or a barrel such
-  as `drizzle/schema.ts`;
-- a table passed through a helper function, a default import, `import()` and
-  `require()`;
-- a computed member (`db["insert"](t)`) and raw SQL;
-- a name the file also binds itself, such as a parameter or a local: judged per
-  file, and failing open;
-- a `pgSchema(...).table(...)` declaration, `pgView`, `pgEnum` and sequences.
+| Case | Outcome | Why |
+|---|---|---|
+| `export { t } from "./m"`, `export { t as u } from "./m"` | followed | an indirect export: the table keeps the name its tables file exports it under |
+| `export * from "./m"` | followed | a star export supplies every name of the module but `default` |
+| `export * as ns from "./m"`, and `import * as ns from "./m"; export { ns }`, written as `ns.t` or `b.ns.t` | followed | a namespace export, entered one name at a time |
+| `import { t } from "./m"; export { t }`, with or without `as` | followed | ECMA-262 files an imported, then exported, binding as an indirect export |
+| A feature's own `index.ts`, a schema barrel such as `drizzle/schema.ts`, a chain of them of any length, a circle of them | followed | the walk keeps the (module, name) pairs it has visited, as ResolveExport does, so a circle ends and a name no module defines comes to nothing |
+| A write whose table is not an import the file binds once: a variable, a call result, a parameter that shadows the import, a spread, the result of `require()` or `await import()`, a member of a value a file outside the tables files holds (`schema.t` of `export const schema = { t }`) | counted as `untraced-write` | no syntax says which table it is. `Map#delete(key)` with a variable key is counted too, since syntax cannot tell it from a write; a literal key is not |
+| A write whose table is imported from a module the run did not load: a package, a path no loaded file answers | counted as `unloaded-module` | the module may define a table a feature owns |
+| A table written through `export default`, `import t from`, or `export { default as t }` | counted as `default-export` | no star supplies `default`, and a default carries no name to be the table's identity |
+| A name that two `export *` supply with different bindings | counted as `ambiguous-star` | ResolveExport answers ambiguous: the module has no such export |
+| A name from a module that says `export = x` | counted as `export-equals` | the export is one object whose members the syntax does not name |
+| Raw SQL that begins as a write (`INSERT INTO`, `REPLACE INTO`, `UPDATE … SET`, `DELETE FROM`) in a string or a template | counted as `raw-sql` | a table named in a string is no import |
+| `export type { t } from`, `export { type t } from`, `export type * from`, `import type` | neither | erased at run time: it writes nothing |
+| A table passed to a helper (`insertInto(db, t)`) or to a computed member (`db["insert"](t)`) | neither | `insertInto` is any function and `["insert"]` any key; only a static member named `insert`, `update` or `delete` is a write, so the file lists as a read |
+| A table bound to another name by a file that is no tables file, then written (`export const o = orders`) | neither | that follows a value, not a name: data flow, which the run does not read |
+| A write to a table no feature declares: a `lib` or loose file holds it | neither | followed, with no owner to name; B22 reports where it is declared |
+| A namespace taken whole (`...ns`, `use(ns)`), a member name (`row.orders`), an object key, an export list, a table named in raw SQL that only reads | neither | none of these is a table named at run time, and a read in raw SQL is no write to count |
+| A `pgSchema(...).table(...)` declaration, `pgView`, `pgEnum`, sequences | neither | B22 reads the three constructors by name; the schema object a `.table(…)` call is made on is not resolved |
+
+A write the table counts is not clean. When a rules file lists either kind, the
+report, plain or `--json`, ends with a census beside the violations, as the
+library and deployable censuses do (`--ci` and `--accept-crossings` print none):
+one line of counts and one row per file and kind.
+
+```text
+tables: 2 not followed (untraced-write 1, unloaded-module 0, default-export 0, ambiguous-star 0, export-equals 0, raw-sql 1)
+  services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table is not an import
+  services/api/src/billing/adapters/driven/seed.ts  raw-sql  raw SQL that writes
+```
+
+Every kind is printed, with an explicit `0`. `--json` carries the same under
+`tables`: `{ "notFollowed": { "<kind>": <count> }, "rows": [{ "file", "kind" }] }`.
+A rules file that lists neither kind prints no census, and every byte of its
+output is the output it had before. `--owners` lists the same rows under
+`Not followed`. The census never fails a run: it makes a blind spot visible
+rather than a violation.
 
 A write that has to stay is accepted by name with
 `--accept-crossings --reason "<why>"`.

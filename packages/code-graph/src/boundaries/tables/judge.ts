@@ -1,7 +1,9 @@
 import type { ImportEdge } from "../../schema.js";
-import { inScope, type Place, placeOf, type ScopeZoning } from "../rules.js";
+import { inScope, type Place, type ScopeZoning } from "../rules.js";
 import type { BoundaryViolation } from "../violation.js";
-import type { TableFacts, Tables } from "./tables.js";
+import type { Follow } from "./follow.js";
+import type { ImportedTable, TableFacts, Tables } from "./tables.js";
+import { type NotFollowed, UNFOLLOWED_KINDS, type UnfollowedKind } from "./unfollowed.js";
 
 // The facts of one file the table kinds read. `file` is scope-relative.
 export type TabledFile = {
@@ -10,10 +12,13 @@ export type TabledFile = {
   readonly tableFacts: TableFacts;
 };
 
+// What a judgment of one scope asks: the scope, the kinds that run, its zoning, and `follow`, which
+// says whose a table is.
 export type TableContext = {
   readonly scope: string;
   readonly tables: Tables;
   readonly zoning: ScopeZoning;
+  readonly follow: Follow;
 };
 
 // A scope laid out per feature is judged. The port layout has no `tables` zone, so it has no owner
@@ -35,31 +40,34 @@ function declarations(ctx: TableContext, file: TabledFile, place: Place): Bounda
   }));
 }
 
-// The feature whose table declaration an imported table lands in, or null for an import that lands
-// anywhere else or resolves to no file the scope loads. The one place that says whose a table is:
-// B23 and the owners view both ask it.
-export function ownerOf(ctx: TableContext, file: TabledFile, source: string): string | null {
-  const target = file.importEdges.find((e) => e.specifier === source && e.target !== null)?.target;
-  if (target === undefined || target === null) return null;
-  const owner = placeOf(target, ctx.zoning);
-  return owner.kind === "feature" && owner.zone.rule.declaresTables ? owner.feature : null;
-}
-
 // A table another feature owns, and the feature that owns it.
 export type OwnedTable = { readonly owner: string; readonly table: string };
 
-// The tables a file passes to a write that a feature other than the file's own declares, one per
-// write the facts record, in source order.
-export function outsideWrites(ctx: TableContext, file: TabledFile, place: Place): OwnedTable[] {
+// The tables among `named` that a feature other than the file's own declares, one per name the facts
+// record, in source order. The table is the one the name comes to once every re-export is followed:
+// its identity is the name its owner's tables file exports it under. The one place that says whose a
+// table is for the gate, the view and the census alike.
+export function ownedOutside(
+  ctx: TableContext,
+  file: TabledFile,
+  place: Place,
+  named: readonly ImportedTable[],
+): OwnedTable[] {
   const own = place.kind === "feature" ? place.feature : null;
-  return file.tableFacts.writes.flatMap(({ source, table }) => {
-    const owner = ownerOf(ctx, file, source);
-    return owner === null || owner === own ? [] : [{ owner, table }];
+  return named.flatMap((imported) => {
+    const followed = ctx.follow(file.file, imported);
+    if (followed.kind !== "table" || followed.owner === own) return [];
+    return [{ owner: followed.owner, table: followed.table }];
   });
 }
 
+// The tables a file passes to a write that a feature other than the file's own declares.
+export function outsideWrites(ctx: TableContext, file: TabledFile, place: Place): OwnedTable[] {
+  return ownedOutside(ctx, file, place, file.tableFacts.writes);
+}
+
 // B23: a table written by a file outside the feature that declares it. One per file per table name,
-// the first in source order.
+// the first in source order, however many re-exports the name passed through.
 function writes(ctx: TableContext, file: TabledFile, place: Place): BoundaryViolation[] {
   if (!ctx.tables.kinds.has("table-written-outside-owner")) return [];
   const found = new Map<string, BoundaryViolation>();
@@ -86,4 +94,22 @@ export function judgeTables(
 ): BoundaryViolation[] {
   if (!judgesTables(ctx.zoning)) return [];
   return [...declarations(ctx, file, place), ...writes(ctx, file, place)];
+}
+
+// The kinds of write a file makes that the run cannot attribute to a table: the ones its syntax
+// shows, and one for each write whose table the follower stops short of. In the order of
+// `UNFOLLOWED`, once each. A scope that is not judged has no owner to attribute a write to.
+function unfollowedKinds(ctx: TableContext, file: TabledFile): UnfollowedKind[] {
+  if (!judgesTables(ctx.zoning)) return [];
+  const found = new Set<UnfollowedKind>(file.tableFacts.unfollowed);
+  for (const write of file.tableFacts.writes) {
+    const followed = ctx.follow(file.file, write);
+    if (followed.kind === "unfollowed") found.add(followed.why);
+  }
+  return UNFOLLOWED_KINDS.filter((kind) => found.has(kind));
+}
+
+// What a file leaves unfollowed, as the rows a census and a view list, the file as the repo names it.
+export function notFollowedOf(ctx: TableContext, file: TabledFile): NotFollowed[] {
+  return unfollowedKinds(ctx, file).map((kind) => ({ file: inScope(ctx.scope, file.file), kind }));
 }

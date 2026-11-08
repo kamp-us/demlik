@@ -84,7 +84,8 @@ const PORTS: Record<string, string> = {
   ),
 };
 
-// How a file reaches a table another feature owns, in every spelling the view lists.
+// How a file reaches a table another feature owns, in every spelling the view lists: a named
+// import, an alias, a namespace member, and a namespace member through a barrel.
 const REACH: Record<string, string> = {
   // `write`: a named import, an alias and a namespace member.
   [at("src/billing/adapters/driven/invoice-store.ts")]: lines(
@@ -109,6 +110,12 @@ const REACH: Record<string, string> = {
   [at("src/audit/adapters/driven/audit-reads.ts")]: lines(
     `import * as t from "${ORDERS_TABLES}";`,
     "export const lines = (db: Db) => db.select().from(t.orderLines);",
+  ),
+  // `write` through a schema barrel, which sits in no feature: the table is `orders`'s all the same.
+  [at("src/drizzle/schema.ts")]: lines('export * from "../orders/adapters/driven/tables";'),
+  [at("src/audit/adapters/driven/via-barrel.ts")]: lines(
+    'import * as schema from "../../../drizzle/schema";',
+    "export const forget = (db: Db) => db.delete(schema.orderLines);",
   ),
   // A file in no feature and a `lib` file, each writing one table and reading another.
   [at("src/main.ts")]: lines(

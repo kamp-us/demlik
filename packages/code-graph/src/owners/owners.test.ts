@@ -74,6 +74,12 @@ const SHOP_SCOPE = {
         },
         {
           table: "orderLines",
+          access: "write",
+          file: at("src/audit/adapters/driven/via-barrel.ts"),
+          place: driven("audit"),
+        },
+        {
+          table: "orderLines",
           access: "read",
           file: at("src/interpreters/queue/outbox.ts"),
           place: INTERPRETER,
@@ -155,6 +161,9 @@ const SHOP_SCOPE = {
       ],
     },
   ],
+  // `rebound.ts` writes a parameter that shares the name of a table it imports, so the write is to
+  // whatever the caller passed: the view says it could not follow it.
+  notFollowed: [{ file: at("src/billing/adapters/driven/rebound.ts"), kind: "untraced-write" }],
 };
 
 const SHOP_REPORT = { scopes: [SHOP_SCOPE], notRead: [] };
@@ -185,6 +194,7 @@ const SHOP_HUMAN = [
   "      orderLines, orders",
   "    Reach into its tables",
   "      orderLines  read         services/api/src/audit/adapters/driven/audit-reads.ts  feature audit (driven)",
+  "      orderLines  write        services/api/src/audit/adapters/driven/via-barrel.ts  feature audit (driven)",
   "      orderLines  read         services/api/src/interpreters/queue/outbox.ts  interpreter queue",
   "      orders  write        services/api/src/audit/adapters/driven/audit-store.ts  feature audit (driven)",
   "      orders  write        services/api/src/billing/adapters/driven/invoice-store.ts  feature billing (driven)",
@@ -220,6 +230,8 @@ const SHOP_HUMAN = [
   "        services/api/src/billing/adapters/driven/enqueue.ts  feature billing (driven)",
   "        services/api/src/orders/adapters/driven/queue-shape.ts  feature orders (driven)",
   "        services/api/src/shipping/adapters/driven/carrier.ts  feature shipping (driven)",
+  "  Not followed",
+  "    services/api/src/billing/adapters/driven/rebound.ts  untraced-write  write whose table is not an import",
   "",
   "Not read",
   "  none",
@@ -280,7 +292,7 @@ describe("the view and the gate cannot disagree", () => {
           .map((row) => [row.file, row.table, owned.feature]),
       )
       .sort();
-    expect(flagged).toHaveLength(5);
+    expect(flagged).toHaveLength(6);
     expect(written).toEqual(flagged);
   });
 
@@ -411,11 +423,11 @@ describe("--owners is a view and never a gate", () => {
     const run = repo.owners({ json: true });
     expect(run.code).toBe(0);
     expect(JSON.parse(run.stdout)).toEqual({
-      scopes: [{ scope: ports, features: [], workers: [], technologies: [] }],
+      scopes: [{ scope: ports, features: [], workers: [], technologies: [], notFollowed: [] }],
       notRead: [],
     });
     expect(repo.owners().stdout).toBe(
-      `${ports}\n  Features\n    none\n  Workers\n    none\n  Technologies\n    none\n\nNot read\n  none\n`,
+      `${ports}\n  Features\n    none\n  Workers\n    none\n  Technologies\n    none\n  Not followed\n    none\n\nNot read\n  none\n`,
     );
   });
 

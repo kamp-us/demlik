@@ -84,6 +84,7 @@ Each scope lists, in order:
 | Features | Per feature: `tables` (the names its `adapters/driven/tables.ts` exports as tables), `reach`, and the `commands` and `externalSystems` of its `ports.ts`, as `--hexagon` prints them. A feature with no `ports.ts` lists empty ports |
 | Workers | Per worker, per binding: its kind, the files `bindingOwners` narrows it to, and every site with its line and place. `testFiles` are left out |
 | Technologies | Per technology the scope's `interpreters` declares: its root, its modules, and every file outside the root that imports a file under it, a type-only import and a re-export included |
+| Not followed | Each file with a write the run could not follow to a table, with the kind: `untraced-write`, `unloaded-module`, `default-export`, `ambiguous-star`, `export-equals` or `raw-sql`. `none` when there is no such file |
 | Not read | A wrangler config that does not parse |
 
 A `reach` row is one file's way into one table another feature owns, with the
@@ -101,11 +102,35 @@ names as `main`.
 
 The view reads table facts and wrangler configs whichever kinds the rules file
 lists. `testFiles` take a file out of it, and a scope not laid out per feature
-lists no features. It does not follow a re-export or barrel, does not read a
-namespace taken whole (`...ns`), does not count a type-only import of a table, an
-enum or a schema object exported beside the tables, a name the file binds twice, or a
-table named in raw SQL, and does not resolve the `pgSchema` object a
-`<schema>.table(…)` call is made on.
+lists no features. A name is followed through every re-export to the tables file
+that defines it, by ECMAScript's
+[ResolveExport](https://tc39.es/ecma262/#sec-resolveexport), so a write or a
+read through a feature's `index.ts` or a schema barrel is a row like any other.
+What it follows, what it lists under Not followed and what it leaves alone, the
+same table `--boundaries` judges by:
+
+| Case | Outcome | Why |
+|---|---|---|
+| `export { t } from "./m"`, `export { t as u } from "./m"` | followed | an indirect export: the table keeps the name its tables file exports it under |
+| `export * from "./m"` | followed | a star export supplies every name of the module but `default` |
+| `export * as ns from "./m"`, and `import * as ns from "./m"; export { ns }`, written as `ns.t` or `b.ns.t` | followed | a namespace export, entered one name at a time |
+| `import { t } from "./m"; export { t }`, with or without `as` | followed | ECMA-262 files an imported, then exported, binding as an indirect export |
+| A feature's own `index.ts`, a schema barrel such as `drizzle/schema.ts`, a chain of them of any length, a circle of them | followed | the walk keeps the (module, name) pairs it has visited, as ResolveExport does, so a circle ends and a name no module defines comes to nothing |
+| A write whose table is not an import the file binds once: a variable, a call result, a parameter that shadows the import, a spread, the result of `require()` or `await import()`, a member of a value a file outside the tables files holds (`schema.t` of `export const schema = { t }`) | counted as `untraced-write` | no syntax says which table it is. `Map#delete(key)` with a variable key is counted too, since syntax cannot tell it from a write; a literal key is not |
+| A write whose table is imported from a module the run did not load: a package, a path no loaded file answers | counted as `unloaded-module` | the module may define a table a feature owns |
+| A table written through `export default`, `import t from`, or `export { default as t }` | counted as `default-export` | no star supplies `default`, and a default carries no name to be the table's identity |
+| A name that two `export *` supply with different bindings | counted as `ambiguous-star` | ResolveExport answers ambiguous: the module has no such export |
+| A name from a module that says `export = x` | counted as `export-equals` | the export is one object whose members the syntax does not name |
+| Raw SQL that begins as a write (`INSERT INTO`, `REPLACE INTO`, `UPDATE … SET`, `DELETE FROM`) in a string or a template | counted as `raw-sql` | a table named in a string is no import |
+| `export type { t } from`, `export { type t } from`, `export type * from`, `import type` | neither | erased at run time: it writes nothing |
+| A table passed to a helper (`insertInto(db, t)`) or to a computed member (`db["insert"](t)`) | neither | `insertInto` is any function and `["insert"]` any key; only a static member named `insert`, `update` or `delete` is a write, so the file lists as a read |
+| A table bound to another name by a file that is no tables file, then written (`export const o = orders`) | neither | that follows a value, not a name: data flow, which the run does not read |
+| A write to a table no feature declares: a `lib` or loose file holds it | neither | followed, with no owner to name; B22 reports where it is declared |
+| A namespace taken whole (`...ns`, `use(ns)`), a member name (`row.orders`), an object key, an export list, a table named in raw SQL that only reads | neither | none of these is a table named at run time, and a read in raw SQL is no write to count |
+| A `pgSchema(...).table(...)` declaration, `pgView`, `pgEnum`, sequences | neither | B22 reads the three constructors by name; the schema object a `.table(…)` call is made on is not resolved |
+
+`Not followed` and the `tables:` census of `--boundaries` are one list, and the
+counts are equal. Neither is a gate.
 
 It exits 0 whatever the scopes hold. It exits 2, with one stderr line and no
 report, where `--boundaries` would refuse to start: an unreadable or invalid
