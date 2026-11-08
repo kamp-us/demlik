@@ -30,21 +30,21 @@ import {
 // `timeout` ask again, so one Cmd can wait twice.
 
 const sku = Schema.Struct({ sku: Schema.Literals(["A", "B"]) });
-const price = Cmd.define("price", {
+const price = Cmd.make("price", {
   input: sku,
   ok: Schema.Struct({
     cents: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 })),
   }),
   err: ["offline"],
 });
-const stock = Cmd.define("stock", {
+const stock = Cmd.make("stock", {
   input: sku,
   ok: Schema.Struct({
     units: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
   }),
   err: ["out_of_stock"],
 });
-const charge = Cmd.define("charge", {
+const charge = Cmd.make("charge", {
   input: sku,
   ok: Schema.Struct({ receipt: Schema.String }),
   err: ["declined", "timeout"],
@@ -121,7 +121,7 @@ const doubleCounts = desk({
  * reducer, unchanged, adds it to a number. The cast is the edit: the reducer's
  * type still says `cents` is a number, as a reducer's would after the edit.
  */
-const textPrice = Cmd.define("price", {
+const textPrice = Cmd.make("price", {
   input: sku,
   ok: Schema.Struct({ cents: Schema.String }),
   err: ["offline"],
@@ -279,7 +279,7 @@ describe("every answer answers a Cmd that was sent and not yet answered", () => 
 
 describe("answers come from the Cmd's own schema", () => {
   const pricedAt = (cents: number) =>
-    Cmd.define("price", {
+    Cmd.make("price", {
       input: sku,
       ok: Schema.Struct({ cents: Schema.Literal(cents) }),
       err: ["offline"],
