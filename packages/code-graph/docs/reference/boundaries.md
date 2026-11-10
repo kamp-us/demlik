@@ -270,7 +270,8 @@ wiring and loads every feature to do it.
 ```
 
 `compositionRoots` lists globs of those files, matched as `testFiles` are.
-Listing one turns the rule on; a rules file without the key runs no B20.
+Listing one turns the rule on; a rules file without the key runs no B20. A
+listed file may also use its worker's bindings (B17, below).
 
 | Rule | Kind | Violation |
 |---|---|---|
@@ -417,7 +418,7 @@ path alias or a tsconfig that extends a package resolves nothing without them.
 
 | Rule | Kind | Violation |
 |---|---|---|
-| B17 | `binding-outside-driven-adapter` | A declared worker binding is referenced outside a driven adapter and its worker's `main` |
+| B17 | `binding-outside-driven-adapter` | A declared worker binding is referenced outside a driven adapter and its worker's composition roots |
 | B18 | `worker-call-cycle` | Service-binding declarations form a cycle between workers |
 | B19 | `relative-import-crosses-workspace` | A relative import points into another package directory |
 | B21 | `package-import-crosses-deployable` | A package import names another workspace with a worker config at its root |
@@ -438,6 +439,21 @@ the binding. Every other file still needs a driven adapter. A config
 with no `main`, or a `main` that names no file the scope loads, cleans
 nothing. A file under a nested worker's directory is judged against that
 worker, so it is clean only when that worker's config names it.
+
+A file `compositionRoots` lists is clean in the same way. A worker that keeps
+its entry small, and opens the module that builds every adapter on the first
+request, wires its bindings in both files:
+
+```json
+{
+  "testFiles": ["**/*.test.ts"],
+  "compositionRoots": ["src/index.ts", "src/configurator.ts"],
+  "acrossDeployables": ["binding-outside-driven-adapter"]
+}
+```
+
+Only a file a glob matches is clean. A file that opens a root is in reach for
+B20 and still needs a driven adapter for B17.
 
 B18 runs only at the repository root and uses service declarations, including
 unused bindings. Self-bindings are ignored. Durable Object and Workflow

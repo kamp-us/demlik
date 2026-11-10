@@ -280,6 +280,70 @@ describe("B17 and the main file of a worker", () => {
   });
 });
 
+// A second file that wires the worker, beside its `main`: the module that builds every adapter,
+// which `main` opens on the first request.
+const ROOT = `${API}/src/configurator.ts`;
+const rootRules = (glob: string) => ({
+  ...RULES,
+  testFiles: ["**/*.test.ts"],
+  compositionRoots: [glob],
+});
+
+describe("B17 and a file compositionRoots lists", () => {
+  it.each(
+    KINDS,
+  )("is clean for a %s binding there, and a file beside it that reads it is not", (_, name, call) => {
+    const files = {
+      [MAIN]: "export default {};\n",
+      [ROOT]: reading(name, call),
+      [`${API}/src/beside.ts`]: reading(name, call),
+    };
+    const run = open(files, rootRules("src/configurator.ts")).run({ json: true });
+    expect(bindingsOf(run)).toEqual([[`${API}/src/beside.ts`, name]]);
+  });
+
+  it.each([
+    "src/configurator.ts",
+    "services/api/src/configurator.ts",
+    "services/*/src/configurator.ts",
+  ])("reads the glob %s as that one file", (glob) => {
+    const files = {
+      [ROOT]: reading("DB", 'prepare("r")'),
+      [`${API}/src/loose.ts`]: reading("DB", 'prepare("c")'),
+    };
+    expect(bindingsOf(open(files, rootRules(glob)).run({ json: true }))).toEqual([
+      [`${API}/src/loose.ts`, "DB"],
+    ]);
+  });
+
+  it("is clean for a binding bindingOwners narrows to a driven adapter", () => {
+    const files = {
+      [`${ORDERS}/adapters/driven/orders-db.ts`]: reading("DB", 'prepare("a")'),
+      [ROOT]: reading("DB", 'prepare("r")'),
+    };
+    const rules = {
+      ...rootRules("src/configurator.ts"),
+      bindingOwners: { [API]: { DB: ["src/orders/adapters/driven/orders-db.ts"] } },
+    };
+    expect(bindingsOf(open(files, rules).run({ json: true }))).toEqual([]);
+  });
+
+  it("flags the same file when no compositionRoots names it", () => {
+    const files = { [ROOT]: reading("DB", 'prepare("r")') };
+    expect(bindingsOf(open(files).run({ json: true }))).toEqual([[ROOT, "DB"]]);
+  });
+
+  it("still counts the sites of that file in the census", () => {
+    const run = open({ [ROOT]: reading("DB", 'prepare("r")') }, rootRules("src/configurator.ts"));
+    const { deployables } = reportOf(run.run({ json: true })) as unknown as {
+      deployables: DeployableCensus;
+    };
+    expect(deployables.workers.flatMap((worker) => worker.sites)).toEqual([
+      { file: ROOT, line: 1, binding: "DB" },
+    ]);
+  });
+});
+
 // Three workers laid out as hexagonal features, each wiring its bindings in the file its config
 // names as `main`, and a test worker in a directory of its own under the first. Beside every main
 // sit the files that must stay flagged: a binding read outside every driven adapter.

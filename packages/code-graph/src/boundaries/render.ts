@@ -191,9 +191,9 @@ const SHAPE_FIX_LINES = [
 
 const DEPLOYABLE_FIX_LINES = [
   "  Use a worker binding only in a feature's adapters/driven/ (driven-adapters/ in the port layout)",
-  "  or in its worker's wrangler main (`bindingOwners` narrows one to exact driven files), break a",
-  "  loop of workers that bind each other, and reach another workspace by its package name, never a",
-  "  relative path.",
+  "  or in a composition root of its worker, its wrangler main or a file `compositionRoots` lists",
+  "  (`bindingOwners` narrows one to exact driven files), break a loop of workers that bind each",
+  "  other, and reach another workspace by its package name, never a relative path.",
 ];
 
 const PACKAGE_FIX_LINES = [
