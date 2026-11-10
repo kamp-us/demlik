@@ -54,8 +54,9 @@ export type BindingSite = { readonly binding: string; readonly line: number };
 
 // The facts of one file the deployable rules read, as `analyzeBoundaries` hands them over.
 // `file` is scope-relative and `from` repo-relative, as the ledger writes it; `driven` is whether
-// the file sits in a hexagon's driven zone, `isMain` whether it is the `main` of the
-// worker its bindings are judged against, and `owners` the scope's `bindingOwners`.
+// the file sits in a hexagon's driven zone, `wires` whether it is a composition root of the worker
+// its bindings are judged against (that worker's `main`, or a file `compositionRoots` lists), and
+// `owners` the scope's `bindingOwners`.
 export type DeployableFile = {
   readonly scope: string;
   readonly file: string;
@@ -63,7 +64,7 @@ export type DeployableFile = {
   readonly importEdges: readonly ImportEdge[];
   readonly bindingSites: readonly BindingSite[];
   readonly driven: boolean;
-  readonly isMain: boolean;
+  readonly wires: boolean;
   readonly owners: Readonly<Record<string, readonly string[]>>;
 };
 

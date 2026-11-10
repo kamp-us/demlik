@@ -217,7 +217,7 @@ function acrossDeployables(
     importEdges: module.importEdges,
     bindingSites: module.bindingSites,
     driven: zoneRuleOf(place)?.touchesBindings === true,
-    isMain: isWorkerMain(deployables, from),
+    wires: isWorkerMain(deployables, from) || ctx.reach.roots.has(module.file),
     owners: ctx.rules.bindingOwners[scope] ?? {},
   });
   const sites = module.bindingSites.map((site) => ({ file: from, ...site }));

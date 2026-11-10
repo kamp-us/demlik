@@ -1,5 +1,11 @@
 # @demlik/code-graph
 
+## 0.16.0
+
+### Minor Changes
+
+- B17 `binding-outside-driven-adapter` is clean in a file `compositionRoots` lists, as it is in the worker's wrangler `main`. A worker that keeps its entry small and opens the module that builds every adapter on the first request wires its bindings in both files, and the second one no longer needs a ledger entry per binding. A file that only reaches a root is still judged.
+
 ## 0.15.0
 
 ### Minor Changes

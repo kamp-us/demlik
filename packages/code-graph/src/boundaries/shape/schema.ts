@@ -35,7 +35,7 @@ const ReadAllowanceSchema = z.record(
 //  - `readAllowance`: per scope, the driven files a driving adapter may read through.
 //  - `compositionRoots`: globs of the files that assemble the whole app, matched as `testFiles` are,
 //    which a test may not open, directly or through other files (B20, needs `testFiles`). Listing
-//    one is what turns B20 on.
+//    one is what turns B20 on, and a listed file is clean for its worker's bindings (B17).
 export const SHAPE_KEYS = {
   applicationShape: z.array(z.enum(SHAPE_KINDS)).default([]),
   applicationMayImport: z.array(z.string().min(1)).default([]),
