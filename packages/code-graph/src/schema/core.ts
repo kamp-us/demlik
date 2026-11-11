@@ -146,9 +146,14 @@ export const DeclarationKindSchema = z.enum([
 ]);
 export type DeclarationKind = z.infer<typeof DeclarationKindSchema>;
 
+export const UseKindSchema = z.enum(["export", "import", "type", "value"]);
+export type UseKind = z.infer<typeof UseKindSchema>;
+
 export const UseSiteSchema = z.object({
   file: z.string(),
   line: z.number(),
+  kinds: z.array(UseKindSchema),
+  members: z.array(z.string()),
 });
 export type UseSite = z.infer<typeof UseSiteSchema>;
 

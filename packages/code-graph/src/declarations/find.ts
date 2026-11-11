@@ -30,7 +30,7 @@ function callSites(fn: FunctionNode, fileOf: ReadonlyMap<string, string>): UseSi
   const sites = new Map<string, UseSite>();
   for (const { callerId, line } of fn.edges.calledBy) {
     const file = fileOf.get(callerId) ?? "";
-    sites.set(`${file}:${line}`, { file, line });
+    sites.set(`${file}:${line}`, { file, line, kinds: ["value"], members: [] });
   }
   return [...sites.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 }

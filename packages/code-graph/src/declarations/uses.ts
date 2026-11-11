@@ -1,7 +1,7 @@
 import type { TypeContext } from "../checker/context.js";
 import * as ts from "../engine/tsgo.js";
 import type { DiscoveredFunction } from "../extract/functions.js";
-import type { DeclarationKind, UseSite } from "../schema.js";
+import type { DeclarationKind, UseKind, UseSite } from "../schema.js";
 import type { DiscoveredDeclaration } from "./discover.js";
 
 export type DeclarationUses = {
@@ -156,8 +156,91 @@ function usedDeclarations(
   return ids;
 }
 
-function sortedSites(sites: Map<string, UseSite>): UseSite[] {
-  return [...sites.values()].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+type SiteAccumulator = {
+  file: string;
+  line: number;
+  kinds: Set<UseKind>;
+  members: Set<string>;
+};
+
+function isImportNameParent(node: ts.Node): boolean {
+  return (
+    ts.isImportSpecifier(node) ||
+    ts.isImportClause(node) ||
+    ts.isNamespaceImport(node) ||
+    ts.isImportEqualsDeclaration(node)
+  );
+}
+
+function heritageUseKind(clause: ts.HeritageClause): UseKind {
+  if (clause.token === ts.SyntaxKind.ImplementsKeyword) return "type";
+  if (ts.isInterfaceDeclaration(clause.parent)) return "type";
+  return "value";
+}
+
+function useKindOf(identifier: ts.Identifier): UseKind {
+  let node: ts.Node | undefined = identifier;
+  while (node !== undefined) {
+    if (isImportNameParent(node)) return "import";
+    if (ts.isExportSpecifier(node)) return "export";
+    if (ts.isExportAssignment(node)) {
+      return node.expression === identifier ? "export" : "value";
+    }
+    if (ts.isHeritageClause(node)) return heritageUseKind(node);
+    if (!ts.isExpressionWithTypeArguments(node) && ts.isTypeNode(node)) return "type";
+    node = node.parent;
+  }
+  return "value";
+}
+
+function outermost(node: ts.Node): ts.Node {
+  let current = node;
+  while (current.parent !== undefined && ts.isOuterExpression(current.parent)) {
+    current = current.parent;
+  }
+  return current;
+}
+
+function memberOf(ctx: TypeContext, identifier: ts.Identifier): string | undefined {
+  const parent = identifier.parent;
+  const reference = outermost(
+    parent !== undefined && ts.isPropertyAccessExpression(parent) && parent.name === identifier
+      ? parent
+      : identifier,
+  );
+  const access = reference.parent;
+  if (access === undefined || !ts.isPropertyAccessExpression(access)) return undefined;
+  return access.expression === reference ? ctx.text(access.name) : undefined;
+}
+
+function recordUse(
+  ctx: TypeContext,
+  sites: ReadonlyMap<string, Map<string, SiteAccumulator>>,
+  id: string,
+  file: string,
+  line: number,
+  identifier: ts.Identifier,
+): void {
+  const byKey = sites.get(id);
+  if (byKey === undefined) return;
+  const key = `${file}:${line}`;
+  const known = byKey.get(key);
+  const site = known ?? { file, line, kinds: new Set<UseKind>(), members: new Set<string>() };
+  if (known === undefined) byKey.set(key, site);
+  site.kinds.add(useKindOf(identifier));
+  const member = memberOf(ctx, identifier);
+  if (member !== undefined) site.members.add(member);
+}
+
+function sortedSites(sites: Map<string, SiteAccumulator>): UseSite[] {
+  return [...sites.values()]
+    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)
+    .map(({ file, line, kinds, members }) => ({
+      file,
+      line,
+      kinds: [...kinds].sort(),
+      members: [...members].sort(),
+    }));
 }
 
 // SPEC §8 C6: every identifier of a loaded file the type checker resolves, through any chain of
@@ -173,7 +256,7 @@ export function resolveDeclarationUses(
   const functionIds = new Set(
     exportedFunctions.filter((f) => joinedFunctions.has(f.id)).map((f) => f.id),
   );
-  const sites = new Map<string, Map<string, UseSite>>();
+  const sites = new Map<string, Map<string, SiteAccumulator>>();
   for (const id of [...nodeToId.values(), ...functionIds]) sites.set(id, new Map());
   const targetOf = targetResolver(ctx, nodeToId, functionIds);
   const names = new Set([...declarations, ...exportedFunctions].map((d) => d.name));
@@ -182,8 +265,7 @@ export function resolveDeclarationUses(
     ctx.prefetchSymbols(identifiers);
     for (const identifier of identifiers) {
       for (const id of usedDeclarations(ctx, identifier, targetOf)) {
-        const line = ctx.startLine(identifier);
-        sites.get(id)?.set(`${unit.file}:${line}`, { file: unit.file, line });
+        recordUse(ctx, sites, id, unit.file, ctx.startLine(identifier), identifier);
       }
     }
   }

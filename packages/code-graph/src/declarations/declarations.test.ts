@@ -56,6 +56,7 @@ export const bag = { LIMIT };
 
 const KINDS = `import { Base, Color, LIMIT, type Shape, arrow } from "./declared";
 import * as D from "./declared";
+import Lim = D.LIMIT;
 export { LIMIT as Limit } from "./declared";
 export type OnlyType = typeof LIMIT;
 export const both: typeof LIMIT = LIMIT;
@@ -63,6 +64,24 @@ export const text = LIMIT.toFixed(2) + LIMIT.toString();
 export const red = Color.Red;
 export const viaNamespace = D.LIMIT.toFixed(1);
 export const mixed = LIMIT.valueOf() + LIMIT.Zeta + LIMIT.alpha + LIMIT.valueOf();
+declare const unknownValue: unknown;
+declare function mixin<T>(base: T): T;
+export const cast = unknownValue as Shape;
+export const checked = { x: 1 } satisfies Shape;
+export const table = new Map<string, Shape>();
+export const guard = (v: unknown): v is Shape => v !== null;
+export const kindName = typeof LIMIT;
+export const chained = LIMIT.toFixed(1).length;
+export const optional = LIMIT?.toFixed;
+export const wrapped = (LIMIT).toFixed(1) + LIMIT!.toPrecision(2) + (LIMIT as number).toExponential();
+export const bracket = Color["Red"];
+export const shorthand = { LIMIT };
+export let picked: Color.Red;
+export type RedType = typeof Color.Red;
+export const Specialized = Base<string>;
+export class Mixed extends mixin(Base) {}
+export class Typed extends Array<Shape> {}
+export class Dotted extends Color.Red {}
 export class Sub extends Base {}
 export class Impl implements Shape { x = 1; }
 export interface Wider extends Shape { z: number }
@@ -75,6 +94,7 @@ const FILES: Record<string, string> = {
   "widget.ts": DEFAULT_CLASS,
   "consumer.ts": CONSUMER,
   "kinds.ts": KINDS,
+  "default-call.ts": 'import { LIMIT } from "./declared";\nexport default String(LIMIT);\n',
   "anonymous.ts": "export default class {}\n",
 };
 
@@ -239,6 +259,14 @@ describe("use sites say how the name is used there (SPEC §8 C6)", () => {
     expect(siteAt(LIMIT_ID, "import { Base")).toMatchObject({ kinds: ["import"], members: [] });
   });
 
+  it("a default import and an `import x = …` are imports", () => {
+    const widget = (node(edges, "widget.ts:class:Widget").uses ?? []).find(
+      (u) => u.file === "consumer.ts" && u.line === lineOf(CONSUMER, "import Widget"),
+    );
+    expect(widget).toMatchObject({ kinds: ["import"], members: [] });
+    expect(siteAt(LIMIT_ID, "import Lim")).toMatchObject({ kinds: ["import"], members: [] });
+  });
+
   it("a re-export specifier and `export default X` are exports", () => {
     expect(siteAt(LIMIT_ID, "export { LIMIT")).toMatchObject({ kinds: ["export"], members: [] });
     expect(siteAt(LIMIT_ID, "export default")).toMatchObject({ kinds: ["export"], members: [] });
@@ -293,6 +321,70 @@ describe("use sites say how the name is used there (SPEC §8 C6)", () => {
     expect(siteAt("declared.ts:interface:Shape", "export interface Wider")).toMatchObject({
       kinds: ["type"],
     });
+  });
+
+  it("the type of `as` and `satisfies`, a type argument and a type predicate are type uses", () => {
+    const SHAPE_ID = "declared.ts:interface:Shape";
+    for (const marker of ["cast", "checked", "table", "guard"]) {
+      expect(siteAt(SHAPE_ID, `export const ${marker}`)).toMatchObject({ kinds: ["type"] });
+    }
+    expect(siteAt(SHAPE_ID, "export class Typed")).toMatchObject({ kinds: ["type"] });
+  });
+
+  it("the JavaScript `typeof x` operator and an instantiation expression are value uses", () => {
+    expect(siteAt(LIMIT_ID, "export const kindName")).toMatchObject({ kinds: ["value"] });
+    expect(siteAt("declared.ts:class:Base", "export const Specialized")).toMatchObject({
+      kinds: ["value"],
+      members: [],
+    });
+  });
+
+  it("a class `extends` is a value use of a name inside a call", () => {
+    expect(siteAt("declared.ts:class:Base", "export class Mixed")).toMatchObject({
+      kinds: ["value"],
+      members: [],
+    });
+  });
+
+  it("only the first property of a chain is a member, optional chaining included", () => {
+    expect(siteAt(LIMIT_ID, "export const chained")).toMatchObject({ members: ["toFixed"] });
+    expect(siteAt(LIMIT_ID, "export const optional")).toMatchObject({ members: ["toFixed"] });
+  });
+
+  it("parentheses, `!` and `as` around the name do not hide the member read off it", () => {
+    expect(siteAt(LIMIT_ID, "export const wrapped")).toMatchObject({
+      kinds: ["value"],
+      members: ["toExponential", "toFixed", "toPrecision"],
+    });
+  });
+
+  it("an element access, a shorthand property and a qualified name list no member", () => {
+    const COLOR_ID = "declared.ts:enum:Color";
+    expect(siteAt(COLOR_ID, "export const bracket")).toMatchObject({
+      kinds: ["value"],
+      members: [],
+    });
+    expect(siteAt(LIMIT_ID, "export const shorthand")).toMatchObject({
+      kinds: ["value"],
+      members: [],
+    });
+    expect(siteAt(COLOR_ID, "export let picked")).toMatchObject({ kinds: ["type"], members: [] });
+    expect(siteAt(COLOR_ID, "export type RedType")).toMatchObject({ kinds: ["type"], members: [] });
+  });
+
+  it("a dotted name in a heritage clause is a property access and lists its member", () => {
+    expect(siteAt("declared.ts:enum:Color", "export class Dotted")).toMatchObject({
+      kinds: ["value"],
+      members: ["Red"],
+    });
+  });
+
+  it("`export default` of an expression that only contains the name is a value use", () => {
+    const line = 2;
+    const site = (node(edges, LIMIT_ID).uses ?? []).find(
+      (u) => u.file === "default-call.ts" && u.line === line,
+    );
+    expect(site).toMatchObject({ kinds: ["value"], members: [] });
   });
 
   it("a function's call sites from --find are value uses with no members", () => {
