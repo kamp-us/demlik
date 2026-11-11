@@ -32,8 +32,11 @@ full graph.
 
 `--find` always prints JSON (`--pretty` indents it): `{ name, scope, matches }`.
 Each match has `id`, `name`, `kind`, `file`, `line`, `isExported`, and `uses`, a
-list of `{ file, line }`. A function's uses are its call sites. A declaration's
-are every place the type checker resolves to it. Several matches exit 0. No
+list of `{ file, line, kinds, members }`. A function's uses are its call sites. A
+declaration's are every place the type checker resolves to it. `kinds` says how
+the name is used on that line (`import`, `export`, `type`, `value`), and `members`
+lists the properties read straight off it there, so `orderSchema.parse(input)`
+is a `value` use with `members: ["parse"]`. Several matches exit 0. No
 match prints an empty list, warns on stderr, and exits 0.
 
 ## Feature hexagon

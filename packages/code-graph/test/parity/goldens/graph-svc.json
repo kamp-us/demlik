@@ -15,19 +15,35 @@ exit 0
       "uses": [
         {
           "file": "src/audit-runs/index.ts",
-          "line": 1
+          "kinds": [
+            "export"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/findings/flows/run.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/findings/flows/run.ts",
-          "line": 2
+          "kinds": [
+            "import"
+          ],
+          "line": 2,
+          "members": []
         },
         {
           "file": "src/findings/flows/run.ts",
-          "line": 4
+          "kinds": [
+            "value"
+          ],
+          "line": 4,
+          "members": []
         }
       ]
     },
@@ -42,15 +58,27 @@ exit 0
       "uses": [
         {
           "file": "src/findings/index.ts",
-          "line": 1
+          "kinds": [
+            "export"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/lib/util.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/lib/util.ts",
-          "line": 2
+          "kinds": [
+            "value"
+          ],
+          "line": 2,
+          "members": []
         }
       ]
     },
@@ -65,11 +93,19 @@ exit 0
       "uses": [
         {
           "file": "src/findings/rules/score.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/findings/rules/score.ts",
-          "line": 5
+          "kinds": [
+            "value"
+          ],
+          "line": 5,
+          "members": []
         }
       ]
     },
@@ -94,7 +130,11 @@ exit 0
       "uses": [
         {
           "file": "src/findings/flows/lazy.ts",
-          "line": 5
+          "kinds": [
+            "export"
+          ],
+          "line": 5,
+          "members": []
         }
       ]
     },
@@ -109,27 +149,51 @@ exit 0
       "uses": [
         {
           "file": "src/findings/flows/run.ts",
-          "line": 3
+          "kinds": [
+            "import"
+          ],
+          "line": 3,
+          "members": []
         },
         {
           "file": "src/findings/flows/run.ts",
-          "line": 4
+          "kinds": [
+            "value"
+          ],
+          "line": 4,
+          "members": []
         },
         {
           "file": "src/findings/rules/score.ts",
-          "line": 3
+          "kinds": [
+            "import"
+          ],
+          "line": 3,
+          "members": []
         },
         {
           "file": "src/findings/rules/score.ts",
-          "line": 5
+          "kinds": [
+            "value"
+          ],
+          "line": 5,
+          "members": []
         },
         {
           "file": "src/index.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "src/index.ts",
-          "line": 2
+          "kinds": [
+            "value"
+          ],
+          "line": 2,
+          "members": []
         }
       ]
     },

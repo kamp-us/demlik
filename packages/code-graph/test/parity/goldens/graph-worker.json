@@ -94,11 +94,19 @@ exit 0
       "uses": [
         {
           "file": "store.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "store.ts",
-          "line": 5
+          "kinds": [
+            "value"
+          ],
+          "line": 5,
+          "members": []
         }
       ]
     },
@@ -113,19 +121,35 @@ exit 0
       "uses": [
         {
           "file": "orphan.workflow.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "orphan.workflow.ts",
-          "line": 7
+          "kinds": [
+            "value"
+          ],
+          "line": 7,
+          "members": []
         },
         {
           "file": "scan.workflow.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "scan.workflow.ts",
-          "line": 7
+          "kinds": [
+            "value"
+          ],
+          "line": 7,
+          "members": []
         }
       ]
     },
@@ -140,11 +164,19 @@ exit 0
       "uses": [
         {
           "file": "store.ts",
-          "line": 1
+          "kinds": [
+            "import"
+          ],
+          "line": 1,
+          "members": []
         },
         {
           "file": "store.ts",
-          "line": 3
+          "kinds": [
+            "type"
+          ],
+          "line": 3,
+          "members": []
         }
       ]
     },
@@ -159,7 +191,11 @@ exit 0
       "uses": [
         {
           "file": "scan.workflow.ts",
-          "line": 15
+          "kinds": [
+            "value"
+          ],
+          "line": 15,
+          "members": []
         }
       ]
     },
@@ -184,7 +220,11 @@ exit 0
       "uses": [
         {
           "file": "store.ts",
-          "line": 5
+          "kinds": [
+            "type"
+          ],
+          "line": 5,
+          "members": []
         }
       ]
     },
@@ -199,7 +239,11 @@ exit 0
       "uses": [
         {
           "file": "store.ts",
-          "line": 17
+          "kinds": [
+            "value"
+          ],
+          "line": 17,
+          "members": []
         }
       ]
     }
