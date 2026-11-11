@@ -4,7 +4,13 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assembleGraph, assembleGraphWithEdges } from "../extract/assemble.js";
 import { loadCheapProject, loadEdgeProject } from "../extract/project.js";
-import { type DeclarationNode, type Graph, ThresholdsSchema } from "../schema.js";
+import {
+  type DeclarationNode,
+  type Graph,
+  ThresholdsSchema,
+  type UseSite,
+  UseSiteSchema,
+} from "../schema.js";
 import { findByName, renderFind } from "./find.js";
 
 const DECLARED = `export type Alias = { a: number };
@@ -48,10 +54,27 @@ export function shadow(): number { const LIMIT = 9; return LIMIT; }
 export const bag = { LIMIT };
 `;
 
+const KINDS = `import { Base, Color, LIMIT, type Shape, arrow } from "./declared";
+import * as D from "./declared";
+export { LIMIT as Limit } from "./declared";
+export type OnlyType = typeof LIMIT;
+export const both: typeof LIMIT = LIMIT;
+export const text = LIMIT.toFixed(2) + LIMIT.toString();
+export const red = Color.Red;
+export const viaNamespace = D.LIMIT.toFixed(1);
+export const mixed = LIMIT.valueOf() + LIMIT.Zeta + LIMIT.alpha + LIMIT.valueOf();
+export class Sub extends Base {}
+export class Impl implements Shape { x = 1; }
+export interface Wider extends Shape { z: number }
+export function useArrow(): number { return arrow(); }
+export default LIMIT;
+`;
+
 const FILES: Record<string, string> = {
   "declared.ts": DECLARED,
   "widget.ts": DEFAULT_CLASS,
   "consumer.ts": CONSUMER,
+  "kinds.ts": KINDS,
   "anonymous.ts": "export default class {}\n",
 };
 
@@ -201,6 +224,95 @@ describe("declaration uses — resolved by the type checker (SPEC §8 C6)", () =
     expect(usesIn("declared.ts:class:Later", "declared.ts")).toEqual([
       lineOf(DECLARED, "export { Later }"),
     ]);
+  });
+});
+
+function siteAt(id: string, marker: string): UseSite | undefined {
+  const line = lineOf(KINDS, marker);
+  return (node(edges, id).uses ?? []).find((u) => u.file === "kinds.ts" && u.line === line);
+}
+
+describe("use sites say how the name is used there (SPEC §8 C6)", () => {
+  const LIMIT_ID = "declared.ts:constant:LIMIT";
+
+  it("an import specifier is an import", () => {
+    expect(siteAt(LIMIT_ID, "import { Base")).toMatchObject({ kinds: ["import"], members: [] });
+  });
+
+  it("a re-export specifier and `export default X` are exports", () => {
+    expect(siteAt(LIMIT_ID, "export { LIMIT")).toMatchObject({ kinds: ["export"], members: [] });
+    expect(siteAt(LIMIT_ID, "export default")).toMatchObject({ kinds: ["export"], members: [] });
+  });
+
+  it("`typeof X` in a type is a type use", () => {
+    expect(siteAt(LIMIT_ID, "export type OnlyType")).toMatchObject({
+      kinds: ["type"],
+      members: [],
+    });
+  });
+
+  it("one line that uses the name as a type and as a value lists both kinds, sorted", () => {
+    expect(siteAt(LIMIT_ID, "export const both")).toMatchObject({
+      kinds: ["type", "value"],
+      members: [],
+    });
+  });
+
+  it("a value use names every member read off the name on that line, sorted", () => {
+    expect(siteAt(LIMIT_ID, "export const text")).toMatchObject({
+      kinds: ["value"],
+      members: ["toFixed", "toString"],
+    });
+    expect(siteAt("declared.ts:enum:Color", "export const red")).toMatchObject({
+      kinds: ["value"],
+      members: ["Red"],
+    });
+  });
+
+  it("a name reached through a namespace import keeps the member read off it", () => {
+    expect(siteAt(LIMIT_ID, "export const viaNamespace")).toMatchObject({
+      kinds: ["value"],
+      members: ["toFixed"],
+    });
+  });
+
+  it("members are listed once each, in code-unit order (capitals first)", () => {
+    expect(siteAt(LIMIT_ID, "export const mixed")).toMatchObject({
+      kinds: ["value"],
+      members: ["Zeta", "alpha", "valueOf"],
+    });
+  });
+
+  it("a class `extends` is a value use; `implements` and an interface `extends` are type uses", () => {
+    expect(siteAt("declared.ts:class:Base", "export class Sub")).toMatchObject({
+      kinds: ["value"],
+    });
+    expect(siteAt("declared.ts:interface:Shape", "export class Impl")).toMatchObject({
+      kinds: ["type"],
+    });
+    expect(siteAt("declared.ts:interface:Shape", "export interface Wider")).toMatchObject({
+      kinds: ["type"],
+    });
+  });
+
+  it("a function's call sites from --find are value uses with no members", () => {
+    const [match] = findByName(edges, "arrow");
+    expect(match?.uses).toEqual([
+      {
+        file: "kinds.ts",
+        line: lineOf(KINDS, "export function useArrow"),
+        kinds: ["value"],
+        members: [],
+      },
+    ]);
+  });
+
+  it("every use site of every declaration carries both fields", () => {
+    const sites = edges.declarations.flatMap((d) => d.uses ?? []);
+    expect(sites.length).toBeGreaterThan(0);
+    for (const site of sites) expect(UseSiteSchema.safeParse(site).success).toBe(true);
+    for (const site of sites) expect(site.kinds.length).toBeGreaterThan(0);
+    expect(UseSiteSchema.safeParse({ file: "a.ts", line: 1 }).success).toBe(false);
   });
 });
 

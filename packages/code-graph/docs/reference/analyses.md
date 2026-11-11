@@ -29,6 +29,8 @@ A declaration node represents a top-level type alias, interface, enum, class,
 or `const` binding that is not already a function node. Each has an id, name,
 kind, file, line, exported flag, and `uses`: every `file` and `line` where the
 type checker resolves a name to it, through renamed imports and re-exports.
+Each use also carries `kinds` (`import`, `export`, `type`, `value`: how the name
+is used on that line) and `members` (the properties read straight off it there).
 `uses` is `null` without call analysis. Declarations have no metrics or findings.
 
 `--find <name>` prints every function and declaration with that bare name as
