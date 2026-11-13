@@ -9,6 +9,7 @@ since the tarball holds none of those files.
 
 New how-to, "Find a wrong machine with a law": it finds an order machine that
 charges the wrong amount with `arbSchemaGuidedSequence`, `foldEvents` and
-`lawTrace` from `@demlik/tea/testing/effect`, which stay `@experimental`. The
-glossary gains `law`, and an `Avoid:` line on `subpath` (door) and `battery`
-(battery layer). No export, subpath or tier changes.
+`lawTrace` from `@demlik/tea/testing/effect`. `arbSchemaGuidedSequence` and
+`lawTrace` stay `@experimental`; `foldEvents` keeps the stable promise of the
+subpath. The glossary gains `law`, and an `Avoid:` line on `subpath` (door) and
+`battery` (battery layer). No export, subpath or tier changes.

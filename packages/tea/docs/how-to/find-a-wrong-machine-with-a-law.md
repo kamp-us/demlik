@@ -133,7 +133,8 @@ const lists = Result.getOrThrow(
 `foldEvents` folds a list through the machine and returns every step: the Msg,
 the Cmds it sent and the Model before and after. `lawTrace` hands your function
 all the steps and answers `null` when the law holds. When it breaks, it answers
-a `LawBreak` whose `reason` is the string your function returned.
+a `LawBreak` whose `reason` is the string your function returned, or `null` when
+it returned `false`.
 
 This law reads the amount from the `place` Msg and not from the Model. A wrong
 line that also wrote the wrong amount into the Model would agree with a law that

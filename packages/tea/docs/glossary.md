@@ -136,8 +136,9 @@ A rule a machine must keep on every list of Msgs. `lawInvariant`,
 `@demlik/tea/pbt`, each take one [fold](#fold) and a check you write, and judge
 a different part of it: every step, the final state, or the steps and the final
 state together. A law answers `null` when the rule holds and a `LawBreak` when
-it does not, and the `LawBreak`'s `reason` is the string your check returned.
-All three are experimental.
+it does not. The `LawBreak`'s `reason` is the string your check returned, or
+`null` when the check returned `false` or an empty string; `lawTerminates` always
+leaves it `null`. All three are experimental.
 Reference: [`lawTrace`](./reference/testing-effect.md#lawTrace) and
 [`LawBreak`](./reference/testing-effect.md#LawBreak). How:
 [Find a wrong machine with a law](./how-to/find-a-wrong-machine-with-a-law.md).
