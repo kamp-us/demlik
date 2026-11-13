@@ -1,0 +1,28 @@
+Hexagon: Billing
+
+Commands
+  dispute: ForDisputing = (invoice: string, note: string) => Promise<void>
+  pay: ForPaying = (invoice: string) => Promise<void>
+  refund: ForRefunding = (invoice: string, cents: number) => Promise<void>
+
+External systems
+  ledger: ForLedgering = (entry: string) => Promise<void>
+
+Other bags
+  BillingIntents
+    pay: ForPaying = (invoice: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/billing.ts: createBilling
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

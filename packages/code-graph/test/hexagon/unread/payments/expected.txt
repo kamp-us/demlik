@@ -1,0 +1,28 @@
+Hexagon: Payments
+
+Commands
+  not read: ports.ts:7 Payments: union type
+
+External systems
+  settle: ForSettling = (id: string) => Promise<void>
+
+Other bags
+  PaymentsByCard
+    chargeCard: ForChargingCards = (id: string) => Promise<void>
+  PaymentsByTransfer
+    chargeTransfer: ForChargingTransfers = (id: string, iban: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/payments.ts: createPayments
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:7 Payments: union type

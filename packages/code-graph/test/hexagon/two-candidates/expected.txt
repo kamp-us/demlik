@@ -1,0 +1,33 @@
+Factory: not found
+
+Commands
+  none
+
+External systems
+  none
+
+Other bags
+  Books
+    list: ForListingBooks = () => Promise<string[]>
+    shelve: ForSavingBooks = (title: string) => Promise<void>
+  BooksDriven
+    save: ForSavingBooks = (title: string) => Promise<void>
+  Films
+    screen: ForListingFilms = () => Promise<string[]>
+  FilmsDriven
+    archive: ForSavingFilms = (title: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/titles.ts: normalize
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

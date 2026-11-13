@@ -1,0 +1,28 @@
+Hexagon: Orders
+
+Commands
+  cancelOrder: ForCancellingOrders = (id: string, reason?: string) => Promise<void>
+  placeOrder: ForPlacingOrders = (id: string) => Promise<void>
+  previewOrder: ForPreviewingOrders = (id: string) => Promise<string>
+
+External systems
+  saveOrder: ForSavingOrders = (id: string) => Promise<void>
+
+Other bags
+  OrderIntents
+    previewOrder: ForPreviewingOrders = (id: string) => Promise<string>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/orders.ts: createOrders
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

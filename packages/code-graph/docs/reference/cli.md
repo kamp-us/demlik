@@ -52,15 +52,33 @@ print `none`. JSON fields are `feature`, `commands`, `externalSystems`,
 `otherBags`, `unbaggedPorts`, `useCases`, `adapters` and `notRead`.
 
 Only direct exported `ForX` function/reference type aliases and non-generic bags
-of plain typed properties are read. Optional properties are allowed. The factory
-must be a direct exported function declaration or `const` arrow/function
-expression at module top level in `application/*.ts`. Its exported binding name
-`createX` selects `X` and `XDriven`. Export lists, namespaces and re-exports are
-not factories. Without a factory, print `Factory: not found` and put every
-readable bag under Other bags; JSON `feature` is `null`.
+of plain typed properties are read. Optional properties are allowed. A bag may be
+written as one type literal, as an intersection (`A & { ... }`), as an interface
+that extends others, or as an alias of another bag, and its members are those of
+every part. A part that is a name must be declared exactly once in `ports.ts`
+itself, exported or not. A bag is read whole or not at all: a name that comes from
+another file, is declared twice, is qualified, takes type arguments or loops back,
+and a member name written in two parts, leave the whole bag in Not read, with a
+reason that names the operand and the cause.
+
+The factory must be a direct exported function declaration or `const`
+arrow/function expression at module top level in `application/*.ts`. Its exported
+binding name `createX` selects `X` and `XDriven`. Export lists, namespaces and
+re-exports are not factories. Without a factory, the one pair `X` and `XDriven`
+that `ports.ts` exports names the feature, as `Stock` and `StockDriven` do
+whatever the folder is called. With no such pair, or two, print
+`Factory: not found` and put every readable bag under Other bags; JSON `feature`
+is `null`.
+
+Commands and External systems hold the members of the feature's `X` and `XDriven`
+bags. A list whose bag is not read prints the row that says so in place of `none`,
+`not read: ports.ts:5 Orders: union type`, and `--json` holds
+`{ "notRead": { "file", "line", "name", "reason" } }` where it would hold an
+array; no member of that bag is printed.
 
 Every other export in `ports.ts` appears in Not read as `file:line Name: reason`.
-There is no alias, inheritance, intersection or scope expansion. Port expressions
+There is no type checker, so a union, a mapped or conditional type, a generic
+bag and a name from another file are not read. Port expressions
 and property types stay as written. A port is used only when a readable bag
 member's entire type is exactly its name. Use cases list each file's direct
 exported functions. Standard source filters include tests. Lists and JSON keys
@@ -84,7 +102,7 @@ Each scope lists, in order:
 
 | Section | Rows |
 |---|---|
-| Features | Per feature: `tables` (the names its `adapters/driven/tables.ts` exports as tables), `reach`, and the `commands` and `externalSystems` of its `ports.ts`, as `--hexagon` prints them. A feature with no `ports.ts` lists empty ports |
+| Features | Per feature: `tables` (the names its `adapters/driven/tables.ts` exports as tables), `reach`, and the `commands` and `externalSystems` of its `ports.ts`, as `--hexagon` prints them, including a list that is not read, which holds the same `notRead` row in text and in `--json`. A feature with no `ports.ts` lists empty ports |
 | Workers | Per worker, per binding: its kind, the files `bindingOwners` narrows it to, and every site with its line and place. `testFiles` are left out |
 | Technologies | Per technology the scope's `interpreters` declares: its root, its modules, and every file outside the root that imports a file under it, a type-only import and a re-export included |
 | Not followed | Each file with a write the run could not follow to a table, with the kind: `untraced-write`, `unloaded-module`, `default-export`, `ambiguous-star`, `export-equals` or `raw-sql`. `none` when there is no such file |

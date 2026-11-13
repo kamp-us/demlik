@@ -885,28 +885,49 @@ tsconfig, type checker, model call or configuration. It reads only this allowlis
   The alias itself is non-generic; a generic port alias is listed as not read.
   A generic function type (`<T>(x: T) => T`) is a plain port and is preserved. Port expressions print as written, without resolving
   aliases, scopes, imported types or substituting generic arguments.
-- **Bag:** a direct `export type Name = { member: Type; ... }` or
-  `export interface Name { member: Type; ... }`, declared once and non-generic.
-  Every member must be a plain property signature with a written type; `readonly`
-  and optional `?` properties are allowed. Computed keys, duplicate members,
-  interface extensions, index/call/construct signatures, methods and accessors
-  are not read. Neither are parenthesized, mapped, conditional, intersection,
-  union or aliased bag shapes. Property types themselves remain as written.
+- **Bag:** a direct `export type Name = <parts>` or
+  `export interface Name extends <parts> { member: Type; ... }`, declared once and
+  non-generic. A part is a type literal `{ member: Type; ... }`, an interface's own
+  body, or a name: an operand of `&`, an `extends` clause, or the whole right side of
+  an alias. A name is read when `ports.ts` itself declares it exactly once, exported
+  or not, as a non-generic type alias or interface, and that declaration is read as
+  a bag in turn. A bag's members are the members of all its parts, so
+  `Orders = OrderIntents & { placeOrder: ForPlacing }`, `interface Billing extends
+  BillingIntents { refund: ForRefunding }` and `Shipment = ShipmentBase`, an alias of
+  an alias, are each read. A declaration reached by two paths, as the base of a
+  diamond of `extends` is, gives its members once.
+  Every member of every part must be a plain property signature with a written
+  type; `readonly` and optional `?` properties are allowed. Computed keys, a member
+  written twice in one part, index/call/construct signatures, methods and accessors
+  are not read, and neither are parenthesized, mapped, conditional or union shapes.
+  The bag is read whole or not at all: a member name written in two parts, a name
+  `ports.ts` imports, does not declare or declares more than once, a qualified name
+  (`Remote.Bag`), a name with type arguments, a generic declaration and a cycle of
+  aliases each leave the whole bag under Not read. The reason says which: an
+  operand's carries `operand <Name>:` and the innermost operand that fails, and a
+  cycle is `cyclic alias`. Property types themselves remain as written.
 - **Factory:** a direct module-level `export function createX` with a body, or
   `export const createX =` an arrow or function expression in `application/*.ts`.
   Its exported binding name supplies `X`, including for named function expressions.
   Export lists, re-exports, default exports and namespace forms are not factories.
 
 The factory in the file named after the feature directory takes precedence,
-then factories with readable `X` and `XDriven` bags, then file/name order.
-`X` supplies Commands; `XDriven` supplies External systems. With no factory,
-print `Factory: not found`, leave both sections empty, and list every readable bag
-under Other bags. Do not infer a feature from the directory name; JSON `feature`
-is `null` when no factory is found.
+then factories whose `X` and `XDriven` `ports.ts` exports, then file/name order.
+With no factory, the feature is the one name `X` for which `ports.ts` exports both
+`X` and `XDriven`, read or not, whatever the folder's functions are called. With no
+such name, or with two, no feature is named, because nothing here chooses between
+them: print `Factory: not found`, leave both sections empty, and list every
+readable bag under Other bags. Do not infer a feature from the
+directory name; JSON `feature` is `null` when none is named.
+`X` supplies Commands; `XDriven` supplies External systems.
 
 Print sections in order: Commands, External systems, Other bags, Ports declared
 in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections print
-`none`; JSON uses empty arrays. Members keep their written names, optional `?`
+`none`; JSON uses empty arrays. A list whose bag is under Not read is no empty
+list: Commands or External systems then holds the one row that says so,
+`not read: ports.ts:5 Orders: union type` in text and `{"notRead": {file, line,
+name, reason}}` in JSON in place of the array, with no member of that bag. Members
+keep their written names, optional `?`
 and types. If a member's entire written type is exactly the name of a readable
 port, also print that port's written expression. Only that exact match counts a
 port as used. Aliases, nested references, qualified names and generic
@@ -932,7 +953,9 @@ work as on other views. No options or library subpaths are added.
 
 Only missing `ports.ts` or an unreadable selected directory exits 2, with a clear
 stderr message naming the path and no report. Cyclic bag aliases are Not read;
-readable properties referring to bags are printed without traversing them.
+readable properties referring to bags are printed without traversing them. A
+property type that names a bag is only text; a part is followed only where `&`,
+`extends` or an alias names it.
 
 ## 15. Owners view (`--owners`)
 
@@ -969,8 +992,9 @@ other views. Lists sort lexically, JSON keys go through the stable serializer, a
 absolute path enters the report, so two runs over one tree print the same bytes. Each scope lists:
 
 - **Features**, by name. A feature lists its `tables`, its `reach` and its ports, `commands` and
-  `externalSystems`, as `readHexagon` returns them for `src/<feature>`. A feature with no `ports.ts`
-  lists empty ports.
+  `externalSystems`, as `readHexagon` returns them for `src/<feature>`: a list whose bag is not read
+  holds the row that says so, in text and in `--json`, as it does under `--hexagon`. A feature with no
+  `ports.ts` lists empty ports.
 - **Workers**, by the service name their config gives them, each with the bindings the scope's files
   reference: the binding's kind, the files `bindingOwners` narrows it to, and every site with its
   line and where the file sits. The sites are those of the deployable census, less the files
