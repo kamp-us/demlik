@@ -433,7 +433,7 @@ const Machine: {
     spec: NoInfer<Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
       readonly cmds: readonly D[];
       readonly model: Schema<S>;
-      readonly msg: Schema<M>;
+      readonly msg: Schema<M> & NoSettledTag<M, D> & LiteralTags<M["type"]>;
       readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "ctx" | "sub">;
     },
   ) => Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx> & {

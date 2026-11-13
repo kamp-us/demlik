@@ -147,6 +147,83 @@ Machine.make({
   types: { cmd: {} as ReturnType<typeof undeclared> },
 });
 
+const fetchFile = Cmd.make("fetch_file", {
+  input: Schema.Struct({}),
+  ok: Schema.String,
+  err: ["offline"],
+});
+const Go = Schema.Struct({ type: Schema.Literal("Go") });
+const answers = {
+  model: Count,
+  cmds: [fetchFile] as const,
+  init: (loaded: typeof Count.Type | null) =>
+    [loaded ?? { count: 0 }, []] as const,
+};
+const settledCells = {
+  fetch_file_ok: (state: typeof Count.Type) => [state, []] as const,
+  fetch_file_err: (state: typeof Count.Type) => [state, []] as const,
+};
+// A Msg named like its Cmd, without the `_ok` or `_err` suffix, is no answer.
+const sameName = Machine.make({
+  ...answers,
+  msg: Schema.Union([
+    Go,
+    Schema.Struct({ type: Schema.Literal("fetch_file") }),
+  ]),
+  update: {
+    Go: (state) => [state, []],
+    fetch_file: (state) => [state, []],
+    ...settledCells,
+  },
+});
+expectTypeOf(sameName.msg.Type).toEqualTypeOf<
+  { readonly type: "Go" } | { readonly type: "fetch_file" }
+>();
+Machine.make({
+  ...answers,
+  // @ts-expect-error a plain Msg cannot be named like a Cmd's settled Msg
+  msg: Schema.Union([
+    Go,
+    Schema.Struct({
+      type: Schema.Literal("fetch_file_ok"),
+      who: Schema.String,
+    }),
+  ]),
+  update: { Go: (state) => [state, []], ...settledCells },
+});
+Machine.make({
+  ...answers,
+  // @ts-expect-error the `_err` name is a settled Msg name too
+  msg: Schema.Union([
+    Go,
+    Schema.Struct({ type: Schema.Literal("fetch_file_err") }),
+  ]),
+  update: { Go: (state) => [state, []], ...settledCells },
+});
+Machine.make({
+  ...answers,
+  cmds: [],
+  // @ts-expect-error a lone open string tag lets every cell name compile
+  msg: Schema.Struct({ type: Schema.String }),
+  update: { Go: (state) => [state, []], Anything: (state) => [state, []] },
+});
+Machine.make({
+  ...answers,
+  cmds: [],
+  // @ts-expect-error one open string tag among literal ones does the same
+  msg: Schema.Union([Go, Schema.Struct({ type: Schema.String })]),
+  update: { Go: (state) => [state, []] },
+});
+Machine.make({
+  ...answers,
+  cmds: [],
+  // @ts-expect-error a template literal tag is open too
+  msg: Schema.Struct({
+    type: Schema.TemplateLiteral([Schema.String, "_ok"]),
+  }),
+  update: { Anything_ok: (state) => [state, []] },
+});
+
 type Tick = Sub<"ticker", { readonly every: number }>;
 const contextual = Machine.make({
   model: Count,
