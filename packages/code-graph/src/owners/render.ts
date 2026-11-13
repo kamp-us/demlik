@@ -1,5 +1,5 @@
 import { notFollowedLine } from "../boundaries/tables/unfollowed.js";
-import type { HexagonMember } from "../hexagon/ports.js";
+import { portListLines } from "../hexagon/render.js";
 import { stableStringify } from "../render/json.js";
 import type { FeatureReach, OwnedFeature } from "./features.js";
 import { locusText } from "./locus.js";
@@ -25,14 +25,6 @@ function block(depth: number, title: string, lines: readonly string[]): string[]
   return [`${indent(depth)}${title}`, ...inner.map((line) => `${indent(depth + 1)}${line}`)];
 }
 
-function memberLines(members: readonly HexagonMember[]): string[] {
-  return members.map((member) => {
-    const signature =
-      member.signature !== null && member.signature !== member.type ? ` = ${member.signature}` : "";
-    return `${member.name}: ${member.type}${signature}`;
-  });
-}
-
 // `access` is padded to the longest word, so the file column lines up.
 const reachLine = ({ table, access, file, place }: FeatureReach): string =>
   `${table}  ${access.padEnd("foreign-key".length)}  ${file}  ${locusText(place)}`;
@@ -43,8 +35,8 @@ function featureLines(feature: OwnedFeature): string[] {
     `${indent(1)}Feature ${feature.feature}`,
     ...block(2, "Tables", tables),
     ...block(2, "Reach into its tables", feature.reach.map(reachLine)),
-    ...block(2, "Commands", memberLines(feature.commands)),
-    ...block(2, "External systems", memberLines(feature.externalSystems)),
+    ...block(2, "Commands", portListLines(feature.commands)),
+    ...block(2, "External systems", portListLines(feature.externalSystems)),
   ];
 }
 

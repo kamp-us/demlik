@@ -1,0 +1,81 @@
+Hexagon: Catalog
+
+Commands
+  add: (body: string) => Promise<string>
+  archive: (id: string) => Promise<void>
+  bulkDiscount: (ids: string[], percent: number) => Promise<void>
+  clearDiscount: (id: string) => Promise<void>
+  count: () => Promise<number>
+  currency: string
+  discount: (id: string, percent: number) => Promise<void>
+  duplicate: (id: string) => Promise<string>
+  exists: (id: string) => Promise<boolean>
+  feature: (id: string) => Promise<void>
+  findByTag: ForSearching = (query: string) => Promise<string[]>
+  get: ForFinding = (id: string) => Promise<string | null>
+  list: ForListing = (page?: number) => Promise<string[]>
+  listTags: () => Promise<string[]>
+  mergeTags: (from: string, into: string) => Promise<void>
+  priceHistory: (id: string) => Promise<number[]>
+  publish: ForPublishing = (id: string) => Promise<void>
+  recent?: ForListing = (page?: number) => Promise<string[]>
+  reindex: ForIndexing = (id: string) => Promise<void>
+  remove: (id: string) => Promise<void>
+  rename: (id: string, title: string) => Promise<void>
+  renameTag: (from: string, to: string) => Promise<void>
+  restore: (id: string) => Promise<void>
+  schedule: (id: string, at: string) => Promise<void>
+  search: ForSearching = (query: string) => Promise<string[]>
+  setPrice: ForPricing = (id: string, cents: number) => Promise<void>
+  tag: ForTagging = (id: string, tag: string) => Promise<void>
+  unfeature: (id: string) => Promise<void>
+  unpublish: ForPublishing = (id: string) => Promise<void>
+  untag: ForTagging = (id: string, tag: string) => Promise<void>
+
+External systems
+  store: ForStoring = (id: string, body: string) => Promise<void>
+
+Other bags
+  CatalogPricing
+    bulkDiscount: (ids: string[], percent: number) => Promise<void>
+    clearDiscount: (id: string) => Promise<void>
+    currency: string
+    discount: (id: string, percent: number) => Promise<void>
+    priceHistory: (id: string) => Promise<number[]>
+    setPrice: ForPricing = (id: string, cents: number) => Promise<void>
+  CatalogReads
+    count: () => Promise<number>
+    exists: (id: string) => Promise<boolean>
+    get: ForFinding = (id: string) => Promise<string | null>
+    list: ForListing = (page?: number) => Promise<string[]>
+    recent?: ForListing = (page?: number) => Promise<string[]>
+    search: ForSearching = (query: string) => Promise<string[]>
+  CatalogTags
+    findByTag: ForSearching = (query: string) => Promise<string[]>
+    listTags: () => Promise<string[]>
+    mergeTags: (from: string, into: string) => Promise<void>
+    renameTag: (from: string, to: string) => Promise<void>
+    tag: ForTagging = (id: string, tag: string) => Promise<void>
+    untag: ForTagging = (id: string, tag: string) => Promise<void>
+  CatalogWrites
+    add: (body: string) => Promise<string>
+    archive: (id: string) => Promise<void>
+    duplicate: (id: string) => Promise<string>
+    remove: (id: string) => Promise<void>
+    rename: (id: string, title: string) => Promise<void>
+    restore: (id: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/catalog.ts: createCatalog
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

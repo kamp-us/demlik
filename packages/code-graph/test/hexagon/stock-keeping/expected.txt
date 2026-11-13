@@ -1,0 +1,26 @@
+Hexagon: Stock
+
+Commands
+  count: ForCounting = (sku: string) => Promise<number>
+  restock: ForRestocking = (sku: string, count: number) => Promise<void>
+
+External systems
+  save: ForSavingStock = (sku: string, count: number) => Promise<void>
+
+Other bags
+  none
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/stock.ts: count, restock
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

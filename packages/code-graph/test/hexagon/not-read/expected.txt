@@ -1,25 +1,33 @@
-Factory: not found
+Hexagon: Warehouse
 
 Commands
-  none
+  generic: ForGeneric<string>
+  implicit: ForImplicit
+  nested: Promise<ForUnused>
+  read?: ForReading = () => string
+  scoped: Remote.ForUnused
+  shadowed: <ForUnused>(value: ForUnused) => void
 
 External systems
-  none
+  read: ForReading = () => string
 
 Other bags
-  Warehouse
-    generic: ForGeneric<string>
-    implicit: ForImplicit
-    nested: Promise<ForUnused>
-    read?: ForReading = () => string
-    scoped: Remote.ForUnused
-    shadowed: <ForUnused>(value: ForUnused) => void
-  WarehouseDriven
-    read: ForReading = () => string
+  Alias
+    read: ForUnused = () => void
+  Diamond
+    left: ForUnused = () => void
+    own: ForUnused = () => void
+    right: ForUnused = () => void
+    shared: ForUnused = () => void
+  Intersection
+    count: number
+    read: ForUnused = () => void
+  UsesHidden
+    hidden: ForUnused = () => void
+    visible: ForUnused = () => void
 
 Ports declared in ports.ts but in no bag
   ForScoped: Remote.ForReading
-  ForUnused: () => void
 
 Use cases
   application/factories.ts: helper
@@ -39,7 +47,7 @@ Not read
   ports.ts:21 RemotePorts: re-export
   ports.ts:22 *: re-export
   ports.ts:23 GenericBag: generic bag
-  ports.ts:24 GenericInstance: bag alias
+  ports.ts:24 GenericInstance: operand GenericBag: generic bag
   ports.ts:25 Parenthesized: parenthesized type
   ports.ts:26 Merged: multiple declarations
   ports.ts:27 Merged: multiple declarations
@@ -49,18 +57,16 @@ Not read
   ports.ts:31 Indexed: index signature
   ports.ts:32 Mapped: mapped type
   ports.ts:33 Conditional: conditional type
-  ports.ts:34 Intersection: intersection type
   ports.ts:35 Union: union type
-  ports.ts:36 Alias: bag alias
   ports.ts:37 DefaultBag: default export
-  ports.ts:38 Overridden: interface extends
+  ports.ts:38 Overridden: member read written in two parts
   ports.ts:39 Duplicate: duplicate member
   ports.ts:40 Scoped: not a port or plain bag
   ports.ts:41 OptionalMethod: method or accessor
   ports.ts:42 Getter: method or accessor
   ports.ts:43 Setter: method or accessor
-  ports.ts:44 CyclicA: bag alias
-  ports.ts:45 CyclicB: bag alias
+  ports.ts:44 CyclicA: cyclic alias
+  ports.ts:45 CyclicB: cyclic alias
   ports.ts:46 MissingType: property without type
   ports.ts:47 Computed: computed property
   ports.ts:48 Scope: namespace declaration
@@ -72,3 +78,7 @@ Not read
   ports.ts:54 Escaped: multiple declarations
   ports.ts:55 Escaped: multiple declarations
   ports.ts:56 "./ports": module declaration
+  ports.ts:62 UsesSplit: operand Split: multiple declarations
+  ports.ts:63 UsesUnknown: operand Unknown: not declared in ports.ts
+  ports.ts:64 UsesImported: operand Shared: imported from another file
+  ports.ts:65 UsesQualified: operand Remote.Bag: qualified name

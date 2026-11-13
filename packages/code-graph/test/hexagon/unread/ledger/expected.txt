@@ -1,0 +1,26 @@
+Hexagon: Ledger
+
+Commands
+  not read: ports.ts:6 Ledger: operand Page: generic bag
+
+External systems
+  write: ForWriting = (entry: string) => Promise<void>
+
+Other bags
+  none
+
+Ports declared in ports.ts but in no bag
+  ForClosing: (period: string) => Promise<void>
+  ForPosting: (entry: string) => Promise<void>
+
+Use cases
+  application/ledger.ts: createLedger
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:6 Ledger: operand Page: generic bag

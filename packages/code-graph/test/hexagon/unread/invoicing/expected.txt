@@ -1,0 +1,26 @@
+Hexagon: Invoicing
+
+Commands
+  not read: ports.ts:8 Invoicing: operand Audited: imported from another file
+
+External systems
+  archive: ForArchiving = (invoice: string) => Promise<void>
+
+Other bags
+  InvoiceIntents
+    raise: ForRaising = (customer: string) => Promise<string>
+
+Ports declared in ports.ts but in no bag
+  ForVoiding: (invoice: string) => Promise<void>
+
+Use cases
+  application/invoicing.ts: createInvoicing
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:8 Invoicing: operand Audited: imported from another file
