@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AsyncSchemaError,
+  CmdNameCollisionError,
   DriveFailedError,
   DriveStalledError,
   NoCellError,
@@ -25,8 +26,9 @@ import { PropertyFailure } from "./pbt";
 //   (1) THROWN / boundary errors — raised at the runtime edge, never folded
 //       into Model. `class extends Error` + `readonly _tag` literal, so a
 //       consumer can branch by `instanceof` OR by tag.
-//       → PortNameCollisionError, QuiescenceTimeoutError, NoCellError,
-//         TerminalTimeoutError, RetryExhaustedError.
+//       → PortNameCollisionError, CmdNameCollisionError,
+//         QuiescenceTimeoutError, NoCellError, TerminalTimeoutError,
+//         RetryExhaustedError.
 //
 //   (2) SETTLED-VALUE errors — folded INTO a machine's Model (`call.error`,
 //       `settleFailed`) and persisted into a `Store<S>` that reloads via plain
@@ -104,6 +106,12 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new OutcomeContractError("fetch", "returned 42"),
     ctor: OutcomeContractError,
     tag: "OutcomeContractError",
+  },
+  {
+    name: "CmdNameCollisionError",
+    make: () => new CmdNameCollisionError("fetch"),
+    ctor: CmdNameCollisionError,
+    tag: "CmdNameCollisionError",
   },
   {
     name: "PropertyFailure",

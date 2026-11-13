@@ -84,6 +84,7 @@ export {
   // for itself; without it the choice is `applyCell` and no checking at all.
   applyCellChecked,
   Cmd,
+  CmdNameCollisionError,
   describeMachine,
   detectUpdateForm,
   foldMsgs,

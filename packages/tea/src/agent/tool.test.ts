@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Outcome, type PortEmitter } from "../index";
+import { CmdNameCollisionError, Outcome, type PortEmitter } from "../index";
 import { run } from "../promise";
 import { MsgType } from "../protocol";
 import { cmdEdgeOver } from "../pure/core";
@@ -274,7 +274,7 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
   });
 
   it("two tools with one name is a declaration bug, refused at construction", () => {
-    expect(() => toolRouter([search, search])).toThrow(/declared twice/);
+    expect(() => toolRouter([search, search])).toThrow(CmdNameCollisionError);
   });
 
   it("outcomeOf reads a settled tool off its Msg, tag and payload beside the reason", () => {

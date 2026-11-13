@@ -26,6 +26,7 @@ import type {
 } from "./pure/core";
 import {
   __DEV__,
+  assertDistinctCmdNames,
   assertPureResult,
   type Cmd,
   deepFreeze,
@@ -1439,6 +1440,10 @@ export function defineMachine<
   U extends Sub,
   Ctx,
 >(m: Machine<S, M, C, U, Ctx>): Machine<S, M, C, U, Ctx> {
+  // One name, one Cmd: refused here, where the author wrote the list, rather
+  // than when an engine first reads it. A machine that skips this call meets
+  // the same rule at `run` and `drive`.
+  assertDistinctCmdNames(m.cmds ?? []);
   // Tag the update form ONCE, here at the typed construction boundary, so no
   // downstream reader re-derives it structurally. Non-enumerable so it does not
   // serialize, show up in `Object.keys`, or collide with a Msg.type key.

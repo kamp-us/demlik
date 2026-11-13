@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (164)
+## Exports (165)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -33,6 +33,7 @@ import { … } from "@demlik/tea";
 | [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds: `Cmd.define` declares a typed Cmd constructor, and `Cmd.none`, `Cmd.batch`, `Cmd.when` and `Cmd.whenDefined` build the Cmd list an update cell returns. |
 | [`CmdDef`](#CmdDef) | Interface | stable | What `Cmd.define` returns: the Cmd builder itself (`fetch({ url })`), with the minted Msg builders and the declaration hung on it. |
 | [`CmdInput`](#CmdInput) | Type | stable | The payload a constructor accepts: a plain record spread beside `type`. |
+| [`CmdNameCollisionError`](#CmdNameCollisionError) | Class | stable | A list of Cmd defs names one Cmd more than once: two defs built under one name, or one def listed twice. |
 | [`CmdOf`](#CmdOf) | Type | stable | The Cmd value a def (or a union of defs) builds. |
 | [`CmdValue`](#CmdValue) | Type | stable | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
 | [`CtxArg`](#CtxArg) | Type | stable | The `ctx` field of an engine's options: optional when the machine's `Ctx` is empty, required otherwise. |
@@ -608,6 +609,19 @@ interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagg
 
 ```ts
 type CmdInput = { readonly type?: never } & Record<string, unknown>
+```
+
+<a id="CmdNameCollisionError"></a>
+
+### `CmdNameCollisionError`
+
+```ts
+class CmdNameCollisionError extends Error {
+  constructor(cmdType: string);
+  readonly _tag: "CmdNameCollisionError";
+  readonly cmdType: string;
+  readonly name: "CmdNameCollisionError";
+}
 ```
 
 <a id="CmdOf"></a>
