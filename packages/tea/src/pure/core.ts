@@ -349,6 +349,43 @@ export class OutcomeContractError extends Error {
 }
 
 /**
+ * A list of Cmd defs names one Cmd more than once: two defs built under one
+ * name, or one def listed twice. A name keys the def's `ok` parse and the
+ * `<name>_ok` / `<name>_err` Msgs minted from it, so a repeat would leave one
+ * def answering for both. A contract breach (ADR 0011, invariant 7): it is
+ * thrown by `defineMachine` when a machine is built and again when a machine
+ * built by hand starts, never folded into Model.
+ */
+export class CmdNameCollisionError extends Error {
+  override readonly name = "CmdNameCollisionError";
+  readonly _tag = "CmdNameCollisionError" as const;
+  constructor(public readonly cmdType: string) {
+    super(
+      `@demlik/tea: two Cmds share the name "${cmdType}". A name builds one ` +
+        `Cmd: it keys that Cmd's \`ok\` schema and the "${cmdType}_ok" / ` +
+        `"${cmdType}_err" Msgs minted from it. Give each Cmd its own name, ` +
+        `and list a def once.`,
+    );
+  }
+}
+
+/**
+ * The one rule behind a def list's names: each `cmdType` appears once. Throws
+ * {@link CmdNameCollisionError} on the first repeat. `defineMachine` calls it
+ * over `cmds` when a machine is built; {@link cmdContractOver} calls it when an
+ * engine or a `drive` starts a machine that never went through it.
+ */
+export function assertDistinctCmdNames(
+  defs: Iterable<{ readonly cmdType: string }>,
+): void {
+  const seen = new Set<string>();
+  for (const { cmdType } of defs) {
+    if (seen.has(cmdType)) throw new CmdNameCollisionError(cmdType);
+    seen.add(cmdType);
+  }
+}
+
+/**
  * The payload a constructor accepts: a plain record spread beside `type`. A
  * `type` key is refused at the type level — it would overwrite the discriminant.
  */
@@ -515,14 +552,16 @@ export interface CmdContract {
 /**
  * The edge and the dispatch check over one def list. They share one record of
  * the Msgs this edge minted, which is how the check tells an engine-minted
- * settle from one the handler built by hand.
+ * settle from one the handler built by hand. Throws
+ * {@link CmdNameCollisionError} when the list names a Cmd twice.
  */
 export function cmdContractOver(
   defs: Iterable<AnyCmdDef>,
   clock: () => number,
 ): CmdContract {
-  const byType = new Map<string, AnyCmdDef>();
-  for (const def of defs) byType.set(def.cmdType, def);
+  const list = [...defs];
+  assertDistinctCmdNames(list);
+  const byType = new Map(list.map((def) => [def.cmdType, def]));
   const minted = new WeakSet<object>();
   return {
     settle: (cmd, returned) => {

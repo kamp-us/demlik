@@ -327,6 +327,9 @@ subs: [
   branded object — identity by reference, not by name.
 - Sub ids are derived (`subIdOf(type, deps)`), never authored; the
   `SubId` brand keeps an ad-hoc string from passing for one.
+- A machine's Cmd names are unique: `defineMachine` refuses a repeat with
+  `CmdNameCollisionError`, and `run` and `drive` refuse it again for a
+  machine written as a plain object.
 - Phase 1.1: `Reducer<S, M, C>` and `Transitions<S, M, C>` mapped types
   make the variant set load-bearing — adding a Msg without a handler
   fails to compile.

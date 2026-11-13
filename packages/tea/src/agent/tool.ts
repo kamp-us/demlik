@@ -30,6 +30,7 @@ import {
 } from "../index";
 import { rejectAll, unchecked } from "../internal/schema";
 import {
+  assertDistinctCmdNames,
   cmdEdgeOf,
   detachWorkOf,
   type HandlerCtx,
@@ -404,19 +405,14 @@ export interface ToolRouter<T extends AnyToolDef> {
  * lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that
  * turns a settled message back into a plain outcome.
  *
- * Two tools with one name is a declaration bug, refused here rather than by a
- * silent last-wins map.
+ * Two tools with one name is a declaration bug, refused here with
+ * `CmdNameCollisionError` rather than by a silent last-wins map.
  */
 export function toolRouter<T extends AnyToolDef>(
   tools: readonly T[],
 ): ToolRouter<T> {
-  const byName = new Map<string, T>();
-  for (const t of tools) {
-    if (byName.has(t.cmdType)) {
-      throw new Error(`toolRouter: tool "${t.cmdType}" is declared twice`);
-    }
-    byName.set(t.cmdType, t);
-  }
+  assertDistinctCmdNames(tools);
+  const byName = new Map(tools.map((t) => [t.cmdType, t]));
   const defs: readonly AnyCmdDef[] = [...tools, rejected];
   const okTypes = new Map(defs.map((d) => [d.okType, d]));
   const errTypes = new Map(defs.map((d) => [d.errType, d]));
