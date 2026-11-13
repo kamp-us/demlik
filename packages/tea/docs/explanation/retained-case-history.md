@@ -13,14 +13,14 @@ record contains one validated agent input message. The run ID selects the
 stream; its contiguous sequence numbers order messages. History entry IDs use
 the run ID, source sequence, and event index within that transition.
 
-The [consumer machine](../../examples/retained-case/agent.ts) delegates each
+The [consumer machine](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/retained-case/agent.ts) delegates each
 message to the existing pure agent reducer. Its parent state carries the agent
 Model, applied message, and transition revision so the host's `Store.save` can
 persist each transition once. Repeated saves of the same revision, including
 the runtime's shutdown save, do not append another message. The reducer performs
 no storage, clock reads, or publication.
 
-The [host](../../examples/retained-case/host.ts) derives the review view with
+The [host](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/retained-case/host.ts) derives the review view with
 `agentEvents`, retaining settled turns, successful tools, failed tools, and
 terminal outcomes. It also records successful context compactions. Started
 work and partial tokens are not retained outcomes. `read()` exposes the Model
@@ -86,7 +86,7 @@ size of the retained history. Two pending views bound queue count, not bytes.
 
 ## What the proof establishes
 
-The [lifecycle suite](../../src/agent/retained-case.test.ts) exercises actual
+The [lifecycle suite](https://github.com/kamp-us/demlik/blob/main/packages/tea/src/agent/retained-case.test.ts) exercises actual
 files, a fresh process after `SIGKILL` between source commit and publication,
 fresh hosts, reconnects, attachment interleaving, append failure, corrupt
 restore, and slow output. The file journal's atomic rename covers this tested

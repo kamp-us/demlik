@@ -76,6 +76,12 @@ guides use are each defined in the [glossary](../glossary.md).
   from `@demlik/tea/testing/promise` or `@demlik/tea/testing/effect` fake
   [handlers](../glossary.md#handler), then assert on the final Model, on the
   order of the [Cmds](../glossary.md#cmd) that ran, and on a failure path.
+- [Find a wrong machine with a law](./find-a-wrong-machine-with-a-law.md) —
+  state a [law](../glossary.md#law) such as "every `charge_card` Cmd carries the
+  amount the order holds", draw Msg lists whose answers come from each Cmd's
+  Effect Schema with `arbSchemaGuidedSequence` from `@demlik/tea/testing/effect`,
+  and read the smallest list that breaks it when a machine charges the wrong
+  amount.
 - [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) — record a run
   with `@demlik/tea/parity`'s `recordRun`, re-fold it through the new machine with
   `goldenReplay`, and take a normalized GO/NO-GO verdict from `parityEqual`.

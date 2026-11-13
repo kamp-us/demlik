@@ -101,7 +101,7 @@ save already under way is not cancelled and can land later. On a plain store
 that late save can overwrite what a newer run saved, and nothing reports it. A
 fenced store refuses it. So a host that starts a new run on the same store
 after a `stop()` that gave up needs a fenced store.
-[ADR 0025](../../../../.decisions/0025-stop-gives-up-on-handlers.md) records
+[ADR 0025](https://github.com/kamp-us/demlik/blob/main/.decisions/0025-stop-gives-up-on-handlers.md) records
 the limit.
 
 `fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
@@ -109,9 +109,9 @@ the limit.
 A run on a fenced store must be given an `onError`, held by its type and, where
 the type was thrown away, by a refusal at start, because a lost fence can
 surface with no caller to reject at
-([ADR 0031](../../../../.decisions/0031-a-fenced-run-must-pass-on-error.md)).
+([ADR 0031](https://github.com/kamp-us/demlik/blob/main/.decisions/0031-a-fenced-run-must-pass-on-error.md)).
 The [durability how-to](../how-to/make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
-shows the setup; [ADR 0017](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md)
+shows the setup; [ADR 0017](https://github.com/kamp-us/demlik/blob/main/.decisions/0017-fencing-is-an-optional-store-widening.md)
 records the design.
 
 ## Forgetting a run: `delete()`
@@ -130,7 +130,7 @@ calls read that saved prompt. Redeploying with a different prompt changes new
 runs; an existing run continues with its original instructions.
 
 Compaction changes the conversation, not the stored instructions. Using a new
-prompt requires a new run. See [ADR 0004](../../../../.decisions/0004-agent-context-compaction.md).
+prompt requires a new run. See [ADR 0004](https://github.com/kamp-us/demlik/blob/main/.decisions/0004-agent-context-compaction.md).
 
 ## What a finished agent run keeps
 

@@ -1,24 +1,35 @@
 /**
- * The link gate (#356, #537).
+ * The link gate (#356, #537, #930).
  *
  * The package's published markdown links to files in this repo two ways: by
  * relative path, and by a GitHub URL into this repo's own `main` tree, which is
  * the only form that works from the npm page. Nothing renders either before a
  * reader clicks one. This module reads every such link out of that markdown and
- * answers which ones name a file that is not there. Every other external link
- * (`https:`, `mailto:`, …), site-rooted paths and in-page anchors are not its
- * business, and it reads the disk only, never the network.
+ * answers two questions: which ones name a file that is not there, and which
+ * relative ones, in a page the tarball ships, name a file the tarball does not
+ * hold. Every other external link (`https:`, `mailto:`, …), site-rooted paths
+ * and in-page anchors are not its business, and it reads the disk only, never
+ * the network.
  */
 
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** packages/tea — this file lives at src/docs/, two levels down. */
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /** The repo root — packages/tea sits two levels below it. */
 const REPO_ROOT = join(PKG_ROOT, "..", "..");
+
+/**
+ * What npm packs at the package root whatever `files` says: `package.json`, and
+ * a README, COPYING, LICENSE or LICENCE with any extension. These are
+ * npm-packlist's strict rules; it packs `main` and `bin` too, and tea declares
+ * neither.
+ */
+const ALWAYS_PACKED =
+  /^(?:package\.json|(?:readme|copying|license|licence)(?:\..*[^~$])?)$/i;
 
 /** The package-root pages a reader meets on npm and GitHub. */
 const ROOT_PAGES = ["CHANGELOG.md", "README.md", "MAINTAINING.md"];
@@ -87,11 +98,31 @@ function resolvedFileOf(
   return fromPage === undefined ? undefined : resolve(dirname(file), fromPage);
 }
 
+/** One link as its page spells it: the 1-based line it sits on and its target. */
+interface Link {
+  readonly line: number;
+  readonly target: string;
+}
+
+/**
+ * Every link in `source`, in page order. Links inside fenced code and inline
+ * code spans are code, not links.
+ */
+function linksIn(source: string): readonly Link[] {
+  const links: Link[] = [];
+  proseLines(source).forEach((text, index) => {
+    const targets = inlineTargets(text);
+    const definition = REFERENCE_DEF.exec(text)?.[1];
+    if (definition !== undefined) targets.push(definition);
+    for (const target of targets) links.push({ line: index + 1, target });
+  });
+  return links;
+}
+
 /**
  * Pure core: the links in `source` that `exists` says resolve to nothing.
  * `file` is the page's own path, which relative targets resolve from;
- * `repoRoot` is where a URL into this repo's tree resolves from. Links inside
- * fenced code and inline code spans are code, not links.
+ * `repoRoot` is where a URL into this repo's tree resolves from.
  */
 export function brokenLinksIn(
   file: string,
@@ -99,18 +130,48 @@ export function brokenLinksIn(
   exists: (path: string) => boolean,
   repoRoot: string,
 ): readonly LinkHit[] {
-  const hits: LinkHit[] = [];
-  proseLines(source).forEach((text, index) => {
-    const targets = inlineTargets(text);
-    const definition = REFERENCE_DEF.exec(text)?.[1];
-    if (definition !== undefined) targets.push(definition);
-    for (const target of targets) {
-      const path = resolvedFileOf(target, file, repoRoot);
-      if (path !== undefined && !exists(path))
-        hits.push({ file, line: index + 1, target });
-    }
+  return linksIn(source).flatMap(({ line, target }) => {
+    const path = resolvedFileOf(target, file, repoRoot);
+    return path !== undefined && !exists(path) ? [{ file, line, target }] : [];
   });
-  return hits;
+}
+
+/**
+ * Whether the tarball holds `path`, given in `/` form from the package root:
+ * npm always packs a few root files, and `files` names the rest, each entry a
+ * file or a folder. An entry written as a pattern throws, because reading it as
+ * a plain name would quietly pack less than npm does.
+ */
+export function packs(files: readonly string[], path: string): boolean {
+  if (ALWAYS_PACKED.test(path)) return true;
+  return files.some((entry) => {
+    if (/[*?[\]{}!]/.test(entry))
+      throw new Error(
+        `package.json files: "${entry}" is a pattern, and the link gate reads a file or a folder only; teach it this pattern or name what it matches.`,
+      );
+    const name = entry.replace(/^\.\//, "").replace(/\/+$/, "");
+    return path === name || path.startsWith(`${name}/`);
+  });
+}
+
+/**
+ * Pure core: the relative links in `source`, a page of the package, whose
+ * target `shipped` says the tarball does not hold. `file` is the page's own
+ * path and `pkgRoot` the package's, which `shipped` reads paths from. A GitHub
+ * URL names a file in the repo, not in the tarball, so it is never a hit.
+ */
+export function unshippedLinksIn(
+  file: string,
+  source: string,
+  shipped: (path: string) => boolean,
+  pkgRoot: string,
+): readonly LinkHit[] {
+  return linksIn(source).flatMap(({ line, target }) => {
+    const path = filePathOf(target);
+    if (path === undefined) return [];
+    const held = relative(pkgRoot, resolve(dirname(file), path));
+    return shipped(held.split(sep).join("/")) ? [] : [{ file, line, target }];
+  });
 }
 
 /**
@@ -205,5 +266,48 @@ export async function collectBrokenLinks(): Promise<readonly LinkHit[]> {
 export function formatBrokenLinks(hits: readonly LinkHit[]): string {
   return hits
     .map((h) => `  ${h.file}:${h.line} — ${h.target} resolves to nothing`)
+    .join("\n");
+}
+
+/** The package's `files`, which says what the tarball holds beside what npm always packs. */
+async function filesOfPackage(): Promise<readonly string[]> {
+  const manifest = JSON.parse(
+    await readFile(join(PKG_ROOT, "package.json"), "utf8"),
+  ) as { readonly files?: readonly string[] };
+  return manifest.files ?? [];
+}
+
+/** The pages the tarball ships, out of {@link linkedPages}: the rest are for GitHub. */
+export async function shippedPages(): Promise<readonly string[]> {
+  const files = await filesOfPackage();
+  return (await linkedPages()).filter((page) =>
+    packs(files, relative(PKG_ROOT, page).split(sep).join("/")),
+  );
+}
+
+/** Every relative link in a shipped page that names a file the tarball does not hold. */
+export async function collectUnshippedLinks(): Promise<readonly LinkHit[]> {
+  const files = await filesOfPackage();
+  const hits: LinkHit[] = [];
+  for (const page of await shippedPages()) {
+    const source = await readFile(page, "utf8");
+    for (const hit of unshippedLinksIn(
+      page,
+      source,
+      (path) => packs(files, path),
+      PKG_ROOT,
+    ))
+      hits.push({ ...hit, file: relative(PKG_ROOT, hit.file) });
+  }
+  return hits;
+}
+
+/** One hit per line, saying what to write instead of the relative link. */
+export function formatUnshippedLinks(hits: readonly LinkHit[]): string {
+  return hits
+    .map(
+      (h) =>
+        `  ${h.file}:${h.line} — ${h.target} is not in the tarball; link it as https://github.com/kamp-us/demlik/blob/main/<path from the repo root>`,
+    )
     .join("\n");
 }

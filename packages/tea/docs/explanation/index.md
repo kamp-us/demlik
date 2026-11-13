@@ -37,20 +37,20 @@ in the [glossary](../glossary.md).
 The pages above are written for someone using the package. The records below are
 written for someone maintaining it: they carry the alternatives considered and
 the history, and they live in the repository rather than in the published docs.
-They are one global ADR sequence, indexed in [`.decisions/`](../../../../.decisions/index.md).
+They are one global ADR sequence, indexed in [`.decisions/`](https://github.com/kamp-us/demlik/blob/main/.decisions/index.md).
 
-- [ADR 0001 — Resilience is built in-house, not installed](../../../../.decisions/0001-no-offtheshelf-resilience.md) — why resilience is hand-built, not an off-the-shelf library.
-- [ADR 0002 — A Durable-Object host layer, not a DO framework](../../../../.decisions/0002-do-host-layer.md) — the `@demlik/tea/do` host is composable functions, not a base class.
-- [ADR 0003 — The DO host targets event-sourced virtual actors](../../../../.decisions/0003-do-targets-event-sourced-virtual-actors.md) — the target the DO host layer is converging toward.
-- [ADR 0004 — An opt-in context-compaction seam on `createAgent`](../../../../.decisions/0004-agent-context-compaction.md) — how an agent trims its own conversation without leaving the reducer.
-- [ADR 0005 — Web timeline player: hosting + render primitive](../../../../.decisions/0005-web-timeline-player-hosting-and-render-primitive.md) — where the devtools timeline is hosted and how it renders.
-- [ADR 0006 — Client-prediction fold seam + runtime-free import boundary](../../../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md) — reusing the authoritative reducer on the client, and keeping the runtime out of that bundle.
-- [ADR 0007 — Docs are a source-generated, drift-gated Diátaxis factory](../../../../.decisions/0007-source-generated-diataxis-docs-factory.md) — why these docs are structured this way.
-- [ADR 0008 — The reference drift gate fails with the patch, single-sourced](../../../../.decisions/0008-reference-drift-gate-fails-with-the-patch.md) — how a stale reference tells you exactly what to regenerate.
-- [ADR 0010 — Export-map tiers: kernel/battery/experimental](../../../../.decisions/0010-export-map-tiers.md) — the record behind [What each import is allowed to do to you](./export-tiers.md).
-- [ADR 0011 — Errors are data; a throw is reserved for a contract breach](../../../../.decisions/0011-errors-as-data.md) — the record behind [Why failures are values and bugs are throws](./errors-as-data.md).
-- [ADR 0015 — A convenience layer hides the wiring, never the state](../../../../.decisions/0015-hide-the-wiring-never-the-state.md) — what a higher-level API may absorb, and what it may never hide.
-- [ADR 0016 — Removal lands in a minor at 0.x](../../../../.decisions/0016-removal-lands-in-a-minor-at-0x.md) — why there is no deprecation holding pattern while the package is pre-1.0.
-- [ADR 0017 — Fencing is an optional `Store` widening](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md) — why refusing a second live writer added an interface instead of changing `Store<S>`.
-- [ADR 0018 — `runInterpret` stays serial](../../../../.decisions/0018-tool-overlap-inside-the-cmd-handler.md) — the ordering guarantee behind [Cmd or Sub](./cmd-or-sub.md), and why concurrent interpret was rejected.
-- [TEA discipline & patterns](../../../../.patterns/tea/patterns/README.md) — the conceptual canon the library implements.
+- [ADR 0001 — Resilience is built in-house, not installed](https://github.com/kamp-us/demlik/blob/main/.decisions/0001-no-offtheshelf-resilience.md) — why resilience is hand-built, not an off-the-shelf library.
+- [ADR 0002 — A Durable-Object host layer, not a DO framework](https://github.com/kamp-us/demlik/blob/main/.decisions/0002-do-host-layer.md) — the `@demlik/tea/do` host is composable functions, not a base class.
+- [ADR 0003 — The DO host targets event-sourced virtual actors](https://github.com/kamp-us/demlik/blob/main/.decisions/0003-do-targets-event-sourced-virtual-actors.md) — the target the DO host layer is converging toward.
+- [ADR 0004 — An opt-in context-compaction seam on `createAgent`](https://github.com/kamp-us/demlik/blob/main/.decisions/0004-agent-context-compaction.md) — how an agent trims its own conversation without leaving the reducer.
+- [ADR 0005 — Web timeline player: hosting + render primitive](https://github.com/kamp-us/demlik/blob/main/.decisions/0005-web-timeline-player-hosting-and-render-primitive.md) — where the devtools timeline is hosted and how it renders.
+- [ADR 0006 — Client-prediction fold seam + runtime-free import boundary](https://github.com/kamp-us/demlik/blob/main/.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md) — reusing the authoritative reducer on the client, and keeping the runtime out of that bundle.
+- [ADR 0007 — Docs are a source-generated, drift-gated Diátaxis factory](https://github.com/kamp-us/demlik/blob/main/.decisions/0007-source-generated-diataxis-docs-factory.md) — why these docs are structured this way.
+- [ADR 0008 — The reference drift gate fails with the patch, single-sourced](https://github.com/kamp-us/demlik/blob/main/.decisions/0008-reference-drift-gate-fails-with-the-patch.md) — how a stale reference tells you exactly what to regenerate.
+- [ADR 0010 — Export-map tiers: kernel/battery/experimental](https://github.com/kamp-us/demlik/blob/main/.decisions/0010-export-map-tiers.md) — the record behind [What each import is allowed to do to you](./export-tiers.md).
+- [ADR 0011 — Errors are data; a throw is reserved for a contract breach](https://github.com/kamp-us/demlik/blob/main/.decisions/0011-errors-as-data.md) — the record behind [Why failures are values and bugs are throws](./errors-as-data.md).
+- [ADR 0015 — A convenience layer hides the wiring, never the state](https://github.com/kamp-us/demlik/blob/main/.decisions/0015-hide-the-wiring-never-the-state.md) — what a higher-level API may absorb, and what it may never hide.
+- [ADR 0016 — Removal lands in a minor at 0.x](https://github.com/kamp-us/demlik/blob/main/.decisions/0016-removal-lands-in-a-minor-at-0x.md) — why there is no deprecation holding pattern while the package is pre-1.0.
+- [ADR 0017 — Fencing is an optional `Store` widening](https://github.com/kamp-us/demlik/blob/main/.decisions/0017-fencing-is-an-optional-store-widening.md) — why refusing a second live writer added an interface instead of changing `Store<S>`.
+- [ADR 0018 — `runInterpret` stays serial](https://github.com/kamp-us/demlik/blob/main/.decisions/0018-tool-overlap-inside-the-cmd-handler.md) — the ordering guarantee behind [Cmd or Sub](./cmd-or-sub.md), and why concurrent interpret was rejected.
+- [TEA discipline & patterns](https://github.com/kamp-us/demlik/blob/main/.patterns/tea/patterns/README.md) — the conceptual canon the library implements.

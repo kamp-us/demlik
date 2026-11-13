@@ -194,7 +194,7 @@ stop that run, and leave the others alone. A run on a fenced store with no
 `Store<S>`, or the caller is JavaScript, the run is refused at start instead:
 the Promise engine's `run` throws, the Effect engine's dies, and nothing is
 loaded or saved.
-[ADR 0031](../../../../.decisions/0031-a-fenced-run-must-pass-on-error.md) records
+[ADR 0031](https://github.com/kamp-us/demlik/blob/main/.decisions/0031-a-fenced-run-must-pass-on-error.md) records
 this.
 
 A fenced `fileStore` takes a lock file beside the state for each save, and a

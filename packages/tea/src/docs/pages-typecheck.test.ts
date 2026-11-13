@@ -8,7 +8,11 @@
  * blocks in page order, as one module, importing tea only through the
  * `@demlik/tea` specifiers. Any diagnostic fails the page. Nothing runs it.
  *
- * Four how-to pages are under the mirror gate as well. They are here because
+ * A page that imports a file the package already holds, such as an example's
+ * machine, names it under `beside`, and the program holds it next to the page's
+ * own module (#930).
+ *
+ * Five how-to pages are under the mirror gate as well. They are here because
  * the mirror gate compares a block with a region of a source file, and that
  * file can define a name outside the region: the block then matches and still
  * does not compile when pasted.
@@ -21,6 +25,7 @@
  * call returns by binding it, so `noUnusedLocals` is off.
  */
 
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -44,6 +49,11 @@ type Layout =
 type Page = Layout & {
   /** Package-relative. */
   readonly path: string;
+  /**
+   * Files the program holds beside the page's own, by the name the page imports
+   * them under, each read from this package-relative path.
+   */
+  readonly beside?: Readonly<Record<string, string>>;
   /**
    * `## ` sections left out of the program, by heading. Their blocks are not
    * module-level code a reader pastes after the ones above: a fragment of a
@@ -72,6 +82,11 @@ const PAGES: readonly Page[] = [
       // peer. `src/effect/use-machine-how-to.test.tsx` compiles and renders it.
       "## 8. Run the hook on the Effect engine",
     ],
+  },
+  {
+    path: "docs/how-to/find-a-wrong-machine-with-a-law.md",
+    // Its first block imports the drive page's machine file, `order.ts`.
+    beside: { "order.ts": "examples/order.ts" },
   },
   {
     path: "docs/how-to/handle-a-tool-failure.md",
@@ -132,9 +147,13 @@ function modulesOf(
 /** The program a reader pastes from `markdown`: file name → text. */
 function pastedFrom(page: Page, markdown: string): Map<string, string> {
   const shown = withoutSections(markdown, page.skip ?? []);
-  return page.files === undefined
-    ? programOf(shown, page.file)
-    : modulesOf(shown, page.files);
+  const program =
+    page.files === undefined
+      ? programOf(shown, page.file)
+      : modulesOf(shown, page.files);
+  for (const [name, path] of Object.entries(page.beside ?? {}))
+    program.set(name, readFileSync(join(PKG_ROOT, path), "utf8"));
+  return program;
 }
 
 /** The compiler's diagnostics for `markdown` read as the page's program. */
@@ -213,6 +232,12 @@ describe("pages typecheck from their own text", { timeout: 120_000 }, () => {
       defines: "export const downloader = defineMachine(",
       renamed: "export const download = defineMachine(",
       name: "downloader",
+    },
+    {
+      path: "docs/how-to/find-a-wrong-machine-with-a-law.md",
+      defines: "export const order = defineMachine(",
+      renamed: "export const orders = defineMachine(",
+      name: "order",
     },
   ])("fails $path when a block uses `$name` and the page no longer defines it", async ({
     path,

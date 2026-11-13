@@ -3,6 +3,8 @@
 The words `@demlik/tea`'s pages use, one entry each, in alphabetical order. Each
 entry says what the thing is, names where it is exported, and links the
 reference page that lists it and the page that covers the why.
+An `Avoid:` line names a word the repo has retired for that term and links the
+record that retired it.
 
 ## agent
 
@@ -24,7 +26,9 @@ a battery into a machine for you, was removed, and a battery is now wired by
 calling its functions from `update`.
 Reference: [the module list, by tier](./reference/index.md). Why:
 [what each import is allowed to do to you](./explanation/export-tiers.md) and
-[ADR 0022](../../../.decisions/0022-no-battery-layer-plain-functions.md).
+[ADR 0022](https://github.com/kamp-us/demlik/blob/main/.decisions/0022-no-battery-layer-plain-functions.md).
+
+Avoid: battery layer, which [ADR 0022](https://github.com/kamp-us/demlik/blob/main/.decisions/0022-no-battery-layer-plain-functions.md) removed.
 
 ## battery slice
 
@@ -81,14 +85,6 @@ receives one to deliver what it observes.
 Reference: [`RunHandle`](./reference/tea.md#RunHandle). Why:
 [Cmd or Sub](./explanation/cmd-or-sub.md).
 
-## subpath
-
-A published import path: one subpath of the package's export map, such as
-`@demlik/tea/promise` or `@demlik/tea/jev`. The root entry is `@demlik/tea`
-itself. Each subpath carries one tier.
-Reference: [the module list, by tier](./reference/index.md). Why:
-[what each import is allowed to do to you](./explanation/export-tiers.md).
-
 ## engine
 
 The code that runs a machine: it folds each Msg, saves the Model, performs the
@@ -133,6 +129,21 @@ HTTP call is a handler you write.
 Reference: [`@demlik/tea/jev`](./reference/jev.md). Why:
 [what each import is allowed to do to you](./explanation/export-tiers.md).
 
+## law
+
+A rule a machine must keep on every list of Msgs. `lawInvariant`,
+`lawTerminates` and `lawTrace`, from `@demlik/tea/testing/effect` and
+`@demlik/tea/pbt`, each take one [fold](#fold) and a check you write, and judge
+a different part of it: every step, the final state, or the steps and the final
+state together. A law answers `null` when the rule holds and a `LawBreak` when
+it does not, and the `LawBreak`'s `reason` is the string your check returned.
+All three are experimental.
+Reference: [`lawTrace`](./reference/testing-effect.md#lawTrace) and
+[`LawBreak`](./reference/testing-effect.md#LawBreak). How:
+[Find a wrong machine with a law](./how-to/find-a-wrong-machine-with-a-law.md).
+Why:
+[ADR 0032](https://github.com/kamp-us/demlik/blob/main/.decisions/0032-effect-property-tests-draw-answers-from-cmd-schemas.md).
+
 ## lid
 
 `defineAgent` from `@demlik/tea/agent`: the short form that builds an agent
@@ -140,7 +151,7 @@ from a model, tools and instructions. `createAgent`, in the same subpath, is
 the longer form underneath it.
 Reference: [`defineAgent`](./reference/agent.md#defineAgent) and
 [`createAgent`](./reference/agent.md#createAgent). Why:
-[ADR 0015](../../../.decisions/0015-hide-the-wiring-never-the-state.md).
+[ADR 0015](https://github.com/kamp-us/demlik/blob/main/.decisions/0015-hide-the-wiring-never-the-state.md).
 
 ## machine
 
@@ -224,6 +235,16 @@ built in.
 Reference: [`Sub`](./reference/tea.md#Sub) and
 [`Subscribe`](./reference/tea.md#Subscribe). Why:
 [Cmd or Sub](./explanation/cmd-or-sub.md).
+
+## subpath
+
+A published import path: one subpath of the package's export map, such as
+`@demlik/tea/promise` or `@demlik/tea/jev`. The root entry is `@demlik/tea`
+itself. Each subpath carries one tier.
+Reference: [the module list, by tier](./reference/index.md). Why:
+[what each import is allowed to do to you](./explanation/export-tiers.md).
+
+Avoid: door, which [ADR 0027](https://github.com/kamp-us/demlik/blob/main/.decisions/0027-one-impure-kind-and-one-word-per-concept.md) retired.
 
 ## tool
 
