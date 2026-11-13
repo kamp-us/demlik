@@ -120,26 +120,33 @@ send, and one handler per Cmd. Write each handler the way you write it for
 ```ts
 import { drive } from "@demlik/tea/testing/promise";
 
-/** Drive one order to the end. Only the card's answer changes between tests. */
-function driveOrder(card: "accepted" | "declined") {
+/** Drive one order to the end. Only the step that fails changes between tests. */
+function driveOrder(failure?: "out_of_stock" | "declined" | "no_carrier") {
   return drive(
     order,
     newOrder,
     { type: "place", sku: "TEA-001", cents: 4200 },
     {
-      reserve_stock: async (_cmd, { ok }) => ok({ hold: "hold-1" }),
+      reserve_stock: async (_cmd, { ok, err }) =>
+        failure === "out_of_stock"
+          ? err({ _tag: "out_of_stock" })
+          : ok({ hold: "hold-1" }),
       charge_card: async (cmd, { ok, err }) =>
-        card === "declined"
+        failure === "declined"
           ? err({ _tag: "declined" })
           : ok({ receipt: `paid-${cmd.cents}` }),
-      ship_parcel: async (cmd, { ok }) => ok({ tracking: `track-${cmd.sku}` }),
+      ship_parcel: async (cmd, { ok, err }) =>
+        failure === "no_carrier"
+          ? err({ _tag: "no_carrier" })
+          : ok({ tracking: `track-${cmd.sku}` }),
     },
   );
 }
 ```
 
-Wrap the call in a function that takes the one answer your tests vary. Here
-that is the card.
+Wrap the call in a function that takes the one thing your tests vary. Here
+that is which step fails, named by the tag of its error; no argument means
+every step succeeds.
 
 ## 3. Assert on the final Model and the Cmds that ran
 
@@ -147,9 +154,14 @@ that is the card.
 went quiet. `trace` lists every Msg folded and every Cmd run, in order; keep the
 `cmd` entries to get the Cmds.
 
+Compare the Cmds whole, built with the machine's own constructors, and not
+just their `type`. A `type` is only a Cmd's name: a `charge_card` started with
+the wrong amount has the same name. Import `reserveStock`, `chargeCard` and
+`shipParcel` from the machine file too.
+
 ```ts
 it("ships an order whose card is accepted", async () => {
-  const { state, trace } = await driveOrder("accepted");
+  const { state, trace } = await driveOrder();
 
   expect(state).toEqual({
     status: "shipped",
@@ -160,30 +172,82 @@ it("ships an order whose card is accepted", async () => {
   });
 
   const ran = trace.flatMap((entry) =>
-    entry.kind === "cmd" ? [entry.cmd.type] : [],
+    entry.kind === "cmd" ? [entry.cmd] : [],
   );
-  expect(ran).toEqual(["reserve_stock", "charge_card", "ship_parcel"]);
+  expect(ran).toEqual([
+    reserveStock({ sku: "TEA-001" }),
+    chargeCard({ cents: 4200 }),
+    shipParcel({ sku: "TEA-001" }),
+  ]);
 });
 ```
 
-## 4. Assert on a failure path
+## 4. Assert on each failure path
 
-Make one fake answer with `err` and drive again. Assert the Model the failure
-leaves, then assert the Cmds: the list shows the steps that ran before the
-failure and that no later step ran.
+Each of the machine's three steps can fail, and a failed step ends the order.
+Make one fake answer with `err` by passing `driveOrder` the tag to fail with,
+and drive again. Assert the Model the failure leaves, then assert the Cmds: the
+list shows the steps that ran before the failure and that no later step ran.
+Write one test per step, so that between them the tests reach every update cell
+of the machine.
 
 ```ts
+it("stops an order with no stock, and charges nothing", async () => {
+  const { state, trace } = await driveOrder("out_of_stock");
+
+  expect(state).toEqual({
+    status: "failed",
+    sku: "TEA-001",
+    cents: 4200,
+    tracking: null,
+    failure: "out_of_stock",
+  });
+
+  const ran = trace.flatMap((entry) =>
+    entry.kind === "cmd" ? [entry.cmd] : [],
+  );
+  expect(ran).toEqual([reserveStock({ sku: "TEA-001" })]);
+});
+
 it("stops an order whose card is declined, and ships nothing", async () => {
   const { state, trace } = await driveOrder("declined");
 
-  expect(state.status).toBe("failed");
-  expect(state.failure).toBe("declined");
-  expect(state.tracking).toBeNull();
+  expect(state).toEqual({
+    status: "failed",
+    sku: "TEA-001",
+    cents: 4200,
+    tracking: null,
+    failure: "declined",
+  });
 
   const ran = trace.flatMap((entry) =>
-    entry.kind === "cmd" ? [entry.cmd.type] : [],
+    entry.kind === "cmd" ? [entry.cmd] : [],
   );
-  expect(ran).toEqual(["reserve_stock", "charge_card"]);
+  expect(ran).toEqual([
+    reserveStock({ sku: "TEA-001" }),
+    chargeCard({ cents: 4200 }),
+  ]);
+});
+
+it("stops an order no carrier takes, after the card was charged", async () => {
+  const { state, trace } = await driveOrder("no_carrier");
+
+  expect(state).toEqual({
+    status: "failed",
+    sku: "TEA-001",
+    cents: 4200,
+    tracking: null,
+    failure: "no_carrier",
+  });
+
+  const ran = trace.flatMap((entry) =>
+    entry.kind === "cmd" ? [entry.cmd] : [],
+  );
+  expect(ran).toEqual([
+    reserveStock({ sku: "TEA-001" }),
+    chargeCard({ cents: 4200 }),
+    shipParcel({ sku: "TEA-001" }),
+  ]);
 });
 ```
 
@@ -247,32 +311,40 @@ it, and run the Effect. Import `Shop` and `orderHandlers` from the file above.
 import { drive } from "@demlik/tea/testing/effect";
 import { Effect, Layer } from "effect";
 
-/** A shop that says yes to everything except, when asked, the card. */
-const fakeShop = (card: "accepted" | "declined") =>
+type Failure = "out_of_stock" | "declined" | "no_carrier";
+
+/** A shop that says yes to everything except, when asked, one step. */
+const fakeShop = (failure?: Failure) =>
   Layer.succeed(Shop, {
-    reserve: () => Effect.succeed({ hold: "hold-1" }),
+    reserve: () =>
+      failure === "out_of_stock"
+        ? Effect.fail({ _tag: "out_of_stock" as const })
+        : Effect.succeed({ hold: "hold-1" }),
     charge: (cents) =>
-      card === "declined"
+      failure === "declined"
         ? Effect.fail({ _tag: "declined" as const })
         : Effect.succeed({ receipt: `paid-${cents}` }),
-    ship: (sku) => Effect.succeed({ tracking: `track-${sku}` }),
+    ship: (sku) =>
+      failure === "no_carrier"
+        ? Effect.fail({ _tag: "no_carrier" as const })
+        : Effect.succeed({ tracking: `track-${sku}` }),
   });
 
 /** Drive one order to the end, on the real handlers over the fake shop. */
-function driveOrder(card: "accepted" | "declined") {
+function driveOrder(failure?: Failure) {
   return Effect.runPromise(
     drive(
       order,
       newOrder,
       { type: "place", sku: "TEA-001", cents: 4200 },
       orderHandlers,
-    ).pipe(Effect.provide(fakeShop(card))),
+    ).pipe(Effect.provide(fakeShop(failure))),
   );
 }
 ```
 
-This `driveOrder` resolves with the same `{ state, trace }`, so the two tests
-from steps 3 and 4 run against it unchanged.
+This `driveOrder` resolves with the same `{ state, trace }`, so the tests from
+steps 3 and 4 run against it unchanged.
 
 ## See also
 
