@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DeployableCensus } from "../boundaries/deployables/census.js";
 import { ledgerTargetOf } from "../boundaries/ledger.js";
@@ -338,8 +339,60 @@ describe("the view and the gate cannot disagree", () => {
       const hexagon = JSON.parse(out.join(""));
       expect(row.commands).toEqual(hexagon.commands);
       expect(row.externalSystems).toEqual(hexagon.externalSystems);
-      expect(row.commands.length + row.externalSystems.length).toBeGreaterThan(0);
+      expect([row.commands, row.externalSystems]).not.toEqual([[], []]);
     }
+  });
+
+  it("lists the ports --hexagon lists for composed and unread lists, and marks a list not read", () => {
+    const fixtures = fileURLToPath(new URL("../../test/hexagon/", import.meta.url));
+    const folders = new Map(
+      ["composed", "unread"].flatMap((group) =>
+        fs
+          .readdirSync(path.join(fixtures, group))
+          .map((name) => [name, path.join(fixtures, group, name)] as const),
+      ),
+    );
+    const repo = open(shopManifests([API]), { features: { [API]: [...folders.keys()] } });
+    for (const [feature, folder] of folders) {
+      repo.put(
+        at(`src/${feature}/ports.ts`),
+        fs.readFileSync(path.join(folder, "ports.ts"), "utf8"),
+      );
+      const application = path.join(folder, "application");
+      for (const file of fs.readdirSync(application)) {
+        const body = fs.readFileSync(path.join(application, file), "utf8");
+        repo.put(at(`src/${feature}/application/${file}`), body);
+      }
+    }
+    const owned = reportFrom(repo.owners({ json: true })).scopes.flatMap((scope) => scope.features);
+    expect(owned.map((row) => row.feature)).toEqual([...folders.keys()].sort());
+    for (const row of owned) {
+      const out: string[] = [];
+      runHexagon(folders.get(row.feature) ?? "", {
+        json: true,
+        pretty: false,
+        emit: (text) => out.push(text),
+        report: (error) => {
+          throw new Error(error);
+        },
+      });
+      const hexagon = JSON.parse(out.join(""));
+      expect(row.commands, row.feature).toEqual(hexagon.commands);
+      expect(row.externalSystems, row.feature).toEqual(hexagon.externalSystems);
+    }
+    expect(repo.owners().stdout).toContain(
+      [
+        "  Feature payments",
+        "    Tables",
+        "      none",
+        "    Reach into its tables",
+        "      none",
+        "    Commands",
+        "      not read: ports.ts:7 Payments: union type",
+        "    External systems",
+        "      settle: ForSettling = (id: string) => Promise<void>",
+      ].join("\n"),
+    );
   });
 });
 

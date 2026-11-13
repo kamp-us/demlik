@@ -1,0 +1,28 @@
+Hexagon: Warehousing
+
+Commands
+  not read: ports.ts:7 Warehousing: union type
+
+External systems
+  persist: ForPersisting = (pallet: string) => Promise<void>
+
+Other bags
+  Receiving
+    receive: ForReceiving = (pallet: string) => Promise<void>
+  Shelving
+    shelve: ForShelving = (pallet: string, bay: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/pallets.ts: label
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:7 Warehousing: union type

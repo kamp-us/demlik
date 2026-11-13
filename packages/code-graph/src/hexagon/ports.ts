@@ -1,10 +1,15 @@
 import { nameText } from "../extract/functions.js";
 import { nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
+import { readBag, type Scope, scopeOf } from "./bag.js";
 
 export type HexagonMember = { name: string; type: string; signature: string | null };
 export type HexagonBag = { name: string; members: HexagonMember[] };
 export type HexagonPort = { name: string; type: string };
 export type NotRead = { file: string; line: number; name: string; reason: string };
+
+// The members of a feature's main bag, or the row that says the bag was not read: a list that was
+// not read is never an empty one.
+export type PortList = readonly HexagonMember[] | { readonly notRead: NotRead };
 
 export function lexical(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -64,33 +69,7 @@ function declarationEntries(node: SyntaxNode, name: string, syntax: SyntaxFile) 
   }));
 }
 
-const SHAPES: Readonly<Record<string, string>> = {
-  TSMappedType: "mapped type",
-  TSConditionalType: "conditional type",
-  TSIntersectionType: "intersection type",
-  TSUnionType: "union type",
-  TSParenthesizedType: "parenthesized type",
-  TSTypeReference: "bag alias",
-  TSIndexSignature: "index signature",
-  TSCallSignatureDeclaration: "call signature",
-  TSConstructSignatureDeclaration: "construct signature",
-  TSMethodSignature: "method or accessor",
-  TSModuleDeclaration: "namespace declaration",
-};
-
-function plainMembers(node: SyntaxNode): SyntaxNode[] | null {
-  if (node.type === "TSInterfaceDeclaration") return node.body.body;
-  return node.type === "TSTypeLiteral" ? node.members : null;
-}
-
-function memberReason(member: SyntaxNode): string | null {
-  if (member.type !== "TSPropertySignature") return SHAPES[member.type] ?? "non-property member";
-  if (member.computed) return "computed property";
-  if (member.typeAnnotation === null) return "property without type";
-  return null;
-}
-
-function isPort(node: SyntaxNode): boolean {
+function isPort(node: SyntaxNode): node is Extract<SyntaxNode, { type: "TSTypeAliasDeclaration" }> {
   if (node.type !== "TSTypeAliasDeclaration") return false;
   return (
     /^For[A-Z]/.test(node.id.name) &&
@@ -98,33 +77,19 @@ function isPort(node: SyntaxNode): boolean {
   );
 }
 
-function bagReason(node: SyntaxNode, body: SyntaxNode, syntax: SyntaxFile): string | null {
-  if (nodeField(node, "typeParameters") !== null) return "generic bag";
-  if (node.type === "TSInterfaceDeclaration" && node.extends.length > 0) return "interface extends";
-  const members = plainMembers(body);
-  if (members === null) return SHAPES[body.type] ?? "not a port or plain bag";
-  const names = members.map((member) => {
-    const key = nodeField(member, "key");
-    return key === null ? "" : nameText(syntax, member, key);
-  });
-  return (
-    members.map(memberReason).find((reason) => reason !== null) ??
-    (new Set(names).size !== names.length ? "duplicate member" : null)
-  );
+type Declared =
+  | { readonly port: string }
+  | { readonly members: readonly SyntaxNode[] }
+  | { readonly reason: string };
+
+function readDeclaration(node: SyntaxNode, name: string, scope: Scope): Declared {
+  if ((scope.declared.get(name)?.length ?? 0) > 1) return { reason: "multiple declarations" };
+  if (!isPort(node)) return readBag(scope, node, name);
+  if (node.typeParameters !== null) return { reason: "generic port" };
+  return { port: scope.syntax.textOf(node.typeAnnotation) };
 }
 
-function declarationReason(node: SyntaxNode, syntax: SyntaxFile): string | null {
-  if (isPort(node)) return nodeField(node, "typeParameters") === null ? null : "generic port";
-  if (node.type !== "TSTypeAliasDeclaration" && node.type !== "TSInterfaceDeclaration")
-    return SHAPES[node.type] ?? "not a port or bag declaration";
-  return bagReason(
-    node,
-    node.type === "TSTypeAliasDeclaration" ? node.typeAnnotation : node,
-    syntax,
-  );
-}
-
-function readMembers(nodes: SyntaxNode[], syntax: SyntaxFile): HexagonMember[] {
+function readMembers(nodes: readonly SyntaxNode[], syntax: SyntaxFile): HexagonMember[] {
   return nodes
     .flatMap((member) =>
       member.type === "TSPropertySignature" && member.typeAnnotation !== null
@@ -140,37 +105,19 @@ function readMembers(nodes: SyntaxNode[], syntax: SyntaxFile): HexagonMember[] {
     .sort((a, b) => lexical(a.name, b.name));
 }
 
-function declarationCounts(syntax: SyntaxFile): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const statement of syntax.program.body) {
-    const node = nodeField(statement, "declaration") ?? statement;
-    const id = nodeField(node, "id");
-    if (id === null) continue;
-    const name = nameText(syntax, node, id);
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-  return counts;
-}
-
 export function readPorts(syntax: SyntaxFile | null, notRead: NotRead[]) {
   const bags: HexagonBag[] = [];
   const ports: HexagonPort[] = [];
   if (syntax === null) return { bags, unbaggedPorts: ports };
-  const counts = declarationCounts(syntax);
-  for (const { node, name, reason: exportReason } of exportEntries(syntax)) {
-    const reason =
-      exportReason ||
-      ((counts.get(name) ?? 0) > 1 ? "multiple declarations" : declarationReason(node, syntax));
-    if (reason !== null) {
-      notRead.push({ file: "ports.ts", line: syntax.startLine(node), name, reason });
-      continue;
-    }
-    const body = node.type === "TSTypeAliasDeclaration" ? node.typeAnnotation : node;
-    const members = plainMembers(body);
-    if (members === null) {
-      ports.push({ name, type: syntax.textOf(body) });
+  const scope = scopeOf(syntax);
+  for (const { node, name, reason } of exportEntries(syntax)) {
+    const read = reason === "" ? readDeclaration(node, name, scope) : { reason };
+    if ("reason" in read) {
+      notRead.push({ file: "ports.ts", line: syntax.startLine(node), name, reason: read.reason });
+    } else if ("port" in read) {
+      ports.push({ name, type: read.port });
     } else {
-      bags.push({ name, members: readMembers(members, syntax) });
+      bags.push({ name, members: readMembers(read.members, syntax) });
     }
   }
   return summarizePorts(bags, ports);

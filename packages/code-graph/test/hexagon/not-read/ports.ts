@@ -56,3 +56,16 @@ export interface \u0045scaped { count: number }
 declare module "./ports" {
   interface Warehouse { count: number }
 }
+import type { Shared } from "outside";
+interface Split { first: ForUnused }
+interface Split { second: ForUnused }
+export type UsesSplit = Split & { third: ForUnused };
+export type UsesUnknown = Unknown & { read: ForUnused };
+export type UsesImported = Shared & { read: ForUnused };
+export type UsesQualified = Remote.Bag & { read: ForUnused };
+type Hidden = { hidden: ForUnused };
+export type UsesHidden = Hidden & { visible: ForUnused };
+interface Root { shared: ForUnused }
+interface Left extends Root { left: ForUnused }
+interface Right extends Root { right: ForUnused }
+export interface Diamond extends Left, Right { own: ForUnused }

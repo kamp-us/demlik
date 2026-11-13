@@ -1,0 +1,28 @@
+Hexagon: Shipment
+
+Commands
+  ship: ForShipping = (parcel: string) => Promise<void>
+
+External systems
+  carry: ForCarrying = (parcel: string) => Promise<string>
+
+Other bags
+  ShipmentBase
+    ship: ForShipping = (parcel: string) => Promise<void>
+  ShipmentIntents
+    ship: ForShipping = (parcel: string) => Promise<void>
+
+Ports declared in ports.ts but in no bag
+  none
+
+Use cases
+  application/shipping.ts: createShipment
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  none

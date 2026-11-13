@@ -4,7 +4,7 @@ import type { BoundaryModule } from "../boundaries/analyze.js";
 import { inScope, type Place } from "../boundaries/rules.js";
 import type { TableContext } from "../boundaries/tables/judge.js";
 import { type Access, reachOf } from "../boundaries/tables/reach.js";
-import type { HexagonMember } from "../hexagon/ports.js";
+import type { PortList } from "../hexagon/ports.js";
 import { readHexagon } from "../hexagon/read.js";
 import { type Locus, locusOf } from "./locus.js";
 
@@ -21,13 +21,14 @@ export type FeatureReach = {
 
 // What a feature owns and who reaches into it: the tables its `adapters/driven/tables.ts` declares,
 // every other file that reaches one of them, and the ports it offers (`commands`) and needs
-// (`externalSystems`), as `--hexagon` prints them.
+// (`externalSystems`), as `--hexagon` prints them: the members, or the row that says the list was not
+// read.
 export type OwnedFeature = {
   readonly feature: string;
   readonly tables: readonly string[];
   readonly reach: readonly FeatureReach[];
-  readonly commands: readonly HexagonMember[];
-  readonly externalSystems: readonly HexagonMember[];
+  readonly commands: PortList;
+  readonly externalSystems: PortList;
 };
 
 const byName = (a: string, b: string): number => a.localeCompare(b);

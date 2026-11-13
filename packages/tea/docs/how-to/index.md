@@ -75,7 +75,7 @@ guides use are each defined in the [glossary](../glossary.md).
 - [Test a machine with `drive`](./test-a-machine-with-drive.md) — hand `drive`
   from `@demlik/tea/testing/promise` or `@demlik/tea/testing/effect` fake
   [handlers](../glossary.md#handler), then assert on the final Model, on the
-  order of the [Cmds](../glossary.md#cmd) that ran, and on a failure path.
+  whole [Cmds](../glossary.md#cmd) that ran in order, and on each failure path.
 - [Find a wrong machine with a law](./find-a-wrong-machine-with-a-law.md) —
   state a [law](../glossary.md#law) such as "every `charge_card` Cmd carries the
   amount the order holds", draw Msg lists whose answers come from each Cmd's

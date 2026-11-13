@@ -96,6 +96,7 @@ export {
   acceptedTypes,
   acceptsOf,
   Cmd,
+  CmdNameCollisionError,
   describeMachine,
   detectUpdateForm,
   foldMsgs,

@@ -1,0 +1,29 @@
+Hexagon: Ticketing
+
+Commands
+  not read: ports.ts:6 Ticketing: operand TicketIntents: method or accessor
+
+External systems
+  not read: ports.ts:7 TicketingDriven: multiple declarations
+
+Other bags
+  none
+
+Ports declared in ports.ts but in no bag
+  ForClosingTickets: (id: string) => Promise<void>
+  ForKeeping: (id: string) => Promise<void>
+  ForNotifying: (id: string) => Promise<void>
+
+Use cases
+  application/ticketing.ts: createTicketing
+
+Adapters
+  driving
+    none
+  driven
+    none
+
+Not read
+  ports.ts:6 Ticketing: operand TicketIntents: method or accessor
+  ports.ts:7 TicketingDriven: multiple declarations
+  ports.ts:10 TicketingDriven: multiple declarations
