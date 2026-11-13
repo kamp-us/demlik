@@ -64,8 +64,8 @@ reason that names the operand and the cause.
 The factory must be a direct exported function declaration or `const`
 arrow/function expression at module top level in `application/*.ts`. Its exported
 binding name `createX` selects `X` and `XDriven`. Export lists, namespaces and
-re-exports are not factories. Without a factory, the one pair of readable bags `X`
-and `XDriven` in `ports.ts` names the feature, as `Stock` and `StockDriven` do
+re-exports are not factories. Without a factory, the one pair `X` and `XDriven`
+that `ports.ts` exports names the feature, as `Stock` and `StockDriven` do
 whatever the folder is called. With no such pair, or two, print
 `Factory: not found` and put every readable bag under Other bags; JSON `feature`
 is `null`.

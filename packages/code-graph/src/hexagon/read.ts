@@ -57,10 +57,13 @@ function exportedFunctions(syntax: SyntaxFile | null): string[] {
   return [...new Set(names)].sort(lexical);
 }
 
-// The names `X` for which `ports.ts` holds both a bag `X` and a bag `XDriven`: what a feature looks
-// like in its ports, whether or not a function builds it.
-function pairedFeatures(bags: HexagonBag[]): string[] {
-  const names = new Set(bags.map((bag) => bag.name));
+// The names `X` for which `ports.ts` exports both `X` and `XDriven`, read or not: what a feature
+// looks like in its ports, whether or not a function builds it.
+function pairedFeatures(bags: HexagonBag[], notRead: NotRead[]): string[] {
+  const names = new Set([
+    ...bags.map((bag) => bag.name),
+    ...notRead.filter((row) => row.file === "ports.ts").map((row) => row.name),
+  ]);
   return [...names].filter((name) => names.has(`${name}Driven`)).sort(lexical);
 }
 
@@ -107,8 +110,8 @@ function checkLayout(root: string): void {
   }
 }
 
-// A feature is named by its factory. With none, the one pair of bags `ports.ts` holds names it, and
-// two pairs leave it unnamed, because nothing here chooses between them.
+// A feature is named by its factory. With none, the one pair `X` and `XDriven` that `ports.ts`
+// exports names it, and two pairs leave it unnamed, because nothing here chooses between them.
 function featureOf(factory: { name: string } | null, paired: string[]): string | null {
   if (factory !== null) return factory.name.slice(6);
   return paired.length === 1 ? (paired[0] ?? null) : null;
@@ -141,7 +144,7 @@ export function readHexagon(root: string): Hexagon {
   const useCases = files
     .filter((file) => /^application\/[^/]+\.ts$/.test(file))
     .map((file) => ({ file, functions: exportedFunctions(readSyntax(root, file, notRead)) }));
-  const paired = pairedFeatures(ports.bags);
+  const paired = pairedFeatures(ports.bags, notRead);
   const feature = featureOf(findFactory(root, useCases, paired), paired);
   notRead.sort(byPlace);
   return {

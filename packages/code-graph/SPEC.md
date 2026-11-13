@@ -912,12 +912,12 @@ tsconfig, type checker, model call or configuration. It reads only this allowlis
   Export lists, re-exports, default exports and namespace forms are not factories.
 
 The factory in the file named after the feature directory takes precedence,
-then factories with readable `X` and `XDriven` bags, then file/name order.
-With no factory, the feature is the one name `X` for which `ports.ts` holds a
-readable bag `X` and a readable bag `XDriven`, whatever the folder's functions are
-called. With no such name, or with two, no feature is named, because nothing here
-chooses between them: print `Factory: not found`, leave both sections empty, and
-list every readable bag under Other bags. Do not infer a feature from the
+then factories whose `X` and `XDriven` `ports.ts` exports, then file/name order.
+With no factory, the feature is the one name `X` for which `ports.ts` exports both
+`X` and `XDriven`, read or not, whatever the folder's functions are called. With no
+such name, or with two, no feature is named, because nothing here chooses between
+them: print `Factory: not found`, leave both sections empty, and list every
+readable bag under Other bags. Do not infer a feature from the
 directory name; JSON `feature` is `null` when none is named.
 `X` supplies Commands; `XDriven` supplies External systems.
 

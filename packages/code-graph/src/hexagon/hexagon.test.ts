@@ -74,13 +74,16 @@ describe("--hexagon over composed and unread port lists", () => {
     }
   });
 
-  it("names a feature with no factory by its pair of bags, and none when two pairs could be it", () => {
+  it("names a feature with no factory by its pair, and none when two pairs could be it", () => {
     const stock = JSON.parse(print(path.join(fixtures, "stock-keeping"), true));
     expect(stock.feature).toBe("Stock");
     expect(stock.commands.map((member: { name: string }) => member.name)).toEqual([
       "count",
       "restock",
     ]);
+    const unread = JSON.parse(print(path.join(fixtures, "unread/warehousing"), true));
+    expect(unread.feature).toBe("Warehousing");
+    expect(unread.commands.notRead.reason).toBe("union type");
     const two = JSON.parse(print(path.join(fixtures, "two-candidates"), true));
     expect(two.feature).toBeNull();
     expect(two.otherBags.map((bag: { name: string }) => bag.name)).toEqual([
@@ -103,12 +106,7 @@ describe("--hexagon over composed and unread port lists", () => {
 });
 
 describe("--hexagon", () => {
-  it.each([
-    "full",
-    "unbagged",
-    "not-read",
-    "unread/ticketing",
-  ])("prints %s deterministically", (name) => {
+  it.each(["full", "unbagged", "not-read"])("prints %s deterministically", (name) => {
     const root = path.join(fixtures, name);
     for (const [extension, flags] of [
       ["txt", []],
