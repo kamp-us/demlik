@@ -330,6 +330,9 @@ subs: [
 - Phase 1.1: `Reducer<S, M, C>` and `Transitions<S, M, C>` mapped types
   make the variant set load-bearing — adding a Msg without a handler
   fails to compile.
+- `Machine.make` (`@demlik/tea/effect`) refuses a plain Msg tag that is a
+  settled Msg name of a listed Cmd, and a tag that is not a literal, on its
+  `msg` line, with the tag named in the diagnostic.
 
 ---
 
