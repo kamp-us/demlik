@@ -14,7 +14,7 @@ exact behaviour is on
 [`DefineAgentConfig`](../reference/agent.md#DefineAgentConfig) in the reference.
 
 Every sample below is quoted from
-[`examples/agent-stop-conditions.ts`](../../examples/agent-stop-conditions.ts),
+[`examples/agent-stop-conditions.ts`](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/agent-stop-conditions.ts),
 which runs in-process with a scripted model that never stops asking for tools:
 `modelAsking(napMs)` asks for one `tick` every turn, and each `tick` naps that
 many milliseconds. They use these imports:

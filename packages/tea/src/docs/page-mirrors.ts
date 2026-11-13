@@ -386,6 +386,24 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     only: true,
   },
   {
+    page: "docs/how-to/find-a-wrong-machine-with-a-law.md",
+    shows: [
+      { file: "examples/order-effect-schema.ts" },
+      // Effect's `Arbitrary` is imported only by `src/effect/` and
+      // `src/testing/effect/`, so the page's test file lives there.
+      ...regions(
+        "src/testing/effect/find-a-wrong-machine-how-to.test.ts",
+        "lists",
+        "law",
+        "check",
+        "passes",
+        "wrong",
+        "reached",
+      ),
+    ],
+    only: true,
+  },
+  {
     page: "docs/how-to/handle-a-tool-failure.md",
     shows: regions(
       "examples/agent-tool-failure.ts",

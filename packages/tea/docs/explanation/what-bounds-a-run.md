@@ -7,7 +7,7 @@ thing, and one of them is easy to misread. `deadlineMs` is not a wall-clock cap.
 afternoon, and this page is about why.
 
 The measurements below come from
-[`examples/agent-stop-conditions.ts`](../../examples/agent-stop-conditions.ts),
+[`examples/agent-stop-conditions.ts`](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/agent-stop-conditions.ts),
 whose scripted model never stops asking for tools. `modelAsking(napMs)` asks for
 one `tick` every turn, and each `tick` naps that many milliseconds.
 [Bound a `defineAgent` run](../how-to/bound-a-run.md) is the recipe that sets

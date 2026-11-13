@@ -17,7 +17,7 @@ From the repository root, choose a directory for this case:
 node packages/tea/examples/retained-case/run.mjs ./retained-case-data
 ```
 
-The [fixture](../../examples/retained-case/fixture.ts) runs fourteen model turns,
+The [fixture](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/retained-case/fixture.ts) runs fourteen model turns,
 two context compactions, and thirteen tool calls. Calls 3, 7, and 11 fail; the
 other ten settle successfully. It stops the first host, opens a fresh host over
 the same files, and checks three disconnect/reconnect cycles before printing
@@ -41,7 +41,7 @@ does not provide a lease between competing hosts.
 
 ## 3. Connect a consumer
 
-The [host](../../examples/retained-case/host.ts) exposes `read()` for inspectable
+The [host](https://github.com/kamp-us/demlik/blob/main/packages/tea/examples/retained-case/host.ts) exposes `read()` for inspectable
 plain state and `source()` for the persisted records. `connect()` returns a
 connection whose first `next()` contains a complete current view. Later reads
 contain complete committed views. Close the connection when the consumer

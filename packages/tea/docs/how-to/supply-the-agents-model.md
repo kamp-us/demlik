@@ -35,7 +35,7 @@ stored it. If you rebuild the assistant message from `content` and `toolCalls`
 alone, it compiles and passes a happy-path test, then fails the first time a
 resume replays a reasoning turn. The value is written to the `Store` with the
 rest of the Model, so it must be JSON-serializable. A
-[compaction](../../../../.decisions/0004-agent-context-compaction.md) fold summarises
+[compaction](https://github.com/kamp-us/demlik/blob/main/.decisions/0004-agent-context-compaction.md) fold summarises
 old turns into text and drops their `provider` with them. That is fine, because
 nothing replays a summarised turn.
 

@@ -24,7 +24,7 @@ The short version:
 - `store.migrate` can answer a `Refusal`, and a Sub runner that throws stops
   the run.
 
-The [release notes](../../CHANGELOG.md) list every renamed type. This page
+The [release notes](https://github.com/kamp-us/demlik/blob/main/packages/tea/CHANGELOG.md) list every renamed type. This page
 covers the moves that change how you write code.
 
 ## 1. Import `run` from `@demlik/tea/promise`
@@ -330,7 +330,7 @@ The same move applies to `authed-call`, `paginated-walk`, `reconciler`,
 `monitored-run`, `snapshot`, `classify-batch` and `jev`. Their settle Msgs are
 the minted `<cmd>_ok` / `<cmd>_err`, and their verbs take that Msg. `fan-out`'s
 `handlers(ports)` is renamed `completion(ports)`. The
-[release notes](../../CHANGELOG.md) list each helper's new names.
+[release notes](https://github.com/kamp-us/demlik/blob/main/packages/tea/CHANGELOG.md) list each helper's new names.
 
 ## 9. Replace `withResilience`, `withDeadline` and `withTelemetry`
 

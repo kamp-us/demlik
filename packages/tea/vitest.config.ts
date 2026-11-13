@@ -64,7 +64,7 @@ const subpathAliases = Object.entries(pkg.exports)
 // resilience / timing / paginate / idempotency / work-queue families, recorder,
 // trace-replay, machine-viz) are host-agnostic and test in plain node — no
 // happy-dom, no Workers pool. Test files are excluded from the
-// published tarball (package.json `files: ["dist"]`) and from `tsc`/`tsup`.
+// published tarball (package.json `files: ["dist", "docs"]`) and from `tsc`/`tsup`.
 export default defineConfig({
   // A test may import the PUBLISHED specifier (`src/export-map-alias.test.ts`
   // does). Point it at `src/` so the suite needs no prior `pnpm build`. Nothing
