@@ -46,3 +46,5 @@ Effect users declare each model and message shape once and keep the existing eng
   explicitly. The core `Machine` type, `defineMachine`, engines, single
   constructor signature and inference rules stay unchanged. Work on
   `schemaMigrate` remains in [issue 872](https://github.com/kamp-us/demlik/issues/872).
+
+<!-- proof for #938: can/proof-938-decision-only -->
