@@ -1,6 +1,13 @@
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
-import { defineMachine, type Reducer } from "../../index";
+import { z } from "zod";
+import {
+  type AnyCmdDef,
+  Cmd,
+  CmdNameCollisionError,
+  defineMachine,
+  type Reducer,
+} from "../../index";
 import { arbMsg, arbMsgSequence } from "../arbitraries";
 import {
   PropertyFailure,
@@ -920,5 +927,81 @@ describe("a setting left undefined under fc.configureGlobal", () => {
       numRuns: undefined,
     });
     expect(run.numRuns).toBe(200);
+  });
+});
+
+// A machine written as a plain object, or a built one spread with a new `cmds`,
+// can list two Cmds under one name, which `defineMachine` refuses. A runner
+// refuses it too, before its first fold, as `run` and `drive` do.
+describe.each(
+  RUNNERS,
+)("%s given a cmds list that names one Cmd twice", (_name, run) => {
+  const input = z.object({ path: z.string() });
+  const own = ["list_dir", "hash", "resize", "notify"].map((name) =>
+    Cmd.define(name, {
+      input,
+      ok: z.object({ n: z.number() }),
+      err: ["offline"],
+    }),
+  );
+  const fetchFile = Cmd.define("fetch_file", {
+    input,
+    ok: z.object({ bytes: z.number() }),
+    err: ["offline"],
+  });
+  const fetchText = Cmd.define("fetch_file", {
+    input,
+    ok: z.object({ text: z.string() }),
+    err: ["offline"],
+  });
+
+  /** `trusting` spread with a `cmds` the maker would not build, counting its boots. */
+  const listing = (cmds: readonly AnyCmdDef[]) => {
+    const boots = { count: 0 };
+    const machine: ShipMachine = {
+      ...trusting,
+      init: (loaded, ctx) => {
+        boots.count += 1;
+        return trusting.init(loaded, ctx);
+      },
+      cmds,
+    };
+    return { machine, boots };
+  };
+
+  /** The error `act` throws; fails when it throws nothing. */
+  const thrownBy = (act: () => unknown): unknown => {
+    try {
+      act();
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected the runner to throw, and it passed");
+  };
+
+  const refused = [
+    ["two defs under one name", [...own, fetchFile, fetchText]],
+    ["one def listed twice", [...own, fetchFile, fetchFile]],
+  ] as const;
+
+  describe.each(refused)("%s", (_listed, cmds) => {
+    it.each([
+      ["by default", {}],
+      ["with failOnUndeclaredCmd", { failOnUndeclaredCmd: true }],
+    ] as const)("throws CmdNameCollisionError naming the Cmd, %s, before it folds", (_how, opts) => {
+      const { machine, boots } = listing(cmds);
+      const error = thrownBy(() => run(machine, { seed: 1, ...opts }));
+      expect(error).toBeInstanceOf(CmdNameCollisionError);
+      expect(error).toMatchObject({ cmdType: "fetch_file" });
+      expect(boots.count).toBe(0);
+    });
+  });
+
+  it("runs a list whose names are all distinct", () => {
+    const { machine, boots } = listing([...own, fetchFile]);
+    expect(run(machine, { seed: 1, failOnUndeclaredCmd: true }).numRuns).toBe(
+      200,
+    );
+    expect(boots.count).toBeGreaterThan(0);
   });
 });

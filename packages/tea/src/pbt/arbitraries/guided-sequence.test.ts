@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   Cmd,
+  CmdNameCollisionError,
   defineMachine,
   type Reducer,
   type Settled,
@@ -757,6 +758,30 @@ describe("what goes wrong", () => {
 
   it("no cells at all is refused, not a stream of empty lists", () => {
     expect(() => arbGuidedSequence(machine, ctx, {})).toThrow(/no cells/);
+  });
+
+  it("a cmds list that names one Cmd twice is refused, as run and drive refuse it", () => {
+    // The answers come from the cells' keys, so this entry would answer right; it
+    // refuses the list anyway, so one rule holds on every property-test entry.
+    const lintAgain = Cmd.define("lint", {
+      input,
+      ok: z.string(),
+      err: ["flaky"],
+    });
+    const listed = [defined.lint, defined.test, defined.scan, publish];
+    for (const cmds of [
+      [...listed, lintAgain],
+      [...listed, defined.lint],
+    ]) {
+      let error: unknown;
+      try {
+        arbGuidedSequence({ ...machine, cmds }, ctx, cells);
+      } catch (thrown) {
+        error = thrown;
+      }
+      expect(error).toBeInstanceOf(CmdNameCollisionError);
+      expect(error).toMatchObject({ cmdType: "lint" });
+    }
   });
 
   it("a Cmd type named after an Object.prototype key has no cell", () => {

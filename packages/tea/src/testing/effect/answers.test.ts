@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { Cmd } from "../../effect";
 import {
+  type AnyCmdDef,
+  CmdNameCollisionError,
   Cmd as CoreCmd,
   defineMachine,
   type Reducer,
@@ -376,5 +378,166 @@ describe("a machine it cannot draw answers for gets a result naming the problem"
     expect(Result.isFailure(result)).toBe(true);
     if (!Result.isFailure(result)) return;
     expect(result.failure).toBeInstanceOf(NothingToDrawError);
+  });
+});
+
+describe("a cmds list that names one Cmd twice is refused, not answered from the last def", () => {
+  // A file desk: `start` asks five things at once and only ever sends the first
+  // `fetch_file`. A machine written as a plain object, or a built one spread with
+  // a new `cmds`, can list a second `fetch_file` (a helper whose name defaults,
+  // say) that the makers would refuse. The good machine is built with one def, and
+  // the bad ones are spreads of it, as the makers would not build them.
+
+  const path = Schema.Struct({ path: Schema.String });
+  const listDir = Cmd.make("list_dir", {
+    input: path,
+    ok: Schema.Struct({ entries: Schema.Int }),
+    err: ["offline"],
+  });
+  const fetchFile = Cmd.make("fetch_file", {
+    input: path,
+    ok: Schema.Struct({ bytes: Schema.Number }),
+    err: ["offline"],
+  });
+  const fetchText = Cmd.make("fetch_file", {
+    input: path,
+    ok: Schema.Struct({ text: Schema.String }),
+    err: ["offline"],
+  });
+  const hash = Cmd.make("hash", {
+    input: path,
+    ok: Schema.Struct({ digest: Schema.String }),
+    err: ["offline"],
+  });
+  const resize = Cmd.make("resize", {
+    input: path,
+    ok: Schema.Struct({ width: Schema.Int }),
+    err: ["offline"],
+  });
+  const notify = Cmd.make("notify", {
+    input: path,
+    ok: Schema.Struct({ delivered: Schema.Boolean }),
+    err: ["offline"],
+  });
+
+  type FileDefs =
+    | typeof listDir
+    | typeof fetchFile
+    | typeof hash
+    | typeof resize
+    | typeof notify;
+  type FileSent = ReturnType<FileDefs>;
+  type FileMsg = { readonly type: "start" } | Settled<FileDefs>;
+  interface Files {
+    readonly asked: number;
+    readonly bytes: number;
+  }
+
+  const settled = (s: Files): readonly [Files, readonly []] => [
+    { ...s, asked: s.asked - 1 },
+    [],
+  ];
+  const cells: Reducer<Files, FileMsg, FileSent> = {
+    start: (s) => [
+      { ...s, asked: s.asked + 5 },
+      [
+        listDir({ path: "." }),
+        fetchFile({ path: "a" }),
+        hash({ path: "a" }),
+        resize({ path: "a" }),
+        notify({ path: "a" }),
+      ],
+    ],
+    list_dir_ok: settled,
+    list_dir_err: settled,
+    fetch_file_ok: (s, m) => [
+      { asked: s.asked - 1, bytes: s.bytes + m.value.bytes },
+      [],
+    ],
+    fetch_file_err: settled,
+    hash_ok: settled,
+    hash_err: settled,
+    resize_ok: settled,
+    resize_err: settled,
+    notify_ok: settled,
+    notify_err: settled,
+  };
+
+  const once = [listDir, fetchFile, hash, resize, notify];
+  const good = defineMachine({
+    types: {
+      model: {} as Files,
+      msg: {} as FileMsg,
+      cmd: {} as FileSent,
+      ctx: {} as object,
+    },
+    cmds: once,
+    init: (loaded) => [loaded ?? { asked: 0, bytes: 0 }, []],
+    update: cells,
+  });
+  const withCmds = (cmds: readonly AnyCmdDef[]) => ({ ...good, cmds });
+
+  const fileOutside = { start: Arbitrary.Constant({ type: "start" as const }) };
+
+  /** The error `arbSchemaGuidedSequence` throws; fails when it throws nothing. */
+  const thrownBy = (m: typeof good): unknown => {
+    try {
+      arbSchemaGuidedSequence(m, ctx, { outside: fileOutside });
+    } catch (error) {
+      return error;
+    }
+    throw new Error(
+      "expected arbSchemaGuidedSequence to throw, and it did not",
+    );
+  };
+
+  it("throws CmdNameCollisionError naming the Cmd when two defs share a name", () => {
+    const error = thrownBy(withCmds([...once, fetchText]));
+    expect(error).toBeInstanceOf(CmdNameCollisionError);
+    expect(error).toMatchObject({
+      _tag: "CmdNameCollisionError",
+      cmdType: "fetch_file",
+    });
+    expect((error as Error).message).toContain("fetch_file");
+    for (const name of ["list_dir", "hash", "resize", "notify"]) {
+      expect((error as Error).message).not.toContain(name);
+    }
+  });
+
+  it("throws it when the same def is listed twice", () => {
+    const error = thrownBy(withCmds([...once, fetchFile]));
+    expect(error).toBeInstanceOf(CmdNameCollisionError);
+    expect(error).toMatchObject({ cmdType: "fetch_file" });
+  });
+
+  it("throws it ahead of a Cmd it cannot draw for, which is a failed Result", () => {
+    const zodFetch = CoreCmd.define("fetch_file", {
+      input: z.object({ path: z.string() }),
+      ok: z.object({ n: z.number() }),
+      err: ["offline"],
+    }) as unknown as typeof fetchFile;
+    expect(
+      Result.isFailure(arbSchemaGuidedSequence(withCmds([zodFetch]), ctx)),
+    ).toBe(true);
+    expect(thrownBy(withCmds([...once, zodFetch]))).toBeInstanceOf(
+      CmdNameCollisionError,
+    );
+  });
+
+  it("answers every fetch_file_ok of the machine with one def from that def's schema", async () => {
+    const lists = Result.getOrThrow(
+      arbSchemaGuidedSequence(good, ctx, { outside: fileOutside }),
+    );
+    const sampled = await Effect.runPromise(
+      Arbitrary.sampleEffect(lists, { count: 300, size: 60, seed: 749 }),
+    );
+    const values = sampled
+      .flat()
+      .flatMap((msg) => (msg.type === "fetch_file_ok" ? [msg.value] : []));
+    expect(values.length).toBeGreaterThan(100);
+    for (const value of values) {
+      expect(typeof value.bytes).toBe("number");
+      expect(value).not.toHaveProperty("text");
+    }
   });
 });

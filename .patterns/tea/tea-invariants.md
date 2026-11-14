@@ -329,7 +329,10 @@ subs: [
   `SubId` brand keeps an ad-hoc string from passing for one.
 - A machine's Cmd names are unique: `defineMachine` refuses a repeat with
   `CmdNameCollisionError`, and `run` and `drive` refuse it again for a
-  machine written as a plain object.
+  machine written as a plain object. So do the property-test entries that
+  read a machine's `cmds` or draw for it (`arbSchemaGuidedSequence`,
+  `arbGuidedSequence`, `propertyTerminates`, `propertyInvariant` and
+  `propertyTrace`), before they draw or fold a list.
 - Phase 1.1: `Reducer<S, M, C>` and `Transitions<S, M, C>` mapped types
   make the variant set load-bearing — adding a Msg without a handler
   fails to compile.

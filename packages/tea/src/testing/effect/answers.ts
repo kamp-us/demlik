@@ -20,7 +20,13 @@ import {
   MAX_PICK,
   resolveGuided,
 } from "../../pbt/arbitraries/guided-fold";
-import type { AnyCmdDef, Cmd, Machine, Sub } from "../../pure/core";
+import {
+  type AnyCmdDef,
+  assertDistinctCmdNames,
+  type Cmd,
+  type Machine,
+  type Sub,
+} from "../../pure/core";
 
 /**
  * The machine has no `cmds` list, so there is no schema to draw an answer from.
@@ -165,6 +171,9 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  * longer than the one first found. A dropped event breaks that: deleting an
  * answer before it can let it back in.
  *
+ * A `machine.cmds` that names one Cmd twice throws `CmdNameCollisionError`, as it
+ * does in `run` and `drive`: it is a wrong program, not a machine to draw for.
+ *
  * It returns a failed `Result`, never an empty arbitrary, on a machine with no
  * `machine.cmds` ({@link NoCmdsError}), on a Cmd whose `ok` schema is not an
  * Effect schema ({@link NotEffectSchemaError}, naming it), and when there is
@@ -233,6 +242,7 @@ export function arbSchemaGuidedSequence<
       }),
     );
   }
+  assertDistinctCmdNames(defs);
 
   const answerers: Answerer<C, M>[] = [];
   const outcomes: Arbitrary.Arbitrary<Outcome>[] = [];
