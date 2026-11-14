@@ -13,7 +13,7 @@ import {
 } from "./docs-package.fixture.js";
 
 // The doc report end to end (SPEC §13.10), through the CLI entry, over the committed fixture
-// package: 45 published declarations, 28 in the caller's shape, 17 out of it, 3 left out.
+// package: 48 published declarations, 30 in the caller's shape, 18 out of it, 3 left out.
 const IN_SHAPE = (what: string): string =>
   `/**\n * ${what}\n *\n * @stability stable\n * @category constructors\n */\n`;
 
@@ -97,21 +97,21 @@ describe("code-graph --api <map> --api-docs <shape>", { timeout: 120_000 }, () =
     );
     const documented = report().stdout;
     expect(documented).not.toMatch(/ {2}(make|probe) {2}/);
-    expect(lines(documented).at(-1)).toBe("api docs: 45 exports judged, 15 with a finding");
+    expect(lines(documented).at(-1)).toBe("api docs: 48 exports judged, 16 with a finding");
 
     const labs = path.join(root, "src/labs/index.ts");
     const at = fs.readFileSync(labs, "utf8").split("\n").length;
     fs.appendFileSync(labs, "export function added(): number {\n  return 1;\n}\n");
     const added = report().stdout;
     expect(added).toContain(`src/labs/index.ts:${at}  added  no doc block\n`);
-    expect(lines(added).at(-1)).toBe("api docs: 46 exports judged, 16 with a finding");
+    expect(lines(added).at(-1)).toBe("api docs: 49 exports judged, 17 with a finding");
   });
 
   it("carries every finding, every reach and no absolute path in --json", () => {
     const out = report("--json").stdout;
     expect(out).not.toContain(root);
     const { judged, declarations, gaps } = JSON.parse(out) as Json;
-    expect(judged).toBe(45);
+    expect(judged).toBe(48);
     expect(gaps).toEqual([]);
     expect(declarations.map(({ file, line, name }) => `${file}:${line} ${name}`)).toEqual([
       ...new Set(
@@ -153,7 +153,7 @@ describe("code-graph --api <map> --api-docs <shape>", { timeout: 120_000 }, () =
     const map = tempFile("barrel-map.json", { ".": { entry: "src/index.ts" } });
     const run = runDocsCli([root, "--api", map, "--api-docs", DOCS_SHAPE]);
     expect(run.stdout).toContain("src/units.ts:29  convert  no doc block\n");
-    expect(lines(run.stdout).at(-1)).toBe("api docs: 26 exports judged, 13 with a finding");
+    expect(lines(run.stdout).at(-1)).toBe("api docs: 29 exports judged, 14 with a finding");
   });
 
   it("leaves out a skipped file and a dependency's name, and judges the file once it is not skipped", () => {
@@ -164,7 +164,7 @@ describe("code-graph --api <map> --api-docs <shape>", { timeout: 120_000 }, () =
     expect(run.stdout).toContain("src/internal/hidden.ts:1  hidden  no doc block\n");
     expect(run.stdout).toContain("src/support.test-support.ts:1  helper  no doc block\n");
     expect(run.stdout).not.toContain("depThing");
-    expect(lines(run.stdout).at(-1)).toBe("api docs: 47 exports judged, 19 with a finding");
+    expect(lines(run.stdout).at(-1)).toBe("api docs: 50 exports judged, 20 with a finding");
   });
 
   it("writes the same payload to --out and leaves stdout empty", () => {

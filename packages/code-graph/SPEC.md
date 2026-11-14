@@ -891,11 +891,13 @@ The view says what a package publishes. This report says whether each published 
 - One declaration per name: the first of the name's declarations in file order, then source order. An overload set and a merged declaration are therefore one, judged where the first one stands.
 - A declaration reached by two subpaths, or under two names, is one declaration. It keeps every `{ subpath, name }` that reaches it.
 - `export * as Name from "./module"` publishes one name for a whole module. The report judges that module's own exports in its place, each reached as `Name.<member>`, and so on through a namespace inside a namespace; a module already being read on the way is not entered again. The `export * as` line itself is not judged.
+- `export namespace Name { … }` and `export declare namespace Name { … }` publish their exported members the same way: each member is a declaration, reached as `Name.<member>`, and so on through a namespace inside a namespace and through a namespace merged with a function, a class or an interface. A namespace already being read on the way is not entered again. The namespace's own statement is a declaration like any other and is judged where it stands.
 - A declaration outside the analyzed path, or under a `node_modules` folder, is a dependency's and is not judged.
 - A file that matches one of the shape's `skip` globs is out: its declarations are not judged, not counted and never a finding.
 - A declaration is named by the name it is declared with (`make` for `export { make as create }`), and stands at the line of its statement's first token. `export const { a, b } = pair` is two declarations on one statement.
 - A declaration with no name of its own is named `default`: `export default 42` is one declaration, `default`, judged at that statement.
 - A published name that is empty, which is how a syntax error such as `export function (` reads, is not judged; the `syntax-error` gap below speaks for it.
+- The report reads ES exports. In a module that holds `export =`, it judges what the checker lists as that module's exports, the members of what is assigned, and not the assigned declaration itself.
 
 **The doc block of a declaration** is the last `/** … */` comment among the leading comments of its statement, as TypeScript attaches them. `/**/` is no block. A line comment between the block and the declaration changes nothing. A description block followed by a second block reads as the second block alone, so `/** Describes it. */` above `/** @internal */` is a block with an empty description.
 
@@ -929,7 +931,7 @@ The view says what a package publishes. This report says whether each published 
 | a rule's `description` | `"required"`: a block with an empty description is a finding. `"optional"`: it is not. |
 | a rule's `required`, `forbidden` | Tags a block must carry, and tags it must not. Both optional. |
 
-A tag is written with its `@` and compared as written, so `@Category` is not `@category`. The file is refused when a tag is not an `@` and a name, when a list names a tag twice, when one rule both requires and forbids a tag, when a `skip` glob does not compile, when it holds no rule for any block kind, and when its rules ask for nothing (every rule `optional` twice over with no tag, and no `order`).
+A tag is written with its `@` and compared as written, so `@Category` is not `@category`. The file is refused when a tag is not an `@` and a name, when a list names a tag twice, when one rule both requires and forbids a tag, when a `skip` glob is empty or does not compile, when it holds no rule for any block kind, and when its rules ask for nothing (every rule `optional` twice over with no tag, and no `order`).
 
 **Block kinds** are the rows of `BLOCK_KINDS` (`src/api/docs/kinds.ts`); a row's key is the shape file's key for its rule.
 
@@ -945,9 +947,9 @@ A tag is written with its `@` and compared as written, so `@Category` is not `@c
 | `missing-description` | there is a block, the rule's `description` is `required` and the description is empty | `the description is empty` |
 | `missing-tag` | there is a block and it lacks a tag of the rule's `required`; one finding per tag, in the list's order | `missing @category` |
 | `forbidden-tag` | there is a block and it carries a tag of the rule's `forbidden`; one finding per tag however often it is written, in the list's order | `@since is forbidden` |
-| `tag-out-of-order` | there is a block and a tag `order` names stands after a tag `order` places later; one finding per tag that stands too late, in the block's order | `@category comes before @stability` |
+| `tag-out-of-order` | there is a block and a tag `order` names stands after a tag `order` places later; one finding per tag line that stands too late, in the block's order | `@category comes before @stability` |
 
-The order check reads the block's tags top to bottom and keeps the latest-placed tag seen so far. A tag `order` does not name is passed over. A tag placed earlier than the one kept is a finding that names the kept tag first. A tag written twice in a row is in order.
+The order check reads the block's tags top to bottom and keeps the latest-placed tag seen so far. A tag `order` does not name is passed over. A tag placed earlier than the one kept is a finding that names the kept tag first. A tag written twice in a row is in order, and a tag written twice, both times too late, is two findings.
 
 **What it prints.** One line per finding, `<file>:<line>  <name>  <what it reads>`, with two spaces between the parts, then one count line:
 
@@ -982,11 +984,16 @@ Declarations print by file, then line, then name, each compared by code unit; th
 
 | Gap | When | The line, after `code-graph: warning: ` |
 |---|---|---|
-| `unresolved-specifier` | `unresolvedSpecifiers` (`src/api/read.ts`, the view's own walk) finds a module specifier the program could not resolve on the way to a published name | `<file> names "<specifier>", which the read could not resolve; a name behind it is not judged` |
-| `syntax-error` | the parser reported a syntax error in a file of the analyzed path | `<file> has <n> syntax error(s); a declaration in it may not be judged` |
+| `unresolved-specifier` | a re-export (`export … from`) in one of the package's own files names a module the program could not resolve, on the way from a module the report read: a map entry, or a module read as a namespace. `unresolvedSpecifiers` (`src/api/read.ts`, the view's own walk) finds it, asked for re-exports only | `<file> names "<specifier>", which the read could not resolve; a name behind it is not judged` |
+| `syntax-error` | the parser reported a syntax error in one of the package's own files | `<file> has <n> syntax error(s); a declaration in it may not be judged` |
 | `no-declaration` | a published name has no declaration at all | `<subpath> publishes "<name>", which the read found no declaration for; it is not judged` |
 
-Gaps print in the table's order, and inside a kind by file then specifier, by file, and by subpath then name. A name declared in a dependency, a file the shape skips and a namespace's own line are left out by rule and are no gap.
+Gaps print in the table's order, and inside a kind by file then specifier, by file, and by subpath then name. One of the package's own files is a file inside the analyzed path and under no `node_modules` folder, the same test that keeps a dependency's declaration out.
+
+- An import the program could not resolve is no gap. An import hides no name; a name published from one reads with no declaration and is the last row's.
+- A dependency's file is no gap, whatever is wrong in it: only a dependency's names stand behind it, and those are not judged. So the report does not enter a dependency's module behind `export * as Name` at all.
+- A name declared in a dependency, a name declared in a file the shape skips and an `export * as` line are left out by rule and are no gap.
+- A gap in a file the shape skips stands. The read runs before the shape, and a re-export in a skipped file can lead to a file that is not skipped.
 
 **Flags and exit codes.** `--api <map> --api-docs <shape>` prints the report and exits 0 whatever it finds. It takes `--json`, `--pretty` and `--out` and no other flag. Exit 2, with one stderr line and nothing written: `--api-docs` without `--api`; `--api-docs` beside any other flag, `--api-base`, `--api-policy`, `--ci`, `--accept-api` and `--reason` among them; an unreadable or invalid shape file, which is read before the map's entries are checked and before any program opens; an invalid map (§13.2); and no tsconfig for `<path>`. Exit 3 as in §13.6. With `--api-docs` absent, every other run of §13.6 prints the bytes and exits with the code it did before.
 

@@ -328,7 +328,8 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
 | `--api <map> --accept-api --reason <text>` | what it added as text; `--json` for `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
 
 `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
-and `--out`, or with [the API ledger's](#the-api-ledger) flags.
+and `--out`, with [the API ledger's](#the-api-ledger) flags, or with
+[the doc report's](#the-doc-report) `--api-docs`.
 Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
 flag beside it, a map that is not JSON or fails the schema (an unknown key, no
 subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
@@ -461,15 +462,16 @@ api docs: 37 exports judged, 2 with a finding
 A declaration is named by the name it is declared with and stands at its source
 line; the file is relative to `<directory>`. An export reached by two subpaths
 or under two names is one declaration, an overload set is judged on its first
-signature, and the members behind `export * as Name` are judged as exports of
-their own module. A name declared in a dependency is not judged. `--json`
+signature, and the members behind `export * as Name` or inside an
+`export namespace Name` are judged as declarations of their own. A name declared in a dependency is not judged. `--json`
 prints `{ declarations, gaps, judged }`, where each declaration with a finding
 carries its `findings` and every `{ subpath, name }` that reaches it.
 
 When the read could not see everything, it says so on stderr, one
-`code-graph: warning:` line per gap, and in `gaps` of `--json`: a module
-specifier it could not resolve, a file with a syntax error, or a published name
-with no declaration. The findings and the exit code do not change.
+`code-graph: warning:` line per gap, and in `gaps` of `--json`: a re-export
+it could not resolve, a file with a syntax error, or a published name with no
+declaration. An import it could not resolve and a broken file in a
+dependency hide no judged name and are no gap. The findings and the exit code do not change.
 
 Exit 2, with one stderr line: `--api-docs` without `--api`; `--api-docs` beside
 any flag but `--json`, `--pretty` and `--out`; an unreadable or invalid shape

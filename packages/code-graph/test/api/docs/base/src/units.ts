@@ -46,3 +46,23 @@ export const PRECISION = 3;
 export function round(value: number): number {
   return Number(value.toFixed(PRECISION));
 }
+
+/**
+ * Lengths written out for people.
+ *
+ * @stability stable
+ * @category namespaces
+ */
+export namespace Labels {
+  /**
+   * The long name of a unit.
+   *
+   * @stability stable
+   * @category models
+   */
+  export type Long = "meters" | "feet";
+
+  export function long(unit: Unit): Long {
+    return unit === "m" ? "meters" : "feet";
+  }
+}
