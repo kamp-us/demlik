@@ -111,6 +111,15 @@ describe("a job the verdict lets skip starts only on changes' answer", () => {
     expect(jobs.test.strategy["fail-fast"]).toBe(false);
   });
 
+  it("each leg runs the vitest slice changes chose, and nothing else", () => {
+    const run = jobs.test.steps.filter((step) => step.run?.includes("vitest"));
+    expect(run).toHaveLength(1);
+    // `$ARGS` is left unquoted on purpose: a leg's args are several words (`--project scripts`).
+    expect(run[0].run.trim()).toBe("pnpm exec vitest run $ARGS");
+    expect(compact(run[0].env.ARGS)).toBe("matrix.args");
+    expect(jobs.test.name).toContain("matrix.name");
+  });
+
   it("an ungated job has no `if`, so it cannot skip", () => {
     for (const id of ["changes", ...ungated]) {
       expect(jobs[id], id).not.toHaveProperty("if");

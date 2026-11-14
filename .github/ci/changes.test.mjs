@@ -859,11 +859,13 @@ describe("reading the workspace from pnpm", { timeout: 60_000 }, () => {
   });
 });
 
-// The slices are the whole suite or the split loses tests without a word. Every test file vitest
-// finds under the root config must sit in a leg an everything-run starts, and the legs of this
-// repo's own workspace must be the dependents pnpm reads from its package.json files.
+// The slices are the whole suite or the split loses tests without a word. A test is a vitest
+// project and a file together, so tea's React and fast-check peer projects count apart from tea's
+// own: every (project, file) pair vitest finds under the root config must sit in a leg an
+// everything-run starts, and the legs of this repo's own workspace must be the dependents pnpm
+// reads from its package.json files.
 describe("this repository's legs", { timeout: 120_000 }, () => {
-  /** @param {string[]} args */
+  /** The (project, file) pairs `vitest list --filesOnly <args>` finds, one `[project] file` line each. @param {string[]} args */
   const list = (args) => {
     const done = spawnSync(
       "pnpm",
@@ -877,8 +879,12 @@ describe("this repository's legs", { timeout: 120_000 }, () => {
     expect(done.status, done.stderr).toBe(0);
     return done.stdout
       .split("\n")
-      .map((line) => line.replace(/^\[[^\]]*\]\s*/, "").trim())
-      .filter((line) => line !== "");
+      .map((line) => /^\[([^\]]*)\]\s*(.+)$/.exec(line.trim()))
+      .filter((found) => found !== null)
+      .map(
+        ([, project, file]) =>
+          `[${project}] ${path.relative(REPO, path.resolve(REPO, file))}`,
+      );
   };
 
   const packages = readPackages(REPO);
@@ -895,28 +901,46 @@ describe("this repository's legs", { timeout: 120_000 }, () => {
     expect(packages?.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("every test file belongs to a leg of the every-test run, and no leg is empty", () => {
-    const all = list([]).map((file) =>
-      path.relative(REPO, path.resolve(REPO, file)),
-    );
+  it("every (project, file) pair belongs to a leg of the every-test run, and no leg is empty", () => {
+    const all = list([]);
     const covered = new Set();
 
     for (const leg of everything.legs) {
-      const files = list(leg.args === "" ? [] : leg.args.split(" ")).map(
-        (file) => path.relative(REPO, path.resolve(REPO, file)),
-      );
+      const found = list(leg.args === "" ? [] : leg.args.split(" "));
       expect(
-        files.length,
+        found.length,
         `leg ${leg.name} finds no test file`,
       ).toBeGreaterThan(0);
 
-      for (const file of files) {
-        covered.add(file);
+      for (const pair of found) {
+        covered.add(pair);
       }
     }
 
-    expect(all.filter((file) => !covered.has(file))).toEqual([]);
+    expect(all.filter((pair) => !covered.has(pair))).toEqual([]);
     expect(all.length).toBeGreaterThan(400);
+  });
+
+  it("tea's leg runs tea's React and fast-check peer projects, and no other leg owns them", () => {
+    const projectsOf = (args) =>
+      new Set(list(args).map((pair) => /^\[([^\]]*)\]/.exec(pair)?.[1]));
+    const teaLeg = everything.legs.find((leg) => leg.name === "packages/tea");
+    expect(teaLeg).toBeDefined();
+    const tea = [...projectsOf(teaLeg.args.split(" "))];
+
+    expect(tea).toContain("@demlik/tea");
+    expect(tea.some((name) => name.startsWith("tea on react "))).toBe(true);
+    expect(tea.some((name) => name.startsWith("tea pbt on fast-check "))).toBe(
+      true,
+    );
+
+    for (const leg of everything.legs.filter((other) => other !== teaLeg)) {
+      const owned = [...projectsOf(leg.args === "" ? [] : leg.args.split(" "))];
+      expect(
+        owned.filter((name) => name.startsWith("tea on react ")),
+        `leg ${leg.name}`,
+      ).toEqual([]);
+    }
   });
 
   it("every `workspace:` dependency in a package.json makes its owner a dependent", () => {

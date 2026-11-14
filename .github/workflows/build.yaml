@@ -220,6 +220,8 @@ jobs:
 
       - run: pnpm install --no-frozen-lockfile
 
+      # `$ARGS` is unquoted on purpose: a leg's args are several words (`--project scripts`), and
+      # the shell must split them. They are the `args` of a leg `changes` wrote.
       - name: Run tests
         env:
           ARGS: ${{ matrix.args }}

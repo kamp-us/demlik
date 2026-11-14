@@ -11,7 +11,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0005](./0005-web-timeline-player-hosting-and-render-primitive.md) | Web timeline player: hosting + render primitive | Accepted | 2026-06-24 |
 | [0006](./0006-client-prediction-fold-seam-and-pure-boundary.md) | Client-prediction fold seam + runtime-free import boundary | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0028](./0028-restored-init-may-resume.md) | 2026-06-27 |
 | [0007](./0007-source-generated-diataxis-docs-factory.md) | Docs are a source-generated, drift-gated Diátaxis factory | Accepted | 2026-07-17 |
-| [0008](./0008-reference-drift-gate-fails-with-the-patch.md) | The reference drift gate fails with the patch, single-sourced | Accepted | 2026-07-17 |
+| [0008](./0008-reference-drift-gate-fails-with-the-patch.md) | The reference drift gate fails with the patch, single-sourced | Amended-in-part by [0036](./0036-one-build-per-event.md) | 2026-07-17 |
 | [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental, showcases off the map | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0022](./0022-no-battery-layer-plain-functions.md) | 2026-07-17 |
 | [0011](./0011-errors-as-data.md) | Errors are data; a throw is reserved for a contract breach | Accepted | 2026-07-17 |
 | [0013](./0013-fabrika-is-the-work-pipeline.md) | fabrika is this repo's work pipeline | Accepted | 2026-08-16 |

@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: The reference drift gate fails with the patch, single-sourced
-status: accepted
+status: amended-in-part by [0036](0036-one-build-per-event.md)
 date: 2026-07-17
 tags: []
 ---
@@ -43,7 +43,10 @@ files; the fix — *which* line, *why* — had to be reverse-engineered by hand.
    pages match source is owned solely by `docs:reference:check`.
 
 3. **Runs before `Run tests`.** The CI step sits right after Lint, so the patch
-   surfaces before any coarser failure can mask it.
+   surfaces before any coarser failure can mask it. *(Amended in part by
+   [0036](./0036-one-build-per-event.md): the tests are now their own jobs beside
+   the one that runs this step, so there is no "before"; the patch still cannot
+   be masked, because a failing test job does not stop it.)*
 
 4. **Source-only, no build dependency.** The generator reads the typedoc model
    over `src/`, not the tsup `dist/` — verified by regenerating with `dist`

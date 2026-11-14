@@ -66,7 +66,9 @@ said it may skip.**
   trigger: GitHub's merge queue takes a required check only from it, and with `push` narrowed to main
   nothing else reports on a queue branch. A newer push to a pull request cancels the run it replaces
   (concurrency group by PR number, `cancel-in-progress` on `synchronize`). A merged PR is three
-  builds: its head, its queue group, main.
+  builds: its head, its queue group, main. What is gone is the second build of the same push. A
+  reopened pull request, or a re-run, is another event and builds again: concurrency serializes runs,
+  it does not deduplicate them.
 - **`changes`, the first job** (`.github/ci/changes.mjs`), reads the changed files (a PR from its
   merge base with its base, a queue group from the group's base) and writes `legs`, the matrix of
   the `test` job, and `test`, whether any leg runs. A leg is one slice of the suite: a workspace
@@ -89,9 +91,16 @@ said it may skip.**
   edit cannot change what a test that only needs the file to exist sees; a deletion starts tea's leg.
   No test reads `ROADMAP.md`, `CLAUDE.md` or a root `README.md`. A package's own Markdown is never
   skipped: tea's docs are tested.
-- **The other steps do not change.** `checks` runs every non-test step as the one job did (conflict
-  markers, CODEOWNERS, catalog guard, typecheck, lint, docs drift, export stamps, API ratchet, build,
-  the verify steps) on every build; they are cheap.
+- **The other steps do not change, and they no longer come first.** `checks` runs every non-test step
+  as the one job did (conflict markers, CODEOWNERS, catalog guard, typecheck, lint, docs drift, export
+  stamps, API ratchet, build, the verify steps) on every build; they are cheap. The tests are now jobs
+  beside `checks`, not steps after it, so they do not wait for it and it does not wait for them. That
+  amends [0008](./0008-reference-drift-gate-fails-with-the-patch.md) item 3 ("runs before `Run
+  tests`"): the order is gone, its purpose is kept. 0008 wanted the drift patch never masked by a
+  coarser failure, and a failing test job cannot stop the `checks` job that prints it (`fail-fast` is
+  off on the matrix, and no job cancels another). The cost of the order was about two minutes on every
+  build for the tests to wait for `checks`, to protect an output that cannot be lost. Items 1, 2 and 4
+  of 0008 stand.
 - **`test-and-build` is the verdict** (`.github/ci/required.mjs`). GitHub counts a skipped required
   check as passed, so it never skips (`if: always()`), needs every other job, and judges each: a job
   passes by succeeding, or by skipping when `changes` wrote exactly `"false"` for it. The ruleset's
