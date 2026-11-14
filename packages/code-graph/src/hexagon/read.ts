@@ -23,17 +23,20 @@ export type Hexagon = {
   notRead: NotRead[];
 };
 
+// The row's name for a whole file that was not read, as against a declaration in it.
+const SOURCE = "<source>";
+
 function readSyntax(root: string, file: string, notRead: NotRead[]): SyntaxFile | null {
   let text: string;
   try {
     text = fs.readFileSync(path.join(root, file), "utf8");
   } catch {
-    notRead.push({ file, line: 1, name: "<source>", reason: "cannot read source" });
+    notRead.push({ file, line: 1, name: SOURCE, reason: "cannot read source" });
     return null;
   }
   const parsed = parseTypeScript(file, text);
   if (parsed.ok) return new SyntaxFile(text, parsed.program, parsed.comments);
-  notRead.push({ file, line: 1, name: "<source>", reason: "cannot parse source" });
+  notRead.push({ file, line: 1, name: SOURCE, reason: "cannot parse source" });
   return null;
 }
 
@@ -120,7 +123,12 @@ function featureOf(factory: { name: string } | null, paired: string[]): string |
 function listOf(bags: HexagonBag[], notRead: NotRead[], name: string | null): PortList {
   const bag = bags.find((candidate) => candidate.name === name);
   if (bag !== undefined) return bag.members;
-  const row = notRead.find((candidate) => candidate.file === "ports.ts" && candidate.name === name);
+  // A `ports.ts` that is not read at all leaves no bag and no row named after the feature, and
+  // both lists are as unread as it is.
+  const row = notRead.find(
+    (candidate) =>
+      candidate.file === "ports.ts" && (candidate.name === SOURCE || candidate.name === name),
+  );
   return row === undefined ? [] : { notRead: row };
 }
 

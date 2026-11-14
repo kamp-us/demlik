@@ -916,9 +916,9 @@ then factories whose `X` and `XDriven` `ports.ts` exports, then file/name order.
 With no factory, the feature is the one name `X` for which `ports.ts` exports both
 `X` and `XDriven`, read or not, whatever the folder's functions are called. With no
 such name, or with two, no feature is named, because nothing here chooses between
-them: print `Factory: not found`, leave both sections empty, and list every
-readable bag under Other bags. Do not infer a feature from the
-directory name; JSON `feature` is `null` when none is named.
+them: print `Factory: not found`, leave both sections empty (unless `ports.ts` is
+not read, below), and list every readable bag under Other bags. Do not infer a
+feature from the directory name; JSON `feature` is `null` when none is named.
 `X` supplies Commands; `XDriven` supplies External systems.
 
 Print sections in order: Commands, External systems, Other bags, Ports declared
@@ -926,9 +926,12 @@ in ports.ts but in no bag, Use cases, Adapters, Not read. Empty sections print
 `none`; JSON uses empty arrays. A list whose bag is under Not read is no empty
 list: Commands or External systems then holds the one row that says so,
 `not read: ports.ts:5 Orders: union type` in text and `{"notRead": {file, line,
-name, reason}}` in JSON in place of the array, with no member of that bag. Members
-keep their written names, optional `?`
-and types. If a member's entire written type is exactly the name of a readable
+name, reason}}` in JSON in place of the array, with no member of that bag. A
+`ports.ts` that does not parse or cannot be read has no bag to look in, so both
+lists hold its `<source>` row, `not read: ports.ts:1 <source>: cannot parse source`
+(or `cannot read source`), whether or not a factory names a feature. Members keep
+their written names, optional `?` and types. If a member's entire written type is
+exactly the name of a readable
 port, also print that port's written expression. Only that exact match counts a
 port as used. Aliases, nested references, qualified names and generic
 instantiations do not count; unreadable bags do not consume ports.
@@ -992,9 +995,9 @@ other views. Lists sort lexically, JSON keys go through the stable serializer, a
 absolute path enters the report, so two runs over one tree print the same bytes. Each scope lists:
 
 - **Features**, by name. A feature lists its `tables`, its `reach` and its ports, `commands` and
-  `externalSystems`, as `readHexagon` returns them for `src/<feature>`: a list whose bag is not read
-  holds the row that says so, in text and in `--json`, as it does under `--hexagon`. A feature with no
-  `ports.ts` lists empty ports.
+  `externalSystems`, as `readHexagon` returns them for `src/<feature>`: a list whose bag is not read,
+  or whose `ports.ts` is not read, holds the row that says so, in text and in `--json`, as it does
+  under `--hexagon`. A feature with no `ports.ts` lists empty ports.
 - **Workers**, by the service name their config gives them, each with the bindings the scope's files
   reference: the binding's kind, the files `bindingOwners` narrows it to, and every site with its
   line and where the file sits. The sites are those of the deployable census, less the files

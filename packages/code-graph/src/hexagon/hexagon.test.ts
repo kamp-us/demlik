@@ -105,6 +105,74 @@ describe("--hexagon over composed and unread port lists", () => {
   });
 });
 
+const UNPARSED = { file: "ports.ts", line: 1, name: "<source>", reason: "cannot parse source" };
+const BROKEN = "export type Broken = {{{ ;\n";
+
+// A copy of the composed `orders` feature: commands written with `&`, a driven bag and a
+// `createOrders` factory. A file that does not exist yet is made with the syntax error as its body.
+function orders(options: { broken?: string; factory?: boolean } = {}): string {
+  const root = fs.mkdtempSync(path.join(temporary, "orders-"));
+  fs.cpSync(path.join(fixtures, "composed/orders"), root, { recursive: true });
+  if (options.factory === false) fs.rmSync(path.join(root, "application"), { recursive: true });
+  if (options.broken !== undefined) fs.appendFileSync(path.join(root, options.broken), BROKEN);
+  return root;
+}
+
+describe("--hexagon when ports.ts is not read", () => {
+  it.each([true, false])("marks both lists not read, never none, with a factory: %s", (factory) => {
+    const root = orders({ broken: "ports.ts", factory });
+    const row = "not read: ports.ts:1 <source>: cannot parse source";
+    const text = print(root, false);
+    expect(text).toContain(`Commands\n  ${row}\n\nExternal systems\n  ${row}\n\n`);
+    expect(text).not.toMatch(/^(Commands|External systems)\n {2}none$/m);
+    expect(print(root, false)).toBe(text);
+
+    const json = print(root, true);
+    expect(print(root, true)).toBe(json);
+    const report = JSON.parse(json);
+    expect(report.feature).toBe(factory ? "Orders" : null);
+    expect(report.commands).toEqual({ notRead: UNPARSED });
+    expect(report.externalSystems).toEqual({ notRead: UNPARSED });
+    expect(report.notRead).toEqual([UNPARSED]);
+
+    for (const [flags, expected] of [
+      [[], text],
+      [["--json"], json],
+    ] as const) {
+      const result = run(root, ...flags);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(expected);
+    }
+  });
+
+  it("marks both lists not read when ports.ts cannot be read at all", () => {
+    const root = orders();
+    fs.rmSync(path.join(root, "ports.ts"));
+    fs.mkdirSync(path.join(root, "ports.ts"));
+    const unreadable = { ...UNPARSED, reason: "cannot read source" };
+    const report = JSON.parse(print(root, true));
+    expect(report.commands).toEqual({ notRead: unreadable });
+    expect(report.externalSystems).toEqual({ notRead: unreadable });
+    expect(print(root, false)).toContain(
+      "Commands\n  not read: ports.ts:1 <source>: cannot read source\n\nExternal systems\n  not read: ports.ts:1 <source>: cannot read source\n",
+    );
+  });
+
+  it.each([
+    "application/broken.ts",
+    "application/orders.ts",
+  ])("leaves both lists as read when %s does not parse", (file) => {
+    const expected = JSON.parse(
+      fs.readFileSync(path.join(fixtures, "composed/orders/expected.json"), "utf8"),
+    );
+    const report = JSON.parse(print(orders({ broken: file }), true));
+    expect(report.notRead).toEqual([{ ...UNPARSED, file }]);
+    for (const key of ["feature", "commands", "externalSystems", "otherBags"])
+      expect(report[key], key).toEqual(expected[key]);
+  });
+});
+
 describe("--hexagon", () => {
   it.each(["full", "unbagged", "not-read"])("prints %s deterministically", (name) => {
     const root = path.join(fixtures, name);

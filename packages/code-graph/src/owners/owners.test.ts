@@ -394,6 +394,50 @@ describe("the view and the gate cannot disagree", () => {
       ].join("\n"),
     );
   });
+
+  it("marks both lists not read for a feature whose ports.ts does not parse, as --hexagon does", () => {
+    const repo = open();
+    // `orders` keeps its factory, `billing` loses it, and `shipping` is left as it was.
+    repo.put(at("src/orders/ports.ts"), "export type Broken = {{{ ;\n");
+    repo.put(at("src/billing/ports.ts"), "export type Broken = {{{ ;\n");
+    repo.remove(at("src/billing/application/billing.ts"));
+    const row = { file: "ports.ts", line: 1, name: "<source>", reason: "cannot parse source" };
+    const owned = reportFrom(repo.owners({ json: true })).scopes.flatMap((scope) => scope.features);
+    for (const name of ["orders", "billing", "shipping"]) {
+      const out: string[] = [];
+      runHexagon(path.join(repo.root, API, "src", name), {
+        json: true,
+        pretty: false,
+        emit: (text) => out.push(text),
+        report: (error) => {
+          throw new Error(error);
+        },
+      });
+      const hexagon = JSON.parse(out.join(""));
+      const listed = owned.find((candidate) => candidate.feature === name);
+      expect(listed?.commands, name).toEqual(hexagon.commands);
+      expect(listed?.externalSystems, name).toEqual(hexagon.externalSystems);
+      if (name === "shipping")
+        expect(hexagon.commands.map((member: { name: string }) => member.name)).toEqual(["ship"]);
+      else
+        expect([hexagon.commands, hexagon.externalSystems]).toEqual([
+          { notRead: row },
+          { notRead: row },
+        ]);
+    }
+    const text = repo.owners().stdout;
+    for (const name of ["orders", "billing"]) {
+      const feature = text.split(`  Feature ${name}\n`)[1]?.split("\n  Feature ")[0];
+      expect(feature, name).toContain(
+        [
+          "    Commands",
+          "      not read: ports.ts:1 <source>: cannot parse source",
+          "    External systems",
+          "      not read: ports.ts:1 <source>: cannot parse source",
+        ].join("\n"),
+      );
+    }
+  });
 });
 
 describe("a view is read-only, deterministic and local to the path it is given", () => {
