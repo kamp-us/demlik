@@ -123,3 +123,5 @@ The package ships these pages: an installed copy holds them in `node_modules/@de
 Two more surfaces sit behind those, for people working on the library rather than using it:
 [`.patterns/`](https://github.com/kamp-us/demlik/blob/main/.patterns/index.md) is how the code is shaped, and
 [`.decisions/`](https://github.com/kamp-us/demlik/blob/main/.decisions/index.md) is why it was shaped that way.
+
+<!-- proof for #938: can/proof-938-tea-only -->
