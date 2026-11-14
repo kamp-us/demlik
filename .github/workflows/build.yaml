@@ -1,21 +1,66 @@
 name: build
 
 on:
-  # `**`, not `*`: a GitHub branch filter treats `*` as matching a single path
-  # SEGMENT, so `*` never matched `can/some-branch` and push CI had never run on any
-  # prefixed branch. Worse, a stacked PR whose BASE contains a slash matched
-  # neither trigger and got no CI at all — silently, because a PR with zero
-  # checks reads the same as a PR whose checks have not started yet.
+  # A pull request runs once, on its own event, and so does a push to main, for what lands there
+  # without one. `push` on every branch ran each pull request twice, the same build side by side.
   push:
     branches:
-      - "**"
+      - main
+  # No `branches` filter, so a pull request runs whatever its base is. A stacked PR whose BASE
+  # contains a slash (`can/some-branch`) once matched neither trigger and got no CI at all,
+  # silently, because a PR with zero checks reads the same as a PR whose checks have not started
+  # yet: a `*` filter matches a single path SEGMENT, and `**` was the fix. No filter has no such
+  # slip.
   pull_request:
-    branches:
-      - "**"
+  # GitHub's merge queue tests each group on a temporary branch (`gh-readonly-queue/...`) and
+  # takes the required check only from this event: "You must use the merge_group event to trigger
+  # your GitHub Actions workflow when a pull request is added to a merge queue", else "the merge
+  # will fail as the required status check will not be reported"
+  # (docs.github.com, "Managing a merge queue"). `push` used to give the queue that run by matching
+  # every branch; narrowing `push` to main made this trigger the queue's only one.
+  merge_group:
+    types: [checks_requested]
+
+# A newer push to the same pull request stops the run it replaces. The queue's runs and main's
+# each have their own commit and all finish. Only a new head cancels: a reopened pull request
+# on the same head waits for the run already going.
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
 
 jobs:
-  test-and-build:
+  # Which test jobs this build starts (.github/ci/changes.mjs): the packages its changed files
+  # touch and the packages that depend on them. pnpm reads the dependencies from each package.json.
+  # Unreadable history, a path no rule knows, the lockfile, a root config and .github/** run every
+  # test. It needs pnpm (`pnpm ls`) but no install, so it answers in seconds beside `checks`.
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test: ${{ steps.diff.outputs.test }}
+      legs: ${{ steps.diff.outputs.legs }}
+    steps:
+      # The whole history: a pull request's changed files start at the merge base of its base and
+      # head, and a queue group's at the group's base.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          EVENT: ${{ github.event_name }}
+        run: node .github/ci/changes.mjs
+
+  # Every step that is not a test. Cheap, so it runs on every build, whatever changed.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       # Depth 2, not the default 1: on a pull request the checkout is the merge of
@@ -109,9 +154,6 @@ jobs:
           TEA_API_BASE: HEAD^1
         run: pnpm --filter @demlik/tea run api:ratchet
 
-      - name: Run tests
-        run: pnpm test
-
       - name: Build
         run: pnpm run build
 
@@ -149,3 +191,58 @@ jobs:
       # (#113), because `ws` is always present here.
       - name: Import /node with no optional peer installed
         run: pnpm --filter @demlik/tea exec node scripts/verify-optional-peer-install.mjs
+
+  # One job per leg `changes` chose, each the vitest run of one slice of the suite (a package, or
+  # the root's `scripts` project): `vitest run <slice>` under the root config, the same projects
+  # `pnpm test` runs. CI tests before it builds, so no leg needs a `dist/`.
+  test:
+    name: test ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.legs) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --no-frozen-lockfile
+
+      # `$ARGS` is unquoted on purpose: a leg's args are several words (`--project scripts`), and
+      # the shell must split them. They are the `args` of a leg `changes` wrote.
+      - name: Run tests
+        env:
+          ARGS: ${{ matrix.args }}
+        run: pnpm exec vitest run $ARGS
+
+  # The one check the `main protection` ruleset requires: its context is "test-and-build", the
+  # name the single job here had, so the ruleset needed no edit. It never skips (`if: always()`),
+  # because GitHub counts a skipped required check as passed, and it passes a job's skip only when
+  # `changes` said that job need not run (required.mjs). The same job gives the merge queue its
+  # check: a group reports it through `merge_group`.
+  # No install and no setup: the runner's own Node runs required.mjs.
+  test-and-build:
+    needs: [changes, checks, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/ci
+
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node .github/ci/required.mjs
