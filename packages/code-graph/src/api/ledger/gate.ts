@@ -2,18 +2,16 @@ import path from "node:path";
 import { findRepoRoot } from "../../extract/project.js";
 import { scopeOf } from "../../ratchet/scope-count.js";
 import { ApiInputError } from "../map.js";
-import { readMeasuredApi } from "../view.js";
 import {
-  API_LEDGER_FILENAME,
-  type ApiLedger,
+  type Ledger,
+  type LedgerMeasurement,
   prunesEntries,
-  publishedNamesOf,
-  readApiLedger,
-  reconcileApiNames,
-  withAcceptedNames,
-  writeApiLedger,
-} from "./ledger.js";
-import { renderApiLedgerAccept, renderApiLedgerCheck } from "./text.js";
+  readLedger,
+  reconcileLedger,
+  withAcceptedEntries,
+  writeLedger,
+} from "./keyed.js";
+import { type LedgerRow, renderApiLedgerAccept, renderApiLedgerCheck } from "./text.js";
 
 export type ApiLedgerMode =
   | { readonly kind: "check" }
@@ -21,7 +19,6 @@ export type ApiLedgerMode =
 
 export type ApiLedgerRun = {
   readonly rootAbsolute: string;
-  readonly map: unknown;
   readonly mode: ApiLedgerMode;
   readonly json: boolean;
   readonly pretty: boolean;
@@ -29,33 +26,42 @@ export type ApiLedgerRun = {
 
 export type ApiLedgerOutcome = { readonly payload: string; readonly code: number };
 
-function readLedgerOrRefuse(file: string): ApiLedger {
-  const read = readApiLedger(file);
+function readLedgerOrRefuse<Field extends string>(
+  row: LedgerRow<Field>,
+  file: string,
+): Ledger<Field> {
+  const read = readLedger(row, file);
   if (read.kind === "invalid") {
-    throw new ApiInputError(`invalid API ledger "${file}": ${read.message}; nothing was written.`);
+    throw new ApiInputError(
+      `invalid ${row.labels.invalid} "${file}": ${read.message}; nothing was written.`,
+    );
   }
   return read.kind === "read" ? read.ledger : { entries: [] };
 }
 
-// The ledger is read before the emit, so a run that cannot gate never measures or writes. Its only
-// input besides the file is the view, which needs no git.
-export async function runApiLedger(run: ApiLedgerRun): Promise<ApiLedgerOutcome> {
+export async function runApiLedger<Field extends string>(
+  row: LedgerRow<Field>,
+  run: ApiLedgerRun,
+  measure: (
+    scope: string,
+    repoRoot: string,
+  ) => LedgerMeasurement<Field> | Promise<LedgerMeasurement<Field>>,
+): Promise<ApiLedgerOutcome> {
   const repoRoot = findRepoRoot(run.rootAbsolute);
-  const file = path.join(repoRoot, API_LEDGER_FILENAME);
-  const ledger = readLedgerOrRefuse(file);
+  const file = path.join(repoRoot, row.filename);
+  const ledger = readLedgerOrRefuse(row, file);
   const scope = scopeOf(repoRoot, run.rootAbsolute);
-  const published = await readMeasuredApi(run.rootAbsolute, run.map, { repoRoot });
-  const result = reconcileApiNames(ledger, scope, publishedNamesOf(scope, published));
+  const result = reconcileLedger(row, ledger, scope, await measure(scope, repoRoot));
   const { mode } = run;
   if (mode.kind === "accept") {
     if (prunesEntries(result) || result.unrecorded.length > 0) {
-      writeApiLedger(file, withAcceptedNames(result.kept, result.unrecorded, mode.reason));
+      writeLedger(row, file, withAcceptedEntries(row, result.kept, result.unrecorded, mode.reason));
     }
-    return { payload: `${renderApiLedgerAccept(result, mode.reason, run)}\n`, code: 0 };
+    return { payload: `${renderApiLedgerAccept(row, result, mode.reason, run)}\n`, code: 0 };
   }
-  if (prunesEntries(result)) writeApiLedger(file, result.kept);
+  if (prunesEntries(result)) writeLedger(row, file, result.kept);
   return {
-    payload: `${renderApiLedgerCheck(result, run)}\n`,
+    payload: `${renderApiLedgerCheck(row, result, run)}\n`,
     code: result.unrecorded.length === 0 ? 0 : 1,
   };
 }
