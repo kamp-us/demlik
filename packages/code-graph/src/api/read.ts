@@ -18,10 +18,10 @@ export type SubpathNames = Readonly<Record<string, ApiEntryText>>;
 type Published = { readonly name: string; readonly declarations: readonly ts.Node[] };
 
 // A file's first statement starts where the file does, so the kind keeps the two apart.
-const nodeKey = (node: ts.Node): string =>
+export const nodeKey = (node: ts.Node): string =>
   `${node.getSourceFile().fileName}:${node.pos}:${node.end}:${node.kind}`;
 
-function byFileThenPosition(a: ts.Node, b: ts.Node): number {
+export function byFileThenPosition(a: ts.Node, b: ts.Node): number {
   const fileA = a.getSourceFile().fileName;
   const fileB = b.getSourceFile().fileName;
   if (fileA !== fileB) return fileA < fileB ? -1 : 1;
@@ -45,9 +45,19 @@ const joinedText = (statements: readonly ts.Node[]): string =>
 function publishedNames(program: ts.TypeProgram, entryFile: string): readonly Published[] {
   const moduleSymbol = moduleSymbolOf(program, entryFile);
   if (moduleSymbol === undefined) return [];
+  return publishedDeclarations(program, moduleSymbol).map(({ name, declarations }) => ({
+    name,
+    declarations: statementsOf(declarations),
+  }));
+}
+
+export function publishedDeclarations(
+  program: ts.TypeProgram,
+  moduleSymbol: ts.TsSymbol,
+): readonly Published[] {
   return [...program.exportsOf(moduleSymbol)].map(([name, symbol]) => ({
     name,
-    declarations: statementsOf(program.declarations(program.aliasTarget(symbol) ?? symbol)),
+    declarations: program.declarations(program.aliasTarget(symbol) ?? symbol),
   }));
 }
 
@@ -92,7 +102,7 @@ const TOP_LEVEL_DECLARATION: ReadonlyArray<(node: ts.Node) => boolean> = [
   ts.isVariableDeclaration,
 ];
 
-function declaredName(declaration: ts.Node): string {
+export function declaredName(declaration: ts.Node): string {
   const name = (declaration as { name?: ts.Node }).name;
   return name !== undefined && ts.isIdentifier(name) ? name.text : "default";
 }
@@ -230,6 +240,11 @@ function moduleReferences(holder: ts.Node): readonly ModuleReference[] {
   return found;
 }
 
+export type ReadScope = {
+  readonly own: (file: string) => boolean;
+  readonly named: (file: string) => string;
+};
+
 export type UnresolvedSpecifier = { readonly specifier: string; readonly file: string };
 
 // Every specifier the read could not resolve on the way to a published name. A name behind one is
@@ -242,7 +257,7 @@ export type UnresolvedSpecifier = { readonly specifier: string; readonly file: s
 // block answers for itself and not for the other blocks in its file.
 export function unresolvedSpecifiers(
   program: ts.TypeProgram,
-  tree: EmittedTree,
+  scope: ReadScope,
   entryFiles: readonly string[],
 ): readonly UnresolvedSpecifier[] {
   const unresolved = new Map<string, UnresolvedSpecifier>();
@@ -259,21 +274,19 @@ export function unresolvedSpecifiers(
   }
   for (let holder = queue.shift(); holder !== undefined; holder = queue.shift()) {
     const file = holder.getSourceFile().fileName;
-    const emitted = tree.declarationOf(file);
-    const references = moduleReferences(holder).filter(
-      ({ reexport }) => reexport || emitted !== undefined,
-    );
+    const own = scope.own(file);
+    const references = moduleReferences(holder).filter(({ reexport }) => reexport || own);
     const symbols = program.symbolsAt(references.map(({ specifier }) => specifier));
     references.forEach(({ specifier, reexport }, index) => {
       const symbol = symbols[index];
       if (symbol === undefined) {
         const text = (specifier as ts.StringLiteral).text;
-        const named = emitted ?? file;
+        const named = scope.named(file);
         unresolved.set(`${named}\0${text}`, { specifier: text, file: named });
         return;
       }
       for (const declaration of program.declarations(symbol)) {
-        const emits = tree.declarationOf(declaration.getSourceFile().fileName) !== undefined;
+        const emits = scope.own(declaration.getSourceFile().fileName);
         if (reexport || emits) enqueue(declaration);
       }
     });

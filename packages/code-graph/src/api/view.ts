@@ -38,7 +38,7 @@ export function packageRoot(root: string): string {
   return fs.realpathSync(absolute);
 }
 
-function packageTsConfig(rootAbsolute: string, repoRoot: string): string {
+export function packageTsConfig(rootAbsolute: string, repoRoot: string): string {
   try {
     return resolveEdgeTsConfig(rootAbsolute, "package", repoRoot);
   } catch (error) {
@@ -70,7 +70,14 @@ function readNames(
       names: new Map(
         [...entries].map(([subpath, file]) => [subpath, readSubpathNames(program, tree, file)]),
       ),
-      unresolved: unresolvedSpecifiers(program, tree, entryFiles),
+      unresolved: unresolvedSpecifiers(
+        program,
+        {
+          own: (file) => tree.declarationOf(file) !== undefined,
+          named: (file) => tree.declarationOf(file) ?? file,
+        },
+        entryFiles,
+      ),
     };
   } finally {
     program.close();

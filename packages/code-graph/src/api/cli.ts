@@ -34,6 +34,7 @@ export type ApiRun = {
 // The mode's flags as the command line gave them.
 export type ApiFlags = {
   readonly api?: string;
+  readonly apiDocs?: string;
   readonly apiBase?: string;
   readonly apiPolicy?: string;
   readonly acceptApi?: boolean;
@@ -194,11 +195,37 @@ const asksForLedger = (flags: ApiFlags): boolean =>
   flags.apiBase === undefined &&
   flags.apiPolicy === undefined;
 
+const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", "json", "pretty", "out"]);
+
+function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promise<number> {
+  const stray = host.given.filter((attribute) => !DOCS_COMPANIONS.has(attribute));
+  if (stray.length > 0) {
+    host.report(
+      `--api --api-docs take only --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
+    );
+    return Promise.resolve(2);
+  }
+  return settle(host, async () => {
+    const { apiDocsShape } = await import("./docs/shape.js");
+    const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
+    const { readApiDocFacts } = await import("./docs/read.js");
+    const { judgeApiDocs } = await import("./docs/judge.js");
+    const { apiDocGapLine } = await import("./docs/gaps.js");
+    const { apiDocsJson, renderApiDocs } = await import("./docs/text.js");
+    const { facts, gaps } = readApiDocFacts(host.rootAbsolute, readJsonFile(mapFile, "API map"));
+    const report = judgeApiDocs(facts, shape);
+    for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
+    const payload = host.json ? apiDocsJson(report, gaps, host.pretty) : renderApiDocs(report);
+    return { payload, code: 0 };
+  });
+}
+
 // The command line's entry to the mode: `null` when none of its flags is given, so every other
 // mode runs as before; otherwise the run's exit code. `--api-base`, `--api-policy` and
 // `--accept-api` without `--api` are refused here (SPEC §13.6).
 export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | null {
   if (flags.api !== undefined) {
+    if (flags.apiDocs !== undefined) return runDocsFlags(flags.api, flags.apiDocs, host);
     if (asksForLedger(flags)) return runLedgerFlags(flags.api, flags, host);
     return runApiView({
       ...host,
@@ -206,6 +233,10 @@ export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | n
       base: flags.apiBase,
       policyFile: flags.apiPolicy,
     });
+  }
+  if (flags.apiDocs !== undefined) {
+    host.report("--api-docs needs --api <map>; nothing was written.");
+    return Promise.resolve(2);
   }
   if (flags.acceptApi === true) {
     host.report("--accept-api needs --api <map>; nothing was written.");

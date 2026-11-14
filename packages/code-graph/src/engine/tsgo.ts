@@ -25,6 +25,7 @@ export type TypeProgram = {
   readonly shorthandValueSymbol: (assignment: Node) => TsSymbol | undefined;
   readonly declarations: (symbol: TsSymbol) => readonly Node[];
   readonly exportsOf: (moduleSymbol: TsSymbol) => ReadonlyMap<string, TsSymbol>;
+  readonly syntaxErrors: () => ReadonlyMap<string, number>;
   readonly libraryKind: (sourceFile: SourceFile) => LibraryKind | null;
   readonly close: () => void;
 };
@@ -186,6 +187,13 @@ function typeProgramOf(project: Project, close: () => void): TypeProgram {
       const out = new Map<string, TsSymbol>();
       for (const symbol of checker.getExportsOfModule(moduleSymbol)) out.set(symbol.name, symbol);
       return out;
+    },
+    syntaxErrors: () => {
+      const counts = new Map<string, number>();
+      for (const { fileName } of program.getSyntacticDiagnostics()) {
+        if (fileName !== undefined) counts.set(fileName, (counts.get(fileName) ?? 0) + 1);
+      }
+      return counts;
     },
     libraryKind: (sourceFile) => {
       if (!program.isSourceFileDefaultLibrary(sourceFile)) return null;
