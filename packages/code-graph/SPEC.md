@@ -900,6 +900,7 @@ The view says what a package publishes. This report says whether each published 
 - A published name that is empty, which is how a syntax error such as `export function (` reads, is not judged; the `syntax-error` gap below speaks for it.
 - The report reads ES exports. Where a module holds `export =`, what is assigned is not judged.
 - Three things a package can publish are not declarations here, and are not judged wherever they are reached: a class's static and an enum's member, which belong to their class or enum; a property assigned onto a function (`make.defaults = …`); and a type a JavaScript file declares inside a comment (`@typedef`, `@callback`).
+- A name that stands for a JSON module (`import pkg from "./package.json"; export { pkg }`) has no declaration of its own: it is not judged and is no gap.
 
 **The doc block of a declaration** is the last `/** … */` comment among the leading comments of its statement, as TypeScript attaches them. `/**/` is no block. A line comment between the block and the declaration changes nothing. A description block followed by a second block reads as the second block alone, so `/** Describes it. */` above `/** @internal */` is a block with an empty description.
 

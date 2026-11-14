@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { PACKAGE_DIR } from "../../test-helpers/ratchet-repo.js";
 
-// The committed doc-report fixture (test/api/docs): the package `@demo/docs` in `base/`, with 45
+// The committed doc-report fixture (test/api/docs): the package `@demo/docs` in `base/`, with 48
 // published declarations over six source files, three subpaths, a namespace export and three
 // exports the report leaves out; its API map; its shape file; and the report it prints.
 export const DOCS_FIXTURE = path.join(PACKAGE_DIR, "test", "api", "docs");

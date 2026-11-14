@@ -131,7 +131,7 @@ class DeclarationRead {
     private readonly scope: OwnFiles,
   ) {}
 
-  from(file: string, subpath: string, prefix = "", active: ReadonlySet<string> = new Set()): void {
+  from(file: string, subpath: string): void {
     if (!this.scope.own(file)) return;
     const symbol = moduleSymbolOf(this.program, file);
     if (symbol === undefined) return;
@@ -139,8 +139,8 @@ class DeclarationRead {
       symbol,
       this.program.declarations(symbol).filter(isWholeModule),
       subpath,
-      prefix,
-      active,
+      "",
+      new Set(),
     );
   }
 
