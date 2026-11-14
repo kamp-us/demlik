@@ -85,3 +85,5 @@ pnpm --filter @demlik/code-graph verify:exports
 ```
 
 [Benchmark findings](bench/FINDINGS.md) record the engine measurements and reproduction commands.
+
+<!-- proof for #938: can/proof-938-code-graph-only -->
