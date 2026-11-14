@@ -1,4 +1,5 @@
 import { nameText } from "../extract/functions.js";
+import { byText } from "../order.js";
 import { nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import { readBag, type Scope, scopeOf } from "./bag.js";
 
@@ -10,10 +11,6 @@ export type NotRead = { file: string; line: number; name: string; reason: string
 // The members of a feature's main bag, or the row that says the bag was not read: a list that was
 // not read is never an empty one.
 export type PortList = readonly HexagonMember[] | { readonly notRead: NotRead };
-
-export function lexical(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 function declaredName(syntax: SyntaxFile, node: SyntaxNode | null, fallback: string): string {
   const id = node === null ? null : nodeField(node, "id");
@@ -102,7 +99,7 @@ function readMembers(nodes: readonly SyntaxNode[], syntax: SyntaxFile): HexagonM
           ]
         : [],
     )
-    .sort((a, b) => lexical(a.name, b.name));
+    .sort((a, b) => byText(a.name, b.name));
 }
 
 export function readPorts(syntax: SyntaxFile | null, notRead: NotRead[]) {
@@ -132,9 +129,9 @@ function summarizePorts(bags: HexagonBag[], ports: HexagonPort[]) {
       member.signature = signatures.get(member.type) ?? null;
     }
   return {
-    bags: bags.sort((a, b) => lexical(a.name, b.name)),
+    bags: bags.sort((a, b) => byText(a.name, b.name)),
     unbaggedPorts: ports
       .filter((port) => !used.has(port.name))
-      .sort((a, b) => lexical(a.name, b.name)),
+      .sort((a, b) => byText(a.name, b.name)),
   };
 }

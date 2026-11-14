@@ -126,12 +126,16 @@ Source: [resolver](../../src/resolve.ts).
 | `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: per subpath, the names added, removed and changed against the commit `base` names |
 | `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: the package's name and its changesets added since the commit `base` names |
 | `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`: the changes that miss the bump the policy asks for; pure, no I/O |
-| `ApiMapSchema`, `BumpPolicySchema` | The zod schemas an API map and a bump policy are parsed through |
+| `readApiDocFacts(root, map, options?)` | `ApiDocFacts`: `{ facts, gaps }`, one fact per published declaration with its source doc block; synchronous, runs no emit |
+| `judgeApiDocs(facts, shape)` | `ApiDocsReport`: `{ judged, declarations }`, the declarations out of the shape with their findings; pure, no I/O |
+| `ApiMapSchema`, `BumpPolicySchema`, `ApiDocsShapeSchema` | The zod schemas an API map, a bump policy and a doc shape are parsed through |
 | `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
 
 and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`,
 `ApiDiffOptions`, `PublishedApiOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`,
-`ChangesetsOptions` and `ApiRatchetVerdict`.
+`ChangesetsOptions`, `ApiRatchetVerdict`, `ApiDocsShape`, `ApiDocFact`,
+`ApiDocGap`, `ApiDocFacts`, `ApiDocFinding`, `JudgedDeclaration` and
+`ApiDocsReport`.
 
 `root` is the package root and resolves against the working directory. `map`
 is the API map, `{ "<subpath>": { entry, tier? } }`, parsed through
@@ -239,6 +243,29 @@ const verdict = ratchetApiDiff(
   readChangesetsSince("packages/tea", diff.base),
 );
 if (!verdict.passed) process.exitCode = 1;
+```
+
+`readApiDocFacts` and `judgeApiDocs` are the library side of
+[`--api-docs`](cli.md#the-doc-report). The reader takes the same `root` and
+`map` and `{ repoRoot? }`, opens the package's source and returns every
+published declaration as a fact (`block`, `file`, `line`, `name`, `reachedBy`,
+and `text`, the doc block as written or `null`), with the `gaps` in what it
+could see. It applies no shape. The judgment takes those facts and a shape
+parsed through `ApiDocsShapeSchema`, applies the shape's `skip` globs and rules,
+and returns how many declarations it judged and the ones with a finding:
+
+```ts
+import { ApiDocsShapeSchema, judgeApiDocs, readApiDocFacts } from "@demlik/code-graph/api";
+
+const shape = ApiDocsShapeSchema.parse({
+  skip: ["**/internal/**"],
+  export: { block: "required", description: "required", required: ["@stability"] },
+});
+const { facts, gaps } = readApiDocFacts("packages/core", {
+  ".": { entry: "src/index.ts" },
+});
+const { judged, declarations } = judgeApiDocs(facts, shape);
+if (gaps.length > 0 || declarations.length > 0) process.exitCode = 1;
 ```
 
 Source: [API exports](../../src/api.ts).

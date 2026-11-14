@@ -408,6 +408,7 @@ code-graph <path> [flags]
 | `--api-policy <file>` | With `--api` and `--api-base`: the bump ratchet (§13.5). Exit 1 on a miss |
 | `--api <map> --ci` | API LEDGER gate (§13.9): fails on a published name `api-ledger.json` at the repo root does not hold. No git base. Never the smell gate |
 | `--api <map> --accept-api --reason "<text>"` | The only way the API ledger grows (§13.9) |
+| `--api <map> --api-docs <shape>` | Doc report (§13.10): every published declaration whose source doc block is missing or out of the shape the JSON file `<shape>` describes. Reads source, runs no emit, exit 0 |
 
 **Emitting output — one way, banner-safe.** With no `--out`, a view writes its document to stdout (unchanged). To capture it to a file, prefer `--out <file>`: because the `pnpm code-graph` wrapper prints its run banner to stdout, a bare `… > report.html` redirect interleaves that banner above the document (an invalid artifact, #1761), whereas `--out` writes the file directly and leaves the banner harmlessly on stdout. If you must redirect stdout instead, run banner-free — `pnpm --silent code-graph …` or `tsx tools/code-graph/src/index.ts …` directly.
 
@@ -437,7 +438,7 @@ code-graph <path> [flags]
 
 ## 13. Published-API mode (`--api`)
 
-An opt-in mode that answers two questions about one package: what does each export subpath publish, as a consumer's types see it, and what did a change do to that. It has three steps over one input. The **view** (§13.3) lists the published names. The **diff** (§13.4) compares the view at a base commit with the view now. The **ratchet** (§13.5) checks the diff against the package's changesets and a bump policy. Each step adds one flag, and each later step runs the earlier ones. The **API ledger** (§13.9) is a separate gate over the view alone, for a repo with no changesets.
+An opt-in mode that answers two questions about one package: what does each export subpath publish, as a consumer's types see it, and what did a change do to that. It has three steps over one input. The **view** (§13.3) lists the published names. The **diff** (§13.4) compares the view at a base commit with the view now. The **ratchet** (§13.5) checks the diff against the package's changesets and a bump policy. Each step adds one flag, and each later step runs the earlier ones. The **API ledger** (§13.9) is a separate gate over the view alone, for a repo with no changesets. The **doc report** (§13.10) reads the source behind the same names and says which are not documented in the caller's shape.
 
 ### 13.1 What it reads, and what it leaves alone
 
@@ -821,6 +822,7 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
 | `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
 | `--api <map> --ci` | view, then the API ledger (§13.9) | human verdict; `--json` gives `{ passed, scope, unrecorded, pruned }` | 0 pass, 1 unrecorded name, 2, 3 |
 | `--api <map> --accept-api --reason "<text>"` | view, then the API ledger's accept (§13.9) | human summary; `--json` gives `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
+| `--api <map> --api-docs <shape>` | the doc report (§13.10); no view and no emit | one line per finding and a count line; `--json` gives `{ declarations, gaps, judged }` | 0, 2, 3 |
 
 `--json`, `--pretty` and `--out` apply as in §10; no flag but those and the ones each row names combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
 
@@ -843,9 +845,11 @@ The mode ships as the `./api` export (`src/api.ts`, a barrel over `src/api/`), b
 | `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: the diff; `base` is any rev. Its options also take `baseMap` (§13.4) |
 | `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: `{ package, changesets }`, where each `Changeset` is `{ file, bump, body }` and only counted files appear |
 | `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`; pure, no I/O |
-| `ApiMapSchema`, `BumpPolicySchema` | the zod schemas the CLI parses through |
+| `readApiDocFacts(root, map, options?)` | `ApiDocFacts`: `{ facts, gaps }`, one fact per published declaration with its source doc block (§13.10); synchronous, no emit |
+| `judgeApiDocs(facts, shape)` | `ApiDocsReport`: `{ judged, declarations }`; pure, no I/O |
+| `ApiMapSchema`, `BumpPolicySchema`, `ApiDocsShapeSchema` | the zod schemas the CLI parses through |
 
-It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `ApiDiffOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own. The API ledger (§13.9) is the command line's alone, like the unreachable and smell ledgers, and adds no export here.
+It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `ApiDiffOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict`, `ApiDocsShape`, `ApiDocFact`, `ApiDocGap`, `ApiDocFacts`, `ApiDocFinding`, `JudgedDeclaration`, `ApiDocsReport` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these exports and holds no logic of its own. The API ledger (§13.9) is the command line's alone, like the unreachable and smell ledgers, and adds no export here.
 
 ### 13.8 Where it is documented
 
@@ -874,6 +878,130 @@ Each child documents the part it builds: the view child `--api` and `readPublish
 code-graph packages/tea --api tea-api.json --accept-api --reason "baseline"   # once
 code-graph packages/tea --api tea-api.json --ci                               # in lint
 ```
+
+### 13.10 The doc report (`--api <map> --api-docs <shape>`)
+
+The view says what a package publishes. This report says whether each published declaration carries a doc block in the shape its maintainer holds it to. A lint rule sees the `export` keyword and cannot tell a published name from a private one; the map can (§13.2).
+
+- **It reads source, never the emitted declarations.** The view's text has no comments (§13.3), and a tsconfig with `removeComments` leaves none in an emit. The report opens a tsgo program over the package's tsconfig with no text overlay, so every file reads as it is on disk. It runs no emit, needs no git and writes no file.
+- **The shape is the caller's.** code-graph ships no tag, no tag list, no order and no default rule, as it ships no bump policy (§13.5).
+
+**Which declarations are judged.** For each subpath of the map, every name its entry module exports, followed through aliases, renames and `export *` to its declarations:
+
+- One declaration per name: the first of the name's declarations in file order, then source order. An overload set and a merged declaration are therefore one, judged where the first one stands. A declaration inside a `declare module "…"` block is passed over while the name has a declaration outside one, so a module augmentation never takes the place of the declaration it adds to.
+- A declaration reached by two subpaths, or under two names, is one declaration. It keeps every `{ subpath, name }` that reaches it.
+- `export * as Name from "./module"` publishes one name for a whole module, and so do `import * as Name from "./module"; export { Name }` and a re-exported ambient `declare module "name"` block. The report judges that module's own exports in its place, each reached as `Name.<member>`, and so on through a namespace inside a namespace; a module already being read on the way is not entered again. The `export * as` line itself is not judged.
+- `export namespace Name { … }` and `export declare namespace Name { … }` publish the names their body exports the same way: each is a declaration, reached as `Name.<member>`, and so on through a namespace inside a namespace. A namespace already being read on the way is not entered again. What a class or an enum of the same name adds to it, a static or an enum member, is not exported from the namespace's body and is not a member. A dotted `namespace A.B.C { … }` is one statement with one doc block: it is judged once, as `A`, and `B` and `C` are only steps in its members' names.
+- A namespace that stands alone is a declaration like any other, judged at its own statement. A namespace merged with a function, a class, an interface or an enum is part of that one declaration (the first bullet), and its members are judged all the same.
+- A declaration outside the analyzed path, or under a `node_modules` folder below it, is a dependency's and is not judged. So is one behind a relative re-export that leaves the analyzed path. The folders above the analyzed path are not looked at, so a package that itself sits under a `node_modules` folder is judged like any other. A name with a declaration in a dependency is the dependency's and is not judged, also when one of the package's own files augments it.
+- A file that matches one of the shape's `skip` globs is out: its declarations are not judged, not counted and never a finding.
+- A declaration is named by the name it is declared with (`make` for `export { make as create }`), and stands at the line of its statement's first token. `export const { a, b } = pair` is two declarations on one statement.
+- A declaration with no name of its own is named `default`: `export default 42` is one declaration, `default`, judged at that statement.
+- A published name that is empty, which is how a syntax error such as `export function (` reads, is not judged; the `syntax-error` gap below speaks for it.
+- The report reads ES exports. Where a module holds `export =`, what is assigned is not judged.
+- Three things a package can publish are not declarations here, and are not judged wherever they are reached: a class's static and an enum's member, which belong to their class or enum; a property assigned onto a function (`make.defaults = …`); and a type a JavaScript file declares inside a comment (`@typedef`, `@callback`).
+- A name that stands for a JSON module (`import pkg from "./package.json"; export { pkg }`) has no declaration of its own: it is not judged and is no gap.
+
+**The doc block of a declaration** is the last `/** … */` comment among the leading comments of its statement, as TypeScript attaches them. `/**/` is no block. A line comment between the block and the declaration changes nothing. A description block followed by a second block reads as the second block alone, so `/** Describes it. */` above `/** @internal */` is a block with an empty description.
+
+**The parts of a block.** Each line loses its leading whitespace, one `*` and one space.
+
+- A line whose trimmed text starts with three backticks opens or closes a fence. A fence line and every line inside a fence are text, never a tag.
+- Outside a fence, a line whose trimmed text starts with `@`, a letter and then letters, digits, `_` or `-`, up to whitespace or the line's end, is a tag line, and that prefix is its tag. A tag written twice is listed twice.
+- The description is everything before the first tag line, trimmed. It is empty when the block holds only tags. An `@` anywhere but the start of a line is text.
+
+**The shape file** is JSON, parsed through `ApiDocsShapeSchema` (strict: an unknown key is refused):
+
+```json
+{
+  "skip": ["**/internal/**", "**/*.test-support.ts"],
+  "order": ["@deprecated", "@default", "@see", "@stability", "@category", "@since"],
+  "export": {
+    "block": "required",
+    "description": "required",
+    "required": ["@stability", "@category"],
+    "forbidden": ["@since", "@example"]
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `skip` | Globs (`src/kinds/glob.ts`) matched against a file's path relative to the analyzed path, `/`-separated. Optional; no glob is rewritten, so `*.test-support.ts` alone matches only a file at the root. |
+| `order` | The order tags stand in, for every block kind. Optional. |
+| `export` | The rule for the doc block of a published declaration. A block kind with no rule is not judged. |
+| a rule's `block` | A required key. `"required"`: a declaration with no block is a finding. `"optional"`: it is not, and a block that is there is still held to the rest of the rule. |
+| a rule's `description` | A required key. `"required"`: a block with an empty description is a finding. `"optional"`: it is not. |
+| a rule's `required`, `forbidden` | Tags a block must carry, and tags it must not. Both optional. |
+
+A tag is written with its `@` and compared as written, so `@Category` is not `@category`. The file is refused when a tag is not an `@` and a name, when a list names a tag twice, when one rule both requires and forbids a tag, when a `skip` glob is empty or does not compile, when it holds no rule for any block kind, and when its rules ask for nothing (every rule `optional` twice over with no tag, and no `order`).
+
+**Block kinds** are the rows of `BLOCK_KINDS` (`src/api/docs/kinds.ts`); a row's key is the shape file's key for its rule.
+
+| Block kind | Whose block | With no block it reads |
+|---|---|---|
+| `export` | a published declaration | `no doc block` |
+
+**Finding kinds** are the rows of `FINDING_KINDS` in the same file. The rows stand in the order the findings of one declaration print in; this table is that order, and nothing else decides it.
+
+| Kind | Raised when | It reads |
+|---|---|---|
+| `missing-block` | the rule's `block` is `required` and the declaration has no block | the block kind's own words, above |
+| `missing-description` | there is a block, the rule's `description` is `required` and the description is empty | `the description is empty` |
+| `missing-tag` | there is a block and it lacks a tag of the rule's `required`; one finding per tag, in the list's order | `missing @category` |
+| `forbidden-tag` | there is a block and it carries a tag of the rule's `forbidden`; one finding per tag however often it is written, in the list's order | `@since is forbidden` |
+| `tag-out-of-order` | there is a block and a tag `order` names stands after a tag `order` places later; one finding per tag line that stands too late, in the block's order | `@category comes before @stability` |
+
+The order check reads the block's tags top to bottom and keeps the latest-placed tag seen so far. A tag `order` does not name is passed over. A tag placed earlier than the one kept is a finding that names the kept tag first. A tag written twice in a row is in order, and a tag written twice, both times too late, is two findings.
+
+**What it prints.** One line per finding, `<file>:<line>  <name>  <what it reads>`, with two spaces between the parts, then one count line:
+
+```
+src/ledger/Log.ts:42  make  no doc block
+src/ledger/Log.ts:57  open  missing @category
+api docs: 37 exports judged, 2 with a finding
+```
+
+Declarations print by file, then line, then name, each compared by code unit; the findings of one declaration print in the order of the table above. `<file>` is relative to the analyzed path and `/`-separated, and no absolute path is printed. The count line names how many declarations were judged and how many of them have a finding (`1 export`, `2 exports`). `--json` prints one object with sorted keys:
+
+```json
+{
+  "declarations": [
+    {
+      "block": "export",
+      "file": "src/ledger/Log.ts",
+      "findings": [{ "kind": "missing-block" }],
+      "line": 42,
+      "name": "make",
+      "reachedBy": [{ "name": "create", "subpath": "." }]
+    }
+  ],
+  "gaps": [],
+  "judged": 37
+}
+```
+
+`declarations` holds only the declarations with a finding, in print order. A finding is `{ kind }`, with `tag` for `missing-tag` and `forbidden-tag`, and `tag` and `before` for `tag-out-of-order`, where `tag` stands too early and `before` is the tag it stands in front of. `reachedBy` is sorted by subpath, then name.
+
+**A read that could not see everything says so.** A declaration the read never found would otherwise be missing from the count with no sign. Each gap is one warning line on stderr, and one item of `gaps` in `--json`; stdout's finding lines and the exit code do not change.
+
+| Gap | When | The line, after `code-graph: warning: ` |
+|---|---|---|
+| `unresolved-specifier` | a re-export (`export … from`) in one of the package's own files names a module the program could not resolve, on the way from a module the report read: a map entry, or a module read as a namespace. A module declared in several places, a source file with a `declare module` block that augments it or an ambient module in two blocks, is read from every one of them. `unresolvedSpecifiers` (`src/api/read.ts`, the view's own walk) finds it, asked for re-exports only | `<file> names "<specifier>", which the read could not resolve; a name behind it is not judged` |
+| `syntax-error` | the parser reported a syntax error in one of the package's own files, wherever it stands in the program | `<file> has <n> syntax error(s); a declaration in it may not be judged` |
+| `no-declaration` | a name exported from one of the package's own files has no declaration at all | `<subpath> publishes "<name>", which the read found no declaration for; it is not judged` |
+
+Gaps print in the table's order, and inside a kind by file then specifier, by file, and by subpath then name. One of the package's own files is a file inside the analyzed path and under no `node_modules` folder below it, the same test that keeps a dependency's declaration out. In `--json` a gap is `{ kind, file, specifier }`, `{ kind, file, count }` or `{ kind, subpath, name }`, in the table's order.
+
+- An import the program could not resolve is no gap. An import hides no name; a name published from one reads with no declaration and is the last row's.
+- A dependency's file is no gap, whatever is wrong in it: only a dependency's names stand behind it, and those are not judged. So the report does not enter a dependency's module behind `export * as Name` at all, and a name a dependency's own file exports with no declaration behind it, such as its re-export of an optional peer that is not installed, is no gap.
+- A syntax error counts in any of the package's own files, also one that publishes nothing. The parser's count cannot say which errors touch an export, the same tradeoff the API ledger takes for the compiler's diagnostics (§13.9).
+- A name declared in a dependency, a name declared in a file the shape skips and an `export * as` line are left out by rule and are no gap.
+- A gap in a file the shape skips stands. The read runs before the shape, and a re-export in a skipped file can lead to a file that is not skipped.
+
+**Flags and exit codes.** `--api <map> --api-docs <shape>` prints the report and exits 0 whatever it finds. It takes `--json`, `--pretty` and `--out` and no other flag. Exit 2, with one stderr line and nothing written: `--api-docs` without `--api`; `--api-docs` beside any other flag, `--api-base`, `--api-policy`, `--ci`, `--accept-api` and `--reason` among them; an unreadable or invalid shape file, which is read before the map's entries are checked and before any program opens; an invalid map (§13.2); and no tsconfig for `<path>`. Exit 3 as in §13.6. With `--api-docs` absent, every other run of §13.6 prints the bytes and exits with the code it did before.
+
+**Library.** `@demlik/code-graph/api` exports the reader, the judgment and the schema (§13.7). `readApiDocFacts(root, map, options?)` returns `{ facts, gaps }`: one fact per declaration (`block`, `file`, `line`, `name`, `reachedBy`, and `text`, the doc block as written or `null`), unjudged and with no skip applied. `judgeApiDocs(facts, shape)` is pure: it applies `skip` and the rules and returns `{ judged, declarations }`. The CLI reads the two files, calls the two functions and prints.
 
 ## 14. Feature hexagon (`--hexagon`)
 

@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import { stableStringify } from "../render/json.js";
 import { diffPublishedApi } from "./diff.js";
+import { apiDocGapLine } from "./docs/gaps.js";
+import { judgeApiDocs } from "./docs/judge.js";
+import { readApiDocFacts } from "./docs/read.js";
+import { apiDocsShape } from "./docs/shape.js";
+import { apiDocsJson, renderApiDocs } from "./docs/text.js";
 import { type ApiLedgerMode, runApiLedger } from "./ledger/gate.js";
 import { ApiInputError } from "./map.js";
 import { readChangesetsSince } from "./ratchet/changesets.js";
@@ -9,10 +14,12 @@ import { renderApiRatchet } from "./ratchet/text.js";
 import { apiChanges, ratchetApiDiff } from "./ratchet/verdict.js";
 import { readPublishedApi } from "./view.js";
 
+const OUTPUT_COMPANIONS = ["json", "pretty", "out"];
+
 // The flags `--api` combines with (SPEC §13.6); any other flag given on the command line exits 2.
 const API_COMPANIONS: ReadonlySet<string> = new Set([
   ...["api", "apiBase", "apiPolicy"],
-  ...["json", "pretty", "out"],
+  ...OUTPUT_COMPANIONS,
 ]);
 
 export type ApiRun = {
@@ -34,6 +41,7 @@ export type ApiRun = {
 // The mode's flags as the command line gave them.
 export type ApiFlags = {
   readonly api?: string;
+  readonly apiDocs?: string;
   readonly apiBase?: string;
   readonly apiPolicy?: string;
   readonly acceptApi?: boolean;
@@ -48,7 +56,7 @@ type ApiOutcome = { readonly payload: string; readonly code: number };
 // has no place in it.
 const LEDGER_COMPANIONS: ReadonlySet<string> = new Set([
   ...["api", "ci", "acceptApi", "reason"],
-  ...["json", "pretty", "out"],
+  ...OUTPUT_COMPANIONS,
 ]);
 
 function readJsonFile(file: string, what: string): unknown {
@@ -67,6 +75,11 @@ function readJsonFile(file: string, what: string): unknown {
 
 const flagOf = (attribute: string): string =>
   `--${attribute.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+
+function strayFlags(given: readonly string[], companions: ReadonlySet<string>): string | undefined {
+  const stray = given.filter((attribute) => !companions.has(attribute));
+  return stray.length === 0 ? undefined : stray.map(flagOf).join(", ");
+}
 
 // The ratchet (SPEC §13.5): the diff, the package's changesets since the diff's base, and the
 // verdict. The policy is parsed before the diff runs, so a bad one is refused before any emit.
@@ -132,9 +145,9 @@ const ownCompanions = (run: ApiRun): string =>
 // A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
 // reading the map and policy files and refusing flags the mode does not take.
 export async function runApiView(run: ApiRun): Promise<number> {
-  const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
-    run.report(`--api takes only ${ownCompanions(run)}; got ${stray.map(flagOf).join(", ")}`);
+  const stray = strayFlags(run.given, API_COMPANIONS);
+  if (stray !== undefined) {
+    run.report(`--api takes only ${ownCompanions(run)}; got ${stray}`);
     return 2;
   }
   if (run.policyFile !== undefined && run.base === undefined) {
@@ -155,10 +168,10 @@ const refused = (message: string): LedgerModeRead => ({
 
 // What the flags ask of the API ledger, decided before any file is read.
 function ledgerModeOf(flags: ApiFlags, given: readonly string[]): LedgerModeRead {
-  const stray = given.filter((attribute) => !LEDGER_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
+  const stray = strayFlags(given, LEDGER_COMPANIONS);
+  if (stray !== undefined) {
     return refused(
-      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
+      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray}`,
     );
   }
   if (flags.acceptApi !== true) {
@@ -194,11 +207,30 @@ const asksForLedger = (flags: ApiFlags): boolean =>
   flags.apiBase === undefined &&
   flags.apiPolicy === undefined;
 
+const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", ...OUTPUT_COMPANIONS]);
+
+function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promise<number> {
+  const stray = strayFlags(host.given, DOCS_COMPANIONS);
+  if (stray !== undefined) {
+    host.report(`--api --api-docs take only --json, --pretty and --out; got ${stray}`);
+    return Promise.resolve(2);
+  }
+  return settle(host, async () => {
+    const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
+    const { facts, gaps } = readApiDocFacts(host.rootAbsolute, readJsonFile(mapFile, "API map"));
+    const report = judgeApiDocs(facts, shape);
+    for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
+    const payload = host.json ? apiDocsJson(report, gaps, host.pretty) : renderApiDocs(report);
+    return { payload, code: 0 };
+  });
+}
+
 // The command line's entry to the mode: `null` when none of its flags is given, so every other
 // mode runs as before; otherwise the run's exit code. `--api-base`, `--api-policy` and
 // `--accept-api` without `--api` are refused here (SPEC §13.6).
 export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | null {
   if (flags.api !== undefined) {
+    if (flags.apiDocs !== undefined) return runDocsFlags(flags.api, flags.apiDocs, host);
     if (asksForLedger(flags)) return runLedgerFlags(flags.api, flags, host);
     return runApiView({
       ...host,
@@ -206,6 +238,10 @@ export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | n
       base: flags.apiBase,
       policyFile: flags.apiPolicy,
     });
+  }
+  if (flags.apiDocs !== undefined) {
+    host.report("--api-docs needs --api <map>; nothing was written.");
+    return Promise.resolve(2);
   }
   if (flags.acceptApi === true) {
     host.report("--accept-api needs --api <map>; nothing was written.");

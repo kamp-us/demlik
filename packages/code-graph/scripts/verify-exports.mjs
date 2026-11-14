@@ -29,6 +29,8 @@ const expected = {
     "diffPublishedApi",
     "readChangesetsSince",
     "ratchetApiDiff",
+    "readApiDocFacts",
+    "judgeApiDocs",
     "ApiInputError",
   ],
 };
@@ -36,7 +38,7 @@ const expected = {
 // Exports that are values but not functions: the zod schemas a caller parses through.
 const schemas = {
   "@demlik/code-graph/boundaries": ["BoundaryRulesSchema"],
-  "@demlik/code-graph/api": ["ApiMapSchema", "BumpPolicySchema"],
+  "@demlik/code-graph/api": ["ApiMapSchema", "BumpPolicySchema", "ApiDocsShapeSchema"],
 };
 
 // Removed from ./project in #397 with ts-morph: the loaders returned ts-morph's Project.

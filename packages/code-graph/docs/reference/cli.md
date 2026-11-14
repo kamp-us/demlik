@@ -330,7 +330,8 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
 | `--api <map> --accept-api --reason <text>` | what it added as text; `--json` for `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
 
 `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
-and `--out`, or with [the API ledger's](#the-api-ledger) flags.
+and `--out`, with [the API ledger's](#the-api-ledger) flags, or with
+[the doc report's](#the-doc-report) `--api-docs`.
 Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
 flag beside it, a map that is not JSON or fails the schema (an unknown key, no
 subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
@@ -416,6 +417,75 @@ code-graph packages/core --api core-api.json --ci                               
 ```
 
 The contract is [SPEC.md §13.9](../../SPEC.md).
+
+### The doc report
+
+`--api <map> --api-docs <shape>` lists every published declaration whose doc
+block is missing or out of the shape you hold the package to. It needs the map
+because only the map says which exports are public. It reads the source files,
+never the emitted declarations, so `removeComments` in the tsconfig changes
+nothing; it runs no emit, needs no git and writes no file.
+
+`<shape>` is a JSON file you write. code-graph ships no tag, order or rule of
+its own:
+
+```json
+{
+  "skip": ["**/internal/**", "**/*.test-support.ts"],
+  "order": ["@deprecated", "@default", "@see", "@stability", "@category", "@since"],
+  "export": {
+    "block": "required",
+    "description": "required",
+    "required": ["@stability", "@category"],
+    "forbidden": ["@since", "@example"]
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `skip` | Globs over a file's path relative to `<directory>`. A file that matches is not judged. Optional. |
+| `order` | The order tags stand in. A tag it does not name is not order-checked. Optional. |
+| `export` | The rule for a published declaration's doc block. |
+| `block` | `"required"` or `"optional"`: whether a declaration with no block is a finding. An optional block that is there is still held to the rest of the rule. |
+| `description` | `"required"` or `"optional"`: whether a block with an empty description is a finding. |
+| `required`, `forbidden` | Tags a block must carry, and tags it must not. Both optional. |
+
+It prints one line per finding and one count line, and exits 0 whatever it
+finds:
+
+```
+src/ledger/Log.ts:42  make  no doc block
+src/ledger/Log.ts:57  open  missing @category
+src/ledger/Log.ts:57  open  @since is forbidden
+api docs: 37 exports judged, 2 with a finding
+```
+
+A declaration is named by the name it is declared with and stands at its source
+line; the file is relative to `<directory>`. An export reached by two subpaths
+or under two names is one declaration, an overload set is judged on its first
+signature, and the members behind `export * as Name` or inside an
+`export namespace Name` are judged as declarations of their own. A name declared in a dependency is not judged. `--json`
+prints `{ declarations, gaps, judged }`, where each declaration with a finding
+carries its `findings` and every `{ subpath, name }` that reaches it.
+
+When the read could not see everything, it says so on stderr, one
+`code-graph: warning:` line per gap, and in `gaps` of `--json`: a re-export
+it could not resolve, a file with a syntax error, or a published name with no
+declaration. An import it could not resolve and a broken file in a
+dependency hide no judged name and are no gap. The findings and the exit code do not change.
+
+Exit 2, with one stderr line: `--api-docs` without `--api`; `--api-docs` beside
+any flag but `--json`, `--pretty` and `--out`; an unreadable or invalid shape
+file, which is read before the package is opened; an invalid map; and no
+tsconfig for `<directory>`.
+
+```sh
+code-graph packages/core --api core-api.json --api-docs core-docs.json
+```
+
+The contract, with every finding kind, the block-parsing rules and the gap
+lines, is [SPEC.md §13.10](../../SPEC.md).
 
 ## Analysis options
 

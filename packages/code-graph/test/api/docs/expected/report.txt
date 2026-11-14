@@ -1,0 +1,23 @@
+src/core.ts:48  parse  no doc block
+src/core.ts:58  format  the description is empty
+src/core.ts:67  retry  missing @stability
+src/core.ts:76  delay  missing @category
+src/core.ts:87  since  @since is forbidden
+src/core.ts:96  sample  @example is forbidden
+src/core.ts:106  swap  @category comes before @stability
+src/core.ts:117  twoBlocks  the description is empty
+src/core.ts:117  twoBlocks  missing @stability
+src/core.ts:117  twoBlocks  missing @category
+src/labs/index.ts:37  probe  no doc block
+src/make.ts:9  make  no doc block
+src/model/index.ts:61  Guest  no doc block
+src/model/index.ts:65  Token  no doc block
+src/model/index.ts:68  Scope  missing @stability
+src/model/index.ts:68  Scope  missing @category
+src/shared.ts:11  sharedDefault  no doc block
+src/shared.ts:27  both  missing @category
+src/shared.ts:27  both  @since is forbidden
+src/units.ts:29  convert  no doc block
+src/units.ts:38  PRECISION  missing @category
+src/units.ts:65  long  no doc block
+api docs: 48 exports judged, 18 with a finding

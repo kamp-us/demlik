@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { tsgoBinary } from "../engine/tsgo.js";
-import { ApiInputError, type ApiSubpath } from "./map.js";
+import { ApiInputError, type ApiSubpath, pathInside } from "./map.js";
 
 // A declaration emit of one package into a temp folder outside the checkout (SPEC §13.3). The
 // emit's root is the package root, so an entry's emitted file follows from the emit's own rule:
@@ -34,8 +34,8 @@ export class EmittedTree {
   // Where `sourceFile` emitted to, relative to the emit's `out`; undefined when it emitted nothing,
   // as a dependency, a `.d.ts` or a file outside the package does not.
   declarationOf(sourceFile: string): string | undefined {
-    const relative = path.relative(this.rootAbsolute, sourceFile);
-    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return undefined;
+    const relative = pathInside(this.rootAbsolute, sourceFile);
+    if (relative === undefined) return undefined;
     const emitted = EMITTED_EXTENSION.find(([source]) => source.test(relative));
     if (emitted === undefined) return undefined;
     const declaration = relative.replace(emitted[0], emitted[1]);

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { byText } from "../order.js";
 import { checkoutOf, exportBaseTree, removeBaseTree, resolveBase } from "./base.js";
 import { type ApiSubpath, apiSubpaths, baseApiSubpaths } from "./map.js";
 import type { ApiEntryText, SubpathNames } from "./read.js";
@@ -137,7 +138,7 @@ export async function diffPublishedApi(
   const gone = before.subpaths.filter(({ subpath }) => !kept.has(subpath));
   const diff: Record<string, SubpathDiff> = {};
   for (const { subpath, tier } of [...subpaths, ...gone].sort((a, b) =>
-    a.subpath < b.subpath ? -1 : a.subpath > b.subpath ? 1 : 0,
+    byText(a.subpath, b.subpath),
   )) {
     diff[subpath] = diffSubpathNames(
       tier,
