@@ -1,0 +1,5 @@
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./labs": { "entry": "src/labs/index.ts", "tier": "experimental" },
+  "./model": { "entry": "src/model/index.ts", "tier": "stable" }
+}

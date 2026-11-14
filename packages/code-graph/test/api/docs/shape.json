@@ -1,0 +1,10 @@
+{
+  "skip": ["**/internal/**", "**/*.test-support.ts"],
+  "order": ["@deprecated", "@default", "@see", "@stability", "@category", "@since"],
+  "export": {
+    "block": "required",
+    "description": "required",
+    "required": ["@stability", "@category"],
+    "forbidden": ["@since", "@example"]
+  }
+}
