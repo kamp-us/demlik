@@ -1,12 +1,14 @@
 import path from "node:path";
 import * as ts from "../../engine/tsgo.js";
 import { findRepoRoot } from "../../extract/project.js";
+import { byText } from "../../order.js";
 import { moduleSymbolOf } from "../../resolve.js";
-import { apiSubpaths, byText, pathInside } from "../map.js";
+import { apiSubpaths, pathInside } from "../map.js";
 import {
   byFileThenPosition,
   declaredName,
   nodeKey,
+  type PublishedDeclaration,
   publishedDeclarations,
   unresolvedSpecifiers,
 } from "../read.js";
@@ -19,16 +21,25 @@ export type ApiDocFacts = {
   readonly gaps: readonly ApiDocGap[];
 };
 
-function readScope(root: string) {
+type ReadScope = {
+  readonly named: (file: string) => string;
+  readonly own: (file: string) => boolean;
+};
+
+function readScope(root: string): ReadScope {
   const named = (file: string): string => path.relative(root, file).split(path.sep).join("/");
   return {
     named,
-    own: (file: string) =>
-      pathInside(root, file) !== undefined && !file.split(path.sep).includes("node_modules"),
+    own: (file: string) => {
+      const inside = pathInside(root, file);
+      return inside !== undefined && !inside.split(path.sep).includes("node_modules");
+    },
   };
 }
 
-function declarationStatement(declaration: ts.Node): ts.Node {
+// The statement a doc block attaches to. Unlike statementOf in ../text.ts, which keeps a
+// declaration's own text, it climbs out of a destructuring pattern and a dotted namespace.
+function documentedStatement(declaration: ts.Node): ts.Node {
   let statement = declaration;
   while (
     statement.parent !== undefined &&
@@ -38,6 +49,28 @@ function declarationStatement(declaration: ts.Node): ts.Node {
     statement = statement.parent;
   }
   return statement;
+}
+
+function exportedFromNamespace(declaration: ts.Node): boolean {
+  for (let holder = declaration.parent; holder !== undefined; holder = holder.parent) {
+    if (ts.isModuleDeclaration(holder)) return true;
+    if (
+      ts.isClassDeclaration(holder) ||
+      ts.isClassExpression(holder) ||
+      ts.isEnumDeclaration(holder) ||
+      ts.isSourceFile(holder)
+    ) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function isWholeModule(declaration: ts.Node): boolean {
+  return (
+    ts.isSourceFile(declaration) ||
+    (ts.isModuleDeclaration(declaration) && ts.isStringLiteral(declaration.name))
+  );
 }
 
 function docText(statement: ts.Node): string | null {
@@ -58,7 +91,7 @@ class DeclarationRead {
 
   constructor(
     private readonly program: ts.TypeProgram,
-    private readonly scope: ReturnType<typeof readScope>,
+    private readonly scope: ReadScope,
   ) {}
 
   from(file: string, subpath: string, prefix = "", active: ReadonlySet<string> = new Set()): void {
@@ -66,33 +99,61 @@ class DeclarationRead {
     const symbol = moduleSymbolOf(this.program, file);
     if (symbol === undefined) return;
     this.modules.add(file);
-    this.exportsOf(symbol, subpath, prefix, new Set(active).add(file));
+    this.exportsOf(
+      publishedDeclarations(this.program, symbol),
+      subpath,
+      prefix,
+      new Set(active).add(file),
+    );
   }
 
   private exportsOf(
-    holder: ts.TsSymbol,
+    exports: readonly PublishedDeclaration[],
     subpath: string,
     prefix: string,
     active: ReadonlySet<string>,
   ): void {
-    for (const { name, symbol, declarations } of publishedDeclarations(this.program, holder)) {
+    for (const { name, symbol, declarations, exportedAt } of exports) {
       if (name === "") continue;
       const reached = { subpath, name: `${prefix}${name}` };
       const declaration = [...declarations].sort(byFileThenPosition)[0];
       if (declaration === undefined) {
-        this.gaps.push({ kind: "no-declaration", ...reached });
+        if (exportedAt.some((site) => this.scope.own(site.getSourceFile().fileName))) {
+          this.gaps.push({ kind: "no-declaration", ...reached });
+        }
         continue;
       }
       if (!this.scope.own(declaration.getSourceFile().fileName)) continue;
-      if (ts.isSourceFile(declaration)) {
-        this.from(declaration.fileName, subpath, `${reached.name}.`, active);
+      if (isWholeModule(declaration)) {
+        this.module(symbol, declaration, subpath, `${reached.name}.`, active);
         continue;
       }
       this.record(declaration, reached);
       const namespace = declarations.find(ts.isModuleDeclaration);
       if (namespace === undefined || active.has(nodeKey(namespace))) continue;
-      this.exportsOf(symbol, subpath, `${reached.name}.`, new Set(active).add(nodeKey(namespace)));
+      const members = publishedDeclarations(this.program, symbol).filter(({ exportedAt }) =>
+        exportedAt.some(exportedFromNamespace),
+      );
+      this.exportsOf(members, subpath, `${reached.name}.`, new Set(active).add(nodeKey(namespace)));
     }
+  }
+
+  private module(
+    symbol: ts.TsSymbol,
+    declaration: ts.Node,
+    subpath: string,
+    prefix: string,
+    active: ReadonlySet<string>,
+  ): void {
+    const key = ts.isSourceFile(declaration) ? declaration.fileName : nodeKey(declaration);
+    if (active.has(key)) return;
+    if (ts.isSourceFile(declaration)) this.modules.add(declaration.fileName);
+    this.exportsOf(
+      publishedDeclarations(this.program, symbol),
+      subpath,
+      prefix,
+      new Set(active).add(key),
+    );
   }
 
   private record(declaration: ts.Node, reached: ApiDocFact["reachedBy"][number]): void {
@@ -108,7 +169,7 @@ class DeclarationRead {
       }
       return;
     }
-    const statement = declarationStatement(declaration);
+    const statement = documentedStatement(declaration);
     this.facts.set(key, {
       block: "export",
       file: this.scope.named(source.fileName),
@@ -122,7 +183,7 @@ class DeclarationRead {
 
 function programGaps(
   program: ts.TypeProgram,
-  scope: ReturnType<typeof readScope>,
+  scope: ReadScope,
   modules: ReadonlySet<string>,
 ): ApiDocGap[] {
   const gaps: ApiDocGap[] = unresolvedSpecifiers(

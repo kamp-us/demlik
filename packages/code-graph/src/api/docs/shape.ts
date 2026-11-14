@@ -5,7 +5,7 @@ import { TAG } from "./block.js";
 import { BLOCK_KINDS } from "./kinds.js";
 
 const TagsSchema = z
-  .array(z.string().regex(new RegExp(`^${TAG}(?![\\s\\S])`), "expected @ and a tag name"))
+  .array(z.string().regex(new RegExp(`^${TAG}$`), "expected @ and a tag name"))
   .refine((tags) => new Set(tags).size === tags.length, "a tag is listed twice")
   .default([]);
 

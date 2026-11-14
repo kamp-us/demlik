@@ -1,5 +1,6 @@
+import { byText } from "../../order.js";
 import type { ApiDiff, SubpathDiff } from "../diff.js";
-import { ApiInputError, byText } from "../map.js";
+import { ApiInputError } from "../map.js";
 import type { ApiEntryText } from "../read.js";
 import type { ChangesetsSince } from "./changesets.js";
 import { type Bump, type BumpPolicy, type BumpRule, bumpPolicy, bumpRank } from "./policy.js";

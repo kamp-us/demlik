@@ -2,11 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseTypeScript } from "../engine/oxc.js";
 import { listSourceFiles, toRelative } from "../extract/project.js";
+import { byText } from "../order.js";
 import { SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import {
   type HexagonBag,
   type HexagonPort,
-  lexical,
   type NotRead,
   type PortList,
   readPorts,
@@ -54,7 +54,7 @@ function exportedFunctions(syntax: SyntaxFile | null): string[] {
     syntax?.program.body.flatMap((statement) =>
       statement.type === "ExportNamedDeclaration" ? functionNames(statement.declaration) : [],
     ) ?? [];
-  return [...new Set(names)].sort(lexical);
+  return [...new Set(names)].sort(byText);
 }
 
 // The names `X` for which `ports.ts` exports both `X` and `XDriven`, read or not: what a feature
@@ -64,7 +64,7 @@ function pairedFeatures(bags: HexagonBag[], notRead: NotRead[]): string[] {
     ...bags.map((bag) => bag.name),
     ...notRead.filter((row) => row.file === "ports.ts").map((row) => row.name),
   ]);
-  return [...names].filter((name) => names.has(`${name}Driven`)).sort(lexical);
+  return [...names].filter((name) => names.has(`${name}Driven`)).sort(byText);
 }
 
 function findFactory(root: string, useCases: Hexagon["useCases"], paired: string[]) {
@@ -77,7 +77,7 @@ function findFactory(root: string, useCases: Hexagon["useCases"], paired: string
   };
   return (
     factories.sort(
-      (a, b) => score(a) - score(b) || lexical(a.file, b.file) || lexical(a.name, b.name),
+      (a, b) => score(a) - score(b) || byText(a.file, b.file) || byText(a.name, b.name),
     )[0] ?? null
   );
 }
@@ -126,10 +126,10 @@ function listOf(bags: HexagonBag[], notRead: NotRead[], name: string | null): Po
 
 function byPlace(a: NotRead, b: NotRead): number {
   return (
-    lexical(a.file, b.file) ||
+    byText(a.file, b.file) ||
     a.line - b.line ||
-    lexical(a.name, b.name) ||
-    lexical(a.reason, b.reason)
+    byText(a.name, b.name) ||
+    byText(a.reason, b.reason)
   );
 }
 
@@ -140,7 +140,7 @@ export function readHexagon(root: string): Hexagon {
   const ports = readPorts(syntax, notRead);
   const files = listSourceFiles(root)
     .map((file) => toRelative(root, file))
-    .sort(lexical);
+    .sort(byText);
   const useCases = files
     .filter((file) => /^application\/[^/]+\.ts$/.test(file))
     .map((file) => ({ file, functions: exportedFunctions(readSyntax(root, file, notRead)) }));

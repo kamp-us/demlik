@@ -1,5 +1,5 @@
 import { globToRegExp } from "../../kinds/glob.js";
-import { byText } from "../map.js";
+import { byText } from "../../order.js";
 import { parseDocBlock } from "./block.js";
 import { type ApiDocFinding, type BlockKind, findingsOf } from "./kinds.js";
 import type { ApiDocsShape } from "./shape.js";

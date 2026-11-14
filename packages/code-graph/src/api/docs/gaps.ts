@@ -1,4 +1,4 @@
-import { byText } from "../map.js";
+import { byText } from "../../order.js";
 
 export type ApiDocGap =
   | { readonly kind: "unresolved-specifier"; readonly file: string; readonly specifier: string }

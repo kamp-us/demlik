@@ -61,10 +61,6 @@ export function pathInside(root: string, file: string): string | undefined {
     : relative;
 }
 
-export function byText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
 function checkedSubpath(
   rootAbsolute: string,
   subpath: string,

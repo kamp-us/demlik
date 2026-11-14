@@ -1,8 +1,8 @@
 import path from "node:path";
 import * as ts from "../engine/tsgo.js";
+import { byText } from "../order.js";
 import { moduleSymbolOf } from "../resolve.js";
 import type { EmittedTree } from "./emit.js";
-import { byText } from "./map.js";
 import { declarationText, statementOf } from "./text.js";
 
 // A published name as a consumer's types see it (SPEC §13.3): its own declaration text, plus the
@@ -17,6 +17,11 @@ export type SubpathNames = Readonly<Record<string, ApiEntryText>>;
 
 // A name's own declarations, followed through aliases, renames and `export *`.
 type Published = { readonly name: string; readonly declarations: readonly ts.Node[] };
+
+export type PublishedDeclaration = Published & {
+  readonly symbol: ts.TsSymbol;
+  readonly exportedAt: readonly ts.Node[];
+};
 
 // A file's first statement starts where the file does, so the kind keeps the two apart.
 export const nodeKey = (node: ts.Node): string =>
@@ -54,10 +59,15 @@ function publishedNames(program: ts.TypeProgram, entryFile: string): readonly Pu
 export function publishedDeclarations(
   program: ts.TypeProgram,
   holder: ts.TsSymbol,
-): readonly (Published & { readonly symbol: ts.TsSymbol })[] {
+): readonly PublishedDeclaration[] {
   return [...program.exportsOf(holder)].map(([name, exported]) => {
     const symbol = program.aliasTarget(exported) ?? exported;
-    return { name, symbol, declarations: program.declarations(symbol) };
+    return {
+      name,
+      symbol,
+      declarations: program.declarations(symbol),
+      exportedAt: program.declarations(exported),
+    };
   });
 }
 
@@ -247,9 +257,12 @@ export type ReadScope = {
 
 export type UnresolvedSpecifier = { readonly specifier: string; readonly file: string };
 
-// The caller's `reads` chooses which references count. The view reads re-exports in every file
-// and imports in emitted files. The walk goes by declaration, so a `declare module` block answers
-// for itself and not for the other blocks in its file.
+// The caller's `scope.reads` chooses which references count. The view counts a re-export in any
+// file it reaches: a source .d.ts, a .js or a dependency is never checked under skipLibCheck and
+// can hand on a name like any other. It counts an import only in an emitted file: an import adds
+// no name to a dependency's exports, so a dependency's missing optional type must not hold back
+// pruning for good. The walk goes by declaration, so a `declare module` block answers for itself
+// and not for the other blocks in its file.
 export function unresolvedSpecifiers(
   program: ts.TypeProgram,
   scope: ReadScope,
