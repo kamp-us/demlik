@@ -37,6 +37,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0033](./0033-a-reducer-throw-stops-the-run-like-a-sub-failure.md) | A reducer throw under `stop` stops the run, the way a Sub failure does | Accepted | 2026-11-01 |
 | [0034](./0034-use-machine-takes-either-engines-run.md) | `useMachine` takes either engine's `run`, and the Effect engine's is `runIn(runtime)`, never a second hook | Accepted | 2026-11-04 |
 | [0035](./0035-effect-machines-infer-from-schemas.md) | Effect machines infer from schemas and command constructors and expose model and message schemas | Accepted | 2026-11-07 |
+| [0036](./0036-one-build-per-event.md) | A pull request builds once, its tests follow the packages its change reaches, and one verdict job is the check main requires | Accepted | 2026-11-13 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
