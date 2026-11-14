@@ -194,5 +194,39 @@ describe(
       expect(gaps).toEqual([]);
       expect(facts.map(({ file, name }) => `${file} ${name}`)).toEqual(["src/index.ts fine"]);
     });
+
+    it("judges an augmented name where it is declared, whatever the augmenting file is called", () => {
+      fs.rmSync(path.join(root, "src/broken.ts"));
+      writeFiles(root, {
+        "src/aaa-augment.ts":
+          'declare module "./core" {\n  interface Options {\n    readonly b: number;\n  }\n}\nexport {};\n',
+        "src/core.ts": FINE.replace(
+          "export const fine = 1;",
+          "export interface Options {\n  readonly a: number;\n}",
+        ),
+        "src/index.ts": 'import "./aaa-augment";\nexport * from "./core";\n',
+      });
+      const { facts, gaps } = readApiDocFacts(root, MAP);
+      expect(gaps).toEqual([]);
+      expect(facts.map(({ file, line, name }) => `${file}:${line} ${name}`)).toEqual([
+        "src/core.ts:7 Options",
+      ]);
+      expect(facts[0]?.text).toContain("Stays fine.");
+    });
+
+    it("leaves a dependency's name out when an own file augments it", () => {
+      fs.rmSync(path.join(root, "src/broken.ts"));
+      writeFiles(root, {
+        "node_modules/dep/package.json": '{ "name": "dep", "types": "index.d.ts" }\n',
+        "node_modules/dep/index.d.ts": "export interface Foo {\n  a: number;\n}\n",
+        "aaa/ext.ts":
+          'declare module "dep" {\n  interface Foo {\n    b: number;\n  }\n}\nexport {};\n',
+        "src/index.ts": `import "../aaa/ext";\nexport type { Foo } from "dep";\nexport * as Dep from "dep";\n${FINE}`,
+        "tsconfig.json": TSCONFIG.replace('"include":["src"]', '"include":["src","aaa"]'),
+      });
+      const { facts, gaps } = readApiDocFacts(root, MAP);
+      expect(gaps).toEqual([]);
+      expect(facts.map(({ name }) => name)).toEqual(["fine"]);
+    });
   },
 );
