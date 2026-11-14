@@ -328,10 +328,14 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
 | `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
 | `--api <map> --ci` | the verdict as text; `--json` for `{ passed, scope, unrecorded, pruned }` | 0 pass, 1 unrecorded name, 2, 3 |
 | `--api <map> --accept-api --reason <text>` | what it added as text; `--json` for `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
+| `--api <map> --api-docs <shape>` | one line per finding and a count line; `--json` for `{ declarations, gaps, judged }` | 0, 2, 3 |
+| `--api <map> --api-docs <shape> --ci` | the verdict as text; `--json` for `{ passed, scope, unrecorded, pruned }` | 0 pass, 1 unrecorded declaration, 2, 3 |
+| `--api <map> --api-docs <shape> --accept-api-docs --reason <text>` | what it added as text; `--json` for `{ scope, accepted, pruned, reason }` | 0, 2, 3 |
 
 `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
 and `--out`, with [the API ledger's](#the-api-ledger) flags, or with
-[the doc report's](#the-doc-report) `--api-docs`.
+[the doc report's](#the-doc-report) `--api-docs` and
+[the doc gate's](#the-doc-gate) flags.
 Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
 flag beside it, a map that is not JSON or fails the schema (an unknown key, no
 subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
@@ -462,7 +466,9 @@ api docs: 37 exports judged, 2 with a finding
 ```
 
 A declaration is named by the name it is declared with and stands at its source
-line; the file is relative to `<directory>`. An export reached by two subpaths
+line; the file is relative to `<directory>`. A declaration inside a namespace
+carries the namespaces it is declared in (`Labels.long`), so two namespaces of
+one file can each hold an `Options`. An export reached by two subpaths
 or under two names is one declaration, an overload set is judged on its first
 signature, and the members behind `export * as Name` or inside an
 `export namespace Name` are judged as declarations of their own. A name declared in a dependency is not judged. `--json`
@@ -476,9 +482,9 @@ declaration. An import it could not resolve and a broken file in a
 dependency hide no judged name and are no gap. The findings and the exit code do not change.
 
 Exit 2, with one stderr line: `--api-docs` without `--api`; `--api-docs` beside
-any flag but `--json`, `--pretty` and `--out`; an unreadable or invalid shape
-file, which is read before the package is opened; an invalid map; and no
-tsconfig for `<directory>`.
+any flag but `--json`, `--pretty`, `--out` and [the doc gate's](#the-doc-gate)
+two; an unreadable or invalid shape file, which is read before the package is
+opened; an invalid map; and no tsconfig for `<directory>`.
 
 ```sh
 code-graph packages/core --api core-api.json --api-docs core-docs.json
@@ -486,6 +492,74 @@ code-graph packages/core --api core-api.json --api-docs core-docs.json
 
 The contract, with every finding kind, the block-parsing rules and the gap
 lines, is [SPEC.md §13.10](../../SPEC.md).
+
+### The doc gate
+
+The doc report exits 0, so a new public export with no doc block still lands
+green. `--ci` beside it fails that run. It works like
+[the API ledger](#the-api-ledger): `api-docs-ledger.json` at the repo root
+holds the declarations you have excused, each with a reason, and the gate fails
+only on a declaration with a finding that the file does not hold. It runs no
+git command and no emit.
+
+```json
+{
+  "entries": [
+    {
+      "block": "export",
+      "file": "src/ledger/Log.ts",
+      "name": "make",
+      "reason": "baseline",
+      "scope": "packages/core"
+    }
+  ]
+}
+```
+
+- An entry is keyed by `(scope, block, file, name)`: the package, the block
+  kind, the file relative to `<directory>` and the declaration's name as the
+  report prints it. It holds no line number, so code moving inside a file
+  changes nothing. `reason` is required.
+- It records a declaration, never its findings. An excused declaration stays
+  excused while its findings change, until its doc block is in shape.
+- `--api <map> --api-docs <shape> --accept-api-docs --reason "<why>"` adds
+  every declaration with a finding that the ledger does not hold yet. An entry
+  already held keeps its reason.
+- `--api <map> --api-docs <shape> --ci` exits 1 on a declaration with a finding
+  and no entry, and prints its finding lines as the report does. It never fails
+  on a stale entry: when a recorded declaration has no finding any more (fixed,
+  gone, renamed, moved to another file, or in a file the shape now skips) it
+  rewrites the ledger without that entry and prints it, so a second run changes
+  nothing. With no ledger file every declaration with a finding fails.
+- A renamed or moved declaration is a new one: its old entry is pruned and it
+  fails until it is fixed or accepted again.
+- A run changes only entries of its own scope, but it reads and validates the
+  whole file first: a bad entry in any scope exits 2.
+- On a run where the read could not see everything (it printed a
+  `code-graph: warning:` line), nothing is pruned. A declaration the read could
+  not see reads exactly like a fixed one, so every entry with no finding stays
+  and is printed with a note that the read could not see everything. New
+  findings still fail and can still be accepted. The first run with no warning
+  prunes.
+- `--json` prints `{ passed, scope, unrecorded, pruned }` for `--ci`, and
+  `{ scope, accepted, pruned, reason }` for `--accept-api-docs`, where each
+  declaration is `{ scope, block, file, name }`. When the read could not see
+  everything, `pruned` is `[]` and both add `unmeasured`, the entries kept with
+  their reasons.
+- Exit 2, with one line on stderr and nothing written: `--accept-api-docs`
+  without a non-empty `--reason`, with `--ci`, or without
+  `--api <map> --api-docs <shape>`; `--reason` without `--accept-api-docs`;
+  either run beside `--api-base`, `--api-policy`, `--accept-api` or any flag
+  other than `--json`, `--pretty` and `--out`; and an unreadable or
+  schema-invalid `api-docs-ledger.json`, which is read after the shape file and
+  before the package is opened. The report's refusals above apply too.
+
+```sh
+code-graph packages/core --api core-api.json --api-docs core-docs.json --accept-api-docs --reason "baseline"   # once
+code-graph packages/core --api core-api.json --api-docs core-docs.json --ci                                    # in lint
+```
+
+The contract is [SPEC.md §13.11](../../SPEC.md).
 
 ## Analysis options
 
@@ -597,12 +671,14 @@ conventions apply alongside active presets.
 | `--boundaries --ci` | Check crossings against `boundary-ledger.json` |
 | `--unreachable --ci` | Check unreachable and unused exports against `unreachable-ledger.json` |
 | `--api <map> --ci` | Check published names against `api-ledger.json`; see [The API ledger](#the-api-ledger) |
+| `--api <map> --api-docs <shape> --ci` | Check published declarations' doc blocks against `api-docs-ledger.json`; see [The doc gate](#the-doc-gate) |
 | `--write-ceilings` | With comments: rewrite ratios. With collapse: record this scope's count |
 | `--accept-crossings` | With boundaries: add unrecorded crossings to the ledger |
 | `--accept-dead` | With unreachable: add unrecorded findings to `unreachable-ledger.json` |
 | `--accept-api` | With `--api`: add unrecorded published names to `api-ledger.json` |
+| `--accept-api-docs` | With `--api --api-docs`: add unrecorded declarations with a finding to `api-docs-ledger.json` |
 | `--dead-only` | With `--unreachable --ci`: gate only `dead` findings, not `only-called-from-tests` or `unused-export` |
-| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead`, `--accept-smells` or `--accept-api` |
+| `--reason <text>` | Required, non-empty reason for `--accept-crossings`, `--accept-dead`, `--accept-smells`, `--accept-api` or `--accept-api-docs` |
 | `--migrate-ceilings` | With boundaries: replace a legacy boundary-count file with a ledger |
 
 The ordinary smell gate is syntax-only unless call analysis is also requested.
@@ -619,7 +695,8 @@ the same way, since they run without one; `--owners` also takes neither
 `--hexagon` nor `--env-keys` beside it. A `--ci` that rides one named gate is
 not a second gate. `--api <map> --ci` and `--api <map> --accept-api` answer
 before this check and take only `--json`, `--pretty` and `--out` (plus `--reason`
-for the accept), so a gate flag beside them exits 2 with their own line.
+for the accept), so a gate flag beside them exits 2 with their own line; the
+doc gate's two runs do the same.
 To run several gates, run the command once per gate. Two reports in one run,
 such as `--cycles --kinds`, are not refused: one is dropped and no gate is lost.
 

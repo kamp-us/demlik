@@ -225,11 +225,17 @@ class DeclarationRead {
       return;
     }
     const statement = documentedStatement(declaration);
+    const names = [declaredName(declaration)];
+    for (let holder = declaration.parent; holder !== undefined; holder = holder.parent) {
+      if (ts.isModuleDeclaration(holder) && ts.isIdentifier(holder.name)) {
+        names.unshift(holder.name.text);
+      }
+    }
     this.facts.set(key, {
       block: "export",
       file: this.scope.named(source.fileName),
       line: source.getLineAndCharacterOfPosition(statement.getStart(source)).line + 1,
-      name: declaredName(declaration),
+      name: names.join("."),
       reachedBy: [reached],
       text: docText(statement),
     });

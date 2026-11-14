@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { API_LEDGER_FILENAME } from "./ledger/ledger.js";
+import { API_LEDGER_FILENAME } from "./ledger/names.js";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CLI = path.join(PACKAGE_DIR, "src", "index.ts");

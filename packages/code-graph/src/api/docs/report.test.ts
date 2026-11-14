@@ -64,7 +64,8 @@ describe("code-graph --api <map> --api-docs <shape>", { timeout: 120_000 }, () =
     for (const line of lines(DOCS_REPORT).slice(0, -1)) {
       const [, file, at, name] = /^(\S+):(\d+) {2}(\S+) {2}/.exec(line) ?? [];
       const source = fs.readFileSync(path.join(root, file as string), "utf8").split("\n");
-      expect(source[Number(at) - 1], line).toContain(name as string);
+      // A name inside a namespace carries its namespaces; the line declares its last part.
+      expect(source[Number(at) - 1], line).toContain((name as string).split(".").at(-1));
     }
   });
 

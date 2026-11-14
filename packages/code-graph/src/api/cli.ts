@@ -6,13 +6,15 @@ import { judgeApiDocs } from "./docs/judge.js";
 import { readApiDocFacts } from "./docs/read.js";
 import { apiDocsShape } from "./docs/shape.js";
 import { apiDocsJson, renderApiDocs } from "./docs/text.js";
+import { API_DOCS_LEDGER, docFindingsOf } from "./ledger/docs.js";
 import { type ApiLedgerMode, runApiLedger } from "./ledger/gate.js";
+import { API_LEDGER, publishedNamesOf } from "./ledger/names.js";
 import { ApiInputError } from "./map.js";
 import { readChangesetsSince } from "./ratchet/changesets.js";
 import { bumpPolicy } from "./ratchet/policy.js";
 import { renderApiRatchet } from "./ratchet/text.js";
 import { apiChanges, ratchetApiDiff } from "./ratchet/verdict.js";
-import { readPublishedApi } from "./view.js";
+import { readMeasuredApi, readPublishedApi } from "./view.js";
 
 const OUTPUT_COMPANIONS = ["json", "pretty", "out"];
 
@@ -45,6 +47,7 @@ export type ApiFlags = {
   readonly apiBase?: string;
   readonly apiPolicy?: string;
   readonly acceptApi?: boolean;
+  readonly acceptApiDocs?: boolean;
   readonly ci?: boolean;
   readonly reason?: string;
 };
@@ -166,40 +169,66 @@ const refused = (message: string): LedgerModeRead => ({
   message: `${message}; nothing was written.`,
 });
 
-// What the flags ask of the API ledger, decided before any file is read.
-function ledgerModeOf(flags: ApiFlags, given: readonly string[]): LedgerModeRead {
-  const stray = strayFlags(given, LEDGER_COMPANIONS);
+// How one ledger gate is asked for on the command line: the flags its `--ci` rides, its accept
+// flag, whether this run gave that flag, and every flag it combines with.
+type LedgerRequest = {
+  readonly rides: string;
+  readonly acceptFlag: string;
+  readonly accepting: boolean;
+  readonly companions: ReadonlySet<string>;
+};
+
+// What the flags ask of a ledger gate, decided before any file is read.
+function ledgerModeOf(
+  flags: ApiFlags,
+  given: readonly string[],
+  { rides, acceptFlag, accepting, companions }: LedgerRequest,
+): LedgerModeRead {
+  const stray = strayFlags(given, companions);
   if (stray !== undefined) {
     return refused(
-      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray}`,
+      `${rides} --ci and ${rides} ${acceptFlag} take only --json, --pretty and --out; got ${stray}`,
     );
   }
-  if (flags.acceptApi !== true) {
+  if (!accepting) {
     return flags.reason === undefined
       ? { kind: "mode", mode: { kind: "check" } }
-      : refused("--reason only rides `--api --accept-api`");
+      : refused(`--reason only rides \`${rides} ${acceptFlag}\``);
   }
-  if (flags.ci === true) return refused("pass one of --ci, --accept-api with --api");
+  if (flags.ci === true) return refused(`pass one of --ci, ${acceptFlag} with ${rides}`);
   const reason = flags.reason?.trim() ?? "";
-  if (reason === "") return refused('`--accept-api` needs a non-empty `--reason "<why>"`');
+  if (reason === "") return refused(`\`${acceptFlag}\` needs a non-empty \`--reason "<why>"\``);
   return { kind: "mode", mode: { kind: "accept", reason } };
 }
 
-function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promise<number> {
-  const read = ledgerModeOf(flags, host.given);
+// One ledger gate's run: its mode from the flags, then `gated` with that mode, settled.
+function runGateFlags(
+  request: LedgerRequest,
+  flags: ApiFlags,
+  host: ApiHost,
+  gated: (mode: ApiLedgerMode) => Promise<ApiOutcome>,
+): Promise<number> {
+  const read = ledgerModeOf(flags, host.given, request);
   if (read.kind === "refused") {
     host.report(read.message);
     return Promise.resolve(2);
   }
-  return settle(host, () =>
-    runApiLedger({
-      rootAbsolute: host.rootAbsolute,
-      map: readJsonFile(mapFile, "API map"),
-      mode: read.mode,
-      json: host.json,
-      pretty: host.pretty,
-    }),
-  );
+  return settle(host, () => gated(read.mode));
+}
+
+function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promise<number> {
+  const request: LedgerRequest = {
+    rides: "--api",
+    acceptFlag: API_LEDGER.acceptFlag,
+    accepting: flags.acceptApi === true,
+    companions: LEDGER_COMPANIONS,
+  };
+  return runGateFlags(request, flags, host, (mode) => {
+    const map = readJsonFile(mapFile, "API map");
+    return runApiLedger(API_LEDGER, { ...host, mode }, async (scope, repoRoot) =>
+      publishedNamesOf(scope, await readMeasuredApi(host.rootAbsolute, map, { repoRoot })),
+    );
+  });
 }
 
 const asksForLedger = (flags: ApiFlags): boolean =>
@@ -207,51 +236,93 @@ const asksForLedger = (flags: ApiFlags): boolean =>
   flags.apiBase === undefined &&
   flags.apiPolicy === undefined;
 
-const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", ...OUTPUT_COMPANIONS]);
+const DOCS_COMPANIONS: ReadonlySet<string> = new Set([
+  "api",
+  "apiDocs",
+  "ci",
+  "acceptApiDocs",
+  ...OUTPUT_COMPANIONS,
+]);
 
-function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promise<number> {
+const DOCS_LEDGER_COMPANIONS: ReadonlySet<string> = new Set([...DOCS_COMPANIONS, "reason"]);
+
+// The doc report of the package with the caller's shape, each gap of its read warned about on
+// stderr. The shape is read first, so a bad one is refused before a ledger or the map is.
+function docsReader(mapFile: string, shapeFile: string, host: ApiHost) {
+  const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
+  return (options: { readonly repoRoot?: string } = {}) => {
+    const map = readJsonFile(mapFile, "API map");
+    const { facts, gaps } = readApiDocFacts(host.rootAbsolute, map, options);
+    for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
+    return { report: judgeApiDocs(facts, shape), gaps };
+  };
+}
+
+function runDocsFlags(
+  mapFile: string,
+  shapeFile: string,
+  flags: ApiFlags,
+  host: ApiHost,
+): Promise<number> {
+  if (flags.ci === true || flags.acceptApiDocs === true) {
+    const request: LedgerRequest = {
+      rides: "--api --api-docs",
+      acceptFlag: API_DOCS_LEDGER.acceptFlag,
+      accepting: flags.acceptApiDocs === true,
+      companions: DOCS_LEDGER_COMPANIONS,
+    };
+    return runGateFlags(request, flags, host, (mode) => {
+      const read = docsReader(mapFile, shapeFile, host);
+      return runApiLedger(API_DOCS_LEDGER, { ...host, mode }, (scope, repoRoot) => {
+        const { report, gaps } = read({ repoRoot });
+        return docFindingsOf(scope, report, gaps);
+      });
+    });
+  }
   const stray = strayFlags(host.given, DOCS_COMPANIONS);
   if (stray !== undefined) {
-    host.report(`--api --api-docs take only --json, --pretty and --out; got ${stray}`);
+    host.report(
+      `--api --api-docs take only --ci, --accept-api-docs, --json, --pretty and --out; got ${stray}`,
+    );
     return Promise.resolve(2);
   }
   return settle(host, async () => {
-    const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
-    const { facts, gaps } = readApiDocFacts(host.rootAbsolute, readJsonFile(mapFile, "API map"));
-    const report = judgeApiDocs(facts, shape);
-    for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
+    const { report, gaps } = docsReader(mapFile, shapeFile, host)();
     const payload = host.json ? apiDocsJson(report, gaps, host.pretty) : renderApiDocs(report);
     return { payload, code: 0 };
   });
 }
 
+// A flag of the mode given without the flag it rides (SPEC §13.6): the refusal's line.
+function flagRequirementOf(flags: ApiFlags): string | undefined {
+  if (flags.acceptApiDocs === true && (flags.api === undefined || flags.apiDocs === undefined)) {
+    return "--accept-api-docs needs --api <map> --api-docs <shape>; nothing was written.";
+  }
+  if (flags.api !== undefined) return undefined;
+  if (flags.apiDocs !== undefined) return "--api-docs needs --api <map>; nothing was written.";
+  if (flags.acceptApi === true) return "--accept-api needs --api <map>; nothing was written.";
+  if (flags.apiBase !== undefined) return "--api-base needs --api <map>";
+  if (flags.apiPolicy !== undefined) return "--api-policy needs --api <map> --api-base <rev>";
+  return undefined;
+}
+
 // The command line's entry to the mode: `null` when none of its flags is given, so every other
-// mode runs as before; otherwise the run's exit code. `--api-base`, `--api-policy` and
-// `--accept-api` without `--api` are refused here (SPEC §13.6).
+// mode runs as before; otherwise the run's exit code.
 export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | null {
-  if (flags.api !== undefined) {
-    if (flags.apiDocs !== undefined) return runDocsFlags(flags.api, flags.apiDocs, host);
-    if (asksForLedger(flags)) return runLedgerFlags(flags.api, flags, host);
-    return runApiView({
-      ...host,
-      mapFile: flags.api,
-      base: flags.apiBase,
-      policyFile: flags.apiPolicy,
-    });
+  const refusal = flagRequirementOf(flags);
+  if (refusal !== undefined) {
+    host.report(refusal);
+    return Promise.resolve(2);
   }
+  if (flags.api === undefined) return null;
   if (flags.apiDocs !== undefined) {
-    host.report("--api-docs needs --api <map>; nothing was written.");
-    return Promise.resolve(2);
+    return runDocsFlags(flags.api, flags.apiDocs, flags, host);
   }
-  if (flags.acceptApi === true) {
-    host.report("--accept-api needs --api <map>; nothing was written.");
-    return Promise.resolve(2);
-  }
-  if (flags.apiBase === undefined && flags.apiPolicy === undefined) return null;
-  host.report(
-    flags.apiBase === undefined
-      ? "--api-policy needs --api <map> --api-base <rev>"
-      : "--api-base needs --api <map>",
-  );
-  return Promise.resolve(2);
+  if (asksForLedger(flags)) return runLedgerFlags(flags.api, flags, host);
+  return runApiView({
+    ...host,
+    mapFile: flags.api,
+    base: flags.apiBase,
+    policyFile: flags.apiPolicy,
+  });
 }

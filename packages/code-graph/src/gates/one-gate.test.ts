@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { API_LEDGER_FILENAME } from "../api/ledger/ledger.js";
+import { API_LEDGER_FILENAME } from "../api/ledger/names.js";
 import { type FiveGateRepo, fiveGateRepo, LEDGER_FILES } from "../test-helpers/five-gate-repo.js";
 import { runCli } from "../test-helpers/ratchet-repo.js";
 

@@ -19,5 +19,5 @@ src/shared.ts:27  both  missing @category
 src/shared.ts:27  both  @since is forbidden
 src/units.ts:29  convert  no doc block
 src/units.ts:38  PRECISION  missing @category
-src/units.ts:65  long  no doc block
+src/units.ts:65  Labels.long  no doc block
 api docs: 48 exports judged, 18 with a finding
