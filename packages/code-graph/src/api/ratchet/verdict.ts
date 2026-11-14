@@ -1,5 +1,5 @@
 import type { ApiDiff, SubpathDiff } from "../diff.js";
-import { ApiInputError } from "../map.js";
+import { ApiInputError, byText } from "../map.js";
 import type { ApiEntryText } from "../read.js";
 import type { ChangesetsSince } from "./changesets.js";
 import { type Bump, type BumpPolicy, type BumpRule, bumpPolicy, bumpRank } from "./policy.js";
@@ -41,8 +41,6 @@ export function calloutMet(
   if (callout === false) return true;
   return found.calloutFound || (callout !== true && found.otherMarkersFound.includes(callout.or));
 }
-
-const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 function subpathChanges(subpath: string, diff: SubpathDiff): readonly ApiChange[] {
   const at = { subpath, tier: diff.tier };

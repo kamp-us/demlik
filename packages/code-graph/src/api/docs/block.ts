@@ -3,6 +3,9 @@ export type DocBlock = {
   readonly tags: readonly string[];
 };
 
+export const TAG = "@[A-Za-z][A-Za-z0-9_-]*";
+const TAG_LINE = new RegExp(`^(${TAG})(?=\\s|$)`);
+
 export function parseDocBlock(text: string): DocBlock {
   const description: string[] = [];
   const tags: string[] = [];
@@ -13,7 +16,7 @@ export function parseDocBlock(text: string): DocBlock {
     if (trimmed.startsWith("```")) {
       fenced = !fenced;
     } else if (!fenced) {
-      const tag = /^(@[A-Za-z][A-Za-z0-9_-]*)(?=\s|$)/.exec(trimmed)?.[1];
+      const tag = TAG_LINE.exec(trimmed)?.[1];
       if (tag !== undefined) {
         tags.push(tag);
         continue;

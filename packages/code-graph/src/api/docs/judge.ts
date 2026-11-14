@@ -1,6 +1,7 @@
 import { globToRegExp } from "../../kinds/glob.js";
+import { byText } from "../map.js";
 import { parseDocBlock } from "./block.js";
-import { type BlockKind, type DocFinding, FINDING_KINDS } from "./kinds.js";
+import { type ApiDocFinding, type BlockKind, findingsOf } from "./kinds.js";
 import type { ApiDocsShape } from "./shape.js";
 
 export type ApiDocFact = {
@@ -12,8 +13,6 @@ export type ApiDocFact = {
   readonly text: string | null;
 };
 
-export type ApiDocFinding = DocFinding;
-
 export type JudgedDeclaration = Omit<ApiDocFact, "text"> & {
   readonly findings: readonly ApiDocFinding[];
 };
@@ -23,20 +22,15 @@ export type ApiDocsReport = {
   readonly declarations: readonly JudgedDeclaration[];
 };
 
-const compare = (a: string, b: string): number => (a === b ? 0 : a < b ? -1 : 1);
-
 function judgeDeclaration(fact: ApiDocFact, shape: ApiDocsShape): JudgedDeclaration {
   const { text, ...place } = fact;
   const rule = shape[fact.block];
-  const input = { block: text === null ? null : parseDocBlock(text), rule, order: shape.order };
-  const findings: ApiDocFinding[] = [];
-  if (input.rule !== undefined) {
-    for (const row of Object.values(FINDING_KINDS)) {
-      findings.push(...row.check({ ...input, rule: input.rule }));
-    }
-  }
+  const findings =
+    rule === undefined
+      ? []
+      : findingsOf({ block: text === null ? null : parseDocBlock(text), rule, order: shape.order });
   const reachedBy = [...place.reachedBy].sort(
-    (a, b) => compare(a.subpath, b.subpath) || compare(a.name, b.name),
+    (a, b) => byText(a.subpath, b.subpath) || byText(a.name, b.name),
   );
   return { ...place, reachedBy, findings };
 }
@@ -46,7 +40,7 @@ export function judgeApiDocs(facts: readonly ApiDocFact[], shape: ApiDocsShape):
   const judged = facts.filter(
     (fact) => shape[fact.block] !== undefined && !skip.some((glob) => glob.test(fact.file)),
   );
-  judged.sort((a, b) => compare(a.file, b.file) || a.line - b.line || compare(a.name, b.name));
+  judged.sort((a, b) => byText(a.file, b.file) || a.line - b.line || byText(a.name, b.name));
   const declarations = judged
     .map((fact) => judgeDeclaration(fact, shape))
     .filter((declaration) => declaration.findings.length > 0);

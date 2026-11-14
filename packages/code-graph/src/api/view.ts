@@ -73,7 +73,7 @@ function readNames(
       unresolved: unresolvedSpecifiers(
         program,
         {
-          own: (file) => tree.declarationOf(file) !== undefined,
+          reads: (file, reexport) => reexport || tree.declarationOf(file) !== undefined,
           named: (file) => tree.declarationOf(file) ?? file,
         },
         entryFiles,

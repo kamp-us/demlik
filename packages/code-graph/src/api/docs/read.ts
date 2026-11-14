@@ -2,13 +2,12 @@ import path from "node:path";
 import * as ts from "../../engine/tsgo.js";
 import { findRepoRoot } from "../../extract/project.js";
 import { moduleSymbolOf } from "../../resolve.js";
-import { apiSubpaths } from "../map.js";
+import { apiSubpaths, byText, pathInside } from "../map.js";
 import {
   byFileThenPosition,
   declaredName,
   nodeKey,
   publishedDeclarations,
-  type ReadScope,
   unresolvedSpecifiers,
 } from "../read.js";
 import { packageRoot, packageTsConfig } from "../view.js";
@@ -20,18 +19,12 @@ export type ApiDocFacts = {
   readonly gaps: readonly ApiDocGap[];
 };
 
-function insidePath(relative: string): boolean {
-  return relative !== ".." && !relative.startsWith("../") && !path.isAbsolute(relative);
-}
-
-function readScope(root: string): ReadScope {
+function readScope(root: string) {
   const named = (file: string): string => path.relative(root, file).split(path.sep).join("/");
   return {
     named,
-    own: (file) => {
-      const relative = named(file);
-      return insidePath(relative) && !relative.split("/").includes("node_modules");
-    },
+    own: (file: string) =>
+      pathInside(root, file) !== undefined && !file.split(path.sep).includes("node_modules"),
   };
 }
 
@@ -61,34 +54,49 @@ function docText(statement: ts.Node): string | null {
 class DeclarationRead {
   readonly facts = new Map<string, ApiDocFact>();
   readonly gaps: ApiDocGap[] = [];
+  readonly modules = new Set<string>();
 
   constructor(
     private readonly program: ts.TypeProgram,
-    private readonly scope: ReadScope,
+    private readonly scope: ReturnType<typeof readScope>,
   ) {}
 
-  from(file: string, subpath: string, prefix = "", active = new Set<string>()): void {
-    if (active.has(file)) return;
+  from(file: string, subpath: string, prefix = "", active: ReadonlySet<string> = new Set()): void {
+    if (active.has(file) || !this.scope.own(file)) return;
     const symbol = moduleSymbolOf(this.program, file);
     if (symbol === undefined) return;
-    const next = new Set(active).add(file);
-    for (const { name, declarations } of publishedDeclarations(this.program, symbol)) {
+    this.modules.add(file);
+    this.exportsOf(symbol, subpath, prefix, new Set(active).add(file));
+  }
+
+  private exportsOf(
+    holder: ts.TsSymbol,
+    subpath: string,
+    prefix: string,
+    active: ReadonlySet<string>,
+  ): void {
+    for (const { name, symbol, declarations } of publishedDeclarations(this.program, holder)) {
       if (name === "") continue;
       const reached = { subpath, name: `${prefix}${name}` };
       const declaration = [...declarations].sort(byFileThenPosition)[0];
       if (declaration === undefined) {
         this.gaps.push({ kind: "no-declaration", ...reached });
-      } else if (ts.isSourceFile(declaration)) {
-        this.from(declaration.fileName, subpath, `${reached.name}.`, next);
-      } else {
-        this.record(declaration, reached);
+        continue;
       }
+      if (!this.scope.own(declaration.getSourceFile().fileName)) continue;
+      if (ts.isSourceFile(declaration)) {
+        this.from(declaration.fileName, subpath, `${reached.name}.`, active);
+        continue;
+      }
+      this.record(declaration, reached);
+      const namespace = declarations.find(ts.isModuleDeclaration);
+      if (namespace === undefined || active.has(nodeKey(namespace))) continue;
+      this.exportsOf(symbol, subpath, `${reached.name}.`, new Set(active).add(nodeKey(namespace)));
     }
   }
 
   private record(declaration: ts.Node, reached: ApiDocFact["reachedBy"][number]): void {
     const source = declaration.getSourceFile();
-    if (!this.scope.own(source.fileName)) return;
     const key = nodeKey(declaration);
     const previous = this.facts.get(key);
     if (previous !== undefined) {
@@ -114,16 +122,22 @@ class DeclarationRead {
 
 function programGaps(
   program: ts.TypeProgram,
-  scope: ReadScope,
-  entryFiles: readonly string[],
+  scope: ReturnType<typeof readScope>,
+  modules: ReadonlySet<string>,
 ): ApiDocGap[] {
-  const gaps: ApiDocGap[] = unresolvedSpecifiers(program, scope, entryFiles).map((gap) => ({
+  const gaps: ApiDocGap[] = unresolvedSpecifiers(
+    program,
+    {
+      named: scope.named,
+      reads: (file, reexport) => reexport && scope.own(file),
+    },
+    [...modules].sort(byText),
+  ).map((gap) => ({
     kind: "unresolved-specifier",
     ...gap,
   }));
   for (const [file, count] of program.syntaxErrors()) {
-    const relative = scope.named(file);
-    if (insidePath(relative)) gaps.push({ kind: "syntax-error", file: relative, count });
+    if (scope.own(file)) gaps.push({ kind: "syntax-error", file: scope.named(file), count });
   }
   return gaps;
 }
@@ -149,7 +163,7 @@ export function readApiDocFacts(
     const scope = readScope(rootAbsolute);
     const read = new DeclarationRead(program, scope);
     for (const { entryAbsolute, subpath } of subpaths) read.from(entryAbsolute, subpath);
-    const gaps = orderApiDocGaps([...programGaps(program, scope, entryFiles), ...read.gaps]);
+    const gaps = orderApiDocGaps([...programGaps(program, scope, read.modules), ...read.gaps]);
     return { facts: [...read.facts.values()], gaps };
   } finally {
     program.close();

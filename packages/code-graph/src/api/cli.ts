@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import { stableStringify } from "../render/json.js";
 import { diffPublishedApi } from "./diff.js";
+import { apiDocGapLine } from "./docs/gaps.js";
+import { judgeApiDocs } from "./docs/judge.js";
+import { readApiDocFacts } from "./docs/read.js";
+import { apiDocsShape } from "./docs/shape.js";
+import { apiDocsJson, renderApiDocs } from "./docs/text.js";
 import { type ApiLedgerMode, runApiLedger } from "./ledger/gate.js";
 import { ApiInputError } from "./map.js";
 import { readChangesetsSince } from "./ratchet/changesets.js";
@@ -9,10 +14,12 @@ import { renderApiRatchet } from "./ratchet/text.js";
 import { apiChanges, ratchetApiDiff } from "./ratchet/verdict.js";
 import { readPublishedApi } from "./view.js";
 
+const OUTPUT_COMPANIONS = ["json", "pretty", "out"];
+
 // The flags `--api` combines with (SPEC §13.6); any other flag given on the command line exits 2.
 const API_COMPANIONS: ReadonlySet<string> = new Set([
   ...["api", "apiBase", "apiPolicy"],
-  ...["json", "pretty", "out"],
+  ...OUTPUT_COMPANIONS,
 ]);
 
 export type ApiRun = {
@@ -49,7 +56,7 @@ type ApiOutcome = { readonly payload: string; readonly code: number };
 // has no place in it.
 const LEDGER_COMPANIONS: ReadonlySet<string> = new Set([
   ...["api", "ci", "acceptApi", "reason"],
-  ...["json", "pretty", "out"],
+  ...OUTPUT_COMPANIONS,
 ]);
 
 function readJsonFile(file: string, what: string): unknown {
@@ -195,7 +202,7 @@ const asksForLedger = (flags: ApiFlags): boolean =>
   flags.apiBase === undefined &&
   flags.apiPolicy === undefined;
 
-const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", "json", "pretty", "out"]);
+const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", ...OUTPUT_COMPANIONS]);
 
 function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promise<number> {
   const stray = host.given.filter((attribute) => !DOCS_COMPANIONS.has(attribute));
@@ -206,12 +213,7 @@ function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promis
     return Promise.resolve(2);
   }
   return settle(host, async () => {
-    const { apiDocsShape } = await import("./docs/shape.js");
     const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
-    const { readApiDocFacts } = await import("./docs/read.js");
-    const { judgeApiDocs } = await import("./docs/judge.js");
-    const { apiDocGapLine } = await import("./docs/gaps.js");
-    const { apiDocsJson, renderApiDocs } = await import("./docs/text.js");
     const { facts, gaps } = readApiDocFacts(host.rootAbsolute, readJsonFile(mapFile, "API map"));
     const report = judgeApiDocs(facts, shape);
     for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { GlobSyntaxError, globToRegExp } from "../../kinds/glob.js";
 import { ApiInputError, issueText } from "../map.js";
+import { TAG } from "./block.js";
 import { BLOCK_KINDS } from "./kinds.js";
 
 const TagsSchema = z
-  .array(z.string().regex(/^@[A-Za-z][A-Za-z0-9_-]*(?![\s\S])/, "expected @ and a tag name"))
+  .array(z.string().regex(new RegExp(`^${TAG}(?![\\s\\S])`), "expected @ and a tag name"))
   .refine((tags) => new Set(tags).size === tags.length, "a tag is listed twice")
   .default([]);
 

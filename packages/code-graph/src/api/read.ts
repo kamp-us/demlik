@@ -2,6 +2,7 @@ import path from "node:path";
 import * as ts from "../engine/tsgo.js";
 import { moduleSymbolOf } from "../resolve.js";
 import type { EmittedTree } from "./emit.js";
+import { byText } from "./map.js";
 import { declarationText, statementOf } from "./text.js";
 
 // A published name as a consumer's types see it (SPEC §13.3): its own declaration text, plus the
@@ -24,8 +25,7 @@ export const nodeKey = (node: ts.Node): string =>
 export function byFileThenPosition(a: ts.Node, b: ts.Node): number {
   const fileA = a.getSourceFile().fileName;
   const fileB = b.getSourceFile().fileName;
-  if (fileA !== fileB) return fileA < fileB ? -1 : 1;
-  return a.pos - b.pos;
+  return byText(fileA, fileB) || a.pos - b.pos;
 }
 
 // Several declarations of one name (overloads, merges) in emitted file order, then position; a
@@ -53,12 +53,12 @@ function publishedNames(program: ts.TypeProgram, entryFile: string): readonly Pu
 
 export function publishedDeclarations(
   program: ts.TypeProgram,
-  moduleSymbol: ts.TsSymbol,
-): readonly Published[] {
-  return [...program.exportsOf(moduleSymbol)].map(([name, symbol]) => ({
-    name,
-    declarations: program.declarations(program.aliasTarget(symbol) ?? symbol),
-  }));
+  holder: ts.TsSymbol,
+): readonly (Published & { readonly symbol: ts.TsSymbol })[] {
+  return [...program.exportsOf(holder)].map(([name, exported]) => {
+    const symbol = program.aliasTarget(exported) ?? exported;
+    return { name, symbol, declarations: program.declarations(symbol) };
+  });
 }
 
 const entityName = (name: ts.Node | undefined): ts.Node | undefined =>
@@ -241,20 +241,15 @@ function moduleReferences(holder: ts.Node): readonly ModuleReference[] {
 }
 
 export type ReadScope = {
-  readonly own: (file: string) => boolean;
+  readonly reads: (file: string, reexport: boolean) => boolean;
   readonly named: (file: string) => string;
 };
 
 export type UnresolvedSpecifier = { readonly specifier: string; readonly file: string };
 
-// Every specifier the read could not resolve on the way to a published name. A name behind one is
-// missing or has no text, which reads exactly like a name the package does not publish.
-//
-// A re-export counts in any file it reaches, since a source `.d.ts`, a `.js` or a dependency is
-// never checked under `skipLibCheck` and can hand on a name like any other. An import counts only
-// in an emitted file: it adds no name to a dependency's exports, so a dependency's missing optional
-// type must not hold back pruning for good. The walk goes by declaration, so a `declare module`
-// block answers for itself and not for the other blocks in its file.
+// The caller's `reads` chooses which references count. The view reads re-exports in every file
+// and imports in emitted files. The walk goes by declaration, so a `declare module` block answers
+// for itself and not for the other blocks in its file.
 export function unresolvedSpecifiers(
   program: ts.TypeProgram,
   scope: ReadScope,
@@ -274,8 +269,9 @@ export function unresolvedSpecifiers(
   }
   for (let holder = queue.shift(); holder !== undefined; holder = queue.shift()) {
     const file = holder.getSourceFile().fileName;
-    const own = scope.own(file);
-    const references = moduleReferences(holder).filter(({ reexport }) => reexport || own);
+    const references = moduleReferences(holder).filter(({ reexport }) =>
+      scope.reads(file, reexport),
+    );
     const symbols = program.symbolsAt(references.map(({ specifier }) => specifier));
     references.forEach(({ specifier, reexport }, index) => {
       const symbol = symbols[index];
@@ -286,8 +282,7 @@ export function unresolvedSpecifiers(
         return;
       }
       for (const declaration of program.declarations(symbol)) {
-        const emits = scope.own(declaration.getSourceFile().fileName);
-        if (reexport || emits) enqueue(declaration);
+        if (scope.reads(declaration.getSourceFile().fileName, reexport)) enqueue(declaration);
       }
     });
   }

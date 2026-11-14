@@ -2,11 +2,11 @@ export { type ApiDiff, type ApiDiffOptions, diffPublishedApi } from "./api/diff.
 export type { ApiDocGap } from "./api/docs/gaps.js";
 export {
   type ApiDocFact,
-  type ApiDocFinding,
   type ApiDocsReport,
   type JudgedDeclaration,
   judgeApiDocs,
 } from "./api/docs/judge.js";
+export type { ApiDocFinding } from "./api/docs/kinds.js";
 export { type ApiDocFacts, readApiDocFacts } from "./api/docs/read.js";
 export { type ApiDocsShape, ApiDocsShapeSchema } from "./api/docs/shape.js";
 export { ApiInputError, type ApiMap, ApiMapSchema } from "./api/map.js";

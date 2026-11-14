@@ -7,7 +7,7 @@ export const BLOCK_KINDS = {
 
 export type BlockKind = keyof typeof BLOCK_KINDS;
 
-export type DocFinding =
+export type ApiDocFinding =
   | { readonly kind: "missing-block" }
   | { readonly kind: "missing-description" }
   | { readonly kind: "missing-tag"; readonly tag: string }
@@ -20,31 +20,26 @@ type CheckInput = {
   readonly order: readonly string[];
 };
 
-type WordsInput = {
-  readonly kind: DocFinding["kind"];
-  readonly tag?: string;
-  readonly before?: string;
-};
-
 type FindingRows = {
-  [Kind in DocFinding["kind"]]: {
-    readonly check: (input: CheckInput) => readonly Extract<DocFinding, { kind: Kind }>[];
-    readonly words: (finding: WordsInput, block: BlockKind) => string;
+  [Kind in ApiDocFinding["kind"]]: {
+    readonly check: (input: CheckInput) => readonly Extract<ApiDocFinding, { kind: Kind }>[];
+    readonly words: (finding: Extract<ApiDocFinding, { kind: Kind }>, block: BlockKind) => string;
   };
 };
 
-export const FINDING_KINDS = {
+// Row order is the print order (SPEC §13.10).
+export const FINDING_KINDS: FindingRows = {
   "missing-block": {
     check: ({ block, rule }) =>
       block === null && rule.block === "required" ? [{ kind: "missing-block" }] : [],
-    words: (_finding: WordsInput, block: BlockKind) => BLOCK_KINDS[block].noBlock,
+    words: (_finding, block) => BLOCK_KINDS[block].noBlock,
   },
   "missing-description": {
     check: ({ block, rule }) =>
       block !== null && rule.description === "required" && block.description === ""
         ? [{ kind: "missing-description" }]
         : [],
-    words: (_finding: WordsInput) => "the description is empty",
+    words: () => "the description is empty",
   },
   "missing-tag": {
     check: ({ block, rule }) =>
@@ -53,7 +48,7 @@ export const FINDING_KINDS = {
         : rule.required
             .filter((tag) => !block.tags.includes(tag))
             .map((tag) => ({ kind: "missing-tag", tag })),
-    words: ({ tag }: WordsInput) => `missing ${tag}`,
+    words: ({ tag }) => `missing ${tag}`,
   },
   "forbidden-tag": {
     check: ({ block, rule }) =>
@@ -62,11 +57,11 @@ export const FINDING_KINDS = {
         : rule.forbidden
             .filter((tag) => block.tags.includes(tag))
             .map((tag) => ({ kind: "forbidden-tag", tag })),
-    words: ({ tag }: WordsInput) => `${tag} is forbidden`,
+    words: ({ tag }) => `${tag} is forbidden`,
   },
   "tag-out-of-order": {
     check: ({ block, order }) => {
-      const findings: Extract<DocFinding, { kind: "tag-out-of-order" }>[] = [];
+      const findings: Extract<ApiDocFinding, { kind: "tag-out-of-order" }>[] = [];
       let latest = -1;
       for (const before of block?.tags ?? []) {
         const position = order.indexOf(before);
@@ -80,6 +75,18 @@ export const FINDING_KINDS = {
       }
       return findings;
     },
-    words: ({ tag, before }: WordsInput) => `${tag} comes before ${before}`,
+    words: ({ tag, before }) => `${tag} comes before ${before}`,
   },
-} satisfies FindingRows;
+};
+
+export function findingsOf(input: CheckInput): readonly ApiDocFinding[] {
+  return Object.values(FINDING_KINDS).flatMap((row): readonly ApiDocFinding[] => row.check(input));
+}
+
+export function findingWords(finding: ApiDocFinding, block: BlockKind): string {
+  const words = FINDING_KINDS[finding.kind].words as (
+    finding: ApiDocFinding,
+    block: BlockKind,
+  ) => string;
+  return words(finding, block);
+}

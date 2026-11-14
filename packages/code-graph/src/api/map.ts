@@ -54,6 +54,17 @@ type MapSide = {
   readonly tree: string;
 };
 
+export function pathInside(root: string, file: string): string | undefined {
+  const relative = path.relative(root, file);
+  return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
+    ? undefined
+    : relative;
+}
+
+export function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function checkedSubpath(
   rootAbsolute: string,
   subpath: string,
@@ -61,8 +72,7 @@ function checkedSubpath(
   side: MapSide,
 ): string {
   const entryAbsolute = path.resolve(rootAbsolute, entry);
-  const relative = path.relative(rootAbsolute, entryAbsolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (pathInside(rootAbsolute, entryAbsolute) === undefined) {
     throw new ApiInputError(`${side.map}: ${subpath}: entry ${entry} lies outside ${side.root}`);
   }
   if (!SOURCE_EXTENSION.test(entry) || DECLARATION_FILE.test(entry)) {
