@@ -201,20 +201,31 @@ function ledgerModeOf(
   return { kind: "mode", mode: { kind: "accept", reason } };
 }
 
-function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promise<number> {
-  const read = ledgerModeOf(flags, host.given, {
-    rides: "--api",
-    acceptFlag: API_LEDGER.acceptFlag,
-    accepting: flags.acceptApi === true,
-    companions: LEDGER_COMPANIONS,
-  });
+// One ledger gate's run: its mode from the flags, then `gated` with that mode, settled.
+function runGateFlags(
+  request: LedgerRequest,
+  flags: ApiFlags,
+  host: ApiHost,
+  gated: (mode: ApiLedgerMode) => Promise<ApiOutcome>,
+): Promise<number> {
+  const read = ledgerModeOf(flags, host.given, request);
   if (read.kind === "refused") {
     host.report(read.message);
     return Promise.resolve(2);
   }
-  return settle(host, () => {
+  return settle(host, () => gated(read.mode));
+}
+
+function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promise<number> {
+  const request: LedgerRequest = {
+    rides: "--api",
+    acceptFlag: API_LEDGER.acceptFlag,
+    accepting: flags.acceptApi === true,
+    companions: LEDGER_COMPANIONS,
+  };
+  return runGateFlags(request, flags, host, (mode) => {
     const map = readJsonFile(mapFile, "API map");
-    return runApiLedger(API_LEDGER, { ...host, mode: read.mode }, async (scope, repoRoot) =>
+    return runApiLedger(API_LEDGER, { ...host, mode }, async (scope, repoRoot) =>
       publishedNamesOf(scope, await readMeasuredApi(host.rootAbsolute, map, { repoRoot })),
     );
   });
@@ -235,50 +246,48 @@ const DOCS_COMPANIONS: ReadonlySet<string> = new Set([
 
 const DOCS_LEDGER_COMPANIONS: ReadonlySet<string> = new Set([...DOCS_COMPANIONS, "reason"]);
 
+// The doc report of the package with the caller's shape, each gap of its read warned about on
+// stderr. The shape is read first, so a bad one is refused before a ledger or the map is.
+function docsReader(mapFile: string, shapeFile: string, host: ApiHost) {
+  const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
+  return (options: { readonly repoRoot?: string } = {}) => {
+    const map = readJsonFile(mapFile, "API map");
+    const { facts, gaps } = readApiDocFacts(host.rootAbsolute, map, options);
+    for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
+    return { report: judgeApiDocs(facts, shape), gaps };
+  };
+}
+
 function runDocsFlags(
   mapFile: string,
   shapeFile: string,
   flags: ApiFlags,
   host: ApiHost,
 ): Promise<number> {
-  const gate = flags.ci === true || flags.acceptApiDocs === true;
-  const read = gate
-    ? ledgerModeOf(flags, host.given, {
-        rides: "--api --api-docs",
-        acceptFlag: API_DOCS_LEDGER.acceptFlag,
-        accepting: flags.acceptApiDocs === true,
-        companions: DOCS_LEDGER_COMPANIONS,
-      })
-    : { kind: "report" as const };
-  if (read.kind === "refused") {
-    host.report(read.message);
-    return Promise.resolve(2);
+  if (flags.ci === true || flags.acceptApiDocs === true) {
+    const request: LedgerRequest = {
+      rides: "--api --api-docs",
+      acceptFlag: API_DOCS_LEDGER.acceptFlag,
+      accepting: flags.acceptApiDocs === true,
+      companions: DOCS_LEDGER_COMPANIONS,
+    };
+    return runGateFlags(request, flags, host, (mode) => {
+      const read = docsReader(mapFile, shapeFile, host);
+      return runApiLedger(API_DOCS_LEDGER, { ...host, mode }, (scope, repoRoot) => {
+        const { report, gaps } = read({ repoRoot });
+        return docFindingsOf(scope, report, gaps);
+      });
+    });
   }
   const stray = strayFlags(host.given, DOCS_COMPANIONS);
-  if (!gate && stray !== undefined) {
+  if (stray !== undefined) {
     host.report(
       `--api --api-docs take only --ci, --accept-api-docs, --json, --pretty and --out; got ${stray}`,
     );
     return Promise.resolve(2);
   }
   return settle(host, async () => {
-    const shape = apiDocsShape(readJsonFile(shapeFile, "API docs shape"));
-    const measure = (options: { readonly repoRoot?: string } = {}) => {
-      const { facts, gaps } = readApiDocFacts(
-        host.rootAbsolute,
-        readJsonFile(mapFile, "API map"),
-        options,
-      );
-      for (const gap of gaps) process.stderr.write(`${apiDocGapLine(gap)}\n`);
-      return { report: judgeApiDocs(facts, shape), gaps };
-    };
-    if (read.kind === "mode") {
-      return runApiLedger(API_DOCS_LEDGER, { ...host, mode: read.mode }, (scope, repoRoot) => {
-        const { report, gaps } = measure({ repoRoot });
-        return docFindingsOf(scope, report, gaps);
-      });
-    }
-    const { report, gaps } = measure();
+    const { report, gaps } = docsReader(mapFile, shapeFile, host)();
     const payload = host.json ? apiDocsJson(report, gaps, host.pretty) : renderApiDocs(report);
     return { payload, code: 0 };
   });
