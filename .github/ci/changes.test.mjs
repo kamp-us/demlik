@@ -510,7 +510,9 @@ const write = (dir, files) => {
   }
 };
 
-describe("reading the changed files from git", () => {
+// These laws start git and pnpm. Under a loaded machine a spawn takes seconds, not milliseconds, so
+// the suites declare their limit once, on the describe.
+describe("reading the changed files from git", { timeout: 60_000 }, () => {
   const repo = makeRepo();
   made.push(repo.dir);
   write(repo.dir, { "a.txt": "a\n", "keep.txt": "k\n" });
@@ -662,7 +664,7 @@ describe("reading the changed files from git", () => {
   });
 });
 
-describe("reading the workspace from pnpm", () => {
+describe("reading the workspace from pnpm", { timeout: 60_000 }, () => {
   // A workspace of its own, so the laws do not move when this repo's packages do:
   //   core <- app (dependency), core <- tool (devDependency), app <- cli, alone, and core/peers/x
   //   nested inside core.
