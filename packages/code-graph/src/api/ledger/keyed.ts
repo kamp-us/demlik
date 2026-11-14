@@ -3,20 +3,30 @@ import { z } from "zod";
 import { byText } from "../../order.js";
 import { stableStringify } from "../../render/json.js";
 
+// One ledger file at the repo root: the entries a gate holds for a package, each keyed by its scope
+// and the file's own fields and carrying a reason. The gate fails only on what the file does not
+// hold and drops the entries a run no longer finds, so the file changes by key and with a reason.
+// An entry is never dropped on a run that could not measure everything, which cannot tell a thing
+// that is gone from one it could not read.
 export type LedgerDescription<Field extends string> = {
   readonly filename: string;
+  // The key's fields after `scope`, in the order the entries are sorted by.
   readonly keyFields: readonly Field[];
 };
 
+// `scope` is the package root relative to the repo root (`.` for the root itself): one file serves
+// every package of a workspace, and two packages can each hold the same key.
 export type LedgerKey<Field extends string> = Readonly<Record<"scope" | Field, string>>;
 type LedgerEntry<Field extends string> = LedgerKey<Field> & { readonly reason: string };
 export type Ledger<Field extends string> = { readonly entries: readonly LedgerEntry<Field>[] };
 
+// One thing a run found that the ledger must hold, and the lines a failed gate prints for it.
 export type FoundItem<Field extends string> = {
   readonly key: LedgerKey<Field>;
   readonly lines: readonly string[];
 };
 
+// What one run found, and whether it saw enough to say that a thing it did not find is gone.
 export type LedgerMeasurement<Field extends string> = {
   readonly items: readonly FoundItem<Field>[];
   readonly measured: boolean;
@@ -121,11 +131,15 @@ export function writeLedger<Field extends string>(
   fs.writeFileSync(file, `${stableStringify(sorted(description, ledger.entries), true)}\n`);
 }
 
+// The run's scope's entries the run did not find. They are `pruned` on a measured run, and
+// `unmeasured` on any other: those stay in the ledger until a measured run decides.
 export type MissingEntries<Field extends string> = {
   readonly kind: "pruned" | "unmeasured";
   readonly entries: readonly LedgerEntry<Field>[];
 };
 
+// What one run found against the ledger. Only the entries of the run's scope are in reach: `kept`
+// is the ledger without the entries it pruned, and an entry of another scope is kept as it is.
 export type LedgerReconciliation<Field extends string> = {
   readonly scope: string;
   readonly unrecorded: readonly FoundItem<Field>[];
@@ -133,6 +147,7 @@ export type LedgerReconciliation<Field extends string> = {
   readonly kept: Ledger<Field>;
 };
 
+// One item per key, in the order first found: two things found under one key are one entry.
 function foldItems<Field extends string>(
   description: LedgerDescription<Field>,
   items: readonly FoundItem<Field>[],
@@ -171,6 +186,7 @@ export function reconcileLedger<Field extends string>(
     : { scope, unrecorded, missing: { kind: "unmeasured", entries }, kept: ledger };
 }
 
+// Whether the run has anything to write besides what it accepts.
 export const prunesEntries = <Field extends string>({
   missing,
 }: LedgerReconciliation<Field>): boolean => missing.kind === "pruned" && missing.entries.length > 0;

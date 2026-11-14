@@ -39,6 +39,8 @@ function readLedgerOrRefuse<Field extends string>(
   return read.kind === "read" ? read.ledger : { entries: [] };
 }
 
+// The ledger is read before the measure, so a run that cannot gate never measures or writes. Its
+// only inputs are the file and what `measure` reads, and it needs no git.
 export async function runApiLedger<Field extends string>(
   row: LedgerRow<Field>,
   run: ApiLedgerRun,

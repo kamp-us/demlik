@@ -6,6 +6,7 @@ import type {
   MissingEntries,
 } from "./keyed.js";
 
+// One ledger's row: its file, and the words its gate prints.
 export type LedgerRow<Field extends string> = LedgerDescription<Field> & {
   readonly labels: { readonly pass: string; readonly fail: string; readonly invalid: string };
   readonly noun: string;
@@ -30,6 +31,8 @@ function missingLines<Field extends string>(
   return [head, ...entries.map(row.entryLine)];
 }
 
+// A measured run's JSON has `pruned` alone; `unmeasured` appears only on a run that could not
+// measure everything.
 const missingFields = <Field extends string>({ kind, entries }: MissingEntries<Field>) =>
   kind === "pruned" ? { pruned: entries } : { pruned: [], unmeasured: entries };
 

@@ -169,6 +169,8 @@ const refused = (message: string): LedgerModeRead => ({
   message: `${message}; nothing was written.`,
 });
 
+// How one ledger gate is asked for on the command line: the flags its `--ci` rides, its accept
+// flag, whether this run gave that flag, and every flag it combines with.
 type LedgerRequest = {
   readonly rides: string;
   readonly acceptFlag: string;
@@ -176,6 +178,7 @@ type LedgerRequest = {
   readonly companions: ReadonlySet<string>;
 };
 
+// What the flags ask of a ledger gate, decided before any file is read.
 function ledgerModeOf(
   flags: ApiFlags,
   given: readonly string[],
@@ -209,14 +212,12 @@ function runLedgerFlags(mapFile: string, flags: ApiFlags, host: ApiHost): Promis
     host.report(read.message);
     return Promise.resolve(2);
   }
-  return settle(host, () =>
-    runApiLedger(API_LEDGER, { ...host, mode: read.mode }, async (scope, repoRoot) =>
-      publishedNamesOf(
-        scope,
-        await readMeasuredApi(host.rootAbsolute, readJsonFile(mapFile, "API map"), { repoRoot }),
-      ),
-    ),
-  );
+  return settle(host, () => {
+    const map = readJsonFile(mapFile, "API map");
+    return runApiLedger(API_LEDGER, { ...host, mode: read.mode }, async (scope, repoRoot) =>
+      publishedNamesOf(scope, await readMeasuredApi(host.rootAbsolute, map, { repoRoot })),
+    );
+  });
 }
 
 const asksForLedger = (flags: ApiFlags): boolean =>
@@ -283,28 +284,21 @@ function runDocsFlags(
   });
 }
 
+// A flag of the mode given without the flag it rides (SPEC §13.6): the refusal's line.
 function flagRequirementOf(flags: ApiFlags): string | undefined {
   if (flags.acceptApiDocs === true && (flags.api === undefined || flags.apiDocs === undefined)) {
     return "--accept-api-docs needs --api <map> --api-docs <shape>; nothing was written.";
   }
   if (flags.api !== undefined) return undefined;
-  return [
-    {
-      given: flags.apiDocs !== undefined,
-      line: "--api-docs needs --api <map>; nothing was written.",
-    },
-    {
-      given: flags.acceptApi === true,
-      line: "--accept-api needs --api <map>; nothing was written.",
-    },
-    { given: flags.apiBase !== undefined, line: "--api-base needs --api <map>" },
-    {
-      given: flags.apiPolicy !== undefined,
-      line: "--api-policy needs --api <map> --api-base <rev>",
-    },
-  ].find(({ given }) => given)?.line;
+  if (flags.apiDocs !== undefined) return "--api-docs needs --api <map>; nothing was written.";
+  if (flags.acceptApi === true) return "--accept-api needs --api <map>; nothing was written.";
+  if (flags.apiBase !== undefined) return "--api-base needs --api <map>";
+  if (flags.apiPolicy !== undefined) return "--api-policy needs --api <map> --api-base <rev>";
+  return undefined;
 }
 
+// The command line's entry to the mode: `null` when none of its flags is given, so every other
+// mode runs as before; otherwise the run's exit code.
 export function runApiFlags(flags: ApiFlags, host: ApiHost): Promise<number> | null {
   const refusal = flagRequirementOf(flags);
   if (refusal !== undefined) {

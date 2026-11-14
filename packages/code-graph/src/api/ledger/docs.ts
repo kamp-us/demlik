@@ -4,6 +4,8 @@ import { declarationFindingLines } from "../docs/text.js";
 import type { LedgerMeasurement } from "./keyed.js";
 import type { LedgerRow } from "./text.js";
 
+// `api-docs-ledger.json`: one entry per published declaration whose doc block is excused (SPEC
+// §13.11). It holds a declaration and never its findings.
 export const API_DOCS_LEDGER_FILENAME = "api-docs-ledger.json";
 
 export const API_DOCS_LEDGER: LedgerRow<"block" | "file" | "name"> = {
@@ -20,6 +22,8 @@ export const API_DOCS_LEDGER: LedgerRow<"block" | "file" | "name"> = {
   entryLine: ({ file, name }) => `  ${file}  ${name}`,
 };
 
+// The declarations with a finding, in the report's order. A read with a gap is not measured: a
+// declaration it could not see reads like one that was fixed.
 export function docFindingsOf(
   scope: string,
   report: ApiDocsReport,
