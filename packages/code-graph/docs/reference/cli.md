@@ -74,7 +74,9 @@ Commands and External systems hold the members of the feature's `X` and `XDriven
 bags. A list whose bag is not read prints the row that says so in place of `none`,
 `not read: ports.ts:5 Orders: union type`, and `--json` holds
 `{ "notRead": { "file", "line", "name", "reason" } }` where it would hold an
-array; no member of that bag is printed.
+array; no member of that bag is printed. A `ports.ts` that does not parse or cannot
+be read holds both lists the same way, with its `<source>` row, whether or not a
+factory names a feature: `not read: ports.ts:1 <source>: cannot parse source`.
 
 Every other export in `ports.ts` appears in Not read as `file:line Name: reason`.
 There is no type checker, so a union, a mapped or conditional type, a generic
