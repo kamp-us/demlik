@@ -890,9 +890,10 @@ The view says what a package publishes. This report says whether each published 
 
 - One declaration per name: the first of the name's declarations in file order, then source order. An overload set and a merged declaration are therefore one, judged where the first one stands.
 - A declaration reached by two subpaths, or under two names, is one declaration. It keeps every `{ subpath, name }` that reaches it.
-- `export * as Name from "./module"` publishes one name for a whole module. The report judges that module's own exports in its place, each reached as `Name.<member>`, and so on through a namespace inside a namespace; a module already being read on the way is not entered again. The `export * as` line itself is not judged.
-- `export namespace Name { … }` and `export declare namespace Name { … }` publish their exported members the same way: each member is a declaration, reached as `Name.<member>`, and so on through a namespace inside a namespace and through a namespace merged with a function, a class or an interface. A namespace already being read on the way is not entered again. The namespace's own statement is a declaration like any other and is judged where it stands.
-- A declaration outside the analyzed path, or under a `node_modules` folder, is a dependency's and is not judged.
+- `export * as Name from "./module"` publishes one name for a whole module, and so do `import * as Name from "./module"; export { Name }` and a re-exported ambient `declare module "name"` block. The report judges that module's own exports in its place, each reached as `Name.<member>`, and so on through a namespace inside a namespace; a module already being read on the way is not entered again. The `export * as` line itself is not judged.
+- `export namespace Name { … }` and `export declare namespace Name { … }` publish the names their body exports the same way: each is a declaration, reached as `Name.<member>`, and so on through a namespace inside a namespace. A namespace already being read on the way is not entered again. What a class or an enum of the same name adds to it, a static or an enum member, is not exported from the namespace's body and is not a member.
+- A namespace that stands alone is a declaration like any other, judged at its own statement. A namespace merged with a function, a class, an interface or an enum is part of that one declaration (the first bullet), and its members are judged all the same.
+- A declaration outside the analyzed path, or under a `node_modules` folder below it, is a dependency's and is not judged. So is one behind a relative re-export that leaves the analyzed path. The folders above the analyzed path are not looked at, so a package that itself sits under a `node_modules` folder is judged like any other.
 - A file that matches one of the shape's `skip` globs is out: its declarations are not judged, not counted and never a finding.
 - A declaration is named by the name it is declared with (`make` for `export { make as create }`), and stands at the line of its statement's first token. `export const { a, b } = pair` is two declarations on one statement.
 - A declaration with no name of its own is named `default`: `export default 42` is one declaration, `default`, judged at that statement.
@@ -927,8 +928,8 @@ The view says what a package publishes. This report says whether each published 
 | `skip` | Globs (`src/kinds/glob.ts`) matched against a file's path relative to the analyzed path, `/`-separated. Optional; no glob is rewritten, so `*.test-support.ts` alone matches only a file at the root. |
 | `order` | The order tags stand in, for every block kind. Optional. |
 | `export` | The rule for the doc block of a published declaration. A block kind with no rule is not judged. |
-| a rule's `block` | `"required"`: a declaration with no block is a finding. `"optional"`: it is not, and a block that is there is still held to the rest of the rule. |
-| a rule's `description` | `"required"`: a block with an empty description is a finding. `"optional"`: it is not. |
+| a rule's `block` | A required key. `"required"`: a declaration with no block is a finding. `"optional"`: it is not, and a block that is there is still held to the rest of the rule. |
+| a rule's `description` | A required key. `"required"`: a block with an empty description is a finding. `"optional"`: it is not. |
 | a rule's `required`, `forbidden` | Tags a block must carry, and tags it must not. Both optional. |
 
 A tag is written with its `@` and compared as written, so `@Category` is not `@category`. The file is refused when a tag is not an `@` and a name, when a list names a tag twice, when one rule both requires and forbids a tag, when a `skip` glob is empty or does not compile, when it holds no rule for any block kind, and when its rules ask for nothing (every rule `optional` twice over with no tag, and no `order`).
@@ -985,13 +986,14 @@ Declarations print by file, then line, then name, each compared by code unit; th
 | Gap | When | The line, after `code-graph: warning: ` |
 |---|---|---|
 | `unresolved-specifier` | a re-export (`export … from`) in one of the package's own files names a module the program could not resolve, on the way from a module the report read: a map entry, or a module read as a namespace. `unresolvedSpecifiers` (`src/api/read.ts`, the view's own walk) finds it, asked for re-exports only | `<file> names "<specifier>", which the read could not resolve; a name behind it is not judged` |
-| `syntax-error` | the parser reported a syntax error in one of the package's own files | `<file> has <n> syntax error(s); a declaration in it may not be judged` |
-| `no-declaration` | a published name has no declaration at all | `<subpath> publishes "<name>", which the read found no declaration for; it is not judged` |
+| `syntax-error` | the parser reported a syntax error in one of the package's own files, wherever it stands in the program | `<file> has <n> syntax error(s); a declaration in it may not be judged` |
+| `no-declaration` | a name exported from one of the package's own files has no declaration at all | `<subpath> publishes "<name>", which the read found no declaration for; it is not judged` |
 
-Gaps print in the table's order, and inside a kind by file then specifier, by file, and by subpath then name. One of the package's own files is a file inside the analyzed path and under no `node_modules` folder, the same test that keeps a dependency's declaration out.
+Gaps print in the table's order, and inside a kind by file then specifier, by file, and by subpath then name. One of the package's own files is a file inside the analyzed path and under no `node_modules` folder below it, the same test that keeps a dependency's declaration out. In `--json` a gap is `{ kind, file, specifier }`, `{ kind, file, count }` or `{ kind, subpath, name }`, in the table's order.
 
 - An import the program could not resolve is no gap. An import hides no name; a name published from one reads with no declaration and is the last row's.
-- A dependency's file is no gap, whatever is wrong in it: only a dependency's names stand behind it, and those are not judged. So the report does not enter a dependency's module behind `export * as Name` at all.
+- A dependency's file is no gap, whatever is wrong in it: only a dependency's names stand behind it, and those are not judged. So the report does not enter a dependency's module behind `export * as Name` at all, and a name a dependency's own file exports with no declaration behind it, such as its re-export of an optional peer that is not installed, is no gap.
+- A syntax error counts in any of the package's own files, also one that publishes nothing. The parser's count cannot say which errors touch an export, the same tradeoff the API ledger takes for the compiler's diagnostics (§13.9).
 - A name declared in a dependency, a name declared in a file the shape skips and an `export * as` line are left out by rule and are no gap.
 - A gap in a file the shape skips stands. The read runs before the shape, and a re-export in a skipped file can lead to a file that is not skipped.
 

@@ -147,5 +147,52 @@ describe(
       expect(run.stderr).toBe(`${UNRESOLVED("./nope", "src/internal/index.ts")}\n`);
       expect(run.stdout).toBe("api docs: 1 export judged, 0 with a finding\n");
     });
+
+    it("takes a name a dependency exports with nothing behind it as no gap", () => {
+      fs.rmSync(path.join(root, "src/broken.ts"));
+      writeFiles(root, {
+        "node_modules/dep/package.json": '{ "name": "dep", "types": "index.d.ts" }\n',
+        "node_modules/dep/index.d.ts":
+          'import type { Opt } from "optional-peer";\nexport type { Opt };\nexport { Opt2 } from "optional-peer-2";\n',
+        "src/index.ts": `export * from "dep";\n${FINE}`,
+      });
+      const { facts, gaps } = readApiDocFacts(root, MAP);
+      expect(gaps).toEqual([]);
+      expect(facts.map(({ name }) => name)).toEqual(["fine"]);
+    });
+
+    it("reads a class merged with a namespace with no gap, and only the namespace's members", () => {
+      fs.rmSync(path.join(root, "src/broken.ts"));
+      writeFiles(root, {
+        "src/index.ts": [
+          FINE.replace(
+            "export const fine = 1;",
+            "export class Svc {\n  static create(): Svc {\n    return new Svc();\n  }\n  static version = 1;\n}",
+          ),
+          "export namespace Svc {",
+          FINE.replace("export const fine = 1;", "export type Opts = { readonly on: boolean };"),
+          "}",
+          "",
+        ].join("\n"),
+      });
+      const { facts, gaps } = readApiDocFacts(root, MAP);
+      expect(gaps).toEqual([]);
+      expect(facts.map(({ name }) => name).sort()).toEqual(["Opts", "Svc"]);
+      expect(facts.find(({ name }) => name === "Opts")?.reachedBy).toEqual([
+        { subpath: ".", name: "Svc.Opts" },
+      ]);
+    });
+
+    it("judges a package that itself sits under a node_modules folder", () => {
+      const vendored = path.join(root, "node_modules/vendored");
+      writeFiles(vendored, {
+        "package.json": '{ "name": "vendored" }\n',
+        "tsconfig.json": TSCONFIG,
+        "src/index.ts": FINE,
+      });
+      const { facts, gaps } = readApiDocFacts(vendored, MAP);
+      expect(gaps).toEqual([]);
+      expect(facts.map(({ file, name }) => `${file} ${name}`)).toEqual(["src/index.ts fine"]);
+    });
   },
 );
