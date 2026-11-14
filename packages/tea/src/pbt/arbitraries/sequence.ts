@@ -16,6 +16,7 @@
 
 import * as fc from "fast-check";
 import type { Cmd, Machine, Sub } from "../../index";
+import { assertDistinctCmdNames } from "../../pure/core";
 import {
   type Answerer,
   type BlindEvent,
@@ -133,6 +134,10 @@ export interface GuidedCells<
  * A step that throws ends its list on the Msg that threw, so a runner's fold meets
  * the same throw and reports it as that list's failure.
  *
+ * A `machine.cmds` that names one Cmd twice throws `CmdNameCollisionError`, as it
+ * does in `run` and `drive`. The answers here come from the cells' keys, so a
+ * repeat would not change them; the rule holds on every entry that draws or runs a list.
+ *
  * - `maxLength` (default 60) caps the events drawn, and dropped ones count, so a
  *   list comes out shorter. `size` (default `"max"`) is forwarded to `fc.array`:
  *   with most answers dropped, fast-check's `"small"` rarely gets a run anywhere.
@@ -195,6 +200,7 @@ export function arbGuidedSequence<
     readonly loaded?: NoInfer<S> | null;
   },
 ): fc.Arbitrary<readonly M[]> {
+  assertDistinctCmdNames(machine.cmds ?? []);
   type Cell = AnswerCell<C, unknown, M>;
   const outside = Object.values(cells.outside ?? {}) as fc.Arbitrary<M>[];
   const answers = Object.entries(cells.answers ?? {}) as [string, Cell][];

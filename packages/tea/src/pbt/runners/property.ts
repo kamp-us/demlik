@@ -31,6 +31,7 @@
 
 import * as fc from "fast-check";
 import { type Cmd, type Machine, msgKeysOf, type Sub } from "../../index";
+import { assertDistinctCmdNames } from "../../pure/core";
 import { type LawBreak, lawInvariant, lawTerminates, lawTrace } from "../laws";
 import { type MsgCount, MsgTally } from "./msg-tally";
 import { type Fold, foldEvents, type Step } from "./replay-fold";
@@ -419,6 +420,7 @@ function runProperty<
   opts: PropertyOpts<S> | undefined,
   check: (result: Fold<S, M, C>) => void,
 ): PropertyRun {
+  assertDistinctCmdNames(machine.cmds ?? []);
   const { loaded, failOnNeverActed, failOnUndeclaredCmd, ...settings } =
     opts ?? {};
   const params = {
@@ -483,6 +485,9 @@ function runProperty<
  *
  * `terminal` also gets the Cmds `init` sent on that list's start.
  *
+ * A `machine.cmds` that names one Cmd twice throws `CmdNameCollisionError`, before
+ * any list is folded.
+ *
  * @example
  * ```ts
  * import type { Machine } from "@demlik/tea";
@@ -544,6 +549,9 @@ export function propertyTerminates<
  * The shrinker minimizes the offending sequence to the smallest Msg list
  * that still violates the predicate.
  *
+ * A `machine.cmds` that names one Cmd twice throws `CmdNameCollisionError`, before
+ * any list is folded.
+ *
  * @example
  * ```ts
  * import type { Machine } from "@demlik/tea";
@@ -602,6 +610,9 @@ export function propertyInvariant<
  * fail: the thrown error's message names that string. An empty string fails too.
  * A throw still fails with its own message. The last argument is the Cmds `init`
  * sent on that list's start.
+ *
+ * A `machine.cmds` that names one Cmd twice throws `CmdNameCollisionError`, before
+ * any list is folded.
  *
  * @example
  * ```ts
