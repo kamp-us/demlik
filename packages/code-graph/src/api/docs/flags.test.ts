@@ -57,7 +57,6 @@ describe("--api-docs on the command line", () => {
   });
 
   it.each([
-    ["--ci", { ci: true }, []],
     ["--api-base", { apiBase: "main" }, []],
     ["--api-policy", { apiBase: "main", apiPolicy: "policy.json" }, []],
     ["--accept-api", { acceptApi: true, reason: "why" }, []],

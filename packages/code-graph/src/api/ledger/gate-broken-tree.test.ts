@@ -9,7 +9,7 @@ import {
   runCli,
   runGate,
 } from "../../test-helpers/ratchet-repo.js";
-import { API_LEDGER_FILENAME } from "./ledger.js";
+import { API_LEDGER_FILENAME } from "./names.js";
 
 const TSCONFIG = `${JSON.stringify({
   compilerOptions: {

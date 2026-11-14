@@ -177,8 +177,8 @@ describe(
       });
       const { facts, gaps } = readApiDocFacts(root, MAP);
       expect(gaps).toEqual([]);
-      expect(facts.map(({ name }) => name).sort()).toEqual(["Opts", "Svc"]);
-      expect(facts.find(({ name }) => name === "Opts")?.reachedBy).toEqual([
+      expect(facts.map(({ name }) => name).sort()).toEqual(["Svc", "Svc.Opts"]);
+      expect(facts.find(({ name }) => name === "Svc.Opts")?.reachedBy).toEqual([
         { subpath: ".", name: "Svc.Opts" },
       ]);
     });

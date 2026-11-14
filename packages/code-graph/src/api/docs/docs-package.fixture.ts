@@ -32,11 +32,17 @@ const DEPENDENCY: Readonly<Record<string, string>> = {
   "node_modules/@demo/dep/index.d.ts": "export declare const depThing: number;\n",
 };
 
+// The fixture package written into `root`, with its dependency installed.
+export function writeDocsPackage(root: string): void {
+  fs.mkdirSync(root, { recursive: true });
+  fs.cpSync(path.join(DOCS_FIXTURE, "base"), root, { recursive: true });
+  writeFiles(root, DEPENDENCY);
+}
+
 // A throwaway copy of the fixture package, in a folder that is no git repository.
 export function docsPackage(): string {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-docs-")));
-  fs.cpSync(path.join(DOCS_FIXTURE, "base"), root, { recursive: true });
-  writeFiles(root, DEPENDENCY);
+  writeDocsPackage(root);
   return root;
 }
 
@@ -47,10 +53,14 @@ export const removePackage = (root: string): void => {
 export type DocsRun = { readonly code: number; readonly stdout: string; readonly stderr: string };
 
 // The CLI as a shell runs it, with stderr kept on a run that exits 0.
-export function runDocsCli(args: readonly string[]): DocsRun {
+export function runDocsCli(
+  args: readonly string[],
+  env: Readonly<Record<string, string>> = {},
+): DocsRun {
   const run = spawnSync(process.execPath, ["--import", "tsx", CLI, ...args], {
     cwd: PACKAGE_DIR,
     encoding: "utf8",
+    env: { ...process.env, ...env },
   });
   return { code: run.status ?? -1, stdout: run.stdout, stderr: run.stderr };
 }
