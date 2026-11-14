@@ -28,7 +28,7 @@ type FindingRows = {
 };
 
 // Row order is the print order (SPEC §13.10).
-export const FINDING_KINDS: FindingRows = {
+const FINDING_KINDS: FindingRows = {
   "missing-block": {
     check: ({ block, rule }) =>
       block === null && rule.block === "required" ? [{ kind: "missing-block" }] : [],

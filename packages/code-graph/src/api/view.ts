@@ -76,7 +76,10 @@ function readNames(
           reads: (file, reexport) => reexport || tree.declarationOf(file) !== undefined,
           named: (file) => tree.declarationOf(file) ?? file,
         },
-        entryFiles,
+        entryFiles.flatMap((file) => {
+          const source = program.sourceFile(file);
+          return source === undefined ? [] : [source];
+        }),
       ),
     };
   } finally {

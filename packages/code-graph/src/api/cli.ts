@@ -76,6 +76,11 @@ function readJsonFile(file: string, what: string): unknown {
 const flagOf = (attribute: string): string =>
   `--${attribute.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
 
+function strayFlags(given: readonly string[], companions: ReadonlySet<string>): string | undefined {
+  const stray = given.filter((attribute) => !companions.has(attribute));
+  return stray.length === 0 ? undefined : stray.map(flagOf).join(", ");
+}
+
 // The ratchet (SPEC §13.5): the diff, the package's changesets since the diff's base, and the
 // verdict. The policy is parsed before the diff runs, so a bad one is refused before any emit.
 async function ratchet(
@@ -140,9 +145,9 @@ const ownCompanions = (run: ApiRun): string =>
 // A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
 // reading the map and policy files and refusing flags the mode does not take.
 export async function runApiView(run: ApiRun): Promise<number> {
-  const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
-    run.report(`--api takes only ${ownCompanions(run)}; got ${stray.map(flagOf).join(", ")}`);
+  const stray = strayFlags(run.given, API_COMPANIONS);
+  if (stray !== undefined) {
+    run.report(`--api takes only ${ownCompanions(run)}; got ${stray}`);
     return 2;
   }
   if (run.policyFile !== undefined && run.base === undefined) {
@@ -163,10 +168,10 @@ const refused = (message: string): LedgerModeRead => ({
 
 // What the flags ask of the API ledger, decided before any file is read.
 function ledgerModeOf(flags: ApiFlags, given: readonly string[]): LedgerModeRead {
-  const stray = given.filter((attribute) => !LEDGER_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
+  const stray = strayFlags(given, LEDGER_COMPANIONS);
+  if (stray !== undefined) {
     return refused(
-      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
+      `--api --ci and --api --accept-api take only --json, --pretty and --out; got ${stray}`,
     );
   }
   if (flags.acceptApi !== true) {
@@ -205,11 +210,9 @@ const asksForLedger = (flags: ApiFlags): boolean =>
 const DOCS_COMPANIONS: ReadonlySet<string> = new Set(["api", "apiDocs", ...OUTPUT_COMPANIONS]);
 
 function runDocsFlags(mapFile: string, shapeFile: string, host: ApiHost): Promise<number> {
-  const stray = host.given.filter((attribute) => !DOCS_COMPANIONS.has(attribute));
-  if (stray.length > 0) {
-    host.report(
-      `--api --api-docs take only --json, --pretty and --out; got ${stray.map(flagOf).join(", ")}`,
-    );
+  const stray = strayFlags(host.given, DOCS_COMPANIONS);
+  if (stray !== undefined) {
+    host.report(`--api --api-docs take only --json, --pretty and --out; got ${stray}`);
     return Promise.resolve(2);
   }
   return settle(host, async () => {

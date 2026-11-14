@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as ts from "../../engine/tsgo.js";
-import { findRepoRoot } from "../../extract/project.js";
+import { findRepoRoot, toRelative } from "../../extract/project.js";
 import { byText } from "../../order.js";
 import { moduleSymbolOf } from "../../resolve.js";
 import { apiSubpaths, pathInside } from "../map.js";
@@ -21,15 +21,14 @@ export type ApiDocFacts = {
   readonly gaps: readonly ApiDocGap[];
 };
 
-type ReadScope = {
+type OwnFiles = {
   readonly named: (file: string) => string;
   readonly own: (file: string) => boolean;
 };
 
-function readScope(root: string): ReadScope {
-  const named = (file: string): string => path.relative(root, file).split(path.sep).join("/");
+function readScope(root: string): OwnFiles {
   return {
-    named,
+    named: (file) => toRelative(root, file),
     own: (file: string) => {
       const inside = pathInside(root, file);
       return inside !== undefined && !inside.split(path.sep).includes("node_modules");
@@ -51,19 +50,32 @@ function documentedStatement(declaration: ts.Node): ts.Node {
   return statement;
 }
 
-function exportedFromNamespace(declaration: ts.Node): boolean {
+function isClassOrEnum(node: ts.Node): boolean {
+  return ts.isClassDeclaration(node) || ts.isClassExpression(node) || ts.isEnumDeclaration(node);
+}
+
+function exportHolder(declaration: ts.Node): ts.Node | undefined {
   for (let holder = declaration.parent; holder !== undefined; holder = holder.parent) {
-    if (ts.isModuleDeclaration(holder)) return true;
-    if (
-      ts.isClassDeclaration(holder) ||
-      ts.isClassExpression(holder) ||
-      ts.isEnumDeclaration(holder) ||
-      ts.isSourceFile(holder)
-    ) {
-      return false;
+    if (ts.isModuleDeclaration(holder) || isClassOrEnum(holder) || ts.isSourceFile(holder)) {
+      return holder;
     }
   }
-  return false;
+  return undefined;
+}
+
+function exportedFromNamespace(declaration: ts.Node): boolean {
+  const holder = exportHolder(declaration);
+  return holder !== undefined && ts.isModuleDeclaration(holder);
+}
+
+function exportedOnlyByClassOrEnum(sites: readonly ts.Node[]): boolean {
+  return (
+    sites.length > 0 &&
+    sites.every((site) => {
+      const holder = exportHolder(site);
+      return holder !== undefined && isClassOrEnum(holder);
+    })
+  );
 }
 
 function isWholeModule(declaration: ts.Node): boolean {
@@ -71,6 +83,31 @@ function isWholeModule(declaration: ts.Node): boolean {
     ts.isSourceFile(declaration) ||
     (ts.isModuleDeclaration(declaration) && ts.isStringLiteral(declaration.name))
   );
+}
+
+function isDeclarationHere(declaration: ts.Node): boolean {
+  return !(
+    (ts.isModuleDeclaration(declaration) && ts.isModuleDeclaration(declaration.parent)) ||
+    ts.isBinaryExpression(declaration) ||
+    ts.isPropertyAccessExpression(declaration) ||
+    declaration.kind === ts.SyntaxKind.JSTypeAliasDeclaration
+  );
+}
+
+function insideDeclaredModule(declaration: ts.Node): boolean {
+  for (
+    let at: ts.Node | undefined = declaration;
+    at !== undefined && !ts.isSourceFile(at);
+    at = at.parent
+  ) {
+    if (isWholeModule(at)) return true;
+  }
+  return false;
+}
+
+function pickedDeclaration(declarations: readonly ts.Node[]): ts.Node | undefined {
+  const candidates = [...declarations].sort(byFileThenPosition).filter(isDeclarationHere);
+  return candidates.find((declaration) => !insideDeclaredModule(declaration)) ?? candidates[0];
 }
 
 function docText(statement: ts.Node): string | null {
@@ -87,23 +124,23 @@ function docText(statement: ts.Node): string | null {
 class DeclarationRead {
   readonly facts = new Map<string, ApiDocFact>();
   readonly gaps: ApiDocGap[] = [];
-  readonly modules = new Set<string>();
+  readonly modules = new Map<string, ts.Node>();
 
   constructor(
     private readonly program: ts.TypeProgram,
-    private readonly scope: ReadScope,
+    private readonly scope: OwnFiles,
   ) {}
 
   from(file: string, subpath: string, prefix = "", active: ReadonlySet<string> = new Set()): void {
-    if (active.has(file) || !this.scope.own(file)) return;
+    if (!this.scope.own(file)) return;
     const symbol = moduleSymbolOf(this.program, file);
     if (symbol === undefined) return;
-    this.modules.add(file);
-    this.exportsOf(
-      publishedDeclarations(this.program, symbol),
+    this.module(
+      symbol,
+      this.program.declarations(symbol).filter(isWholeModule),
       subpath,
       prefix,
-      new Set(active).add(file),
+      active,
     );
   }
 
@@ -114,45 +151,63 @@ class DeclarationRead {
     active: ReadonlySet<string>,
   ): void {
     for (const { name, symbol, declarations, exportedAt } of exports) {
-      if (name === "") continue;
+      if (name === "" || exportedOnlyByClassOrEnum(exportedAt)) continue;
       const reached = { subpath, name: `${prefix}${name}` };
-      const declaration = [...declarations].sort(byFileThenPosition)[0];
-      if (declaration === undefined) {
+      if (declarations.length === 0) {
         if (exportedAt.some((site) => this.scope.own(site.getSourceFile().fileName))) {
           this.gaps.push({ kind: "no-declaration", ...reached });
         }
         continue;
       }
-      if (!this.scope.own(declaration.getSourceFile().fileName)) continue;
-      if (isWholeModule(declaration)) {
-        this.module(symbol, declaration, subpath, `${reached.name}.`, active);
+      if (
+        declarations.some((declaration) => !this.scope.own(declaration.getSourceFile().fileName))
+      ) {
         continue;
       }
-      this.record(declaration, reached);
-      const namespace = declarations.find(ts.isModuleDeclaration);
-      if (namespace === undefined || active.has(nodeKey(namespace))) continue;
-      const members = publishedDeclarations(this.program, symbol).filter(({ exportedAt }) =>
-        exportedAt.some(exportedFromNamespace),
-      );
-      this.exportsOf(members, subpath, `${reached.name}.`, new Set(active).add(nodeKey(namespace)));
+      const modules = declarations.filter(isWholeModule);
+      if (modules.length > 0) {
+        this.module(symbol, modules, subpath, `${reached.name}.`, active);
+        continue;
+      }
+      const declaration = pickedDeclaration(declarations);
+      if (declaration !== undefined) this.record(declaration, reached);
+      this.namespace(symbol, declarations, subpath, `${reached.name}.`, active);
     }
   }
 
-  private module(
+  private namespace(
     symbol: ts.TsSymbol,
-    declaration: ts.Node,
+    declarations: readonly ts.Node[],
     subpath: string,
     prefix: string,
     active: ReadonlySet<string>,
   ): void {
-    const key = ts.isSourceFile(declaration) ? declaration.fileName : nodeKey(declaration);
-    if (active.has(key)) return;
-    if (ts.isSourceFile(declaration)) this.modules.add(declaration.fileName);
+    const namespace = declarations.find(ts.isModuleDeclaration);
+    if (namespace === undefined || active.has(nodeKey(namespace))) return;
+    const members = publishedDeclarations(this.program, symbol).filter(({ exportedAt }) =>
+      exportedAt.some(exportedFromNamespace),
+    );
+    this.exportsOf(members, subpath, prefix, new Set(active).add(nodeKey(namespace)));
+  }
+
+  private module(
+    symbol: ts.TsSymbol,
+    declarations: readonly ts.Node[],
+    subpath: string,
+    prefix: string,
+    active: ReadonlySet<string>,
+  ): void {
+    const roots = declarations.filter((declaration) =>
+      this.scope.own(declaration.getSourceFile().fileName),
+    );
+    const keys = roots.map(nodeKey);
+    if (keys.some((key) => active.has(key))) return;
+    for (const root of roots) this.modules.set(nodeKey(root), root);
     this.exportsOf(
       publishedDeclarations(this.program, symbol),
       subpath,
       prefix,
-      new Set(active).add(key),
+      new Set([...active, ...keys]),
     );
   }
 
@@ -183,8 +238,8 @@ class DeclarationRead {
 
 function programGaps(
   program: ts.TypeProgram,
-  scope: ReadScope,
-  modules: ReadonlySet<string>,
+  scope: OwnFiles,
+  modules: ReadonlyMap<string, ts.Node>,
 ): ApiDocGap[] {
   const gaps: ApiDocGap[] = unresolvedSpecifiers(
     program,
@@ -192,7 +247,7 @@ function programGaps(
       named: scope.named,
       reads: (file, reexport) => reexport && scope.own(file),
     },
-    [...modules].sort(byText),
+    [...modules.values()].sort(byFileThenPosition),
   ).map((gap) => ({
     kind: "unresolved-specifier",
     ...gap,
@@ -214,7 +269,7 @@ export function readApiDocFacts(
     rootAbsolute,
     options.repoRoot ?? findRepoRoot(rootAbsolute),
   );
-  const entryFiles = [...new Set(subpaths.map(({ entryAbsolute }) => entryAbsolute))].sort();
+  const entryFiles = [...new Set(subpaths.map(({ entryAbsolute }) => entryAbsolute))].sort(byText);
   const program = ts.openTypeProgram({
     tsConfigPath,
     rootFiles: entryFiles,

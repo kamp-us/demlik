@@ -266,7 +266,7 @@ export type UnresolvedSpecifier = { readonly specifier: string; readonly file: s
 export function unresolvedSpecifiers(
   program: ts.TypeProgram,
   scope: ReadScope,
-  entryFiles: readonly string[],
+  roots: readonly ts.Node[],
 ): readonly UnresolvedSpecifier[] {
   const unresolved = new Map<string, UnresolvedSpecifier>();
   const seen = new Set<string>();
@@ -276,10 +276,7 @@ export function unresolvedSpecifiers(
     seen.add(nodeKey(holder));
     queue.push(holder);
   };
-  for (const file of entryFiles) {
-    const source = program.sourceFile(file);
-    if (source !== undefined) enqueue(source);
-  }
+  for (const root of roots) enqueue(root);
   for (let holder = queue.shift(); holder !== undefined; holder = queue.shift()) {
     const file = holder.getSourceFile().fileName;
     const references = moduleReferences(holder).filter(({ reexport }) =>
