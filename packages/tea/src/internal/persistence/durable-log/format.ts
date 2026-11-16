@@ -1,7 +1,6 @@
 /** The neutral serialized log format and its pure write decisions. */
 
 import type { DeliveryId } from "../../../pure/core";
-import { structuralHash } from "../../../pure/core";
 import type {
   EventSourcedOptions,
   LogAppend,
@@ -278,9 +277,33 @@ export function pendingMessages<S, M, C>(
   );
 }
 
-/** Compare serialized State without depending on object identity. */
+/** Compare codec values strictly, including own-key presence and array shape. */
 export function sameLogValue(left: unknown, right: unknown): boolean {
-  return structuralHash(left) === structuralHash(right);
+  if (Object.is(left, right)) return true;
+  if (
+    typeof left !== "object" ||
+    left === null ||
+    typeof right !== "object" ||
+    right === null
+  )
+    return false;
+  const prototype = Object.getPrototypeOf(left);
+  if (
+    prototype !== Object.getPrototypeOf(right) ||
+    (prototype !== Object.prototype &&
+      prototype !== Array.prototype &&
+      prototype !== null)
+  )
+    return false;
+  const keys = Reflect.ownKeys(left);
+  return (
+    keys.length === Reflect.ownKeys(right).length &&
+    keys.every(
+      (key) =>
+        Object.hasOwn(right, key) &&
+        sameLogValue(Reflect.get(left, key), Reflect.get(right, key)),
+    )
+  );
 }
 
 /** Query applied sources in commit order with inclusive, gap-free query positions. */
