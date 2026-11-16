@@ -619,13 +619,30 @@ The cells of `update` keep their names: a cell is still named for the variant
 it handles. A content part of an agent message keeps `type`
 (`{ type: "text", text }`), and so does a Jev question.
 
-There is no alias, nothing reads both keys, and nothing converts saved data.
+There is no alias, and nothing reads both keys. tea also converts nothing an
+older release saved. What an old save does depends on what it holds, and each
+kind has its own place to rename the key:
 
-- An event row an older release saved carries `type`. The event-sourced
-  store's default parser drops a row with no `_tag`.
-- A saved Model is not rewritten. One with no discriminant inside loads as
-  before. One whose State or stored Msgs carry `type` no longer matches its
-  machine: a schema-checked store refuses it, and a permissive one loads it and
-  the first Msg finds no cell.
+- **A Model with no discriminant inside** loads as before. There is nothing to
+  rename.
+- **A Model that is a tagged State, or that holds Msgs,** reaches your
+  `Store.migrate` exactly as it was saved, keyed `type`. `schemaMigrate(schema)`
+  refuses it, and `run` fails with `StoreRefusedError`. A `migrate` that does
+  not check the shape passes it on, and a state table has no row for it
+  (`NoCellError`). To keep the run, rename the key in `migrate`, or in the
+  second argument of `schemaMigrate`:
 
-Start those runs fresh, or convert them in your own `store.migrate`.
+  ```ts
+  const migrate = schemaMigrate(schema, (raw) => {
+    const { type, ...rest } = raw as { type?: unknown };
+    return type === undefined ? raw : { _tag: type, ...rest };
+  });
+  ```
+
+- **An event row of `doEventSourcedStore`** is read by `parseEvent`, before
+  `Store.migrate` sees anything. The default `parseEvent` drops a row with no
+  string `_tag` and raises no error, so the run resumes from the snapshot and
+  whatever rows are left. To keep the rows, pass a `parseEvent` that renames
+  the key. The store's snapshot is read by its `parse` option in the same way.
+
+If you do not need the old runs, start them fresh.

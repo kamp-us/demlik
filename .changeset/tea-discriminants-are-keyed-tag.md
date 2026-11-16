@@ -18,4 +18,4 @@ if (msg._tag === "add") count += msg.by;
 
 Rename the key where you write a Msg, a Cmd, a Sub or a State and where you read one. A cell of `update` keeps its name. A content part of an agent message (`{ type: "text", text }`) and a Jev question keep `type`.
 
-There is no alias, nothing reads both keys, and nothing converts saved data. An event row an older release saved carries `type`, and the event-sourced store's default parser drops it. A saved Model is not rewritten: one with no discriminant inside loads as before, and one whose State or stored Msgs carry `type` no longer matches its machine. Start those runs fresh, or convert them in your own `store.migrate`.
+There is no alias, and nothing reads both keys. tea also converts nothing an older release saved. A Model with no discriminant inside loads as before. A save that holds a State or a Msg keyed `type` continues only when your own boundary parse renames the key: `Store.migrate` for a saved Model, and `parseEvent` for the rows of the event-sourced store, whose default drops an old row without an error. Section 17 of the migrate guide shows each case.

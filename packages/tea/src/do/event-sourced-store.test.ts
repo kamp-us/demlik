@@ -509,6 +509,48 @@ describe("doEventSourcedStore — readEvents (public log reader)", () => {
     ]);
   });
 
+  it("a host parseEvent that renames the old key reads type-keyed rows and folds them", async () => {
+    const backing = new Map<string, string>();
+    backing.set(
+      "@@es/evt/0000000000000001",
+      JSON.stringify({ type: "inc", by: 2 }),
+    );
+    backing.set(
+      "@@es/evt/0000000000000002",
+      JSON.stringify({ _tag: "inc", by: 3 }),
+    );
+    backing.set("@@es/evt/0000000000000003", JSON.stringify({ type: "reset" }));
+    backing.set(
+      "@@es/evt/0000000000000004",
+      JSON.stringify({ type: "inc", by: 4 }),
+    );
+    const { storage } = fakeStorage(backing);
+    const reader = doEventSourcedStore<State, Msg, typeof ctx>(
+      storage,
+      counter(),
+      ctx,
+      {
+        parseEvent: (raw) => {
+          const { type, ...rest } = raw as { type?: unknown; _tag?: unknown };
+          const row = type === undefined ? rest : { _tag: type, ...rest };
+          return typeof row._tag === "string" ? (row as Msg) : null;
+        },
+      },
+    );
+
+    expect(await collect(reader.readEvents())).toEqual([
+      { seq: 1, event: { _tag: "inc", by: 2 } },
+      { seq: 2, event: { _tag: "inc", by: 3 } },
+      { seq: 3, event: { _tag: "reset" } },
+      { seq: 4, event: { _tag: "inc", by: 4 } },
+    ]);
+    expect(await reader.store.load()).toEqual({
+      _tag: "counting",
+      count: 4,
+      log: [],
+    });
+  });
+
   it("is read-only — streaming the log mutates no storage", async () => {
     const backing = new Map<string, string>();
     await liveRun(backing, sampleMsgs, 100);

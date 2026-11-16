@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCell,
   defineMachine,
+  NoCellError,
   type Reducer,
   Refusal,
   type Schema,
@@ -133,5 +135,65 @@ describe("schemaMigrate — wired as a real Store.migrate", () => {
       StoreRefusedError,
     );
     expect(store.saves).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// A State saved by a release that keyed the discriminant `type` (before ADR
+// 0037). tea converts nothing: these pin what each kind of `migrate` does with
+// such a save, and that a one-line `upcast` is enough to keep it.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("a State saved before the discriminant was keyed `_tag`", () => {
+  type Light =
+    | { readonly _tag: "red"; readonly waited: number }
+    | { readonly _tag: "green"; readonly waited: number };
+  type LightMsg = { readonly _tag: "tick" };
+
+  const lightSchema: Schema<Light> = {
+    safeParse(raw) {
+      const r = raw as { _tag?: unknown; waited?: unknown } | null;
+      return typeof r === "object" &&
+        r !== null &&
+        (r._tag === "red" || r._tag === "green") &&
+        typeof r.waited === "number"
+        ? { success: true, data: raw as Light }
+        : { success: false };
+    },
+  };
+
+  const light = defineMachine({
+    types: { model: {} as Light, msg: {} as LightMsg, ctx: undefined },
+    init: (loaded) => [loaded ?? { _tag: "red", waited: 0 }, []],
+    update: {
+      red: { tick: (s, _m) => [{ _tag: "green", waited: s.waited + 1 }, []] },
+      green: { tick: (s, _m) => [{ _tag: "red", waited: s.waited + 1 }, []] },
+    },
+  });
+
+  const oldSave = { type: "green", waited: 7 };
+
+  it("a schema-checked migrate refuses it", () => {
+    expect(schemaMigrate(lightSchema)(oldSave)).toBeInstanceOf(Refusal);
+  });
+
+  it("an upcast that renames the key keeps it", () => {
+    const migrate = schemaMigrate(lightSchema, (raw) => {
+      const { type, ...rest } = raw as { type?: unknown };
+      return type === undefined ? raw : { _tag: type, ...rest };
+    });
+    expect(migrate(oldSave)).toEqual({ _tag: "green", waited: 7 });
+    // A save already written with `_tag` passes through the same upcast.
+    expect(migrate({ _tag: "red", waited: 2 })).toEqual({
+      _tag: "red",
+      waited: 2,
+    });
+  });
+
+  it("a migrate that does not check the shape hands the machine a State with no row", () => {
+    const unchecked = oldSave as unknown as Light;
+    expect(() => applyCell(light, unchecked, { _tag: "tick" })).toThrowError(
+      NoCellError,
+    );
   });
 });
