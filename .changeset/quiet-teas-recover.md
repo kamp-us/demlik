@@ -14,3 +14,7 @@ caller `id`, and Effect handlers accept an optional invocation context for
 `deliveryIdOf`. Stores without a log retain their existing lifecycle and
 save-failure behavior. This slice adds no fenced, file or Durable Object log
 adapter and persists no timer decisions.
+
+Append individual records through an incremental projection instead of rewriting
+and revalidating history. Refuse State/Cmd payloads that change through the
+schema/JSON round trip, and retain detached contract failures as owed work.

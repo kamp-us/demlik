@@ -1,6 +1,11 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { z } from "zod";
-import { type LogStep, logUpdates } from "../index";
+import {
+  defineMachine,
+  deliveryIdOf,
+  type LogStep,
+  logUpdates,
+} from "../index";
 import {
   type Msg,
   machine,
@@ -165,7 +170,9 @@ test("two keyed drivers share a Map while isolating history, dedup, revisions, c
       key: "a/b",
     }).load(),
   ).toEqual({ files: ["left"], uploaded: [] });
-  expect(disk.size).toBe(2);
+  expect(new Set([...disk.keys()].map((key) => key.split("/")[1])).size).toBe(
+    2,
+  );
 });
 
 test("schema transformations supply canonical admitted messages to the reducer", async () => {
@@ -195,7 +202,9 @@ test("invalid derived checkpoint State falls back to committed records; malforme
   }).ready;
   await live.dispatch({ _tag: "picked", file: "one" });
   await live.stop();
-  const key = [...disk.keys()][0];
+  const key = [...disk.keys()].find(
+    (key) => JSON.parse(disk.get(key) ?? "null")?.snapshot !== null,
+  );
   if (!key) throw new Error("Missing serialized log");
   const valid = disk.get(key);
   if (!valid) throw new Error("Missing log bytes");
@@ -209,10 +218,10 @@ test("invalid derived checkpoint State falls back to committed records; malforme
   for (const bytes of [
     "{",
     JSON.stringify({ ...raw, protocol: 0 }),
-    JSON.stringify({ ...raw, version: -1 }),
+    JSON.stringify({ ...raw, seq: -1 }),
     JSON.stringify({
       ...raw,
-      records: [{ seq: 1, record: { _tag: "unknown" } }],
+      record: { _tag: "unknown" },
     }),
   ]) {
     disk.set(key, bytes);
@@ -222,4 +231,125 @@ test("invalid derived checkpoint State falls back to committed records; malforme
     await expect(invalid.commitStep(birth)).rejects.toThrow();
     expect(disk).toEqual(before);
   }
+});
+
+test.each([
+  ["birth", "state"],
+  ["birth", "command"],
+  ["step", "state"],
+  ["step", "command"],
+] as const)("refuses schema-normalized %s %s before writing", async (phase, changed) => {
+  const disk = new Map<string, string>();
+  const store = memoryEventSourcedStore(disk, {
+    state: z.object({ value: z.string().trim() }),
+    message: z.object({ _tag: z.literal("go") }),
+    command: z.object({ _tag: z.literal("upload"), value: z.string().trim() }),
+  });
+  if (phase === "step") {
+    await store.commitStep({
+      _tag: "birth",
+      at: 0,
+      state: { value: "hello" },
+      cmds: [],
+      timers: [],
+    });
+    await store.appendMessage({
+      _tag: "message",
+      id: "go",
+      at: 1,
+      msg: { _tag: "go" },
+    });
+  }
+  const before = new Map(disk);
+  const payload = {
+    state: { value: changed === "state" ? " hello " : "hello" },
+    cmds: [
+      {
+        _tag: "upload" as const,
+        value: changed === "command" ? " hello " : "hello",
+      },
+    ],
+    timers: [],
+  };
+  const result =
+    phase === "birth"
+      ? store.commitStep({ _tag: "birth", at: 0, ...payload })
+      : store.commitStep({
+          _tag: "message",
+          sourceId: "go",
+          disposition: "applied",
+          ...payload,
+        });
+  await expect(result).rejects.toThrow("round trip unchanged");
+  expect(disk).toEqual(before);
+});
+
+test("valid delivered payload is identical live and after wake for the same delivery ID", async () => {
+  const disk = new Map<string, string>();
+  const typed = {
+    state: z.object({ value: z.string().trim() }),
+    message: z.object({ _tag: z.literal("go") }),
+    command: z.object({ _tag: z.literal("upload"), value: z.string().trim() }),
+  };
+  const program = defineMachine({
+    types: {
+      model: {} as { value: string },
+      msg: {} as { _tag: "go" },
+      cmd: {} as { _tag: "upload"; value: string },
+    },
+    init: (): readonly [
+      { value: string },
+      readonly { _tag: "upload"; value: string }[],
+    ] => [{ value: "hello" }, [{ _tag: "upload", value: "hello" }]],
+    update: { go: (s) => [s, []] },
+  });
+  const handouts: unknown[] = [];
+  const interrupted = new Error("drop");
+  for (let activation = 0; activation < 2; activation += 1) {
+    const store = memoryEventSourcedStore(
+      activation === 0 ? disk : new Map(disk),
+      typed,
+    );
+    await expect(
+      run(program, {
+        store,
+        onError: () => {},
+        interpret: {
+          upload: async (cmd, ctx) => {
+            handouts.push({ id: deliveryIdOf(ctx), cmd });
+            throw interrupted;
+          },
+        },
+      }).ready,
+    ).rejects.toBe(interrupted);
+  }
+  expect(handouts).toEqual([
+    { id: 1, cmd: { _tag: "upload", value: "hello" } },
+    { id: 1, cmd: { _tag: "upload", value: "hello" } },
+  ]);
+});
+
+test("appending a fixed-size record validates and writes only that record, independent of retained history", async () => {
+  const disk = new Map<string, string>();
+  const validate = vi.fn((raw: unknown) => options.message.safeParse(raw));
+  const store = memoryEventSourcedStore(disk, {
+    ...options,
+    message: { safeParse: validate },
+  });
+  await store.commitStep(birth);
+  const sizes: number[] = [];
+  const put = disk.set.bind(disk);
+  disk.set = (key, bytes) => {
+    sizes.push(bytes.length);
+    return put(key, bytes);
+  };
+  for (let index = 0; index < 200; index += 1)
+    await store.appendMessage(input(String(index).padStart(3, "0")));
+  expect(validate.mock.calls.length).toBeLessThanOrEqual(800);
+  expect(sizes).toHaveLength(200);
+  expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(2);
+  expect(Math.max(...sizes)).toBeLessThan(256);
+  expect(
+    (await memoryEventSourcedStore(new Map(disk), options).readLog()).records,
+  ).toHaveLength(201);
 });

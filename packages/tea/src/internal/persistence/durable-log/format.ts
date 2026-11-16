@@ -278,169 +278,6 @@ export function pendingMessages<S, M, C>(
   );
 }
 
-function append<S, M, C>(
-  log: LogEnvelope<S, M, C>,
-  record: LogRecord<S, M, C>,
-): LogEnvelope<S, M, C> {
-  return {
-    ...log,
-    version: log.version + 1,
-    records: [...log.records, { seq: log.records.length + 1, record }],
-    timers:
-      record._tag === "birth" || record._tag === "step"
-        ? record.timers
-        : log.timers,
-  };
-}
-
-/** Choose first-payload-wins admission and its one physical write. */
-export function appendLogMessage<S, M, C>(
-  log: LogEnvelope<S, M, C>,
-  message: LogMessage<M>,
-  schema: Schema<M>,
-): readonly [LogEnvelope<S, M, C>, LogAppend<M>] {
-  if (log.records.length === 0)
-    throw new Error("A log requires birth before admission");
-  const existing = log.records.find(
-    (r): r is PersistedLogRecord<LogMessage<M>> =>
-      r.record._tag === "message" && r.record.id === message.id,
-  );
-  if (existing)
-    return [log, { version: log.version, appended: false, entry: existing }];
-  const canonical = parseMessage(message, schema);
-  const next = append(log, canonical);
-  return [
-    next,
-    {
-      version: next.version,
-      appended: true,
-      entry: { seq: next.records.length, record: canonical },
-    },
-  ];
-}
-
-/** Choose a data-only checkpoint over fully consumed sources. */
-export function checkpointLog<S, M, C>(
-  log: LogEnvelope<S, M, C>,
-): readonly [LogEnvelope<S, M, C>, boolean] {
-  const pending = new Set(pendingMessages(log).map((m) => m.id));
-  let through = 0;
-  for (const row of log.records) {
-    if (row.record._tag !== "message") continue;
-    if (pending.has(row.record.id)) break;
-    through = row.seq;
-  }
-  const applied = log.records.filter(
-    ({ record }) =>
-      record._tag === "step" &&
-      record.disposition === "applied" &&
-      log.records.some(
-        (r) =>
-          r.seq > (log.snapshot?.through ?? 0) &&
-          r.seq <= through &&
-          r.record._tag === "message" &&
-          r.record.id === record.sourceId,
-      ),
-  );
-  if (applied.length === 0) return [log, false];
-  // Commits are ordered by their source sequence, so this is the consumed prefix State.
-  const last = [...log.records]
-    .reverse()
-    .find(
-      ({ record }) =>
-        record._tag === "step" &&
-        log.records.some(
-          (r) =>
-            r.seq <= through &&
-            r.record._tag === "message" &&
-            r.record.id === record.sourceId,
-        ),
-    );
-  if (last?.record._tag !== "step") return [log, false];
-  return [{ ...log, snapshot: { through, state: last.record.state } }, true];
-}
-
-/** Choose one atomic State/owed/source-receipt record, with automatic checkpoint metadata. */
-export function commitLogStep<S, M, C>(
-  log: LogEnvelope<S, M, C>,
-  step: LogStep<S, M, C>,
-  every: number,
-): readonly [LogEnvelope<S, M, C>, LogCommit<C>] {
-  const existing = log.records.find(({ record }) =>
-    step._tag === "birth"
-      ? record._tag === "birth"
-      : record._tag === "step" && record.sourceId === step.sourceId,
-  );
-  if (
-    existing &&
-    (existing.record._tag === "birth" || existing.record._tag === "step")
-  )
-    return [
-      log,
-      {
-        version: log.version,
-        owed: existing.record.owed.map(({ id, effect }) => ({ id, effect })),
-      },
-    ];
-  if (step._tag === "birth" && log.records.length !== 0)
-    throw new Error("Birth requires an empty log");
-  if (step._tag === "message" && pendingMessages(log)[0]?.id !== step.sourceId)
-    throw new Error("Commit requires the first pending source");
-  const ledger = logLedger(log);
-  const owed = step.cmds.map((cmd) => ledger.owe(cmd).event);
-  const record: LogRecord<S, M, C> =
-    step._tag === "birth"
-      ? {
-          _tag: "birth",
-          at: step.at,
-          state: step.state,
-          owed,
-          timers: step.timers,
-        }
-      : {
-          _tag: "step",
-          sourceId: step.sourceId,
-          state: step.state,
-          owed,
-          timers: step.timers,
-          disposition: step.disposition,
-          ...(step.failure ? { failure: step.failure } : {}),
-        };
-  let next = append(log, record);
-  const sources = new Set(
-    log.records
-      .filter((r) => r.seq > (log.snapshot?.through ?? 0))
-      .flatMap(({ record }) => (record._tag === "message" ? [record.id] : [])),
-  );
-  const count = next.records.filter(
-    ({ record }) =>
-      record._tag === "step" &&
-      record.disposition === "applied" &&
-      sources.has(record.sourceId),
-  ).length;
-  if (count >= every) next = checkpointLog(next)[0];
-  return [
-    next,
-    {
-      version: next.version,
-      owed: owed.map(({ id, effect }) => ({ id, effect })),
-    },
-  ];
-}
-
-/** Choose an idempotent confirmation, retaining its receipt after checkpoints. */
-export function confirmLogEffect<S, M, C>(
-  log: LogEnvelope<S, M, C>,
-  id: DeliveryId,
-): readonly [LogEnvelope<S, M, C>, LogConfirmation] {
-  integer(id, 1);
-  const result = logLedger(log).confirm(id);
-  if (!result.confirmed)
-    return [log, { version: log.version, confirmed: false }];
-  const next = append(log, { _tag: "confirmed", event: result.event });
-  return [next, { version: next.version, confirmed: true }];
-}
-
 /** Compare serialized State without depending on object identity. */
 export function sameLogValue(left: unknown, right: unknown): boolean {
   return structuralHash(left) === structuralHash(right);
@@ -471,4 +308,275 @@ export function logUpdates<S, M, C>(
         ]
       : [];
   });
+}
+
+/** One physical record write and the projection change to install after acknowledgement. */
+export interface PreparedLogWrite<T> {
+  readonly suffix: string;
+  readonly bytes: string;
+  readonly result: T;
+  accept(): void;
+}
+
+type Snapshot<S, M, C> = LogRead<S, M, C>["snapshot"];
+type Frame<S, M, C> = PersistedLogRecord<LogRecord<S, M, C>> & {
+  readonly protocol: 2;
+  readonly snapshot: Snapshot<S, M, C>;
+};
+
+/** Open a private, incrementally maintained projection of validated protocol records. */
+export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
+  const records: PersistedLogRecord<LogRecord<S, M, C>>[] = [];
+  type Source = {
+    entry: PersistedLogRecord<LogMessage<M>>;
+    step?: Extract<LogRecord<S, M, C>, { _tag: "step" }>;
+    appliedCount?: number;
+  };
+  const sources = new Map<string, Source>();
+  const sourceSeqs = new Map<number, Source>();
+  const pending: Source[] = [];
+  const deliveries = new Map<DeliveryId, boolean>();
+  let cursor = 0;
+  let state: S | null = null;
+  let timers: readonly LoggedTimer<M>[] = [];
+  let birth: Extract<LogRecord<S, M, C>, { _tag: "birth" }> | undefined;
+  let high = 0;
+  let applied = 0;
+  let baseline = 0;
+  let through = 0;
+  let snapshot: Snapshot<S, M, C> = null;
+
+  function acceptSnapshot(raw: unknown): void {
+    if (raw === null) return;
+    const r = object(raw);
+    const boundary = integer(r.through, 1);
+    const source = sourceSeqs.get(boundary);
+    if (
+      !source?.step ||
+      source.appliedCount === undefined ||
+      boundary > through
+    )
+      throw new Error("Invalid checkpoint boundary");
+    if (boundary < (snapshot?.through ?? 0)) return;
+    const parsed = options.state.safeParse(r.state);
+    if (!parsed.success) return;
+    snapshot = { through: boundary, state: parsed.data };
+    baseline = source.appliedCount;
+  }
+
+  function accept(
+    row: PersistedLogRecord<LogRecord<S, M, C>>,
+    checkpoint: unknown = null,
+  ): void {
+    const { seq, record } = row;
+    if (seq !== records.length + 1 || (seq === 1 && record._tag !== "birth"))
+      throw new Error("Invalid durable log ordering");
+    const consumers = {
+      birth: (r: Extract<LogRecord<S, M, C>, { _tag: "birth" }>) => {
+        if (birth) throw new Error("Duplicate birth");
+        birth = r;
+        install(r);
+      },
+      message: (r: LogMessage<M>) => {
+        if (sources.has(r.id)) throw new Error("Duplicate log source");
+        const source = { entry: { seq, record: r } };
+        sources.set(r.id, source);
+        sourceSeqs.set(seq, source);
+        pending.push(source);
+      },
+      step: (r: Extract<LogRecord<S, M, C>, { _tag: "step" }>) => {
+        const source = pending[cursor];
+        if (source?.entry.record.id !== r.sourceId)
+          throw new Error("Invalid source receipt");
+        source.step = r;
+        if (r.disposition === "applied") applied += 1;
+        source.appliedCount = applied;
+        through = source.entry.seq;
+        cursor += 1;
+        install(r);
+      },
+      confirmed: (r: Extract<LogRecord<S, M, C>, { _tag: "confirmed" }>) => {
+        if (deliveries.get(r.event.id) !== false)
+          throw new Error("Invalid delivery receipt");
+        deliveries.set(r.event.id, true);
+      },
+    } satisfies {
+      [K in LogRecord<S, M, C>["_tag"]]: (
+        r: Extract<LogRecord<S, M, C>, { _tag: K }>,
+      ) => void;
+    };
+    // The discriminant selects the matching table row, which is total over the protocol union.
+    consumers[record._tag](record as never);
+    records.push(row);
+    acceptSnapshot(checkpoint);
+  }
+
+  function install(
+    record: Extract<LogRecord<S, M, C>, { _tag: "birth" | "step" }>,
+  ): void {
+    for (const owed of record.owed) {
+      if (owed.id <= high) throw new Error("Invalid delivery ordering");
+      high = owed.id;
+      deliveries.set(owed.id, false);
+    }
+    state = record.state;
+    timers = record.timers;
+  }
+
+  function restore(bytes: string): void {
+    const raw = object(JSON.parse(bytes));
+    if (raw.protocol === 1 && records.length === 0) {
+      const legacy = readEnvelope(bytes, options);
+      for (const row of legacy.records) accept(row);
+      acceptSnapshot(legacy.snapshot);
+      return;
+    }
+    if (raw.protocol !== 2) throw new Error("Unsupported durable log protocol");
+    accept(
+      { seq: integer(raw.seq, 1), record: parseRecord(raw.record, options) },
+      raw.snapshot,
+    );
+  }
+
+  function prepare<T>(
+    record: LogRecord<S, M, C>,
+    checkpoint: Snapshot<S, M, C>,
+    result: (row: PersistedLogRecord<LogRecord<S, M, C>>) => T,
+  ): PreparedLogWrite<T> {
+    const frame: Frame<S, M, C> = {
+      protocol: 2,
+      seq: records.length + 1,
+      record,
+      snapshot: checkpoint,
+    };
+    const bytes = JSON.stringify(frame);
+    const raw = object(JSON.parse(bytes));
+    const canonical = parseRecord(raw.record, options);
+    if (record._tag === "birth" || record._tag === "step") {
+      if (
+        canonical._tag !== record._tag ||
+        !sameLogValue(record.state, canonical.state) ||
+        !sameLogValue(record.owed, canonical.owed)
+      )
+        throw new Error(
+          "Durable State and Cmd must survive the schema/JSON round trip unchanged",
+        );
+    }
+    const row = { seq: frame.seq, record: canonical };
+    return {
+      suffix: frame.seq === 1 ? "" : `/${frame.seq}`,
+      bytes,
+      result: structuredClone(result(row)),
+      accept: () => accept(row, raw.snapshot),
+    };
+  }
+
+  return {
+    version: () => records.length,
+    state: () => structuredClone(state),
+    read: (): LogRead<S, M, C> =>
+      structuredClone({ version: records.length, records, snapshot, timers }),
+    restore,
+    restoreCheckpoint(bytes: string) {
+      const raw = object(JSON.parse(bytes));
+      if (raw.protocol !== 2)
+        throw new Error("Unsupported checkpoint protocol");
+      acceptSnapshot(raw.snapshot);
+    },
+    append(
+      message: LogMessage<M>,
+    ): LogAppend<M> | PreparedLogWrite<LogAppend<M>> {
+      if (!birth) throw new Error("A log requires birth before admission");
+      const existing = sources.get(message.id);
+      if (existing)
+        return structuredClone({
+          version: records.length,
+          appended: false,
+          entry: existing.entry,
+        });
+      const canonical = parseMessage(message, options.message);
+      return prepare(canonical, null, (row) => ({
+        version: row.seq,
+        appended: true,
+        entry: row as PersistedLogRecord<LogMessage<M>>,
+      }));
+    },
+    commit(
+      step: LogStep<S, M, C>,
+    ): LogCommit<C> | PreparedLogWrite<LogCommit<C>> {
+      const existing =
+        step._tag === "birth" ? birth : sources.get(step.sourceId)?.step;
+      if (existing)
+        return structuredClone({
+          version: records.length,
+          owed: existing.owed.map(({ id, effect }) => ({ id, effect })),
+        });
+      if (
+        step._tag === "birth"
+          ? records.length !== 0
+          : pending[cursor]?.entry.record.id !== step.sourceId
+      )
+        throw new Error("Commit requires birth or the first pending source");
+      const recorder = pendingEffectsLedger<C>({ lastId: high });
+      const owed = step.cmds.map((cmd) => recorder.owe(cmd).event);
+      const record: LogRecord<S, M, C> =
+        step._tag === "birth"
+          ? {
+              _tag: "birth",
+              at: step.at,
+              state: step.state,
+              owed,
+              timers: step.timers,
+            }
+          : {
+              _tag: "step",
+              sourceId: step.sourceId,
+              state: step.state,
+              owed,
+              timers: step.timers,
+              disposition: step.disposition,
+              ...(step.failure ? { failure: step.failure } : {}),
+            };
+      const source = pending[cursor];
+      const checkpoint =
+        source !== undefined &&
+        step._tag === "message" &&
+        step.disposition === "applied" &&
+        applied + 1 - baseline >= (options.snapshotEvery ?? 100)
+          ? { through: source.entry.seq, state: step.state }
+          : null;
+      return prepare(record, checkpoint, (row) => {
+        const r = row.record;
+        if (r._tag !== "birth" && r._tag !== "step")
+          throw new Error("Invalid committed record");
+        return {
+          version: row.seq,
+          owed: r.owed.map(({ id, effect }) => ({ id, effect })),
+        };
+      });
+    },
+    confirm(
+      id: DeliveryId,
+    ): LogConfirmation | PreparedLogWrite<LogConfirmation> {
+      integer(id, 1);
+      if (deliveries.get(id) !== false)
+        return { version: records.length, confirmed: false };
+      return prepare(
+        { _tag: "confirmed", event: { _tag: "effect_confirmed", id } },
+        null,
+        (row) => ({ version: row.seq, confirmed: true }),
+      );
+    },
+    checkpoint(): boolean | PreparedLogWrite<boolean> {
+      if (applied === baseline || state === null) return false;
+      const next = { through, state };
+      const bytes = JSON.stringify({ protocol: 2, snapshot: next });
+      return {
+        suffix: "/checkpoint",
+        bytes,
+        result: true,
+        accept: () => acceptSnapshot(next),
+      };
+    },
+  };
 }

@@ -36,9 +36,12 @@ operations. The engine and handlers communicate through asynchronous store and
 handler calls; initialization and reduction remain synchronous and pure. There
 is one transition tail shared by the Promise and Effect engines.
 
-The memory adapter serializes a namespace envelope into a caller-owned
-`Map<string, string>`. Each mutation reads, decides and writes synchronously
-before yielding. A transition uses one Map mutation containing its State, every
+The memory adapter serializes each protocol record into its own namespaced cell
+in a caller-owned `Map<string, string>`. Cold recovery validates retained
+records once and builds admission, receipt and checkpoint indexes. An active
+writer validates and serializes only its new record, without scanning history.
+Each mutation reads, decides and writes synchronously before yielding.
+A transition uses one Map mutation containing its State, every
 newly owed command, an applied/ignored/rejected source receipt and any automatic
 checkpoint. The engine never calls the inherited snapshot `save` on a log store.
 
@@ -54,6 +57,9 @@ checkpoint. The engine never calls the inherited snapshot `save` on a log store.
   tail when available, including the State produced by supervised restart.
   Never run a committed reducer again. Consume pending sources before handing
   out surviving deliveries; recovery executes no historical command or Sub.
+- State and Cmd payloads must survive JSON serialization and schema validation
+  unchanged. Refuse lossy or normalized payloads before writing so a delivery
+  has the same value live and after wake. Message normalization remains allowed.
 - The store assigns positive safe-integer delivery IDs, increasing monotonically
   with gaps permitted. Retain the high-water after confirmation. Every handout
   receives its persisted ID in a fresh invocation context.
