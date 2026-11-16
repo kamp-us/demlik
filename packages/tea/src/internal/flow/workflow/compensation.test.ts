@@ -56,16 +56,16 @@ const STEPS: readonly WorkflowStep<Activity>[] = [
 ];
 
 function ok(id: number, result: Result): ActivityOk<Result> {
-  return { type: "activity_ok", id, result };
+  return { _tag: "activity_ok", id, result };
 }
 function err(id: number, failure: Failure): ActivityErr<Failure> {
-  return { type: "activity_err", id, failure };
+  return { _tag: "activity_err", id, failure };
 }
 function compOk(id: number): CompensationOk {
-  return { type: "compensation_ok", id };
+  return { _tag: "compensation_ok", id };
 }
 function compErr(id: number, failure: Failure): CompensationErr<Failure> {
-  return { type: "compensation_err", id, failure };
+  return { _tag: "compensation_err", id, failure };
 }
 
 /**
@@ -152,7 +152,7 @@ describe("reverse-order compensation (#125 AC1)", () => {
     if (pivot.state.status !== "compensating") throw new Error("unreachable");
     expect(pivot.state.current.index).toBe(2);
     expect(pivot.cmds).toHaveLength(1);
-    expect(pivot.cmds[0].type).toBe("workflow_compensation");
+    expect(pivot.cmds[0]._tag).toBe("workflow_compensation");
     expect((pivot.cmds[0] as CompensationCmd<Activity>).compensation).toBe(
       "void-ticket",
     );
@@ -218,7 +218,7 @@ describe("each compensation is a durable owed effect (#125 AC2)", () => {
     // Fail s1 → pivot. Ledger owes the compensation for s0; the Cmd carries the
     // same id; owed precedes dispatch in the ledger array.
     const pivot = wf.onActivityErr(state, err(state.current.id, "boom"));
-    const owed = pivot.ledger.filter((e) => e.type === "effect_owed");
+    const owed = pivot.ledger.filter((e) => e._tag === "effect_owed");
     expect(owed).toHaveLength(1);
     expect(pivot.cmds).toHaveLength(1);
     expect((owed[0] as { id: number }).id).toBe(pivot.cmds[0].id);
@@ -229,7 +229,7 @@ describe("each compensation is a durable owed effect (#125 AC2)", () => {
     const compId = pivot.state.current.id;
     const settled = wf.onCompensationOk(pivot.state, compOk(compId));
     const confirms = settled.ledger.filter(
-      (e) => e.type === "effect_confirmed",
+      (e) => e._tag === "effect_confirmed",
     );
     expect(confirms).toHaveLength(1);
     expect((confirms[0] as { id: number }).id).toBe(compId);
@@ -262,7 +262,7 @@ describe("each compensation is a durable owed effect (#125 AC2)", () => {
     const survivors = wf.survivingActivities(allEvents);
     expect(survivors).toHaveLength(1);
     expect(survivors[0]).toEqual(compCmd);
-    expect(survivors[0].type).toBe("workflow_compensation");
+    expect(survivors[0]._tag).toBe("workflow_compensation");
 
     // Confirm once, then a duplicate (re-emitted) compensation result is a
     // no-op: state unchanged, no effects.

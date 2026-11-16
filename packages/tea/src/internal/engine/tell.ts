@@ -12,7 +12,7 @@ import { type Postable, post, type TellAnswer } from "./loop";
  * the `post` symbol, so a handle that did not come from `run` reaches this only
  * through a cast. It is refused here, loudly: it has no line to put a Msg on.
  */
-export function tellRun<S, M extends { type: string }>(
+export function tellRun<S, M extends { _tag: string }>(
   machine: Parameters<typeof acceptedTypes>[0],
   runtime: object,
   msg: M,
@@ -24,6 +24,6 @@ export function tellRun<S, M extends { type: string }>(
     );
   }
   return postable(msg, (state) =>
-    acceptedTypes(machine, state).includes(msg.type),
+    acceptedTypes(machine, state).includes(msg._tag),
   );
 }

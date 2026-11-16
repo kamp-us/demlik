@@ -3,7 +3,7 @@
  * test under `src/internal/` (#46, #47, ADR 0014).
  *
  * A family moves into this folder and is retyped onto `Cmd.define` in the same
- * PR. Nothing in the type system refuses a hand-written `{ type: "x" }` beside
+ * PR. Nothing in the type system refuses a hand-written `{ _tag: "x" }` beside
  * a constructor — `Cmd<T>`'s phantoms are optional on purpose, so a literal
  * still satisfies the union — which means the only thing that keeps a folder
  * on ONE form is a check that reads the source. This is that check, shared so
@@ -14,8 +14,8 @@
  *   1. No hand-written Cmd TYPE remains — `Cmd<"…">` / `Cmd<typeof MsgType.…>`
  *      was the pre-retype shape; the retyped one is `CmdOf<typeof def>`.
  *   2. No object literal spells a Cmd discriminant a `Cmd.define` in the
- *      folder declares — `type: "$deadline:decision"` beside its def
- *      is the drift this catches. Msg and Sub literals share the `type:` key
+ *      folder declares — `_tag: "$deadline:decision"` beside its def
+ *      is the drift this catches. Msg and Sub literals share the `_tag:` key
  *      and are deliberately NOT in scope: only the names a def claims count.
  *
  * A def may claim a FAMILY of names rather than one: `Cmd.define(`${name}_run`,
@@ -23,7 +23,7 @@
  * literal to register. The scanner records the template's static tail (`_run`)
  * in {@link Scan.definedSuffixes}, and a literal ENDING in one is drift exactly
  * as a literal matching a concrete name is — which keeps the check wider than
- * it was, not narrower: `type: "jev_run"` is caught beside `type:
+ * it was, not narrower: `_tag: "jev_run"` is caught beside `_tag:
  * MsgType.ResilientRun`.
  *
  * Comments are blanked before scanning (JSDoc quotes the old literal shape as
@@ -92,7 +92,7 @@ const DEFINE = /\bCmd\.define\(\s*(?:"([^"]+)"|MsgType\.(\w+))/g;
 // whose static tail is the channel — `Cmd.define(`${name}_run`, …)`.
 const DEFINE_FAMILY = /\bCmd\.define\(\s*`\$\{[^}]+\}([^`]+)`/g;
 const HAND_TYPE = /\bCmd<\s*(?:"([^"]+)"|typeof MsgType\.(\w+))\s*>/g;
-const LITERAL = /\btype:\s*(?:"([^"]+)"|MsgType\.(\w+))/g;
+const LITERAL = /\b_tag:\s*(?:"([^"]+)"|MsgType\.(\w+))/g;
 
 export function scan(files: readonly SourceFile[]): Scan {
   const defined = new Set<string>();

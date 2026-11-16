@@ -16,15 +16,15 @@ import {
   propertyTrace,
 } from "../pbt";
 
-type State = { readonly type: "idle" } | { readonly type: "done" };
-type Msg = { readonly type: "finish" };
+type State = { readonly _tag: "idle" } | { readonly _tag: "done" };
+type Msg = { readonly _tag: "finish" };
 
 declare const machine: Machine<State, Msg, never, never, object>;
 declare const seqArb: fc.Arbitrary<readonly Msg[]>;
 declare const stateArb: fc.Arbitrary<State>;
 declare const otherArb: fc.Arbitrary<{ readonly other: true }>;
 
-const terminal = (s: State) => s.type === "done";
+const terminal = (s: State) => s._tag === "done";
 
 // A failing run can't pass through a forwarded setting.
 propertyTerminates(machine, {}, seqArb, terminal, {
@@ -50,7 +50,7 @@ propertyTrace(machine, {}, seqArb, () => true, {
 
 // `loaded` is a state, null, or an arbitrary of the machine's state that can
 // also draw null: what storage hands back on a fresh start.
-propertyTrace(machine, {}, seqArb, () => true, { loaded: { type: "idle" } });
+propertyTrace(machine, {}, seqArb, () => true, { loaded: { _tag: "idle" } });
 propertyTrace(machine, {}, seqArb, () => true, { loaded: null });
 propertyTrace(machine, {}, seqArb, () => true, { loaded: stateArb });
 propertyTrace(machine, {}, seqArb, () => true, {
@@ -70,9 +70,9 @@ const shared: PropertyOpts<State> = {
 propertyTrace(machine, {}, seqArb, () => true, shared);
 
 // Each check's last argument is what `init` sent, typed as the machine's Cmds.
-type Ping = { readonly type: "ping" };
+type Ping = { readonly _tag: "ping" };
 declare const pinging: Machine<State, Msg, Ping, never, object>;
-const isPing = (cmds: readonly Ping[]) => cmds.every((c) => c.type === "ping");
+const isPing = (cmds: readonly Ping[]) => cmds.every((c) => c._tag === "ping");
 propertyTerminates(pinging, {}, seqArb, (_s, initCmds) => isPing(initCmds));
 propertyInvariant(pinging, {}, seqArb, (_s, initCmds) => isPing(initCmds));
 propertyTrace(pinging, {}, seqArb, (_s, _f, initCmds) => isPing(initCmds));
@@ -102,9 +102,9 @@ propertyTrace(machine, {}, seqArb, () => true, {
 // boolean check, however it was declared, still compiles.
 declare const answer: boolean | string | null;
 const plainStep = (step: { readonly next: State }): boolean =>
-  step.next.type === "done";
+  step.next._tag === "done";
 const plainTrace = (_steps: readonly unknown[], final: State): boolean =>
-  final.type === "done";
+  final._tag === "done";
 propertyInvariant(machine, {}, seqArb, plainStep);
 propertyInvariant(machine, {}, seqArb, () => answer);
 propertyTrace(machine, {}, seqArb, plainTrace);

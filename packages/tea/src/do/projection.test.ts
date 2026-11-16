@@ -38,16 +38,16 @@ import {
 // State folds every Msg, so an arbitrary Msg sequence exercises a real fold.
 
 interface State {
-  readonly type: "counting";
+  readonly _tag: "counting";
   readonly count: number;
   readonly log: readonly string[];
 }
 
 type Msg =
-  | { type: "inc"; by: number }
-  | { type: "dec"; by: number }
-  | { type: "reset" }
-  | { type: "note"; text: string };
+  | { _tag: "inc"; by: number }
+  | { _tag: "dec"; by: number }
+  | { _tag: "reset" }
+  | { _tag: "note"; text: string };
 
 const update: Reducer<State, Msg, never> = {
   inc: (s, m) => [{ ...s, count: s.count + m.by }, []],
@@ -63,27 +63,27 @@ function counter() {
       msg: {} as Msg,
       ctx: {} as Record<string, never>,
     },
-    init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
+    init: (loaded) => [loaded ?? { _tag: "counting", count: 0, log: [] }, []],
     update,
   });
 }
 
 const ctx: Record<string, never> = {};
 
-const INITIAL: State = { type: "counting", count: 0, log: [] };
+const INITIAL: State = { _tag: "counting", count: 0, log: [] };
 
 const msgTable: MsgArbitraryTable<Msg> = {
   inc: fc.record({
-    type: fc.constant<"inc">("inc"),
+    _tag: fc.constant<"inc">("inc"),
     by: fc.integer({ min: 1, max: 10 }),
   }),
   dec: fc.record({
-    type: fc.constant<"dec">("dec"),
+    _tag: fc.constant<"dec">("dec"),
     by: fc.integer({ min: 1, max: 10 }),
   }),
-  reset: fc.constant({ type: "reset" as const }),
+  reset: fc.constant({ _tag: "reset" as const }),
   note: fc.record({
-    type: fc.constant<"note">("note"),
+    _tag: fc.constant<"note">("note"),
     text: fc.string(),
   }),
 };
@@ -114,7 +114,7 @@ function countProjection(
     apply(view, u) {
       const msg = u.msg;
       if (msg === null) return view; // boot update — event-shaped projection skips it
-      switch (msg.type) {
+      switch (msg._tag) {
         case "inc":
           return { ...view, total: view.total + msg.by };
         case "dec":
@@ -160,7 +160,7 @@ function streamOf(msgs: readonly Msg[]): { msg: Msg | null; model: State }[] {
   ];
   let model = INITIAL;
   for (const m of msgs) {
-    [model] = update[m.type](model, m as never);
+    [model] = update[m._tag](model, m as never);
     stream.push({ msg: m, model });
   }
   return stream;
@@ -214,10 +214,10 @@ describe("Projection — rebuild-equivalence", () => {
     // A run of inc/dec then reset: the write-model count is 0 after reset, and so
     // is the event-fold total — but they reach 0 via independent paths.
     const msgs: Msg[] = [
-      { type: "inc", by: 5 },
-      { type: "dec", by: 2 },
-      { type: "note", text: "x" },
-      { type: "reset" },
+      { _tag: "inc", by: 5 },
+      { _tag: "dec", by: 2 },
+      { _tag: "note", text: "x" },
+      { _tag: "reset" },
     ];
     const r = rebuildProjection(
       countProjection(() => {}),
@@ -235,7 +235,7 @@ describe("Projection — rebuild-equivalence", () => {
     // A single `inc by 7`: if `updates[0]` is dropped, the total is 0; it must be 7.
     const single = rebuildProjection(
       countProjection(() => {}),
-      [{ msg: { type: "inc", by: 7 }, model: INITIAL }],
+      [{ msg: { _tag: "inc", by: 7 }, model: INITIAL }],
     );
     expect(single.view()).toEqual({ total: 7, notes: 0 });
 
@@ -243,9 +243,9 @@ describe("Projection — rebuild-equivalence", () => {
     const several = rebuildProjection(
       countProjection(() => {}),
       [
-        { msg: { type: "note", text: "first" }, model: INITIAL },
-        { msg: { type: "inc", by: 2 }, model: INITIAL },
-        { msg: { type: "inc", by: 3 }, model: INITIAL },
+        { msg: { _tag: "note", text: "first" }, model: INITIAL },
+        { msg: { _tag: "inc", by: 2 }, model: INITIAL },
+        { msg: { _tag: "inc", by: 3 }, model: INITIAL },
       ],
     );
     expect(several.view()).toEqual({ total: 5, notes: 1 });
@@ -265,12 +265,12 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     const runner = runProjection(countProjection((v) => emitted.push(v)));
 
     const u1 = {
-      msg: { type: "inc", by: 3 } as Msg,
+      msg: { _tag: "inc", by: 3 } as Msg,
       model: INITIAL,
       offset: 1,
     };
     const u2 = {
-      msg: { type: "inc", by: 4 } as Msg,
+      msg: { _tag: "inc", by: 4 } as Msg,
       model: INITIAL,
       offset: 2,
     };
@@ -292,9 +292,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
   it("resuming from a stored offset does not reprocess the last-applied event (exclusive, no ±1)", () => {
     // Build a runner that already applied through offset 2 (the eviction point).
     const stream = streamOf([
-      { type: "inc", by: 10 },
-      { type: "inc", by: 5 },
-      { type: "inc", by: 1 },
+      { _tag: "inc", by: 10 },
+      { _tag: "inc", by: 5 },
+      { _tag: "inc", by: 1 },
     ]);
     // stream offsets: 0 boot, 1 inc10, 2 inc5, 3 inc1.
     const live = runProjection(countProjection(() => {}));
@@ -325,7 +325,7 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     // A new event strictly after the stored offset DOES apply.
     expect(
       resumed.present({
-        msg: { type: "inc", by: 100 } as Msg,
+        msg: { _tag: "inc", by: 100 } as Msg,
         model: INITIAL,
         offset: 4,
       }),
@@ -335,9 +335,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
 
   it("rebuild after reset re-folds the full stream to the same view", () => {
     const stream = streamOf([
-      { type: "inc", by: 2 },
-      { type: "note", text: "a" },
-      { type: "dec", by: 1 },
+      { _tag: "inc", by: 2 },
+      { _tag: "note", text: "a" },
+      { _tag: "dec", by: 1 },
     ]);
     const runner = runProjection(countProjection(() => {}));
     stream.forEach((s, i) => {
@@ -373,7 +373,7 @@ describe("Projection — one model, many projections", () => {
         const stream = streamOf(msgs);
         // biome-ignore lint/style/noNonNullAssertion: streamOf always emits a boot event, so the stream is non-empty and its last element exists under noUncheckedIndexedAccess
         expect(state.count).toBe(stream[stream.length - 1]!.model.count);
-        expect(count.notes).toBe(msgs.filter((m) => m.type === "note").length);
+        expect(count.notes).toBe(msgs.filter((m) => m._tag === "note").length);
       }),
       { numRuns: 50 },
     );
@@ -387,7 +387,7 @@ describe("Projection — one model, many projections", () => {
       id: { name: "poison", key: "main" },
       initial: 0,
       apply(view, u) {
-        if (u.msg?.type === "dec") throw new Error("boom");
+        if (u.msg?._tag === "dec") throw new Error("boom");
         return view + 1;
       },
       emit: () => {},
@@ -400,9 +400,9 @@ describe("Projection — one model, many projections", () => {
     const poisonRunner = registry.register(poison);
 
     registry.dispatch(null, INITIAL); // offset 0 — boot update (both projections skip)
-    registry.dispatch({ type: "inc", by: 1 }, INITIAL); // offset 1
-    registry.dispatch({ type: "dec", by: 1 }, INITIAL); // offset 2 — poison throws
-    registry.dispatch({ type: "inc", by: 1 }, INITIAL); // offset 3
+    registry.dispatch({ _tag: "inc", by: 1 }, INITIAL); // offset 1
+    registry.dispatch({ _tag: "dec", by: 1 }, INITIAL); // offset 2 — poison throws
+    registry.dispatch({ _tag: "inc", by: 1 }, INITIAL); // offset 3
 
     // The good projection saw all three updates; its view is intact.
     expect(goodRunner.view()).toEqual({ total: 1, notes: 0 });
@@ -424,7 +424,7 @@ describe("Projection — one model, many projections", () => {
       id: { name: "poison", key: "main" },
       initial: 0,
       apply(view, u) {
-        if (u.msg?.type === "dec") throw new Error("boom");
+        if (u.msg?._tag === "dec") throw new Error("boom");
         return view + 1;
       },
       emit: () => {},
@@ -436,8 +436,8 @@ describe("Projection — one model, many projections", () => {
     registry.register(poison);
 
     registry.dispatch(null, INITIAL); // offset 0 — boot (skipped)
-    registry.dispatch({ type: "inc", by: 1 }, INITIAL); // offset 1 — folds cleanly
-    registry.dispatch({ type: "dec", by: 1 }, INITIAL); // offset 2 — throws
+    registry.dispatch({ _tag: "inc", by: 1 }, INITIAL); // offset 1 — folds cleanly
+    registry.dispatch({ _tag: "dec", by: 1 }, INITIAL); // offset 2 — throws
 
     // The throw did not strand the loop, but it did NOT vanish: exactly one
     // error surfaced, tagged with the failing projection's id (errors-are-data).
@@ -453,7 +453,7 @@ describe("Projection — one model, many projections", () => {
     const b = registry.register(stateProjection(() => {}));
 
     registry.dispatch(null, INITIAL); // offset 0 — boot
-    registry.dispatch({ type: "inc", by: 5 }, { ...INITIAL, count: 5 }); // offset 1
+    registry.dispatch({ _tag: "inc", by: 5 }, { ...INITIAL, count: 5 }); // offset 1
     expect(a.view()).toEqual({ total: 5, notes: 0 });
     expect(b.view()).toEqual({ count: 5 });
 
@@ -484,8 +484,8 @@ describe("sseProjection — sseHub as one projection over the seam", () => {
     const runtime = run(counter(), { ctx });
     const detach = driveProjections(registry, runtime);
     await runtime.ready;
-    await runtime.dispatch({ type: "inc", by: 3 });
-    await runtime.dispatch({ type: "inc", by: 4 });
+    await runtime.dispatch({ _tag: "inc", by: 3 });
+    await runtime.dispatch({ _tag: "inc", by: 4 });
     detach();
     await runtime.stop();
 
@@ -504,17 +504,17 @@ describe("sseProjection — sseHub as one projection over the seam", () => {
 
     // Only "note" maps to an event; inc/dec/reset are skips.
     const projection = sseProjection<State, Msg, SseEvent>(hub, (msg) =>
-      msg?.type === "note" ? { kind: "note", text: msg.text } : null,
+      msg?._tag === "note" ? { kind: "note", text: msg.text } : null,
     );
     const runner = runProjection(projection);
 
-    runner.present({ msg: { type: "inc", by: 1 }, model: INITIAL, offset: 1 });
+    runner.present({ msg: { _tag: "inc", by: 1 }, model: INITIAL, offset: 1 });
     runner.present({
-      msg: { type: "note", text: "hi" },
+      msg: { _tag: "note", text: "hi" },
       model: INITIAL,
       offset: 2,
     });
-    runner.present({ msg: { type: "reset" }, model: INITIAL, offset: 3 });
+    runner.present({ msg: { _tag: "reset" }, model: INITIAL, offset: 3 });
 
     expect(received).toEqual([{ kind: "note", text: "hi" }]);
   });

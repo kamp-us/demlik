@@ -54,7 +54,7 @@ const BASE = 1_000_000;
 
 // The running `deadline` Sub the engine hands the runner for `list`.
 function running(...list: DeadlineSub[]): DeadlinesSub {
-  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
+  return { id: subIdOf("deadline", list), _tag: "deadline", deps: list };
 }
 
 describe("cockatiel timeout vectors → tea deadline", () => {

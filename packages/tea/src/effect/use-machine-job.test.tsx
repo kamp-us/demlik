@@ -22,10 +22,10 @@ class Greeter extends Context.Service<
 
 type Tile = { readonly n: number; readonly greeting: string };
 type Msg =
-  | { readonly type: "inc" }
-  | { readonly type: "greet" }
-  | { readonly type: "greeted"; readonly text: string };
-type Say = { readonly type: "say"; readonly name: string };
+  | { readonly _tag: "inc" }
+  | { readonly _tag: "greet" }
+  | { readonly _tag: "greeted"; readonly text: string };
+type Say = { readonly _tag: "say"; readonly name: string };
 type Ticker = Sub<"ticker", { readonly name: string }>;
 
 const names = ["a", "b", "c"] as const;
@@ -43,10 +43,10 @@ function tileMachine(name: Name) {
     init: () => [{ n: 0, greeting: "" }, []],
     update: {
       inc: (s) => [{ ...s, n: s.n + 1 }, []],
-      greet: (s) => [s, [{ type: "say", name }]],
+      greet: (s) => [s, [{ _tag: "say", name }]],
       greeted: (s, msg) => [{ ...s, greeting: msg.text }, []],
     },
-    subs: [{ type: "ticker", deps: () => ({ name }) }],
+    subs: [{ _tag: "ticker", deps: () => ({ name }) }],
   });
 }
 
@@ -118,7 +118,7 @@ it("three tiles on one runtime: one run each, Streams paused by a hide, a Cmd la
           Effect.gen(function* () {
             const greeter = yield* Greeter;
             yield* Effect.promise(() => t.answer);
-            return { type: "greeted", text: greeter.greet(cmd.name) } as const;
+            return { _tag: "greeted", text: greeter.greet(cmd.name) } as const;
           }),
       },
       subscribe: {
@@ -144,7 +144,7 @@ it("three tiles on one runtime: one run each, Streams paused by a hide, a Cmd la
       <button
         type="button"
         data-tile={name}
-        onClick={() => send({ type: "inc" })}
+        onClick={() => send({ _tag: "inc" })}
       >
         {name}:{state.n}:{state.greeting}
       </button>
@@ -179,7 +179,7 @@ it("three tiles on one runtime: one run each, Streams paused by a hide, a Cmd la
 
     // Tile b's Cmd is in flight across the first hide and lands during it.
     await act(async () => {
-      tiles.b.send?.({ type: "greet" });
+      tiles.b.send?.({ _tag: "greet" });
     });
     for (let cycle = 1; cycle <= 3; cycle++) {
       await settle(window(true));

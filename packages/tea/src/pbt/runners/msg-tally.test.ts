@@ -17,32 +17,32 @@ import { foldEvents, type Step } from "./replay-fold";
 // holds: nothing on the cut path runs, so nothing on it can break.
 
 type State =
-  | { readonly type: "draft"; readonly edits: number }
-  | { readonly type: "reviewing"; readonly edits: number }
-  | { readonly type: "approved"; readonly edits: number }
-  | { readonly type: "merged"; readonly edits: number };
+  | { readonly _tag: "draft"; readonly edits: number }
+  | { readonly _tag: "reviewing"; readonly edits: number }
+  | { readonly _tag: "approved"; readonly edits: number }
+  | { readonly _tag: "merged"; readonly edits: number };
 
 type Msg =
-  | { readonly type: "edit" }
-  | { readonly type: "submit" }
-  | { readonly type: "reject" }
-  | { readonly type: "approve" }
-  | { readonly type: "merge" };
+  | { readonly _tag: "edit" }
+  | { readonly _tag: "submit" }
+  | { readonly _tag: "reject" }
+  | { readonly _tag: "approve" }
+  | { readonly _tag: "merge" };
 
-type Notify = { readonly type: "notify" };
+type Notify = { readonly _tag: "notify" };
 
 const update: Reducer<State, Msg, Notify> = {
   edit: (s) =>
-    s.type === "draft" ? [{ ...s, edits: s.edits + 1 }, []] : [s, []],
+    s._tag === "draft" ? [{ ...s, edits: s.edits + 1 }, []] : [s, []],
   submit: (s) =>
-    s.type === "draft" ? [{ ...s, type: "reviewing" }, []] : [s, []],
+    s._tag === "draft" ? [{ ...s, _tag: "reviewing" }, []] : [s, []],
   reject: (s) =>
-    s.type === "reviewing" ? [{ ...s, type: "draft" }, []] : [s, []],
+    s._tag === "reviewing" ? [{ ...s, _tag: "draft" }, []] : [s, []],
   approve: (s) =>
-    s.type === "reviewing" ? [{ ...s, type: "approved" }, []] : [s, []],
+    s._tag === "reviewing" ? [{ ...s, _tag: "approved" }, []] : [s, []],
   merge: (s) =>
-    s.type === "approved"
-      ? [{ ...s, type: "merged" }, [{ type: "notify" }]]
+    s._tag === "approved"
+      ? [{ ...s, _tag: "merged" }, [{ _tag: "notify" }]]
       : [s, []],
 };
 
@@ -54,7 +54,7 @@ const defineReview = (cells: Reducer<State, Msg, Notify>) =>
       cmd: {} as Notify,
       ctx: {} as Record<string, never>,
     },
-    init: (loaded) => [loaded ?? { type: "draft", edits: 0 }, []],
+    init: (loaded) => [loaded ?? { _tag: "draft", edits: 0 }, []],
     update: cells,
   });
 
@@ -63,11 +63,11 @@ const healthy = defineReview(update);
 const cut = defineReview({ ...update, approve: (s) => [s, []] });
 
 const msgArb = arbMsg<Msg>({
-  edit: fc.constant({ type: "edit" as const }),
-  submit: fc.constant({ type: "submit" as const }),
-  reject: fc.constant({ type: "reject" as const }),
-  approve: fc.constant({ type: "approve" as const }),
-  merge: fc.constant({ type: "merge" as const }),
+  edit: fc.constant({ _tag: "edit" as const }),
+  submit: fc.constant({ _tag: "submit" as const }),
+  reject: fc.constant({ _tag: "reject" as const }),
+  approve: fc.constant({ _tag: "approve" as const }),
+  merge: fc.constant({ _tag: "merge" as const }),
 });
 
 const longLists = arbMsgSequence(msgArb, { size: "max" });
@@ -77,11 +77,11 @@ const SEEDS = [1, 42, 20261101];
 // Every law the two machines share, as one check.
 const lawsHold = ({ prev, next }: Step<State, Msg, Notify>): string | null => {
   if (
-    next.type === "approved" &&
-    !["reviewing", "approved"].includes(prev.type)
+    next._tag === "approved" &&
+    !["reviewing", "approved"].includes(prev._tag)
   )
     return "only a review approves";
-  if (next.type === "merged" && !["approved", "merged"].includes(prev.type))
+  if (next._tag === "merged" && !["approved", "merged"].includes(prev._tag))
     return "only an approved change merges";
   return next.edits < prev.edits ? "edits only grow" : null;
 };
@@ -134,8 +134,8 @@ const countsOver = (lists: readonly (readonly Msg[])[]) => {
   }
   for (const msgs of lists) {
     for (const step of foldEvents(healthy, {}, null, msgs).steps) {
-      const count = counts.get(step.msg.type);
-      if (!count) throw new Error(`unknown type ${step.msg.type}`);
+      const count = counts.get(step.msg._tag);
+      if (!count) throw new Error(`unknown type ${step.msg._tag}`);
       count.drawn += 1;
       const changed = structuralHash(step.next) !== structuralHash(step.prev);
       if (changed || step.cmds.length > 0) count.acted += 1;
@@ -266,7 +266,7 @@ describe("msgCounts", () => {
         longLists,
         (steps, final) => {
           lists.push(steps.map((step) => step.msg));
-          return final.type !== "merged";
+          return final._tag !== "merged";
         },
         { seed: 1 },
       ),
@@ -290,7 +290,7 @@ describe("msgCounts", () => {
       propertyTrace(
         throwing,
         {},
-        arbMsgSequence(fc.constant<Msg>({ type: "edit" }), { minLength: 1 }),
+        arbMsgSequence(fc.constant<Msg>({ _tag: "edit" }), { minLength: 1 }),
         () => true,
         { seed: 1 },
       ),
@@ -309,7 +309,7 @@ describe("msgCounts", () => {
       {},
       longLists,
       (steps, final) => {
-        fc.pre(final.type !== "merged");
+        fc.pre(final._tag !== "merged");
         lists.push(steps.map((step) => step.msg));
         return true;
       },
@@ -331,7 +331,7 @@ describe("msgCounts", () => {
   it("counts a step that only sent a Cmd as acting", () => {
     const pinging = defineReview({
       ...update,
-      edit: (s) => [s, [{ type: "notify" }]],
+      edit: (s) => [s, [{ _tag: "notify" }]],
     });
     const run = propertyTrace(pinging, {}, longLists, () => true, { seed: 1 });
 
@@ -341,7 +341,7 @@ describe("msgCounts", () => {
 
 describe("a Msg type never drawn", () => {
   const withoutMerge = arbMsgSequence(
-    fc.constantFrom<Msg>({ type: "submit" }, { type: "approve" }),
+    fc.constantFrom<Msg>({ _tag: "submit" }, { _tag: "approve" }),
     { size: "max" },
   );
 
@@ -399,7 +399,7 @@ describe("failOnNeverActed beside other failures", () => {
 
 describe("a state that isn't plain data", () => {
   type Dated = { readonly at: Date };
-  type Tick = { readonly type: "tick" };
+  type Tick = { readonly _tag: "tick" };
   const dated = defineMachine({
     types: {
       model: {} as Dated,
@@ -409,14 +409,14 @@ describe("a state that isn't plain data", () => {
     init: () => [{ at: new Date(0) }, []],
     update: { tick: (s: Dated) => [{ at: new Date(s.at) }, []] },
   });
-  const ticks = arbMsgSequence(fc.constant<Tick>({ type: "tick" }), {
+  const ticks = arbMsgSequence(fc.constant<Tick>({ _tag: "tick" }), {
     minLength: 1,
   });
 
   class Money {
     constructor(readonly cents: number) {}
   }
-  type Swap = { readonly type: "swap" };
+  type Swap = { readonly _tag: "swap" };
   /** A machine that swaps between two states, each a new object to the other. */
   const rebuilding = (one: object, other: object) =>
     defineMachine({
@@ -428,7 +428,7 @@ describe("a state that isn't plain data", () => {
       init: () => [one, []],
       update: { swap: (s: object) => [s === one ? other : one, []] },
     });
-  const swaps = arbMsgSequence(fc.constant<Swap>({ type: "swap" }), {
+  const swaps = arbMsgSequence(fc.constant<Swap>({ _tag: "swap" }), {
     minLength: 1,
   });
 
@@ -559,7 +559,7 @@ describe("a state that isn't plain data", () => {
 /** Whether one step counts as acting, read from the tally the runners fill. */
 const actedOnStep = (prev: unknown, next: unknown): boolean => {
   const tally = new MsgTally(["step"]);
-  tally.add([{ prev, msg: { type: "step" }, next, cmds: [] }]);
+  tally.add([{ prev, msg: { _tag: "step" }, next, cmds: [] }]);
   expect(tally.refusal).toBeNull();
   return tally.counts.get("step")?.acted === 1;
 };
@@ -725,7 +725,7 @@ describe("a step that shares a list with its prev", () => {
     readonly n: number;
     readonly items: readonly { readonly id: number }[];
   };
-  type HeldMsg = { readonly type: "bump" } | { readonly type: "copy" };
+  type HeldMsg = { readonly _tag: "bump" } | { readonly _tag: "copy" };
   const holding = (loaded: Held) =>
     defineMachine({
       types: {
@@ -740,7 +740,7 @@ describe("a step that shares a list with its prev", () => {
       },
     });
   const heldMsgs = arbMsgSequence(
-    fc.constantFrom<HeldMsg>({ type: "bump" }, { type: "copy" }),
+    fc.constantFrom<HeldMsg>({ _tag: "bump" }, { _tag: "copy" }),
     { size: "max", maxLength: 60 },
   );
 
@@ -790,9 +790,9 @@ describe("a property on a large state", () => {
     readonly items: readonly Item[];
   };
   type BigMsg = {
-    readonly type: "bump" | "flip" | "a" | "b" | "c" | "d";
+    readonly _tag: "bump" | "flip" | "a" | "b" | "c" | "d";
   };
-  type Ping = { readonly type: "ping" };
+  type Ping = { readonly _tag: "ping" };
 
   const itemsOf = (count: number): readonly Item[] =>
     Array.from({ length: count }, (_, id) => ({
@@ -826,16 +826,16 @@ describe("a property on a large state", () => {
     });
 
   const quiet = (s: Big): readonly [Big, Ping[]] => [s, []];
-  const pinging = (s: Big): readonly [Big, Ping[]] => [s, [{ type: "ping" }]];
+  const pinging = (s: Big): readonly [Big, Ping[]] => [s, [{ _tag: "ping" }]];
 
   const lists = arbMsgSequence(
     fc.constantFrom<BigMsg>(
-      { type: "bump" },
-      { type: "flip" },
-      { type: "a" },
-      { type: "b" },
-      { type: "c" },
-      { type: "d" },
+      { _tag: "bump" },
+      { _tag: "flip" },
+      { _tag: "a" },
+      { _tag: "b" },
+      { _tag: "c" },
+      { _tag: "d" },
     ),
     { size: "max", maxLength: 300 },
   );
@@ -878,8 +878,8 @@ describe("a property on a large state", () => {
     );
     for (const msgs of seen) {
       for (const step of foldEvents(small, {}, null, msgs).steps) {
-        const count = expected.get(step.msg.type);
-        if (!count) throw new Error(`unknown type ${step.msg.type}`);
+        const count = expected.get(step.msg._tag);
+        if (!count) throw new Error(`unknown type ${step.msg._tag}`);
         count.drawn += 1;
         const changed = structuralHash(step.next) !== structuralHash(step.prev);
         if (changed || step.cmds.length > 0) count.acted += 1;
@@ -907,7 +907,7 @@ describe("a property on a large state", () => {
     const msgs = Array.from(
       { length: 60 },
       (_, i): BigMsg => ({
-        type: (["bump", "flip", "a", "b", "c", "d"] as const)[i % 6] ?? "a",
+        _tag: (["bump", "flip", "a", "b", "c", "d"] as const)[i % 6] ?? "a",
       }),
     );
     const { steps } = foldEvents(machine, {}, null, msgs);

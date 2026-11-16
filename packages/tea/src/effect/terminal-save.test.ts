@@ -11,9 +11,9 @@ import { memoryStore } from "../mem";
 import { run as runPromise } from "../promise";
 import { run as runEffect, StoreFailed, type SubFailed } from "./index";
 
-type State = { readonly type: "working" | "done" };
-type Msg = { readonly type: "finish" };
-type Cmd = { readonly type: "work" };
+type State = { readonly _tag: "working" | "done" };
+type Msg = { readonly _tag: "finish" };
+type Cmd = { readonly _tag: "work" };
 
 const machine = defineMachine({
   types: {
@@ -22,19 +22,19 @@ const machine = defineMachine({
     cmd: {} as Cmd,
     sub: {} as TimerSub<Msg>,
   },
-  init: (loaded) => [loaded ?? { type: "working" }, []],
+  init: (loaded) => [loaded ?? { _tag: "working" }, []],
   update: {
     finish: (): readonly [State, readonly Cmd[]] => [
-      { type: "done" },
-      [{ type: "work" }],
+      { _tag: "done" },
+      [{ _tag: "work" }],
     ],
   },
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (state: State) =>
-        state.type === "working"
-          ? { ms: 10, msg: { type: "finish" as const } }
+        state._tag === "working"
+          ? { ms: 10, msg: { _tag: "finish" as const } }
           : null,
     },
   ],
@@ -79,7 +79,7 @@ const engines: Record<
       { ...machine, init },
       {
         store,
-        terminal: (state) => state.type === "done",
+        terminal: (state) => state._tag === "done",
         onError: (error) => reports.push(error),
         interpret: { work: () => work },
       },
@@ -103,7 +103,7 @@ const engines: Record<
             { ...machine, init },
             {
               store,
-              terminal: (state) => state.type === "done",
+              terminal: (state) => state._tag === "done",
               onError: (error) => reports.push(error),
               interpret: { work: () => Effect.promise(() => work) },
             },
@@ -151,7 +151,7 @@ function slowStore(failure?: Error, loaded?: State) {
     load: () => inner.load(),
     migrate: (raw) => inner.migrate(raw),
     async save(state) {
-      if (state.type === "done") {
+      if (state._tag === "done") {
         const began = performance.now();
         entered.release();
         await delay(60);
@@ -168,8 +168,8 @@ function slowStore(failure?: Error, loaded?: State) {
 
 function outcome(promise: Promise<State>) {
   return promise.then(
-    (state) => ({ type: "done" as const, state }),
-    (error: unknown) => ({ type: "failed" as const, error }),
+    (state) => ({ _tag: "done" as const, state }),
+    (error: unknown) => ({ _tag: "failed" as const, error }),
   );
 }
 
@@ -205,28 +205,28 @@ describe.each(
         }
       };
       try {
-        expect(rt.getState().type).toBe("working");
+        expect(rt.getState()._tag).toBe("working");
         query();
         await slow.entered.promise;
         query();
-        await vi.waitFor(() => expect(rt.getState().type).toBe("done"));
+        await vi.waitFor(() => expect(rt.getState()._tag).toBe("done"));
         query();
         await slow.delayed.promise;
 
         expect(results).toEqual([undefined, undefined, undefined]);
         expect(completed).toEqual([]);
-        expect(await slow.store.load()).toEqual({ type: "working" });
+        expect(await slow.store.load()).toEqual({ _tag: "working" });
 
         slow.finish.release();
         const readings = await Promise.all(pending);
         expect(readings).toEqual(
           Array.from({ length: 3 }, () => ({
-            state: { type: "done" },
-            saved: { type: "done" },
+            state: { _tag: "done" },
+            saved: { _tag: "done" },
           })),
         );
         expect(rt.result()).toEqual(await slow.store.load());
-        expect(await rt.done()).toEqual({ type: "done" });
+        expect(await rt.done()).toEqual({ _tag: "done" });
         expect(slow.durations[0]).toBeGreaterThanOrEqual(50);
       } finally {
         slow.finish.release();
@@ -248,10 +248,10 @@ describe.each(
 
       expect(rt.result()).toBeUndefined();
       const after = await outcome(rt.done());
-      expect(after.type).toBe("failed");
+      expect(after._tag).toBe("failed");
       for (const result of await Promise.all([before, during, after])) {
-        expect(result.type).toBe("failed");
-        if (result.type !== "failed") throw new Error("done() resolved");
+        expect(result._tag).toBe("failed");
+        if (result._tag !== "failed") throw new Error("done() resolved");
         if (engine === "Effect") {
           expect(result.error).toBeInstanceOf(StoreFailed);
           expect(result.error).toMatchObject({
@@ -264,7 +264,7 @@ describe.each(
       }
       if (engine === "Effect") expect(completionFailures).toHaveLength(3);
       expect(reports).toEqual([failure]);
-      expect(await slow.store.load()).toEqual({ type: "working" });
+      expect(await slow.store.load()).toEqual({ _tag: "working" });
     } finally {
       slow.finish.release();
       await close();
@@ -275,9 +275,9 @@ describe.each(
     const work = hold();
     const { rt, close } = await start(undefined, work.promise);
     try {
-      await vi.waitFor(() => expect(rt.getState().type).toBe("done"));
-      expect(rt.result()).toEqual({ type: "done" });
-      expect(await rt.done()).toEqual({ type: "done" });
+      await vi.waitFor(() => expect(rt.getState()._tag).toBe("done"));
+      expect(rt.result()).toEqual({ _tag: "done" });
+      expect(await rt.done()).toEqual({ _tag: "done" });
     } finally {
       work.release();
       await close();
@@ -285,11 +285,11 @@ describe.each(
   });
 
   it("holds restored terminal boot and its completion reads until the delayed save succeeds", async () => {
-    const slow = slowStore(undefined, { type: "working" });
+    const slow = slowStore(undefined, { _tag: "working" });
     const init = vi.fn(
       (loaded: State | null): readonly [State, readonly Cmd[]] => {
-        expect(loaded).toEqual({ type: "working" });
-        return [{ type: "done" }, []];
+        expect(loaded).toEqual({ _tag: "working" });
+        return [{ _tag: "done" }, []];
       },
     );
     const starting = start(slow.store, undefined, init);
@@ -304,10 +304,10 @@ describe.each(
       await slow.entered.promise;
       await slow.delayed.promise;
       expect(readings).toEqual([]);
-      expect(await slow.store.load()).toEqual({ type: "working" });
+      expect(await slow.store.load()).toEqual({ _tag: "working" });
       slow.finish.release();
-      expect(await completion).toEqual({ type: "done" });
-      expect(readings).toEqual([{ type: "done" }, { type: "done" }]);
+      expect(await completion).toEqual({ _tag: "done" });
+      expect(readings).toEqual([{ _tag: "done" }, { _tag: "done" }]);
       expect(init).toHaveBeenCalledTimes(1);
     } finally {
       slow.finish.release();
@@ -317,10 +317,10 @@ describe.each(
 
   it("rejects restored terminal boot when its save fails", async () => {
     const failure = new Error("restored terminal save refused");
-    const slow = slowStore(failure, { type: "working" });
+    const slow = slowStore(failure, { _tag: "working" });
     const init: typeof machine.init = (loaded) => {
-      expect(loaded).toEqual({ type: "working" });
-      return [{ type: "done" }, []];
+      expect(loaded).toEqual({ _tag: "working" });
+      return [{ _tag: "done" }, []];
     };
     const starting = start(slow.store, undefined, init).then(
       async ({ close }) => {
@@ -332,7 +332,7 @@ describe.each(
     try {
       await slow.entered.promise;
       await slow.delayed.promise;
-      expect(await slow.store.load()).toEqual({ type: "working" });
+      expect(await slow.store.load()).toEqual({ _tag: "working" });
       slow.finish.release();
       const error = await starting;
       if (engine === "Effect") {
@@ -341,7 +341,7 @@ describe.each(
       } else {
         expect(error).toBe(failure);
       }
-      expect(await slow.store.load()).toEqual({ type: "working" });
+      expect(await slow.store.load()).toEqual({ _tag: "working" });
     } finally {
       slow.finish.release();
       await starting;
@@ -349,10 +349,10 @@ describe.each(
   });
 
   it("a terminal rehydrate completes at boot with the terminal State saved", async () => {
-    const store = memoryStore<State>({ type: "done" });
+    const store = memoryStore<State>({ _tag: "done" });
     const { rt, close } = await start(store);
     try {
-      expect(rt.result()).toEqual({ type: "done" });
+      expect(rt.result()).toEqual({ _tag: "done" });
       expect(await rt.done()).toEqual(await store.load());
     } finally {
       await close();

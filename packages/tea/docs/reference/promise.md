@@ -28,7 +28,7 @@ import { … } from "@demlik/tea/promise";
 ### `BootingRun`
 
 ```ts
-interface BootingRun<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E> {
+interface BootingRun<S, M extends { _tag: string }, E extends { _tag: string } = never> extends BootingRuntime<S, M, E> {
   /**
    * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
    * the boot error). This is the ONLY way to obtain a `Runtime` — and a
@@ -54,8 +54,8 @@ interface BootingRun<S, M extends { type: string }, E extends { type: string } =
 ```ts
 function driveToDone<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   handle: BootingRuntime<S, M, E>,
   start: M | ((booted: S) => M),
@@ -69,7 +69,7 @@ function driveToDone<
 ### `DriveToDoneOptions`
 
 ```ts
-type DriveToDoneOptions<S, M extends { type: string } = never> = DriveCancellation<S, M> & {
+type DriveToDoneOptions<S, M extends { _tag: string } = never> = DriveCancellation<S, M> & {
   /**
    * Marks a terminal State as a FAILURE. A State this holds for ends the drive
    * like any terminal one — the runtime is stopped — but the drive REJECTS with
@@ -88,11 +88,11 @@ type DriveToDoneOptions<S, M extends { type: string } = never> = DriveCancellati
 ```ts
 type PromiseRunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string },
+  E extends { _tag: string },
 > = CtxArg<Ctx> & NoInfer<RunHandlers<M, C, U, Ctx>> & StoreAndOnError<S> & {
   /**
    * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
@@ -168,11 +168,11 @@ type PromiseRunOptions<
 ```ts
 function run<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: PromiseRunOptions<S, M, C, U, Ctx, E>,
@@ -184,7 +184,7 @@ function run<
 ### `Run`
 
 ```ts
-interface Run<S, M extends { type: string }, E extends { type: string } = never> extends Runtime<S, M, E>, Postable<S, M> {
+interface Run<S, M extends { _tag: string }, E extends { _tag: string } = never> extends Runtime<S, M, E>, Postable<S, M> {
   /** Resolves to this same `Runtime` once boot completes. Idempotent. */
   ready: Promise<Run<S, M, E>>;
 }
@@ -197,11 +197,11 @@ interface Run<S, M extends { type: string }, E extends { type: string } = never>
 ```ts
 function tell<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   runtime: Run<S, M, E>,

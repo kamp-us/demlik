@@ -206,7 +206,7 @@ interpret: {
 // TS:  a `subs` entry on the machine…
 subs: [
   {
-    type: "listen_websocket",
+    _tag: "listen_websocket",
     deps: (state) => (state.online ? { url: state.url } : null),
   },
 ]
@@ -214,7 +214,7 @@ subs: [
 subscribe: {
   listen_websocket: (sub, ctx, dispatch) => {
     const ws = new WebSocket(sub.deps.url)
-    ws.onmessage = (e) => dispatch({ type: "Recv", data: e.data })
+    ws.onmessage = (e) => dispatch({ _tag: "Recv", data: e.data })
     return () => ws.close()
   },
 }

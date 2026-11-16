@@ -13,7 +13,7 @@ import {
 import { run } from "../promise";
 import { senderOf } from "./send";
 
-type Msg = { readonly type: "inc" } | { readonly type: "boom" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "boom" };
 const machine = defineMachine({
   types: { model: {} as { n: number }, msg: {} as Msg, ctx: undefined },
   init: () => [{ n: 0 }, []],
@@ -43,14 +43,14 @@ const open = async () => {
 describe("senderOf on a run from `run`", () => {
   it("returns nothing and the Msg folds", async () => {
     const { runtime, send } = await open();
-    expect(send({ type: "inc" })).toBeUndefined();
+    expect(send({ _tag: "inc" })).toBeUndefined();
     await runtime.idle();
     expect(runtime.getState()).toEqual({ n: 1 });
   });
 
   it("a reducer throw: the run's sink hears it once, `report` never", async () => {
     const { runtime, send, sink, reported } = await open();
-    send({ type: "boom" });
+    send({ _tag: "boom" });
     await runtime.idle();
     expect(sink.map((h) => h.phase)).toEqual(["reduce"]);
     expect(reported).toEqual([]);
@@ -58,7 +58,7 @@ describe("senderOf on a run from `run`", () => {
 
   it("a Msg with no cell stays loud: the run's sink hears its NoCellError", async () => {
     const { runtime, send, sink } = await open();
-    send({ type: "nope" } as unknown as Msg);
+    send({ _tag: "nope" } as unknown as Msg);
     await runtime.idle();
     expect(sink).toHaveLength(1);
     expect(sink[0]?.error).toBeInstanceOf(NoCellError);
@@ -67,7 +67,7 @@ describe("senderOf on a run from `run`", () => {
   it("a send to a stopped run: `report` hears a discard", async () => {
     const { runtime, send, sink, reported } = await open();
     await runtime.stop();
-    send({ type: "inc" });
+    send({ _tag: "inc" });
     expect(reported.map((h) => h.phase)).toEqual(["discard"]);
     expect(reported[0]?.error).toBeInstanceOf(DispatchDiscardedError);
     expect(sink).toEqual([]);
@@ -81,7 +81,7 @@ describe("senderOf on a hand-built handle", () => {
       { dispatch: () => Promise.reject(new Error("no")) },
       (_error, { phase }) => reported.push(phase),
     );
-    send({ type: "inc" });
+    send({ _tag: "inc" });
     await Promise.resolve();
     await Promise.resolve();
     expect(reported).toEqual(["follow-up"]);

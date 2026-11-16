@@ -272,14 +272,14 @@ describe("in-flight tool handlers after a cancellation", () => {
     // started; the tool's settle AFTER the abort is not. The run ends on one
     // `RunDone` saying it was cancelled, so a listener holding open work —
     // a span, a spinner — has the one signal to close it on (#331).
-    expect(events.map((e) => e.type)).toEqual([
+    expect(events.map((e) => e._tag)).toEqual([
       "BrainStarted",
       "TurnSettled",
       "ToolStarted",
       "RunDone",
     ]);
     const last = events.at(-1);
-    expect(last?.type === "RunDone" && last.status.kind).toBe("cancelled");
+    expect(last?._tag === "RunDone" && last.status.kind).toBe("cancelled");
     // …and the late outcome never reached the Model either.
     expect(final.conversation?.toolRecords ?? []).toHaveLength(0);
   });

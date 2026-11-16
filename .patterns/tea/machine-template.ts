@@ -18,10 +18,10 @@ import { Cmd, defineMachine, type Interpret, tryInterpret } from "@demlik/tea";
 //    See: .patterns/tea/patterns/11-impossible-states.md
 // ---------------------------------------------------------------------------
 type State =
-  | { type: "idle" }
-  | { type: "loading" }
-  | { type: "ready"; data: string }
-  | { type: "error"; error: string };
+  | { _tag: "idle" }
+  | { _tag: "loading" }
+  | { _tag: "ready"; data: string }
+  | { _tag: "error"; error: string };
 
 // ---------------------------------------------------------------------------
 // 2. Msg — one closed union. Every event that can move the machine.
@@ -29,11 +29,11 @@ type State =
 //    See: .patterns/tea/patterns/01-invariants.md (invariant 4)
 // ---------------------------------------------------------------------------
 type Msg =
-  | { type: "fetch_requested" }
-  | { type: "fetch_succeeded"; data: string }
-  | { type: "fetch_failed"; error: string }
-  | { type: "tick"; time: number }
-  | { type: "visibility_changed"; visible: boolean };
+  | { _tag: "fetch_requested" }
+  | { _tag: "fetch_succeeded"; data: string }
+  | { _tag: "fetch_failed"; error: string }
+  | { _tag: "tick"; time: number }
+  | { _tag: "visibility_changed"; visible: boolean };
 
 // ---------------------------------------------------------------------------
 // 3. Cmd — one-shot effects. Tagged data describing intent, never closures.
@@ -41,13 +41,13 @@ type Msg =
 //    See: .patterns/tea/patterns/04-effects-as-data.md
 //    See: .patterns/tea/patterns/15-decisions.md (decision 1: Cmd vs Sub)
 // ---------------------------------------------------------------------------
-type Commands = { type: "fetch_data" };
+type Commands = { _tag: "fetch_data" };
 
 // ---------------------------------------------------------------------------
 // 4. Sub — ongoing subscriptions. Continuous sources of Msgs.
 //    "Keep watching this, send me Msgs when something happens."
 //    `Sub<type, deps>`: `deps` is the plain data its runner reads. The runtime
-//    derives each running Sub's id from `{ type, deps }` — never hand-written.
+//    derives each running Sub's id from `{ _tag, deps }` — never hand-written.
 //    The built-in `timer` needs no entry here.
 //    See: .patterns/tea/patterns/04-effects-as-data.md (Sub section)
 //    See: .patterns/tea/patterns/15-decisions.md (decision 4: sub gating)
@@ -77,27 +77,27 @@ export const machine = defineMachine({
 
   // 6. Init — returns [state, cmds].
   //    See: .patterns/tea/patterns/15-decisions.md (decision 2: init shape)
-  init: (loaded) => [loaded ?? { type: "idle" }, Cmd.none],
+  init: (loaded) => [loaded ?? { _tag: "idle" }, Cmd.none],
 
   // 7. Update — Reducer form: one handler per Msg type.
   //    Each cell is pure: no fetch, no await, no mutation.
   //    Return [nextState, cmds] — the pair is the architecture.
   //    See: .patterns/tea/patterns/03-signature.md
   update: {
-    fetch_requested: () => [{ type: "loading" }, [{ type: "fetch_data" }]],
+    fetch_requested: () => [{ _tag: "loading" }, [{ _tag: "fetch_data" }]],
 
-    fetch_succeeded: (_state, msg) => [{ type: "ready", data: msg.data }, Cmd.none],
+    fetch_succeeded: (_state, msg) => [{ _tag: "ready", data: msg.data }, Cmd.none],
 
-    fetch_failed: (_state, msg) => [{ type: "error", error: msg.error }, Cmd.none],
+    fetch_failed: (_state, msg) => [{ _tag: "error", error: msg.error }, Cmd.none],
 
     tick: (state) => [state, Cmd.none],
 
     visibility_changed: (state) => [state, Cmd.none],
   },
 
-  // 9. Subs — declared as data: one `{ type, deps(state) }` entry per Sub.
+  // 9. Subs — declared as data: one `{ _tag, deps(state) }` entry per Sub.
   //    `deps` returns the slice of state the Sub depends on, or null for
-  //    "off in this state". The runtime keys each running Sub on `{ type, deps }`:
+  //    "off in this state". The runtime keys each running Sub on `{ _tag, deps }`:
   //      Same deps across transitions → keep running (no restart)
   //      Deps changed → stop the old one, start the new one
   //      Deps null → stop
@@ -107,19 +107,19 @@ export const machine = defineMachine({
   //    See: .patterns/tea/patterns/15-decisions.md (decision 4)
   subs: [
     // Always-on: visibility matters in any phase
-    { type: "visibility", deps: () => ({ watch: "document" }) },
+    { _tag: "visibility", deps: () => ({ watch: "document" }) },
     // Phase-gated: only tick when ready (costs a timer)
     {
-      type: "heartbeat",
-      deps: (state) => (state.type === "ready" ? { everyMs: 30_000 } : null),
+      _tag: "heartbeat",
+      deps: (state) => (state._tag === "ready" ? { everyMs: 30_000 } : null),
     },
     // Built-in `timer`: dispatch `msg` once, `ms` after it starts. Every
     // engine ships its runner, so there is none to write below.
     {
-      type: "timer",
+      _tag: "timer",
       deps: (state) =>
-        state.type === "loading"
-          ? { ms: 10_000, msg: { type: "fetch_failed", error: "timeout" } }
+        state._tag === "loading"
+          ? { ms: 10_000, msg: { _tag: "fetch_failed", error: "timeout" } }
           : null,
     },
   ],
@@ -138,8 +138,8 @@ export const interpret: Interpret<Msg, Commands, Ctx> = {
       const res = await fetch("https://example.com/data");
       return res.text();
     },
-    (data): Msg => ({ type: "fetch_succeeded", data }),
-    (error): Msg => ({ type: "fetch_failed", error: String(error) }),
+    (data): Msg => ({ _tag: "fetch_succeeded", data }),
+    (error): Msg => ({ _tag: "fetch_failed", error: String(error) }),
   ),
 };
 
@@ -150,13 +150,13 @@ export const interpret: Interpret<Msg, Commands, Ctx> = {
 //     See: .patterns/tea/patterns/14-ports-interop.md
 export const subscribe: Subscribe<Msg, Subs, Ctx> = {
   heartbeat: (sub, _ctx, dispatch) => {
-    const id = setInterval(() => dispatch({ type: "tick", time: Date.now() }), sub.deps.everyMs);
+    const id = setInterval(() => dispatch({ _tag: "tick", time: Date.now() }), sub.deps.everyMs);
     return () => clearInterval(id);
   },
 
   visibility: (_sub, _ctx, dispatch) => {
     const handler = () =>
-      dispatch({ type: "visibility_changed", visible: document.visibilityState === "visible" });
+      dispatch({ _tag: "visibility_changed", visible: document.visibilityState === "visible" });
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
   },

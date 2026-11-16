@@ -101,7 +101,7 @@ export interface ReplayResult<S, M = unknown> {
  */
 export function replayTrace<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

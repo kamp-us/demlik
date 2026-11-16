@@ -34,16 +34,16 @@ export type { TellAnswer } from "../internal/engine/loop";
  * tea has no lock-up detector. Use `tell` there.
  *
  * ```ts
- * const answer = tell(parent, parentRun, { type: "child_result", id });
+ * const answer = tell(parent, parentRun, { _tag: "child_result", id });
  * ```
  */
 export function tell<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   runtime: Run<S, M, E>,

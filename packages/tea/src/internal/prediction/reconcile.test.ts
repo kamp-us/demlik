@@ -24,8 +24,8 @@ import { ack, reconcile, type SeqTagged, tagSeq } from "./index";
 // command. Order-sensitive enough to prove the replay tail is folded, simple
 // enough to compute the expected state by hand.
 type CounterState = { readonly count: number };
-type CounterMsg = { readonly type: "add"; readonly n: number };
-const add = (n: number): CounterMsg => ({ type: "add", n });
+type CounterMsg = { readonly _tag: "add"; readonly n: number };
+const add = (n: number): CounterMsg => ({ _tag: "add", n });
 
 function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {

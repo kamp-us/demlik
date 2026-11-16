@@ -146,7 +146,7 @@ describe(
           JSON.parse(await readFile(join(directory, "c1.state.json"), "utf8")),
         );
         expect(saved).toEqual({
-          type: "Pending",
+          _tag: "Pending",
           intent: {
             callId: "c1",
             args: { operationId: "operation-1", text: "one note" },
@@ -176,7 +176,7 @@ describe(
       const saved = Checkpoint.parse(
         JSON.parse(await readFile(join(directory, "c1.state.json"), "utf8")),
       );
-      expect(saved.type).toBe("Settled");
+      expect(saved._tag).toBe("Settled");
       if (kind === "append") {
         expect(await lines(join(directory, "notes.txt"))).toEqual(
           Array(count).fill("one note"),
@@ -213,8 +213,8 @@ describe(
             await readFile(join(directory, `${callId}.state.json`), "utf8"),
           ),
         );
-        expect(saved.type).toBe(callId === "c3" ? "Failed" : "Settled");
-        if (saved.type === "Failed") {
+        expect(saved._tag).toBe(callId === "c3" ? "Failed" : "Settled");
+        if (saved._tag === "Failed") {
           expect(saved.failure).toEqual({
             _tag: "key_conflict",
             operationId: "operation-1",

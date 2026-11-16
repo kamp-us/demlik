@@ -24,16 +24,16 @@ import { doEventSourcedStore } from "./event-sourced-store";
 // (not a no-op log). This counter chooses passive restored initialization.
 
 interface State {
-  readonly type: "counting";
+  readonly _tag: "counting";
   readonly count: number;
   readonly log: readonly string[];
 }
 
 type Msg =
-  | { type: "inc"; by: number }
-  | { type: "dec"; by: number }
-  | { type: "reset" }
-  | { type: "note"; text: string };
+  | { _tag: "inc"; by: number }
+  | { _tag: "dec"; by: number }
+  | { _tag: "reset" }
+  | { _tag: "note"; text: string };
 
 const update: Reducer<State, Msg, never> = {
   inc: (s, m) => [{ ...s, count: s.count + m.by }, []],
@@ -49,7 +49,7 @@ function counter() {
       msg: {} as Msg,
       ctx: {} as Record<string, never>,
     },
-    init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
+    init: (loaded) => [loaded ?? { _tag: "counting", count: 0, log: [] }, []],
     update,
   });
 }
@@ -61,9 +61,9 @@ it("restores snapshot plus log before calling active init once at runtime boot",
   await liveRun(
     backing,
     [
-      { type: "inc", by: 1 },
-      { type: "inc", by: 2 },
-      { type: "inc", by: 3 },
+      { _tag: "inc", by: 1 },
+      { _tag: "inc", by: 2 },
+      { _tag: "inc", by: 3 },
     ],
     2,
   );
@@ -223,16 +223,16 @@ async function liveRunTickSnapshots(
 
 const msgTable: MsgArbitraryTable<Msg> = {
   inc: fc.record({
-    type: fc.constant<"inc">("inc"),
+    _tag: fc.constant<"inc">("inc"),
     by: fc.integer({ min: 0, max: 1000 }),
   }),
   dec: fc.record({
-    type: fc.constant<"dec">("dec"),
+    _tag: fc.constant<"dec">("dec"),
     by: fc.integer({ min: 0, max: 1000 }),
   }),
-  reset: fc.constant({ type: "reset" as const }),
+  reset: fc.constant({ _tag: "reset" as const }),
   note: fc.record({
-    type: fc.constant<"note">("note"),
+    _tag: fc.constant<"note">("note"),
     text: fc.string(),
   }),
 };
@@ -291,7 +291,7 @@ describe("doEventSourcedStore — boundary cases", () => {
   it("empty log: fresh actor still fires the ready signal once", async () => {
     const backing = new Map<string, string>();
     const live = await liveRun(backing, [], 10);
-    expect(live.state).toEqual({ type: "counting", count: 0, log: [] });
+    expect(live.state).toEqual({ _tag: "counting", count: 0, log: [] });
     expect(live.readyCalls).toBe(1);
 
     // A rehydrate over the (now still effectively empty) store also fires once.
@@ -299,8 +299,8 @@ describe("doEventSourcedStore — boundary cases", () => {
     expect(rebuilt.readyCalls).toBe(1);
     // No snapshot, no events → fold starts fresh; migrate(null) → null (boot
     // fresh path), which is the snapshot-only oracle for an empty sequence.
-    expect(rebuilt.state ?? { type: "counting", count: 0, log: [] }).toEqual({
-      type: "counting",
+    expect(rebuilt.state ?? { _tag: "counting", count: 0, log: [] }).toEqual({
+      _tag: "counting",
       count: 0,
       log: [],
     });
@@ -310,16 +310,16 @@ describe("doEventSourcedStore — boundary cases", () => {
     // snapshotEvery=10, only 3 events: no snapshot ever taken, pure-log replay.
     const backing = new Map<string, string>();
     const msgs: Msg[] = [
-      { type: "inc", by: 5 },
-      { type: "note", text: "a" },
-      { type: "dec", by: 2 },
+      { _tag: "inc", by: 5 },
+      { _tag: "note", text: "a" },
+      { _tag: "dec", by: 2 },
     ];
     const live = await liveRun(backing, msgs, 10);
     const rebuilt = await rehydrate(backing, 10);
     expect(rebuilt.state).toEqual(live.state);
     expect(rebuilt.state).toEqual(snapshotOnlyFold(msgs));
     expect(rebuilt.state).toEqual({
-      type: "counting",
+      _tag: "counting",
       count: 3,
       log: ["a"],
     });
@@ -333,7 +333,7 @@ describe("doEventSourcedStore — boundary cases", () => {
     // full fold.
     const backing = new Map<string, string>();
     const msgs: Msg[] = Array.from({ length: 13 }, (_, i) => ({
-      type: "inc" as const,
+      _tag: "inc" as const,
       by: i + 1,
     }));
     const live = await liveRun(backing, msgs, 4);
@@ -385,11 +385,11 @@ function readerOver(backing: Map<string, string>, snapshotEvery = 100) {
 // Five distinct events the counter applies, so each lands as one log cell at
 // seqs 1..5 in dispatch order.
 const sampleMsgs: Msg[] = [
-  { type: "inc", by: 1 },
-  { type: "inc", by: 2 },
-  { type: "note", text: "x" },
-  { type: "dec", by: 1 },
-  { type: "reset" },
+  { _tag: "inc", by: 1 },
+  { _tag: "inc", by: 2 },
+  { _tag: "note", text: "x" },
+  { _tag: "dec", by: 1 },
+  { _tag: "reset" },
 ];
 
 describe("doEventSourcedStore — readEvents (public log reader)", () => {
@@ -459,7 +459,7 @@ describe("doEventSourcedStore — readEvents (public log reader)", () => {
     // must still surface ALL 13 events (a snapshot bounds replay, not the log).
     const backing = new Map<string, string>();
     const msgs: Msg[] = Array.from({ length: 13 }, (_, i) => ({
-      type: "inc" as const,
+      _tag: "inc" as const,
       by: i + 1,
     }));
     await liveRun(backing, msgs, 4);
@@ -485,16 +485,70 @@ describe("doEventSourcedStore — readEvents (public log reader)", () => {
       ctx,
       {
         parseEvent: (raw) => {
-          const m = raw as { type?: unknown };
-          if (m?.type === "reset") return null;
-          return typeof m?.type === "string" ? (raw as Msg) : null;
+          const m = raw as { _tag?: unknown };
+          if (m?._tag === "reset") return null;
+          return typeof m?._tag === "string" ? (raw as Msg) : null;
         },
       },
     );
 
     const rows = await collect(reader.readEvents());
     expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4]); // seq 5 (reset) dropped
-    expect(rows.some((r) => r.event.type === "reset")).toBe(false);
+    expect(rows.some((r) => r.event._tag === "reset")).toBe(false);
+  });
+
+  it("drops old type-keyed rows with the default parseEvent and reads _tag rows", async () => {
+    const backing = new Map<string, string>();
+    backing.set("@@es/evt/0000000000000001", JSON.stringify({ type: "inc" }));
+    backing.set("@@es/evt/0000000000000002", JSON.stringify({ _tag: "inc" }));
+    const { storage } = fakeStorage(backing);
+    const reader = doEventSourcedStore(storage, counter(), ctx);
+
+    expect(await collect(reader.readEvents())).toEqual([
+      { seq: 2, event: { _tag: "inc" } },
+    ]);
+  });
+
+  it("a host parseEvent that renames the old key reads type-keyed rows and folds them", async () => {
+    const backing = new Map<string, string>();
+    backing.set(
+      "@@es/evt/0000000000000001",
+      JSON.stringify({ type: "inc", by: 2 }),
+    );
+    backing.set(
+      "@@es/evt/0000000000000002",
+      JSON.stringify({ _tag: "inc", by: 3 }),
+    );
+    backing.set("@@es/evt/0000000000000003", JSON.stringify({ type: "reset" }));
+    backing.set(
+      "@@es/evt/0000000000000004",
+      JSON.stringify({ type: "inc", by: 4 }),
+    );
+    const { storage } = fakeStorage(backing);
+    const reader = doEventSourcedStore<State, Msg, typeof ctx>(
+      storage,
+      counter(),
+      ctx,
+      {
+        parseEvent: (raw) => {
+          const { type, ...rest } = raw as { type?: unknown; _tag?: unknown };
+          const row = type === undefined ? rest : { _tag: type, ...rest };
+          return typeof row._tag === "string" ? (row as Msg) : null;
+        },
+      },
+    );
+
+    expect(await collect(reader.readEvents())).toEqual([
+      { seq: 1, event: { _tag: "inc", by: 2 } },
+      { seq: 2, event: { _tag: "inc", by: 3 } },
+      { seq: 3, event: { _tag: "reset" } },
+      { seq: 4, event: { _tag: "inc", by: 4 } },
+    ]);
+    expect(await reader.store.load()).toEqual({
+      _tag: "counting",
+      count: 4,
+      log: [],
+    });
   });
 
   it("is read-only — streaming the log mutates no storage", async () => {
@@ -525,7 +579,7 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
     // was never crossed. The last one covers seq 9 (highest 3-multiple <= 10).
     const backing = new Map<string, string>();
     const msgs: Msg[] = Array.from({ length: 10 }, (_, i) => ({
-      type: "inc" as const,
+      _tag: "inc" as const,
       by: i + 1,
     }));
     const live = await liveRunTickSnapshots(backing, msgs, 3);
@@ -550,7 +604,7 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
     // snapshotEvery=4, 13 events → snapshot at seq 12, replay folds snapshot + 1.
     const backing = new Map<string, string>();
     const msgs: Msg[] = Array.from({ length: 13 }, (_, i) => ({
-      type: "inc" as const,
+      _tag: "inc" as const,
       by: i + 1,
     }));
     const live = await liveRun(backing, msgs, 4);
@@ -607,7 +661,7 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
     expect(backing.has("@@es/snapshot")).toBe(false);
 
     // Apply one event, then snapshotNow() writes at seq 1.
-    await runtime.dispatch({ type: "inc", by: 5 });
+    await runtime.dispatch({ _tag: "inc", by: 5 });
     await Promise.all(appends.splice(0));
     expect(await es.snapshotNow()).toBe(true);
     const snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
@@ -642,7 +696,7 @@ describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)
 
     const dispatch = async (n: number) => {
       for (let i = 0; i < n; i++) {
-        await runtime.dispatch({ type: "inc", by: 1 });
+        await runtime.dispatch({ _tag: "inc", by: 1 });
         await Promise.all(appends.splice(0));
       }
     };

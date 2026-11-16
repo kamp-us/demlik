@@ -46,12 +46,12 @@ export function verifyCase(host: CaseHost): CaseView {
   const view = committedView(host);
   const events = view.history.map((entry) => entry.event);
   assert.equal(
-    events.filter((event) => event.type === "TurnSettled").length,
+    events.filter((event) => event._tag === "TurnSettled").length,
     14,
   );
-  assert.equal(events.filter((event) => event.type === "ToolFailed").length, 3);
+  assert.equal(events.filter((event) => event._tag === "ToolFailed").length, 3);
   assert.equal(
-    events.filter((event) => event.type === "ToolSettled").length,
+    events.filter((event) => event._tag === "ToolSettled").length,
     10,
   );
   assert.equal(view.compactions, 2);
@@ -72,7 +72,7 @@ export function verifyCase(host: CaseHost): CaseView {
   assert.ok(
     events.some(
       (event) =>
-        event.type === "ToolSettled" &&
+        event._tag === "ToolSettled" &&
         event.result.snippet.startsWith("Evidence 1,"),
     ),
   );

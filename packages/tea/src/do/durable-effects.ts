@@ -130,7 +130,7 @@ export function applyEffectEvent<E>(
   event: EffectLedgerEvent<E>,
 ): PendingEffectsLedger<E> {
   const next = new Map(ledger);
-  switch (event.type) {
+  switch (event._tag) {
     case "effect_owed":
       next.set(event.id, event.effect);
       return next;
@@ -263,13 +263,13 @@ export function pendingEffectsLedger<E>(restore?: {
     owe(effect) {
       counter += 1;
       const id = counter;
-      const event: EffectOwed<E> = { type: "effect_owed", id, effect };
+      const event: EffectOwed<E> = { _tag: "effect_owed", id, effect };
       mirror = applyEffectEvent(mirror, event);
       return { id, event };
     },
     confirm(id) {
       const confirmed = mirror.has(id);
-      const event: EffectConfirmed = { type: "effect_confirmed", id };
+      const event: EffectConfirmed = { _tag: "effect_confirmed", id };
       mirror = applyEffectEvent(mirror, event);
       return { confirmed, event };
     },

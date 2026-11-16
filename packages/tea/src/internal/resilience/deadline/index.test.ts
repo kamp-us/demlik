@@ -31,13 +31,13 @@ const BASE = 1_000_000;
 
 // The running `deadline` Sub the engine hands the runner for `list`.
 function running(...list: DeadlineSub[]): DeadlinesSub {
-  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
+  return { id: subIdOf("deadline", list), _tag: "deadline", deps: list };
 }
 
 describe("deadlineSub", () => {
   it("builds a stable, identity-branded Sub carrying the absolute target", () => {
     const sub = deadlineSub("audit-stale", BASE + 900_000);
-    expect(sub.type).toBe("deadline");
+    expect(sub._tag).toBe("deadline");
     expect(sub.id).toBe("audit-stale");
     expect(sub.atMs).toBe(BASE + 900_000);
   });
@@ -51,7 +51,7 @@ describe("deadlineSub", () => {
     vi.setSystemTime(BASE + 500);
     const b = deadlineSub("guard", BASE + 1000);
     expect(a.id).toBe(b.id);
-    expect(a.type).toBe(b.type);
+    expect(a._tag).toBe(b._tag);
   });
 });
 
@@ -168,7 +168,7 @@ describe("the deadline list — one Sub arms many", () => {
 
   it("`deadlinesSub` declares the list as one `deadline` Sub", () => {
     type S = { readonly at: number | null };
-    type M = { readonly type: "arm"; readonly at: number };
+    type M = { readonly _tag: "arm"; readonly at: number };
     const machine = defineMachine({
       types: { model: {} as S, msg: {} as M, sub: {} as DeadlinesSub },
       init: () => [{ at: null }, []],
@@ -179,7 +179,7 @@ describe("the deadline list — one Sub arms many", () => {
     });
 
     expect(replay(machine, { msgs: [], ctx: undefined }).subs).toEqual([]);
-    const arm: M = { type: "arm", at: BASE };
+    const arm: M = { _tag: "arm", at: BASE };
     const armed = replay(machine, { msgs: [arm], ctx: undefined });
     expect(armed.subs).toEqual([running(deadlineSub("g", BASE))]);
   });
@@ -306,7 +306,7 @@ describe("setTimeoutArmTimer — the default backing", () => {
 describe("deadlineExceeded", () => {
   it("constructs the tagged Msg shape consumers union into their reducer", () => {
     expect(deadlineExceeded("guard", BASE + 5000)).toEqual({
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "guard",
       atMs: BASE + 5000,
     });

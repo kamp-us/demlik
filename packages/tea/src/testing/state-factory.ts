@@ -5,9 +5,9 @@
 // of hand-rolled factory functions, one per phase, each one's defaults
 // duplicated across files:
 //
-//   function idleState() { return { type: "idle" }; }
+//   function idleState() { return { _tag: "idle" }; }
 //   function creatingWindowState(overrides?: Partial<...>) {
-//     return { type: "creating_window", auditId: ..., wsUrl: ..., ...overrides };
+//     return { _tag: "creating_window", auditId: ..., wsUrl: ..., ...overrides };
 //   }
 //   ...
 //
@@ -19,16 +19,16 @@
 // Two type-level guarantees:
 //
 //   1. Every phase has a defaults entry — `StateFactoryDefaults<S>` is a
-//      mapped type keyed by every `S["type"]`. Missing an entry is a
+//      mapped type keyed by every `S["_tag"]`. Missing an entry is a
 //      compile error (the @ts-expect-error in testing.spec.ts pins this).
 //
 //   2. Each phase's defaults match that phase's required shape minus the
-//      `type` discriminator. Passing wrong fields fails to compile.
+//      `_tag` discriminator. Passing wrong fields fails to compile.
 //
 // The runtime is pure data:
 //
 //   api[k] = (overrides) => ({
-//     type: k,
+//     _tag: k,
 //     ...defaults[k],
 //     ...stripUndefined(overrides ?? {}),
 //   })
@@ -45,18 +45,18 @@
 // ---------------------------------------------------------------------------
 
 /** A factory-constructed phase: `S` narrowed to the arm whose discriminator equals `K`. */
-type StateOf<S, K> = Extract<S, { type: K }>;
+type StateOf<S, K> = Extract<S, { _tag: K }>;
 
-/** A factory-constructed phase with the `type` discriminator removed — the "fields the caller cares about" half. */
-type RequiredFields<T> = Omit<T, "type">;
+/** A factory-constructed phase with the `_tag` discriminator removed — the "fields the caller cares about" half. */
+type RequiredFields<T> = Omit<T, "_tag">;
 
 /**
  * Defaults shape passed to `stateFactory`. Mapped type over the discriminant
  * set: every phase MUST have an entry, and that entry MUST match the phase's
- * required fields minus the `type` discriminator.
+ * required fields minus the `_tag` discriminator.
  */
-export type StateFactoryDefaults<S extends { type: string }> = {
-  readonly [K in S["type"]]: RequiredFields<StateOf<S, K>>;
+export type StateFactoryDefaults<S extends { _tag: string }> = {
+  readonly [K in S["_tag"]]: RequiredFields<StateOf<S, K>>;
 };
 
 /**
@@ -65,8 +65,8 @@ export type StateFactoryDefaults<S extends { type: string }> = {
  * object merges those overrides in (with undefineds stripped — see
  * stripUndefined below).
  */
-export type StateFactoryAPI<S extends { type: string }> = {
-  readonly [K in S["type"]]: (
+export type StateFactoryAPI<S extends { _tag: string }> = {
+  readonly [K in S["_tag"]]: (
     overrides?: Partial<RequiredFields<StateOf<S, K>>>,
   ) => StateOf<S, K>;
 };
@@ -95,27 +95,27 @@ function stripUndefined<T extends object>(obj: T): Partial<T> {
 
 /**
  * Build a typed phase-constructor API from per-phase defaults. The defaults
- * object MUST have one entry per `S["type"]` discriminant; the returned API
+ * object MUST have one entry per `S["_tag"]` discriminant; the returned API
  * has one method per phase. Each method merges the defaults with optional
- * overrides (undefineds stripped), then stamps the `type` discriminator.
+ * overrides (undefineds stripped), then stamps the `_tag` discriminator.
  *
  * @example
  * ```ts
  * import { stateFactory } from "@demlik/tea/testing";
  *
- * type S = { type: "a"; n: number } | { type: "b"; s: string };
+ * type S = { _tag: "a"; n: number } | { _tag: "b"; s: string };
  * const f = stateFactory<S>({ a: { n: 0 }, b: { s: "" } });
- * f.a();              // { type: "a", n: 0 }
- * f.a({ n: 42 });     // { type: "a", n: 42 }
- * f.b({ s: "hi" });   // { type: "b", s: "hi" }
+ * f.a();              // { _tag: "a", n: 0 }
+ * f.a({ n: 42 });     // { _tag: "a", n: 42 }
+ * f.b({ s: "hi" });   // { _tag: "b", s: "hi" }
  * ```
  */
-export function stateFactory<S extends { type: string }>(
+export function stateFactory<S extends { _tag: string }>(
   defaults: StateFactoryDefaults<S>,
 ): StateFactoryAPI<S> {
   // Build the API by walking the defaults' own keys. Each key corresponds
   // to one phase discriminator; the constructor closes over both the key
-  // (for the `type` stamp) and that phase's defaults snapshot.
+  // (for the `_tag` stamp) and that phase's defaults snapshot.
   const api = {} as { [k: string]: (overrides?: object) => unknown };
   for (const key of Object.keys(
     defaults,
@@ -125,7 +125,7 @@ export function stateFactory<S extends { type: string }>(
       // The strip-undefined pass lives here, not at the caller. See the
       // module header for the `exactOptionalPropertyTypes` rationale.
       const cleanedOverrides = overrides ? stripUndefined(overrides) : {};
-      return { type: key, ...phaseDefaults, ...cleanedOverrides };
+      return { _tag: key, ...phaseDefaults, ...cleanedOverrides };
     };
   }
   return api as StateFactoryAPI<S>;

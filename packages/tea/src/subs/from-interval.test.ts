@@ -15,9 +15,9 @@ type State = {
   readonly periodMs: number;
 };
 type Msg =
-  | { readonly type: "tick" }
-  | { readonly type: "disarm" }
-  | { readonly type: "retime"; readonly periodMs: number };
+  | { readonly _tag: "tick" }
+  | { readonly _tag: "disarm" }
+  | { readonly _tag: "retime"; readonly periodMs: number };
 
 const update: Reducer<State, Msg, never> = {
   tick: (s) => [{ ...s, ticks: s.ticks + 1 }, []],
@@ -37,7 +37,7 @@ function tickMachine(intervalMs: number) {
     update,
     subs: [
       {
-        type: "tick",
+        _tag: "tick",
         deps: (s) => (s.armed ? { intervalMs: s.periodMs } : null),
       },
     ],
@@ -45,7 +45,7 @@ function tickMachine(intervalMs: number) {
 }
 
 const subscribe = {
-  tick: fromInterval<TickSub, Msg>(() => ({ type: "tick" })),
+  tick: fromInterval<TickSub, Msg>(() => ({ _tag: "tick" })),
 };
 
 describe("fromInterval — subscribe → deliver → cleanup against a real runtime", () => {
@@ -81,7 +81,7 @@ describe("fromInterval — subscribe → deliver → cleanup against a real runt
     await rt.idle();
     expect(rt.getState().ticks).toBe(1);
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     await vi.advanceTimersByTimeAsync(5_000);
     await rt.idle();
     expect(rt.getState().ticks).toBe(1); // cleanup ran; the timer is gone
@@ -110,7 +110,7 @@ describe("fromInterval — subscribe → deliver → cleanup against a real runt
   it("a changed period restarts the interval at the new period", async () => {
     const rt = await run(tickMachine(1_000), { subscribe }).ready;
     await vi.advanceTimersByTimeAsync(600);
-    await rt.dispatch({ type: "retime", periodMs: 5_000 });
+    await rt.dispatch({ _tag: "retime", periodMs: 5_000 });
 
     // The 1s interval is gone: no tick at the old period's boundary.
     await vi.advanceTimersByTimeAsync(4_999);

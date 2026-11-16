@@ -15,7 +15,7 @@ import { defineMachine, type NoCtx, type Reducer } from "../index";
 import { run } from "../promise";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 
 const pureUpdate: Reducer<State, Msg, never> = {
   bump: (s) => [{ count: s.count + 1 }, []],

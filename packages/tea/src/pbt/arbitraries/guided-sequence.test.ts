@@ -42,18 +42,18 @@ type Defs = (typeof defined)[CheckName] | typeof publish;
 type Sent = ReturnType<Defs>;
 
 type State =
-  | { readonly type: "idle" }
+  | { readonly _tag: "idle" }
   | {
-      readonly type: "asking";
+      readonly _tag: "asking";
       readonly ticket: string;
       readonly got: readonly CheckName[];
     }
-  | { readonly type: "publishing"; readonly ticket: string }
-  | { readonly type: "landed" };
+  | { readonly _tag: "publishing"; readonly ticket: string }
+  | { readonly _tag: "landed" };
 
 type Msg =
-  | { readonly type: "start"; readonly ticket: string }
-  | { readonly type: "nudge" }
+  | { readonly _tag: "start"; readonly ticket: string }
+  | { readonly _tag: "nudge" }
   | Settled<Defs>;
 
 const ask = (name: CheckName, ticket: string): Sent =>
@@ -62,12 +62,12 @@ const ask = (name: CheckName, ticket: string): Sent =>
 const checkOk =
   (name: CheckName) =>
   (s: State): readonly [State, readonly Sent[]] => {
-    if (s.type !== "asking" || s.got.includes(name)) return [s, []];
+    if (s._tag !== "asking" || s.got.includes(name)) return [s, []];
     const got = [...s.got, name];
     return got.length < CHECKS.length
       ? [{ ...s, got }, []]
       : [
-          { type: "publishing", ticket: s.ticket },
+          { _tag: "publishing", ticket: s.ticket },
           [publish({ ticket: s.ticket })],
         ];
   };
@@ -75,20 +75,20 @@ const checkOk =
 const checkErr =
   (name: CheckName) =>
   (s: State): readonly [State, readonly Sent[]] =>
-    s.type === "asking" && !s.got.includes(name)
+    s._tag === "asking" && !s.got.includes(name)
       ? [s, [ask(name, s.ticket)]]
       : [s, []];
 
 const update: Reducer<State, Msg, Sent> = {
   start: (s, m) =>
-    s.type === "idle"
+    s._tag === "idle"
       ? [
-          { type: "asking", ticket: m.ticket, got: [] },
+          { _tag: "asking", ticket: m.ticket, got: [] },
           CHECKS.map((name) => ask(name, m.ticket)),
         ]
       : [s, []],
   nudge: (s) =>
-    s.type === "asking"
+    s._tag === "asking"
       ? [
           s,
           CHECKS.filter((name) => !s.got.includes(name)).map((name) =>
@@ -103,9 +103,9 @@ const update: Reducer<State, Msg, Sent> = {
   scan_ok: checkOk("scan"),
   scan_err: checkErr("scan"),
   publish_ok: (s) =>
-    s.type === "publishing" ? [{ type: "landed" }, []] : [s, []],
+    s._tag === "publishing" ? [{ _tag: "landed" }, []] : [s, []],
   publish_err: (s) =>
-    s.type === "publishing" ? [s, [publish({ ticket: s.ticket })]] : [s, []],
+    s._tag === "publishing" ? [s, [publish({ ticket: s.ticket })]] : [s, []],
 };
 
 type Ctx = Record<string, never>;
@@ -120,7 +120,7 @@ const release = (cells: Reducer<State, Msg, Sent> = update) =>
       ctx: {} as Ctx,
     },
     cmds: [defined.lint, defined.test, defined.scan, publish],
-    init: (loaded) => [loaded ?? { type: "idle" }, []],
+    init: (loaded) => [loaded ?? { _tag: "idle" }, []],
     update: cells,
   });
 
@@ -131,7 +131,7 @@ const dropsAnAnswer = release({ ...update, test_ok: (s) => [s, []] });
 const startCell = arbRecordMsg("start", {
   ticket: fc.constantFrom("T1", "T2"),
 });
-const nudgeCell = fc.constant({ type: "nudge" as const });
+const nudgeCell = fc.constant({ _tag: "nudge" as const });
 
 /** A check answers good 3 times in 4, and a shrink moves a bad answer toward a good one. */
 const goodOrBad = fc.nat(3).map((n) => n !== 3);
@@ -194,10 +194,10 @@ const landsGivenEveryAnswer = (
   initCmds: readonly Sent[],
 ): boolean | string =>
   steps.length === 0 ||
-  final.type === "idle" ||
+  final._tag === "idle" ||
   walk(initCmds, steps).waiting.length > 0 ||
-  final.type === "landed" ||
-  `every answer came in and the run sits in ${final.type}`;
+  final._tag === "landed" ||
+  `every answer came in and the run sits in ${final._tag}`;
 
 const folded = (m: typeof machine, msgs: readonly Msg[]) =>
   foldEvents(m, ctx, null, msgs);
@@ -226,11 +226,11 @@ describe("a test author checks that something must happen, on random lists", () 
       lists,
       (steps, final, initCmds) => {
         if (
-          final.type !== "idle" &&
+          final._tag !== "idle" &&
           walk(initCmds, steps).waiting.length === 0
         ) {
           finished++;
-          if (final.type === "landed") landed++;
+          if (final._tag === "landed") landed++;
         }
         return landsGivenEveryAnswer(steps, final, initCmds);
       },
@@ -257,12 +257,12 @@ describe("a test author checks that something must happen, on random lists", () 
 
   it("works through propertyTerminates too", () => {
     const failure = failureOf(() =>
-      propertyTerminates(machine, ctx, lists, (s) => s.type !== "landed", {
+      propertyTerminates(machine, ctx, lists, (s) => s._tag !== "landed", {
         seed: 1,
         numRuns: 500,
       }),
     );
-    expect(told(failure)).toContain('"type":"landed"');
+    expect(told(failure)).toContain('"_tag":"landed"');
   });
 });
 
@@ -281,7 +281,7 @@ describe("every answer answers a Cmd really sent", () => {
     for (const msgs of fc.sample(lists, { seed: 1, numRuns: 200 })) {
       for (const state of folded(machine, msgs).states) {
         expect(JSON.stringify(state)).not.toMatch(
-          /"type":"(lint|test|scan|publish)"/,
+          /"_tag":"(lint|test|scan|publish)"/,
         );
       }
     }
@@ -290,10 +290,10 @@ describe("every answer answers a Cmd really sent", () => {
   it("answers a Cmd sent twice at most twice", () => {
     const twice = fc.sample(lists, { seed: 42, numRuns: 2000 }).some((msgs) => {
       const asks = folded(machine, msgs).steps.flatMap(({ cmds }) =>
-        cmds.filter((cmd) => cmd.type === "lint"),
+        cmds.filter((cmd) => cmd._tag === "lint"),
       ).length;
       const answers = msgs.filter(
-        ({ type }) => type === "lint_ok" || type === "lint_err",
+        ({ _tag: type }) => type === "lint_ok" || type === "lint_err",
       ).length;
       expect(answers).toBeLessThanOrEqual(asks);
       return answers >= 2;
@@ -304,7 +304,7 @@ describe("every answer answers a Cmd really sent", () => {
   it("drops an answer event with nothing waiting: no list opens on an answer", () => {
     for (const msgs of fc.sample(lists, { seed: 1, numRuns: 500 })) {
       const [first] = msgs;
-      if (first !== undefined) expect(first.type).toMatch(/^(start|nudge)$/);
+      if (first !== undefined) expect(first._tag).toMatch(/^(start|nudge)$/);
     }
   });
 
@@ -315,7 +315,9 @@ describe("every answer answers a Cmd really sent", () => {
       answers: rest,
     });
     for (const msgs of fc.sample(partial, { seed: 1, numRuns: 500 })) {
-      expect(msgs.some(({ type }) => type.startsWith("lint_"))).toBe(false);
+      expect(msgs.some(({ _tag: type }) => type.startsWith("lint_"))).toBe(
+        false,
+      );
     }
   });
 });
@@ -375,8 +377,8 @@ describe("a shrunk list", () => {
     const longTicket = release({
       ...update,
       publish_ok: (s) =>
-        s.type === "publishing" && s.ticket.length >= 3
-          ? [{ type: "idle" }, []]
+        s._tag === "publishing" && s.ticket.length >= 3
+          ? [{ _tag: "idle" }, []]
           : update.publish_ok(s, {} as never),
     });
     const longTickets = arbGuidedSequence(longTicket, ctx, {
@@ -388,13 +390,13 @@ describe("a shrunk list", () => {
     const details = fc.check(
       fc.property(longTickets, (msgs) => {
         const final = folded(longTicket, msgs).finalState;
-        return !(final.type === "idle" && msgs.length > 0);
+        return !(final._tag === "idle" && msgs.length > 0);
       }),
       { seed: 1, numRuns: 2000 },
     );
     const [shrunk] = details.counterexample ?? [];
     const start = shrunk?.find(
-      (msg): msg is Extract<Msg, { type: "start" }> => msg.type === "start",
+      (msg): msg is Extract<Msg, { _tag: "start" }> => msg._tag === "start",
     );
     expect(start?.ticket).toHaveLength(3);
   });
@@ -403,9 +405,9 @@ describe("a shrunk list", () => {
 describe("a machine with no machine.cmds", () => {
   // Hand-written Cmds, and answers that carry no `cmd`: nothing to read a pairing
   // from. `init` sends one too, and the cell names it by the Cmd it gets.
-  type Job = { readonly type: "job"; readonly id: number };
-  type Done = { readonly type: "done"; readonly id: number };
-  type Go = { readonly type: "go" };
+  type Job = { readonly _tag: "job"; readonly id: number };
+  type Done = { readonly _tag: "done"; readonly id: number };
+  type Go = { readonly _tag: "go" };
   type Bare = { readonly open: readonly number[]; readonly closed: number };
 
   const bare = defineMachine({
@@ -417,12 +419,12 @@ describe("a machine with no machine.cmds", () => {
     },
     init: (loaded) => [
       loaded ?? { open: [0], closed: 0 },
-      [{ type: "job", id: 0 }],
+      [{ _tag: "job", id: 0 }],
     ],
     update: {
       go: (s) => {
         const id = s.open.length + s.closed;
-        return [{ ...s, open: [...s.open, id] }, [{ type: "job", id }]];
+        return [{ ...s, open: [...s.open, id] }, [{ _tag: "job", id }]];
       },
       done: (s, m) => [
         {
@@ -435,11 +437,11 @@ describe("a machine with no machine.cmds", () => {
   });
 
   const bareLists = arbGuidedSequence(bare, ctx, {
-    outside: { go: fc.constant({ type: "go" as const }) },
+    outside: { go: fc.constant({ _tag: "go" as const }) },
     answers: {
       job: {
         draw: fc.constant(null),
-        make: (cmd) => ({ type: "done" as const, id: cmd.id }),
+        make: (cmd) => ({ _tag: "done" as const, id: cmd.id }),
       },
     },
   });
@@ -451,13 +453,13 @@ describe("a machine with no machine.cmds", () => {
       const { steps, finalState } = foldEvents(bare, ctx, null, msgs);
       const open = new Set([0]);
       for (const { msg, cmds } of steps) {
-        if (msg.type === "done") {
+        if (msg._tag === "done") {
           expect(open.delete(msg.id)).toBe(true);
         }
         for (const cmd of cmds) open.add(cmd.id);
       }
       expect([...open].sort()).toEqual([...finalState.open].sort());
-      if (msgs[0]?.type === "done" && msgs[0].id === 0) reachedInit++;
+      if (msgs[0]?._tag === "done" && msgs[0].id === 0) reachedInit++;
     }
     expect(reachedInit).toBeGreaterThan(0);
   });
@@ -471,7 +473,7 @@ describe("a machine with no machine.cmds", () => {
         answers: {
           job: {
             draw: fc.constant(null),
-            make: (cmd) => ({ type: "done" as const, id: cmd.id }),
+            make: (cmd) => ({ _tag: "done" as const, id: cmd.id }),
           },
         },
       },
@@ -491,7 +493,7 @@ describe("a machine in the transitions form", () => {
   const table = {
     idle: {
       start: (_s, m) => [
-        { type: "asking", ticket: m.ticket, got: [] },
+        { _tag: "asking", ticket: m.ticket, got: [] },
         CHECKS.map((name) => ask(name, m.ticket)),
       ],
     },
@@ -505,7 +507,7 @@ describe("a machine in the transitions form", () => {
       scan_err: checkErr("scan"),
     },
     publishing: {
-      publish_ok: () => [{ type: "landed" }, []],
+      publish_ok: () => [{ _tag: "landed" }, []],
       publish_err: (s) => [s, [publish({ ticket: s.ticket })]],
     },
     landed: {},
@@ -520,7 +522,7 @@ describe("a machine in the transitions form", () => {
         ctx: {} as Ctx,
       },
       cmds: [defined.lint, defined.test, defined.scan, publish],
-      init: (loaded) => [loaded ?? { type: "idle" }, []],
+      init: (loaded) => [loaded ?? { _tag: "idle" }, []],
       update: cells,
     });
 
@@ -538,7 +540,7 @@ describe("a machine in the transitions form", () => {
       ctx,
       phasedLists,
       (_steps, final) => {
-        if (final.type === "landed") landed++;
+        if (final._tag === "landed") landed++;
         return true;
       },
       { seed, numRuns: 500 },
@@ -599,8 +601,8 @@ describe("a machine in the transitions form", () => {
       const { misfit, waiting } = walk(initCmds, steps);
       expect(misfit).toBeNull();
       if (
-        finalState.type !== "asking" &&
-        waiting.some((cmd) => (cmd as Sent).type !== "publish")
+        finalState._tag !== "asking" &&
+        waiting.some((cmd) => (cmd as Sent)._tag !== "publish")
       ) {
         nudgedPast++;
       }
@@ -611,12 +613,12 @@ describe("a machine in the transitions form", () => {
 
   it("a refused answer leaves its Cmd waiting for a later one", () => {
     // One Cmd, sent at the start, whose answer `shut` refuses and `open` takes.
-    type Job = { readonly type: "job" };
-    type GateMsg = { readonly type: "unlock" } | { readonly type: "job_done" };
+    type Job = { readonly _tag: "job" };
+    type GateMsg = { readonly _tag: "unlock" } | { readonly _tag: "job_done" };
     type Gate =
-      | { readonly type: "shut" }
-      | { readonly type: "open" }
-      | { readonly type: "done" };
+      | { readonly _tag: "shut" }
+      | { readonly _tag: "open" }
+      | { readonly _tag: "done" };
     const gate = defineMachine({
       types: {
         model: {} as Gate,
@@ -624,10 +626,10 @@ describe("a machine in the transitions form", () => {
         cmd: {} as Job,
         ctx: {} as Ctx,
       },
-      init: (loaded) => [loaded ?? { type: "shut" }, [{ type: "job" }]],
+      init: (loaded) => [loaded ?? { _tag: "shut" }, [{ _tag: "job" }]],
       update: {
-        shut: { unlock: () => [{ type: "open" }, []] },
-        open: { job_done: () => [{ type: "done" }, []] },
+        shut: { unlock: () => [{ _tag: "open" }, []] },
+        open: { job_done: () => [{ _tag: "done" }, []] },
         done: {},
       } satisfies Transitions<Gate, GateMsg, Job>,
     });
@@ -636,13 +638,13 @@ describe("a machine in the transitions form", () => {
     // on a list means a refused event left the one Cmd there to be read again.
     let reads = 0;
     const counted = arbGuidedSequence(gate, ctx, {
-      outside: { unlock: fc.constant({ type: "unlock" as const }) },
+      outside: { unlock: fc.constant({ _tag: "unlock" as const }) },
       answers: {
         job: {
           draw: fc.constant(null),
           make: () => {
             reads++;
-            return { type: "job_done" as const };
+            return { _tag: "job_done" as const };
           },
         },
       },
@@ -656,12 +658,12 @@ describe("a machine in the transitions form", () => {
     expect(
       samples.some(
         ({ msgs, read }) =>
-          read > 1 && msgs.some(({ type }) => type === "job_done"),
+          read > 1 && msgs.some(({ _tag: type }) => type === "job_done"),
       ),
     ).toBe(true);
     for (const { msgs } of samples) {
       expect(
-        msgs.filter(({ type }) => type === "job_done").length,
+        msgs.filter(({ _tag: type }) => type === "job_done").length,
       ).toBeLessThanOrEqual(1);
       expect(foldEvents(gate, ctx, null, msgs).steps).toHaveLength(msgs.length);
     }
@@ -687,7 +689,7 @@ describe("a machine in the transitions form", () => {
       ),
     );
     expect(told(failure)).toContain("scan_ok broke");
-    expect(failure.message).toMatch(/"type":"scan_ok"[^\]]*\]\]/);
+    expect(failure.message).toMatch(/"_tag":"scan_ok"[^\]]*\]\]/);
   });
 });
 
@@ -710,7 +712,7 @@ describe("what goes wrong", () => {
     );
     expect(told(failure)).toContain("scan_ok broke");
     expect(failure.run.numShrinks).toBeGreaterThan(0);
-    expect(failure.message).toMatch(/"type":"scan_ok"[^\]]*\]\]/);
+    expect(failure.message).toMatch(/"_tag":"scan_ok"[^\]]*\]\]/);
   });
 
   it("an init's throw comes back as a failure on an empty list", () => {
@@ -785,25 +787,25 @@ describe("what goes wrong", () => {
   });
 
   it("a Cmd type named after an Object.prototype key has no cell", () => {
-    type Odd = { readonly type: "constructor" };
+    type Odd = { readonly _tag: "constructor" };
     const odd = defineMachine({
       types: {
         model: {} as { readonly sent: number },
-        msg: {} as { readonly type: "send" } | { readonly type: "got" },
+        msg: {} as { readonly _tag: "send" } | { readonly _tag: "got" },
         cmd: {} as Odd,
         ctx: {} as Ctx,
       },
       init: () => [{ sent: 0 }, []],
       update: {
-        send: (s) => [{ sent: s.sent + 1 }, [{ type: "constructor" }]],
+        send: (s) => [{ sent: s.sent + 1 }, [{ _tag: "constructor" }]],
         got: (s) => [s, []],
       },
     });
     const sends = arbGuidedSequence(odd, ctx, {
-      outside: { send: fc.constant({ type: "send" as const }) },
+      outside: { send: fc.constant({ _tag: "send" as const }) },
     });
     for (const msgs of fc.sample(sends, { seed: 1, numRuns: 50 })) {
-      expect(msgs.every(({ type }) => type === "send")).toBe(true);
+      expect(msgs.every(({ _tag: type }) => type === "send")).toBe(true);
     }
   });
 });
@@ -848,14 +850,14 @@ describe("the cell's types", () => {
       arbGuidedSequence(machine, ctx, {
         answers: {
           // @ts-expect-error No Cmd has this type.
-          nothing: { draw: fc.constant(null), make: () => ({ type: "nudge" }) },
+          nothing: { draw: fc.constant(null), make: () => ({ _tag: "nudge" }) },
         },
       });
 
       arbGuidedSequence(machine, ctx, {
         outside: {
           // @ts-expect-error No Msg has this type.
-          nothing: fc.constant({ type: "nothing" }),
+          nothing: fc.constant({ _tag: "nothing" }),
         },
       });
     };

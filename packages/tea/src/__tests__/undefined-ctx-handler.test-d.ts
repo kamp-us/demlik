@@ -26,9 +26,9 @@ const fetchName = Cmd.define("fetch_name", {
   err: ["not_found"],
 });
 
-type Ping = { readonly type: "ping" };
-type Pong = { readonly type: "pong" };
-type Go = { readonly type: "go" };
+type Ping = { readonly _tag: "ping" };
+type Pong = { readonly _tag: "pong" };
+type Go = { readonly _tag: "go" };
 type Msg = Go | Pong | Settled<typeof fetchName>;
 type AppCmd = ReturnType<typeof fetchName> | Ping;
 
@@ -46,7 +46,7 @@ const interpret: Interpret<Msg, AppCmd, undefined> = {
   // A hand-written cell reaches `emit` with no cast.
   ping: async (_cmd, ctx) => {
     ctx.emit(progress, 2);
-    return { type: "pong" };
+    return { _tag: "pong" };
   },
 };
 
@@ -71,7 +71,7 @@ const machine = defineMachine({
   cmds: [fetchName],
   init: () => [{ n: 0 }, []],
   update: {
-    go: (s) => [s, [fetchName({ id: "u1" }), { type: "ping" }]],
+    go: (s) => [s, [fetchName({ id: "u1" }), { _tag: "ping" }]],
     pong: (s) => [s, []],
     fetch_name_ok: (s) => [s, []],
     fetch_name_err: (s) => [s, []],
@@ -87,7 +87,7 @@ const detached: InterpretDetached<Ping, Pong, undefined> = async (
   dispatch,
 ) => {
   ctx.emit(progress, 3);
-  dispatch({ type: "pong" });
+  dispatch({ _tag: "pong" });
 };
 const wrapped = wrapDetached<Ping, Msg, Pong, undefined>(detached);
 void wrapped;

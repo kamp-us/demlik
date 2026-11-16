@@ -72,14 +72,14 @@ export interface GameState {
 
 /** The only input: a relative move. Stands in for any client-predicted command. */
 export interface Move {
-  readonly type: "move";
+  readonly _tag: "move";
   readonly dx: number;
   readonly dy: number;
 }
 
 /** Construct a `move` input. */
 export const move = (dx: number, dy: number): Move => ({
-  type: "move",
+  _tag: "move",
   dx,
   dy,
 });

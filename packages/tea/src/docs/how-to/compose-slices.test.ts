@@ -91,8 +91,8 @@ export interface LookupState {
 }
 
 export type LookupMsg =
-  | { readonly type: "ask"; readonly key: string; readonly at: number }
-  | { readonly type: "arrived"; readonly key: string; readonly answer: Answer };
+  | { readonly _tag: "ask"; readonly key: string; readonly at: number }
+  | { readonly _tag: "arrived"; readonly key: string; readonly answer: Answer };
 
 /**
  * `liftSlice(key, state, verb(...))` is the `{ ...state, inFlight: slice }`
@@ -191,15 +191,15 @@ const zero: LookupState = {
 
 /** The state after asking for `tea` and having the answer come back. */
 const settled = (): LookupState =>
-  step(step(zero, { type: "ask", key: "tea", at: 7 }), {
-    type: "arrived",
+  step(step(zero, { _tag: "ask", key: "tea", at: 7 }), {
+    _tag: "arrived",
     key: "tea",
     answer: { title: "Tea" },
   });
 
 describe("docs/how-to/compose-two-battery-slices.md (#240) — it runs", () => {
   it("threads each verb result into its own key and leaves the sibling alone", () => {
-    const asked = step(zero, { type: "ask", key: "tea", at: 7 });
+    const asked = step(zero, { _tag: "ask", key: "tea", at: 7 });
 
     expect(asked.inFlight).toEqual({ tea: 7 });
     // `liftSlice` rebuilt one key; the cache slice is the SAME value, by
@@ -213,7 +213,7 @@ describe("docs/how-to/compose-two-battery-slices.md (#240) — it runs", () => {
   });
 
   it("reads `pending` from the second step while the first defers", () => {
-    const asked = step(zero, { type: "ask", key: "tea", at: 7 });
+    const asked = step(zero, { _tag: "ask", key: "tea", at: 7 });
     expect(statusOf(asked, "tea")).toEqual({ state: "pending", since: 7 });
   });
 
@@ -228,7 +228,7 @@ describe("docs/how-to/compose-two-battery-slices.md (#240) — it runs", () => {
 describe("docs/how-to/compose-two-battery-slices.md (#240) — the precedence", () => {
   /** Cached AND back in flight: the one input the two orders disagree about. */
   const refreshing = (): LookupState =>
-    step(settled(), { type: "ask", key: "tea", at: 9 });
+    step(settled(), { _tag: "ask", key: "tea", at: 9 });
 
   // #region precedence
   it("answers `ready` for a cached key that is refreshing", () => {

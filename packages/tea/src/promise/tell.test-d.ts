@@ -56,7 +56,7 @@ tell(line, handBuilt, ping("a"));
 tell(line, { ...handBuilt }, ping("a"));
 
 // @ts-expect-error a Msg outside the machine's union
-tell(line, fromReady, { type: "unknown" });
+tell(line, fromReady, { _tag: "unknown" });
 
 // A fake typed as the host's `Runtime` stays valid as one, and a real handle
 // still fits where a `Runtime` is asked for.

@@ -12,7 +12,7 @@ import { run as runPromise } from "../promise";
 import { run as runEffect } from "./index";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
@@ -49,7 +49,7 @@ const engines = {
   promise: async (opts: Options) => {
     try {
       const rt = await runPromise(machine, { ctx: undefined, ...opts }).ready;
-      await rt.dispatch({ type: "bump" });
+      await rt.dispatch({ _tag: "bump" });
       const state = rt.getState();
       await rt.stop();
       return { state };
@@ -66,7 +66,7 @@ const engines = {
             ...opts,
           });
           const rt = yield* booting.ready;
-          yield* rt.dispatch({ type: "bump" });
+          yield* rt.dispatch({ _tag: "bump" });
           return rt.getState();
         }),
       ),

@@ -4,7 +4,7 @@
  * a ctx missing a key the machine's `ctx` names) lives in `__tests__/typed-cmd-channels.test-d.ts`.
  *
  * What the runtime owes:
- *   - the emitted Cmd is still a plain `{ type, ...input }` record (JSON
+ *   - the emitted Cmd is still a plain `{ _tag, ...input }` record (JSON
  *     round-trip equal) — the channels are phantoms;
  *   - a handler returns an outcome and the engine mints the Msg (ADR 0021):
  *     `ok(v)` → `<name>_ok`, a declared `err({ _tag })` → `<name>_err`, and an
@@ -52,13 +52,13 @@ type FetchSettled = Settled<typeof fetch>;
 
 type Model = {
   readonly body: string | null;
-  readonly errors: readonly FetchSettled["type"][];
+  readonly errors: readonly FetchSettled["_tag"][];
   readonly lastError:
-    | Extract<FetchSettled, { type: "fetch_err" }>["error"]
+    | Extract<FetchSettled, { _tag: "fetch_err" }>["error"]
     | null;
   readonly ats: readonly number[];
 };
-type Msg = { readonly type: "go"; readonly url: string };
+type Msg = { readonly _tag: "go"; readonly url: string };
 
 const initial: Model = { body: null, errors: [], lastError: null, ats: [] };
 
@@ -71,7 +71,7 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
   fetch_err: (m, msg) => [
     {
       ...m,
-      errors: [...m.errors, msg.type],
+      errors: [...m.errors, msg._tag],
       lastError: msg.error,
       ats: [...m.ats, msg.at],
     },
@@ -106,12 +106,12 @@ function interpretOver(
 const fixedClock = (at: number) => () => at;
 
 describe("Cmd.define — the emitted Cmd is still a plain record", () => {
-  it("builds `{ type, ...input }` and survives a JSON round-trip unchanged", () => {
+  it("builds `{ _tag, ...input }` and survives a JSON round-trip unchanged", () => {
     const cmd = fetch({ url: "/users" });
-    expect(cmd).toEqual({ type: "fetch", url: "/users" });
+    expect(cmd).toEqual({ _tag: "fetch", url: "/users" });
     expect(JSON.parse(JSON.stringify(cmd))).toEqual(cmd);
     // The channels are phantoms: nothing rides on the value.
-    expect(Object.keys(cmd).sort()).toEqual(["type", "url"]);
+    expect(Object.keys(cmd).sort()).toEqual(["_tag", "url"]);
   });
 
   it("carries its declaration for the runtime edge", () => {
@@ -124,12 +124,12 @@ describe("Cmd.define — the emitted Cmd is still a plain record", () => {
   it("mints the settled Msgs, leaving `at` to the runtime unless handed one", () => {
     const cmd = fetch({ url: "/" });
     expect(fetch.ok(cmd, { body: "x" })).toEqual({
-      type: "fetch_ok",
+      _tag: "fetch_ok",
       cmd,
       value: { body: "x" },
     });
     expect(fetch.err(cmd, { _tag: "timeout" }, 42)).toEqual({
-      type: "fetch_err",
+      _tag: "fetch_err",
       cmd,
       error: { _tag: "timeout" },
       at: 42,
@@ -146,10 +146,10 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
     }).ready;
     const seen: string[] = [];
     rt.observe((msg) => {
-      seen.push(msg.type);
+      seen.push(msg._tag);
     });
 
-    await rt.dispatch({ type: "go", url: "/" });
+    await rt.dispatch({ _tag: "go", url: "/" });
 
     expect(rt.getState().body).toBe("hello");
     expect(rt.getState().ats).toEqual([1_000]);
@@ -172,7 +172,7 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
       seen.push(msg);
     });
 
-    await rt.dispatch({ type: "go", url: "/" });
+    await rt.dispatch({ _tag: "go", url: "/" });
 
     const state = rt.getState();
     // The corrupt value never reached the `_ok` cell.
@@ -187,9 +187,9 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
     // And it is a settled-value error (ADR 0011): plain data, JSON round-trip equal.
     expect(malformed).not.toBeInstanceOf(Error);
     expect(JSON.parse(JSON.stringify(malformed))).toEqual(malformed);
-    expect(seen.map((m) => m.type)).toEqual(["go", "fetch_err"]);
-    const errMsg = seen[1] as Extract<FetchSettled, { type: "fetch_err" }>;
-    expect(errMsg.cmd).toEqual({ type: "fetch", url: "/" });
+    expect(seen.map((m) => m._tag)).toEqual(["go", "fetch_err"]);
+    const errMsg = seen[1] as Extract<FetchSettled, { _tag: "fetch_err" }>;
+    expect(errMsg.cmd).toEqual({ _tag: "fetch", url: "/" });
   });
 
   it("the parsed value is what lands (zod strips a key the schema does not name)", async () => {
@@ -205,9 +205,9 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
       seen.push(msg);
     });
 
-    await rt.dispatch({ type: "go", url: "/" });
+    await rt.dispatch({ _tag: "go", url: "/" });
 
-    const okMsg = seen[1] as Extract<FetchSettled, { type: "fetch_ok" }>;
+    const okMsg = seen[1] as Extract<FetchSettled, { _tag: "fetch_ok" }>;
     expect(okMsg.value).toEqual({ body: "kept" });
   });
 
@@ -217,7 +217,7 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
       interpret: interpretOver(async () => ({ body: "t" })),
       ctx: { http: { get: async () => "unused" } },
     }).ready;
-    await rt.dispatch({ type: "go", url: "/" });
+    await rt.dispatch({ _tag: "go", url: "/" });
     const [at] = rt.getState().ats;
     expect(at).toBeGreaterThanOrEqual(before);
     expect(at).toBeLessThanOrEqual(Date.now());
@@ -261,9 +261,9 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
     }).ready;
     const seen: string[] = [];
     rt.observe((msg) => {
-      seen.push(msg.type);
+      seen.push(msg._tag);
     });
-    await rt.dispatch({ type: "go", url: "/a" });
+    await rt.dispatch({ _tag: "go", url: "/a" });
     return { state: rt.getState(), seen, reports };
   }
 
@@ -343,7 +343,7 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
     const { state, seen, reports } = await goOnce(async () => {
       calls += 1;
       // Once only, so a regression that passes it through cannot loop.
-      return calls === 1 ? { type: "go", url: "/follow-up" } : undefined;
+      return calls === 1 ? { _tag: "go", url: "/follow-up" } : undefined;
     });
     expect(seen).toEqual(["go"]);
     expect(state.errors).toEqual([]);
@@ -395,7 +395,7 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
         reports.push(error);
       },
     }).ready;
-    await rt.dispatch({ type: "go", url: "/after" });
+    await rt.dispatch({ _tag: "go", url: "/after" });
     expect(rt.getState().body).toBe("/after");
     expect(reports).toHaveLength(1);
   });
@@ -420,7 +420,7 @@ describe("`Cmd.define` takes any Standard Schema", () => {
     });
     type S = { readonly got: string | null; readonly issue: string | null };
     const m = defineMachine({
-      types: { model: {} as S, msg: {} as { type: "say"; text: unknown } },
+      types: { model: {} as S, msg: {} as { _tag: "say"; text: unknown } },
       cmds: [shout],
       init: () => [{ got: null, issue: null }, []],
       update: {
@@ -446,9 +446,9 @@ describe("`Cmd.define` takes any Standard Schema", () => {
           ok((cmd.text === "42" ? 42 : cmd.text) as never),
       },
     }).ready;
-    await rt.dispatch({ type: "say", text: "hi" });
+    await rt.dispatch({ _tag: "say", text: "hi" });
     expect(rt.getState().got).toBe("HI");
-    await rt.dispatch({ type: "say", text: "42" });
+    await rt.dispatch({ _tag: "say", text: "42" });
     expect(rt.getState().issue).toBe("raw");
   });
 
@@ -460,7 +460,7 @@ describe("`Cmd.define` takes any Standard Schema", () => {
     });
     const reports: unknown[] = [];
     const m = defineMachine({
-      types: { model: {} as { n: number }, msg: {} as { type: "go" } },
+      types: { model: {} as { n: number }, msg: {} as { _tag: "go" } },
       cmds: [later],
       init: () => [{ n: 0 }, []],
       update: {
@@ -475,7 +475,7 @@ describe("`Cmd.define` takes any Standard Schema", () => {
         reports.push(error);
       },
     }).ready;
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
     expect(rt.getState().n).toBe(0);
     expect(reports[0]).toBeInstanceOf(AsyncSchemaError);
   });
@@ -484,35 +484,35 @@ describe("`Cmd.define` takes any Standard Schema", () => {
 describe("a machine of hand-written Cmds is untouched", () => {
   it("runs with no `cmds`, no parse, no stamp", async () => {
     type S = { readonly n: number };
-    type M = { readonly type: "bump" } | { readonly type: "bumped" };
-    type C = { readonly type: "later" };
+    type M = { readonly _tag: "bump" } | { readonly _tag: "bumped" };
+    type C = { readonly _tag: "later" };
     const m = defineMachine({
       types: { model: {} as S, msg: {} as M, cmd: {} as C, ctx: {} as NoCtx },
       init: (_loaded) => [{ n: 0 }, []],
       update: {
-        bump: (s) => [s, [{ type: "later" }]],
+        bump: (s) => [s, [{ _tag: "later" }]],
         bumped: (s) => [{ n: s.n + 1 }, []],
       },
     });
     const seen: M[] = [];
     const rt = await run(m, {
-      interpret: { later: async (_cmd) => ({ type: "bumped" }) },
+      interpret: { later: async (_cmd) => ({ _tag: "bumped" }) },
     }).ready;
     rt.observe((msg) => {
       seen.push(msg);
     });
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().n).toBe(1);
     // No `at` was grafted onto a Msg the kernel does not own.
-    expect(seen[1]).toEqual({ type: "bumped" });
+    expect(seen[1]).toEqual({ _tag: "bumped" });
   });
 });
 
 describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
-  type Progress = { readonly type: "progress"; readonly note: string };
-  type Kick = { readonly type: "kick" };
-  type PokeOk = { readonly type: "poke_ok" };
-  type PokeCmd = { readonly type: "poke" };
+  type Progress = { readonly _tag: "progress"; readonly note: string };
+  type Kick = { readonly _tag: "kick" };
+  type PokeOk = { readonly _tag: "poke_ok" };
+  type PokeCmd = { readonly _tag: "poke" };
   type DMsg = Msg | Kick | Progress | PokeOk;
 
   // A hand-written `cmd` beside `cmds` takes the `types`-only overload, which
@@ -528,7 +528,7 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
     init: (_loaded) => [initial, []],
     update: {
       ...update,
-      kick: (m) => [m, [{ type: "poke" }]],
+      kick: (m) => [m, [{ _tag: "poke" }]],
       progress: (m) => [m, []],
       poke_ok: (m) => [m, []],
     },
@@ -549,7 +549,7 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
     }).ready;
     const seen: string[] = [];
     rt.observe((m) => {
-      seen.push(m.type);
+      seen.push(m._tag);
     });
     await rt.dispatch(msg);
     await rt.idle();
@@ -569,7 +569,7 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
         },
         poke: noPoke,
       },
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
     );
     expect(seen).toEqual(["go"]);
     expect(state).toEqual(initial);
@@ -592,7 +592,7 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
         },
         poke: noPoke,
       },
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
     );
     expect(seen).toEqual(["go", "fetch_ok"]);
     expect(state.body).toBe("via edge");
@@ -604,12 +604,12 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
     const { state, seen, reports } = await send(
       {
         fetch: async (_cmd, { ok }, dispatch) => {
-          dispatch?.({ type: "progress", note: "half way" });
+          dispatch?.({ _tag: "progress", note: "half way" });
           return ok({ body: "done" });
         },
         poke: noPoke,
       },
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
     );
     expect(seen).toEqual(["go", "progress", "fetch_ok"]);
     expect(state.body).toBe("done");
@@ -621,11 +621,11 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
       {
         fetch: async (_cmd, { ok }) => ok({ body: "unused" }),
         poke: async (_cmd, _ctx, dispatch) => {
-          dispatch?.({ type: "poke_ok" });
-          dispatch?.({ type: "progress", note: "poked" });
+          dispatch?.({ _tag: "poke_ok" });
+          dispatch?.({ _tag: "progress", note: "poked" });
         },
       },
-      { type: "kick" },
+      { _tag: "kick" },
     );
     expect(seen).toEqual(["kick", "poke_ok", "progress"]);
     expect(reports).toEqual([]);

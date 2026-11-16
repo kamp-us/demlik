@@ -38,7 +38,7 @@ export interface OrderState {
 }
 
 export type OrderMsg = {
-  readonly type: "place";
+  readonly _tag: "place";
   readonly sku: string;
   readonly cents: number;
 };

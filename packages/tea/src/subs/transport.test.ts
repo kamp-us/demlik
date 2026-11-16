@@ -61,10 +61,10 @@ type State = {
   readonly heard: readonly string[];
 };
 type Msg =
-  | { readonly type: "heard"; readonly text: string }
-  | { readonly type: "lost" }
-  | { readonly type: "close_seam" }
-  | { readonly type: "rekey"; readonly runId: string };
+  | { readonly _tag: "heard"; readonly text: string }
+  | { readonly _tag: "lost" }
+  | { readonly _tag: "close_seam" }
+  | { readonly _tag: "rekey"; readonly runId: string };
 
 const update: Reducer<State, Msg, never> = {
   heard: (s, m) => [{ ...s, heard: [...s.heard, m.text] }, []],
@@ -73,7 +73,7 @@ const update: Reducer<State, Msg, never> = {
   rekey: (s, m) => [{ ...s, runId: m.runId }, []],
 };
 
-const lost = (): Msg => ({ type: "lost" });
+const lost = (): Msg => ({ _tag: "lost" });
 
 function seamBattery() {
   return fromTransport<"hands", string, Inbound, Outbound, Msg, Ctx>({
@@ -97,7 +97,7 @@ function seamBattery() {
     // Empty text parses fine but is not worth a domain Msg — the second
     // (post-parse) drop-on-null seam.
     onInbound: (inbound) =>
-      inbound.text === "" ? null : { type: "heard", text: inbound.text },
+      inbound.text === "" ? null : { _tag: "heard", text: inbound.text },
     lostMsg: lost,
     serializeOutbound: (out) => JSON.stringify(out),
   });
@@ -128,7 +128,7 @@ function runSeam(seam: Seam, transport: Transport, runId = "run-1") {
 
 /** The running Sub the engine would hand the seam's runner for `runId`. */
 function handsSub(runId: string): TransportSub<"hands", string> {
-  return { id: subIdOf("hands", runId), type: "hands", deps: runId };
+  return { id: subIdOf("hands", runId), _tag: "hands", deps: runId };
 }
 
 describe("fromTransport — inbound, close, and the outbound handle table", () => {
@@ -195,7 +195,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     expect(rt.getState().heard).toEqual(["<lost>"]);
     expect(rt.getState().runId).toBeNull();
     expect(
-      observed.mock.calls.filter(([msg]) => msg.type === "lost"),
+      observed.mock.calls.filter(([msg]) => msg._tag === "lost"),
     ).toHaveLength(1);
 
     await rt.stop();
@@ -206,7 +206,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     const transport = stubTransport();
     const rt = await runSeam(seam, transport);
 
-    await rt.dispatch({ type: "close_seam" });
+    await rt.dispatch({ _tag: "close_seam" });
     expect(transport.closed).toBe(true);
     expect(transport.listenerCount).toBe(0);
 
@@ -235,7 +235,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const rt = await runSeam(seam, transport);
 
-    await rt.dispatch({ type: "close_seam" });
+    await rt.dispatch({ _tag: "close_seam" });
     expect(() => seam.send("run-1", { say: "too late" })).not.toThrow();
     expect(transport.sent).toEqual([]);
     expect(warn).toHaveBeenCalled();
@@ -276,7 +276,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     const transport = stubTransport();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const dispose = seam.subscribe(
-      { id: subIdOf("hands", "1"), type: "hands", deps: "1" },
+      { id: subIdOf("hands", "1"), _tag: "hands", deps: "1" },
       { transport },
       () => {},
     );
@@ -308,7 +308,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     });
     const rt = await runSeam(keyed, stubTransport());
 
-    await rt.dispatch({ type: "rekey", runId: "run-2" });
+    await rt.dispatch({ _tag: "rekey", runId: "run-2" });
     expect(first.closed).toBe(true);
     expect(second.closed).toBe(false);
 
@@ -371,7 +371,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     };
     const rt = await runSeam(seam, transport);
 
-    await expect(rt.dispatch({ type: "close_seam" })).resolves.toBeUndefined();
+    await expect(rt.dispatch({ _tag: "close_seam" })).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
 
     warn.mockRestore();

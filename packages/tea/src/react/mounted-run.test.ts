@@ -11,7 +11,7 @@ import { MountedRun } from "./mounted-run";
 const machine = defineMachine({
   types: {
     model: {} as { readonly n: number },
-    msg: {} as { readonly type: "inc" },
+    msg: {} as { readonly _tag: "inc" },
     ctx: undefined,
   },
   init: () => [{ n: 0 }, []],
@@ -40,7 +40,7 @@ describe("MountedRun, if React ever retired it on a hide", () => {
     mounted.connect();
     await microtask();
 
-    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(mounted.send({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(1);
   });
@@ -52,14 +52,14 @@ describe("MountedRun, if React ever retired it on a hide", () => {
     mounted.retire();
     mounted.disconnect();
     await microtask();
-    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(mounted.send({ _tag: "inc" })).toBeUndefined();
     expect(report).toHaveBeenCalledExactlyOnceWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },
     );
 
     mounted.connect();
-    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(mounted.send({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(2);
   });
@@ -74,7 +74,7 @@ describe("MountedRun, on a React where a cleanup cannot be a hide", () => {
     mounted.disconnect();
     await microtask();
 
-    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(mounted.send({ _tag: "inc" })).toBeUndefined();
     expect(report).toHaveBeenCalledExactlyOnceWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },
@@ -89,7 +89,7 @@ describe("MountedRun, on a React where a cleanup cannot be a hide", () => {
     mounted.connect();
     await microtask();
 
-    expect(mounted.send({ type: "inc" })).toBeUndefined();
+    expect(mounted.send({ _tag: "inc" })).toBeUndefined();
     await vi.waitFor(() => expect(mounted.getSnapshot()).toEqual({ n: 1 }));
     expect(startRun).toHaveBeenCalledTimes(1);
   });

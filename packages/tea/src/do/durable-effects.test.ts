@@ -100,10 +100,10 @@ describe("foldLedger — the pure fold (no side table)", () => {
         const { events } = driveRecorder(ops);
 
         const owedIds = new Set(
-          events.filter((e) => e.type === "effect_owed").map((e) => e.id),
+          events.filter((e) => e._tag === "effect_owed").map((e) => e.id),
         );
         const confirmedIds = new Set(
-          events.filter((e) => e.type === "effect_confirmed").map((e) => e.id),
+          events.filter((e) => e._tag === "effect_confirmed").map((e) => e.id),
         );
         const expectedSurviving = [...owedIds]
           .filter((id) => !confirmedIds.has(id))
@@ -196,7 +196,7 @@ describe("boundary cases", () => {
     expect(rec.confirm(owe.id).confirmed).toBe(true);
     expect(rec.confirm(owe.id).confirmed).toBe(false); // duplicate → false
 
-    const conf = { type: "effect_confirmed", id: owe.id } as const;
+    const conf = { _tag: "effect_confirmed", id: owe.id } as const;
     const once = foldLedger([owe.event, conf]);
     const twice = foldLedger([owe.event, conf, conf]);
     expect([...once.entries()]).toEqual([...twice.entries()]);
@@ -205,7 +205,7 @@ describe("boundary cases", () => {
 
   it("confirming a never-owed id is a no-op fold", () => {
     const ledger = applyEffectEvent(emptyLedger<ToolCall>(), {
-      type: "effect_confirmed",
+      _tag: "effect_confirmed",
       id: 999,
     });
     expect([...ledger.entries()]).toEqual([]);
@@ -238,7 +238,7 @@ describe("pendingEffectsLedger — live recorder", () => {
     const persisted = [
       a.event,
       b.event,
-      { type: "effect_confirmed", id: a.id } as const,
+      { _tag: "effect_confirmed", id: a.id } as const,
     ];
 
     // Simulated activation: rebuild from the log + carry lastId across.
@@ -261,7 +261,7 @@ describe("pendingEffectsLedger — live recorder", () => {
     const persisted: readonly EffectLedgerEvent<ToolCall>[] = [
       a.event,
       b.event,
-      { type: "effect_confirmed", id: a.id },
+      { _tag: "effect_confirmed", id: a.id },
     ];
 
     // A generator is single-pass: a naive double walk of `events` (fold, then

@@ -104,7 +104,7 @@ export type AgentCmd<
  * fire, never as a silent gap the agent backfills.
  */
 export type SnapshotInterpret<
-  M extends { type: string },
+  M extends { _tag: string },
   Snap extends boolean,
   Ctx,
 > = Snap extends true
@@ -312,7 +312,7 @@ export type AgentTimerMsg = LlmTimerMsg;
 // A run that rehydrated mid-loop must re-fire its one outstanding effect on
 // activation. `do/host`'s `autoBoot` is the firing side; this agent reducer's
 // `boot` verb is the receiving side. The coupling used to be a RAW string:
-// host built `{ type: "agent_boot", at }` by hand and the agent string-matched
+// host built `{ _tag: "agent_boot", at }` by hand and the agent string-matched
 // it — a literal duplicated across the seam with nothing tying the two ends.
 //
 // `AgentBootPort` promotes that coupling to a typed contract OWNED by the agent
@@ -324,7 +324,7 @@ export type AgentTimerMsg = LlmTimerMsg;
 
 /** The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. */
 export type AgentBootMsg = {
-  readonly type: typeof MsgType.AgentBoot;
+  readonly _tag: typeof MsgType.AgentBoot;
   readonly at: number;
 };
 
@@ -332,10 +332,10 @@ export type AgentBootMsg = {
  * The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches
  * on a resumable rehydrate. The agent owns this constructor so the boot Msg
  * shape lives in ONE place — the host fires it through here, never as a raw
- * `{ type: "agent_boot" }` literal.
+ * `{ _tag: "agent_boot" }` literal.
  */
 export function agentBootMsg(at: number): AgentBootMsg {
-  return { type: MsgType.AgentBoot, at };
+  return { _tag: MsgType.AgentBoot, at };
 }
 
 /**
@@ -346,13 +346,13 @@ export function agentBootMsg(at: number): AgentBootMsg {
  * constructor rather than a literal duplicated across the seam.
  */
 export type AgentCancelMsg = {
-  readonly type: typeof MsgType.AgentCancel;
+  readonly _tag: typeof MsgType.AgentCancel;
   readonly at: number;
 };
 
 /** Construct the `agent_cancel` Msg an abort dispatches. `at` stamps the outcome. */
 export function agentCancelMsg(at: number): AgentCancelMsg {
-  return { type: MsgType.AgentCancel, at };
+  return { _tag: MsgType.AgentCancel, at };
 }
 
 // ===========================================================================
@@ -379,18 +379,18 @@ export function agentCancelMsg(at: number): AgentCancelMsg {
  */
 export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | {
-      readonly type: typeof MsgType.AgentStart;
+      readonly _tag: typeof MsgType.AgentStart;
       readonly runId: string;
       readonly at: number;
     }
   | {
-      readonly type: typeof MsgType.AgentToolOk;
+      readonly _tag: typeof MsgType.AgentToolOk;
       readonly callId: string;
       readonly result: R;
       readonly at: number;
     }
   | {
-      readonly type: typeof MsgType.AgentToolErr;
+      readonly _tag: typeof MsgType.AgentToolErr;
       readonly callId: string;
       readonly reason: string;
       readonly at: number;
@@ -459,37 +459,37 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  */
 export type AgentEvent<R> =
   | (AgentEventHead & {
-      readonly type: "BrainStarted";
+      readonly _tag: "BrainStarted";
       readonly turn: number;
       readonly purpose: string;
       readonly model: string | null;
       readonly payload: unknown;
     })
   | (AgentEventHead & {
-      readonly type: "TurnSettled";
+      readonly _tag: "TurnSettled";
       readonly turn: AgentTurn;
       /** The usage the provider reported for this turn. Absent → none reported. */
       readonly usage?: TurnUsage;
     })
   | (AgentEventHead & {
-      readonly type: "ToolStarted";
+      readonly _tag: "ToolStarted";
       readonly callId: string;
       readonly name: string;
       readonly args: Readonly<Record<string, unknown>>;
     })
   | (AgentEventHead & {
-      readonly type: "ToolSettled";
+      readonly _tag: "ToolSettled";
       readonly callId: string;
       readonly result: R;
     })
   | (AgentEventHead & {
-      readonly type: "ToolFailed";
+      readonly _tag: "ToolFailed";
       readonly callId: string;
       readonly name: string;
       readonly failure: ToolFailure;
     })
   | (AgentEventHead & {
-      readonly type: "RunDone";
+      readonly _tag: "RunDone";
       readonly status: AgentEndedStatus;
     });
 
@@ -502,7 +502,7 @@ export interface AgentEventHead {
 }
 
 /**
- * Every {@link AgentEvent} `type`. A subscriber that wants the whole stream
+ * Every {@link AgentEvent} `_tag`. A subscriber that wants the whole stream
  * off `runtime.on` subscribes once per entry. `satisfies` proves each entry is
  * a real type; a type test proves no real type is missing.
  */
@@ -513,7 +513,7 @@ export const AGENT_EVENT_TYPES = [
   "ToolSettled",
   "ToolFailed",
   "RunDone",
-] as const satisfies readonly AgentEvent<unknown>["type"][];
+] as const satisfies readonly AgentEvent<unknown>["_tag"][];
 
 /**
  * Project one APPLIED agent transition `(msg, state)` to its semantic
@@ -604,7 +604,7 @@ export function agentEvents<
         // `_err` is noted by the reducer and projected below.
         if (routed.outcome.kind === "ok" && !refused.has(routed.callId)) {
           events.push({
-            type: "ToolSettled",
+            _tag: "ToolSettled",
             runId,
             // The router claimed it, so it is one of its settled Msgs.
             at: (msg as WiredToolMsg<T>).at,
@@ -634,8 +634,8 @@ function turnSettled<R>(
   at: number,
 ): AgentEvent<R> {
   return turn.usage === undefined
-    ? { type: "TurnSettled", runId, at, turn }
-    : { type: "TurnSettled", runId, at, turn, usage: turn.usage };
+    ? { _tag: "TurnSettled", runId, at, turn }
+    : { _tag: "TurnSettled", runId, at, turn, usage: turn.usage };
 }
 
 // One outbox note → its public event. `run_ended` reads the ending off the
@@ -649,7 +649,7 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
   switch (note.kind) {
     case "brain_started":
       return {
-        type: "BrainStarted",
+        _tag: "BrainStarted",
         runId,
         at: note.at,
         turn: note.turn,
@@ -659,7 +659,7 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
       };
     case "tool_started":
       return {
-        type: "ToolStarted",
+        _tag: "ToolStarted",
         runId,
         at: note.at,
         callId: note.call.callId,
@@ -668,7 +668,7 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
       };
     case "tool_failed":
       return {
-        type: "ToolFailed",
+        _tag: "ToolFailed",
         runId,
         at: note.at,
         callId: note.call.callId,
@@ -679,7 +679,7 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
       const status = ended(state);
       return status === null
         ? null
-        : { type: "RunDone", runId, at: note.at, status };
+        : { _tag: "RunDone", runId, at: note.at, status };
     }
   }
 }
@@ -718,14 +718,14 @@ function ended<Stage, P extends string, O extends Record<P, unknown>, R>(
 
 // The agent's own Msg union, projected exhaustively. A Msg the router did not
 // claim is one of these: `WiredToolMsg<T>` and `AgentMachineMsg` are disjoint on
-// `type`, which the cast at the one call site records.
+// `_tag`, which the cast at the one call site records.
 function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   msg: AgentMachineMsg<P, O, R>,
   runId: string,
   events: AgentEvent<R>[],
   refused: ReadonlySet<string>,
 ): void {
-  switch (msg.type) {
+  switch (msg._tag) {
     case MsgType.ResilientOk:
       // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
       // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
@@ -739,7 +739,7 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       // this is the abandoned attempt resolving late, and it is refused (#145).
       if (!refused.has(msg.callId)) {
         events.push({
-          type: "ToolSettled",
+          _tag: "ToolSettled",
           runId,
           at: msg.at,
           callId: msg.callId,
@@ -774,15 +774,15 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
  *
  * The runtime result is exactly the spread of the two key-disjoint records. The
  * single `as` is a SOUND mapped-type identity, not a laundering cast: `Interpret`
- * is a homomorphic mapped type keyed by `Cmd["type"]`, so
+ * is a homomorphic mapped type keyed by `Cmd["_tag"]`, so
  * `Interpret<M, A, Ctx> & Interpret<M, B, Ctx>` IS `Interpret<M, A | B, Ctx>`
- * (`(A | B)["type"] = A["type"] | B["type"]`). TypeScript does not reduce that
+ * (`(A | B)["_tag"] = A["_tag"] | B["_tag"]`). TypeScript does not reduce that
  * intersection of two GENERIC mapped types on its own, so the equality is
  * asserted ONCE here — preserving `M` and `Ctx` exactly — rather than smuggled
  * through `as unknown as Interpret<...>` at every wiring site. Pure.
  */
 export function mergeInterpret<
-  M extends { type: string },
+  M extends { _tag: string },
   A extends Cmd,
   B extends Cmd,
   Ctx,

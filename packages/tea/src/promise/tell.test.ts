@@ -87,8 +87,8 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
         readonly log: RingChildMsg[];
       }
     >();
-    const finished = (state: { readonly type: string }) =>
-      state.type === "finished";
+    const finished = (state: { readonly _tag: string }) =>
+      state._tag === "finished";
 
     const parentRun = await run(parent, {
       terminal: finished,
@@ -97,7 +97,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
           const child = children.get(cmd.id);
           if (child === undefined) throw new Error(`no child ${cmd.id}`);
           tell(child.machine, child.run, {
-            type: "answer",
+            _tag: "answer",
             round: cmd.round,
           });
         },
@@ -113,7 +113,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
         interpret: {
           report: async (cmd) => {
             tell(parent, parentRun, {
-              type: "child_result",
+              _tag: "child_result",
               id: cmd.id,
               round: cmd.round,
             });
@@ -125,19 +125,19 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
     }
 
     for (const child of children.values()) {
-      expect(tell(child.machine, child.run, { type: "begin" })).toBe("queued");
+      expect(tell(child.machine, child.run, { _tag: "begin" })).toBe("queued");
     }
 
     const parentFinal: RingParentState = await within(parentRun.done());
     const expected = { a: ROUNDS, b: ROUNDS, c: ROUNDS };
-    expect(parentFinal).toEqual({ type: "finished", reports: expected });
+    expect(parentFinal).toEqual({ _tag: "finished", reports: expected });
     expect(replay(parent, { msgs: parentLog, ctx: {} }).state).toEqual(
       parentFinal,
     );
 
     for (const child of children.values()) {
       const childFinal = await within(child.run.done());
-      expect(childFinal).toEqual({ type: "finished", answered: ROUNDS });
+      expect(childFinal).toEqual({ _tag: "finished", answered: ROUNDS });
       expect(child.log).toHaveLength(ROUNDS + 1);
       expect(replay(child.machine, { msgs: child.log, ctx: {} }).state).toEqual(
         childFinal,
@@ -149,7 +149,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
 
   it("returns before the receiver's step runs: with its handler held, `tell` has answered and the Msg folds once it is released", async () => {
     const { runtime, started, release } = await openLine();
-    const held = runtime.dispatch({ type: "hold" });
+    const held = runtime.dispatch({ _tag: "hold" });
     await started;
 
     expect(tell(line, runtime, ping("a"))).toBe("queued");
@@ -175,7 +175,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
 
   it("tells from one sender fold in the order they were sent, behind a held handler", async () => {
     const { runtime, started, release } = await openLine();
-    const held = runtime.dispatch({ type: "hold" });
+    const held = runtime.dispatch({ _tag: "hold" });
     await started;
     const names = Array.from({ length: 50 }, (_, i) => `n${i}`);
     for (const name of names) tell(line, runtime, ping(name));
@@ -188,7 +188,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
 
   it("answers `stopped` for a run that has stopped, and for one that is stopping", async () => {
     const { runtime, started, release, reports } = await openLine();
-    const held = runtime.dispatch({ type: "hold" });
+    const held = runtime.dispatch({ _tag: "hold" });
     await started;
 
     const stopping = runtime.stop();
@@ -205,7 +205,7 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
 
   it("answers `stopped` ahead of `no_cell`: a stopped run says it stopped, whatever its State", async () => {
     const { runtime } = await openLine();
-    await runtime.dispatch({ type: "close" });
+    await runtime.dispatch({ _tag: "close" });
     await runtime.stop();
     expect(tell(line, runtime, ping("a"))).toBe("stopped");
   });
@@ -213,8 +213,8 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
   it("answers `no_cell` when the current State has no cell, and sends nothing", async () => {
     const { runtime, reports } = await openLine();
     const seen: string[] = [];
-    runtime.observe((msg) => void seen.push(msg.type));
-    await runtime.dispatch({ type: "close" });
+    runtime.observe((msg) => void seen.push(msg._tag));
+    await runtime.dispatch({ _tag: "close" });
 
     expect(tell(line, runtime, ping("a"))).toBe("no_cell");
     await runtime.idle();
@@ -230,14 +230,14 @@ describe("tell on the Promise engine", { timeout: 2 * LIMIT_MS }, () => {
       interpret: { wait: async () => {} },
     }).ready;
     // `close` is queued, not folded, so the check still reads `open`.
-    const closing = runtime.dispatch({ type: "close" });
+    const closing = runtime.dispatch({ _tag: "close" });
     expect(tell(line, runtime, ping("late"))).toBe("queued");
     await closing;
     await runtime.idle();
     // The default sink rethrows on a macrotask: vitest fails on that throw.
     await nextMacrotask();
 
-    expect(runtime.getState()).toEqual({ type: "closed", folded: [] });
+    expect(runtime.getState()).toEqual({ _tag: "closed", folded: [] });
     expect(warned).not.toHaveBeenCalled();
     await runtime.stop();
   });

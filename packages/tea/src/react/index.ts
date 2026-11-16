@@ -84,7 +84,7 @@ const cleanupMayBeAHide = "Activity" in React;
  */
 export type UseMachineOpts<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -132,7 +132,7 @@ export type UseMachineOpts<
  */
 export function useMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -280,16 +280,16 @@ const identity = <T>(state: T): T => state;
  * hand-built handle's dispatch failure under `phase: "follow-up"`. It defaults
  * to the default sink and is read fresh without replacing `send`.
  */
-export function useRuntime<S, M extends { type: string }>(
+export function useRuntime<S, M extends { _tag: string }>(
   runtime: ViewHandle<S, M>,
   opts?: UseRuntimeOpts,
 ): [S, (msg: M) => void];
-export function useRuntime<S, M extends { type: string }, V>(
+export function useRuntime<S, M extends { _tag: string }, V>(
   runtime: ViewHandle<S, M>,
   select: (state: S) => V,
   opts?: UseRuntimeOpts,
 ): [V, (msg: M) => void];
-export function useRuntime<S, M extends { type: string }, V>(
+export function useRuntime<S, M extends { _tag: string }, V>(
   runtime: ViewHandle<S, M>,
   selectOrOpts: ((state: S) => V) | UseRuntimeOpts = {},
   opts: UseRuntimeOpts = {},
@@ -328,7 +328,7 @@ export type UseRuntimeOpts = {
 };
 
 /** What `useRuntime` reads: a booted run from either engine's `run`, or a hand-built handle. */
-export type ViewHandle<S, M extends { type: string }> = {
+export type ViewHandle<S, M extends { _tag: string }> = {
   subscribe(listener: () => void): () => void;
   getState(): S;
 } & SendTarget<S, M>;

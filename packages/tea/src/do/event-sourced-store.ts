@@ -104,7 +104,7 @@ export interface EventSourcedOptions<S, M> {
    * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
    * a recognized shape; returning `null` DROPS the event from replay (use for a
    * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `type` as `M`.
+   * string `_tag` as `M`.
    */
   readonly parseEvent?: (raw: unknown) => M | null;
   /**
@@ -220,7 +220,7 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
   raw !== null &&
   typeof raw === "object" &&
   !Array.isArray(raw) &&
-  typeof (raw as { type?: unknown }).type === "string"
+  typeof (raw as { _tag?: unknown })._tag === "string"
     ? (raw as M)
     : null;
 
@@ -253,7 +253,7 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
 // definition site.
 export function doEventSourcedStore<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   Ctx,
   C extends Cmd = Cmd,
   U extends Sub = Sub,

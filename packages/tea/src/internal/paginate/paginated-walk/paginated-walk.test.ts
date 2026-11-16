@@ -50,7 +50,7 @@ const baseConfig = {
   firstPage: 0,
   nextCursor: (p: Page): number | null => (p.last ? null : p.offset + 1),
   onPage: (p: Page): readonly IndexCmd[] => [
-    { type: "index", offset: p.offset },
+    { _tag: "index", offset: p.offset },
   ],
   retry: {
     baseMs: 100,
@@ -73,7 +73,7 @@ interface HostState {
   readonly walk: PaginatedWalkState<number, Page>;
 }
 type HostMsg =
-  | { type: "start"; at: number }
+  | { _tag: "start"; at: number }
   | PageOkMsg<Page>
   | PageErrMsg
   | PaginatedWalkTimerMsg;
@@ -114,7 +114,7 @@ function makeMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
   });
   return { walk, machine };
 }
@@ -136,7 +136,7 @@ const errMsg = (cause: unknown, at: number): PageErrMsg =>
 const rejected = (cause: unknown) => ({ _tag: "port_rejected", cause });
 
 const fetchCmd = (offset: number): FetchPageCmd<number> => ({
-  type: "resilient_run",
+  _tag: "resilient_run",
   key: PAGE_KEY,
   input: offset,
 });
@@ -203,7 +203,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     [s] = walk.start(s, 0);
     const [s2, cmds] = walk.pageOk(s, okMsg(page(0), 10));
     // onPage(page 0) cmd, then the next page-fetch effect for cursor 1.
-    expect(cmds).toEqual([{ type: "index", offset: 0 }, fetchCmd(1)]);
+    expect(cmds).toEqual([{ _tag: "index", offset: 0 }, fetchCmd(1)]);
     expect(s2.walk.phase).toBe("fetching");
     if (s2.walk.phase === "fetching") expect(s2.walk.cursor).toBe(1);
     expect(s2.walk.pages).toBe(1);
@@ -218,7 +218,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     [s] = walk.start(s, 0);
     const [s2, cmds] = walk.pageOk(s, okMsg(page(0, true), 10));
     // The last page still emits its onPage cmd, but NO next fetch.
-    expect(cmds).toEqual([{ type: "index", offset: 0 }]);
+    expect(cmds).toEqual([{ _tag: "index", offset: 0 }]);
     expect(s2.walk.phase).toBe("done");
     expect(walk.isComplete(s2)).toBe(true);
   });
@@ -252,7 +252,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     // The paginator is done → recordPage absorbs it: cursor + counters frozen.
     expect(s2.walk).toEqual(before);
     // onPage still fires (the consumer's per-page work runs on any success).
-    expect(cmds).toEqual([{ type: "index", offset: 5 }]);
+    expect(cmds).toEqual([{ _tag: "index", offset: 5 }]);
   });
 
   it("walks all pages to completion via repeated pageOk", () => {
@@ -268,7 +268,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     const [s3, cmds] = walk.pageOk(s, okMsg(page(2, true), 0)); // → done
     expect(s3.walk.pages).toBe(3);
     expect(walk.isComplete(s3)).toBe(true);
-    expect(cmds).toEqual([{ type: "index", offset: 2 }]); // last page: no fetch
+    expect(cmds).toEqual([{ _tag: "index", offset: 2 }]); // last page: no fetch
   });
 });
 
@@ -285,7 +285,7 @@ describe("createPaginatedWalk — backpressure (paused)", () => {
     expect(s2.walk.phase).toBe("paused");
     if (s2.walk.phase === "paused") expect(s2.walk.cursor).toBe(1);
     // onPage cmd only — the next fetch is withheld until drained / resumed.
-    expect(cmds).toEqual([{ type: "index", offset: 0 }]);
+    expect(cmds).toEqual([{ _tag: "index", offset: 0 }]);
   });
 });
 
@@ -443,7 +443,7 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
     // maxAttempts 3 → attempts 0,1,2 retry; the 3rd recorded failure gives up.
     for (let i = 0; i < 3; i++) {
       [s] = walk.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:${PAGE_KEY}`,
         atMs: 0,
       });
@@ -467,7 +467,7 @@ describe("createPaginatedWalk — onTimer (retry the same page)", () => {
     [s] = walk.pageErr(s, errMsg("boom", 0));
     expect(s.resilience.calls[PAGE_KEY]?.phase).toBe("waiting_retry");
     const [s2, cmds] = walk.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:${PAGE_KEY}`,
       atMs: 0,
     });
@@ -486,7 +486,7 @@ describe("createPaginatedWalk — onTimer (retry the same page)", () => {
     [s] = walk.pageOk(s, okMsg(page(0), 0)); // settle the fetch succeeded
     const before = s;
     const [after, cmds] = walk.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `resilient:retry:${PAGE_KEY}`,
       atMs: 0,
     });
@@ -554,16 +554,16 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
   it("start → fetch cmd, then page_ok → index + next fetch through the reducer", () => {
     bound.expectCmdSequence(
       {
-        msgs: [{ type: "start", at: 0 }, okMsg(page(0), 0)],
+        msgs: [{ _tag: "start", at: 0 }, okMsg(page(0), 0)],
       },
-      [fetchCmd(0), { type: "index", offset: 0 }, fetchCmd(1)],
+      [fetchCmd(0), { _tag: "index", offset: 0 }, fetchCmd(1)],
     );
   });
 
   it("a full three-page walk emits one index cmd per page and finishes done", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "start", at: 0 },
+        { _tag: "start", at: 0 },
         okMsg(page(0), 0),
         okMsg(page(1), 0),
         okMsg(page(2, true), 0),
@@ -573,17 +573,17 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
     expect(state.walk.walk.pages).toBe(3);
     expect(cmds).toEqual([
       fetchCmd(0),
-      { type: "index", offset: 0 },
+      { _tag: "index", offset: 0 },
       fetchCmd(1),
-      { type: "index", offset: 1 },
+      { _tag: "index", offset: 1 },
       fetchCmd(2),
-      { type: "index", offset: 2 },
+      { _tag: "index", offset: 2 },
     ]);
   });
 
   it("start → page_err leaves a retry + deadline timer desired", () => {
     const { state, subs } = bound.replay({
-      msgs: [{ type: "start", at: 0 }, errMsg("e", 0)],
+      msgs: [{ _tag: "start", at: 0 }, errMsg("e", 0)],
     });
     expect(walk.deadlines(state.walk)).toEqual([
       deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
@@ -592,11 +592,11 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
     // The built-in `timer` Sub arms the soonest of them — the retry.
     expect(subs).toEqual([
       expect.objectContaining({
-        type: "timer",
+        _tag: "timer",
         deps: {
           ms: 0,
           msg: {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: `resilient:retry:${PAGE_KEY}`,
             atMs: 0,
           },
@@ -652,7 +652,7 @@ function wiredMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
   });
   return {
     walk,
@@ -709,7 +709,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
     const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     // Drive: start → fetch(0) → port resolves → resilient_run_ok re-enters → done.
-    await rt.dispatch({ type: "start", at: 0 });
+    await rt.dispatch({ _tag: "start", at: 0 });
     await settleUntil(
       () => rt.getState(),
       (s) => s.walk.walk.phase === "done",
@@ -752,7 +752,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
     );
     const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
-    await rt.dispatch({ type: "start", at: 0 });
+    await rt.dispatch({ _tag: "start", at: 0 });
     await settleUntil(
       () => rt.getState(),
       (s) => s.walk.walk.phase === "paused",
@@ -790,7 +790,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
     );
     const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
-    await rt.dispatch({ type: "start", at: 0 });
+    await rt.dispatch({ _tag: "start", at: 0 });
     // Drive until the fetch slot terminally fails (re-entered via interpret's
     // resilient_run_err). The paginator stays parked on cursor 0.
     await settleUntil(
@@ -873,7 +873,7 @@ describe("createPaginatedWalk — properties", () => {
               break;
             case "retry":
               [s, cmds] = walk.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${PAGE_KEY}`,
                 atMs: a.at,
               });
@@ -882,7 +882,7 @@ describe("createPaginatedWalk — properties", () => {
           // Never more than one page-fetch effect per verb (zero or one); the
           // walk is a sequencer, not a fan-out. onPage index cmds may add more,
           // but there is at most ONE resilient_run.
-          const fetches = cmds.filter((c) => c.type === "resilient_run");
+          const fetches = cmds.filter((c) => c._tag === "resilient_run");
           if (fetches.length > 1) return false;
         }
         return true;
@@ -905,7 +905,7 @@ describe("createPaginatedWalk — properties", () => {
           const isLast = i === n - 1;
           let cmds: readonly (FetchPageCmd<number> | IndexCmd)[];
           [s, cmds] = walk.pageOk(s, okMsg(page(i, isLast), 0));
-          for (const c of cmds) if (c.type === "index") indexed.push(c.offset);
+          for (const c of cmds) if (c._tag === "index") indexed.push(c.offset);
         }
         // Every cursor 0..n-1 indexed exactly once, in order.
         expect(indexed).toEqual([...Array(n).keys()]);
@@ -920,7 +920,7 @@ describe("createPaginatedWalk — properties", () => {
     const { machine } = makeMachine();
     const msgArb = fc.array(
       fc.oneof(
-        fc.record({ type: fc.constant("start" as const), at: fc.nat(10_000) }),
+        fc.record({ _tag: fc.constant("start" as const), at: fc.nat(10_000) }),
         fc
           .record({
             result: fc.record({
@@ -1016,7 +1016,7 @@ describe("createPaginatedWalk — properties", () => {
               break;
             case "retry":
               [s] = walk.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${PAGE_KEY}`,
                 atMs: op.at,
               });

@@ -245,7 +245,7 @@ export interface PresenceUpgrade {
  *       return new Response("expected a websocket upgrade", { status: 426 });
  *     }
  *     const playerId = new URL(request.url).searchParams.get("player");
- *     const welcome = { type: "welcome", playerId };
+ *     const welcome = { _tag: "welcome", playerId };
  *     const { server, response } = acceptPresenceSocket(this.ctx, {
  *       attachment: { playerId },
  *     });

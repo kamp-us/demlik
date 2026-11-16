@@ -3,10 +3,10 @@ import { defineMachine } from "../../index";
 import { type Answerer, type BlindEvent, resolveGuided } from "./guided-fold";
 
 // `ping` sends one `ask`; `asked` answers it. The state counts, never keeps a Cmd.
-type Ask = { readonly type: "ask"; readonly n: number };
+type Ask = { readonly _tag: "ask"; readonly n: number };
 type Msg =
-  | { readonly type: "ping" }
-  | { readonly type: "asked"; readonly cmd: Ask; readonly value: unknown };
+  | { readonly _tag: "ping" }
+  | { readonly _tag: "asked"; readonly cmd: Ask; readonly value: unknown };
 
 const machine = defineMachine({
   types: {
@@ -17,21 +17,21 @@ const machine = defineMachine({
   },
   init: (loaded) => [loaded ?? 0, []],
   update: {
-    ping: (n) => [n + 1, [{ type: "ask", n }]],
+    ping: (n) => [n + 1, [{ _tag: "ask", n }]],
     asked: (n) => [n, []],
   },
 });
 
 const answerers: readonly Answerer<Ask, Msg>[] = [
-  { cmdType: "ask", make: (cmd, value) => ({ type: "asked", cmd, value }) },
+  { cmdType: "ask", make: (cmd, value) => ({ _tag: "asked", cmd, value }) },
 ];
-const ping = { type: "ping" } as const;
+const ping = { _tag: "ping" } as const;
 const answer = (otherwise?: Msg): BlindEvent<Msg> =>
   otherwise === undefined
     ? { kind: "answer", pick: 0, values: ["v"] }
     : { kind: "answer", pick: 0, values: ["v"], otherwise };
 const resolve = (events: readonly BlindEvent<Msg>[]) =>
-  resolveGuided(machine, {}, null, answerers, events).map((m) => m.type);
+  resolveGuided(machine, {}, null, answerers, events).map((m) => m._tag);
 
 describe("resolveGuided", () => {
   it("drops an answer with nothing waiting", () => {

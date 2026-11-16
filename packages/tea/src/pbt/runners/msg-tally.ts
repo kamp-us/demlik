@@ -111,14 +111,14 @@ export class MsgTally {
   }
 
   /** Count one list's steps, unless the run has already failed. */
-  add<S, M extends { type: string }, C extends Cmd>(
+  add<S, M extends { _tag: string }, C extends Cmd>(
     steps: readonly Step<S, M, C>[],
   ): void {
     if (this.#closed) return;
     for (const step of steps) {
       const { acted, refusal } = classify(step);
-      const count = this.#counts.get(step.msg.type) ?? { drawn: 0, acted: 0 };
-      this.#counts.set(step.msg.type, {
+      const count = this.#counts.get(step.msg._tag) ?? { drawn: 0, acted: 0 };
+      this.#counts.set(step.msg._tag, {
         drawn: count.drawn + 1,
         acted: count.acted + (acted ? 1 : 0),
       });

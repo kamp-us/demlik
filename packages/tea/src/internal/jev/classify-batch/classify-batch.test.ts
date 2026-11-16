@@ -78,7 +78,7 @@ function okFor(
     answers[key] = answerOf(choice);
   }
   return {
-    type: MsgType.ResilientOk,
+    _tag: MsgType.ResilientOk,
     cmd,
     value: {
       answers,
@@ -95,7 +95,7 @@ const errFor = (
   cmd: ClassifyBatchCmd<Line>,
   at: number,
 ): ClassifyBatchErrMsg => ({
-  type: MsgType.ResilientErr,
+  _tag: MsgType.ResilientErr,
   cmd,
   error: {
     _tag: "port_rejected",
@@ -116,8 +116,8 @@ async function handle(
 ): Promise<ClassifyBatchOkMsg<Line> | ClassifyBatchErrMsg> {
   const outcome = k.decode(cmd.input, await http(cmd.input));
   return outcome._tag === "Ok"
-    ? { type: MsgType.ResilientOk, cmd, value: outcome.value, at }
-    : { type: MsgType.ResilientErr, cmd, error: outcome.error, at };
+    ? { _tag: MsgType.ResilientOk, cmd, value: outcome.value, at }
+    : { _tag: MsgType.ResilientErr, cmd, error: outcome.error, at };
 }
 
 /** Drive `add` over every item, gathering the Cmds each transition emitted. */
@@ -358,7 +358,7 @@ describe("eviction is a Msg", () => {
     const k = knob({ maxItems: 10, maxMs: 500 });
     const [s1] = addAll(k, k.init(), txns(1), 1_000);
     expect(k.subs(s1)).toEqual([
-      { id: "jev-classify-batch", type: "deadline", atMs: 1_500 },
+      { id: "jev-classify-batch", _tag: "deadline", atMs: 1_500 },
     ]);
   });
 
@@ -367,13 +367,13 @@ describe("eviction is a Msg", () => {
     const [s1] = addAll(k, k.init(), txns(1), 1_000);
     const model = { classify: s1 };
     const entries = k.subEntries((m: typeof model) => m.classify);
-    expect(entries.map((e) => [e.type, e.deps(model)])).toEqual([
+    expect(entries.map((e) => [e._tag, e.deps(model)])).toEqual([
       [
         "timer",
         {
           ms: 500,
           msg: {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: "jev-classify-batch",
             atMs: 1_500,
           },
@@ -436,7 +436,7 @@ describe("the effect boundary is `../ask`'s", () => {
     const [s1, cmds] = addAll(k, k.init(), txns(2), 0);
     const settle = await handle(k, only(cmds), http, 0);
 
-    expect(settle.type).toBe(MsgType.ResilientOk);
+    expect(settle._tag).toBe(MsgType.ResilientOk);
     const [s2] = k.onBatchOk(s1, settle as ClassifyBatchOkMsg<Line>);
     expect(k.answerFor(s2, "m0", 0)).toEqual({
       status: "answered",
@@ -453,7 +453,7 @@ describe("the effect boundary is `../ask`'s", () => {
     const [s1, cmds] = addAll(k, k.init(), txns(1), 0);
     const settle = await handle(k, only(cmds), http, 0);
 
-    expect(settle.type).toBe(MsgType.ResilientErr);
+    expect(settle._tag).toBe(MsgType.ResilientErr);
     const [s2] = k.onBatchErr(s1, settle as ClassifyBatchErrMsg);
     expect(k.answerFor(s2, "m0", 0)).toEqual({
       status: "failed",

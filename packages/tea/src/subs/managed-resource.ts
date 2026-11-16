@@ -65,7 +65,7 @@ export interface DefineManagedResourceOpts<
   Ctx,
 > {
   /**
-   * A short, stable name — and the resource's Sub `type`. The machine's
+   * A short, stable name — and the resource's Sub `_tag`. The machine's
    * `subscribe` table holds this battery's runner under it, so it must be
    * unique among the machine's Sub types.
    */
@@ -105,7 +105,7 @@ export interface DefineManagedResourceOpts<
  */
 export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
   /** The battery's Sub type — its `name`. */
-  readonly type: N;
+  readonly _tag: N;
 
   /**
    * The `subs` entry. `when(state)` returns the resource's KEY when it should
@@ -120,7 +120,7 @@ export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
 
   /**
    * The runner for this battery's Sub type — hand it to `run` as
-   * `subscribe: { [battery.type]: battery.subscribe }`. Runs `acquire` on
+   * `subscribe: { [battery._tag]: battery.subscribe }`. Runs `acquire` on
    * start, holds the Handle in the battery's handle table, and returns a
    * cleanup that runs `release` (and forgets the Handle) on stop.
    */
@@ -159,9 +159,9 @@ export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
  * import { run } from "@demlik/tea/promise";
  *
  * type RunId = string;
- * type State = { type: "idle" } | { type: "running"; runId: RunId };
- * type Msg = { type: "start"; runId: RunId } | { type: "stop" };
- * type Cmd = { type: "start_graph"; runId: RunId };
+ * type State = { _tag: "idle" } | { _tag: "running"; runId: RunId };
+ * type Msg = { _tag: "start"; runId: RunId } | { _tag: "stop" };
+ * type Cmd = { _tag: "start_graph"; runId: RunId };
  * interface Ctx { readonly storage: Storage; readonly bucket: string }
  * declare class CheckpointSaver {
  *   constructor(opts: { storage: Storage; bucket: string; runId: RunId });
@@ -187,11 +187,11 @@ export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
  *     sub: {} as ManagedResourceSub<"checkpoint", RunId>,
  *     ctx: {} as Ctx,
  *   },
- *   init: (loaded) => [loaded ?? { type: "idle" }, []],
+ *   init: (loaded) => [loaded ?? { _tag: "idle" }, []],
  *   update,
  *   subs: [
  *     checkpointStore.depKeyed((s: State) =>
- *       s.type === "running" ? s.runId : null,
+ *       s._tag === "running" ? s.runId : null,
  *     ),
  *   ],
  * });
@@ -255,11 +255,11 @@ export function defineManagedResource<N extends string, TKey, Handle, Ctx>(
   };
 
   return {
-    type: opts.name,
+    _tag: opts.name,
     depKeyed: <S>(
       when: (state: S) => TKey | null,
     ): DepKeyedSub<S, ManagedResourceSub<N, TKey>> => ({
-      type: opts.name,
+      _tag: opts.name,
       deps: when,
     }),
     subscribe,

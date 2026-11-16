@@ -49,7 +49,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
         const { parentScope, parentRun, children } = yield* openParent;
         const a = yield* spawnWorker(parentScope, parentRun, children, "a");
         const worker = yield* a.run.ready;
-        yield* worker.dispatch({ type: "job" });
+        yield* worker.dispatch({ _tag: "job" });
         expect([...children.keys()]).toEqual(["a"]);
         expect(children.get("a")).toBe(a);
         const count = worker.getState().done;
@@ -71,12 +71,12 @@ describe("examples/parent-and-workers-effect.ts", () => {
         yield* stopWorker(children, "a");
 
         expect([...children.keys()]).toEqual(["b"]);
-        const refused = yield* Effect.flip(worker.dispatch({ type: "job" }));
+        const refused = yield* Effect.flip(worker.dispatch({ _tag: "job" }));
         expect(refused._tag).toBe("Stopped");
         yield* Effect.promise(() =>
           vi.waitFor(() =>
             expect(parentRun.getState()).toEqual({
-              type: "open",
+              _tag: "open",
               stopped: ["a"],
             }),
           ),
@@ -110,7 +110,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
 
         expect(children.size).toBe(0);
         for (const worker of workers) {
-          const refused = yield* Effect.flip(worker.dispatch({ type: "job" }));
+          const refused = yield* Effect.flip(worker.dispatch({ _tag: "job" }));
           expect(refused._tag).toBe("Stopped");
         }
       }),
@@ -122,13 +122,13 @@ describe("examples/parent-and-workers-effect.ts", () => {
       Effect.gen(function* () {
         const { parentScope, parentRun, children } = yield* openParent;
         yield* spawnWorker(parentScope, parentRun, children, "a");
-        yield* parentRun.dispatch({ type: "close" });
+        yield* parentRun.dispatch({ _tag: "close" });
 
         yield* stopWorker(children, "a");
         yield* parentRun.idle();
 
         expect(children.size).toBe(0);
-        expect(parentRun.getState()).toEqual({ type: "closed", stopped: [] });
+        expect(parentRun.getState()).toEqual({ _tag: "closed", stopped: [] });
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
@@ -141,7 +141,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
         yield* spawnWorker(parentScope, parentRun, children, "a");
         let delivered = false;
         parentRun.observe((msg) => {
-          if (msg.type === "child_stopped") delivered = true;
+          if (msg._tag === "child_stopped") delivered = true;
         });
 
         yield* stopWorker(children, "a");
@@ -180,7 +180,7 @@ describe("examples/process-tree-effect.ts", () => {
           );
           if (process.lifecycle !== "running") throw new Error("not running");
           const runtime = yield* process.run.ready;
-          yield* runtime.dispatch({ type: "input", text: `hello from ${id}` });
+          yield* runtime.dispatch({ _tag: "input", text: `hello from ${id}` });
           expect(runtime.getState()).toEqual({ written: 1 });
         }
         expect(lines).toEqual({ p1: ["hello from p1"], p2: ["hello from p2"] });
@@ -192,7 +192,7 @@ describe("examples/process-tree-effect.ts", () => {
         yield* Effect.promise(() =>
           vi.waitFor(() =>
             expect(parentRun.getState()).toEqual({
-              type: "open",
+              _tag: "open",
               stopped: ["p1"],
             }),
           ),
@@ -230,7 +230,7 @@ describe("examples/process-tree-effect.ts", () => {
         yield* Effect.promise(() =>
           vi.waitFor(() =>
             expect(parentRun.getState()).toEqual({
-              type: "open",
+              _tag: "open",
               stopped: ["p1"],
             }),
           ),

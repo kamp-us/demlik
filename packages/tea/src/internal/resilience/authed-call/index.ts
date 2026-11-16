@@ -80,7 +80,7 @@
  *     refresh_token_err: (s) => [s, []],
  *     deadline_exceeded: (s, m) => ac.onTimer(s, m),
  *   },
- *   subs: [{ type: "timer", deps: (s) => ac.timer(s) }],
+ *   subs: [{ _tag: "timer", deps: (s) => ac.timer(s) }],
  *
  *   // and where it runs — the two handlers you write:
  *   run(machine, {
@@ -172,7 +172,7 @@ export type AuthedCmd<I> = RunCmd<I> | RefreshTokenCmd;
  * when a guarded call comes back unauthorized.
  */
 export type Unauthorized = {
-  readonly type: typeof MsgType.Unauthorized;
+  readonly _tag: typeof MsgType.Unauthorized;
   readonly key: string;
   readonly at: number;
 };
@@ -477,7 +477,7 @@ export function createAuthedCall<I, R>(
 
   /**
    * The built-in `timer` Sub's deps: resilient-call's `timer` over the
-   * `resilience` field. Declare `{ type: "timer", deps: (s) => ac.timer(s) }`.
+   * `resilience` field. Declare `{ _tag: "timer", deps: (s) => ac.timer(s) }`.
    */
   function timer(s: AuthedState<I, R>) {
     return rc.timer(s.resilience);

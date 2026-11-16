@@ -13,7 +13,7 @@ import { memoryStore } from "./index";
 // ───────────────────────────────────────────────────────────────────────────
 
 type CounterState = { readonly n: number };
-type CounterMsg = { readonly type: "inc" };
+type CounterMsg = { readonly _tag: "inc" };
 
 function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
@@ -96,9 +96,9 @@ describe("memoryStore through a real run() — the round-trip tracer", () => {
 
     // First life: boot fresh (store empty), advance to n = 3, stop.
     const first = await run(counterMachine(), { ctx: undefined, store }).ready;
-    await first.dispatch({ type: "inc" });
-    await first.dispatch({ type: "inc" });
-    await first.dispatch({ type: "inc" });
+    await first.dispatch({ _tag: "inc" });
+    await first.dispatch({ _tag: "inc" });
+    await first.dispatch({ _tag: "inc" });
     expect(first.getState()).toEqual({ n: 3 });
     await first.stop();
 
@@ -112,7 +112,7 @@ describe("memoryStore through a real run() — the round-trip tracer", () => {
     expect(second.getState()).toEqual({ n: 3 });
 
     // And it keeps counting from where the first life left off.
-    await second.dispatch({ type: "inc" });
+    await second.dispatch({ _tag: "inc" });
     expect(second.getState()).toEqual({ n: 4 });
     await second.stop();
     await expect(store.load()).resolves.toEqual({ n: 4 });

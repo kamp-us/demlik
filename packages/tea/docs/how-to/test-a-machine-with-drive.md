@@ -61,7 +61,7 @@ export interface OrderState {
 }
 
 export type OrderMsg = {
-  readonly type: "place";
+  readonly _tag: "place";
   readonly sku: string;
   readonly cents: number;
 };
@@ -125,7 +125,7 @@ function driveOrder(failure?: "out_of_stock" | "declined" | "no_carrier") {
   return drive(
     order,
     newOrder,
-    { type: "place", sku: "TEA-001", cents: 4200 },
+    { _tag: "place", sku: "TEA-001", cents: 4200 },
     {
       reserve_stock: async (_cmd, { ok, err }) =>
         failure === "out_of_stock"
@@ -155,7 +155,7 @@ went quiet. `trace` lists every Msg folded and every Cmd run, in order; keep the
 `cmd` entries to get the Cmds.
 
 Compare the Cmds whole, built with the machine's own constructors, and not
-just their `type`. A `type` is only a Cmd's name: a `charge_card` started with
+just their `_tag`. A `_tag` is only a Cmd's name: a `charge_card` started with
 the wrong amount has the same name. Import `reserveStock`, `chargeCard` and
 `shipParcel` from the machine file too.
 
@@ -336,7 +336,7 @@ function driveOrder(failure?: Failure) {
     drive(
       order,
       newOrder,
-      { type: "place", sku: "TEA-001", cents: 4200 },
+      { _tag: "place", sku: "TEA-001", cents: 4200 },
       orderHandlers,
     ).pipe(Effect.provide(fakeShop(failure))),
   );

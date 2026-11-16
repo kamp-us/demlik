@@ -78,7 +78,7 @@
  *     snapshot_write_ok: (s, m) => [{ ...s, run: run.confirmSnapshot(s.run, m) }, []],
  *     snapshot_write_err: (s) => [s, []],
  *   },
- *   subs: [{ type: "timer", deps: (s) => run.timer(s.run) }],
+ *   subs: [{ _tag: "timer", deps: (s) => run.timer(s.run) }],
  *
  *   // and where it runs — the checkpoint write is the handler you write (the
  *   // engine's `run` imported under another name, since `run` is the knob):
@@ -746,7 +746,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    * The built-in `timer` Sub's deps for the watchdog: `deadlineMs` counted from
    * `lastProgressAt`, the instant the current alarm was armed. Its fire is a
    * `deadline_exceeded` Msg; route it to `onDeadline`. Declare
-   * `{ type: "timer", deps: (s) => run.timer(s.run) }`. PURE.
+   * `{ _tag: "timer", deps: (s) => run.timer(s.run) }`. PURE.
    */
   function timer(
     s: MonitoredRunState<Stage>,

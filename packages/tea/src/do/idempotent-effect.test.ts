@@ -61,11 +61,11 @@ describe("foldApplied — the pure fold (no side table)", () => {
     const arbEvents: fc.Arbitrary<AppliedEffectsEvent[]> = fc.array(
       fc.oneof(
         fc.record({
-          type: fc.constant("effect_applied" as const),
+          _tag: fc.constant("effect_applied" as const),
           key: fc.string({ minLength: 1 }),
         }),
         fc.record({
-          type: fc.constant("effect_forgotten" as const),
+          _tag: fc.constant("effect_forgotten" as const),
           key: fc.string({ minLength: 1 }),
         }),
       ),
@@ -84,17 +84,17 @@ describe("foldApplied — the pure fold (no side table)", () => {
   it("effect_applied adds, effect_forgotten removes; duplicates are no-ops", () => {
     const applied = emptyApplied();
     const a1 = applyAppliedEvent(applied, {
-      type: "effect_applied",
+      _tag: "effect_applied",
       key: "k1",
     });
     expect(isApplied(a1, "k1")).toBe(true);
     // Duplicate add is a no-op fold (at-least-once tolerates a re-fired marker).
-    const a2 = applyAppliedEvent(a1, { type: "effect_applied", key: "k1" });
+    const a2 = applyAppliedEvent(a1, { _tag: "effect_applied", key: "k1" });
     expect([...a2].sort()).toEqual(["k1"]);
     // Forget removes it; forgetting an absent key is a no-op.
-    const a3 = applyAppliedEvent(a2, { type: "effect_forgotten", key: "k1" });
+    const a3 = applyAppliedEvent(a2, { _tag: "effect_forgotten", key: "k1" });
     expect(isApplied(a3, "k1")).toBe(false);
-    const a4 = applyAppliedEvent(a3, { type: "effect_forgotten", key: "nope" });
+    const a4 = applyAppliedEvent(a3, { _tag: "effect_forgotten", key: "nope" });
     expect([...a4]).toEqual([]);
   });
 
@@ -112,7 +112,7 @@ describe("idempotentEffect + appliedEffects — apply-once semantics", () => {
     expect(first.ran).toBe(true);
     if (first.ran) {
       expect(first.result).toBe("wrote");
-      expect(first.event).toEqual({ type: "effect_applied", key: "run1:v1" });
+      expect(first.event).toEqual({ _tag: "effect_applied", key: "run1:v1" });
     }
     expect(fn).toHaveBeenCalledTimes(1);
 
@@ -129,7 +129,7 @@ describe("idempotentEffect + appliedEffects — apply-once semantics", () => {
     expect(guard.isApplied("k")).toBe(true);
     // The marker the caller persists IS what makes the next re-fire a no-op.
     if (outcome.ran) {
-      expect(outcome.event).toEqual({ type: "effect_applied", key: "k" });
+      expect(outcome.event).toEqual({ _tag: "effect_applied", key: "k" });
     }
   });
 });
@@ -199,7 +199,7 @@ describe("retention: forget prunes the marker (ledger confirm-removes-entry shap
     expect(first.ran).toBe(true);
     // Prune once the effect can no longer re-fire (its ledger entry confirmed).
     const { event } = guard.forget("k");
-    expect(event).toEqual({ type: "effect_forgotten", key: "k" });
+    expect(event).toEqual({ _tag: "effect_forgotten", key: "k" });
     expect(guard.isApplied("k")).toBe(false);
 
     const persisted: AppliedEffectsEvent[] = first.ran
@@ -252,7 +252,7 @@ describe("composition — the marker lives in the Store alongside State", () => 
     // Rebuild the guard from the reloaded set; the re-fire is swallowed.
     const reloaded = appliedEffects({
       events: [...(loaded?.applied ?? [])].map((key) => ({
-        type: "effect_applied" as const,
+        _tag: "effect_applied" as const,
         key,
       })),
     });
@@ -306,8 +306,8 @@ describe("composition — the marker lives in the Store alongside State", () => 
       ctx,
       { snapshotEvery: 100 },
     );
-    await es1.append({ type: "effect_applied", key: "run1:v1" });
-    await es1.append({ type: "effect_applied", key: "run1:v2" });
+    await es1.append({ _tag: "effect_applied", key: "run1:v1" });
+    await es1.append({ _tag: "effect_applied", key: "run1:v2" });
 
     // — EVICTION — a brand-new store instance folds the SAME log at load.
     const es2 = doEventSourcedStore<Model, Msg, typeof ctx>(
@@ -321,7 +321,7 @@ describe("composition — the marker lives in the Store alongside State", () => 
     // The applied set rebuilt from the folded log — both markers present.
     const reloaded = appliedEffects({
       events: [...(rebuilt?.applied ?? [])].map((key) => ({
-        type: "effect_applied" as const,
+        _tag: "effect_applied" as const,
         key,
       })),
     });

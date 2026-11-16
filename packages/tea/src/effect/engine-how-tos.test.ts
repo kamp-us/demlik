@@ -60,10 +60,10 @@ describe("one machine file, both engines — it runs", () => {
 
   it("a miss arms the built-in timer, and nothing else does", () => {
     const [timer] = profile.subs ?? [];
-    expect(timer?.type).toBe("timer");
+    expect(timer?._tag).toBe("timer");
     expect(timer?.deps({ status: "missing", name: null })).toEqual({
       ms: 2_000,
-      msg: { type: "clear" },
+      msg: { _tag: "clear" },
     });
     expect(timer?.deps({ status: "loaded", name: "Ada" })).toBeNull();
   });
@@ -83,7 +83,7 @@ describe("a `timer` entry in `subscribe` replaces the built-in — both pages' s
       },
     }).ready;
     try {
-      await runtime.dispatch({ type: "look_up", id: "u2" });
+      await runtime.dispatch({ _tag: "look_up", id: "u2" });
       await vi.waitFor(() => expect(runtime.getState().status).toBe("idle"));
     } finally {
       await runtime.stop();
@@ -95,7 +95,7 @@ describe("a `timer` entry in `subscribe` replaces the built-in — both pages' s
       Effect.gen(function* () {
         const handle = yield* runProfileInTest;
         const runtime = yield* handle.ready;
-        yield* runtime.dispatch({ type: "look_up", id: "u2" });
+        yield* runtime.dispatch({ _tag: "look_up", id: "u2" });
         yield* Effect.promise(() =>
           vi.waitFor(() => expect(runtime.getState().status).toBe("idle")),
         );

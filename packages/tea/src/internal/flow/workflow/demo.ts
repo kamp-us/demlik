@@ -232,7 +232,7 @@ export interface ScenarioOutcome {
  * present so the trace line matches what was performed.
  */
 function labelOf(cmd: WorkflowCmd<SagaActivity>): string {
-  return cmd.type === "workflow_activity"
+  return cmd._tag === "workflow_activity"
     ? cmd.activity.label
     : cmd.compensation.label;
 }
@@ -300,12 +300,12 @@ function foldOneResult(
   const stepName = stepNameOf(cmd);
   const label = labelOf(cmd);
 
-  if (cmd.type === "workflow_activity") {
+  if (cmd._tag === "workflow_activity") {
     const activityCmd: ActivityCmd<SagaActivity> = cmd;
     const outcome = performActivity(scenario, activityCmd.activity);
     if (outcome.ok) {
       const msg: WorkflowMsg<SagaReceipt, SagaFailure> = {
-        type: "activity_ok",
+        _tag: "activity_ok",
         id: activityCmd.id,
         result: outcome.result,
       };
@@ -321,7 +321,7 @@ function foldOneResult(
       };
     }
     const msg: WorkflowMsg<SagaReceipt, SagaFailure> = {
-      type: "activity_err",
+      _tag: "activity_err",
       id: activityCmd.id,
       failure: outcome.failure,
     };
@@ -340,7 +340,7 @@ function foldOneResult(
   // A compensation dispatch — always succeeds in the demo's failure path.
   const compCmd: CompensationCmd<SagaActivity> = cmd;
   const msg: WorkflowMsg<SagaReceipt, SagaFailure> = {
-    type: "compensation_ok",
+    _tag: "compensation_ok",
     id: compCmd.id,
   };
   const next = wf.onCompensationOk(state, msg);

@@ -373,7 +373,7 @@ function autoBoot<
   P extends string,
   O extends Record<P, unknown>,
   R,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   booting: RunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, E>,
   now?: () => number,
@@ -387,8 +387,8 @@ function autoBoot<
 ```ts
 function bootResume<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   booting: RunHandle<S, M, E>,
   port: ResumePort<S, M>,
@@ -581,7 +581,7 @@ type DeliveryId = number
 ```ts
 function doEventSourcedStore<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   Ctx,
   C extends Cmd = Cmd,
   U extends Sub = Sub,
@@ -652,7 +652,7 @@ interface DoStoreOptions<S> {
 ### `driveProjections`
 
 ```ts
-function driveProjections<Model, Msg extends { type: string }>(
+function driveProjections<Model, Msg extends { _tag: string }>(
   registry: ProjectionRegistry<Model, Msg>,
   runtime: {
     observe(observer: (msg: Msg, model: Model) => void): () => void;
@@ -885,7 +885,7 @@ interface EventSourcedOptions<S, M> {
    * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
    * a recognized shape; returning `null` DROPS the event from replay (use for a
    * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `type` as `M`.
+   * string `_tag` as `M`.
    */
   readonly parseEvent?: (raw: unknown) => M | null;
   /**
@@ -1203,7 +1203,7 @@ interface PresenceUpgrade {
 ### `Projection`
 
 ```ts
-interface Projection<Model, Msg extends { type: string }, View> {
+interface Projection<Model, Msg extends { _tag: string }, View> {
   /** This projection's id (offset-isolation unit). */
   readonly id: ProjectionId;
   /** The seed view for a fresh or rebuilt run (the `NoOffset` start). */
@@ -1268,7 +1268,7 @@ type ProjectionOnError = (error: unknown, context: ProjectionErrorContext) => vo
 ### `projectionRegistry`
 
 ```ts
-function projectionRegistry<Model, Msg extends { type: string }>(
+function projectionRegistry<Model, Msg extends { _tag: string }>(
   onError?: ProjectionOnError,
 ): ProjectionRegistry<Model, Msg>
 ```
@@ -1278,7 +1278,7 @@ function projectionRegistry<Model, Msg extends { type: string }>(
 ### `ProjectionRegistry`
 
 ```ts
-interface ProjectionRegistry<Model, Msg extends { type: string }> {
+interface ProjectionRegistry<Model, Msg extends { _tag: string }> {
   /**
    * Present one update to EVERY registered runner. Each folds independently; an
    * `apply`/`emit` throw in one runner is caught so it cannot strand the others
@@ -1304,7 +1304,7 @@ interface ProjectionRegistry<Model, Msg extends { type: string }> {
 ### `ProjectionRunner`
 
 ```ts
-interface ProjectionRunner<Model, Msg extends { type: string }, View> {
+interface ProjectionRunner<Model, Msg extends { _tag: string }, View> {
   readonly id: ProjectionId;
   /**
    * The exclusive stored offset — the position of the LAST applied update.
@@ -1357,7 +1357,7 @@ interface ProjectionUpdate<Model, Msg> {
 ### `rebuildProjection`
 
 ```ts
-function rebuildProjection<Model, Msg extends { type: string }, View>(
+function rebuildProjection<Model, Msg extends { _tag: string }, View>(
   projection: Projection<Model, Msg, View>,
   updates: readonly {
     readonly model: Model;
@@ -1414,7 +1414,7 @@ function reissueSurvivingEffects<R>(
 ### `ResumePort`
 
 ```ts
-interface ResumePort<S, M extends { type: string }> {
+interface ResumePort<S, M extends { _tag: string }> {
   readonly isResumable: (state: S) => boolean;
   readonly resumeMsg: (now: number) => M;
 }
@@ -1425,7 +1425,7 @@ interface ResumePort<S, M extends { type: string }> {
 ### `runProjection`
 
 ```ts
-function runProjection<Model, Msg extends { type: string }, View>(
+function runProjection<Model, Msg extends { _tag: string }, View>(
   projection: Projection<Model, Msg, View>,
   startOffset?: number,
 ): ProjectionRunner<Model, Msg, View>
@@ -1486,34 +1486,34 @@ function sseFromAgentEvents<R, Frame>(
       type: K,
       handler: (
         event: Extract<AgentEventHead & {
+          readonly _tag: "BrainStarted";
           readonly model: string | null;
           readonly payload: unknown;
           readonly purpose: string;
           readonly turn: number;
-          readonly type: "BrainStarted";
-        }, { type: K }> | Extract<AgentEventHead & {
+        }, { _tag: K }> | Extract<AgentEventHead & {
+          readonly _tag: "TurnSettled";
           readonly turn: AgentTurn;
-          readonly type: "TurnSettled";
           /** The usage the provider reported for this turn. Absent → none reported. */
           readonly usage?: TurnUsage;
-        }, { type: K }> | Extract<AgentEventHead & {
+        }, { _tag: K }> | Extract<AgentEventHead & {
+          readonly _tag: "ToolStarted";
           readonly args: Readonly<Record<string, unknown>>;
           readonly callId: string;
           readonly name: string;
-          readonly type: "ToolStarted";
-        }, { type: K }> | Extract<AgentEventHead & {
+        }, { _tag: K }> | Extract<AgentEventHead & {
+          readonly _tag: "ToolFailed";
           readonly callId: string;
           readonly failure: ToolFailure;
           readonly name: string;
-          readonly type: "ToolFailed";
-        }, { type: K }> | Extract<AgentEventHead & {
+        }, { _tag: K }> | Extract<AgentEventHead & {
+          readonly _tag: "RunDone";
           readonly status: AgentEndedStatus;
-          readonly type: "RunDone";
-        }, { type: K }> | Extract<AgentEventHead & {
+        }, { _tag: K }> | Extract<AgentEventHead & {
+          readonly _tag: "ToolSettled";
           readonly callId: string;
           readonly result: R;
-          readonly type: "ToolSettled";
-        }, { type: K }>,
+        }, { _tag: K }>,
       ) => void,
     ): () => void;
   },
@@ -1547,7 +1547,7 @@ interface SseHub<E> {
 ### `sseProjection`
 
 ```ts
-function sseProjection<Model, Msg extends { type: string }, E>(
+function sseProjection<Model, Msg extends { _tag: string }, E>(
   hub: SseHub<E>,
   toEvent: (msg: Msg | null, model: Model) => E | null,
   id?: { key?: string; name?: string },

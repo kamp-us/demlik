@@ -18,7 +18,7 @@ import { … } from "@demlik/tea";
 | [`ack`](#ack) | Function | stable | Construct an `Ack` for a last-applied sequence number. |
 | [`Ack`](#Ack) | Interface | stable | The authoritative side's acknowledgement: the highest `seq` it has applied. |
 | [`AckPartition`](#AckPartition) | Interface | stable | The result of splitting a seq-tagged buffer against an ack. |
-| [`AnyCmdDef`](#AnyCmdDef) | Type | stable | The declaration-erased view the runtime reads: which `type` a def builds, which two Msg types it settles with, the `ok` schema the edge parses against and the tags an `Err` may carry. |
+| [`AnyCmdDef`](#AnyCmdDef) | Type | stable | The declaration-erased view the runtime reads: which `_tag` a def builds, which two Msg types it settles with, the `ok` schema the edge parses against and the tags an `Err` may carry. |
 | [`applyCell`](#applyCell) | Function | stable | Run the one update cell that matches `state` and `msg` and return its `[nextState, cmds]`. |
 | [`applyCellChecked`](#applyCellChecked) | Function | stable | `applyCell` with the development-mode checks that catch an impure cell: the input state is frozen and the result is asserted to be plain data. |
 | [`asReducer`](#asReducer) | Function | stable | Type-check a standalone reducer record and return it branded. |
@@ -32,10 +32,10 @@ import { … } from "@demlik/tea";
 | [`Cmd`](#Cmd) | Type | stable | A tagged-union, one-shot effect — JSON-plain, hashable, replayable. |
 | [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds: `Cmd.define` declares a typed Cmd constructor, and `Cmd.none`, `Cmd.batch`, `Cmd.when` and `Cmd.whenDefined` build the Cmd list an update cell returns. |
 | [`CmdDef`](#CmdDef) | Interface | stable | What `Cmd.define` returns: the Cmd builder itself (`fetch({ url })`), with the minted Msg builders and the declaration hung on it. |
-| [`CmdInput`](#CmdInput) | Type | stable | The payload a constructor accepts: a plain record spread beside `type`. |
+| [`CmdInput`](#CmdInput) | Type | stable | The payload a constructor accepts: a plain record spread beside `_tag`. |
 | [`CmdNameCollisionError`](#CmdNameCollisionError) | Class | stable | A list of Cmd defs names one Cmd more than once: two defs built under one name, or one def listed twice. |
 | [`CmdOf`](#CmdOf) | Type | stable | The Cmd value a def (or a union of defs) builds. |
-| [`CmdValue`](#CmdValue) | Type | stable | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
+| [`CmdValue`](#CmdValue) | Type | stable | The value `Cmd.define("fetch", …)` builds: `{ _tag: "fetch", ...input }`. |
 | [`CtxArg`](#CtxArg) | Type | stable | The `ctx` field of an engine's options: optional when the machine's `Ctx` is empty, required otherwise. |
 | [`DeclaredErrorsOf`](#DeclaredErrorsOf) | Type | stable | The failures a `Cmd.define`d Cmd's handler may return: its declared tags. |
 | [`defineListener`](#defineListener) | Function | stable | Build a listener-backed Sub factory whose cleanup is mandatory and derived. |
@@ -44,7 +44,7 @@ import { … } from "@demlik/tea";
 | [`DefineManagedResourceOpts`](#DefineManagedResourceOpts) | Interface | stable | Options for `defineManagedResource`: the resource's `name`, how to `acquire` it for a key, and how to `release` the handle. |
 | [`definePort`](#definePort) | Function | stable | Define a typed port. |
 | [`DeletableStore`](#DeletableStore) | Interface | stable | A `Store<S>` that can remove what it saved — how a host forgets a run. |
-| [`DepKeyedSub`](#DepKeyedSub) | Type | stable | One entry of a machine's `subs`: a Sub `type` plus `deps(state)`, which returns the data the runner needs, or `null` to keep the Sub off. |
+| [`DepKeyedSub`](#DepKeyedSub) | Type | stable | One entry of a machine's `subs`: a Sub `_tag` plus `deps(state)`, which returns the data the runner needs, or `null` to keep the Sub off. |
 | [`describeMachine`](#describeMachine) | Function | stable | Describe a machine's update table as data: its form, its Msg types, and the per-state accept sets of a transitions machine. |
 | [`detectUpdateForm`](#detectUpdateForm) | Function | stable | Work out an `update` record's `UpdateForm` from its shape. |
 | [`DispatchDiscardedError`](#DispatchDiscardedError) | Class | stable | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
@@ -144,11 +144,11 @@ import { … } from "@demlik/tea";
 | [`StoreConflictError`](#StoreConflictError) | Class | stable | Thrown when a fenced save finds a version other than the one it expected — another live writer has this run. |
 | [`StoreRefusedError`](#StoreRefusedError) | Class | stable | `ready` rejects with this when the saved state could not be restored: `migrate` returned refuse, or `load` / `migrate` threw (that throw is the `cause`). |
 | [`structuralHash`](#structuralHash) | Function | stable | Turn a plain-data value into a stable string that does not depend on object key order. |
-| [`Sub`](#Sub) | Type | stable | A running subscription as its runner sees it: its `type`, the `deps` value the machine's `subs` entry returned, and an `id` derived from both. |
+| [`Sub`](#Sub) | Type | stable | A running subscription as its runner sees it: its `_tag`, the `deps` value the machine's `subs` entry returned, and an `id` derived from both. |
 | [`SubFailedError`](#SubFailedError) | Class | stable | What `done()` rejects with once a Sub's failure the Sub did not map to a Msg has stopped the run, which can then never reach a terminal State. |
 | [`subId`](#subId) | Function | stable | Construct a `SubId` from a string. |
 | [`SubId`](#SubId) | Type | stable | The branded string that identifies a running Sub. |
-| [`subIdOf`](#subIdOf) | Function | stable | The one `id` of a Sub: a structural hash of its `type` and its `deps` value. |
+| [`subIdOf`](#subIdOf) | Function | stable | The one `id` of a Sub: a structural hash of its `_tag` and its `deps` value. |
 | [`Subscribe`](#Subscribe) | Type | stable | The Sub runner table an engine is handed: one runner per Sub type. |
 | [`SubscribeArg`](#SubscribeArg) | Type | stable | The `subscribe` option of an engine's `run`: one runner per Sub type the machine declares, except the built-ins (`timer`) the engine already ships. |
 | [`SubscribeHandler`](#SubscribeHandler) | Type | stable | A Sub runner: given the Sub, the `ctx` and a `dispatch`, it opens the resource and returns a `Dispose`. |
@@ -262,7 +262,7 @@ type AnyCmdDef = {
 ```ts
 function applyCell<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd<string, unknown, unknown>,
 >(
   machine: { __form?: UpdateForm; update: object },
@@ -278,7 +278,7 @@ function applyCell<
 ```ts
 function applyCellChecked<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd<string, unknown, unknown>,
 >(
   machine: { __form?: UpdateForm; update: object },
@@ -292,7 +292,7 @@ function applyCellChecked<
 ### `asReducer`
 
 ```ts
-function asReducer<S, M extends { type: string }, C extends Cmd>(
+function asReducer<S, M extends { _tag: string }, C extends Cmd>(
   reducer: Reducer<S, M, C>,
 ): Branded<Reducer<S, M, C>>
 ```
@@ -316,7 +316,7 @@ class AsyncSchemaError extends Error {
 ### `BootedRunHandle`
 
 ```ts
-interface BootedRunHandle<S, M extends { type: string }, E extends { type: string } = never> extends RunHandle<S, M, E> {
+interface BootedRunHandle<S, M extends { _tag: string }, E extends { _tag: string } = never> extends RunHandle<S, M, E> {
   /** Resolves to the booted handle once boot completes. */
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
   /** The current State. Total. */
@@ -329,7 +329,7 @@ interface BootedRunHandle<S, M extends { type: string }, E extends { type: strin
 ### `BootingRuntime`
 
 ```ts
-interface BootingRuntime<S, M extends { type: string }, E extends { type: string } = never> extends RuntimeRef<M>, RunHandle<S, M, E> {
+interface BootingRuntime<S, M extends { _tag: string }, E extends { _tag: string } = never> extends RuntimeRef<M>, RunHandle<S, M, E> {
   /**
    * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
    * the boot error). This is the ONLY way to obtain a `Runtime` — and a
@@ -382,15 +382,15 @@ interface BootingRuntime<S, M extends { type: string }, E extends { type: string
    */
   observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
   /**
-   * Subscribe to a SEMANTIC event of `type`. The handler receives exactly the
-   * `E` member whose `type` matches `K`, so a consumer never touches another
+   * Subscribe to a SEMANTIC event of `_tag`. The handler receives exactly the
+   * `E` member whose `_tag` matches `K`, so a consumer never touches another
    * event's shape and never references the machine's PRIVATE Msg names. Multiple
    * handlers per type; fanout is synchronous and throw-isolated. Fires only when
    * the machine's `events` projector (wired on `run`) emits that type.
    */
   on<K extends string>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /**
    * Subscribe to the INITIAL State — the boot transition. Fires exactly once:
@@ -464,7 +464,7 @@ type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
   readonly __e?: E;
   /** Phantom — the value this Cmd settles with. Never assigned. */
   readonly __ok?: Ok;
-  readonly type: T;
+  readonly _tag: T;
 }
 
 const Cmd: {
@@ -473,9 +473,9 @@ const Cmd: {
    * multiple conditional sources:
    *
    *   return [next, Cmd.batch(
-   *     Cmd.whenDefined(state.queueItemId, (id) => ({ type: "complete", id })),
-   *     Cmd.when(state.windowId !== undefined, { type: "close_window", windowId }),
-   *     [{ type: "detach_debugger", tabId: state.tabId }],
+   *     Cmd.whenDefined(state.queueItemId, (id) => ({ _tag: "complete", id })),
+   *     Cmd.when(state.windowId !== undefined, { _tag: "close_window", windowId }),
+   *     [{ _tag: "detach_debugger", tabId: state.tabId }],
    *   )];
    *
    * `<const C>` keeps inline cmd literals' discriminants narrow (same
@@ -486,7 +486,7 @@ const Cmd: {
   ) => readonly C[];
   /**
    * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
-   * `fetch({ url })` yields `{ type: "fetch", url }` — carrying the minted Msg
+   * `fetch({ url })` yields `{ _tag: "fetch", url }` — carrying the minted Msg
    * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` (for replay
    * logs and tests) and the declaration the runtime edge parses against.
    * `Settled<typeof fetch>` is the two-arm Msg union it settles with;
@@ -548,9 +548,9 @@ const Cmd: {
    * Otherwise return the empty array. Spreads cleanly into the cmds array
    * returned by a Transitions cell.
    *
-   * `const C` (TypeScript 5.0+) keeps the inferred `type:` discriminator
+   * `const C` (TypeScript 5.0+) keeps the inferred `_tag:` discriminator
    * literal narrow when called with an object literal — so `Cmd.when(b,
-   * { type: "x", ... })` infers as `{ type: "x", ... }`, not `{ type:
+   * { _tag: "x", ... })` infers as `{ _tag: "x", ... }`, not `{ _tag:
    * string, ... }`, and stays assignable to a discriminated-union arm
    * without `as const` at the call site.
    */
@@ -564,7 +564,7 @@ const Cmd: {
    * the empty array. `value` is narrowed to `T` inside `build`.
    *
    * `const C` on the return type keeps the callback's object-literal
-   * `type:` field narrow (see `when` above for the full rationale).
+   * `_tag:` field narrow (see `when` above for the full rationale).
    */
   readonly whenDefined: <T, const C extends Cmd<string, unknown, unknown>>(
     value: T | undefined,
@@ -580,7 +580,7 @@ const Cmd: {
 ```ts
 interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagged> {
   (input: Input): CmdValue<Name, Input, Ok, E>;
-  /** The `type` discriminant of every Cmd this builds. */
+  /** The `_tag` discriminant of every Cmd this builds. */
   readonly cmdType: Name;
   readonly err: (
     cmd: CmdValue<Name, Input, Ok, E>,
@@ -608,7 +608,7 @@ interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagg
 ### `CmdInput`
 
 ```ts
-type CmdInput = { readonly type?: never } & Record<string, unknown>
+type CmdInput = { readonly _tag?: never } & Record<string, unknown>
 ```
 
 <a id="CmdNameCollisionError"></a>
@@ -677,7 +677,7 @@ function defineListener<
 ```ts
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub = Sub<never>,
   Ctx = unknown,
@@ -689,7 +689,7 @@ function defineMachine<
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd = Cmd<never>,
   U extends Sub = Sub<never>,
   Ctx = unknown,
@@ -700,19 +700,19 @@ function defineMachine<
 ): Machine<S, M, C, U, Ctx>
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub,
   Ctx,
 >(
   m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds" | "update"> & {
     readonly cmds: readonly D[];
-    update: [S] extends [{ type: string }] ? Transitions<S, M | Settled<D>, CmdOf<D>> : never;
+    update: [S] extends [{ _tag: string }] ? Transitions<S, M | Settled<D>, CmdOf<D>> : never;
   },
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub,
   Ctx,
@@ -724,18 +724,18 @@ function defineMachine<
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
 >(
   m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
-    update: [S] extends [{ type: string }] ? Transitions<S, M, C> : never;
+    update: [S] extends [{ _tag: string }] ? Transitions<S, M, C> : never;
   },
 ): Machine<S, M, C, U, Ctx>
 function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -769,7 +769,7 @@ interface DefineManagedResourceOpts<N extends string, TKey, Handle, Ctx> {
    */
   readonly acquire: (key: TKey, ctx: Ctx) => Handle;
   /**
-   * A short, stable name — and the resource's Sub `type`. The machine's
+   * A short, stable name — and the resource's Sub `_tag`. The machine's
    * `subscribe` table holds this battery's runner under it, so it must be
    * unique among the machine's Sub types.
    */
@@ -817,6 +817,7 @@ interface DeletableStore<S> extends Store<S> {
 
 ```ts
 type DepKeyedSub<S, U extends Sub = Sub> = U extends Sub<infer T, infer D> ? {
+  readonly _tag: T;
   /**
    * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
    * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -825,7 +826,6 @@ type DepKeyedSub<S, U extends Sub = Sub> = U extends Sub<infer T, infer D> ? {
    * `Error` or class instance rather than collapsing them onto one id.
    */
   readonly deps: (state: S) => D | null | undefined;
-  readonly type: T;
 } : never
 ```
 
@@ -944,11 +944,11 @@ class DriveStalledError<S> extends Error {
 ```ts
 type EngineRun<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   F extends HandlerFamily = PromiseHandlers,
 > = ((
   machine: Machine<S, M, C, U, Ctx>,
@@ -989,9 +989,9 @@ interface EventSourceFactoryOpts<S, M> {
 ### `ExhaustiveTransitions`
 
 ```ts
-type ExhaustiveTransitions<S extends { type: string }, M extends { type: string }, C extends Cmd> = { [P in S["type"]]: { [K in M["type"]]: (
-  state: Extract<S, { type: P }>,
-  msg: Extract<M, { type: K }>,
+type ExhaustiveTransitions<S extends { _tag: string }, M extends { _tag: string }, C extends Cmd> = { [P in S["_tag"]]: { [K in M["_tag"]]: (
+  state: Extract<S, { _tag: P }>,
+  msg: Extract<M, { _tag: K }>,
 ) => SyncReturn<S, C> } }
 ```
 
@@ -1034,7 +1034,7 @@ interface FencedStore<S> extends Store<S> {
 ```ts
 function foldMsgs<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd<string, unknown, unknown>,
   U extends Sub<string, unknown>,
   Ctx,
@@ -1051,7 +1051,7 @@ function foldMsgs<
 
 ```ts
 interface FoldRefusal<M> {
-  /** The underlying cell-lookup failure: msg.type + state name + accepted set. */
+  /** The underlying cell-lookup failure: msg._tag + state name + accepted set. */
   readonly error: NoCellError;
   /** Index into the `msgs` array the fold was given. */
   readonly index: number;
@@ -1067,7 +1067,7 @@ interface FoldRefusal<M> {
 ```ts
 function foldUpdates<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd<string, unknown, unknown>,
 >(
   machine: { __form?: UpdateForm; update: object },
@@ -1137,7 +1137,7 @@ function fromPort<
   Ctx,
   T,
   RS = unknown,
-  RM extends { type: string } = { type: string },
+  RM extends { _tag: string } = { _tag: string },
 >(
   selectRuntime: (ctx: Ctx) => Runtime<RS, RM>,
   port: Port<T>,
@@ -1188,7 +1188,7 @@ interface FromTransportOpts<N extends string, TKey, Inbound, Outbound, M, Ctx> {
    */
   readonly lostMsg: (key: TKey) => M;
   /**
-   * A short, stable name for this seam — and its Sub `type`. The machine's
+   * A short, stable name for this seam — and its Sub `_tag`. The machine's
    * `subscribe` table holds the seam's runner under it, so it must be unique
    * among the machine's Sub types.
    */
@@ -1239,7 +1239,7 @@ interface HandlerFamily {
   readonly Ctx: unknown;
   /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
   readonly handlers: unknown;
-  readonly M: { type: string };
+  readonly M: { _tag: string };
   readonly U: Sub;
 }
 ```
@@ -1262,7 +1262,7 @@ type HandlersFor<F extends HandlerFamily, M, C, U, Ctx> = (F & {
 ### `historyTracker`
 
 ```ts
-function historyTracker<S, M extends { type: string }>(
+function historyTracker<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   size: number,
 ): HistoryTracker<S, M>
@@ -1273,7 +1273,7 @@ function historyTracker<S, M extends { type: string }>(
 ### `HistoryTracker`
 
 ```ts
-interface HistoryTracker<S, M extends { type: string }> {
+interface HistoryTracker<S, M extends { _tag: string }> {
   /**
    * Snapshot of recorded transitions, oldest first. Each entry is
    * `{ msg, state }`: `msg` is `null` for the boot transition (recorded via
@@ -1342,7 +1342,7 @@ function initAck(): Ack
 ### `Interpret`
 
 ```ts
-type Interpret<M extends { type: string }, C extends Cmd, Ctx> = { [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx> }
+type Interpret<M extends { _tag: string }, C extends Cmd, Ctx> = { [K in C["_tag"]]: InterpretCell<M, Extract<C, { _tag: K }>, Ctx> }
 ```
 
 <a id="InterpretArg"></a>
@@ -1350,7 +1350,7 @@ type Interpret<M extends { type: string }, C extends Cmd, Ctx> = { [K in C["type
 ### `InterpretArg`
 
 ```ts
-type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [C] extends [Cmd<never>] ? { interpret?: Interpret<M, C, Ctx> } : { interpret: Interpret<M, C, Ctx> }
+type InterpretArg<M extends { _tag: string }, C extends Cmd, Ctx> = [C] extends [Cmd<never>] ? { interpret?: Interpret<M, C, Ctx> } : { interpret: Interpret<M, C, Ctx> }
 ```
 
 <a id="InterpretCell"></a>
@@ -1358,7 +1358,7 @@ type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [C] extends 
 ### `InterpretCell`
 
 ```ts
-type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> = unknown extends ErrorsOf<C> ? (
+type InterpretCell<M extends { _tag: string }, C extends Cmd, Ctx> = unknown extends ErrorsOf<C> ? (
   cmd: C,
   ctx: HandlerCtx<Ctx>,
   dispatch?: (msg: M) => void,
@@ -1374,7 +1374,7 @@ type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> = unknown ext
 ### `InterpretDetached`
 
 ```ts
-type InterpretDetached<C extends Cmd, Allowed extends { type: string }, Ctx> = (
+type InterpretDetached<C extends Cmd, Allowed extends { _tag: string }, Ctx> = (
   cmd: C,
   ctx: HandlerCtx<Ctx>,
   dispatch: (msg: Allowed) => void,
@@ -1417,7 +1417,7 @@ interface ListenerTarget<Args extends readonly unknown[], S extends Sub, Ctx> {
 ### `Machine`
 
 ```ts
-type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
+type Machine<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> = {
   /**
    * The update form ("reducer" | "transitions"), stamped non-enumerably by
    * `defineMachine` at construction (see `UpdateForm` / `formOf`). Optional in
@@ -1474,20 +1474,20 @@ type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> =
    */
   init: (loaded: S | null, ctx: Ctx) => readonly [S, readonly C[]];
   /**
-   * The machine's Subs, as data: each entry names a Sub `type` and the state
+   * The machine's Subs, as data: each entry names a Sub `_tag` and the state
    * slice it depends on (`deps`). The engine derives the id
-   * (`structuralHash({ type, deps })`) and the gate (`deps` non-null), starts
-   * the runner for `type` when an entry turns on, leaves it alone while the id
+   * (`structuralHash({ _tag, deps })`) and the gate (`deps` non-null), starts
+   * the runner for `_tag` when an entry turns on, leaves it alone while the id
    * holds, restarts it when the id changes, and stops it on `null` or `stop()`.
    *
    * `U` is the machine's own Sub union (`types.sub`); the built-in `timer`
-   * (`{ type: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
+   * (`{ _tag: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
    *
    * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
    * (identity derived, not hand-authored).
    */
   readonly subs?: ReadonlyArray<DepKeyedSub<S, U | BuiltinSub<M>>>;
-  update: Reducer<S, M, C> | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+  update: Reducer<S, M, C> | ([S] extends [{ _tag: string }] ? Transitions<S, M, C> : never);
 }
 ```
 
@@ -1499,16 +1499,16 @@ type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> =
 type MachineShape =
   | {
     readonly form: "reducer";
-    /** Every `Msg.type` the flat reducer has a cell for. */
+    /** Every `Msg._tag` the flat reducer has a cell for. */
     readonly msgs: readonly string[];
   }
   | {
-    /** `state.type` → the `Msg.type`s that state has a cell for. */
+    /** `state._tag` → the `Msg._tag`s that state has a cell for. */
     readonly accepts: Readonly<Record<string, readonly string[]>>;
     readonly form: "transitions";
-    /** The union of every row's `Msg.type` keys (see `msgKeysOf`). */
+    /** The union of every row's `Msg._tag` keys (see `msgKeysOf`). */
     readonly msgs: readonly string[];
-    /** Every `state.type` the table has a row for, in table order. */
+    /** Every `state._tag` the table has a row for, in table order. */
     readonly states: readonly string[];
   }
 ```
@@ -1518,7 +1518,7 @@ type MachineShape =
 ### `MachineTypes`
 
 ```ts
-type MachineTypes<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
+type MachineTypes<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> = {
   readonly cmd?: C;
   readonly ctx?: Ctx;
   readonly model: S;
@@ -1547,6 +1547,8 @@ type MalformedResult = {
 
 ```ts
 interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
+  /** The battery's Sub type — its `name`. */
+  readonly _tag: N;
   /**
    * The `subs` entry. `when(state)` returns the resource's KEY when it should
    * be held, or `null` when it should be torn down. The key is the Sub's
@@ -1557,6 +1559,7 @@ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
   readonly depKeyed: <S>(
     when: (state: S) => TKey | null,
   ) => {
+    readonly _tag: N;
     /**
      * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
      * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -1565,7 +1568,6 @@ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
      * `Error` or class instance rather than collapsing them onto one id.
      */
     readonly deps: (state: S) => TKey | null | undefined;
-    readonly type: N;
   };
   /**
    * Accessor for the live Handle, keyed on `key` (the author's key, never the
@@ -1577,7 +1579,7 @@ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
   readonly get: (key: TKey) => Handle | undefined;
   /**
    * The runner for this battery's Sub type — hand it to `run` as
-   * `subscribe: { [battery.type]: battery.subscribe }`. Runs `acquire` on
+   * `subscribe: { [battery._tag]: battery.subscribe }`. Runs `acquire` on
    * start, holds the Handle in the battery's handle table, and returns a
    * cleanup that runs `release` (and forgets the Handle) on stop.
    */
@@ -1586,8 +1588,6 @@ interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
     ctx: Ctx,
     dispatch: (msg: never) => void,
   ) => Dispose;
-  /** The battery's Sub type — its `name`. */
-  readonly type: N;
 }
 ```
 
@@ -1783,7 +1783,7 @@ class PortNameCollisionError extends Error {
 ```ts
 interface PromiseHandlers extends HandlerFamily {
   /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
-  readonly handlers: RunHandlers<{ type: string }, Cmd, Sub, unknown>;
+  readonly handlers: RunHandlers<{ _tag: string }, Cmd, Sub, unknown>;
 }
 ```
 
@@ -1832,7 +1832,7 @@ interface ReadStep<In, Out> {
 ```ts
 function reconcile<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1876,7 +1876,7 @@ interface ReconnectingWebSocketFactoryOpts<S, M> {
 ### `Reducer`
 
 ```ts
-type Reducer<S, M extends { type: string }, C extends Cmd> = { [K in M["type"]]: (state: S, msg: Extract<M, { type: K }>) => SyncReturn<S, C> }
+type Reducer<S, M extends { _tag: string }, C extends Cmd> = { [K in M["_tag"]]: (state: S, msg: Extract<M, { _tag: K }>) => SyncReturn<S, C> }
 ```
 
 <a id="Refusal"></a>
@@ -1906,7 +1906,7 @@ function refuse(reason: string): Refusal
 ```ts
 function replay<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1929,7 +1929,7 @@ function replay<
 ### `RunHandle`
 
 ```ts
-interface RunHandle<S, M extends { type: string }, E extends { type: string } = never> {
+interface RunHandle<S, M extends { _tag: string }, E extends { _tag: string } = never> {
   /** Resolves to the booted handle once boot completes. */
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
   /** Put a Msg in the inbox; resolves once the engine has processed it. */
@@ -1939,10 +1939,10 @@ interface RunHandle<S, M extends { type: string }, E extends { type: string } = 
    * with the Cmds that transition started.
    */
   observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
   on<K extends string>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
@@ -1961,7 +1961,7 @@ interface RunHandle<S, M extends { type: string }, E extends { type: string } = 
 ### `RunHandlers`
 
 ```ts
-type RunHandlers<M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = InterpretArg<M, C, Ctx> & SubscribeArg<M, U, Ctx>
+type RunHandlers<M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> = InterpretArg<M, C, Ctx> & SubscribeArg<M, U, Ctx>
 ```
 
 <a id="RunOptions"></a>
@@ -1971,11 +1971,11 @@ type RunHandlers<M extends { type: string }, C extends Cmd, U extends Sub, Ctx> 
 ```ts
 type RunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   F extends HandlerFamily = PromiseHandlers,
 > = CtxArg<Ctx> & HandlersFor<F, M, C, U, Ctx> & StoreAndOnError<S> & {
   readonly events?: (msg: M, state: S) => readonly E[];
@@ -1987,7 +1987,7 @@ type RunOptions<
 ### `Runtime`
 
 ```ts
-interface Runtime<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E> {
+interface Runtime<S, M extends { _tag: string }, E extends { _tag: string } = never> extends BootingRuntime<S, M, E> {
   /** Resolves to this same `Runtime` once boot completes. Idempotent. */
   ready: Promise<Runtime<S, M, E>>;
   /**
@@ -2098,7 +2098,7 @@ type RuntimeErrorPhase =
 ### `RuntimeRef`
 
 ```ts
-interface RuntimeRef<M extends { type: string }> {
+interface RuntimeRef<M extends { _tag: string }> {
   /**
    * Put a Msg in the runtime's inbox and resolve once processed. Runs to
    * QUIESCENCE by default: settles only after the dispatched Msg AND every
@@ -2176,11 +2176,11 @@ type Settled<D extends AnyCmdDef> = D extends CmdDef<infer Name, infer Input, in
 
 ```ts
 type SettledErr<Name extends string, C, E extends Tagged> = {
+  readonly _tag: `${Name}_err`;
   /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
   readonly at: number;
   readonly cmd: C;
   readonly error: E | MalformedResult;
-  readonly type: `${Name}_err`;
 }
 ```
 
@@ -2190,10 +2190,10 @@ type SettledErr<Name extends string, C, E extends Tagged> = {
 
 ```ts
 type SettledOk<Name extends string, C, Ok> = {
+  readonly _tag: `${Name}_ok`;
   /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
   readonly at: number;
   readonly cmd: C;
-  readonly type: `${Name}_ok`;
   readonly value: Ok;
 }
 ```
@@ -2267,9 +2267,9 @@ function structuralHash(deps: unknown): string
 
 ```ts
 type Sub<T extends string = string, D = unknown> = {
+  readonly _tag: T;
   readonly deps: D;
   readonly id: SubId;
-  readonly type: T;
 }
 ```
 
@@ -2314,7 +2314,7 @@ function subIdOf(type: string, deps: unknown): SubId
 ### `Subscribe`
 
 ```ts
-type Subscribe<M extends { type: string }, U extends Sub, Ctx> = { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx: Ctx, dispatch: (msg: M) => void) => Dispose }
+type Subscribe<M extends { _tag: string }, U extends Sub, Ctx> = { [K in U["_tag"]]: (sub: Extract<U, { _tag: K }>, ctx: Ctx, dispatch: (msg: M) => void) => Dispose }
 ```
 
 <a id="SubscribeArg"></a>
@@ -2322,10 +2322,10 @@ type Subscribe<M extends { type: string }, U extends Sub, Ctx> = { [K in U["type
 ### `SubscribeArg`
 
 ```ts
-type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [Exclude<U["type"], BuiltinSubType>] extends [never] ? {
+type SubscribeArg<M extends { _tag: string }, U extends Sub, Ctx> = [Exclude<U["_tag"], BuiltinSubType>] extends [never] ? {
   readonly subscribe?: Partial<Subscribe<M, Exclude<U, Sub<never>> | BuiltinSub<M>, Ctx>>;
 } : {
-  readonly subscribe: Subscribe<M, Exclude<U, { readonly type: BuiltinSubType }>, Ctx> & Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
+  readonly subscribe: Subscribe<M, Exclude<U, { readonly _tag: BuiltinSubType }>, Ctx> & Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
 }
 ```
 
@@ -2342,7 +2342,7 @@ type SubscribeHandler<S extends Sub, M, Ctx> = (sub: S, ctx: Ctx, dispatch: (msg
 ### `Supervision`
 
 ```ts
-type Supervision<S, M extends { type: string }> =
+type Supervision<S, M extends { _tag: string }> =
   | "stop"
   | "escalate"
   | {
@@ -2423,7 +2423,7 @@ function tagSeq<T>(seq: number, value: T): SeqTagged<T>
 interface TelemetryEvent {
   /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
   readonly at: number;
-  /** The `Msg.type` that drove the transition. */
+  /** The `Msg._tag` that drove the transition. */
   readonly msgType: string;
   /** This run's applied transitions so far, counted from 1. Boot is not one. */
   readonly seq: number;
@@ -2462,7 +2462,7 @@ type TimerSub<M> = Sub<"timer", TimerDeps<M>>
 ### `Transitions`
 
 ```ts
-type Transitions<S extends { type: string }, M extends { type: string }, C extends Cmd> = { [P in S["type"]]: Partial<ExhaustiveTransitions<S, M, C>[P]> }
+type Transitions<S extends { _tag: string }, M extends { _tag: string }, C extends Cmd> = { [P in S["_tag"]]: Partial<ExhaustiveTransitions<S, M, C>[P]> }
 ```
 
 <a id="Transport"></a>
@@ -2495,6 +2495,8 @@ interface Transport {
 
 ```ts
 interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+  /** The seam's Sub type — its `name`. */
+  readonly _tag: N;
   /**
    * The `subs` entry. `when(state)` returns the seam's KEY when it should be
    * open, or `null` when it should be torn down. The key is the Sub's `deps`,
@@ -2505,6 +2507,7 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
   readonly depKeyed: <S>(
     when: (state: S) => TKey | null,
   ) => {
+    readonly _tag: N;
     /**
      * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
      * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -2513,7 +2516,6 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
      * `Error` or class instance rather than collapsing them onto one id.
      */
     readonly deps: (state: S) => TKey | null | undefined;
-    readonly type: N;
   };
   /**
    * Outbound send, addressed by the seam's key (never the derived Sub id,
@@ -2526,12 +2528,10 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
   readonly send: (key: TKey, outbound: Outbound) => void;
   /**
    * The runner for this seam's Sub type — hand it to `run` as
-   * `subscribe: { [seam.type]: seam.subscribe }`. Wires inbound + close in
+   * `subscribe: { [seam._tag]: seam.subscribe }`. Wires inbound + close in
    * one shot and publishes the live transport to the outbound handle table.
    */
   readonly subscribe: (sub: TransportSub<N, TKey>, ctx: Ctx, dispatch: (msg: M) => void) => Dispose;
-  /** The seam's Sub type — its `name`. */
-  readonly type: N;
 }
 ```
 
@@ -2556,7 +2556,7 @@ type TransportSub<N extends string, TKey> = Sub<N, TKey>
 ### `tryApplyCell`
 
 ```ts
-function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
+function tryApplyCell<S, M extends { _tag: string }, C extends Cmd>(
   machine: { __form?: UpdateForm; update: object },
   state: S,
   msg: M,
@@ -2568,7 +2568,7 @@ function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
 ### `tryFoldMsgs`
 
 ```ts
-function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
+function tryFoldMsgs<S, M extends { _tag: string }, C extends Cmd>(
   machine: { __form?: UpdateForm; update: object },
   base: S,
   msgs: readonly M[],
@@ -2648,7 +2648,7 @@ type WebSocketSubData = {
 ### `Wired`
 
 ```ts
-type Wired<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = { readonly machine: Machine<S, M, C, U, Ctx> } & RunHandlers<M, C, U, Ctx>
+type Wired<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> = { readonly machine: Machine<S, M, C, U, Ctx> } & RunHandlers<M, C, U, Ctx>
 ```
 
 <a id="wrapDetached"></a>
@@ -2658,8 +2658,8 @@ type Wired<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
 ```ts
 function wrapDetached<
   C extends Cmd,
-  M extends { type: string },
-  Allowed extends { type: string },
+  M extends { _tag: string },
+  Allowed extends { _tag: string },
   Ctx,
 >(
   handler: InterpretDetached<C, Allowed, Ctx>,

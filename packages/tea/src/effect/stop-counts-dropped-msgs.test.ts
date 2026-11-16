@@ -27,13 +27,13 @@ const SECRET = "a-host-secret";
 type Model = { readonly folded: readonly string[] };
 type ItemType = "alpha" | "beta" | "gamma";
 type Msg =
-  | { readonly type: "start" }
-  | { readonly type: ItemType; readonly secret: string };
-type Cmd = { readonly type: "work" };
+  | { readonly _tag: "start" }
+  | { readonly _tag: ItemType; readonly secret: string };
+type Cmd = { readonly _tag: "work" };
 type Feed = Sub<"feed", { readonly on: true }>;
 
 const fold = (s: Model, msg: Msg): readonly [Model, readonly Cmd[]] => [
-  { folded: [...s.folded, msg.type] },
+  { folded: [...s.folded, msg._tag] },
   [],
 ];
 
@@ -47,12 +47,12 @@ const machine = defineMachine({
   },
   init: (loaded) => [loaded ?? { folded: [] }, []],
   update: {
-    start: (s) => [s, [{ type: "work" }]],
+    start: (s) => [s, [{ _tag: "work" }]],
     alpha: fold,
     beta: fold,
     gamma: fold,
   },
-  subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+  subs: [{ _tag: "feed", deps: () => ({ on: true as const }) }],
 });
 
 const LIMIT_MS = 50;
@@ -66,7 +66,7 @@ type Engine = (typeof ENGINES)[number];
  */
 type Handler = "never" | "held" | "interruptible";
 
-const item = (type: ItemType): Msg => ({ type, secret: SECRET });
+const item = (type: ItemType): Msg => ({ _tag: type, secret: SECRET });
 
 /** The issue's 20 Msgs of three types, 10, 7 and 3, in a mixed order. */
 function twentyItems(): readonly Msg[] {
@@ -224,7 +224,7 @@ async function startStuck(
   handler: Handler,
 ): Promise<Started & { readonly started: Promise<unknown> }> {
   const run = await start[engine](handler);
-  const started = run.dispatch({ type: "start" });
+  const started = run.dispatch({ _tag: "start" });
   await until(() => run.work.entered);
   return { ...run, started };
 }
@@ -410,7 +410,7 @@ describe.each(
     await stopped;
 
     expect(noticesOf(run)).toEqual([]);
-    expect(run.state().folded).toEqual(items.map((m) => m.type));
+    expect(run.state().folded).toEqual(items.map((m) => m._tag));
     await run.close();
   });
 
@@ -458,7 +458,7 @@ describe("Effect engine: a handler stop() can interrupt", () => {
 
     expect(await Promise.all(waiting)).toEqual(items.map(() => "folded"));
     expect(noticesOf(run)).toEqual([]);
-    const folded = items.map((m) => m.type);
+    const folded = items.map((m) => m._tag);
     expect(run.state().folded).toEqual(folded);
     // A save per Msg, and stop()'s final one.
     expect(run.saves.length).toBe(savesBefore + 21);
@@ -490,7 +490,7 @@ describe("Promise engine: a Msg a handler or a Sub sent, on the line behind it",
         },
       },
     }).ready;
-    void runtime.dispatchOnce({ type: "start" });
+    void runtime.dispatchOnce({ _tag: "start" });
     await until(() => entered);
     fromSub(item("beta"));
 

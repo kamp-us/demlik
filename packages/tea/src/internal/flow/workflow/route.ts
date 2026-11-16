@@ -28,7 +28,7 @@ export function routeWorkflowMsg<A, R, F>(
   state: WorkflowState<A, R, F>,
   msg: WorkflowMsg<R, F>,
 ): WorkflowReducerStep<A, R, F> {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "activity_ok":
       return wf.onActivityOk(state, msg);
     case "activity_err":

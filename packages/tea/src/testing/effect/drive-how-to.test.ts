@@ -72,7 +72,7 @@ function driveOrder(failure?: Failure) {
     drive(
       order,
       newOrder,
-      { type: "place", sku: "TEA-001", cents: 4200 },
+      { _tag: "place", sku: "TEA-001", cents: 4200 },
       orderHandlers,
     ).pipe(Effect.provide(fakeShop(failure))),
   );

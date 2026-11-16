@@ -70,8 +70,8 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
         const parentScope = yield* Scope.make();
         const ids = ["a", "b", "c"];
         const parent = ringParent(ids, ROUNDS);
-        const finished = (state: { readonly type: string }) =>
-          state.type === "finished";
+        const finished = (state: { readonly _tag: string }) =>
+          state._tag === "finished";
 
         interface Child {
           readonly machine: ReturnType<typeof ringChild>;
@@ -90,7 +90,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
                 const child = children.get(cmd.id);
                 if (child === undefined) return Effect.die(`no ${cmd.id}`);
                 return tell(child.machine, child.run, {
-                  type: "answer",
+                  _tag: "answer",
                   round: cmd.round,
                 });
               }).pipe(Effect.as([] as readonly never[])),
@@ -109,7 +109,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
                   interpret: {
                     report: (cmd) =>
                       tell(parent, parentRun, {
-                        type: "child_result",
+                        _tag: "child_result",
                         id: cmd.id,
                         round: cmd.round,
                       }).pipe(Effect.as([] as readonly never[])),
@@ -128,7 +128,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
 
         const all = [...children.values()];
         for (const child of all) {
-          expect(yield* tell(child.machine, child.run, { type: "begin" })).toBe(
+          expect(yield* tell(child.machine, child.run, { _tag: "begin" })).toBe(
             "queued",
           );
         }
@@ -137,7 +137,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           .done()
           .pipe(Effect.timeout("10 seconds"));
         const expected = { a: ROUNDS, b: ROUNDS, c: ROUNDS };
-        expect(parentFinal).toEqual({ type: "finished", reports: expected });
+        expect(parentFinal).toEqual({ _tag: "finished", reports: expected });
         expect(replay(parent, { msgs: parentLog, ctx: {} }).state).toEqual(
           parentFinal,
         );
@@ -146,7 +146,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           const childFinal = yield* child.run
             .done()
             .pipe(Effect.timeout("10 seconds"));
-          expect(childFinal).toEqual({ type: "finished", answered: ROUNDS });
+          expect(childFinal).toEqual({ _tag: "finished", answered: ROUNDS });
           expect(child.log).toHaveLength(ROUNDS + 1);
           expect(
             replay(child.machine, { msgs: child.log, ctx: {} }).state,
@@ -166,7 +166,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
       Effect.gen(function* () {
         const { scope, runtime, entered, release } = yield* openLine();
         const held = yield* Effect.forkChild(
-          runtime.dispatch({ type: "hold" }),
+          runtime.dispatch({ _tag: "hold" }),
           { startImmediately: true },
         );
         yield* Deferred.await(entered);
@@ -189,7 +189,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
       Effect.gen(function* () {
         const { scope, runtime, entered, release } = yield* openLine();
         const held = yield* Effect.forkChild(
-          runtime.dispatch({ type: "hold" }),
+          runtime.dispatch({ _tag: "hold" }),
           { startImmediately: true },
         );
         yield* Deferred.await(entered);
@@ -223,7 +223,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           },
         }).pipe(Scope.provide(scope))).ready;
 
-        yield* sender.dispatch({ type: "hold" });
+        yield* sender.dispatch({ _tag: "hold" });
         yield* receiver.idle();
 
         expect(receiver.getState().folded).toEqual(names);
@@ -236,7 +236,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { scope, runtime, entered, release } = yield* openLine();
-        yield* Effect.forkChild(runtime.dispatch({ type: "hold" }), {
+        yield* Effect.forkChild(runtime.dispatch({ _tag: "hold" }), {
           startImmediately: true,
         });
         yield* Deferred.await(entered);
@@ -261,7 +261,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { scope, runtime } = yield* openLine();
-        yield* runtime.dispatch({ type: "close" });
+        yield* runtime.dispatch({ _tag: "close" });
         yield* Scope.close(scope, Exit.void);
         expect(yield* tell(line, runtime, ping("a"))).toBe("stopped");
       }),
@@ -273,8 +273,8 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
       Effect.gen(function* () {
         const { scope, runtime, reports } = yield* openLine();
         const seen: string[] = [];
-        runtime.observe((msg) => void seen.push(msg.type));
-        yield* runtime.dispatch({ type: "close" });
+        runtime.observe((msg) => void seen.push(msg._tag));
+        yield* runtime.dispatch({ _tag: "close" });
 
         expect(yield* tell(line, runtime, ping("a"))).toBe("no_cell");
         yield* runtime.idle();
@@ -297,7 +297,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           }).pipe(Scope.provide(scope))).ready;
           // `close` is queued, not folded, so the check still reads `open`.
           const closing = yield* Effect.forkChild(
-            runtime.dispatch({ type: "close" }),
+            runtime.dispatch({ _tag: "close" }),
             { startImmediately: true },
           );
           expect(yield* tell(line, runtime, ping("late"))).toBe("queued");
@@ -306,7 +306,7 @@ describe("tell on the Effect engine", { timeout: 20_000 }, () => {
           // The default sink rethrows on a macrotask: vitest fails on that throw.
           yield* nextMacrotask;
 
-          expect(runtime.getState()).toEqual({ type: "closed", folded: [] });
+          expect(runtime.getState()).toEqual({ _tag: "closed", folded: [] });
           yield* Scope.close(scope, Exit.void);
         }),
       );

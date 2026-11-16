@@ -50,7 +50,7 @@ import { … } from "@demlik/tea/effect";
 ### `BridgedRun`
 
 ```ts
-type BridgedRun<R> = (<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+type BridgedRun<R> = (<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: RunOptions<S, M, C, U, Ctx, never, EffectHandlers<R>>,
 ) => RunHandle<S, M>) & {
@@ -63,7 +63,7 @@ type BridgedRun<R> = (<S, M extends { type: string }, C extends Cmd, U extends S
 ### `CellErrors`
 
 ```ts
-type CellErrors<C extends Cmd, I> = { [K in keyof I & C["type"]]: unknown extends ErrorsOf<Extract<C, { type: K }>> ? ErrorOfCell<I[K]> : never }[keyof I & C["type"]]
+type CellErrors<C extends Cmd, I> = { [K in keyof I & C["_tag"]]: unknown extends ErrorsOf<Extract<C, { _tag: K }>> ? ErrorOfCell<I[K]> : never }[keyof I & C["_tag"]]
 ```
 
 <a id="CheckingSchema"></a>
@@ -87,9 +87,9 @@ const Cmd: {
    * multiple conditional sources:
    *
    *   return [next, Cmd.batch(
-   *     Cmd.whenDefined(state.queueItemId, (id) => ({ type: "complete", id })),
-   *     Cmd.when(state.windowId !== undefined, { type: "close_window", windowId }),
-   *     [{ type: "detach_debugger", tabId: state.tabId }],
+   *     Cmd.whenDefined(state.queueItemId, (id) => ({ _tag: "complete", id })),
+   *     Cmd.when(state.windowId !== undefined, { _tag: "close_window", windowId }),
+   *     [{ _tag: "detach_debugger", tabId: state.tabId }],
    *   )];
    *
    * `<const C>` keeps inline cmd literals' discriminants narrow (same
@@ -159,9 +159,9 @@ const Cmd: {
    * Otherwise return the empty array. Spreads cleanly into the cmds array
    * returned by a Transitions cell.
    *
-   * `const C` (TypeScript 5.0+) keeps the inferred `type:` discriminator
+   * `const C` (TypeScript 5.0+) keeps the inferred `_tag:` discriminator
    * literal narrow when called with an object literal — so `Cmd.when(b,
-   * { type: "x", ... })` infers as `{ type: "x", ... }`, not `{ type:
+   * { _tag: "x", ... })` infers as `{ _tag: "x", ... }`, not `{ _tag:
    * string, ... }`, and stays assignable to a discriminated-union arm
    * without `as const` at the call site.
    */
@@ -175,7 +175,7 @@ const Cmd: {
    * the empty array. `value` is narrowed to `T` inside `build`.
    *
    * `const C` on the return type keeps the callback's object-literal
-   * `type:` field narrow (see `when` above for the full rationale).
+   * `_tag:` field narrow (see `when` above for the full rationale).
    */
   readonly whenDefined: <T, const C extends Cmd<string, unknown, unknown>>(
     value: T | undefined,
@@ -189,7 +189,7 @@ const Cmd: {
 ### `EffectBootingRun`
 
 ```ts
-interface EffectBootingRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
+interface EffectBootingRun<S, M extends { _tag: string }, E extends { _tag: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -205,7 +205,7 @@ interface EffectBootingRun<S, M extends { type: string }, E extends { type: stri
 ### `EffectBootingRuntime`
 
 ```ts
-interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: string } = never, Err = never> {
+interface EffectBootingRuntime<S, M extends { _tag: string }, E extends { _tag: string } = never, Err = never> {
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -232,10 +232,10 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
    * with the Cmds that transition started.
    */
   observe(observer: (msg: M, state: S, cmds?: readonly Cmd[]) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
   on<K extends string>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
@@ -266,7 +266,7 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
 ```ts
 interface EffectHandlers<R> extends HandlerFamily {
   /** The `interpret` and `subscribe` options, for the machine `HandlersFor` names. */
-  readonly handlers: EffectHandlerTables<{ type: string }, Cmd, Sub, Scope | R>;
+  readonly handlers: EffectHandlerTables<{ _tag: string }, Cmd, Sub, Scope | R>;
 }
 ```
 
@@ -275,7 +275,7 @@ interface EffectHandlers<R> extends HandlerFamily {
 ### `EffectHandlerTables`
 
 ```ts
-type EffectHandlerTables<M extends { type: string }, C extends Cmd, U extends Sub, R> = InterpretOption<C, EffectInterpret<M, C, R>> & SubscribeOption<U, EffectSubscribe<M, U, R>>
+type EffectHandlerTables<M extends { _tag: string }, C extends Cmd, U extends Sub, R> = InterpretOption<C, EffectInterpret<M, C, R>> & SubscribeOption<U, EffectSubscribe<M, U, R>>
 ```
 
 <a id="EffectInterpret"></a>
@@ -283,7 +283,7 @@ type EffectHandlerTables<M extends { type: string }, C extends Cmd, U extends Su
 ### `EffectInterpret`
 
 ```ts
-type EffectInterpret<M extends { type: string }, C extends Cmd, R = unknown> = { readonly [K in C["type"]]: EffectInterpretCell<M, Extract<C, { type: K }>, R> }
+type EffectInterpret<M extends { _tag: string }, C extends Cmd, R = unknown> = { readonly [K in C["_tag"]]: EffectInterpretCell<M, Extract<C, { _tag: K }>, R> }
 ```
 
 <a id="EffectInterpretCell"></a>
@@ -291,7 +291,7 @@ type EffectInterpret<M extends { type: string }, C extends Cmd, R = unknown> = {
 ### `EffectInterpretCell`
 
 ```ts
-type EffectInterpretCell<M extends { type: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
+type EffectInterpretCell<M extends { _tag: string }, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>
 ```
 
 <a id="EffectRun"></a>
@@ -299,7 +299,7 @@ type EffectInterpretCell<M extends { type: string }, C extends Cmd, R = unknown>
 ### `EffectRun`
 
 ```ts
-interface EffectRun<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectRuntime<S, M, E, Err>, Postable<S, M> {
+interface EffectRun<S, M extends { _tag: string }, E extends { _tag: string } = never, Err = never> extends EffectRuntime<S, M, E, Err>, Postable<S, M> {
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -315,7 +315,7 @@ interface EffectRun<S, M extends { type: string }, E extends { type: string } = 
 ### `EffectRunner`
 
 ```ts
-type EffectRunner<M extends { type: string }, U extends Sub, R = unknown> = (sub: U) => Stream.Stream<M, unknown, R>
+type EffectRunner<M extends { _tag: string }, U extends Sub, R = unknown> = (sub: U) => Stream.Stream<M, unknown, R>
 ```
 
 <a id="EffectRunOptions"></a>
@@ -325,11 +325,11 @@ type EffectRunner<M extends { type: string }, U extends Sub, R = unknown> = (sub
 ```ts
 type EffectRunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string },
+  E extends { _tag: string },
   I,
   B,
 > = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & StoreAndOnError<S> & {
@@ -364,7 +364,7 @@ type EffectRunOptions<
 ### `EffectRuntime`
 
 ```ts
-interface EffectRuntime<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
+interface EffectRuntime<S, M extends { _tag: string }, E extends { _tag: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -404,7 +404,7 @@ interface EffectRuntime<S, M extends { type: string }, E extends { type: string 
 ### `EffectSubscribe`
 
 ```ts
-type EffectSubscribe<M extends { type: string }, U extends Sub, R = unknown> = { readonly [K in Exclude<U["type"], BuiltinSubType>]: EffectRunner<M, Extract<U, { type: K }>, R> } & { readonly [K in BuiltinSubType]?: EffectRunner<M, Extract<BuiltinSub<M>, { type: K }>, R> }
+type EffectSubscribe<M extends { _tag: string }, U extends Sub, R = unknown> = { readonly [K in Exclude<U["_tag"], BuiltinSubType>]: EffectRunner<M, Extract<U, { _tag: K }>, R> } & { readonly [K in BuiltinSubType]?: EffectRunner<M, Extract<BuiltinSub<M>, { _tag: K }>, R> }
 ```
 
 <a id="InterpretServices"></a>
@@ -420,12 +420,12 @@ type InterpretServices<I> = { [K in keyof I]: ServicesOfCell<I[K]> }[keyof I]
 ### `Machine`
 
 ```ts
-type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = CoreMachine<S, M, C, U, Ctx>
+type Machine<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> = CoreMachine<S, M, C, U, Ctx>
 
 const Machine: {
   make: <
     S,
-    M extends { type: string },
+    M extends { _tag: string },
     D extends AnyCmdDef,
     U extends Sub = Sub<never>,
     Ctx = unknown,
@@ -433,7 +433,7 @@ const Machine: {
     spec: NoInfer<Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
       readonly cmds: readonly D[];
       readonly model: Schema<S>;
-      readonly msg: Schema<M> & NoSettledTag<M, D> & LiteralTags<M["type"]>;
+      readonly msg: Schema<M> & NoSettledTag<M, D> & LiteralTags<M["_tag"]>;
       readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "ctx" | "sub">;
     },
   ) => Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx> & {
@@ -450,13 +450,13 @@ const Machine: {
 ```ts
 function run<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
   I extends EffectInterpret<M, C, unknown> = EffectInterpret<M, C, never>,
   B extends EffectSubscribe<M, U, unknown> = EffectSubscribe<M, U, never>,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
@@ -579,11 +579,11 @@ type SubscribeServices<B> = { [K in keyof B]-?: ServicesOfRunner<NonNullable<B[K
 ```ts
 function tell<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,

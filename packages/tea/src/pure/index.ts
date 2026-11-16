@@ -91,7 +91,7 @@ export type {
 export {
   AsyncSchemaError,
   // `acceptedTypes` answers about the state VALUE a caller holds, where
-  // `acceptsOf` answers about a `state.type` a tool already named. It is the
+  // `acceptsOf` answers about a `state._tag` a tool already named. It is the
   // same reading the refusal carries — `lookupCell`'s miss arm calls it.
   acceptedTypes,
   acceptsOf,

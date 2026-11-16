@@ -97,12 +97,12 @@ describe("transcript — a finished run's turns, without hand-writing a collecto
     const t = transcript<Result>();
     expect(t.read().outcome).toEqual({ kind: "running" });
 
-    t.onEvent({ type: "TurnSettled", runId: "r", at: 1, turn: ASK });
+    t.onEvent({ _tag: "TurnSettled", runId: "r", at: 1, turn: ASK });
     const midRun = t.read();
     expect(midRun.turns).toEqual([ASK]);
 
     t.onEvent({
-      type: "RunDone",
+      _tag: "RunDone",
       runId: "r",
       at: 2,
       status: {

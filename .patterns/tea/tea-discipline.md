@@ -30,7 +30,7 @@ This is the **what** of TEA discipline. The **canon** of operations, and the why
 4. **External events enter as Subs** — observation only; lifecycle owned by the substrate.
 5. **Composition by narrowest typed surface** — sibling runtimes share `RuntimeRef<M>`, not full Runtime.
 6. **Runtime is small and inspectable** — every transition observable; no silent failures.
-7. **Identity is load-bearing** — Msg.type and State.type at the type level; mapped types enforce.
+7. **Identity is load-bearing** — Msg._tag and State._tag at the type level; mapped types enforce.
 8. **Store at the boundary** — `Store<S>` parses, the substrate trusts.
 
 The testing discipline — "cross-cell emergent invariants live in property tests, not in cell comments" — is **Rule 4** of this doc, not a ninth invariant. Invariants are properties of the TEA system; rules are engineering practice on top of them.
@@ -162,20 +162,20 @@ A helper is justified when **3+ cells emit the same Cmd sequence representing th
 
 ### Helper shape
 
-Returns `readonly C[]`. Takes `state` narrowed via `Extract<S, { type: ... }>` so the type system enforces which state variants can call it. Conditional emission via `Cmd.whenDefined(...)` for nullable fields.
+Returns `readonly C[]`. Takes `state` narrowed via `Extract<S, { _tag: ... }>` so the type system enforces which state variants can call it. Conditional emission via `Cmd.whenDefined(...)` for nullable fields.
 
 ```ts
 function tearDownAudit(
-  state: Extract<BackgroundState, { type: "auditing" | "connecting" | "initializing" }>,
+  state: Extract<BackgroundState, { _tag: "auditing" | "connecting" | "initializing" }>,
   status: "cancelled" | "failed",
   error?: string,
 ): readonly BackgroundCmd[] {
   return [
     ...Cmd.whenDefined(state.queueItemId, (id) =>
-      pickDefined({ type: "queue:complete", queueItemId: id, status, error })
+      pickDefined({ _tag: "queue:complete", queueItemId: id, status, error })
     ),
-    ...(state.type === "auditing" ? [{ type: "detach_debugger", tabId: state.tabId }] : []),
-    { type: "close_audit_window", windowId: state.windowId },
+    ...(state._tag === "auditing" ? [{ _tag: "detach_debugger", tabId: state.tabId }] : []),
+    { _tag: "close_audit_window", windowId: state.windowId },
   ];
 }
 ```
@@ -243,7 +243,7 @@ Cmds are data. The `interpret` handler PERFORMS. The reducer EMITS.
 ### Apply:
 
 - Side effects (chrome API calls, WS sends, timer starts) live ONLY in `interpret`. The reducer never calls chrome or sends WS messages.
-- Cmds are pure data: `{ type, ...fields }`. No closures, no functions.
+- Cmds are pure data: `{ _tag, ...fields }`. No closures, no functions.
 - Cmd handlers are async and return `Promise<M | readonly M[] | void>` — one follow-up Msg, a list of them, or nothing (on the Effect engine, `Effect.Effect<M | readonly M[] | void, unknown, R>`). A returned list is dispatched in order, the way Elm's `Cmd.batch` answers with several Msgs; return it rather than looping over a dispatch by hand (#324). Follow-ups are enqueued for the next tick. A `Cmd.define`d Cmd's handler is the exception: it returns an outcome or nothing, never a Msg, and the engine mints `<name>_ok` / `<name>_err` (ADR 0021).
 - If a Cmd handler fails, see Rule 2 for whether to dispatch a Msg arm or log.
 
@@ -367,7 +367,7 @@ The agent's first response must be a brief (5–8 bullets) demonstrating it read
 
 - **Cell** — One entry in the `Transitions` table or `Reducer` record. A pure function `(state, msg) → (state, cmds)`.
 - **Cmd** — Data describing a one-shot effect. Performed by `interpret`. Examples: `send_ws`, `attach_debugger`, `close_audit_window`.
-- **Msg arm** — A new variant in the Msg union representing a typed event. Adding one forces every (state.type × Msg variant) cell to handle it.
+- **Msg arm** — A new variant in the Msg union representing a typed event. Adding one forces every (state._tag × Msg variant) cell to handle it.
 - **Sub** — Long-lived subscription (WebSocket, chrome.alarms). Spawned/torn down by the substrate's reconcile loop. Observes external events and dispatches Msgs.
 - **Fire-and-forget** — A Cmd whose failure doesn't affect state. Examples: detach at teardown, close-window. Log honestly; no Msg arm.
 - **Property test** — A `fast-check`-driven test that asserts an invariant holds across generated input sequences. Owned by `@demlik/tea/pbt`.

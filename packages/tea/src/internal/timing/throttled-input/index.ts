@@ -64,7 +64,7 @@
  *     throttleMs: 1_000,      // but never fire more than 1/s during a long burst
  *     cacheTtlMs: 30_000,     // skip a query repeated within 30s
  *     cacheKey: (q) => q,
- *     emit: (q) => ({ type: "RunSearch", query: q }),
+ *     emit: (q) => ({ _tag: "RunSearch", query: q }),
  *   });
  *
  *   // Model:        { search: ThrottledInput<string>, ... }

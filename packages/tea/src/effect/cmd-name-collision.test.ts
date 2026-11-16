@@ -26,11 +26,11 @@ import { drive as drivePromise } from "../testing/promise";
 import { Cmd, Machine, run as runEffect } from ".";
 
 type State = { readonly asked: number };
-type Msg = { readonly type: "go" };
-type Poke = { readonly type: "poke" };
+type Msg = { readonly _tag: "go" };
+type Poke = { readonly _tag: "poke" };
 
 const initial: State = { asked: 0 };
-const go: Msg = { type: "go" };
+const go: Msg = { _tag: "go" };
 
 /** Eighteen Cmds that each have a name of their own. */
 const ownNames = Array.from(
@@ -58,7 +58,7 @@ type Plain = CoreMachine<State, Msg, Poke, Sub<never>, undefined>;
 const plain = (cmds: readonly AnyCmdDef[]): Plain => ({
   init: () => [initial, []],
   update: {
-    go: (s) => [{ asked: s.asked + 1 }, [{ type: "poke" }]],
+    go: (s) => [{ asked: s.asked + 1 }, [{ _tag: "poke" }]],
   },
   cmds,
 });
@@ -122,7 +122,7 @@ const flavors = {
     build: (cmds) =>
       Machine.make({
         model: Schema.Struct({ asked: Schema.Number }),
-        msg: Schema.Struct({ type: Schema.Literal("go") }),
+        msg: Schema.Struct({ _tag: Schema.Literal("go") }),
         cmds,
         init: () => [initial, []],
         update: { go: (s) => [s, []] },

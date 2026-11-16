@@ -178,7 +178,7 @@ export interface Recorder<S, M> {
  * @param opts    - see {@link RecorderOptions}. Default records everything,
  *                  no step retention.
  */
-export function recorder<S, M extends { type: string }>(
+export function recorder<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recorder<S, M> {
@@ -444,7 +444,7 @@ export interface TraceAttachment {
  * @typeParam S - the machine's State type.
  * @typeParam M - the machine's Msg union.
  */
-export function traceAttachment<S, M extends { type: string }>(
+export function traceAttachment<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
 ): TraceAttachment {
   return {
@@ -473,7 +473,7 @@ export interface BreadcrumbsOptions<M> {
    */
   readonly limit?: number;
   /**
-   * Customize each breadcrumb's `message`. Default uses `msg.type`. Provide a
+   * Customize each breadcrumb's `message`. Default uses `msg._tag`. Provide a
    * serializer to surface a richer one-liner (e.g. include an id). The msg is
    * ALSO always attached verbatim under `data.msg` regardless of this option,
    * so the structured payload is never lost to the string rendering.
@@ -493,7 +493,7 @@ export interface BreadcrumbsOptions<M> {
  *   - `category` — `"tea"` (groups them in the Sentry breadcrumb panel).
  *   - `type`     — `"default"` (the generic Sentry breadcrumb type).
  *   - `level`    — `"info"` (msgs are normal flow; the crash is the event).
- *   - `message`  — `msg.type`, or `serialize(msg)` when provided.
+ *   - `message`  — `msg._tag`, or `serialize(msg)` when provided.
  *   - `data.msg` — the full msg object (structured detail kept verbatim).
  *
  * Capped at `opts.limit` (default 100). When the trace has more msgs than the
@@ -511,7 +511,7 @@ export interface BreadcrumbsOptions<M> {
  * @typeParam S - the machine's State type.
  * @typeParam M - the machine's Msg union.
  */
-export function breadcrumbsFromTrace<S, M extends { type: string }>(
+export function breadcrumbsFromTrace<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
   opts?: BreadcrumbsOptions<M>,
 ): TraceBreadcrumb[] {
@@ -538,9 +538,9 @@ export function breadcrumbsFromTrace<S, M extends { type: string }>(
       category: "tea",
       type: "default",
       level: "info",
-      message: serialize ? serialize(msg) : msg.type,
+      message: serialize ? serialize(msg) : msg._tag,
       // Full msg kept verbatim so the structured payload survives even when
-      // `message` is a terse one-liner. Cast: a Msg is a `{ type: string }`
+      // `message` is a terse one-liner. Cast: a Msg is a `{ _tag: string }`
       // record, which is a `Record<string, unknown>` for Sentry's `data`.
       data: { msg: msg as unknown as Record<string, unknown> },
     });

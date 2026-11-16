@@ -12,40 +12,40 @@ import { replayTrace } from "./index";
 // ---------------------------------------------------------------------------
 type Item = { readonly sku: string; readonly price: number };
 type State =
-  | { readonly type: "shopping"; readonly cart: readonly Item[] }
+  | { readonly _tag: "shopping"; readonly cart: readonly Item[] }
   | {
-      readonly type: "checkout";
+      readonly _tag: "checkout";
       readonly cart: readonly Item[];
       readonly address: string | null;
     }
   | {
-      readonly type: "paying";
+      readonly _tag: "paying";
       readonly cart: readonly Item[];
       readonly address: string;
       readonly attempt: number;
     }
   | {
-      readonly type: "declined";
+      readonly _tag: "declined";
       readonly cart: readonly Item[];
       readonly address: string;
       readonly attempt: number;
       readonly reason: string;
     }
   | {
-      readonly type: "paid";
+      readonly _tag: "paid";
       readonly cart: readonly Item[];
       readonly orderId: string;
     };
 type Msg =
-  | { readonly type: "add"; readonly sku: string; readonly price: number }
-  | { readonly type: "remove"; readonly sku: string }
-  | { readonly type: "checkout" }
-  | { readonly type: "back" }
-  | { readonly type: "address"; readonly text: string }
-  | { readonly type: "pay" }
-  | { readonly type: "charged"; readonly orderId: string }
-  | { readonly type: "declined"; readonly reason: string }
-  | { readonly type: "retry" };
+  | { readonly _tag: "add"; readonly sku: string; readonly price: number }
+  | { readonly _tag: "remove"; readonly sku: string }
+  | { readonly _tag: "checkout" }
+  | { readonly _tag: "back" }
+  | { readonly _tag: "address"; readonly text: string }
+  | { readonly _tag: "pay" }
+  | { readonly _tag: "charged"; readonly orderId: string }
+  | { readonly _tag: "declined"; readonly reason: string }
+  | { readonly _tag: "retry" };
 type Charge = Cmd<"charge"> & {
   readonly total: number;
   readonly attempt: number;
@@ -59,13 +59,13 @@ function checkout(
   // A fee changes what the bank is asked for, and no State: the cart, the
   // address and the order id stay as they were.
   const charge = (cart: readonly Item[], attempt: number): Charge => ({
-    type: "charge",
+    _tag: "charge",
     total: total(cart) + (opts.fee ?? 0),
     attempt,
   });
   const retryCell = (s: Declined): readonly [State, readonly Charge[]] => [
     {
-      type: "paying",
+      _tag: "paying",
       cart: s.cart,
       address: s.address,
       attempt: s.attempt + 1,
@@ -80,7 +80,7 @@ function checkout(
       cmd: {} as Charge,
       ctx: {} as Ctx,
     },
-    init: (loaded) => [loaded ?? { type: "shopping", cart: [] }, []],
+    init: (loaded) => [loaded ?? { _tag: "shopping", cart: [] }, []],
     update: {
       shopping: {
         add: (s, m) => [
@@ -92,19 +92,19 @@ function checkout(
           [],
         ],
         checkout: (s) => [
-          { type: "checkout", cart: s.cart, address: null },
+          { _tag: "checkout", cart: s.cart, address: null },
           [],
         ],
       },
       checkout: {
         address: (s, m) => [{ ...s, address: m.text }, []],
-        back: (s) => [{ type: "shopping", cart: s.cart }, []],
+        back: (s) => [{ _tag: "shopping", cart: s.cart }, []],
         pay: (s) =>
           s.address === null
             ? [s, []]
             : [
                 {
-                  type: "paying",
+                  _tag: "paying",
                   cart: s.cart,
                   address: s.address,
                   attempt: 1,
@@ -114,12 +114,12 @@ function checkout(
       },
       paying: {
         charged: (s, m) => [
-          { type: "paid", cart: s.cart, orderId: m.orderId },
+          { _tag: "paid", cart: s.cart, orderId: m.orderId },
           [],
         ],
         declined: (s, m) => [
           {
-            type: "declined",
+            _tag: "declined",
             cart: s.cart,
             address: s.address,
             attempt: s.attempt,
@@ -130,14 +130,14 @@ function checkout(
       },
       declined: {
         ...(opts.withoutRetry ? {} : { retry: retryCell }),
-        back: (s) => [{ type: "shopping", cart: s.cart }, []],
+        back: (s) => [{ _tag: "shopping", cart: s.cart }, []],
       },
       paid: {},
     },
   });
 }
 
-type Declined = Extract<State, { type: "declined" }>;
+type Declined = Extract<State, { _tag: "declined" }>;
 
 /** The card is declined on the first attempt and charged on the second. */
 function bank() {
@@ -146,8 +146,8 @@ function bank() {
     charge: async (cmd): Promise<Msg> => {
       calls.push(cmd);
       return cmd.attempt === 1
-        ? { type: "declined", reason: "insufficient funds" }
-        : { type: "charged", orderId: `order-${cmd.total}` };
+        ? { _tag: "declined", reason: "insufficient funds" }
+        : { _tag: "charged", orderId: `order-${cmd.total}` };
     },
   };
   return { calls, interpret };
@@ -156,20 +156,20 @@ function bank() {
 // The session a shopper drives by hand: 21 Msgs, and the bank adds 2 more.
 const SKUS = ["tea", "cup", "pot", "tray", "spoon", "kettle", "sugar", "milk"];
 const shopperSession: Msg[] = [
-  ...SKUS.map((sku, i) => ({ type: "add", sku, price: 10 + i }) as const),
-  { type: "remove", sku: "sugar" },
-  { type: "remove", sku: "tray" },
-  { type: "add", sku: "honey", price: 7 },
-  { type: "add", sku: "lemon", price: 3 },
-  { type: "checkout" },
-  { type: "back" },
-  { type: "add", sku: "saucer", price: 5 },
-  { type: "checkout" },
-  { type: "pay" },
-  { type: "address", text: "Moda, Kadıköy" },
-  { type: "address", text: "Moda Cd. 12, Kadıköy" },
-  { type: "pay" },
-  { type: "retry" },
+  ...SKUS.map((sku, i) => ({ _tag: "add", sku, price: 10 + i }) as const),
+  { _tag: "remove", sku: "sugar" },
+  { _tag: "remove", sku: "tray" },
+  { _tag: "add", sku: "honey", price: 7 },
+  { _tag: "add", sku: "lemon", price: 3 },
+  { _tag: "checkout" },
+  { _tag: "back" },
+  { _tag: "add", sku: "saucer", price: 5 },
+  { _tag: "checkout" },
+  { _tag: "pay" },
+  { _tag: "address", text: "Moda, Kadıköy" },
+  { _tag: "address", text: "Moda Cd. 12, Kadıköy" },
+  { _tag: "pay" },
+  { _tag: "retry" },
 ];
 
 /** Drive the shopper's session on a real run and save it as JSONL. */
@@ -179,7 +179,7 @@ async function recordSession() {
   const rec = recorder(runtime, { captureSteps: true });
   const booted = await runtime.ready;
   for (const msg of shopperSession) await booted.dispatch(msg);
-  await vi.waitFor(() => expect(booted.getState().type).toBe("paid"));
+  await vi.waitFor(() => expect(booted.getState()._tag).toBe("paid"));
   await booted.stop();
   return { jsonl: rec.toJSONL(), charges: live.calls };
 }
@@ -195,9 +195,9 @@ describe("a saved checkout session replayed through your current code", () => {
     expect(result.divergence).toBeUndefined();
     expect(result.refusal).toBeUndefined();
     expect(result.states).toHaveLength(23);
-    expect(result.actual).toMatchObject({ type: "paid", orderId: "order-94" });
+    expect(result.actual).toMatchObject({ _tag: "paid", orderId: "order-94" });
     expect(result.cmds[19]).toEqual([
-      { type: "charge", total: 94, attempt: 1 },
+      { _tag: "charge", total: 94, attempt: 1 },
     ]);
     expect(charges).toHaveLength(2);
   });
@@ -208,7 +208,7 @@ describe("a saved checkout session replayed through your current code", () => {
     const steps = parseJSONL<State, Msg>(jsonl).steps ?? [];
 
     expect(steps).toHaveLength(23);
-    expect(steps[19]?.msg).toEqual({ type: "pay" });
+    expect(steps[19]?.msg).toEqual({ _tag: "pay" });
     expect(steps[19]?.cmds).toEqual([charges[0]]);
     expect(steps[21]?.cmds).toEqual([charges[1]]);
     expect(steps.filter((step) => (step.cmds ?? []).length > 0)).toHaveLength(
@@ -229,10 +229,10 @@ describe("a saved checkout session replayed through your current code", () => {
       path: "cmds[0].total",
       expected: 94,
       actual: 96,
-      at: { index: 19, msg: { type: "pay" } },
+      at: { index: 19, msg: { _tag: "pay" } },
     });
     expect(result.states).toHaveLength(23);
-    expect(result.actual).toMatchObject({ type: "paid", orderId: "order-94" });
+    expect(result.actual).toMatchObject({ _tag: "paid", orderId: "order-94" });
   });
 
   it("names the first Msg where a changed price rule parts from the recording", async () => {
@@ -248,7 +248,7 @@ describe("a saved checkout session replayed through your current code", () => {
       path: "state.cart[0].price",
       expected: 10,
       actual: 9,
-      at: { index: 0, msg: { type: "add", sku: "tea" } },
+      at: { index: 0, msg: { _tag: "add", sku: "tea" } },
     });
     expect(result.states).toHaveLength(23);
   });
@@ -264,11 +264,11 @@ describe("a saved checkout session replayed through your current code", () => {
     expect(result.matches).toBe(false);
     expect(result.refusal).toEqual({
       index: 21,
-      msg: { type: "retry" },
+      msg: { _tag: "retry" },
       stateName: "declined",
       acceptedTypes: ["back"],
     });
     expect(result.states).toHaveLength(21);
-    expect(result.actual).toMatchObject({ type: "declined", attempt: 1 });
+    expect(result.actual).toMatchObject({ _tag: "declined", attempt: 1 });
   });
 });

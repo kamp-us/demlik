@@ -98,17 +98,17 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
     const view = await runFixture(directory);
     expect(
       view.history
-        .filter((row) => row.event.type === "ToolFailed")
+        .filter((row) => row.event._tag === "ToolFailed")
         .map((row) =>
-          row.event.type === "ToolFailed" ? row.event.failure.reason : "",
+          row.event._tag === "ToolFailed" ? row.event.failure.reason : "",
         ),
     ).toEqual(["Lookup 3 failed", "Lookup 7 failed", "Lookup 11 failed"]);
     expect(view.history[0]?.event).toMatchObject({
-      type: "TurnSettled",
+      _tag: "TurnSettled",
       turn: { content: "Settled reasoning 1" },
     });
     expect(view.history.at(-1)?.event).toMatchObject({
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "done" },
     });
     expect(await runFixture(directory)).toEqual(view);
@@ -121,7 +121,7 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
     const journal: CaseJournal = {
       ...backing,
       async append(stream, record) {
-        if (record.msg.type === "resilient_run_ok") {
+        if (record.msg._tag === "resilient_run_ok") {
           reached.resolve();
           await release.promise;
           throw new Error("source append failed: disk full");
@@ -233,21 +233,21 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
   it.each([
     [
       "shape",
-      '{"seq":1,"record":{"version":1,"msg":{"type":"agent_start","runId":42,"at":1}}}\n',
+      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":42,"at":1}}}\n',
     ],
     [
       "sequence",
-      '{"seq":2,"record":{"version":1,"msg":{"type":"agent_start","runId":"corrupt","at":1}}}\n',
+      '{"seq":2,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"corrupt","at":1}}}\n',
     ],
     [
       "owner",
-      '{"seq":1,"record":{"version":1,"msg":{"type":"agent_start","runId":"foreign","at":1}}}\n',
+      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"foreign","at":1}}}\n',
     ],
   ])("refuses a corrupt persisted %s without overwriting it", async (name, bytes) => {
     const journal = fileJournal(join(work, `corrupt-${name}`), parseRecord);
     await journal.append("corrupt", {
       version: 1,
-      msg: { type: "agent_start", runId: "corrupt", at: 1 },
+      msg: { _tag: "agent_start", runId: "corrupt", at: 1 },
     });
     const path = join(work, `corrupt-${name}`, "corrupt.jsonl");
     await writeFile(path, bytes);
@@ -299,7 +299,7 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
       expect(
         view.history.filter(
           (row) =>
-            row.event.type === "TurnSettled" &&
+            row.event._tag === "TurnSettled" &&
             row.event.turn.content === "Settled reasoning 1",
         ),
       ).toHaveLength(1);

@@ -44,8 +44,8 @@ import {
  * import type { Machine } from "@demlik/tea";
  * import { msgTypeKeys } from "@demlik/tea/pbt";
  *
- * type State = { type: "idle" } | { type: "auditing" };
- * type Msg = { type: "start_audit" } | { type: "stop_audit" } | { type: "window_created" };
+ * type State = { _tag: "idle" } | { _tag: "auditing" };
+ * type Msg = { _tag: "start_audit" } | { _tag: "stop_audit" } | { _tag: "window_created" };
  * declare const auditBackgroundMachine: Machine<State, Msg, never, never, unknown>;
  *
  * msgTypeKeys(auditBackgroundMachine);
@@ -54,12 +54,12 @@ import {
  */
 export function msgTypeKeys<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
 >(machine: {
   update:
     | Reducer<S, M, C>
-    | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+    | ([S] extends [{ _tag: string }] ? Transitions<S, M, C> : never);
   __form?: UpdateForm;
 }): readonly string[] {
   return msgKeysOf(machine);

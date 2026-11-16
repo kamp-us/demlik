@@ -92,7 +92,7 @@ interface State {
 }
 
 type Msg =
-  | { readonly type: "ask_all"; readonly content: string }
+  | { readonly _tag: "ask_all"; readonly content: string }
   | JevTimerMsg<"judge">
   | JevTimerMsg<"sort">
   | JevTimerMsg<"size">;
@@ -229,23 +229,23 @@ describe("three named Jev knobs in one machine, on the Effect engine", () => {
         });
         const runtime = yield* handle.ready;
 
-        yield* runtime.dispatch({ type: "ask_all", content: "an issue" });
+        yield* runtime.dispatch({ _tag: "ask_all", content: "an issue" });
         const waiting = runtime.getState();
 
         // Fired in a different order than asked. Every id ends in the same
         // key, so only the name routes a timer to its knob.
         yield* runtime.dispatch({
-          type: "size_deadline",
+          _tag: "size_deadline",
           id: "size:retry:k",
           atMs: 0,
         });
         yield* runtime.dispatch({
-          type: "judge_deadline",
+          _tag: "judge_deadline",
           id: "judge:retry:k",
           atMs: 0,
         });
         yield* runtime.dispatch({
-          type: "sort_deadline",
+          _tag: "sort_deadline",
           id: "sort:retry:k",
           atMs: 0,
         });
@@ -256,9 +256,9 @@ describe("three named Jev knobs in one machine, on the Effect engine", () => {
     expect(waiting.judge.calls.k?.phase).toBe("waiting_retry");
     expect(waiting.sort.calls.k?.phase).toBe("waiting_retry");
     expect(waiting.size.calls.k?.phase).toBe("waiting_retry");
-    expect(judge.timer(waiting.judge)?.msg.type).toBe("judge_deadline");
-    expect(sort.timer(waiting.sort)?.msg.type).toBe("sort_deadline");
-    expect(size.timer(waiting.size)?.msg.type).toBe("size_deadline");
+    expect(judge.timer(waiting.judge)?.msg._tag).toBe("judge_deadline");
+    expect(sort.timer(waiting.sort)?.msg._tag).toBe("sort_deadline");
+    expect(size.timer(waiting.size)?.msg._tag).toBe("size_deadline");
 
     const judged = state.judge.calls.k;
     const sorted = state.sort.calls.k;

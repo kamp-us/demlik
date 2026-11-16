@@ -103,9 +103,9 @@ export interface TraceAgentOptions {
 
 /** Anything that delivers an agent's events by type — a runtime built with `events: agentEvents()`. */
 export interface AgentEventSource<R> {
-  on<K extends AgentEvent<R>["type"]>(
+  on<K extends AgentEvent<R>["_tag"]>(
     type: K,
-    handler: (event: Extract<AgentEvent<R>, { type: K }>) => void,
+    handler: (event: Extract<AgentEvent<R>, { _tag: K }>) => void,
   ): () => void;
 }
 
@@ -231,7 +231,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
   const onEvent = (event: AgentEvent<R>): void => {
     const run = openRun(event.runId, event.at);
     run.lastAt = event.at;
-    switch (event.type) {
+    switch (event._tag) {
       case "BrainStarted": {
         // A boot in the same process re-issues the call already open.
         if (run.brain !== null) return;

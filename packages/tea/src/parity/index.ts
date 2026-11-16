@@ -75,7 +75,7 @@ export interface Recording<S, M> {
  * {@link goldenReplay}). See {@link RecorderOptions} for `captureSteps` (needed
  * only for the per-step / resume-cache-prefix inspection, not for replay).
  */
-export function recordRun<S, M extends { type: string }>(
+export function recordRun<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recording<S, M> {
@@ -96,7 +96,7 @@ export function recordRun<S, M extends { type: string }>(
  */
 export function goldenReplay<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

@@ -68,8 +68,8 @@ describe("skipSaving — the page's wrapper, on both engines", () => {
   it("without the wrapper every streaming state is saved — the test is not vacuous", async () => {
     const { store, saved } = recordingStore();
     const runtime = await run(reply, { store }).ready;
-    await runtime.dispatch({ type: "start" });
-    for (const text of tokens) await runtime.dispatch({ type: "token", text });
+    await runtime.dispatch({ _tag: "start" });
+    for (const text of tokens) await runtime.dispatch({ _tag: "token", text });
     await runtime.stop();
 
     // `start`, one per token, and the flush at `stop()`.
@@ -81,8 +81,8 @@ describe("skipSaving — the page's wrapper, on both engines", () => {
     const runtime = await run(reply, {
       store: skipSaving(store, isStreaming),
     }).ready;
-    await runtime.dispatch({ type: "start" });
-    await runtime.dispatch({ type: "token", text: "Hel" });
+    await runtime.dispatch({ _tag: "start" });
+    await runtime.dispatch({ _tag: "token", text: "Hel" });
     await runtime.stop();
 
     expect(saved.filter(isStreaming)).toEqual([]);

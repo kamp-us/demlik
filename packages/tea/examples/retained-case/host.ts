@@ -20,12 +20,12 @@ type Model = ReturnType<Wiring["agent"]["init"]>;
 type State = ReturnType<Wiring["machine"]["init"]>[0];
 type Settled = Extract<
   AgentEvent<Evidence>,
-  { type: "TurnSettled" | "ToolSettled" | "ToolFailed" | "RunDone" }
+  { _tag: "TurnSettled" | "ToolSettled" | "ToolFailed" | "RunDone" }
 >;
 type Retained =
   | Settled
   | {
-      readonly type: "ContextCompacted";
+      readonly _tag: "ContextCompacted";
       readonly runId: string;
       readonly at: number;
       readonly summary: string;
@@ -163,7 +163,7 @@ export async function openCase(
     for (const client of clients) client.close(new Error(state.reason));
   };
   const validate = (record: CaseRecord, previous: Committed): void => {
-    if (record.msg.type === "agent_start") {
+    if (record.msg._tag === "agent_start") {
       if (record.msg.runId !== runId || previous.model.run.phase !== "idle") {
         throw new Error("case source has a foreign or repeated start");
       }
@@ -181,22 +181,22 @@ export async function openCase(
       throw new Error("case source sequence is not contiguous");
     const retained: Retained[] = events(record.msg, model).filter(
       (event): event is Settled =>
-        event.type === "TurnSettled" ||
-        event.type === "ToolSettled" ||
-        event.type === "ToolFailed" ||
-        event.type === "RunDone",
+        event._tag === "TurnSettled" ||
+        event._tag === "ToolSettled" ||
+        event._tag === "ToolFailed" ||
+        event._tag === "RunDone",
     );
     const awaiting = previous.model.conversation?.awaiting;
-    if (record.msg.type === "compact_ok" && awaiting?.kind === "compacting") {
+    if (record.msg._tag === "compact_ok" && awaiting?.kind === "compacting") {
       retained.push({
-        type: "ContextCompacted",
+        _tag: "ContextCompacted",
         runId,
         at: record.msg.at,
         summary: record.msg.result.output.summary,
         foldedTurns: awaiting.folding,
       });
     }
-    const ending = retained.find((event) => event.type === "RunDone");
+    const ending = retained.find((event) => event._tag === "RunDone");
     return {
       model,
       view: {
@@ -211,7 +211,7 @@ export async function openCase(
           })),
         ],
         outcome:
-          ending?.type === "RunDone"
+          ending?._tag === "RunDone"
             ? ending.status
             : model.run.phase === "idle"
               ? { kind: "idle" }
@@ -220,7 +220,7 @@ export async function openCase(
                 : previous.view.outcome,
         compactions:
           previous.view.compactions +
-          retained.filter((event) => event.type === "ContextCompacted").length,
+          retained.filter((event) => event._tag === "ContextCompacted").length,
         maxActiveTurns: Math.max(
           previous.view.maxActiveTurns,
           model.conversation?.turns.length ?? 0,
@@ -312,7 +312,7 @@ export async function openCase(
       ensureOpen();
       if (current().model.run.phase !== "idle")
         throw new Error("case has already started");
-      await runtime.dispatch({ type: "agent_start", runId, at: ports.now() });
+      await runtime.dispatch({ _tag: "agent_start", runId, at: ports.now() });
       current();
     },
     async resume() {
@@ -321,7 +321,7 @@ export async function openCase(
         current().model.run.phase !== "idle" &&
         !wired.agent.isSettled(current().model)
       ) {
-        await runtime.dispatch({ type: "agent_boot", at: ports.now() });
+        await runtime.dispatch({ _tag: "agent_boot", at: ports.now() });
       }
       current();
     },

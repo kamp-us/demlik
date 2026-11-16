@@ -16,25 +16,25 @@ import { parseJSONL, recorder, replayTrace } from "@demlik/tea/persistence";
 
 // === Domain: an order that can take items + a discount, then check out ===
 type Order =
-  | { type: "open"; subtotal: number; discountPct: number }
+  | { _tag: "open"; subtotal: number; discountPct: number }
   | {
-      type: "checked_out";
+      _tag: "checked_out";
       subtotal: number;
       discountPct: number;
       total: number;
     };
 
 type Msg =
-  | { type: "add_item"; price: number }
-  | { type: "apply_discount"; pct: number }
-  | { type: "checkout" };
+  | { _tag: "add_item"; price: number }
+  | { _tag: "apply_discount"; pct: number }
+  | { _tag: "checkout" };
 
 // --- v1: SHIPPED WITH A BUG. apply_discount discounts the subtotal in place,
 //     then checkout discounts again -> the customer is double-discounted. ---
 const orderV1 = defineMachine({
   types: { model: {} as Order, msg: {} as Msg },
   init: (loaded) => [
-    loaded ?? { type: "open", subtotal: 0, discountPct: 0 },
+    loaded ?? { _tag: "open", subtotal: 0, discountPct: 0 },
     [],
   ],
   update: {
@@ -47,7 +47,7 @@ const orderV1 = defineMachine({
       ],
       checkout: (s) => [
         {
-          type: "checked_out",
+          _tag: "checked_out",
           subtotal: s.subtotal,
           discountPct: s.discountPct,
           total: s.subtotal * (1 - s.discountPct / 100),
@@ -63,7 +63,7 @@ const orderV1 = defineMachine({
 const orderV2 = defineMachine({
   types: { model: {} as Order, msg: {} as Msg },
   init: (loaded) => [
-    loaded ?? { type: "open", subtotal: 0, discountPct: 0 },
+    loaded ?? { _tag: "open", subtotal: 0, discountPct: 0 },
     [],
   ],
   update: {
@@ -72,7 +72,7 @@ const orderV2 = defineMachine({
       apply_discount: (s, m) => [{ ...s, discountPct: m.pct }, []], // fixed: just record
       checkout: (s) => [
         {
-          type: "checked_out",
+          _tag: "checked_out",
           subtotal: s.subtotal,
           discountPct: s.discountPct,
           total: s.subtotal * (1 - s.discountPct / 100),
@@ -93,12 +93,12 @@ async function main() {
   const runtime = await run(orderV1, { ctx: {} }).ready;
   const rec = recorder(runtime);
 
-  await runtime.dispatch({ type: "add_item", price: 100 });
-  await runtime.dispatch({ type: "add_item", price: 50 });
-  await runtime.dispatch({ type: "apply_discount", pct: 10 });
-  await runtime.dispatch({ type: "checkout" });
+  await runtime.dispatch({ _tag: "add_item", price: 100 });
+  await runtime.dispatch({ _tag: "add_item", price: 50 });
+  await runtime.dispatch({ _tag: "apply_discount", pct: 10 });
+  await runtime.dispatch({ _tag: "checkout" });
 
-  const prod = runtime.getState() as Extract<Order, { type: "checked_out" }>;
+  const prod = runtime.getState() as Extract<Order, { _tag: "checked_out" }>;
   console.log(
     "dispatched: add_item 100, add_item 50, apply_discount 10%, checkout",
   );
@@ -143,18 +143,18 @@ async function main() {
       title: "order (v2)",
       samples: {
         states: {
-          open: { type: "open", subtotal: 150, discountPct: 10 },
+          open: { _tag: "open", subtotal: 150, discountPct: 10 },
           checked_out: {
-            type: "checked_out",
+            _tag: "checked_out",
             subtotal: 150,
             discountPct: 10,
             total: 135,
           },
         },
         msgs: {
-          add_item: { type: "add_item", price: 10 },
-          apply_discount: { type: "apply_discount", pct: 10 },
-          checkout: { type: "checkout" },
+          add_item: { _tag: "add_item", price: 10 },
+          apply_discount: { _tag: "apply_discount", pct: 10 },
+          checkout: { _tag: "checkout" },
         },
       },
     }),

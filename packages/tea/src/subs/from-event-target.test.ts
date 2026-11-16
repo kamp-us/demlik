@@ -33,7 +33,7 @@ class FakeTarget implements MinimalEventTarget {
 
 type PingSub = Sub<"ping", Readonly<Record<string, never>>>;
 type State = { readonly armed: boolean; readonly pings: number };
-type Msg = { readonly type: "ping" } | { readonly type: "disarm" };
+type Msg = { readonly _tag: "ping" } | { readonly _tag: "disarm" };
 
 const update: Reducer<State, Msg, never> = {
   ping: (s) => [{ ...s, pings: s.pings + 1 }, []],
@@ -49,7 +49,7 @@ const pingMachine = defineMachine({
   },
   init: () => [{ armed: true, pings: 0 }, []],
   update,
-  subs: [{ type: "ping", deps: (s) => (s.armed ? {} : null) }],
+  subs: [{ _tag: "ping", deps: (s) => (s.armed ? {} : null) }],
 });
 
 function pingRunners(target: FakeTarget) {
@@ -57,7 +57,7 @@ function pingRunners(target: FakeTarget) {
     ping: fromEventTarget<PingSub, Msg>(
       () => target,
       "ping",
-      (event) => ("skip" in event ? null : { type: "ping" }),
+      (event) => ("skip" in event ? null : { _tag: "ping" }),
     ),
   };
 }
@@ -98,7 +98,7 @@ describe("fromEventTarget — subscribe → deliver → cleanup against a real r
     const target = new FakeTarget();
     const rt = await run(pingMachine, { subscribe: pingRunners(target) }).ready;
 
-    await rt.dispatch({ type: "disarm" });
+    await rt.dispatch({ _tag: "disarm" });
     expect(target.count("ping")).toBe(0); // removeEventListener ran
 
     target.fire({ type: "ping" });

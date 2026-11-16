@@ -10,13 +10,15 @@ or reshaped and shows it before and after.
 - Section 11 is 0.17.
 - Sections 12 to 16 are 0.18.
 - 0.19 has no breaking change. A Model saved by an older release still loads.
+- Section 17 is the release after 0.27. It renames the key every Msg, Cmd, Sub
+  and State carries, and nothing converts a run saved before it.
 
 The short version:
 
 - `run` lives in `@demlik/tea/promise` now.
 - A machine has no `interpret`, no `subscribe` and no `subscriptions`. Handlers
   and Sub runners go to `run`.
-- Subs are `{ type, deps }` data. `timer` is built in.
+- Subs are `{ _tag, deps }` data. `timer` is built in.
 - A `Cmd.define`d handler returns an outcome, and the engine mints the Msg.
 - There is no DI (`provide`, `layer`, `R`) and no battery layer (`mount*`,
   `with*`, `handlers(ports)`).
@@ -64,10 +66,10 @@ machine and its handlers together (`createAgentHost`'s `buildMachine`,
 `toMachine()`, `defineAgent(...).machine(input)`) now returns
 `{ machine, interpret }`, and the `Wired` type names that pair.
 
-## 3. Declare Subs as `{ type, deps }` data
+## 3. Declare Subs as `{ _tag, deps }` data
 
 Both 0.15 Sub forms are gone: `subscriptions(state)` plus a `subscribe` table
-on the machine, and `subs: [{ deps, source }]`. A Sub is now a `type` and a
+on the machine, and `subs: [{ deps, source }]`. A Sub is now a `_tag` and a
 `deps(state)` function. `null` means off. The runner moves to `run`.
 
 ```ts
@@ -90,7 +92,7 @@ type FeedSub = Sub<"feed", { readonly url: string }>;
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, sub: {} as FeedSub },
   init, update,
-  subs: [{ type: "feed", deps: (s) => (s.live ? { url: s.url } : null) }],
+  subs: [{ _tag: "feed", deps: (s) => (s.live ? { url: s.url } : null) }],
 });
 run(machine, {
   subscribe: { feed: (sub, ctx, dispatch) => openFeed(sub.deps.url, dispatch) },
@@ -98,7 +100,7 @@ run(machine, {
 ```
 
 A runner is `(sub, ctx, dispatch) => Dispose` and reads its data off
-`sub.deps`. The Sub's id is a hash of `{ type, deps }`, so it starts when `deps`
+`sub.deps`. The Sub's id is a hash of `{ _tag, deps }`, so it starts when `deps`
 turns non-null, restarts when `deps` changes, and stops on `null`. `deps` must
 be plain data.
 
@@ -111,7 +113,7 @@ subscribe: { retry: fromTimeout(() => ({ type: "retry_due" })) },
 
 // after
 subs: [
-  { type: "timer", deps: (s) => (s.waiting ? { ms: 500, msg: { type: "retry_due" } } : null) },
+  { _tag: "timer", deps: (s) => (s.waiting ? { ms: 500, msg: { _tag: "retry_due" } } : null) },
 ],
 ```
 
@@ -120,9 +122,9 @@ time. Other moves in this area:
 
 - `defineManagedResource(...).sub(key)` and `.gated(when)` become
   `.depKeyed(when)`: put the entry in `subs`, and return `null` from `when` for
-  off. `.subIdFor(key)` becomes `subIdOf(battery.type, key)`.
+  off. `.subIdFor(key)` becomes `subIdOf(battery._tag, key)`.
   `combineManagedResources` is gone; list each resource's `.depKeyed(when)`
-  and its `.subscribe` under its own `type`.
+  and its `.subscribe` under its own `_tag`.
 - `replay(...).depSubs` is gone. Read `replay(...).subs`.
 - `SubIdCollisionError` is gone. Two Sub types can no longer share an id.
 
@@ -254,7 +256,7 @@ const machine = defineMachine({
       return [{ ...s, call }, cmds];
     },
   },
-  subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }],
+  subs: [{ _tag: "timer", deps: (s) => rc.timer(s.call) }],
 });
 run(machine, {
   interpret: {
@@ -363,9 +365,9 @@ const guarded = withDeadline(machine, { ms: 30_000, progress: (m) => m.type === 
 // after
 subs: [
   {
-    type: "timer",
+    _tag: "timer",
     deps: (s) =>
-      s.phase === "running" ? { ms: 30_000, msg: { type: "stalled", seq: s.seq } } : null,
+      s.phase === "running" ? { ms: 30_000, msg: { _tag: "stalled", seq: s.seq } } : null,
   },
 ],
 update: {
@@ -526,7 +528,7 @@ run(machine, {
       try {
         return openFeed(sub.deps.url, dispatch);
       } catch (cause) {
-        dispatch({ type: "feed_failed", reason: String(cause) });
+        dispatch({ _tag: "feed_failed", reason: String(cause) });
         return () => {};
       }
     },
@@ -588,10 +590,63 @@ onEvent: (e) => {
 
 // after
 onEvent: (e) => {
-  if (e.type === "RunDone" && e.status.kind === "done") save(e.status.output);
+  if (e._tag === "RunDone" && e.status.kind === "done") save(e.status.output);
 },
 ```
 
 A failed or cancelled run reports `RunDone` too, with `status.kind` of
 `"failed"` or `"cancelled"`. Before, it reported nothing, so a listener that
 treated every `RunDone` as a success needs the `kind` check.
+
+## 17. Key every Msg, Cmd, Sub and State by `_tag`
+
+The key that names a variant is `_tag` now, where it was `type`. It is the key
+Effect uses, so `Schema.TaggedStruct`, `Schema.TaggedUnion` and `Match.tag` fit
+a tea Msg as they are. Rename it where you write a Msg, a Cmd, a Sub or a State,
+and where you read one.
+
+```ts
+// before
+type Msg = { type: "inc" } | { type: "add"; by: number };
+const next = msg.type === "add" ? count + msg.by : count + 1;
+
+// after
+type Msg = { _tag: "inc" } | { _tag: "add"; by: number };
+const next = msg._tag === "add" ? count + msg.by : count + 1;
+```
+
+The cells of `update` keep their names: a cell is still named for the variant
+it handles. A content part of an agent message keeps `type`
+(`{ type: "text", text }`), and so does a Jev question.
+
+There is no alias, and nothing reads both keys. tea also converts nothing an
+older release saved. What an old save does depends on what it holds, and each
+kind has its own place to rename the key:
+
+- **A Model with no discriminant inside** loads as before. There is nothing to
+  rename.
+- **A Model that is a tagged State, or that holds Msgs,** reaches your
+  `Store.migrate` exactly as it was saved, keyed `type`. `schemaMigrate(schema)`
+  refuses it, and `run` fails with `StoreRefusedError`. A `migrate` that does
+  not check the shape passes it on, and a state table has no row for it
+  (`NoCellError`). To keep the run, rename the key in `migrate`, or in the
+  second argument of `schemaMigrate`. This one renames the Model's own key:
+
+  ```ts
+  const migrate = schemaMigrate(schema, (raw) => {
+    const { type, ...rest } = raw as { type?: unknown };
+    return type === undefined ? raw : { _tag: type, ...rest };
+  });
+  ```
+
+  It does not touch a `type` key deeper in the save, such as a Msg held in a
+  queue. The schema refuses the save until those are renamed too, so rename
+  each one where it sits.
+
+- **An event row of `doEventSourcedStore`** is read by `parseEvent`, before
+  `Store.migrate` sees anything. The default `parseEvent` drops a row with no
+  string `_tag` and raises no error, so the run resumes from the snapshot and
+  whatever rows are left. To keep the rows, pass a `parseEvent` that renames
+  the key. The store's snapshot is read by its `parse` option in the same way.
+
+If you do not need the old runs, start them fresh.

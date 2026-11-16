@@ -80,7 +80,7 @@
  *   // Type params: <Stage, Purpose, Outputs, Result, ToolCmd, Msg>. `ToolCmd`
  *   // is the discriminated Cmd `toolOf` returns — keep it precise (not the open
  *   // `Cmd`) so the wired machine's interpret merge type-checks per key.
- *   type RunTool = { readonly type: "run_tool" } & ToolCall;
+ *   type RunTool = { readonly _tag: "run_tool" } & ToolCall;
  *   const agent = createAgent<Stage, Purpose, Outputs, Result, RunTool, Msg>({
  *     stages: ["plan", "act", "report"],
  *     // The brain: a plain `async (messages) => turn` (the common path), or the
@@ -88,7 +88,7 @@
  *     model: async (messages) => client.chat(messages),
  *     schemas: { plan: planSchema, act: turnSchema, report: reportSchema },
  *     turnOf: (stage) => stageToPurpose[stage],   // which brain call a stage runs
- *     toolOf: (call): RunTool => ({ type: "run_tool", ...call }),
+ *     toolOf: (call): RunTool => ({ _tag: "run_tool", ...call }),
  *     toolConcurrency: 1,                          // launched per transition
  *     deadlineMs: 10 * 60_000,
  *     maxTurns: 60,
@@ -1486,7 +1486,7 @@ export function createAgent<
     // `Interpret` over the rest of the config-derived union (`TC`, and
     // `snapshot_write` only when snapshotting). `mergeInterpret` joins the two
     // disjoint halves into the full `Interpret<M, ACmd, Ctx>` — each key maps
-    // precisely (`resilient_run` → the brain cell, `TC["type"]` / `snapshot_write`
+    // precisely (`resilient_run` → the brain cell, `TC["_tag"]` / `snapshot_write`
     // → the consumer's cells), with the one sound mapped-type identity isolated in
     // the helper rather than laundered through `as unknown as` here.
     //

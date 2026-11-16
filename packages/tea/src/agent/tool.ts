@@ -396,7 +396,7 @@ export interface ToolRouter<T extends AnyToolDef> {
    * its payload ride beside that rendering, never instead of it (#115).
    */
   readonly outcomeOf: (msg: {
-    readonly type: string;
+    readonly _tag: string;
   }) => ToolSettlement<ToolResult<T>, ToolError<T>> | null;
 }
 
@@ -450,7 +450,7 @@ export function toolRouter<T extends AnyToolDef>(
     [rejected.cmdType]: async (cmd: ToolRejectedCmd) => Outcome.err(cmd.error),
   };
   for (const t of tools) handlers[t.cmdType] = t.interpret;
-  // Each handler is the def's own typed `interpret`, keyed by the `type` it
+  // Each handler is the def's own typed `interpret`, keyed by the `_tag` it
   // builds; the record is assembled per name, which the mapped type cannot see.
   const interpret = handlers as unknown as Interpret<
     ToolMsg<T>,
@@ -459,16 +459,16 @@ export function toolRouter<T extends AnyToolDef>(
   >;
 
   const outcomeOf = (msg: {
-    readonly type: string;
+    readonly _tag: string;
   }): ToolSettlement<ToolResult<T>, ToolError<T>> | null => {
-    if (okTypes.has(msg.type)) {
+    if (okTypes.has(msg._tag)) {
       const ok = msg as unknown as SettledShape<ToolResult<T>>;
       return {
         callId: ok.cmd.callId,
         outcome: { kind: "ok", result: ok.value },
       };
     }
-    if (errTypes.has(msg.type)) {
+    if (errTypes.has(msg._tag)) {
       const err = msg as unknown as SettledShape<ToolResult<T>>;
       return {
         callId: err.cmd.callId,
@@ -592,7 +592,7 @@ export function fanOutInterpret<T extends AnyToolDef>(
 /** The release chain carries no value and must not break — both arms land here. */
 function swallow(): void {}
 
-// The two settled arms share one shape once the `type` has been matched
+// The two settled arms share one shape once the `_tag` has been matched
 // against the router's own def; `value` / `error` are read per arm.
 type SettledShape<R> = {
   readonly cmd: { readonly callId: string };

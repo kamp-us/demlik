@@ -37,8 +37,8 @@ import {
  */
 export interface EffectBootingRuntime<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
   Err = never,
 > {
   /**
@@ -67,10 +67,10 @@ export interface EffectBootingRuntime<
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
-  on<K extends E["type"]>(
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
+  on<K extends E["_tag"]>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /** Subscribe to a typed Port. */
   subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
@@ -101,8 +101,8 @@ export interface EffectBootingRuntime<
  */
 export interface EffectRuntime<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
   Err = never,
 > extends EffectBootingRuntime<S, M, E, Err> {
   /** The current State. Total. */
@@ -139,8 +139,8 @@ export interface EffectRuntime<
  */
 export interface EffectBootingRun<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
   Err = never,
 > extends EffectBootingRuntime<S, M, E, Err> {
   readonly ready: Effect.Effect<EffectRun<S, M, E, Err>, Err | StoreFailed>;
@@ -156,8 +156,8 @@ export interface EffectBootingRun<
  */
 export interface EffectRun<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
   Err = never,
 > extends EffectRuntime<S, M, E, Err>,
     Postable<S, M> {
@@ -181,8 +181,8 @@ function settled<A, Err>(
 /** Build the Effect handle over the loop's Promise one. */
 export function effectHandle<
   S,
-  M extends { type: string },
-  E extends { type: string },
+  M extends { _tag: string },
+  E extends { _tag: string },
   Err,
 >(
   loop: Runtime<S, M, E> &

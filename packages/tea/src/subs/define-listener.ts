@@ -39,7 +39,7 @@
 //   });
 //
 //   // ...then in the `subscribe` table handed to `run`, supply the Msg projection:
-//   subscribe: { tick: fromChromeAlarm<M>((sub, alarm) => ({ type: "tick", ... })) }
+//   subscribe: { tick: fromChromeAlarm<M>((sub, alarm) => ({ _tag: "tick", ... })) }
 //
 //   - `add`/`remove` receive `(listener, sub, ctx)`. The `listener` is the
 //     EXACT function the substrate built; pass it straight to the platform's

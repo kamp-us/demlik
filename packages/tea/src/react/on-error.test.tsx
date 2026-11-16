@@ -21,7 +21,7 @@ import { useMachine } from "./index";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
@@ -66,13 +66,13 @@ describe("useMachine's onError", () => {
     }
     await act(async () => root.render(<Page />));
     await act(async () => {
-      expect(send({ type: "bump" })).toBeUndefined();
+      expect(send({ _tag: "bump" })).toBeUndefined();
     });
     expect(onError).toHaveBeenCalledExactlyOnceWith(failure, {
       phase: "reduce",
     });
     expect(container.textContent).toBe("0");
-    expect(send({ type: "bump" })).toBeUndefined();
+    expect(send({ _tag: "bump" })).toBeUndefined();
     expect(onError).toHaveBeenLastCalledWith(
       expect.any(DispatchDiscardedError),
       { phase: "discard" },
@@ -102,7 +102,7 @@ describe("useMachine's onError", () => {
 
     await act(async () => root.render(<Page onError={first} />));
     await act(async () => {
-      expect(dispatch({ type: "bump" })).toBeUndefined();
+      expect(dispatch({ _tag: "bump" })).toBeUndefined();
     });
     await act(async () => root.render(<Page onError={latest} />));
     expect(boots).toHaveBeenCalledTimes(1);
@@ -113,7 +113,7 @@ describe("useMachine's onError", () => {
       store,
       onError: () => {},
     }).ready;
-    await taker.dispatch({ type: "bump" });
+    await taker.dispatch({ _tag: "bump" });
     await act(async () => root.unmount());
     root = createRoot(document.createElement("div"));
 
@@ -131,10 +131,10 @@ describe("useMachine's onError", () => {
       types: {
         model: {} as State,
         msg: {} as Msg,
-        cmd: {} as { readonly type: "hang" },
+        cmd: {} as { readonly _tag: "hang" },
         ctx: undefined,
       },
-      init: (loaded) => [loaded ?? { count: 0 }, [{ type: "hang" as const }]],
+      init: (loaded) => [loaded ?? { count: 0 }, [{ _tag: "hang" as const }]],
       update: { bump: (state) => [state, []] },
     });
 

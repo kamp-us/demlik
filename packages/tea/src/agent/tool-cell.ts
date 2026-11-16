@@ -44,7 +44,7 @@ export const REJECTED_TYPE = "tool_rejected";
 const SNAPSHOT_WRITE_TYPE = "snapshot_write";
 
 /**
- * A tool name `tool()` and `agentTool()` refuse. A tool's name is its Cmd `type` — so
+ * A tool name `tool()` and `agentTool()` refuse. A tool's name is its Cmd `_tag` — so
  * its interpret key — and the prefix of its settle Msgs, so every string
  * already spoken by the protocol is taken twice over: the settle prefixes
  * (`resilient_run`, `agent_tool`, `compact`) would overwrite the agent's own

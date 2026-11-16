@@ -419,7 +419,7 @@ export type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef<A>>>;
  * the same #67 ledger, with its own delivery id — but the consumer's interpret
  * cell performs the inverse `compensation` payload, and the result is dispatched
  * back as a {@link CompensationOk}/{@link CompensationErr} carrying the SAME id.
- * Distinguished by `type` so the consumer routes forward vs. inverse work to the
+ * Distinguished by `_tag` so the consumer routes forward vs. inverse work to the
  * right port, and the re-emit-on-wake stays type-correct.
  */
 export function workflowCompensationDef<A>() {
@@ -461,7 +461,7 @@ export type WorkflowCmd<A> = ActivityCmd<A> | CompensationCmd<A>;
  *  reducer matches it against `current.id`, records the completed step, and
  *  advances. */
 export interface ActivityOk<R> {
-  readonly type: "activity_ok";
+  readonly _tag: "activity_ok";
   readonly id: DeliveryId;
   readonly result: R;
 }
@@ -471,7 +471,7 @@ export interface ActivityOk<R> {
  *  the reducer begins compensation (or settles `failed` when nothing has
  *  completed). */
 export interface ActivityErr<F> {
-  readonly type: "activity_err";
+  readonly _tag: "activity_err";
   readonly id: DeliveryId;
   readonly failure: F;
 }
@@ -483,7 +483,7 @@ export interface ActivityErr<F> {
  *  `failed_compensated` when the unwind is complete. A compensation produces no
  *  result the workflow carries — its only signal is "the undo took". */
 export interface CompensationOk {
-  readonly type: "compensation_ok";
+  readonly _tag: "compensation_ok";
   readonly id: DeliveryId;
 }
 
@@ -492,7 +492,7 @@ export interface CompensationOk {
  *  halts the rollback at the terminal `compensation_failed` state — never wedged
  *  in `compensating` forever. */
 export interface CompensationErr<F> {
-  readonly type: "compensation_err";
+  readonly _tag: "compensation_err";
   readonly id: DeliveryId;
   readonly failure: F;
 }
@@ -505,8 +505,8 @@ export type WorkflowMsg<R, F> =
   | CompensationOk
   | CompensationErr<F>;
 
-/** Every `type` discriminant tag of the {@link WorkflowMsg} union. */
-export type WorkflowMsgType = WorkflowMsg<unknown, unknown>["type"];
+/** Every `_tag` discriminant tag of the {@link WorkflowMsg} union. */
+export type WorkflowMsgType = WorkflowMsg<unknown, unknown>["_tag"];
 
 /**
  * The runtime accept-set of every {@link WorkflowMsgType} — the single source of

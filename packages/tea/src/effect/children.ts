@@ -46,16 +46,16 @@ import type { EffectRun } from "./handle";
  * and tea has no lock-up detector. Use `tell` there.
  *
  * ```ts
- * const answer = yield* tell(parent, parentRun, { type: "child_stopped", id });
+ * const answer = yield* tell(parent, parentRun, { _tag: "child_stopped", id });
  * ```
  */
 export const tell = <
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   Err = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
@@ -147,7 +147,7 @@ export const spawnedScope = (scope: Scope.Scope): Scope.Closeable | undefined =>
  *     Effect.map(run(worker, {}), (run) => ({ run, scope })),
  *   enrol: (child) => Effect.sync(() => children.set(id, child)),
  *   remove: Effect.sync(() => children.delete(id)),
- *   notify: tell(parent, parentRun, { type: "child_stopped", id }),
+ *   notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
  * });
  * ```
  */

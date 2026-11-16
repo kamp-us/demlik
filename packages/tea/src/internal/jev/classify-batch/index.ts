@@ -310,7 +310,7 @@ export function createClassifyBatch<I, C extends string>(
   const window = createBatchWindow<I, FlushCmd<I>>({
     maxItems,
     maxMs: config.maxMs,
-    flush: (items) => ({ type: "classify_batch_flush", items }),
+    flush: (items) => ({ _tag: "classify_batch_flush", items }),
   });
 
   /** The starting slice — each battery's own `init`, side by side. */
@@ -539,7 +539,7 @@ export function createClassifyBatch<I, C extends string>(
     TimerSub<BatchWindowExpired> | CacheEvictionSub
   >[] {
     const flush: DepKeyedSub<Model, TimerSub<BatchWindowExpired>> = {
-      type: "timer",
+      _tag: "timer",
       deps: (model: Model) => window.timer(select(model).window, id),
     };
     if (config.evictEveryMs === undefined) return [flush];

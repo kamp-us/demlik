@@ -41,7 +41,7 @@ type Purpose = "act";
 interface Outputs extends Record<Purpose, AgentTurn> {
   readonly act: AgentTurn;
 }
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
 type M = AgentMachineMsg<Purpose, Outputs, string>;
 
 const SCREENSHOT = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
@@ -76,9 +76,9 @@ function scripted(turns: readonly (AgentTurn | Error)[]) {
 const toolInterpret: Interpret<M, ToolCmd, object> = {
   run_tool: async (cmd) =>
     cmd.name === "fetch"
-      ? { type: "agent_tool_err", callId: cmd.callId, reason: "404", at: 0 }
+      ? { _tag: "agent_tool_err", callId: cmd.callId, reason: "404", at: 0 }
       : {
-          type: "agent_tool_ok",
+          _tag: "agent_tool_ok",
           callId: cmd.callId,
           result: `captured ${SCREENSHOT}`,
           at: 0,
@@ -110,7 +110,7 @@ async function traced(
     model: scripted(turns),
     schemas: { act: { parse: (v) => v as AgentTurn } },
     turnOf: () => "act",
-    toolOf: (c) => ({ type: "run_tool", ...c }),
+    toolOf: (c) => ({ _tag: "run_tool", ...c }),
     modelId: "claude-test",
     payloadOf: () => ({ prompt: `look at ${SCREENSHOT}` }),
     rng: () => 0,
@@ -131,7 +131,7 @@ async function traced(
     events: agentEvents<string, Purpose, Outputs, string>(),
   }).ready;
   const stop = traceAgent(runtime, { tracer, ...opts });
-  await runtime.dispatch({ type: "agent_start", runId: "run-1", at: START });
+  await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: START });
   await runtime.done();
   await runtime.stop();
   stop();
@@ -301,16 +301,16 @@ describe("agentSpans — the listener form", () => {
   const events: AgentEvent<string>[] = [
     {
       ...head(1),
-      type: "BrainStarted",
+      _tag: "BrainStarted",
       turn: 0,
       purpose: "act",
       model: null,
       payload: null,
     },
-    { ...head(2), type: "TurnSettled", turn: ASK },
+    { ...head(2), _tag: "TurnSettled", turn: ASK },
     {
       ...head(3),
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
       name: "screenshot",
       args: {},
@@ -324,7 +324,7 @@ describe("agentSpans — the listener form", () => {
     for (const e of events) spans.onEvent(e);
     spans.onEvent({
       ...head(1_790_000_000_123.5),
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "cancelled", at: 1_790_000_000_123.5 },
     });
 
@@ -346,7 +346,7 @@ describe("agentSpans — the listener form", () => {
     for (const e of events) spans.onEvent(e);
     spans.onEvent({
       ...head(4),
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "cancelled", at: 4 },
     });
 
@@ -390,7 +390,7 @@ describe("agentSpans — the listener form", () => {
     for (const e of events) spans.onEvent(e);
     spans.onEvent({
       ...head(4.25),
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c2",
       name: "fetch",
       args: {},
@@ -398,7 +398,7 @@ describe("agentSpans — the listener form", () => {
     spans.onEvent({
       runId: "run-7",
       at: 9,
-      type: "BrainStarted",
+      _tag: "BrainStarted",
       turn: 0,
       purpose: "act",
       model: null,
@@ -455,7 +455,7 @@ describe("agentSpans — the listener form", () => {
       },
     } as AgentEventSource<string>;
     const stop = traceAgent(source, { tracer });
-    for (const e of events) handlers.get(e.type)?.(e);
+    for (const e of events) handlers.get(e._tag)?.(e);
 
     stop();
     expect(handlers.size).toBe(0);
@@ -567,17 +567,17 @@ describe("agentSpans — under a host's parent", () => {
     spans.onEvent({
       runId: "run-p",
       at: 1,
-      type: "BrainStarted",
+      _tag: "BrainStarted",
       turn: 0,
       purpose: "act",
       model: null,
       payload: null,
     });
-    spans.onEvent({ runId: "run-p", at: 2, type: "TurnSettled", turn: ANSWER });
+    spans.onEvent({ runId: "run-p", at: 2, _tag: "TurnSettled", turn: ANSWER });
     spans.onEvent({
       runId: "run-p",
       at: 3,
-      type: "RunDone",
+      _tag: "RunDone",
       status: { kind: "cancelled", at: 3 },
     });
 
@@ -598,7 +598,7 @@ describe("agentSpans — under a host's parent", () => {
     spans.onEvent({
       runId: "run-d",
       at: 1,
-      type: "BrainStarted",
+      _tag: "BrainStarted",
       turn: 0,
       purpose: "act",
       model: null,
@@ -607,7 +607,7 @@ describe("agentSpans — under a host's parent", () => {
     spans.onEvent({
       runId: "run-d",
       at: 2,
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
       name: "lookup",
       args: {},
@@ -642,7 +642,7 @@ describe("agentSpans — under a host's parent", () => {
     handlers.get("ToolStarted")?.({
       runId: "run-t",
       at: 1,
-      type: "ToolStarted",
+      _tag: "ToolStarted",
       callId: "c1",
       name: "lookup",
       args: {},

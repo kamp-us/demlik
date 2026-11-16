@@ -42,7 +42,7 @@ const audit = Cmd.define("audit", {
 });
 
 type Model = { readonly name: string | null; readonly note: string };
-type Msg = { readonly type: "go"; readonly id: string };
+type Msg = { readonly _tag: "go"; readonly id: string };
 
 // ── 1. the playground shape: zero type arguments, zero annotations ──────────
 
@@ -133,20 +133,20 @@ void run(machine, { ctx: { http }, interpret: machineInterpret });
 // ── 4. the Transitions (2-D table) form works through `types` the same way ──
 
 type Phase =
-  | { readonly type: "idle" }
-  | { readonly type: "loading"; readonly id: string };
-type PhaseMsg = { readonly type: "start"; readonly id: string };
+  | { readonly _tag: "idle" }
+  | { readonly _tag: "loading"; readonly id: string };
+type PhaseMsg = { readonly _tag: "start"; readonly id: string };
 
-const idle: Phase = { type: "idle" };
+const idle: Phase = { _tag: "idle" };
 
 const table = defineMachine({
   types: { model: {} as Phase, msg: {} as PhaseMsg, ctx: {} as HttpCtx },
   cmds: [lookup],
-  init: (loaded) => [loaded ?? { type: "idle" }, []],
+  init: (loaded) => [loaded ?? { _tag: "idle" }, []],
   update: {
     idle: {
       start: (_s, msg) => [
-        { type: "loading", id: msg.id },
+        { _tag: "loading", id: msg.id },
         [lookup({ id: msg.id })],
       ],
       lookup_ok: (s) => [s, []],
@@ -177,8 +177,8 @@ void run(table, {
 // nothing to derive from, so the union is a value under `types` exactly as
 // Model and Msg are.
 
-type Persist = { readonly type: "persist"; readonly n: number };
-type Count = { readonly type: "bump" } | { readonly type: "saved" };
+type Persist = { readonly _tag: "persist"; readonly n: number };
+type Count = { readonly _tag: "bump" } | { readonly _tag: "saved" };
 type DbCtx = { readonly db: { readonly put: (n: number) => Promise<void> } };
 
 const handWritten = defineMachine({
@@ -190,7 +190,7 @@ const handWritten = defineMachine({
   },
   init: () => [{ n: 0 }, []],
   update: {
-    bump: (m) => [{ n: m.n + 1 }, [{ type: "persist", n: m.n + 1 }]],
+    bump: (m) => [{ n: m.n + 1 }, [{ _tag: "persist", n: m.n + 1 }]],
     saved: (m) => [m, []],
   },
 });
@@ -201,7 +201,7 @@ void run(handWritten, {
   interpret: {
     persist: async (cmd, ctx) => {
       await ctx.db.put(cmd.n);
-      return { type: "saved" } as Count;
+      return { _tag: "saved" } as Count;
     },
   },
 });
@@ -221,14 +221,14 @@ const polling = defineMachine({
     bump: (m) => [{ n: m.n + 1 }, []],
     saved: (m) => [m, []],
   },
-  subs: [{ type: "poll", deps: (m) => ({ every: 1_000 * (m.n + 1) }) }],
+  subs: [{ _tag: "poll", deps: (m) => ({ every: 1_000 * (m.n + 1) }) }],
 });
 
 void run(polling, {
   subscribe: {
     poll: (sub, _ctx, dispatch) => {
       const timer = setInterval(
-        () => dispatch({ type: "bump" }),
+        () => dispatch({ _tag: "bump" }),
         sub.deps.every,
       );
       return () => clearInterval(timer);
@@ -239,7 +239,7 @@ void run(polling, {
 // ── 6. a pure machine: no cmds, no ctx, `run` needs no `interpret` ──────────
 
 const pure = defineMachine({
-  types: { model: {} as { readonly n: number }, msg: {} as { type: "tick" } },
+  types: { model: {} as { readonly n: number }, msg: {} as { _tag: "tick" } },
   init: () => [{ n: 0 }, []],
   update: { tick: (m) => [{ n: m.n + 1 }, []] },
 });
@@ -252,19 +252,19 @@ void stillNoCtx;
 // ── 7. the table form with NO cmds — `C` stays the cmdless marker ───────────
 
 type Order =
-  | { readonly type: "open"; readonly subtotal: number }
-  | { readonly type: "closed"; readonly total: number };
+  | { readonly _tag: "open"; readonly subtotal: number }
+  | { readonly _tag: "closed"; readonly total: number };
 type OrderMsg =
-  | { readonly type: "add"; readonly price: number }
-  | { readonly type: "close" };
+  | { readonly _tag: "add"; readonly price: number }
+  | { readonly _tag: "close" };
 
 const pureTable = defineMachine({
   types: { model: {} as Order, msg: {} as OrderMsg },
-  init: (loaded) => [loaded ?? { type: "open", subtotal: 0 }, []],
+  init: (loaded) => [loaded ?? { _tag: "open", subtotal: 0 }, []],
   update: {
     open: {
       add: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],
-      close: (s) => [{ type: "closed", total: s.subtotal }, []],
+      close: (s) => [{ _tag: "closed", total: s.subtotal }, []],
     },
     closed: {
       add: (s) => [s, []],

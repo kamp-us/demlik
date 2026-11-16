@@ -16,7 +16,7 @@ type State = {
   readonly count: number;
   readonly output: string | null;
 };
-type Msg = { readonly type: "bump" } | { readonly type: "finish" };
+type Msg = { readonly _tag: "bump" } | { readonly _tag: "finish" };
 
 function counterMachine() {
   const update: Reducer<State, Msg, never> = {
@@ -40,9 +40,9 @@ describe("Runtime.result() — the terminal-State read (#46)", () => {
     }).ready;
 
     expect(rt.result()).toBeUndefined(); // fresh boot → not terminal
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.result()).toBeUndefined(); // still running
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
 
     const result = rt.result();
     expect(result).not.toBeUndefined();
@@ -52,7 +52,7 @@ describe("Runtime.result() — the terminal-State read (#46)", () => {
 
   it("is always undefined when no terminal predicate is supplied", async () => {
     const rt = await run(counterMachine(), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "finish" }); // State IS done…
+    await rt.dispatch({ _tag: "finish" }); // State IS done…
     expect(rt.result()).toBeUndefined(); // …but no predicate → never terminal
   });
 });
@@ -65,8 +65,8 @@ describe("Runtime.done() — the awaitable terminal result (#46)", () => {
     }).ready;
 
     const done = rt.done(); // parked before terminal
-    await rt.dispatch({ type: "bump" });
-    await rt.dispatch({ type: "finish" }); // makes `isDone` hold → resolves
+    await rt.dispatch({ _tag: "bump" });
+    await rt.dispatch({ _tag: "finish" }); // makes `isDone` hold → resolves
 
     const final = await done;
     expect(final.phase).toBe("done");
@@ -78,7 +78,7 @@ describe("Runtime.done() — the awaitable terminal result (#46)", () => {
       ctx: undefined,
       terminal: isDone,
     }).ready;
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
 
     // Already terminal — `done()` must resolve at once, never miss the
     // transition it was called after.
@@ -94,7 +94,7 @@ describe("Runtime.done() — the awaitable terminal result (#46)", () => {
 
     const a = rt.done();
     const b = rt.done();
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
 
     const [ra, rb] = await Promise.all([a, b]);
     expect(ra.output).toBe("done@0");

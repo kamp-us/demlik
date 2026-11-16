@@ -21,11 +21,11 @@ type UndoCmd =
 type StepCmd = DoCmd | UndoCmd;
 
 type Msg =
-  | { type: "begin" }
-  | { type: "step_ok"; ref: string }
-  | { type: "step_err"; error: string }
-  | { type: "undo_ok"; ref: string }
-  | { type: "undo_err"; error: string };
+  | { _tag: "begin" }
+  | { _tag: "step_ok"; ref: string }
+  | { _tag: "step_err"; error: string }
+  | { _tag: "undo_ok"; ref: string }
+  | { _tag: "undo_err"; error: string };
 
 interface State {
   saga: SagaState;
@@ -42,16 +42,16 @@ interface Ctx {
 const saga = createSaga<DoCmd, UndoCmd>({
   steps: [
     {
-      do: { type: "reserve_stock", sku: "TEA-001", qty: 2 },
-      undo: { type: "release_stock", sku: "TEA-001", qty: 2 },
+      do: { _tag: "reserve_stock", sku: "TEA-001", qty: 2 },
+      undo: { _tag: "release_stock", sku: "TEA-001", qty: 2 },
     },
     {
-      do: { type: "charge_card", cents: 4200 },
-      undo: { type: "refund_card", cents: 4200 },
+      do: { _tag: "charge_card", cents: 4200 },
+      undo: { _tag: "refund_card", cents: 4200 },
     },
     {
-      do: { type: "ship", sku: "TEA-001", address: "42 Demlik Ln" },
-      undo: { type: "unship", sku: "TEA-001" },
+      do: { _tag: "ship", sku: "TEA-001", address: "42 Demlik Ln" },
+      undo: { _tag: "unship", sku: "TEA-001" },
     },
   ],
 });
@@ -108,49 +108,49 @@ export const checkout = defineMachine({
 // The Cmd handlers ride beside the machine, never on it: `run` takes them.
 export const checkoutInterpret: Interpret<Msg, StepCmd, Ctx> = {
   reserve_stock: tryInterpret<
-    DoCmd & { type: "reserve_stock" },
+    DoCmd & { _tag: "reserve_stock" },
     string,
     Msg,
     Ctx
   >(
     (cmd, ctx) => ctx.warehouse.reserve(cmd.sku, cmd.qty),
-    (ref) => ({ type: "step_ok", ref }),
-    (err) => ({ type: "step_err", error: String(err) }),
+    (ref) => ({ _tag: "step_ok", ref }),
+    (err) => ({ _tag: "step_err", error: String(err) }),
   ),
-  charge_card: tryInterpret<DoCmd & { type: "charge_card" }, string, Msg, Ctx>(
+  charge_card: tryInterpret<DoCmd & { _tag: "charge_card" }, string, Msg, Ctx>(
     (cmd, ctx) => ctx.gateway.charge(cmd.cents),
-    (ref) => ({ type: "step_ok", ref }),
-    (err) => ({ type: "step_err", error: String(err) }),
+    (ref) => ({ _tag: "step_ok", ref }),
+    (err) => ({ _tag: "step_err", error: String(err) }),
   ),
-  ship: tryInterpret<DoCmd & { type: "ship" }, string, Msg, Ctx>(
+  ship: tryInterpret<DoCmd & { _tag: "ship" }, string, Msg, Ctx>(
     (cmd, ctx) => ctx.carrier.ship(cmd.sku, cmd.address),
-    (ref) => ({ type: "step_ok", ref }),
-    (err) => ({ type: "step_err", error: String(err) }),
+    (ref) => ({ _tag: "step_ok", ref }),
+    (err) => ({ _tag: "step_err", error: String(err) }),
   ),
   release_stock: tryInterpret<
-    UndoCmd & { type: "release_stock" },
+    UndoCmd & { _tag: "release_stock" },
     string,
     Msg,
     Ctx
   >(
     (cmd, ctx) => ctx.refunds.release(cmd.sku, cmd.qty),
-    (ref) => ({ type: "undo_ok", ref }),
-    (err) => ({ type: "undo_err", error: String(err) }),
+    (ref) => ({ _tag: "undo_ok", ref }),
+    (err) => ({ _tag: "undo_err", error: String(err) }),
   ),
   refund_card: tryInterpret<
-    UndoCmd & { type: "refund_card" },
+    UndoCmd & { _tag: "refund_card" },
     string,
     Msg,
     Ctx
   >(
     (cmd) => Promise.resolve(`refund:${cmd.cents}`),
-    (ref) => ({ type: "undo_ok", ref }),
-    (err) => ({ type: "undo_err", error: String(err) }),
+    (ref) => ({ _tag: "undo_ok", ref }),
+    (err) => ({ _tag: "undo_err", error: String(err) }),
   ),
-  unship: tryInterpret<UndoCmd & { type: "unship" }, string, Msg, Ctx>(
+  unship: tryInterpret<UndoCmd & { _tag: "unship" }, string, Msg, Ctx>(
     (cmd) => Promise.resolve(`unship:${cmd.sku}`),
-    (ref) => ({ type: "undo_ok", ref }),
-    (err) => ({ type: "undo_err", error: String(err) }),
+    (ref) => ({ _tag: "undo_ok", ref }),
+    (err) => ({ _tag: "undo_err", error: String(err) }),
   ),
 };
 
@@ -190,7 +190,7 @@ async function drive(title: string, cardWorks: boolean): Promise<void> {
     ctx: makeCtx(cardWorks),
   }).ready;
   const done = settled(runtime);
-  await runtime.dispatch({ type: "begin" });
+  await runtime.dispatch({ _tag: "begin" });
   await done;
 
   const { saga: final, log } = runtime.getState();

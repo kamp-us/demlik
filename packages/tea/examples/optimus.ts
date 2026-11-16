@@ -209,7 +209,7 @@ function fakeModel() {
 type WalkCursor = string;
 type WalkState = { readonly walk: PaginatedWalkState<WalkCursor, SitemapPage> };
 type WalkMsg =
-  | { readonly type: "walk_start"; readonly at: number }
+  | { readonly _tag: "walk_start"; readonly at: number }
   | PageOkMsg<SitemapPage>
   | PageErrMsg
   | PaginatedWalkTimerMsg;
@@ -259,7 +259,7 @@ const walkMachine = defineMachine({
     },
   },
   // The retry timer. `timer` is built into the engine.
-  subs: [{ type: "timer", deps: (s: WalkState) => crawler.timer(s.walk) }],
+  subs: [{ _tag: "timer", deps: (s: WalkState) => crawler.timer(s.walk) }],
 });
 
 // The machine is data; its handler rides beside it into `run`. It returns an
@@ -296,11 +296,11 @@ async function runCrawlSubRun(): Promise<readonly string[]> {
   }).ready;
   const discovered: string[] = [];
   runtime.observe((msg) => {
-    if (msg !== null && msg.type === "resilient_run_ok") {
+    if (msg !== null && msg._tag === "resilient_run_ok") {
       for (const url of msg.value.urls) discovered.push(url);
     }
   });
-  await runtime.dispatch({ type: "walk_start", at: 1 });
+  await runtime.dispatch({ _tag: "walk_start", at: 1 });
   await until(
     () => crawler.isComplete(runtime.getState().walk),
     "paginated-walk reaches done",
@@ -313,7 +313,7 @@ type AuditCallState = {
   readonly resilience: ResilientState<string, AuditFinding>;
 };
 type AuditCallMsg =
-  | { readonly type: "audit_start"; readonly url: string; readonly at: number }
+  | { readonly _tag: "audit_start"; readonly url: string; readonly at: number }
   | SucceedMsg<AuditFinding>
   | FailMsg
   | ResilientTimerMsg;
@@ -367,7 +367,7 @@ const auditMachine = defineMachine({
   },
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s: AuditCallState) => auditCall.timer(s.resilience),
     },
   ],
@@ -412,7 +412,7 @@ async function runAuditSubRun(url: string): Promise<AuditFinding> {
     interpret: auditInterpret,
   }).ready;
   auditClock += 1;
-  await runtime.dispatch({ type: "audit_start", url, at: auditClock });
+  await runtime.dispatch({ _tag: "audit_start", url, at: auditClock });
   await until(() => {
     const call = runtime.getState().resilience.calls[AUDIT_KEY];
     return call?.phase === "succeeded" || call?.phase === "failed";
@@ -440,7 +440,7 @@ async function settleIntake(
   if (cmd === undefined) {
     throw new Error("intake.receive emitted no decision Cmd");
   }
-  if (cmd.type === "intake:replay") {
+  if (cmd._tag === "intake:replay") {
     auditedSkipped += 1;
     intakeReplays.push(cmd.key);
     return { finding: cmd.result, disposition: "replay" };
@@ -466,8 +466,8 @@ const agent = createAgent<
   payloadOf: (stage) => ({ stage }),
   toolOf: (call): ToolCmd =>
     call.name === "crawl_sitemap"
-      ? { type: "run_crawl", ...call }
-      : { type: "run_audit", ...call },
+      ? { _tag: "run_crawl", ...call }
+      : { _tag: "run_audit", ...call },
   toolConcurrency: 1,
   retry: { baseMs: 10, factor: 2, capMs: 50, maxAttempts: 5, jitter: "none" },
   deadlineMs: 600_000,
@@ -485,7 +485,7 @@ const toolInterpret: Interpret<Msg, ToolCmd, AgentCtx> = {
   run_crawl: async (cmd, ctx) => {
     const urls = await runCrawlSubRun();
     return {
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: { kind: "sitemap", urls },
       at: ctx.now(),
@@ -499,7 +499,7 @@ const toolInterpret: Interpret<Msg, ToolCmd, AgentCtx> = {
     [intakeState, received] = intake.receive(intakeState, url, at, id);
     const { finding, disposition } = await settleIntake(received, ctx.now());
     return {
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: { kind: "audit", finding, disposition },
       at: ctx.now(),
@@ -536,7 +536,7 @@ type UploaderState = {
   readonly sink: ResilientState<string, string>;
 };
 type UploaderMsg =
-  | { readonly type: "ship"; readonly report: string; readonly at: number }
+  | { readonly _tag: "ship"; readonly report: string; readonly at: number }
   | ResilientTimerMsg<"publish">;
 
 /** The uploader's phase, read off the settled sink call. */
@@ -575,7 +575,7 @@ const uploaderMachine = defineMachine({
     },
   },
   // The retry and deadline timers. `timer` is built into the engine.
-  subs: [{ type: "timer", deps: (s: UploaderState) => publish.timer(s.sink) }],
+  subs: [{ _tag: "timer", deps: (s: UploaderState) => publish.timer(s.sink) }],
 });
 
 const uploaderInterpret: Interpret<
@@ -670,7 +670,7 @@ async function main() {
   runtime.observe((msg, _state) => {
     if (msg === null) return;
 
-    if (msg.type === "resilient_run_ok") {
+    if (msg._tag === "resilient_run_ok") {
       const out = msg.value.output as AgentTurn;
       const purpose = msg.cmd.key as Purpose;
       if (purpose !== lastStage) {
@@ -693,7 +693,7 @@ async function main() {
       }
     }
 
-    if (msg.type === "agent_tool_ok") {
+    if (msg._tag === "agent_tool_ok") {
       const result = msg.result;
       if (result.kind === "sitemap") {
         console.log(
@@ -711,7 +711,7 @@ async function main() {
   });
 
   await runtime.dispatch({
-    type: "agent_start",
+    _tag: "agent_start",
     runId: "crawl-audit-001",
     at: ctx.now(),
   });
@@ -786,7 +786,7 @@ async function main() {
   }).ready;
 
   await uploaderRuntime.dispatch({
-    type: "ship",
+    _tag: "ship",
     report: reportTurn.content,
     at: Date.now(),
   });

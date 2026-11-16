@@ -94,7 +94,7 @@ function recordingPerformer(
     performed,
     async perform(cmd) {
       performed.push(cmd);
-      return { type: "activity_ok", id: cmd.id, result: map(cmd.activity) };
+      return { _tag: "activity_ok", id: cmd.id, result: map(cmd.activity) };
     },
   };
 }
@@ -161,7 +161,7 @@ describe("persist + advance across cold activations", () => {
           performedThisWake++;
           if (performedThisWake > 1) throw new EvictBeforeResult(cmd);
           return {
-            type: "activity_ok",
+            _tag: "activity_ok",
             id: cmd.id,
             result: `${cmd.activity}-ok`,
           };
@@ -253,7 +253,7 @@ describe("cold-wake re-emit (idempotent by delivery id)", () => {
     // Drive the first step to completion (folds result for delivery id 1,
     // advances to step 2 owing delivery id 2).
     const id1Result: WorkflowMsg<Result, Failure> = {
-      type: "activity_ok",
+      _tag: "activity_ok",
       id: 1,
       result: "reserve-ok",
     };
@@ -333,7 +333,7 @@ describe("cold-wake replay byte-identity", () => {
         evictAfterFirst.calls++;
         // Succeed step 0 (id 1); evict on step 1's dispatch (id 2).
         if (cmd.id === 1)
-          return { type: "activity_ok", id: cmd.id, result: "reserve-ok" };
+          return { _tag: "activity_ok", id: cmd.id, result: "reserve-ok" };
         throw new EvictBeforeResult(cmd);
       },
     };

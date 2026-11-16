@@ -131,7 +131,7 @@ export function applyAppliedEvent(
   applied: AppliedEffects,
   event: AppliedEffectsEvent,
 ): AppliedEffects {
-  switch (event.type) {
+  switch (event._tag) {
     case "effect_applied": {
       if (applied.has(event.key)) return applied;
       const next = new Set(applied);
@@ -255,12 +255,12 @@ export function appliedEffects(restore?: {
       // First application: run the effect, THEN record the marker (see the
       // ordering rationale in the module header — after, never before).
       const result = await effect.fn();
-      const event: EffectApplied = { type: "effect_applied", key: effect.key };
+      const event: EffectApplied = { _tag: "effect_applied", key: effect.key };
       mirror = applyAppliedEvent(mirror, event);
       return { ran: true, key: effect.key, result, event };
     },
     forget(key: EffectKey): { readonly event: EffectForgotten } {
-      const event: EffectForgotten = { type: "effect_forgotten", key };
+      const event: EffectForgotten = { _tag: "effect_forgotten", key };
       mirror = applyAppliedEvent(mirror, event);
       return { event };
     },

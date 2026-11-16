@@ -16,17 +16,17 @@ import {
 //
 // A three-step booking saga: book a flight, charge the card, reserve a hotel.
 // Each forward Cmd has a matching compensating Cmd. The Cmds carry no payload
-// beyond their tag — the saga drives ORDER, not data, so a plain `type` is
+// beyond their tag — the saga drives ORDER, not data, so a plain `_tag` is
 // enough to assert which step's effect was emitted.
 type Forward = Cmd<"book_flight"> | Cmd<"charge_card"> | Cmd<"reserve_hotel">;
 type Undo = Cmd<"cancel_flight"> | Cmd<"refund_card"> | Cmd<"release_hotel">;
 
-const bookFlight: Forward = { type: "book_flight" };
-const chargeCard: Forward = { type: "charge_card" };
-const reserveHotel: Forward = { type: "reserve_hotel" };
-const cancelFlight: Undo = { type: "cancel_flight" };
-const refundCard: Undo = { type: "refund_card" };
-const releaseHotel: Undo = { type: "release_hotel" };
+const bookFlight: Forward = { _tag: "book_flight" };
+const chargeCard: Forward = { _tag: "charge_card" };
+const reserveHotel: Forward = { _tag: "reserve_hotel" };
+const cancelFlight: Undo = { _tag: "cancel_flight" };
+const refundCard: Undo = { _tag: "refund_card" };
+const releaseHotel: Undo = { _tag: "release_hotel" };
 
 const threeSteps = {
   steps: [
@@ -326,11 +326,11 @@ interface MachineState {
   readonly saga: SagaState;
 }
 type Msg =
-  | { type: "begin" }
-  | { type: "step_ok" }
-  | { type: "step_err"; error: string }
-  | { type: "undo_ok" }
-  | { type: "undo_err"; error: string };
+  | { _tag: "begin" }
+  | { _tag: "step_ok" }
+  | { _tag: "step_err"; error: string }
+  | { _tag: "undo_ok" }
+  | { _tag: "undo_err"; error: string };
 
 const machineSaga = createSaga(threeSteps);
 
@@ -366,10 +366,10 @@ describe("machine integration", () => {
     bound.expectCmdSequence(
       {
         msgs: [
-          { type: "begin" },
-          { type: "step_ok" },
-          { type: "step_ok" },
-          { type: "step_ok" },
+          { _tag: "begin" },
+          { _tag: "step_ok" },
+          { _tag: "step_ok" },
+          { _tag: "step_ok" },
         ],
       },
       [bookFlight, chargeCard, reserveHotel],
@@ -379,10 +379,10 @@ describe("machine integration", () => {
   it("drives the slice to committed on a full happy path", () => {
     const { state } = bound.replay({
       msgs: [
-        { type: "begin" },
-        { type: "step_ok" },
-        { type: "step_ok" },
-        { type: "step_ok" },
+        { _tag: "begin" },
+        { _tag: "step_ok" },
+        { _tag: "step_ok" },
+        { _tag: "step_ok" },
       ],
     });
     expect(state.saga.phase).toBe("committed");
@@ -392,12 +392,12 @@ describe("machine integration", () => {
   it("compensates in reverse and aborts on a mid-saga failure", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "begin" }, // book_flight
-        { type: "step_ok" }, // step 0 done → charge_card
-        { type: "step_ok" }, // step 1 done → reserve_hotel
-        { type: "step_err", error: "no rooms" }, // step 2 fails → refund_card
-        { type: "undo_ok" }, // refund done → cancel_flight
-        { type: "undo_ok" }, // cancel done → aborted
+        { _tag: "begin" }, // book_flight
+        { _tag: "step_ok" }, // step 0 done → charge_card
+        { _tag: "step_ok" }, // step 1 done → reserve_hotel
+        { _tag: "step_err", error: "no rooms" }, // step 2 fails → refund_card
+        { _tag: "undo_ok" }, // refund done → cancel_flight
+        { _tag: "undo_ok" }, // cancel done → aborted
       ],
     });
 
@@ -416,12 +416,12 @@ describe("machine integration", () => {
   it("halts in compensation_failed when an undo bounces mid-rollback", () => {
     const { state, cmds } = bound.replay({
       msgs: [
-        { type: "begin" }, // book_flight
-        { type: "step_ok" }, // step 0 done → charge_card
-        { type: "step_ok" }, // step 1 done → reserve_hotel
-        { type: "step_err", error: "no rooms" }, // step 2 fails → refund_card
-        { type: "undo_err", error: "refund bounced" }, // refund fails → compensation_failed
-        { type: "undo_ok" }, // stale Msg against a terminal saga → no-op
+        { _tag: "begin" }, // book_flight
+        { _tag: "step_ok" }, // step 0 done → charge_card
+        { _tag: "step_ok" }, // step 1 done → reserve_hotel
+        { _tag: "step_err", error: "no rooms" }, // step 2 fails → refund_card
+        { _tag: "undo_err", error: "refund bounced" }, // refund fails → compensation_failed
+        { _tag: "undo_ok" }, // stale Msg against a terminal saga → no-op
       ],
     });
 
@@ -449,8 +449,8 @@ describe("saga invariants (property)", () => {
   /** Build an n-step saga whose do/undo Cmds tag their positional index. */
   function makeSaga(n: number) {
     const steps = Array.from({ length: n }, (_v, i) => ({
-      do: { type: "do", i } as Cmd<"do"> & { i: number },
-      undo: { type: "undo", i } as Cmd<"undo"> & { i: number },
+      do: { _tag: "do", i } as Cmd<"do"> & { i: number },
+      undo: { _tag: "undo", i } as Cmd<"undo"> & { i: number },
     }));
     return createSaga({ steps });
   }

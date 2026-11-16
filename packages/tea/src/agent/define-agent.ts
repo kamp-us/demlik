@@ -180,7 +180,7 @@ export type DefinedAgentCmd<T extends AnyToolDef> = AgentCmd<
 
 /**
  * The interpret table of the machine `defineAgent` wired: one cell per
- * {@link DefinedAgentCmd}, keyed by its `type` — a tool's own Cmd type, the
+ * {@link DefinedAgentCmd}, keyed by its `_tag` — a tool's own Cmd type, the
  * router's `tool_rejected`, and the agent-owned brain call.
  */
 export type DefinedAgentInterpret<T extends AnyToolDef> = Interpret<
@@ -1100,7 +1100,7 @@ function summarizeWith(
     // `Date.now()` at the settle, exactly as the composed llm-call handler
     // stamps the brain call's own settle Msg.
     return {
-      type: MsgType.CompactOk,
+      _tag: MsgType.CompactOk,
       key: COMPACTION_PURPOSE,
       result: {
         key: COMPACTION_PURPOSE,
@@ -1275,7 +1275,7 @@ function forwardLadderErrors<T extends AnyToolDef>(
     // `Store` handed back. Reading the Msg rather than "is this the first call"
     // is what makes that a stated invariant instead of an assumed one.
     const seeding =
-      msg.type === MsgType.AgentStart || msg.type === MsgType.AgentBoot;
+      msg._tag === MsgType.AgentStart || msg._tag === MsgType.AgentBoot;
     for (const record of state.conversation?.toolRecords ?? []) {
       const { outcome, call } = record;
       if (outcome.kind !== "error") continue;
@@ -1324,7 +1324,7 @@ function withToolErrorHook<T extends AnyToolDef>(
   onToolError: NonNullable<DefineAgentConfig<T>["onToolError"]>,
 ): ToolRouter<T> {
   type Handler = (
-    cmd: { readonly type: string },
+    cmd: { readonly _tag: string },
     ctx: unknown,
   ) => Promise<unknown>;
   const handlers = router.interpret as unknown as Record<string, Handler>;
@@ -1336,7 +1336,7 @@ function withToolErrorHook<T extends AnyToolDef>(
       // it. The engine mints the returned outcome itself, once, for the fold.
       const msg = cmdEdgeOf(ctx)(cmd, returned);
       if (typeof msg !== "object" || msg === null) return returned;
-      const settled = router.outcomeOf(msg as { readonly type: string });
+      const settled = router.outcomeOf(msg as { readonly _tag: string });
       if (settled === null || settled.outcome.kind === "ok") return returned;
       // A laddered call is announced off its fold, once, by
       // `forwardLadderErrors` — never per attempt from here.
@@ -1367,27 +1367,27 @@ function withToolErrorHook<T extends AnyToolDef>(
  */
 function ownedByLadder<T extends AnyToolDef>(
   router: ToolRouter<T>,
-  cmd: { readonly type: string },
+  cmd: { readonly _tag: string },
   callId: string,
 ): boolean {
-  return router.resilienceOf({ name: cmd.type, callId, args: {} }) !== null;
+  return router.resilienceOf({ name: cmd._tag, callId, args: {} }) !== null;
 }
 
 /**
- * The tool name a Cmd was built for: its own `type`, except for the router's
+ * The tool name a Cmd was built for: its own `_tag`, except for the router's
  * `tool_rejected`, whose type is the router's and whose rejection carries the
  * name the MODEL asked for — the name a consumer needs to see for an
  * `unknown_tool`. PURE.
  */
-function calledName(cmd: { readonly type: string }): string {
+function calledName(cmd: { readonly _tag: string }): string {
   const rejection = (cmd as { readonly error?: { readonly name?: unknown } })
     .error;
-  return typeof rejection?.name === "string" ? rejection.name : cmd.type;
+  return typeof rejection?.name === "string" ? rejection.name : cmd._tag;
 }
 
 /** The Msg that sets a run in motion. */
 function startMsg(runId: string, at: number) {
-  return { type: MsgType.AgentStart, runId, at } as const;
+  return { _tag: MsgType.AgentStart, runId, at } as const;
 }
 
 /**

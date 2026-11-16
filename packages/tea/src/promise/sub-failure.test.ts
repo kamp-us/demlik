@@ -21,8 +21,8 @@ import { run } from "./index";
 type Feed = Sub<"feed", { readonly on: true }>;
 type Other = Sub<"other", { readonly on: true }>;
 type Msg =
-  | { readonly type: "failed"; readonly code: number }
-  | { readonly type: "poke" };
+  | { readonly _tag: "failed"; readonly code: number }
+  | { readonly _tag: "poke" };
 type Model = { readonly failed: number | null; readonly pokes: number };
 
 const machine = defineMachine({
@@ -33,8 +33,8 @@ const machine = defineMachine({
     poke: (m) => [{ ...m, pokes: m.pokes + 1 }, []],
   },
   subs: [
-    { type: "feed", deps: () => ({ on: true as const }) },
-    { type: "other", deps: () => ({ on: true as const }) },
+    { _tag: "feed", deps: () => ({ on: true as const }) },
+    { _tag: "other", deps: () => ({ on: true as const }) },
   ],
 });
 
@@ -69,12 +69,12 @@ describe("Promise engine: an unhandled Sub failure", () => {
     expect(reports).toEqual([{ error: boom, phase: "sub" }]);
     await vi.waitFor(() => expect(otherDisposed).toBe(true));
     expect(liveSubs(booting)).toBe(0);
-    await expect(booting.dispatch({ type: "poke" })).rejects.toThrow(/stopped/);
+    await expect(booting.dispatch({ _tag: "poke" })).rejects.toThrow(/stopped/);
   });
 
   it("a Sub failure rejects done() with SubFailedError for waiting and later callers", async () => {
     type Gate = { readonly open: boolean };
-    type GateMsg = { readonly type: "open" };
+    type GateMsg = { readonly _tag: "open" };
     type Watch = Sub<"watch", { readonly on: true }>;
     const gated = defineMachine({
       types: { model: {} as Gate, msg: {} as GateMsg, sub: {} as Watch },
@@ -82,7 +82,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
       update: { open: () => [{ open: true }, []] },
       subs: [
         {
-          type: "watch",
+          _tag: "watch",
           deps: (s) => (s.open ? { on: true as const } : null),
         },
       ],
@@ -99,7 +99,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
     }).ready;
 
     const waiting = rt.done();
-    await expect(rt.dispatch({ type: "open" })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "open" })).rejects.toBe(boom);
 
     const first = await waiting.catch((error: unknown) => error);
     const later = await rt.done().catch((error: unknown) => error);
@@ -111,7 +111,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
 
   it("a Sub that sends the terminal Msg and then fails: done() and result() agree", async () => {
     type Gate = { readonly open: boolean; readonly finished: boolean };
-    type GateMsg = { readonly type: "open" } | { readonly type: "finish" };
+    type GateMsg = { readonly _tag: "open" } | { readonly _tag: "finish" };
     type Watch = Sub<"watch", { readonly on: true }>;
     const gated = defineMachine({
       types: { model: {} as Gate, msg: {} as GateMsg, sub: {} as Watch },
@@ -122,7 +122,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
       },
       subs: [
         {
-          type: "watch",
+          _tag: "watch",
           deps: (s) => (s.open ? { on: true as const } : null),
         },
       ],
@@ -134,14 +134,14 @@ describe("Promise engine: an unhandled Sub failure", () => {
       terminal: (s) => s.finished,
       subscribe: {
         watch: (_sub, _ctx, dispatch) => {
-          dispatch({ type: "finish" });
+          dispatch({ _tag: "finish" });
           throw boom;
         },
       },
     }).ready;
 
     const waiting = rt.done();
-    await expect(rt.dispatch({ type: "open" })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "open" })).rejects.toBe(boom);
     const racing = rt.done();
 
     expect((await waiting).finished).toBe(true);
@@ -152,7 +152,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
 
   it("a terminal State whose own step's runner throws still answers done() with that State", async () => {
     type Gate = { readonly finished: boolean };
-    type GateMsg = { readonly type: "finish" };
+    type GateMsg = { readonly _tag: "finish" };
     type Watch = Sub<"watch", { readonly on: true }>;
     const gated = defineMachine({
       types: { model: {} as Gate, msg: {} as GateMsg, sub: {} as Watch },
@@ -160,7 +160,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
       update: { finish: () => [{ finished: true }, []] },
       subs: [
         {
-          type: "watch",
+          _tag: "watch",
           deps: (s) => (s.finished ? { on: true as const } : null),
         },
       ],
@@ -178,7 +178,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
     }).ready;
 
     const waiting = rt.done();
-    await expect(rt.dispatch({ type: "finish" })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "finish" })).rejects.toBe(boom);
 
     expect((await waiting).finished).toBe(true);
     expect(rt.result()?.finished).toBe(true);
@@ -186,7 +186,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
 
   it("a runner that throws on a later transition rejects that dispatch and stops the run", async () => {
     type Gate = { readonly open: boolean };
-    type GateMsg = { readonly type: "open" } | { readonly type: "poke" };
+    type GateMsg = { readonly _tag: "open" } | { readonly _tag: "poke" };
     type Watch = Sub<"watch", { readonly on: true }>;
     const gated = defineMachine({
       types: { model: {} as Gate, msg: {} as GateMsg, sub: {} as Watch },
@@ -197,7 +197,7 @@ describe("Promise engine: an unhandled Sub failure", () => {
       },
       subs: [
         {
-          type: "watch",
+          _tag: "watch",
           deps: (s) => (s.open ? { on: true as const } : null),
         },
       ],
@@ -213,11 +213,11 @@ describe("Promise engine: an unhandled Sub failure", () => {
       },
     }).ready;
 
-    await expect(rt.dispatch({ type: "open" })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "open" })).rejects.toBe(boom);
     expect(reports).toEqual([{ error: boom, phase: "sub" }]);
     expect(liveSubs(rt)).toBe(0);
     await vi.waitFor(() =>
-      expect(rt.dispatch({ type: "poke" })).rejects.toThrow(/stopped/),
+      expect(rt.dispatch({ _tag: "poke" })).rejects.toThrow(/stopped/),
     );
   });
 });
@@ -230,7 +230,7 @@ describe("Promise engine: a Sub that maps its own errors to Msgs", () => {
       subscribe: {
         feed: (_sub, _ctx, dispatch) => {
           // The source reports its own failure, and the Sub turns it into a Msg.
-          queueMicrotask(() => dispatch({ type: "failed", code: 1006 }));
+          queueMicrotask(() => dispatch({ _tag: "failed", code: 1006 }));
           return () => {};
         },
         other: () => () => {},
@@ -238,7 +238,7 @@ describe("Promise engine: a Sub that maps its own errors to Msgs", () => {
     }).ready;
 
     await vi.waitFor(() => expect(rt.getState().failed).toBe(1006));
-    await rt.dispatch({ type: "poke" });
+    await rt.dispatch({ _tag: "poke" });
     expect(rt.getState().pokes).toBe(1);
     expect(liveSubs(rt)).toBe(2);
     expect(reports).toEqual([]);

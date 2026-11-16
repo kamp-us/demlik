@@ -76,13 +76,13 @@ export type SchemaAnswersError =
  *
  * @experimental
  */
-export interface SchemaGuidedOptions<S, M extends { type: string }> {
+export interface SchemaGuidedOptions<S, M extends { _tag: string }> {
   /**
    * The Msgs nothing sends a Cmd for, by Msg type: a user's click, a timer. A
    * Msg type here and in no Cmd's answers is drawn only from here.
    */
   readonly outside?: {
-    readonly [K in M["type"]]?: Arbitrary.Arbitrary<Extract<M, { type: K }>>;
+    readonly [K in M["_tag"]]?: Arbitrary.Arbitrary<Extract<M, { _tag: K }>>;
   };
   /**
    * Caps the events drawn. Default 60. `checkEffect` and `sampleEffect` cap a
@@ -195,7 +195,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  *   ok: Schema.Struct({ n: Schema.Int }),
  *   err: ["offline"],
  * });
- * type Msg = { type: "start" } | Settled<typeof fetchCount>;
+ * type Msg = { _tag: "start" } | Settled<typeof fetchCount>;
  * declare const machine: Machine<
  *   { readonly total: number },
  *   Msg,
@@ -206,7 +206,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  *
  * const lists = Result.getOrThrow(
  *   arbSchemaGuidedSequence(machine, {}, {
- *     outside: { start: Arbitrary.Constant({ type: "start" as const }) },
+ *     outside: { start: Arbitrary.Constant({ _tag: "start" as const }) },
  *   }),
  * );
  * const result = await Effect.runPromise(
@@ -225,7 +225,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  */
 export function arbSchemaGuidedSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

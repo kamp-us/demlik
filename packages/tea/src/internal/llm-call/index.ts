@@ -57,7 +57,7 @@
  *     resilient_run_err: (s, m) => …llm.fail(s.resilience, m)… llm.errOf(m) …,
  *     deadline_exceeded: (s, m) => liftLlmCall(s, llm.onTimer(s.resilience, m)),
  *   },
- *   subs: [{ type: "timer", deps: (s) => llm.timer(s.resilience) }],
+ *   subs: [{ _tag: "timer", deps: (s) => llm.timer(s.resilience) }],
  *
  *   // and where it runs — invoking the model is your handler:
  *   run(machine, {

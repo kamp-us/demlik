@@ -41,7 +41,7 @@ export const spawnWorker = (
       Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
   });
 
 /** Stop one worker. An id not in the table is a no-op. */

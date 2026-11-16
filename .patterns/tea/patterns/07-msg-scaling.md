@@ -41,7 +41,7 @@ signal cells.
   Over Unions" for large discriminated unions.
 - **No exhaustiveness sugar** — Elm's `case` is exhaustive by default. TS
   needs `assertNever` in the default branch, which is a discipline cost.
-- **Discriminator verbosity** — `{ type: "FetchBookResult"; result: ... }`
+- **Discriminator verbosity** — `{ _tag: "FetchBookResult"; result: ... }`
   is more characters than Elm's `GotText (Result ...)`.
 
 Source: https://github.com/microsoft/TypeScript/wiki/Performance#preferring-base-types-over-unions
@@ -72,13 +72,13 @@ child and lifts child commands into parent commands.
 ```typescript
 // Parent Msg includes a child-forwarding variant
 type ParentMsg =
-  | { type: "LoginMsg"; msg: LoginMsg }
-  | { type: "DashboardMsg"; msg: DashboardMsg }
-  | { type: "AppLevelThing" }
+  | { _tag: "LoginMsg"; msg: LoginMsg }
+  | { _tag: "DashboardMsg"; msg: DashboardMsg }
+  | { _tag: "AppLevelThing" }
 
 // Parent update delegates
 function update(msg: ParentMsg, state: AppState): [AppState, Cmd[]] {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "LoginMsg": {
       const [loginState, loginCmds] = loginUpdate(msg.msg, state.login)
       return [{ ...state, login: loginState }, loginCmds.map(liftToParent)]
@@ -101,7 +101,7 @@ The parent reads OutMsg and decides what to do. The child never dispatches to th
 parent directly.
 
 ```typescript
-type LoginOutMsg = { type: "LoginSucceeded"; user: User }
+type LoginOutMsg = { _tag: "LoginSucceeded"; user: User }
 
 function loginUpdate(msg, state): [LoginState, Cmd[], LoginOutMsg | null] {
   // ... returns outMsg when login succeeds
@@ -109,7 +109,7 @@ function loginUpdate(msg, state): [LoginState, Cmd[], LoginOutMsg | null] {
 
 // Parent reads it
 const [loginState, loginCmds, outMsg] = loginUpdate(msg, state.login)
-if (outMsg?.type === "LoginSucceeded") {
+if (outMsg?._tag === "LoginSucceeded") {
   return [{ ...state, user: outMsg.user, phase: "dashboard" }, []]
 }
 ```
@@ -131,20 +131,20 @@ key the update function by phase. Each phase cell only sees Msgs relevant to
 that phase.
 
 ```typescript
-// Instead of one big switch on msg.type across all states,
+// Instead of one big switch on msg._tag across all states,
 // dispatch by state phase first, then msg type
 const update = {
   Loading: {
-    GotData: (state, msg) => [{ type: "Ready", data: msg.data }, []],
-    GotError: (state, msg) => [{ type: "Error", error: msg.error }, []],
+    GotData: (state, msg) => [{ _tag: "Ready", data: msg.data }, []],
+    GotError: (state, msg) => [{ _tag: "Error", error: msg.error }, []],
     // other msgs are no-ops in Loading
   },
   Ready: {
-    Refresh: (state, msg) => [{ type: "Loading" }, [{ type: "fetch_data" }]],
+    Refresh: (state, msg) => [{ _tag: "Loading" }, [{ _tag: "fetch_data" }]],
     // ...
   },
   Error: {
-    Retry: (state, msg) => [{ type: "Loading" }, [{ type: "fetch_data" }]],
+    Retry: (state, msg) => [{ _tag: "Loading" }, [{ _tag: "fetch_data" }]],
   },
 }
 ```

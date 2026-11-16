@@ -41,14 +41,14 @@
  * } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type State = { type: "idle" } | { type: "done" };
- * type Msg = { type: "go" };
+ * type State = { _tag: "idle" } | { _tag: "done" };
+ * type Msg = { _tag: "go" };
  * interface MyCtx { readonly someField: string }
  * declare const machine: Machine<State, Msg, never, never, MyCtx>;
  * declare const msgArb: fc.Arbitrary<Msg>;
  *
  * const ctx = stubCtxThrowingProxy<MyCtx>();
- * propertyTerminates(machine, ctx, arbMsgSequence(msgArb), (s) => s.type === "done");
+ * propertyTerminates(machine, ctx, arbMsgSequence(msgArb), (s) => s._tag === "done");
  * // If anything reads ctx.someField during the run, an Error throws:
  * //   "@demlik/tea/pbt: ctx access denied (PBT operates on the pure
  * //    reducer; ctx field 'someField' was read)"

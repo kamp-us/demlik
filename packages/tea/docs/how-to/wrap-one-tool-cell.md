@@ -24,7 +24,7 @@ const queued = agent.with({
 ```
 
 The key is the tool's **name** — a `tool("fetch_rate", …)` is a `Cmd.define`d
-effect whose `type` is that name, and the interpret cell keyed by it is what the
+effect whose `_tag` is that name, and the interpret cell keyed by it is what the
 kernel calls to run the tool. `next` is the cell `defineAgent` wired: the one
 that calls your handler and returns its outcome. `cmd` is the tool's Cmd, and
 `cmd.callId` is the call's id — a `tool()` handler is not handed it, so a
@@ -80,8 +80,8 @@ A cell that genuinely has to settle differently is a different machine, and
 The outcome `next` resolves, and the Msg the engine mints from each arm:
 
 ```ts
-{ _tag: "Ok", value }    // → { type: "fetch_rate_ok",  cmd, value, at }
-{ _tag: "Err", error }   // → { type: "fetch_rate_err", cmd, error, at }
+{ _tag: "Ok", value }    // → { _tag: "fetch_rate_ok",  cmd, value, at }
+{ _tag: "Err", error }   // → { _tag: "fetch_rate_err", cmd, error, at }
 ```
 
 `value` is checked against your `ok` schema as the Msg is minted, and `error` is

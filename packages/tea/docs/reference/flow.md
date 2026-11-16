@@ -109,7 +109,7 @@ import { … } from "@demlik/tea/flow";
 | [`WorkflowCmd`](#WorkflowCmd) | Type | battery | The Cmd union this module emits: forward activity dispatches AND (#125) reverse compensation dispatches. |
 | [`workflowCompensationDef`](#workflowCompensationDef) | Function | battery | Dispatch a compensation (#125). |
 | [`WorkflowMsg`](#WorkflowMsg) | Type | battery | The Msg union the reducer folds: forward activity results AND (#125) reverse compensation results. |
-| [`WorkflowMsgType`](#WorkflowMsgType) | Type | battery | Every `type` discriminant tag of the WorkflowMsg union. |
+| [`WorkflowMsgType`](#WorkflowMsgType) | Type | battery | Every `_tag` discriminant tag of the WorkflowMsg union. |
 | [`WorkflowReducerStep`](#WorkflowReducerStep) | Interface | battery | A workflow reducer step: the next state, the ledger events to persist (owed-before-dispatch), and the activity Cmds to dispatch. |
 | [`WorkflowState`](#WorkflowState) | Type | battery | The workflow's state — a discriminated union on `status`. |
 | [`WorkflowStatus`](#WorkflowStatus) | Type | battery | Every `status` discriminant of the WorkflowState union. |
@@ -132,9 +132,9 @@ type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef>>
 
 ```ts
 interface ActivityErr<F> {
+  readonly _tag: "activity_err";
   readonly failure: F;
   readonly id: number;
-  readonly type: "activity_err";
 }
 ```
 
@@ -144,9 +144,9 @@ interface ActivityErr<F> {
 
 ```ts
 interface ActivityOk<R> {
+  readonly _tag: "activity_ok";
   readonly id: number;
   readonly result: R;
-  readonly type: "activity_ok";
 }
 ```
 
@@ -170,8 +170,8 @@ function addItem<I, C extends Cmd>(
 ```ts
 function awaitTerminal<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   runtime: Runtime<S, M, E>,
   isTerminal: (state: S) => boolean,
@@ -331,9 +331,9 @@ type CompensationCmd<A> = CmdOf<ReturnType<typeof workflowCompensationDef>>
 
 ```ts
 interface CompensationErr<F> {
+  readonly _tag: "compensation_err";
   readonly failure: F;
   readonly id: number;
-  readonly type: "compensation_err";
 }
 ```
 
@@ -366,8 +366,8 @@ interface CompensationFailedWorkflow<A, R, F> {
 
 ```ts
 interface CompensationOk {
+  readonly _tag: "compensation_ok";
   readonly id: number;
-  readonly type: "compensation_ok";
 }
 ```
 
@@ -682,7 +682,7 @@ function createMonitoredRun<Stage, V = unknown>(
    * The built-in `timer` Sub's deps for the watchdog: `deadlineMs` counted from
    * `lastProgressAt`, the instant the current alarm was armed. Its fire is a
    * `deadline_exceeded` Msg; route it to `onDeadline`. Declare
-   * `{ type: "timer", deps: (s) => run.timer(s.run) }`. PURE.
+   * `{ _tag: "timer", deps: (s) => run.timer(s.run) }`. PURE.
    */
   timer: (s: MonitoredRunState<Stage>) => TimerDeps<MonitoredRunTimerMsg> | null;
 }
@@ -820,7 +820,7 @@ function createReconciler<
   }>;
   /**
    * The built-in `timer` Sub's deps for the scan. Declare
-   * `{ type: "timer", deps: (s) => rec.timer(s.rec) }`.
+   * `{ _tag: "timer", deps: (s) => rec.timer(s.rec) }`.
    */
   timer: (s: State) => TimerDeps<ResilientTimerMsg<"resilient">> | null;
 }
@@ -1717,7 +1717,7 @@ type ReconcilePhase = "applying" | "done" | "failed" | "idle" | "scanning"
 interface ReconcilerConfig<Actual, Desired, Page, Change, ApplyCmd extends Cmd, Cursor = number> {
   /**
    * Realize one `Change` as the Cmd that mutates the actual world. Returns plain
-   * data (a `{ type, ... }` Cmd the consumer's interpret handler performs).
+   * data (a `{ _tag, ... }` Cmd the consumer's interpret handler performs).
    * PURE — the side effect happens when the runtime performs the emitted Cmd,
    * never here.
    */
@@ -1855,7 +1855,7 @@ interface RunningWorkflow<A, R> {
 ```ts
 function runToTerminal<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -2185,7 +2185,7 @@ type WorkflowMsg<R, F> = ActivityOk<R> | ActivityErr<F> | CompensationOk | Compe
 ### `WorkflowMsgType`
 
 ```ts
-type WorkflowMsgType = WorkflowMsg<unknown, unknown>["type"]
+type WorkflowMsgType = WorkflowMsg<unknown, unknown>["_tag"]
 ```
 
 <a id="WorkflowReducerStep"></a>

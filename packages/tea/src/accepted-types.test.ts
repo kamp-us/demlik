@@ -34,28 +34,28 @@ describe("acceptedTypes — transitions form", () => {
   };
 
   it("returns the refusing state's own row keys, not the table-wide union", () => {
-    expect(acceptedTypes(machine, { type: "running" })).toEqual([
+    expect(acceptedTypes(machine, { _tag: "running" })).toEqual([
       "step",
       "halt",
     ]);
-    expect(acceptedTypes(machine, { type: "idle" })).toEqual(["start"]);
+    expect(acceptedTypes(machine, { _tag: "idle" })).toEqual(["start"]);
   });
 
   it("a state with no cells returns an empty array, not undefined and not a throw", () => {
-    const answer = acceptedTypes(machine, { type: "frozen" });
+    const answer = acceptedTypes(machine, { _tag: "frozen" });
     expect(answer).toEqual([]);
     expect(Array.isArray(answer)).toBe(true);
   });
 
   it("a state with no row at all accepts nothing, which is true of it", () => {
-    expect(acceptedTypes(machine, { type: "vanished" })).toEqual([]);
+    expect(acceptedTypes(machine, { _tag: "vanished" })).toEqual([]);
     // Untagged under the transitions form is the same fact: no row, no cells.
     expect(acceptedTypes(machine, { count: 1 })).toEqual([]);
   });
 
   it("a nullish state is read without a throw, and accepts nothing", () => {
     // The doc promises this function never throws; before #196 the row lookup
-    // dereferenced `state.type` and a pre-boot `null` crashed the caller that
+    // dereferenced `state._tag` and a pre-boot `null` crashed the caller that
     // trusted it.
     expect(acceptedTypes(machine, undefined)).toEqual([]);
     expect(acceptedTypes(machine, null)).toEqual([]);
@@ -69,7 +69,7 @@ describe("acceptedTypes — reducer form", () => {
   };
 
   it("returns the flat table's keys", () => {
-    expect(acceptedTypes(machine, { type: "counting", count: 3 })).toEqual([
+    expect(acceptedTypes(machine, { _tag: "counting", count: 3 })).toEqual([
       "bump",
       "reset",
     ]);
@@ -93,7 +93,7 @@ describe("acceptedTypes — reducer form", () => {
 
   it("an empty update returns an empty array", () => {
     expect(
-      acceptedTypes({ __form: "reducer", update: {} }, { type: "x" }),
+      acceptedTypes({ __form: "reducer", update: {} }, { _tag: "x" }),
     ).toEqual([]);
   });
 });
@@ -134,13 +134,13 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
    */
   const agrees = (
     machine: { update: object; __form?: "reducer" | "transitions" },
-    state: { type: string } | null | undefined,
+    state: { _tag: string } | null | undefined,
     msgType: string,
   ) => {
     const asked = acceptedTypes(machine, state);
     let refusal: NoCellError | undefined;
     try {
-      applyCell(machine, state, { type: msgType });
+      applyCell(machine, state, { _tag: msgType });
     } catch (err) {
       expect(err).toBeInstanceOf(NoCellError);
       refusal = err as NoCellError;
@@ -164,7 +164,7 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
         fc.constantFrom(...STATE_TYPES, "unmapped"),
         fc.constantFrom(...MSG_TYPES, "unmapped"),
         (machine, stateType, msgType) =>
-          agrees(machine, { type: stateType }, msgType),
+          agrees(machine, { _tag: stateType }, msgType),
       ),
     );
   });
@@ -174,7 +174,7 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
       fc.property(
         reducerArb,
         fc.constantFrom(...MSG_TYPES, "unmapped"),
-        (machine, msgType) => agrees(machine, { type: "counting" }, msgType),
+        (machine, msgType) => agrees(machine, { _tag: "counting" }, msgType),
       ),
     );
   });
@@ -222,7 +222,7 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
         fc.constantFrom(...STATE_TYPES, "unmapped"),
         fc.constantFrom(...MSG_TYPES, "unmapped"),
         (machine, stateType, msgType) =>
-          agrees(machine, { type: stateType }, msgType),
+          agrees(machine, { _tag: stateType }, msgType),
       ),
     );
   });
@@ -232,7 +232,7 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
       fc.property(
         poisonedReducerArb,
         fc.constantFrom(...MSG_TYPES, "unmapped"),
-        (machine, msgType) => agrees(machine, { type: "counting" }, msgType),
+        (machine, msgType) => agrees(machine, { _tag: "counting" }, msgType),
       ),
     );
   });
@@ -284,7 +284,7 @@ describe("applyCell on a nullish state — NoCellError, never a TypeError (#199)
     msgType: string,
   ) => {
     try {
-      applyCell(machine, state, { type: msgType });
+      applyCell(machine, state, { _tag: msgType });
     } catch (err) {
       return err;
     }

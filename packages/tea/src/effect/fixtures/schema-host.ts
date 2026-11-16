@@ -3,7 +3,7 @@ import { Machine } from "../index";
 
 export const CounterModel = Schema.Struct({ count: Schema.Number });
 export const CounterMsg = Schema.Struct({
-  type: Schema.Literal("UserIncremented"),
+  _tag: Schema.Literal("UserIncremented"),
   amount: Schema.Number,
 });
 export const counter = Machine.make({
@@ -20,7 +20,7 @@ export const PreferencesModel = Schema.Struct({
   selected: Schema.NullOr(Schema.String),
 });
 export const PreferencesMsg = Schema.Struct({
-  type: Schema.Literal("UserSelectedTheme"),
+  _tag: Schema.Literal("UserSelectedTheme"),
   theme: Schema.String,
 });
 export const preferences = Machine.make({
@@ -37,7 +37,7 @@ export const NotebookModel = Schema.Struct({
   notes: Schema.Array(Schema.String),
 });
 export const NotebookMsg = Schema.Struct({
-  type: Schema.Literal("UserAddedNote"),
+  _tag: Schema.Literal("UserAddedNote"),
   text: Schema.String,
 });
 export const notebook = Machine.make({

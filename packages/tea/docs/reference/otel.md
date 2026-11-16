@@ -45,34 +45,34 @@ interface AgentEventSource<R> {
     type: K,
     handler: (
       event: Extract<AgentEventHead & {
+        readonly _tag: "BrainStarted";
         readonly model: string | null;
         readonly payload: unknown;
         readonly purpose: string;
         readonly turn: number;
-        readonly type: "BrainStarted";
-      }, { type: K }> | Extract<AgentEventHead & {
+      }, { _tag: K }> | Extract<AgentEventHead & {
+        readonly _tag: "TurnSettled";
         readonly turn: AgentTurn;
-        readonly type: "TurnSettled";
         /** The usage the provider reported for this turn. Absent → none reported. */
         readonly usage?: TurnUsage;
-      }, { type: K }> | Extract<AgentEventHead & {
+      }, { _tag: K }> | Extract<AgentEventHead & {
+        readonly _tag: "ToolStarted";
         readonly args: Readonly<Record<string, unknown>>;
         readonly callId: string;
         readonly name: string;
-        readonly type: "ToolStarted";
-      }, { type: K }> | Extract<AgentEventHead & {
+      }, { _tag: K }> | Extract<AgentEventHead & {
+        readonly _tag: "ToolFailed";
         readonly callId: string;
         readonly failure: ToolFailure;
         readonly name: string;
-        readonly type: "ToolFailed";
-      }, { type: K }> | Extract<AgentEventHead & {
+      }, { _tag: K }> | Extract<AgentEventHead & {
+        readonly _tag: "RunDone";
         readonly status: AgentEndedStatus;
-        readonly type: "RunDone";
-      }, { type: K }> | Extract<AgentEventHead & {
+      }, { _tag: K }> | Extract<AgentEventHead & {
+        readonly _tag: "ToolSettled";
         readonly callId: string;
         readonly result: R;
-        readonly type: "ToolSettled";
-      }, { type: K }>,
+      }, { _tag: K }>,
     ) => void,
   ): () => void;
 }

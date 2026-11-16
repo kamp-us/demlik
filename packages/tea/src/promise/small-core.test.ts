@@ -66,12 +66,12 @@ type Model = {
   readonly bag: { count: number };
 };
 type Msg =
-  | { readonly type: "bump"; readonly to?: string }
-  | { readonly type: "explode" }
-  | { readonly type: "mutate" }
-  | { readonly type: "misaddress" }
-  | { readonly type: "load" }
-  | { readonly type: "finish" };
+  | { readonly _tag: "bump"; readonly to?: string }
+  | { readonly _tag: "explode" }
+  | { readonly _tag: "mutate" }
+  | { readonly _tag: "misaddress" }
+  | { readonly _tag: "load" }
+  | { readonly _tag: "finish" };
 
 const fresh: Model = {
   owner: "run-a",
@@ -105,8 +105,8 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
 const identity: Identity<Model, Msg | FetchSettled> = {
   ofState: (s) => s.owner,
   ofMsg: (msg) => {
-    if (msg.type === "misaddress") throw new Error("ofMsg boom");
-    return msg.type === "bump" ? msg.to : undefined;
+    if (msg._tag === "misaddress") throw new Error("ofMsg boom");
+    return msg._tag === "bump" ? msg.to : undefined;
   },
 };
 
@@ -159,7 +159,7 @@ describe("spike #264's eleven cases, against the new loop", () => {
     }).ready;
     const savesAtBoot = store.saves.length;
 
-    await expect(rt.dispatch({ type: "bump", to: "run-b" })).resolves.toBe(
+    await expect(rt.dispatch({ _tag: "bump", to: "run-b" })).resolves.toBe(
       undefined,
     );
 
@@ -177,12 +177,12 @@ describe("spike #264's eleven cases, against the new loop", () => {
       onError,
     }).ready;
 
-    await expect(rt.dispatch({ type: "misaddress" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "misaddress" })).rejects.toThrow(
       "ofMsg boom",
     );
     expect(reports.map((r) => r.phase)).toEqual(["reduce"]);
     // Escalate leaves the runtime live.
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().n).toBe(1);
     await rt.stop();
   });
@@ -191,16 +191,16 @@ describe("spike #264's eleven cases, against the new loop", () => {
     const rt = await run(machine, {
       interpret: answering({ n: 1 }),
       events: (msg, state) =>
-        msg.type === "bump" ? [{ type: "bumped" as const, n: state.n }] : [],
+        msg._tag === "bump" ? [{ _tag: "bumped" as const, n: state.n }] : [],
     }).ready;
     const seen: number[] = [];
     rt.on("bumped", (event) => {
       seen.push(event.n);
     });
 
-    await rt.dispatch({ type: "bump" });
-    await rt.dispatch({ type: "finish" });
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
+    await rt.dispatch({ _tag: "finish" });
+    await rt.dispatch({ _tag: "bump" });
 
     expect(seen).toEqual([1, 2]);
     await rt.stop();
@@ -214,7 +214,7 @@ describe("spike #264's eleven cases, against the new loop", () => {
     expect(rt.result()).toBeUndefined();
     const done = rt.done();
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
 
     await expect(done).resolves.toMatchObject({ done: true });
     expect(rt.result()).toMatchObject({ done: true });
@@ -240,10 +240,10 @@ describe("spike #264's eleven cases, against the new loop", () => {
       onError,
     }).ready;
 
-    await expect(rt.dispatch({ type: "explode" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "explode" })).rejects.toThrow(
       "reducer boom",
     );
-    await expect(rt.dispatch({ type: "bump" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "bump" })).rejects.toThrow(
       "runtime stopped",
     );
     expect(reports.map((r) => r.phase)).toEqual(["reduce"]);
@@ -257,10 +257,10 @@ describe("spike #264's eleven cases, against the new loop", () => {
       onError: () => {},
     }).ready;
 
-    await expect(rt.dispatch({ type: "explode" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "explode" })).rejects.toThrow(
       "reducer boom",
     );
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     expect(rt.getState().n).toBe(1);
     await rt.stop();
   });
@@ -276,10 +276,10 @@ describe("spike #264's eleven cases, against the new loop", () => {
     }).ready;
     const seen: string[] = [];
     rt.observe((msg) => {
-      seen.push(msg.type);
+      seen.push(msg._tag);
     });
 
-    await rt.dispatch({ type: "explode" });
+    await rt.dispatch({ _tag: "explode" });
 
     expect(rt.getState().n).toBe(-1);
     expect(seen).toEqual(["explode"]);
@@ -300,8 +300,8 @@ describe("spike #264's eleven cases, against the new loop", () => {
       onError: () => {},
     }).ready;
 
-    await second.dispatch({ type: "bump" });
-    const refused = first.dispatch({ type: "load" });
+    await second.dispatch({ _tag: "bump" });
+    const refused = first.dispatch({ _tag: "load" });
 
     await expect(refused).rejects.toBeInstanceOf(StoreConflictError);
     await expect(refused).rejects.toMatchObject({ _tag: "store_conflict" });
@@ -316,10 +316,10 @@ describe("spike #264's eleven cases, against the new loop", () => {
       clock: () => 42,
     }).ready;
     rt.observe((msg) => {
-      if (msg.type === "fetch_err") settled = msg;
+      if (msg._tag === "fetch_err") settled = msg;
     });
 
-    await rt.dispatch({ type: "load" });
+    await rt.dispatch({ _tag: "load" });
 
     expect(rt.getState().lastError).toBe("malformed_result");
     expect(rt.getState().ats).toEqual([42]);
@@ -334,7 +334,7 @@ describe("spike #264's eleven cases, against the new loop", () => {
       clock: () => 42,
     }).ready;
 
-    await rt.dispatch({ type: "load" });
+    await rt.dispatch({ _tag: "load" });
 
     expect(rt.getState().n).toBe(7);
     expect(rt.getState().ats).toEqual([42]);
@@ -349,7 +349,7 @@ describe("spike #264's eleven cases, against the new loop", () => {
       onError,
     }).ready;
 
-    await expect(rt.dispatch({ type: "mutate" })).rejects.toThrow();
+    await expect(rt.dispatch({ _tag: "mutate" })).rejects.toThrow();
     expect(rt.getState().bag.count).toBe(0);
     expect(reports.map((r) => r.phase)).toEqual(["reduce"]);
     await rt.stop();
@@ -359,7 +359,7 @@ describe("spike #264's eleven cases, against the new loop", () => {
 describe("the core's sub reconcile", () => {
   type Tick = Sub<"tick", { readonly every: number }>;
   type TModel = { readonly every: number | null };
-  type TMsg = { readonly type: "set"; readonly every: number | null };
+  type TMsg = { readonly _tag: "set"; readonly every: number | null };
   const ticker = defineMachine({
     types: {
       model: {} as TModel,
@@ -371,7 +371,7 @@ describe("the core's sub reconcile", () => {
     update: { set: (_s, msg) => [{ every: msg.every }, []] },
     subs: [
       {
-        type: "tick",
+        _tag: "tick",
         deps: (s: TModel) => (s.every === null ? null : { every: s.every }),
       },
     ],
@@ -390,9 +390,9 @@ describe("the core's sub reconcile", () => {
       },
     }).ready;
 
-    await rt.dispatch({ type: "set", every: 10 });
-    await rt.dispatch({ type: "set", every: 20 });
-    await rt.dispatch({ type: "set", every: null });
+    await rt.dispatch({ _tag: "set", every: 10 });
+    await rt.dispatch({ _tag: "set", every: 20 });
+    await rt.dispatch({ _tag: "set", every: null });
 
     expect(log).toEqual(["start 10", "stop 10", "start 20", "stop 20"]);
     await rt.stop();
@@ -402,8 +402,8 @@ describe("the core's sub reconcile", () => {
 describe("what spike #264 left out", () => {
   it("stop() drains in-flight work and discards its follow-up as DispatchDiscardedError", async () => {
     type DModel = { readonly got: number };
-    type DMsg = { readonly type: "go" } | { readonly type: "got" };
-    type DCmd = { readonly type: "wait" };
+    type DMsg = { readonly _tag: "go" } | { readonly _tag: "got" };
+    type DCmd = { readonly _tag: "wait" };
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -417,7 +417,7 @@ describe("what spike #264 left out", () => {
       },
       init: () => [{ got: 0 }, []],
       update: {
-        go: (s) => [s, [{ type: "wait" }]],
+        go: (s) => [s, [{ _tag: "wait" }]],
         got: (s) => [{ got: s.got + 1 }, []],
       },
     });
@@ -426,13 +426,13 @@ describe("what spike #264 left out", () => {
       interpret: {
         wait: async () => {
           await gate;
-          return { type: "got" } as const;
+          return { _tag: "got" } as const;
         },
       },
       onError,
     }).ready;
 
-    const dispatched = rt.dispatchOnce({ type: "go" });
+    const dispatched = rt.dispatchOnce({ _tag: "go" });
     await Promise.resolve();
     const stopped = rt.stop();
     release();
@@ -445,7 +445,7 @@ describe("what spike #264 left out", () => {
       expect.any(RuntimeDiscardedError),
       expect.any(DispatchDiscardedError),
     ]);
-    await expect(rt.dispatch({ type: "go" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "go" })).rejects.toThrow(
       "runtime stopped",
     );
   });
@@ -465,14 +465,14 @@ describe("what spike #264 left out", () => {
     const carrier = defineMachine({
       types: {
         model: {} as CModel,
-        msg: {} as { readonly type: "go" },
+        msg: {} as { readonly _tag: "go" },
         ctx: {} as NoCtx,
       },
       cmds: [fetch, carry],
       init: () => [{ n: 0, ats: [] }, []],
       update: {
         go: (m: CModel) => [m, [carry({})]],
-        fetch_ok: (m: CModel, msg: Extract<CSettled, { type: "fetch_ok" }>) => [
+        fetch_ok: (m: CModel, msg: Extract<CSettled, { _tag: "fetch_ok" }>) => [
           { n: msg.value.n, ats: [...m.ats, msg.at] },
           [],
         ],
@@ -482,7 +482,7 @@ describe("what spike #264 left out", () => {
       },
     });
     const baseFetch: Interpret<
-      { readonly type: "go" } | CSettled,
+      { readonly _tag: "go" } | CSettled,
       ReturnType<typeof fetch> | ReturnType<typeof carry>,
       NoCtx
     >["fetch"] = async (_cmd, { ok }) => ok({ n: 5 });
@@ -502,7 +502,7 @@ describe("what spike #264 left out", () => {
       clock: () => 9,
     }).ready;
 
-    await rt.dispatch({ type: "go" });
+    await rt.dispatch({ _tag: "go" });
 
     expect(rt.getState()).toEqual({ n: 5, ats: [9] });
     await rt.stop();
@@ -521,9 +521,9 @@ describe("telemetry (withTelemetry moved inside the loop, #268)", () => {
       },
     }).ready;
 
-    await rt.dispatch({ type: "bump" });
-    await rt.dispatch({ type: "bump", to: "run-b" });
-    await rt.dispatch({ type: "load" });
+    await rt.dispatch({ _tag: "bump" });
+    await rt.dispatch({ _tag: "bump", to: "run-b" });
+    await rt.dispatch({ _tag: "load" });
 
     expect(events).toEqual([
       { seq: 1, msgType: "bump", at: 42 },
@@ -541,7 +541,7 @@ describe("telemetry (withTelemetry moved inside the loop, #268)", () => {
       telemetry: () => Promise.reject(new Error("sink down")),
     }).ready;
 
-    await rt.dispatch({ type: "bump" });
+    await rt.dispatch({ _tag: "bump" });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(rt.getState().n).toBe(1);

@@ -27,7 +27,7 @@ import { … } from "@demlik/tea/react";
 ```ts
 function useMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -45,7 +45,7 @@ function useMachine<
 ```ts
 type UseMachineOpts<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -61,11 +61,11 @@ type UseMachineOpts<
 ### `useRuntime`
 
 ```ts
-function useRuntime<S, M extends { type: string }>(
+function useRuntime<S, M extends { _tag: string }>(
   runtime: ViewHandle<S, M>,
   opts?: UseRuntimeOpts,
 ): [S, (msg: M) => void]
-function useRuntime<S, M extends { type: string }, V>(
+function useRuntime<S, M extends { _tag: string }, V>(
   runtime: ViewHandle<S, M>,
   select: (state: S) => V,
   opts?: UseRuntimeOpts,
@@ -88,7 +88,7 @@ type UseRuntimeOpts = {
 ### `ViewHandle`
 
 ```ts
-type ViewHandle<S, M extends { type: string }> = {
+type ViewHandle<S, M extends { _tag: string }> = {
   getState(): S;
   subscribe(listener: () => void): () => void;
 } & SendTarget<S, M>

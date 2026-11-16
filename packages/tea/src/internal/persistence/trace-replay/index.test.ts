@@ -11,8 +11,8 @@ import { replayTrace } from "./index";
 // on a real `state.queue[i].status` shape, the canonical regression case.
 // ---------------------------------------------------------------------------
 type Item = { id: string; status: "pending" | "done" };
-type State = { type: "queue"; items: readonly Item[]; processed: number };
-type Msg = { type: "enqueue"; id: string } | { type: "complete"; id: string };
+type State = { _tag: "queue"; items: readonly Item[]; processed: number };
+type Msg = { _tag: "enqueue"; id: string } | { _tag: "complete"; id: string };
 type Ctx = Record<string, never>;
 
 // The ORIGINAL reducer: completing an item flips its status to "done".
@@ -20,7 +20,7 @@ function queueMachine() {
   return defineMachine({
     types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [
-      loaded ?? { type: "queue", items: [], processed: 0 },
+      loaded ?? { _tag: "queue", items: [], processed: 0 },
       Cmd.none,
     ],
     update: {
@@ -49,7 +49,7 @@ function queueMachineBuggyStatus() {
   return defineMachine({
     types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [
-      loaded ?? { type: "queue", items: [], processed: 0 },
+      loaded ?? { _tag: "queue", items: [], processed: 0 },
       Cmd.none,
     ],
     update: {
@@ -66,10 +66,10 @@ async function recordRun() {
   const runtime = run(queueMachine(), { ctx: {} });
   const rec = recorder(runtime);
   await runtime.ready;
-  await runtime.dispatch({ type: "enqueue", id: "a" });
-  await runtime.dispatch({ type: "enqueue", id: "b" });
-  await runtime.dispatch({ type: "enqueue", id: "c" });
-  await runtime.dispatch({ type: "complete", id: "b" });
+  await runtime.dispatch({ _tag: "enqueue", id: "a" });
+  await runtime.dispatch({ _tag: "enqueue", id: "b" });
+  await runtime.dispatch({ _tag: "enqueue", id: "c" });
+  await runtime.dispatch({ _tag: "complete", id: "b" });
   const trace = rec.dump();
   await runtime.stop();
   return trace;
@@ -78,12 +78,12 @@ async function recordRun() {
 describe("replayTrace", () => {
   it("folds the captured post-init state without re-running init or its commands", async () => {
     type Model = { readonly count: number };
-    type Event = { readonly type: "add"; readonly by: number };
-    type Command = { readonly type: "write" };
+    type Event = { readonly _tag: "add"; readonly by: number };
+    type Command = { readonly _tag: "write" };
     const init = vi.fn(
       (loaded: Model | null): readonly [Model, readonly Command[]] => [
         { count: (loaded?.count ?? 0) + 10 },
-        [{ type: "write" }],
+        [{ _tag: "write" }],
       ],
     );
     const machine = defineMachine({
@@ -95,7 +95,7 @@ describe("replayTrace", () => {
       init,
       update: { add: (s, m) => [{ count: s.count + m.by }, []] },
     });
-    const write = vi.fn(async (): Promise<Event> => ({ type: "add", by: 1 }));
+    const write = vi.fn(async (): Promise<Event> => ({ _tag: "add", by: 1 }));
     const booting = run(machine, {
       store: memoryStore<Model>({ count: 4 }),
       interpret: { write },
@@ -104,7 +104,7 @@ describe("replayTrace", () => {
     const rt = await booting.ready;
     try {
       await rt.idle();
-      await rt.dispatch({ type: "add", by: 3 });
+      await rt.dispatch({ _tag: "add", by: 3 });
       const trace = rec.dump();
       expect(trace.loaded).toEqual({ count: 14 });
       expect(replayTrace(machine, trace, {}).actual).toEqual({ count: 18 });
@@ -124,7 +124,7 @@ describe("replayTrace", () => {
       replayTrace(machine, {
         loaded: null,
         msgs: [],
-        finalState: { type: "queue", items: [], processed: 0 },
+        finalState: { _tag: "queue", items: [], processed: 0 },
       }),
     ).toThrow(/no captured initial State/);
     expect(init).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe("replayTrace", () => {
 
     const result = replayTrace(queueMachine(), trace, {});
     expect(result.matches).toBe(true);
-    expect(result.actual).toEqual({ type: "queue", items: [], processed: 0 });
+    expect(result.actual).toEqual({ _tag: "queue", items: [], processed: 0 });
   });
 
   it("reports a top-level scalar divergence at the root-most differing path", async () => {
@@ -184,11 +184,11 @@ describe("replayTrace names the msg a replay breaks at", () => {
     const rec = recorder(runtime, { captureSteps });
     await runtime.ready;
     for (const id of ["a", "b", "c", "d", "e"]) {
-      await runtime.dispatch({ type: "enqueue", id });
+      await runtime.dispatch({ _tag: "enqueue", id });
     }
-    await runtime.dispatch({ type: "complete", id: "b" });
-    await runtime.dispatch({ type: "enqueue", id: "f" });
-    await runtime.dispatch({ type: "complete", id: "d" });
+    await runtime.dispatch({ _tag: "complete", id: "b" });
+    await runtime.dispatch({ _tag: "enqueue", id: "f" });
+    await runtime.dispatch({ _tag: "complete", id: "d" });
     const jsonl = rec.toJSONL();
     await runtime.stop();
     return jsonl;
@@ -202,7 +202,7 @@ describe("replayTrace names the msg a replay breaks at", () => {
       path: "state.items[1].status",
       expected: "done",
       actual: "pending",
-      at: { index: 5, msg: { type: "complete", id: "b" } },
+      at: { index: 5, msg: { _tag: "complete", id: "b" } },
     });
     expect(result.states).toHaveLength(8);
   });
@@ -227,7 +227,7 @@ describe("replayTrace names the msg a replay breaks at", () => {
       types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
       init: queueMachine().init,
       update: {
-        enqueue: (s: State, m: Extract<Msg, { type: "enqueue" }>) => [
+        enqueue: (s: State, m: Extract<Msg, { _tag: "enqueue" }>) => [
           { ...s, items: [...s.items, { id: m.id, status: "pending" }] },
           Cmd.none,
         ],
@@ -237,7 +237,7 @@ describe("replayTrace names the msg a replay breaks at", () => {
     expect(result.matches).toBe(false);
     expect(result.refusal).toEqual({
       index: 5,
-      msg: { type: "complete", id: "b" },
+      msg: { _tag: "complete", id: "b" },
       stateName: "queue",
       acceptedTypes: ["enqueue"],
     });

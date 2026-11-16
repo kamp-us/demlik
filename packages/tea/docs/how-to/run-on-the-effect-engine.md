@@ -44,8 +44,8 @@ export interface ProfileState {
 }
 
 export type ProfileMsg =
-  | { readonly type: "look_up"; readonly id: string }
-  | { readonly type: "clear" };
+  | { readonly _tag: "look_up"; readonly id: string }
+  | { readonly _tag: "clear" };
 
 export const profile = defineMachine({
   types: { model: {} as ProfileState, msg: {} as ProfileMsg },
@@ -66,9 +66,9 @@ export const profile = defineMachine({
   // A miss clears itself after two seconds. Both engines ship `timer`.
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s) =>
-        s.status === "missing" ? { ms: 2_000, msg: { type: "clear" } } : null,
+        s.status === "missing" ? { ms: 2_000, msg: { _tag: "clear" } } : null,
     },
   ],
 });
@@ -129,7 +129,7 @@ export const lookUp = (id: string) =>
   Effect.gen(function* () {
     const handle = yield* runProfile;
     const runtime = yield* handle.ready;
-    yield* runtime.dispatch({ type: "look_up", id });
+    yield* runtime.dispatch({ _tag: "look_up", id });
     return runtime.getState();
   }).pipe(Effect.scoped);
 ```
@@ -218,7 +218,7 @@ run(chat, {
     room: (sub) =>
       roomFeed(sub.deps.roomId).pipe(
         Stream.catchTag("SocketClosed", (e) =>
-          Stream.make({ type: "disconnected", code: e.code } as const),
+          Stream.make({ _tag: "disconnected", code: e.code } as const),
         ),
       ),
   },
@@ -265,7 +265,7 @@ them:
   becomes its `_err` Msg instead.
 
 ```ts
-const sent = runtime.dispatch({ type: "look_up", id }).pipe(
+const sent = runtime.dispatch({ _tag: "look_up", id }).pipe(
   Effect.as("sent"),
   Effect.catchTags({
     Stopped: () => Effect.succeed("stopped"),

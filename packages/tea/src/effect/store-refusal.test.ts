@@ -222,7 +222,7 @@ describe("the restore-or-refuse how-to — the host's view", () => {
       phase: "unrestored",
       reason: "the saved notes are not a note list",
     });
-    await rt.dispatch({ type: "add", text: "ignored" });
+    await rt.dispatch({ _tag: "add", text: "ignored" });
     await rt.stop();
 
     expect(await readFile(path, "utf8")).toBe(other);

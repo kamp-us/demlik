@@ -31,12 +31,12 @@ interface State {
 
 type Msg =
   | {
-      type: "webhook_received";
+      _tag: "webhook_received";
       event: PaymentEvent;
       at: number;
       itemId: string;
     }
-  | { type: "worker_done"; key: string; receipt: Receipt; at: number };
+  | { _tag: "worker_done"; key: string; receipt: Receipt; at: number };
 
 type ProcessCmd = Cmd<"run_charge"> & {
   key: string;
@@ -84,20 +84,20 @@ export const webhookIntake = defineMachine({
         m.itemId,
       );
       const appCmds: AppCmd[] = intakeCmds.map((cmd) =>
-        cmd.type === "intake:process"
+        cmd._tag === "intake:process"
           ? {
-              type: "run_charge",
+              _tag: "run_charge",
               key: cmd.key,
               itemId: cmd.itemId,
               event: cmd.payload,
               at: m.at,
             }
-          : { type: "serve_cached", key: cmd.key, receipt: cmd.result },
+          : { _tag: "serve_cached", key: cmd.key, receipt: cmd.result },
       );
       const droppedPending =
         intakeCmds.length === 0 ? s.absorbed + 1 : s.absorbed;
       const servedFromCache = intakeCmds.some(
-        (cmd) => cmd.type === "intake:replay",
+        (cmd) => cmd._tag === "intake:replay",
       )
         ? s.replayed + 1
         : s.replayed;
@@ -139,7 +139,7 @@ export const webhookIntakeInterpret: Interpret<Msg, AppCmd, Ctx> = {
     console.log(
       `  enqueue+process  ${cmd.event.id}  →  ${receipt.ledgerEntry} ($${(receipt.amountCents / 100).toFixed(2)} for ${receipt.customer})`,
     );
-    return { type: "worker_done", key: cmd.key, receipt, at: cmd.at };
+    return { _tag: "worker_done", key: cmd.key, receipt, at: cmd.at };
   },
   serve_cached: async (cmd) => {
     console.log(
@@ -216,7 +216,7 @@ async function main() {
   for (const { event, at } of inbox) {
     nextId += 1;
     await runtime.dispatch({
-      type: "webhook_received",
+      _tag: "webhook_received",
       event,
       at,
       itemId: `q-${nextId}`,

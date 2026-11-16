@@ -29,19 +29,19 @@ type State = {
   readonly steps: number;
 };
 type Msg =
-  | { readonly type: "start" }
-  | { readonly type: "step" }
-  | { readonly type: "blow_up" };
-type JobCmd = { readonly type: "next" } | { readonly type: "explode" };
+  | { readonly _tag: "start" }
+  | { readonly _tag: "step" }
+  | { readonly _tag: "blow_up" };
+type JobCmd = { readonly _tag: "next" } | { readonly _tag: "explode" };
 
 function jobMachine() {
   const update: Reducer<State, Msg, JobCmd> = {
-    start: (s) => [{ ...s, phase: "running" }, [{ type: "next" }]],
+    start: (s) => [{ ...s, phase: "running" }, [{ _tag: "next" }]],
     step: (s) => {
       const steps = s.steps + 1;
       return steps >= 3
         ? [{ phase: "done", steps }, []]
-        : [{ ...s, steps }, [{ type: "next" }]];
+        : [{ ...s, steps }, [{ _tag: "next" }]];
     },
     blow_up: (s) => [{ ...s, phase: "failed" }, []],
   };
@@ -58,8 +58,8 @@ function jobMachine() {
 }
 
 const jobInterpret: Interpret<Msg, JobCmd, undefined> = {
-  next: async () => ({ type: "step" }),
-  explode: async () => ({ type: "blow_up" }),
+  next: async () => ({ _tag: "step" }),
+  explode: async () => ({ _tag: "blow_up" }),
 };
 
 const isDone = (s: State): boolean => s.phase === "done";
@@ -68,7 +68,7 @@ const isFailed = (s: State): boolean => s.phase === "failed";
 // Wrap the handle `run()` returns so the test can read what the drive did to
 // it: how many observers are attached right now, and whether `stop()` settled.
 // Spreading the runtime is sound — its members are closures, not `this` users.
-function instrument<S, M extends { type: string }>(
+function instrument<S, M extends { _tag: string }>(
   handle: BootingRuntime<S, M>,
 ) {
   let attached = 0;
@@ -113,7 +113,7 @@ describe("driveToDone — resolves with the terminal State (#57)", () => {
     );
     const before = probe.attached;
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isDone);
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isDone);
 
     expect(final).toEqual({ phase: "done", steps: 3 });
     expect(probe.attached).toBe(before);
@@ -130,10 +130,10 @@ describe("driveToDone — resolves with the terminal State (#57)", () => {
     );
     const applied: string[] = [];
     probe.handle.observe((msg) => {
-      applied.push(msg.type);
+      applied.push(msg._tag);
     });
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isDone);
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isDone);
 
     expect(final).toEqual({ phase: "done", steps: 3 });
     expect(applied).toEqual([]);
@@ -146,7 +146,7 @@ describe("driveToDone — resolves with the terminal State (#57)", () => {
       ctx: undefined,
       interpret: jobInterpret,
     }).ready;
-    const final = await driveToDone(runtime, { type: "start" }, isDone);
+    const final = await driveToDone(runtime, { _tag: "start" }, isDone);
     expect(final.phase).toBe("done");
   });
 });
@@ -157,7 +157,7 @@ describe("driveToDone — typed rejections (#57)", () => {
       run(jobMachine(), { ctx: undefined, interpret: jobInterpret }),
     );
 
-    const drive = driveToDone(probe.handle, { type: "blow_up" }, isDone, {
+    const drive = driveToDone(probe.handle, { _tag: "blow_up" }, isDone, {
       failed: isFailed,
     });
 
@@ -178,14 +178,14 @@ describe("driveToDone — typed rejections (#57)", () => {
     // re-emits `loop`. No State is ever terminal, so the only way out is the
     // cap `dispatch` already rejects on — no second clock.
     type S2 = { readonly ticks: number };
-    type M2 = { readonly type: "start" } | { readonly type: "tick" };
-    type C2 = { readonly type: "loop" };
+    type M2 = { readonly _tag: "start" } | { readonly _tag: "tick" };
+    type C2 = { readonly _tag: "loop" };
     const update: Reducer<S2, M2, C2> = {
-      start: (s) => [s, [{ type: "loop" }]],
-      tick: (s) => [{ ticks: s.ticks + 1 }, [{ type: "loop" }]],
+      start: (s) => [s, [{ _tag: "loop" }]],
+      tick: (s) => [{ ticks: s.ticks + 1 }, [{ _tag: "loop" }]],
     };
     const interpret: Interpret<M2, C2, undefined> = {
-      loop: async () => ({ type: "tick" }),
+      loop: async () => ({ _tag: "tick" }),
     };
     const livelock = defineMachine({
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
@@ -204,7 +204,7 @@ describe("driveToDone — typed rejections (#57)", () => {
     );
 
     await expect(
-      driveToDone(probe.handle, { type: "start" }, () => false),
+      driveToDone(probe.handle, { _tag: "start" }, () => false),
     ).rejects.toBeInstanceOf(QuiescenceTimeoutError);
     expect(probe.attached).toBe(0);
     expect(probe.stopped).toBe(true);
@@ -215,7 +215,7 @@ describe("driveToDone — typed rejections (#57)", () => {
     // is quiescent, nothing inside the runtime can move it, and before #68 the
     // drive waited on that forever with `stop()` never reached.
     type S3 = { readonly phase: "idle" | "waiting" | "done" };
-    type M3 = { readonly type: "start" } | { readonly type: "finish" };
+    type M3 = { readonly _tag: "start" } | { readonly _tag: "finish" };
     const update: Reducer<S3, M3, never> = {
       start: () => [{ phase: "waiting" }, []],
       finish: () => [{ phase: "done" }, []],
@@ -229,7 +229,7 @@ describe("driveToDone — typed rejections (#57)", () => {
 
     const drive = driveToDone(
       probe.handle,
-      { type: "start" },
+      { _tag: "start" },
       (s) => s.phase === "done",
     );
 
@@ -266,7 +266,7 @@ describe("driveToDone — typed rejections (#57)", () => {
 
     const failure = await driveToDone(
       probe.handle,
-      { type: "start" },
+      { _tag: "start" },
       isDone,
     ).catch((err: unknown) => err);
     expect(failure).toBeInstanceOf(StoreRefusedError);
@@ -281,7 +281,7 @@ describe("driveToDone — typed rejections (#57)", () => {
 // runner and with the built-in timer.
 describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", () => {
   type S4 = { readonly phase: "idle" | "waiting" | "done" };
-  type M4 = { readonly type: "start" } | { readonly type: "finish" };
+  type M4 = { readonly _tag: "start" } | { readonly _tag: "finish" };
   const update: Reducer<S4, M4, never> = {
     start: () => [{ phase: "waiting" }, []],
     finish: () => [{ phase: "done" }, []],
@@ -290,7 +290,7 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
   // A one-shot timer that delivers `finish` on a later macrotask — after the
   // quiescent drain has already returned.
   const finishLater = (dispatch: (msg: M4) => void): (() => void) => {
-    const timer = setTimeout(() => dispatch({ type: "finish" }), 5);
+    const timer = setTimeout(() => dispatch({ _tag: "finish" }), 5);
     return () => clearTimeout(timer);
   };
 
@@ -302,7 +302,7 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
       update,
       subs: [
         {
-          type: "finish",
+          _tag: "finish",
           deps: (s) => (s.phase === "waiting" ? { armed: true } : null),
         },
       ],
@@ -314,7 +314,7 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
       }),
     );
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isDone4);
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isDone4);
 
     expect(final).toEqual({ phase: "done" });
     expect(probe.attached).toBe(0);
@@ -328,17 +328,17 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
       update,
       subs: [
         {
-          type: "timer",
+          _tag: "timer",
           deps: (s) =>
             s.phase === "waiting"
-              ? { ms: 5, msg: { type: "finish" } as const }
+              ? { ms: 5, msg: { _tag: "finish" } as const }
               : null,
         },
       ],
     });
     const probe = instrument(run(machine, { ctx: undefined }));
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isDone4);
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isDone4);
 
     expect(final).toEqual({ phase: "done" });
     expect(probe.attached).toBe(0);
@@ -355,10 +355,10 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
 describe("driveToDone — cancellation via an AbortSignal", () => {
   type S5 = { readonly phase: "idle" | "running" | "done" | "halted" };
   type M5 =
-    | { readonly type: "start" }
-    | { readonly type: "halt" }
-    | { readonly type: "boom" };
-  type C5 = { readonly type: "loop" };
+    | { readonly _tag: "start" }
+    | { readonly _tag: "halt" }
+    | { readonly _tag: "boom" };
+  type C5 = { readonly _tag: "loop" };
 
   // A machine that never finishes on its own: every `start` re-enters itself
   // through an interpret follow-up, so only a cancel can end the drive.
@@ -367,7 +367,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
       start: (s) =>
         s.phase === "halted"
           ? [s, []]
-          : [{ phase: "running" }, [{ type: "loop" }]],
+          : [{ phase: "running" }, [{ _tag: "loop" }]],
       halt: () => [{ phase: "halted" }, []],
       // A cancel fold that throws instead of landing a State — the shape a
       // direct kernel consumer can hand `driveToDone` (#170).
@@ -378,7 +378,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     const interpret: Interpret<M5, C5, undefined> = {
       loop: async () => {
         onLoop();
-        return { type: "start" };
+        return { _tag: "start" };
       },
     };
     const machine = defineMachine({
@@ -400,7 +400,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
 
   const isEnded5 = (s: S5): boolean =>
     s.phase === "done" || s.phase === "halted";
-  const cancel5 = () => ({ type: "halt" }) as const;
+  const cancel5 = () => ({ _tag: "halt" }) as const;
 
   it("an already-aborted signal cancels in place of `start`, so its effects never fire", async () => {
     let loops = 0;
@@ -415,7 +415,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
       ),
     );
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
       signal: controller.signal,
       cancel: cancel5,
     });
@@ -439,7 +439,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
       ),
     );
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
       signal: controller.signal,
       cancel: cancel5,
     });
@@ -459,7 +459,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     controller.abort();
     const probe = instrument(runLooper(() => {}, { ctx: undefined }));
 
-    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+    const final = await driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
       // The drive does not add the cancelled State to the failure set behind the
       // caller's back: only a State THIS predicate marks rejects, and it does not
       // mark `halted`.
@@ -474,7 +474,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
   // #170 — the cancel fold is the only thing that can land the terminal State
   // on an abort, so a throw there used to leave the drive awaiting a promise
   // nothing could resolve: no rejection, no `DriveStalledError`, a hang.
-  const boom5 = () => ({ type: "boom" }) as const;
+  const boom5 = () => ({ _tag: "boom" }) as const;
 
   it("an already-aborted signal whose cancel Msg throws rejects instead of hanging", async () => {
     const controller = new AbortController();
@@ -489,7 +489,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     );
 
     await expect(
-      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
         signal: controller.signal,
         cancel: boom5,
       }),
@@ -512,7 +512,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     );
 
     await expect(
-      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
         signal: controller.signal,
         cancel: boom5,
       }),
@@ -552,7 +552,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     // Without containment the throw escapes the abort listener: no dispatch is
     // enqueued, so `terminal` is never resolved and this await never returns.
     await expect(
-      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
         signal: controller.signal,
         cancel: throwingCancel,
       }),
@@ -567,7 +567,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     const probe = instrument(runLooper(() => {}, { ctx: undefined }));
 
     await expect(
-      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
         signal: controller.signal,
         cancel: throwingCancel,
       }),
@@ -584,7 +584,7 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     // The already-aborted exit runs the same `failed` check every other exit
     // does: same inputs, one answer, whichever path reached the State.
     await expect(
-      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      driveToDone(probe.handle, { _tag: "start" }, isEnded5, {
         failed: (s) => s.phase === "halted",
         signal: controller.signal,
         cancel: cancel5,

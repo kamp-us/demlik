@@ -119,7 +119,7 @@ export function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R> {
 
   return {
     onEvent: (event) => {
-      switch (event.type) {
+      switch (event._tag) {
         case "TurnSettled":
           turns.push(event.turn);
           return;

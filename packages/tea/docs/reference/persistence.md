@@ -46,7 +46,7 @@ import { … } from "@demlik/tea/persistence";
 ### `breadcrumbsFromTrace`
 
 ```ts
-function breadcrumbsFromTrace<S, M extends { type: string }>(
+function breadcrumbsFromTrace<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
   opts?: BreadcrumbsOptions<M>,
 ): TraceBreadcrumb[]
@@ -66,7 +66,7 @@ interface BreadcrumbsOptions<M> {
    */
   readonly limit?: number;
   /**
-   * Customize each breadcrumb's `message`. Default uses `msg.type`. Provide a
+   * Customize each breadcrumb's `message`. Default uses `msg._tag`. Provide a
    * serializer to surface a richer one-liner (e.g. include an id). The msg is
    * ALSO always attached verbatim under `data.msg` regardless of this option,
    * so the structured payload is never lost to the string rendering.
@@ -104,7 +104,7 @@ function parseJSONL<S, M>(jsonl: string): Trace<S, M>
 ### `recorder`
 
 ```ts
-function recorder<S, M extends { type: string }>(
+function recorder<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recorder<S, M>
@@ -292,7 +292,7 @@ interface ReplayResult<S, M = unknown> {
 ```ts
 function replayTrace<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -560,7 +560,7 @@ interface Trace<S, M> {
 ### `traceAttachment`
 
 ```ts
-function traceAttachment<S, M extends { type: string }>(
+function traceAttachment<S, M extends { _tag: string }>(
   trace: Trace<S, M>,
 ): TraceAttachment
 ```

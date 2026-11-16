@@ -497,7 +497,7 @@ export type AgentSnapshotConfig =
  *                 open `Cmd`) so `AgentCmd<P, TC>` stays a closed discriminated
  *                 union and the wired machine's interpret merge type-checks per
  *                 key — the brain handler maps to `resilient_run`, the tool one to
- *                 `TC["type"]` — with no laundering cast. Defaults to `Cmd` for
+ *                 `TC["_tag"]` — with no laundering cast. Defaults to `Cmd` for
  *                 the consumer that does not care to name its tool Cmd.
  *   - `Msg`     — the model's message shape (threaded through the llm-call loader).
  */

@@ -31,16 +31,16 @@ import { run } from "../promise";
 
 // ── 1. additive: the untyped shapes are untouched ───────────────────────────
 
-type Legacy = { readonly type: "ping"; readonly n: number };
-const legacy: Legacy = { type: "ping", n: 1 };
+type Legacy = { readonly _tag: "ping"; readonly n: number };
+const legacy: Legacy = { _tag: "ping", n: 1 };
 const legacyAsCmd: Cmd = legacy;
-const legacyNarrow: Cmd<"ping"> = { type: "ping" };
+const legacyNarrow: Cmd<"ping"> = { _tag: "ping" };
 void legacyAsCmd;
 void legacyNarrow;
 
 // `Cmd` has three parameters — tag, `Ok`, `E` — and no requirements slot.
 // @ts-expect-error a fourth (requirements) parameter does not exist
-const noRequirementsSlot: Cmd<"a", unknown, unknown, unknown> = { type: "a" };
+const noRequirementsSlot: Cmd<"a", unknown, unknown, unknown> = { _tag: "a" };
 void noRequirementsSlot;
 
 // `Cmd<never>` is still the cmdless marker — a real Cmd never satisfies it.
@@ -82,17 +82,17 @@ void fetchIsTyped;
 const typedIntoUntyped: Cmd<"fetch"> = fetch({ url: "/" });
 void typedIntoUntyped;
 
-// The value the constructor builds is the flat record: `type` beside the input.
-const built: { readonly type: "fetch"; readonly url: string } = fetch({
+// The value the constructor builds is the flat record: `_tag` beside the input.
+const built: { readonly _tag: "fetch"; readonly url: string } = fetch({
   url: "/",
 });
 void built;
 
-// A `type` key in the input schema is refused — it would overwrite the
+// A `_tag` key in the input schema is refused — it would overwrite the
 // discriminant.
 Cmd.define("clash", {
-  // @ts-expect-error `type` is not an input field
-  input: z.object({ type: z.string() }),
+  // @ts-expect-error `_tag` is not an input field
+  input: z.object({ _tag: z.string() }),
   ok: z.void(),
   err: [],
 });
@@ -103,7 +103,7 @@ type FetchCmd = ReturnType<typeof fetch>;
 // ── 2. the `_err` cell must be exhaustive over `E` ──────────────────────────
 
 type Model = { readonly body: string | null; readonly lastTag: string | null };
-type Msg = { readonly type: "go" };
+type Msg = { readonly _tag: "go" };
 
 // Every tag handled — the declared two AND the kernel-minted third.
 const exhaustive: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
@@ -185,7 +185,7 @@ const selfMinted: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
 void selfMinted;
 const foreign: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
   // @ts-expect-error nor may it answer with another Msg of the machine
-  fetch: async () => ({ type: "go" }) as const,
+  fetch: async () => ({ _tag: "go" }) as const,
 };
 void foreign;
 
@@ -212,7 +212,7 @@ run(machine, { ctx: {}, interpret: direct });
 run(machine, { interpret: direct });
 
 // A machine with NO typed Cmds still runs ctx-less (the #182 win is untouched).
-type PureMsg = { readonly type: "bump" };
+type PureMsg = { readonly _tag: "bump" };
 const pure = defineMachine({
   types: { model: {} as { n: number }, msg: {} as PureMsg, ctx: {} as NoCtx },
   init: () => [{ n: 0 }, []],

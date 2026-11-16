@@ -6,7 +6,7 @@ interface Model {
   readonly stamps: readonly number[];
 }
 
-type Msg = { readonly type: "tick"; readonly at: number };
+type Msg = { readonly _tag: "tick"; readonly at: number };
 
 type LogCmd = Cmd<"log"> & { readonly at: number };
 
@@ -24,7 +24,7 @@ const machineWith = (read: (m: Msg) => { state: number; cmd: number }) =>
         const { state, cmd } = read(m);
         return [
           { stamps: [...s.stamps, state] },
-          [{ type: "log" as const, at: cmd }],
+          [{ _tag: "log" as const, at: cmd }],
         ];
       },
     },
@@ -32,8 +32,8 @@ const machineWith = (read: (m: Msg) => { state: number; cmd: number }) =>
 
 const opts = {
   msgs: [
-    { type: "tick" as const, at: 10 },
-    { type: "tick" as const, at: 20 },
+    { _tag: "tick" as const, at: 10 },
+    { _tag: "tick" as const, at: 20 },
   ],
   ctx: undefined,
 };

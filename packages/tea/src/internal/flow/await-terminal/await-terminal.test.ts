@@ -14,9 +14,9 @@ interface JobState {
 }
 
 type JobMsg =
-  | { readonly type: "start" }
-  | { readonly type: "finish" }
-  | { readonly type: "noop" };
+  | { readonly _tag: "start" }
+  | { readonly _tag: "finish" }
+  | { readonly _tag: "noop" };
 
 const isDone = (s: JobState): boolean => s.phase === "done";
 
@@ -48,8 +48,8 @@ describe("awaitTerminal", () => {
     const runtime = await run(makeJob("idle"), {}).ready;
 
     const terminal = awaitTerminal(runtime, isDone);
-    await runtime.dispatch({ type: "start" }); // working — not terminal
-    await runtime.dispatch({ type: "finish" }); // done — terminal
+    await runtime.dispatch({ _tag: "start" }); // working — not terminal
+    await runtime.dispatch({ _tag: "finish" }); // done — terminal
 
     const state = await terminal;
     expect(state).toEqual({ phase: "done" });
@@ -69,13 +69,13 @@ describe("awaitTerminal", () => {
     };
 
     const terminal = awaitTerminal(runtime, countingIsDone);
-    await runtime.dispatch({ type: "finish" });
+    await runtime.dispatch({ _tag: "finish" });
     await terminal;
 
     const callsAtResolve = calls;
     // Drive two more transitions the detached observer must ignore.
-    await runtime.dispatch({ type: "noop" });
-    await runtime.dispatch({ type: "noop" });
+    await runtime.dispatch({ _tag: "noop" });
+    await runtime.dispatch({ _tag: "noop" });
     expect(calls).toBe(callsAtResolve);
 
     await runtime.stop();
@@ -105,7 +105,7 @@ describe("awaitTerminal", () => {
       const runtime = await run(makeJob("idle"), {}).ready;
 
       const terminal = awaitTerminal(runtime, isDone, { timeoutMs: 1000 });
-      await runtime.dispatch({ type: "finish" });
+      await runtime.dispatch({ _tag: "finish" });
       await expect(terminal).resolves.toEqual({ phase: "done" });
 
       // The resolve path cleared the timer — no pending timer remains, so
@@ -122,7 +122,7 @@ describe("runToTerminal", () => {
   it("boots, dispatches the seed msgs, and resolves with the terminal state", async () => {
     const state = await runToTerminal(
       makeJob("idle"),
-      { msgs: [{ type: "start" }, { type: "finish" }] },
+      { msgs: [{ _tag: "start" }, { _tag: "finish" }] },
       isDone,
     );
     expect(state).toEqual({ phase: "done" });
@@ -144,7 +144,7 @@ describe("runToTerminal", () => {
     it("rejects with TerminalTimeoutError and tears the runtime down when no terminal is reached", async () => {
       const terminal = runToTerminal(
         makeJob("idle"),
-        { msgs: [{ type: "start" }] }, // reaches `working`, never `done`
+        { msgs: [{ _tag: "start" }] }, // reaches `working`, never `done`
         isDone,
         { timeoutMs: 1000 },
       );
@@ -161,8 +161,8 @@ describe("runToTerminal", () => {
       // stop() gives up on the handler at `disposeTimeoutMs` and says so; the
       // default sink warns, which is noise here.
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      type StuckMsg = { readonly type: "start" };
-      type StuckCmd = { readonly type: "hang" };
+      type StuckMsg = { readonly _tag: "start" };
+      type StuckCmd = { readonly _tag: "hang" };
       const stuck = defineMachine({
         types: {
           model: {} as JobState,
@@ -171,14 +171,14 @@ describe("runToTerminal", () => {
           ctx: {} as NoCtx,
         },
         init: () => [{ phase: "idle" }, []],
-        update: { start: () => [{ phase: "working" }, [{ type: "hang" }]] },
+        update: { start: () => [{ phase: "working" }, [{ _tag: "hang" }]] },
       });
       const outcomes = [1, 2, 3].map(() =>
         runToTerminal(
           stuck,
           {
             interpret: { hang: () => new Promise<void>(() => {}) },
-            msgs: [{ type: "start" }],
+            msgs: [{ _tag: "start" }],
           },
           isDone,
           { timeoutMs: 100 },

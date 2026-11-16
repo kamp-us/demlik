@@ -20,8 +20,8 @@ export interface State {
 }
 
 export type Msg =
-  | { readonly type: "start"; readonly total: number }
-  | { readonly type: "chunk"; readonly size: number };
+  | { readonly _tag: "start"; readonly total: number }
+  | { readonly _tag: "chunk"; readonly size: number };
 
 /** A download that counts the bytes it has received until it has them all. */
 export const downloader = defineMachine({
@@ -57,10 +57,10 @@ function Downloader() {
       <p>
         {state.phase}: {state.received}/{state.total}
       </p>
-      <button type="button" onClick={() => send({ type: "start", total: 3 })}>
+      <button type="button" onClick={() => send({ _tag: "start", total: 3 })}>
         Start
       </button>
-      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
+      <button type="button" onClick={() => send({ _tag: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -117,7 +117,7 @@ const [state, send] = useMachine(jobWatcher, {
   subscribe: {
     job_poll: (sub, _ctx, dispatch) => {
       const timer = setInterval(
-        () => dispatch({ type: "poll_due", jobId: sub.deps.jobId }),
+        () => dispatch({ _tag: "poll_due", jobId: sub.deps.jobId }),
         2_000,
       );
       return () => clearInterval(timer);
@@ -218,7 +218,7 @@ function Progress() {
       <p>
         {state.received}/{state.total}
       </p>
-      <button type="button" onClick={() => send({ type: "chunk", size: 1 })}>
+      <button type="button" onClick={() => send({ _tag: "chunk", size: 1 })}>
         Receive chunk
       </button>
     </div>
@@ -283,12 +283,12 @@ To supply an error sink too, use `useRuntime(run, select, { onError })`.
 import type { ViewHandle } from "@demlik/tea/react";
 
 type TileId = "inbox" | "notes" | "timer";
-type TileMsg = { readonly type: "increment" };
+type TileMsg = { readonly _tag: "increment" };
 type DeskModel = {
   readonly views: Readonly<Record<TileId, { readonly n: number }>>;
 };
 type DeskMsg = {
-  readonly type: "tile";
+  readonly _tag: "tile";
   readonly id: TileId;
   readonly msg: TileMsg;
 };
@@ -296,10 +296,10 @@ type DeskRun = ViewHandle<DeskModel, DeskMsg>;
 
 function Tile({ run, id }: { run: DeskRun; id: TileId }) {
   const [view, send] = useRuntime(run, (m) => m.views[id]);
-  const sendToTile = (msg: TileMsg) => send({ type: "tile", id, msg });
+  const sendToTile = (msg: TileMsg) => send({ _tag: "tile", id, msg });
 
   return (
-    <button type="button" onClick={() => sendToTile({ type: "increment" })}>
+    <button type="button" onClick={() => sendToTile({ _tag: "increment" })}>
       {id}: {view.n}
     </button>
   );
@@ -382,7 +382,7 @@ function Lookup() {
   });
 
   return (
-    <button type="button" onClick={() => send({ type: "look_up", id: "u1" })}>
+    <button type="button" onClick={() => send({ _tag: "look_up", id: "u1" })}>
       {state.status}: {state.name}
     </button>
   );

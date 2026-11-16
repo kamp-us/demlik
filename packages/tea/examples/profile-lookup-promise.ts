@@ -22,7 +22,7 @@ export function runProfile(directory: Directory) {
 export async function lookUp(directory: Directory, id: string) {
   const runtime = await runProfile(directory).ready;
   try {
-    await runtime.dispatch({ type: "look_up", id });
+    await runtime.dispatch({ _tag: "look_up", id });
     return runtime.getState();
   } finally {
     await runtime.stop();

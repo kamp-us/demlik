@@ -73,7 +73,7 @@ put it in, by which time the window it was meant to keep open has already closed
 
 The window is not work the machine asked for; it is a thing the machine is
 *watching* while it sits in the `awaiting_payment` phase. That is a Sub, and the
-machine declares it as data: an entry in `subs` that names the Sub's `type` and
+machine declares it as data: an entry in `subs` that names the Sub's `_tag` and
 the slice of state it depends on (`deps`). The engine reads both the Sub's
 identity and its on/off gate out of that slice: non-null means on, `null` (or
 `undefined`) means off, and a change means restart.
@@ -90,8 +90,8 @@ type VendingState =
   | { readonly phase: "awaiting_payment"; readonly saleId: string };
 
 type VendingMsg =
-  | { readonly type: "sale_started"; readonly saleId: string }
-  | { readonly type: "payment_window_expired"; readonly saleId: string };
+  | { readonly _tag: "sale_started"; readonly saleId: string }
+  | { readonly _tag: "payment_window_expired"; readonly saleId: string };
 
 const vendingMachine = defineMachine({
   types: { model: {} as VendingState, msg: {} as VendingMsg },
@@ -109,12 +109,12 @@ const vendingMachine = defineMachine({
   },
   subs: [
     {
-      type: "timer",
+      _tag: "timer",
       deps: (s) =>
         s.phase === "awaiting_payment"
           ? {
               ms: 30_000,
-              msg: { type: "payment_window_expired", saleId: s.saleId },
+              msg: { _tag: "payment_window_expired", saleId: s.saleId },
             }
           : null,
     },
@@ -133,7 +133,7 @@ Anything that is not a plain countdown — a poll, a socket, a sensor — is a S
 type of your own. The machine names it in `types.sub` and declares it in `subs`
 exactly the same way. The code that opens the thing is its **runner**, and it
 does not live on the machine: it is handed to `run` in `subscribe`, gets the Sub
-as `{ id, type, deps }`, and returns the function that closes it.
+as `{ id, _tag, deps }`, and returns the function that closes it.
 
 ```ts
 import type { Sub } from "@demlik/tea";
@@ -146,8 +146,8 @@ type JobState =
   | { readonly phase: "waiting"; readonly jobId: string };
 
 type JobMsg =
-  | { readonly type: "job_started"; readonly jobId: string }
-  | { readonly type: "poll_due"; readonly jobId: string };
+  | { readonly _tag: "job_started"; readonly jobId: string }
+  | { readonly _tag: "poll_due"; readonly jobId: string };
 
 const jobs = defineMachine({
   types: { model: {} as JobState, msg: {} as JobMsg, sub: {} as JobPoll },
@@ -158,7 +158,7 @@ const jobs = defineMachine({
   },
   subs: [
     {
-      type: "job_poll",
+      _tag: "job_poll",
       deps: (s) => (s.phase === "waiting" ? { jobId: s.jobId } : null),
     },
   ],
@@ -168,7 +168,7 @@ run(jobs, {
   subscribe: {
     job_poll: (sub, _ctx, dispatch) => {
       const timer = setInterval(
-        () => dispatch({ type: "poll_due", jobId: sub.deps.jobId }),
+        () => dispatch({ _tag: "poll_due", jobId: sub.deps.jobId }),
         2_000,
       );
       return () => clearInterval(timer);

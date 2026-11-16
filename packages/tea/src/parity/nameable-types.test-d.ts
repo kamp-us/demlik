@@ -16,7 +16,7 @@ import {
 } from "./index";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "inc" };
+type Msg = { readonly _tag: "inc" };
 
 declare const machine: Machine<State, Msg, Cmd, never, void>;
 

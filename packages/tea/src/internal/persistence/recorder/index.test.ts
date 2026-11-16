@@ -13,11 +13,11 @@ import {
 // observe fires on the first microtask via `stepBootEffects`; `await
 // runtime.ready` guarantees it has fired before we read.
 // ---------------------------------------------------------------------------
-type State = { type: "counting"; count: number; log: readonly string[] };
+type State = { _tag: "counting"; count: number; log: readonly string[] };
 type Msg =
-  | { type: "inc"; by: number }
-  | { type: "dec"; by: number }
-  | { type: "note"; text: string };
+  | { _tag: "inc"; by: number }
+  | { _tag: "dec"; by: number }
+  | { _tag: "note"; text: string };
 
 function counter() {
   return defineMachine({
@@ -27,7 +27,7 @@ function counter() {
       ctx: {} as Record<string, never>,
     },
     init: (loaded) => [
-      loaded ?? { type: "counting", count: 0, log: [] },
+      loaded ?? { _tag: "counting", count: 0, log: [] },
       Cmd.none,
     ],
     update: {
@@ -44,23 +44,23 @@ describe("recorder", () => {
     const rec = recorder(runtime);
     await runtime.ready; // boot observe fires here
 
-    await runtime.dispatch({ type: "inc", by: 5 });
-    await runtime.dispatch({ type: "dec", by: 2 });
-    await runtime.dispatch({ type: "note", text: "hi" });
+    await runtime.dispatch({ _tag: "inc", by: 5 });
+    await runtime.dispatch({ _tag: "dec", by: 2 });
+    await runtime.dispatch({ _tag: "note", text: "hi" });
 
     const trace = rec.dump();
 
     // loaded = the post-init initial state captured at the boot observe.
-    expect(trace.loaded).toEqual({ type: "counting", count: 0, log: [] });
+    expect(trace.loaded).toEqual({ _tag: "counting", count: 0, log: [] });
     // msgs = the ordered, non-null msgs.
     expect(trace.msgs).toEqual([
-      { type: "inc", by: 5 },
-      { type: "dec", by: 2 },
-      { type: "note", text: "hi" },
+      { _tag: "inc", by: 5 },
+      { _tag: "dec", by: 2 },
+      { _tag: "note", text: "hi" },
     ]);
     // finalState = the last observed state.
     expect(trace.finalState).toEqual({
-      type: "counting",
+      _tag: "counting",
       count: 3,
       log: ["hi"],
     });
@@ -75,19 +75,19 @@ describe("recorder", () => {
     const rec = recorder(runtime, { captureSteps: true });
     await runtime.ready;
 
-    await runtime.dispatch({ type: "inc", by: 1 });
-    await runtime.dispatch({ type: "inc", by: 1 });
+    await runtime.dispatch({ _tag: "inc", by: 1 });
+    await runtime.dispatch({ _tag: "inc", by: 1 });
 
     const trace = rec.dump();
     expect(trace.steps).toEqual([
       {
-        msg: { type: "inc", by: 1 },
-        state: { type: "counting", count: 1, log: [] },
+        msg: { _tag: "inc", by: 1 },
+        state: { _tag: "counting", count: 1, log: [] },
         cmds: [],
       },
       {
-        msg: { type: "inc", by: 1 },
-        state: { type: "counting", count: 2, log: [] },
+        msg: { _tag: "inc", by: 1 },
+        state: { _tag: "counting", count: 2, log: [] },
         cmds: [],
       },
     ]);
@@ -100,9 +100,9 @@ describe("recorder", () => {
     const rec = recorder(runtime, { captureSteps: true });
     await runtime.ready;
 
-    await runtime.dispatch({ type: "inc", by: 10 });
-    await runtime.dispatch({ type: "note", text: "checkpoint" });
-    await runtime.dispatch({ type: "dec", by: 3 });
+    await runtime.dispatch({ _tag: "inc", by: 10 });
+    await runtime.dispatch({ _tag: "note", text: "checkpoint" });
+    await runtime.dispatch({ _tag: "dec", by: 3 });
 
     const dumped = rec.dump();
     const jsonl = rec.toJSONL();
@@ -112,7 +112,7 @@ describe("recorder", () => {
     expect(lines).toHaveLength(1 + dumped.msgs.length);
     expect(JSON.parse(lines[0])).toEqual({
       kind: "boot",
-      state: { type: "counting", count: 0, log: [] },
+      state: { _tag: "counting", count: 0, log: [] },
     });
 
     const rehydrated = parseJSONL<State, Msg>(jsonl);
@@ -126,15 +126,15 @@ describe("recorder", () => {
     const rec = recorder(runtime);
     await runtime.ready;
 
-    await runtime.dispatch({ type: "inc", by: 1 });
+    await runtime.dispatch({ _tag: "inc", by: 1 });
     rec.stop();
     // Dispatched AFTER stop — must NOT be recorded.
-    await runtime.dispatch({ type: "inc", by: 100 });
+    await runtime.dispatch({ _tag: "inc", by: 100 });
 
     const trace = rec.dump();
-    expect(trace.msgs).toEqual([{ type: "inc", by: 1 }]);
+    expect(trace.msgs).toEqual([{ _tag: "inc", by: 1 }]);
     // finalState froze at the last observed (pre-stop) transition.
-    expect(trace.finalState).toEqual({ type: "counting", count: 1, log: [] });
+    expect(trace.finalState).toEqual({ _tag: "counting", count: 1, log: [] });
 
     // stop() is idempotent.
     expect(() => rec.stop()).not.toThrow();
@@ -145,18 +145,18 @@ describe("recorder", () => {
   it("parseJSONL of a boot-only trace yields an empty-msgs Trace", () => {
     const jsonl = JSON.stringify({
       kind: "boot",
-      state: { type: "counting", count: 0, log: [] },
+      state: { _tag: "counting", count: 0, log: [] },
     });
     const trace = parseJSONL<State, Msg>(jsonl);
-    expect(trace.loaded).toEqual({ type: "counting", count: 0, log: [] });
+    expect(trace.loaded).toEqual({ _tag: "counting", count: 0, log: [] });
     expect(trace.msgs).toEqual([]);
-    expect(trace.finalState).toEqual({ type: "counting", count: 0, log: [] });
+    expect(trace.finalState).toEqual({ _tag: "counting", count: 0, log: [] });
   });
 
   it("parseJSONL throws on a missing boot header", () => {
     const jsonl = JSON.stringify({
       kind: "step",
-      msg: { type: "inc", by: 1 },
+      msg: { _tag: "inc", by: 1 },
       state: null,
     });
     expect(() => parseJSONL<State, Msg>(jsonl)).toThrow(
@@ -174,33 +174,33 @@ describe("recorder", () => {
     const rec = recorder(runtime, { captureSteps: true });
     await runtime.ready;
 
-    await runtime.dispatch({ type: "inc", by: 5 });
-    await runtime.dispatch({ type: "note", text: "a" });
-    await runtime.dispatch({ type: "dec", by: 2 });
-    await runtime.dispatch({ type: "inc", by: 10 });
+    await runtime.dispatch({ _tag: "inc", by: 5 });
+    await runtime.dispatch({ _tag: "note", text: "a" });
+    await runtime.dispatch({ _tag: "dec", by: 2 });
+    await runtime.dispatch({ _tag: "inc", by: 10 });
 
     const dumped = rec.dump();
 
     // One step per msg, each with the POST-transition state, in order.
     expect(dumped.steps).toEqual([
       {
-        msg: { type: "inc", by: 5 },
-        state: { type: "counting", count: 5, log: [] },
+        msg: { _tag: "inc", by: 5 },
+        state: { _tag: "counting", count: 5, log: [] },
         cmds: [],
       },
       {
-        msg: { type: "note", text: "a" },
-        state: { type: "counting", count: 5, log: ["a"] },
+        msg: { _tag: "note", text: "a" },
+        state: { _tag: "counting", count: 5, log: ["a"] },
         cmds: [],
       },
       {
-        msg: { type: "dec", by: 2 },
-        state: { type: "counting", count: 3, log: ["a"] },
+        msg: { _tag: "dec", by: 2 },
+        state: { _tag: "counting", count: 3, log: ["a"] },
         cmds: [],
       },
       {
-        msg: { type: "inc", by: 10 },
-        state: { type: "counting", count: 13, log: ["a"] },
+        msg: { _tag: "inc", by: 10 },
+        state: { _tag: "counting", count: 13, log: ["a"] },
         cmds: [],
       },
     ]);
@@ -232,18 +232,18 @@ describe("recorder", () => {
     const rec = recorder(runtime); // default: captureSteps false
     await runtime.ready;
 
-    await runtime.dispatch({ type: "inc", by: 7 });
-    await runtime.dispatch({ type: "note", text: "x" });
-    await runtime.dispatch({ type: "dec", by: 3 });
+    await runtime.dispatch({ _tag: "inc", by: 7 });
+    await runtime.dispatch({ _tag: "note", text: "x" });
+    await runtime.dispatch({ _tag: "dec", by: 3 });
 
     const dumped = rec.dump();
     // No per-step retention in the default mode.
     expect(dumped.steps).toBeUndefined();
     // But loaded + msgs + finalState are intact — the minimal replay-faithful
     // trace.
-    expect(dumped.loaded).toEqual({ type: "counting", count: 0, log: [] });
+    expect(dumped.loaded).toEqual({ _tag: "counting", count: 0, log: [] });
     expect(dumped.finalState).toEqual({
-      type: "counting",
+      _tag: "counting",
       count: 4,
       log: ["x"],
     });
@@ -289,8 +289,8 @@ describe("Sentry adapters", () => {
 
   it("traceAttachment emits the exact Sentry Attachment shape with JSONL data", async () => {
     const trace = await recordedTrace([
-      { type: "inc", by: 1 },
-      { type: "note", text: "boom" },
+      { _tag: "inc", by: 1 },
+      { _tag: "note", text: "boom" },
     ]);
     const att = traceAttachment(trace);
 
@@ -303,14 +303,14 @@ describe("Sentry adapters", () => {
 
   it("breadcrumbsFromTrace emits one Sentry Breadcrumb per msg, newest-last", async () => {
     const trace = await recordedTrace([
-      { type: "inc", by: 1 },
-      { type: "dec", by: 2 },
-      { type: "note", text: "boom" },
+      { _tag: "inc", by: 1 },
+      { _tag: "dec", by: 2 },
+      { _tag: "note", text: "boom" },
     ]);
     const crumbs = breadcrumbsFromTrace(trace);
 
     expect(crumbs).toHaveLength(3);
-    // Default message is msg.type; order is dispatch order (newest last).
+    // Default message is msg._tag; order is dispatch order (newest last).
     expect(crumbs.map((c) => c.message)).toEqual(["inc", "dec", "note"]);
     // Every crumb carries the canonical Sentry-shaped fields.
     expect(crumbs[0]).toEqual({
@@ -318,49 +318,49 @@ describe("Sentry adapters", () => {
       type: "default",
       level: "info",
       message: "inc",
-      data: { msg: { type: "inc", by: 1 } },
+      data: { msg: { _tag: "inc", by: 1 } },
     });
     // The full msg survives verbatim under data.msg.
-    expect(crumbs.at(-1)?.data?.msg).toEqual({ type: "note", text: "boom" });
+    expect(crumbs.at(-1)?.data?.msg).toEqual({ _tag: "note", text: "boom" });
   });
 
   it("breadcrumbsFromTrace honors the limit (keeps the newest `limit` msgs)", async () => {
     const trace = await recordedTrace([
-      { type: "inc", by: 1 },
-      { type: "inc", by: 2 },
-      { type: "inc", by: 3 },
-      { type: "inc", by: 4 },
-      { type: "inc", by: 5 },
+      { _tag: "inc", by: 1 },
+      { _tag: "inc", by: 2 },
+      { _tag: "inc", by: 3 },
+      { _tag: "inc", by: 4 },
+      { _tag: "inc", by: 5 },
     ]);
     const crumbs = breadcrumbsFromTrace(trace, { limit: 2 });
 
     // The two NEWEST msgs, in order.
     expect(crumbs).toHaveLength(2);
     expect(crumbs.map((c) => c.data?.msg)).toEqual([
-      { type: "inc", by: 4 },
-      { type: "inc", by: 5 },
+      { _tag: "inc", by: 4 },
+      { _tag: "inc", by: 5 },
     ]);
   });
 
   it("breadcrumbsFromTrace honors a custom serialize while keeping the full msg in data", async () => {
     const trace = await recordedTrace([
-      { type: "inc", by: 9 },
-      { type: "note", text: "tag" },
+      { _tag: "inc", by: 9 },
+      { _tag: "note", text: "tag" },
     ]);
     const crumbs = breadcrumbsFromTrace(trace, {
       serialize: (m) =>
-        m.type === "note"
+        m._tag === "note"
           ? `note(${m.text})`
-          : `${m.type}(${"by" in m ? m.by : ""})`,
+          : `${m._tag}(${"by" in m ? m.by : ""})`,
     });
 
     expect(crumbs.map((c) => c.message)).toEqual(["inc(9)", "note(tag)"]);
     // serialize affects `message` only — data.msg stays the structured msg.
-    expect(crumbs[0].data?.msg).toEqual({ type: "inc", by: 9 });
+    expect(crumbs[0].data?.msg).toEqual({ _tag: "inc", by: 9 });
   });
 
   it("breadcrumbsFromTrace with limit 0 yields no breadcrumbs", async () => {
-    const trace = await recordedTrace([{ type: "inc", by: 1 }]);
+    const trace = await recordedTrace([{ _tag: "inc", by: 1 }]);
     expect(breadcrumbsFromTrace(trace, { limit: 0 })).toEqual([]);
   });
 });

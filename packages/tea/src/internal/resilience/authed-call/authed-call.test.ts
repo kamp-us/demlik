@@ -62,13 +62,13 @@ interface HostState {
   readonly authed: AuthedState<string, string>;
 }
 type HostMsg =
-  | { type: "attempt"; key: string; input: string; at: number }
-  | { type: "unauthorized"; key: string; at: number }
+  | { _tag: "attempt"; key: string; input: string; at: number }
+  | { _tag: "unauthorized"; key: string; at: number }
   | TokenRefreshMsg
   | SucceedMsg<string>
   | FailMsg
   | ResilientTimerMsg;
-type HostCmd = RunCmd<string> | { type: "refresh_token" };
+type HostCmd = RunCmd<string> | { _tag: "refresh_token" };
 
 function makeMachine(
   config: Parameters<typeof createAuthedCall>[0] = fullConfig,
@@ -114,7 +114,7 @@ function makeMachine(
         return [{ authed: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => ac.timer(s.authed) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => ac.timer(s.authed) }],
   });
   return { ac, machine };
 }
@@ -170,7 +170,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
     const [s, cmds] = ac.attempt(ac.init(), "k", "payload", 42);
     expect(cmds).toEqual([
-      { type: "resilient_run", key: "k", input: "payload" },
+      { _tag: "resilient_run", key: "k", input: "payload" },
     ]);
     expect(s.resilience.calls.k).toEqual({
       phase: "running",
@@ -215,11 +215,11 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     [s] = ac.attempt(s, "k", "in", 0);
     [s] = ac.fail(s, errMsg("k", "e", 0));
     const [s2, cmds] = ac.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
-    expect(cmds).toEqual([{ type: "resilient_run", key: "k", input: "in" }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "k", input: "in" }]);
     expect(s2.resilience.calls.k.phase).toBe("running");
   });
 
@@ -238,7 +238,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     // The built-in timer arms the soonest one, counted from the slice's clock.
     expect(ac.timer(s)).toEqual({
       ms: 0,
-      msg: { type: "deadline_exceeded", id: "resilient:retry:k", atMs: 100 },
+      msg: { _tag: "deadline_exceeded", id: "resilient:retry:k", atMs: 100 },
     });
   });
 });
@@ -267,7 +267,7 @@ describe("createAuthedCall — the 401 dance (refresh → retry once)", () => {
     expect(installed.auth).toEqual({ token: tok(10_000, "new"), stale: false });
     const [s2, cmds] = ac.onRefreshed(installed, 10);
     // The parked call is re-issued through the resilient gate.
-    expect(cmds).toEqual([{ type: "resilient_run", key: "k", input: "in" }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "k", input: "in" }]);
     expect(s2.pendingAuthRetry).toEqual({}); // parked set cleared
     expect(s2.authRetry.k).toBe(1); // budget preserved — a 2nd 401 is terminal
   });
@@ -369,28 +369,28 @@ describe("createAuthedCall — wired in a machine (replay)", () => {
     bound.expectCmdSequence(
       {
         msgs: [
-          { type: "attempt", key: "k", input: "in", at: 0 },
-          { type: "unauthorized", key: "k", at: 0 },
+          { _tag: "attempt", key: "k", input: "in", at: 0 },
+          { _tag: "unauthorized", key: "k", at: 0 },
         ],
       },
-      [{ type: "resilient_run", key: "k", input: "in" }, refreshTokenCmd()],
+      [{ _tag: "resilient_run", key: "k", input: "in" }, refreshTokenCmd()],
     );
   });
 
   it("attempt → 401 → token_refreshed re-issues the run cmd", () => {
     const { cmds, state } = bound.replay({
       msgs: [
-        { type: "attempt", key: "k", input: "in", at: 0 },
-        { type: "unauthorized", key: "k", at: 0 },
+        { _tag: "attempt", key: "k", input: "in", at: 0 },
+        { _tag: "unauthorized", key: "k", at: 0 },
         refreshed(tok(10_000, "new"), 10),
       ],
     });
     // replay accumulates cmds across the whole sequence: the original run, the
     // refresh the 401 asked for, then the re-issued run after the token landed.
     expect(cmds).toEqual([
-      { type: "resilient_run", key: "k", input: "in" },
+      { _tag: "resilient_run", key: "k", input: "in" },
       refreshTokenCmd(),
-      { type: "resilient_run", key: "k", input: "in" },
+      { _tag: "resilient_run", key: "k", input: "in" },
     ]);
     expect(state.authed.auth).toEqual({
       token: tok(10_000, "new"),
@@ -402,8 +402,8 @@ describe("createAuthedCall — wired in a machine (replay)", () => {
   it("the full happy path: attempt → 401 → refresh → re-attempt → ok settles succeeded", () => {
     const { state, subs } = bound.replay({
       msgs: [
-        { type: "attempt", key: "k", input: "in", at: 0 },
-        { type: "unauthorized", key: "k", at: 0 },
+        { _tag: "attempt", key: "k", input: "in", at: 0 },
+        { _tag: "unauthorized", key: "k", at: 0 },
         refreshed(tok(10_000, "new"), 10),
         okMsg("k", "DONE", 20),
       ],
@@ -460,7 +460,7 @@ describe("createAuthedCall — properties", () => {
 
         // A retry timer firing re-runs the gate and settles auth bookkeeping.
         const [s5] = ac.onTimer(s3, {
-          type: "deadline_exceeded",
+          _tag: "deadline_exceeded",
           id: "resilient:retry:k",
           atMs: at,
         });
@@ -615,7 +615,7 @@ describe("createAuthedCall — properties", () => {
               break;
             case "timer":
               [s] = ac.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${a.key}`,
                 atMs: a.at,
               });
@@ -635,13 +635,13 @@ describe("createAuthedCall — properties", () => {
     const msgArb = fc.array(
       fc.oneof(
         fc.record({
-          type: fc.constant("attempt" as const),
+          _tag: fc.constant("attempt" as const),
           key: fc.constantFrom("a", "b"),
           input: fc.constant("in"),
           at: fc.nat(10_000),
         }),
         fc.record({
-          type: fc.constant("unauthorized" as const),
+          _tag: fc.constant("unauthorized" as const),
           key: fc.constantFrom("a", "b"),
           at: fc.nat(10_000),
         }),
@@ -704,9 +704,9 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
   // it is folded by on401 — exactly the production path (the run port
   // distinguishes a 401 from a generic 5xx).
   type WMsg =
-    | { type: "attempt"; key: string; input: string; at: number }
-    | { type: "unauthorized"; key: string; at: number }
-    | { type: "nop" }
+    | { _tag: "attempt"; key: string; input: string; at: number }
+    | { _tag: "unauthorized"; key: string; at: number }
+    | { _tag: "nop" }
     | ResilientTimerMsg;
 
   // The downstream ports. `outcomes` is a per-key queue the run port pops: each
@@ -841,7 +841,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     let stable = 0;
     let prev = -1;
     while (guard++ < 100 && stable < 2) {
-      await runtime.dispatch({ type: "nop" });
+      await runtime.dispatch({ _tag: "nop" });
       const len = drainLedger();
       if (len === prev) stable += 1;
       else stable = 0;
@@ -868,7 +868,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // (1) attempt key "a" — reaches the backend, comes back 401, parks + asks
     // for a refresh; the refresh port re-enters with a fresh token and re-issues
     // "a", which comes back 401 AGAIN → budget spent → terminal settle failed.
-    await runtime.dispatch({ type: "attempt", key: "a", input: "in", at: 0 });
+    await runtime.dispatch({ _tag: "attempt", key: "a", input: "in", at: 0 });
     await drain(runtime);
 
     // DEFECT 1 — the systemic assertion FIRST: the SHARED breaker is still
@@ -900,7 +900,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // must reach the backend and SUCCEED. Pre-fix the breaker was open, so this
     // attempt fast-fails into `circuit_open` and the backend is never reached.
     const reachedBeforeB = ctx.reached.length;
-    await runtime.dispatch({ type: "attempt", key: "b", input: "in", at: 10 });
+    await runtime.dispatch({ _tag: "attempt", key: "b", input: "in", at: 10 });
     await drain(runtime);
 
     expect(runtime.getState().authed.resilience.calls.b).toEqual({
@@ -934,7 +934,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
 
     // (1) attempt "a" — backend FAILS generically → retry brick backs it off
     // into waiting_retry (NOT running). The breaker (threshold 5) does NOT trip.
-    await runtime.dispatch({ type: "attempt", key: "a", input: "in", at: 0 });
+    await runtime.dispatch({ _tag: "attempt", key: "a", input: "in", at: 0 });
     await drain(runtime);
     expect(runtime.getState().authed.resilience.calls.a.phase).toBe(
       "waiting_retry",
@@ -946,7 +946,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // refresh. Post-fix the waiting_retry input is read, so the 401 marks the
     // token stale, emits a refresh, and parks the call.
     ctx.now.value = 5;
-    await runtime.dispatch({ type: "unauthorized", key: "a", at: 5 });
+    await runtime.dispatch({ _tag: "unauthorized", key: "a", at: 5 });
     await drain(runtime);
 
     // DEFECT 2 — the refresh fired (the token landed fresh and not stale) and

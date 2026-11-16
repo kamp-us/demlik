@@ -13,7 +13,7 @@ import { fakeChrome } from "./test-utils";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type State = { readonly n: number };
-type Msg = { readonly type: "inc" } | { readonly type: "boom" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "boom" };
 const failure = new Error("reducer threw");
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: undefined },
@@ -64,7 +64,7 @@ it.each([
       <button
         type="button"
         onClick={() => {
-          expect(dispatch({ type: "inc" })).toBeUndefined();
+          expect(dispatch({ _tag: "inc" })).toBeUndefined();
         }}
       >
         {state?.n ?? "waiting"}
@@ -118,7 +118,7 @@ describe.each([
         <button
           type="button"
           onClick={() => {
-            expect(dispatch({ type: "inc" })).toBeUndefined();
+            expect(dispatch({ _tag: "inc" })).toBeUndefined();
           }}
         >
           {state?.n ?? "waiting"}
@@ -218,7 +218,7 @@ describe.each([
     const mounted = await mount();
     try {
       await act(async () => {
-        expect(mounted.send({ type: "boom" })).toBeUndefined();
+        expect(mounted.send({ _tag: "boom" })).toBeUndefined();
         await mounted.runtime.idle();
       });
       expect(mounted.hostError).toHaveBeenCalledExactlyOnceWith(failure, {

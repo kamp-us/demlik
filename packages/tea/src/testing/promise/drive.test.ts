@@ -41,8 +41,8 @@ interface CountState {
 }
 
 type CountMsg =
-  | { readonly type: "start"; readonly left: number }
-  | { readonly type: "worked"; readonly label: string };
+  | { readonly _tag: "start"; readonly left: number }
+  | { readonly _tag: "worked"; readonly label: string };
 
 type WorkCmd = Cmd<"work"> & { readonly label: string };
 
@@ -57,13 +57,13 @@ const counting = defineMachine({
   update: {
     start: (_s, m) => [
       { left: m.left, done: 0 },
-      m.left > 0 ? [{ type: "work" as const, label: `w${m.left}` }] : [],
+      m.left > 0 ? [{ _tag: "work" as const, label: `w${m.left}` }] : [],
     ],
     worked: (s) => {
       const left = s.left - 1;
       return [
         { left, done: s.done + 1 },
-        left > 0 ? [{ type: "work" as const, label: `w${left}` }] : [],
+        left > 0 ? [{ _tag: "work" as const, label: `w${left}` }] : [],
       ];
     },
   },
@@ -72,7 +72,7 @@ const counting = defineMachine({
 /** The real handler record, as a test hands it to `drive`. */
 const handlers = {
   work: async (cmd: WorkCmd) => ({
-    type: "worked" as const,
+    _tag: "worked" as const,
     label: cmd.label,
   }),
 };
@@ -90,7 +90,7 @@ describe("drive", () => {
     const { state } = await drive(
       counting,
       initial,
-      { type: "start", left: 3 },
+      { _tag: "start", left: 3 },
       handlers,
     );
 
@@ -101,16 +101,16 @@ describe("drive", () => {
     const { trace } = await drive(
       counting,
       initial,
-      { type: "start", left: 2 },
+      { _tag: "start", left: 2 },
       handlers,
     );
 
     expect(trace).toEqual([
-      { kind: "msg", msg: { type: "start", left: 2 } },
-      { kind: "cmd", cmd: { type: "work", label: "w2" } },
-      { kind: "msg", msg: { type: "worked", label: "w2" } },
-      { kind: "cmd", cmd: { type: "work", label: "w1" } },
-      { kind: "msg", msg: { type: "worked", label: "w1" } },
+      { kind: "msg", msg: { _tag: "start", left: 2 } },
+      { kind: "cmd", cmd: { _tag: "work", label: "w2" } },
+      { kind: "msg", msg: { _tag: "worked", label: "w2" } },
+      { kind: "cmd", cmd: { _tag: "work", label: "w1" } },
+      { kind: "msg", msg: { _tag: "worked", label: "w1" } },
     ]);
   });
 
@@ -118,7 +118,7 @@ describe("drive", () => {
     const { state, trace } = await drive(
       counting,
       initial,
-      { type: "start", left: 4 },
+      { _tag: "start", left: 4 },
       handlers,
     );
 
@@ -136,20 +136,20 @@ describe("drive", () => {
     const counted = {
       work: async (cmd: WorkCmd) => {
         awaited += 1;
-        return { type: "worked" as const, label: cmd.label };
+        return { _tag: "worked" as const, label: cmd.label };
       },
     };
 
     const { state, trace } = await drive(
       counting,
       initial,
-      { type: "start", left: 0 },
+      { _tag: "start", left: 0 },
       counted,
     );
 
     expect(awaited).toBe(0);
     expect(cmdsOf(trace)).toEqual([]);
-    expect(trace).toEqual([{ kind: "msg", msg: { type: "start", left: 0 } }]);
+    expect(trace).toEqual([{ kind: "msg", msg: { _tag: "start", left: 0 } }]);
     expect(state).toEqual({ left: 0, done: 0 });
   });
 
@@ -160,14 +160,14 @@ describe("drive", () => {
         _ctx: unknown,
         dispatch?: (msg: CountMsg) => void,
       ) => {
-        dispatch?.({ type: "worked", label: cmd.label });
+        dispatch?.({ _tag: "worked", label: cmd.label });
       },
     };
 
     const { state, trace } = await drive(
       counting,
       initial,
-      { type: "start", left: 2 },
+      { _tag: "start", left: 2 },
       detached,
     );
 
@@ -179,16 +179,16 @@ describe("drive", () => {
     const { state, trace } = await drive(
       burst,
       { log: [] },
-      { type: "fire" },
+      { _tag: "fire" },
       {
         burst: async (cmd) => burstAnswer(cmd.count),
         hush: async () => [],
-        last: async () => ({ type: "done" }),
+        last: async () => ({ _tag: "done" }),
       },
     );
 
     expect(state).toEqual({ log: ["got 0", "got 1", "got 2", "done"] });
-    expect(msgsOf(trace).map((m) => m.type)).toEqual([
+    expect(msgsOf(trace).map((m) => m._tag)).toEqual([
       "fire",
       "got",
       "got",
@@ -205,14 +205,14 @@ describe("drive", () => {
       types: {
         model: {} as { readonly seen: string | null },
         msg: {} as
-          | { readonly type: "go" }
-          | { readonly type: "saw"; readonly mark: string },
+          | { readonly _tag: "go" }
+          | { readonly _tag: "saw"; readonly mark: string },
         cmd: {} as Cmd<"peek">,
         ctx: {} as Marked,
       },
       init: (loaded) => [loaded ?? { seen: null }, []],
       update: {
-        go: (s) => [s, [{ type: "peek" as const }]],
+        go: (s) => [s, [{ _tag: "peek" as const }]],
         saw: (_s, m) => [{ seen: m.mark }, []],
       },
     });
@@ -220,10 +220,10 @@ describe("drive", () => {
     const { state } = await drive(
       marked,
       { seen: null },
-      { type: "go" },
+      { _tag: "go" },
       {
         peek: async (_cmd: Cmd<"peek">, ctx: Marked) => ({
-          type: "saw" as const,
+          _tag: "saw" as const,
           mark: ctx.mark,
         }),
       },
@@ -240,14 +240,14 @@ describe("drive", () => {
         // biome-ignore lint/suspicious/noExplicitAny: the port is irrelevant here; what is under test is that `emit` EXISTS
         (ctx.emit as any)({ id: "noop" }, 1);
         emitted = true;
-        return { type: "worked" as const, label: cmd.label };
+        return { _tag: "worked" as const, label: cmd.label };
       },
     };
 
     const { state } = await drive(
       counting,
       initial,
-      { type: "start", left: 1 },
+      { _tag: "start", left: 1 },
       emitting,
     );
 
@@ -260,7 +260,7 @@ describe("drive", () => {
       const failure = await drive(
         counting,
         initial,
-        { type: "start", left: 10 },
+        { _tag: "start", left: 10 },
         handlers,
         { maxRounds: 3 },
       ).catch((err: unknown) => err);
@@ -279,7 +279,7 @@ describe("drive", () => {
       const err = (await drive(
         counting,
         initial,
-        { type: "start", left: 10 },
+        { _tag: "start", left: 10 },
         handlers,
         { maxRounds: 2 },
       ).catch((e: unknown) => e)) as DriveRoundsExceededError<
@@ -288,12 +288,12 @@ describe("drive", () => {
       >;
 
       expect(msgsOf(err.trace)).toEqual([
-        { type: "start", left: 10 },
-        { type: "worked", label: "w10" },
+        { _tag: "start", left: 10 },
+        { _tag: "worked", label: "w10" },
       ]);
       expect(cmdsOf(err.trace)).toEqual([
-        { type: "work", label: "w10" },
-        { type: "work", label: "w9" },
+        { _tag: "work", label: "w10" },
+        { _tag: "work", label: "w9" },
       ]);
     });
 
@@ -303,7 +303,7 @@ describe("drive", () => {
       const err = (await drive(
         counting,
         initial,
-        { type: "start", left: 500 },
+        { _tag: "start", left: 500 },
         handlers,
       ).catch((e: unknown) => e)) as DriveRoundsExceededError<
         CountMsg,
@@ -318,7 +318,7 @@ describe("drive", () => {
       const { state } = await drive(
         counting,
         initial,
-        { type: "start", left: 2 },
+        { _tag: "start", left: 2 },
         handlers,
         { maxRounds: 3 },
       );
@@ -343,7 +343,7 @@ describe("drive", () => {
       const failure = await drive(
         counting,
         initial,
-        { type: "start", left: 3 },
+        { _tag: "start", left: 3 },
         rejecting,
       ).catch((err: unknown) => err);
 
@@ -356,14 +356,14 @@ describe("drive", () => {
       const failure = await drive(
         counting,
         initial,
-        { type: "start", left: 3 },
+        { _tag: "start", left: 3 },
         rejecting,
       ).catch((err: unknown) => err);
 
       const trace = driveTraceOf<CountMsg, WorkCmd>(failure);
       expect(trace).toEqual([
-        { kind: "msg", msg: { type: "start", left: 3 } },
-        { kind: "cmd", cmd: { type: "work", label: "w3" } },
+        { kind: "msg", msg: { _tag: "start", left: 3 } },
+        { kind: "cmd", cmd: { _tag: "work", label: "w3" } },
       ]);
     });
 
@@ -376,7 +376,7 @@ describe("drive", () => {
         },
       };
 
-      await drive(counting, initial, { type: "start", left: 5 }, once).catch(
+      await drive(counting, initial, { _tag: "start", left: 5 }, once).catch(
         () => {},
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -397,7 +397,7 @@ describe("drive", () => {
     const failure = await drive(
       counting,
       initial,
-      { type: "start", left: 1 },
+      { _tag: "start", left: 1 },
       empty,
     ).catch((err: unknown) => err);
 
@@ -422,12 +422,12 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
   });
 
   type FetchCmd = ReturnType<typeof fetch>;
-  type PokeCmd = { readonly type: "poke" };
+  type PokeCmd = { readonly _tag: "poke" };
   type DMsg =
-    | { readonly type: "go"; readonly url: string }
-    | { readonly type: "kick" }
-    | { readonly type: "progress"; readonly note: string }
-    | { readonly type: "poke_ok" }
+    | { readonly _tag: "go"; readonly url: string }
+    | { readonly _tag: "kick" }
+    | { readonly _tag: "progress"; readonly note: string }
+    | { readonly _tag: "poke_ok" }
     | Settled<typeof fetch>;
 
   interface Seen {
@@ -450,12 +450,12 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     cmds: [fetch],
     init: (loaded) => [loaded ?? { seen: [], body: null }, []],
     update: {
-      go: (s, m) => [note(s, m.type), [fetch({ url: m.url })]],
-      kick: (s, m) => [note(s, m.type), [{ type: "poke" as const }]],
-      progress: (s, m) => [note(s, m.type), []],
-      poke_ok: (s, m) => [note(s, m.type), []],
-      fetch_ok: (s, m) => [{ ...note(s, m.type), body: m.value.body }, []],
-      fetch_err: (s, m) => [note(s, m.type), []],
+      go: (s, m) => [note(s, m._tag), [fetch({ url: m.url })]],
+      kick: (s, m) => [note(s, m._tag), [{ _tag: "poke" as const }]],
+      progress: (s, m) => [note(s, m._tag), []],
+      poke_ok: (s, m) => [note(s, m._tag), []],
+      fetch_ok: (s, m) => [{ ...note(s, m._tag), body: m.value.body }, []],
+      fetch_err: (s, m) => [note(s, m._tag), []],
     },
   });
 
@@ -477,7 +477,7 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     const failure = await drive(
       dispatching,
       start,
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
       handlers,
     ).catch((err: unknown) => err);
 
@@ -487,8 +487,8 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
       `dispatched its own "${own}" Msg`,
     );
     expect(driveTraceOf(failure)).toEqual([
-      { kind: "msg", msg: { type: "go", url: "/a" } },
-      { kind: "cmd", cmd: { type: "fetch", url: "/a" } },
+      { kind: "msg", msg: { _tag: "go", url: "/a" } },
+      { kind: "cmd", cmd: { _tag: "fetch", url: "/a" } },
     ]);
   });
 
@@ -505,7 +505,7 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     };
 
     await expect(
-      drive(dispatching, start, { type: "go", url: "/a" }, handlers),
+      drive(dispatching, start, { _tag: "go", url: "/a" }, handlers),
     ).rejects.toBeInstanceOf(OutcomeContractError);
   });
 
@@ -524,7 +524,7 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     const { state } = await drive(
       dispatching,
       start,
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
       handlers,
       { clock: () => 5 },
     );
@@ -535,7 +535,7 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
   it("passes a defined handler's other Msgs", async () => {
     const handlers: Handlers = {
       fetch: async (_cmd, { ok }, dispatch) => {
-        dispatch?.({ type: "progress", note: "half way" });
+        dispatch?.({ _tag: "progress", note: "half way" });
         return ok({ body: "done" });
       },
       poke: noPoke,
@@ -544,7 +544,7 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     const { state } = await drive(
       dispatching,
       start,
-      { type: "go", url: "/a" },
+      { _tag: "go", url: "/a" },
       handlers,
     );
 
@@ -558,15 +558,15 @@ describe("drive and a defined handler's own dispatch (#304)", () => {
     const handlers: Handlers = {
       fetch: async (_cmd, { ok }) => ok({ body: "unused" }),
       poke: async (_cmd, _ctx, dispatch) => {
-        dispatch?.({ type: "poke_ok" });
-        dispatch?.({ type: "progress", note: "poked" });
+        dispatch?.({ _tag: "poke_ok" });
+        dispatch?.({ _tag: "progress", note: "poked" });
       },
     };
 
     const { state } = await drive(
       dispatching,
       start,
-      { type: "kick" },
+      { _tag: "kick" },
       handlers,
     );
 

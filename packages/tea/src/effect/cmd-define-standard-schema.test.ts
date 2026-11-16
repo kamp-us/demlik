@@ -44,7 +44,7 @@ describe("Cmd.define infers its channels from any Standard Schema (types)", () =
   it("the settled `_ok` Msg carries the schema's type as `value`", () => {
     type EffectOk = Extract<
       Settled<typeof viaEffect>,
-      { type: "load_effect_ok" }
+      { _tag: "load_effect_ok" }
     >;
     expectTypeOf<EffectOk["value"]>().toEqualTypeOf<{
       readonly name: string;
@@ -62,7 +62,7 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
   const machine = defineMachine({
     types: {
       model: {} as Model,
-      msg: {} as { readonly type: "go"; readonly id: string },
+      msg: {} as { readonly _tag: "go"; readonly id: string },
     },
     cmds: [viaZod, viaEffect],
     init: () => [{ zod: null, effect: null, malformed: [] }, []],
@@ -93,7 +93,7 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
 
   it("a value both schemas accept lands on both `_ok` cells", async () => {
     const rt = await start((id) => ({ name: `user ${id}` })).ready;
-    await rt.dispatch({ type: "go", id: "7" });
+    await rt.dispatch({ _tag: "go", id: "7" });
     expect(rt.getState()).toEqual({
       zod: "user 7",
       effect: "user 7",
@@ -103,7 +103,7 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
 
   it("a value both schemas reject becomes `malformed_result` on both `_err` cells", async () => {
     const rt = await start(() => ({ name: 42 })).ready;
-    await rt.dispatch({ type: "go", id: "7" });
+    await rt.dispatch({ _tag: "go", id: "7" });
     expect(rt.getState()).toEqual({
       zod: null,
       effect: null,

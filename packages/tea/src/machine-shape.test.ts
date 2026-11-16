@@ -22,23 +22,23 @@ import {
 //      the machine it is handed.
 // ───────────────────────────────────────────────────────────────────────────
 
-type LightState = { readonly type: "red" } | { readonly type: "green" };
-type LightMsg = { readonly type: "go" } | { readonly type: "stop" };
+type LightState = { readonly _tag: "red" } | { readonly _tag: "green" };
+type LightMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
 
 function lightMachine() {
   const update: Transitions<LightState, LightMsg, never> = {
-    red: { go: () => [{ type: "green" }, []], stop: (s) => [s, []] },
-    green: { go: (s) => [s, []], stop: () => [{ type: "red" }, []] },
+    red: { go: () => [{ _tag: "green" }, []], stop: (s) => [s, []] },
+    green: { go: (s) => [s, []], stop: () => [{ _tag: "red" }, []] },
   };
   return defineMachine({
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
-    init: (_loaded) => [{ type: "red" }, []],
+    init: (_loaded) => [{ _tag: "red" }, []],
     update,
   });
 }
 
 type CounterState = { readonly count: number };
-type CounterMsg = { readonly type: "bump" } | { readonly type: "reset" };
+type CounterMsg = { readonly _tag: "bump" } | { readonly _tag: "reset" };
 
 function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
@@ -66,14 +66,14 @@ describe("describeMachine — transitions form", () => {
   it("a RAGGED table reports each row's real accept-set, not a uniform one", () => {
     // The dynamic-builder shape: plain `string` discriminants, rows that
     // genuinely differ. This is the case the cast at the consumer existed for.
-    type S = { readonly type: string };
-    type M = { readonly type: string };
+    type S = { readonly _tag: string };
+    type M = { readonly _tag: string };
     const m = defineMachine({
       types: { model: {} as S, msg: {} as M, ctx: undefined },
-      init: () => [{ type: "idle" }, []],
+      init: () => [{ _tag: "idle" }, []],
       update: {
-        idle: { start: () => [{ type: "busy" }, []] },
-        busy: { cancel: () => [{ type: "idle" }, []], tick: (s: S) => [s, []] },
+        idle: { start: () => [{ _tag: "busy" }, []] },
+        busy: { cancel: () => [{ _tag: "idle" }, []], tick: (s: S) => [s, []] },
       } as unknown as Transitions<S, M, never>,
     });
     const shape = describeMachine(m);

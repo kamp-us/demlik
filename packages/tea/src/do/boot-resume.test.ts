@@ -27,16 +27,16 @@ type WorkerState = {
 
 const FRESH: WorkerState = { done: 0, inFlight: false, resumedAt: null };
 
-type BeginMsg = { readonly type: "begin" };
-type WorkDoneMsg = { readonly type: "work_done" };
+type BeginMsg = { readonly _tag: "begin" };
+type WorkDoneMsg = { readonly _tag: "work_done" };
 // The typed resume Msg — the `AgentBootMsg` shape (issue #60) for this grain.
-type ResumeMsg = { readonly type: "resume_work"; readonly at: number };
+type ResumeMsg = { readonly _tag: "resume_work"; readonly at: number };
 type WorkerMsg = BeginMsg | WorkDoneMsg | ResumeMsg;
 
 type DoWorkCmd = Cmd<"do_work">;
 
 // The typed resume-Msg port constructor — never a hand-built literal (AC #3).
-const resumeWorkMsg = (at: number): ResumeMsg => ({ type: "resume_work", at });
+const resumeWorkMsg = (at: number): ResumeMsg => ({ _tag: "resume_work", at });
 
 // A durable machine wired through `bootResume`: its resume port is the grain's
 // own predicate + typed constructor, the direct non-agent analogue of
@@ -60,12 +60,12 @@ function makeWorker(effects: number[]) {
     // Its init is passive; `bootResume` reissues the outstanding work.
     init: (loaded) => [loaded ?? FRESH, []],
     update: {
-      begin: (s) => [{ ...s, inFlight: true }, [{ type: "do_work" }]],
+      begin: (s) => [{ ...s, inFlight: true }, [{ _tag: "do_work" }]],
       // The resume verb: re-emit the ONE outstanding effect and stamp the clock.
       // Guarded on `inFlight` so a spurious resume on a settled machine is inert.
       resume_work: (s, msg) =>
         s.inFlight
-          ? [{ ...s, resumedAt: msg.at }, [{ type: "do_work" }]]
+          ? [{ ...s, resumedAt: msg.at }, [{ _tag: "do_work" }]]
           : [s, []],
       work_done: (s) => [{ ...s, done: s.done + 1, inFlight: false }, []],
     },
@@ -73,7 +73,7 @@ function makeWorker(effects: number[]) {
   const interpret: Interpret<WorkerMsg, DoWorkCmd, Record<never, never>> = {
     do_work: async (_cmd) => {
       effects.push(1);
-      return { type: "work_done" };
+      return { _tag: "work_done" };
     },
   };
   return { machine, interpret };

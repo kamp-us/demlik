@@ -84,7 +84,7 @@ describe("examples/versioned-save.ts — through a fileStore", () => {
       store: fileStore(path, migrateSettings),
     }).ready;
     expect(rt.getState()).toEqual(v3);
-    await rt.dispatch({ type: "toggleCompact" });
+    await rt.dispatch({ _tag: "toggleCompact" });
     await rt.stop();
 
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({

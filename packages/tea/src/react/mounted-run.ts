@@ -31,7 +31,7 @@ import { senderOf } from "./send";
 import { SubGate } from "./sub-gate";
 
 /** A run, the listener this object holds on it, and the `send` built on it. */
-interface Started<S, M extends { type: string }> {
+interface Started<S, M extends { _tag: string }> {
   readonly handle: RunHandle<S, M>;
   readonly unlisten: () => void;
   readonly send: (msg: M) => void;
@@ -41,14 +41,14 @@ interface Started<S, M extends { type: string }> {
  * Where the run is. `leaving` is a run whose component is gone but whose passive
  * cleanups have not run yet: a child's cleanup may still send it a last Msg.
  */
-type Phase<S, M extends { type: string }> =
-  | { readonly type: "not-started" }
-  | ({ readonly type: "live" | "leaving" } & Started<S, M>)
-  | { readonly type: "stopped" };
+type Phase<S, M extends { _tag: string }> =
+  | { readonly _tag: "not-started" }
+  | ({ readonly _tag: "live" | "leaving" } & Started<S, M>)
+  | { readonly _tag: "stopped" };
 
-export class MountedRun<S, M extends { type: string }> {
+export class MountedRun<S, M extends { _tag: string }> {
   private snapshot: S;
-  private phase: Phase<S, M> = { type: "not-started" };
+  private phase: Phase<S, M> = { _tag: "not-started" };
   // The run's booted handle: the only thing with a `getState`. `null` until its
   // `ready` resolves, and for good if its boot fails.
   private booted: BootedRunHandle<S, M> | null = null;
@@ -92,7 +92,7 @@ export class MountedRun<S, M extends { type: string }> {
    * `phase: "discard"`; the run reports its own step failures.
    */
   readonly send = (msg: M): void => {
-    switch (this.phase.type) {
+    switch (this.phase._tag) {
       case "live":
       case "leaving":
         this.phase.send(msg);
@@ -107,20 +107,20 @@ export class MountedRun<S, M extends { type: string }> {
   };
 
   private discard(msg: M): void {
-    this.report(new DispatchDiscardedError(msg.type), { phase: "discard" });
+    this.report(new DispatchDiscardedError(msg._tag), { phase: "discard" });
   }
 
   /** The effect ran: the component is on screen. */
   connect(): void {
     this.connected = true;
     this.subs.open();
-    switch (this.phase.type) {
+    switch (this.phase._tag) {
       case "live":
         return;
       case "leaving":
         // Only if React ever calls an insertion cleanup on a hide. The show that
         // follows must not find a dead run, so it takes the run back.
-        this.phase = { ...this.phase, type: "live" };
+        this.phase = { ...this.phase, _tag: "live" };
         return;
       case "not-started":
       case "stopped":
@@ -133,7 +133,7 @@ export class MountedRun<S, M extends { type: string }> {
     this.connected = false;
     queueMicrotask(() => {
       if (this.connected) return;
-      if (this.phase.type === "leaving" || !this.cleanupMayBeAHide) this.stop();
+      if (this.phase._tag === "leaving" || !this.cleanupMayBeAHide) this.stop();
       else this.subs.close();
     });
   }
@@ -144,9 +144,9 @@ export class MountedRun<S, M extends { type: string }> {
    * React 19.2 a deleted hidden tree never gets here, and `disconnect` stops it.
    */
   retire(): void {
-    switch (this.phase.type) {
+    switch (this.phase._tag) {
       case "not-started": {
-        this.phase = { type: "stopped" };
+        this.phase = { _tag: "stopped" };
         const held = this.held;
         this.held = [];
         for (const msg of held) this.discard(msg);
@@ -155,7 +155,7 @@ export class MountedRun<S, M extends { type: string }> {
       case "live":
         // A standing effect's cleanup comes later and stops the run then, so a
         // child's cleanup can still reach it. A hidden one has no cleanup coming.
-        if (this.connected) this.phase = { ...this.phase, type: "leaving" };
+        if (this.connected) this.phase = { ...this.phase, _tag: "leaving" };
         else this.stop();
         return;
       default:
@@ -178,7 +178,7 @@ export class MountedRun<S, M extends { type: string }> {
       if (installed !== undefined) this.publish(installed);
     });
     const send = senderOf(handle, this.report);
-    this.phase = { type: "live", handle, unlisten, send };
+    this.phase = { _tag: "live", handle, unlisten, send };
     // The run reports boot failures through its own sink.
     handle.ready.then(
       (booted) => {
@@ -197,7 +197,7 @@ export class MountedRun<S, M extends { type: string }> {
   private stop(): void {
     if (!("handle" in this.phase)) return;
     const { handle, unlisten } = this.phase;
-    this.phase = { type: "stopped" };
+    this.phase = { _tag: "stopped" };
     unlisten();
     void handle.stop();
   }

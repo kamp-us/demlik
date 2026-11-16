@@ -8,7 +8,7 @@
  * BroadcastChannel pub/sub, cross-runtime Ports, SSE streams, and
  * bidirectional WebSocket streams — one-shot (`fromWebSocket`) and
  * auto-reconnecting with capped backoff (`fromReconnectingWebSocket`). The
- * machine declares the Sub as data (`subs: [{ type, deps(state) }]`); the
+ * machine declares the Sub as data (`subs: [{ _tag, deps(state) }]`); the
  * caller hands the runner to `run` under that type
  * (`run(machine, { subscribe: { [type]: runner } })`). The factory absorbs the
  * lifecycle (subscribe + cleanup) and reads its data off `sub.deps`; the caller

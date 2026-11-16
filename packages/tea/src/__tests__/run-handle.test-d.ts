@@ -35,10 +35,10 @@ import { run } from "../promise";
 import { useMachine, useRuntime } from "../react/index";
 
 type State = { readonly n: number };
-type Msg = { readonly type: "inc" } | { readonly type: "resume" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "resume" };
 
 /** A booted handle built by hand — no engine behind it. */
-function fakeHandle<S, M extends { type: string }, E extends { type: string }>(
+function fakeHandle<S, M extends { _tag: string }, E extends { _tag: string }>(
   state: S,
 ): BootedRunHandle<S, M, E> {
   const handle: BootedRunHandle<S, M, E> = {
@@ -65,7 +65,7 @@ export function Viewer(): null {
   const [state, send] = useRuntime(fake);
   const n: number = state.n;
   void n;
-  send({ type: "inc" });
+  send({ _tag: "inc" });
   return null;
 }
 
@@ -77,9 +77,9 @@ export function SelectingViewer(): null {
   expectTypeOf(whole).toEqualTypeOf<[State, (msg: Msg) => void]>();
   const withSink = useRuntime(fake, (s) => s.n, { onError });
   expectTypeOf(withSink).toEqualTypeOf<[number, (msg: Msg) => void]>();
-  expectTypeOf(selected[1]({ type: "inc" })).toEqualTypeOf<void>();
+  expectTypeOf(selected[1]({ _tag: "inc" })).toEqualTypeOf<void>();
   // @ts-expect-error — send accepts only the run's Msg
-  selected[1]({ type: "unknown" });
+  selected[1]({ _tag: "unknown" });
   return null;
 }
 
@@ -91,12 +91,12 @@ export const projections = driveProjections(
 export const sse = sseFromAgentEvents(
   fakeAgent,
   sseHub<{ readonly kind: "done" }>(),
-  (e) => (e.type === "RunDone" ? { kind: "done" } : null),
+  (e) => (e._tag === "RunDone" ? { kind: "done" } : null),
 );
 
 export const resumed: Promise<void> = bootResume(fake, {
   isResumable: (s) => s.n > 0,
-  resumeMsg: () => ({ type: "resume" }),
+  resumeMsg: () => ({ _tag: "resume" }),
 });
 
 // A booting handle (no `getState`) is enough for `bootResume`, which waits on
@@ -104,7 +104,7 @@ export const resumed: Promise<void> = bootResume(fake, {
 declare const booting: RunHandle<State, Msg>;
 export const resumedFromBooting: Promise<void> = bootResume(booting, {
   isResumable: () => false,
-  resumeMsg: () => ({ type: "resume" }),
+  resumeMsg: () => ({ _tag: "resume" }),
 });
 export function BootingViewer(): null {
   // @ts-expect-error — a booting handle has no `getState` to render from
@@ -141,11 +141,11 @@ const counter = defineMachine({
 /** Another engine's `run`: same options, a hand-built handle out. */
 declare function otherRun<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: RunOptions<S, M, C, U, Ctx, E>,

@@ -40,8 +40,8 @@ function tracker() {
 
 type State = { readonly runId: string | null };
 type Msg =
-  | { readonly type: "switch"; readonly runId: string }
-  | { readonly type: "finish" };
+  | { readonly _tag: "switch"; readonly runId: string }
+  | { readonly _tag: "finish" };
 
 const update: Reducer<State, Msg, never> = {
   switch: (_s, m) => [{ runId: m.runId }, []],
@@ -101,7 +101,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
     });
     const rt = await runFor(battery).ready;
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
     expect(t.released).toHaveLength(1);
     expect(t.released[0]?.key).toBe("run-1");
     expect(t.released[0]?.released).toBe(true);
@@ -118,7 +118,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
     });
     const rt = await runFor(battery).ready;
 
-    await rt.dispatch({ type: "switch", runId: "run-2" });
+    await rt.dispatch({ _tag: "switch", runId: "run-2" });
     expect(t.acquired).toEqual(["run-1", "run-2"]);
     expect(t.released.map((h) => h.key)).toEqual(["run-1"]);
 
@@ -141,7 +141,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
     });
     const rt = await runFor(battery).ready;
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
     expect(releasedWith).toBe(handles[0]);
 
     await rt.stop();
@@ -159,7 +159,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
     expect(battery.get("run-1")?.key).toBe("run-1");
     expect(battery.get("never-acquired")).toBeUndefined();
 
-    await rt.dispatch({ type: "finish" });
+    await rt.dispatch({ _tag: "finish" });
     expect(battery.get("run-1")).toBeUndefined();
 
     await rt.stop();
@@ -227,7 +227,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
         reports.push({ error, phase: context.phase }),
     }).ready;
 
-    await expect(rt.dispatch({ type: "finish" })).resolves.toBeUndefined();
+    await expect(rt.dispatch({ _tag: "finish" })).resolves.toBeUndefined();
     expect(reports).toEqual([
       { error: expect.any(Error), phase: "sub-cleanup" },
     ]);
@@ -249,7 +249,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
         reports.push({ error, phase: context.phase }),
     }).ready;
 
-    await expect(rt.dispatch({ type: "finish" })).resolves.toBeUndefined();
+    await expect(rt.dispatch({ _tag: "finish" })).resolves.toBeUndefined();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(reports).toEqual([
       { error: expect.any(Error), phase: "sub-cleanup" },
@@ -277,8 +277,8 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
       acquire: (key) => ({ key, released: false }),
       release: () => {},
     });
-    expect(battery.type).toBe("checkpoint");
-    expect(battery.depKeyed((s: State) => s.runId).type).toBe("checkpoint");
+    expect(battery._tag).toBe("checkpoint");
+    expect(battery.depKeyed((s: State) => s.runId)._tag).toBe("checkpoint");
   });
 
   it("keeps a string key and a numeric key distinct in the handle table", () => {
@@ -293,7 +293,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
       release: () => {},
     });
     const dispose = battery.subscribe(
-      { id: subIdOf("checkpoint", "1"), type: "checkpoint", deps: "1" },
+      { id: subIdOf("checkpoint", "1"), _tag: "checkpoint", deps: "1" },
       {},
       () => {},
     );
@@ -311,7 +311,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 type MultiState = { readonly phase: "idle" | "running" | "reporting" };
-type MultiMsg = { readonly type: "goto"; readonly phase: MultiState["phase"] };
+type MultiMsg = { readonly _tag: "goto"; readonly phase: MultiState["phase"] };
 
 const multiUpdate: Reducer<MultiState, MultiMsg, never> = {
   goto: (_s, m) => [{ phase: m.phase }, []],
@@ -371,15 +371,15 @@ describe("defineManagedResource — two resources, two Sub types", () => {
     const { t, start } = twoResources();
     const rt = await start();
 
-    await rt.dispatch({ type: "goto", phase: "running" });
+    await rt.dispatch({ _tag: "goto", phase: "running" });
     expect(t.acquired.sort()).toEqual(["bridge:run-1", "checkpoint:run-1"]);
 
     // Leaving `running` drops only the checkpoint; the bridge's own gate keeps
     // it alive in `reporting`.
-    await rt.dispatch({ type: "goto", phase: "reporting" });
+    await rt.dispatch({ _tag: "goto", phase: "reporting" });
     expect(t.released.map((h) => h.key)).toEqual(["checkpoint:run-1"]);
 
-    await rt.dispatch({ type: "goto", phase: "idle" });
+    await rt.dispatch({ _tag: "goto", phase: "idle" });
     expect(t.released.map((h) => h.key).sort()).toEqual([
       "bridge:run-1",
       "checkpoint:run-1",
@@ -392,7 +392,7 @@ describe("defineManagedResource — two resources, two Sub types", () => {
     const { checkpoint, bridge, start } = twoResources();
     const rt = await start();
 
-    await rt.dispatch({ type: "goto", phase: "running" });
+    await rt.dispatch({ _tag: "goto", phase: "running" });
     expect(checkpoint.get("run-1")?.key).toBe("checkpoint:run-1");
     expect(bridge.get("run-1")?.key).toBe("bridge:run-1");
 
@@ -448,7 +448,7 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
     });
     const sub = (runId: string) => ({
       id: subIdOf("checkpoint", { runId }),
-      type: "checkpoint" as const,
+      _tag: "checkpoint" as const,
       deps: { runId },
     });
     const disposeA = battery.subscribe(sub("A"), {}, () => {});
@@ -498,7 +498,7 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
     const rt = await runFor(battery).ready;
 
     // Re-key: the old handle's release starts mid-run, outside `stop()`.
-    await rt.dispatch({ type: "switch", runId: "run-2" });
+    await rt.dispatch({ _tag: "switch", runId: "run-2" });
     await rt.stop();
     expect(settled.sort()).toEqual(["run-1", "run-2"]);
   });

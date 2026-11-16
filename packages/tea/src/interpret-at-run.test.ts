@@ -18,14 +18,14 @@ import { run } from "./promise";
 
 type State = { readonly saved: readonly number[]; readonly ticks: number };
 type Msg =
-  | { readonly type: "save"; readonly n: number }
-  | { readonly type: "saved"; readonly n: number }
-  | { readonly type: "tick" };
+  | { readonly _tag: "save"; readonly n: number }
+  | { readonly _tag: "saved"; readonly n: number }
+  | { readonly _tag: "tick" };
 type SaveCmd = Cmd<"persist"> & { readonly n: number };
 type TickSub = Sub<"tick", { readonly name: string }>;
 
 const update: Reducer<State, Msg, SaveCmd> = {
-  save: (s, m) => [s, [{ type: "persist", n: m.n }]],
+  save: (s, m) => [s, [{ _tag: "persist", n: m.n }]],
   saved: (s, m) => [{ ...s, saved: [...s.saved, m.n] }, []],
   tick: (s) => [{ ...s, ticks: s.ticks + 1 }, []],
 };
@@ -39,7 +39,7 @@ const machine = defineMachine({
   },
   init: () => [{ saved: [], ticks: 0 }, []],
   update,
-  subs: [{ type: "tick", deps: () => ({ name: "clock" }) }],
+  subs: [{ _tag: "tick", deps: () => ({ name: "clock" }) }],
 });
 
 // A runner that arms nothing, for the tests that exercise Cmds only.
@@ -51,12 +51,12 @@ describe("run(machine, { interpret })", () => {
     const interpret: Interpret<Msg, SaveCmd, unknown> = {
       persist: async (cmd) => {
         performed.push(cmd.n);
-        return { type: "saved", n: cmd.n };
+        return { _tag: "saved", n: cmd.n };
       },
     };
     const rt = await run(machine, { interpret, subscribe: quiet }).ready;
 
-    await rt.dispatch({ type: "save", n: 7 });
+    await rt.dispatch({ _tag: "save", n: 7 });
 
     expect(performed).toEqual([7]);
     expect(rt.getState().saved).toEqual([7]);
@@ -65,16 +65,16 @@ describe("run(machine, { interpret })", () => {
 
   it("runs one machine under two different handler tables", async () => {
     const real = await run(machine, {
-      interpret: { persist: async (c) => ({ type: "saved", n: c.n }) },
+      interpret: { persist: async (c) => ({ _tag: "saved", n: c.n }) },
       subscribe: quiet,
     }).ready;
     const doubled = await run(machine, {
-      interpret: { persist: async (c) => ({ type: "saved", n: c.n * 2 }) },
+      interpret: { persist: async (c) => ({ _tag: "saved", n: c.n * 2 }) },
       subscribe: quiet,
     }).ready;
 
-    await real.dispatch({ type: "save", n: 3 });
-    await doubled.dispatch({ type: "save", n: 3 });
+    await real.dispatch({ _tag: "save", n: 3 });
+    await doubled.dispatch({ _tag: "save", n: 3 });
 
     expect(real.getState().saved).toEqual([3]);
     expect(doubled.getState().saved).toEqual([6]);
@@ -90,7 +90,7 @@ describe("run(machine, { subscribe })", () => {
       interpret: { persist: async () => undefined },
       subscribe: {
         tick: (_sub, _ctx, dispatch) => {
-          fire = () => dispatch({ type: "tick" });
+          fire = () => dispatch({ _tag: "tick" });
           return () => {
             fire = undefined;
           };

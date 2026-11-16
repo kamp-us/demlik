@@ -94,7 +94,7 @@ type ForkEffect = (
  *
  * ```ts
  * const { state, trace } = await Effect.runPromise(
- *   drive(machine, initial, { type: "go" }, {
+ *   drive(machine, initial, { _tag: "go" }, {
  *     fetch: (cmd) =>
  *       Effect.gen(function* () {
  *         const api = yield* Api;
@@ -111,7 +111,7 @@ type ForkEffect = (
  */
 export function drive<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -263,10 +263,10 @@ function effectSubs<S, M>(
       }
       for (const [id, sub] of desired) {
         if (started.has(id)) continue;
-        const make = subscribe[sub.type] ?? builtins[sub.type];
+        const make = subscribe[sub._tag] ?? builtins[sub._tag];
         if (make === undefined) {
           throw new Error(
-            `@demlik/tea: no subscribe runner for Sub type "${sub.type}". ` +
+            `@demlik/tea: no subscribe runner for Sub type "${sub._tag}". ` +
               "Pass one to drive in `subscribe`.",
           );
         }

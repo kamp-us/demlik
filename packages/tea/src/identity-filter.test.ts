@@ -22,9 +22,9 @@ import { run } from "./promise";
 
 type State = { readonly runId: string | null; readonly applied: string[] };
 type Msg =
-  | { readonly type: "claim"; readonly runId: string }
-  | { readonly type: "work"; readonly runId: string }
-  | { readonly type: "ping" };
+  | { readonly _tag: "claim"; readonly runId: string }
+  | { readonly _tag: "work"; readonly runId: string }
+  | { readonly _tag: "ping" };
 
 const update: Reducer<State, Msg, never> = {
   claim: (s, m) => [
@@ -40,7 +40,7 @@ const update: Reducer<State, Msg, never> = {
 // it cannot type.
 const identity: Identity<State, Msg> = {
   ofState: (s) => s.runId ?? undefined,
-  ofMsg: (m) => (m.type === "ping" ? undefined : m.runId),
+  ofMsg: (m) => (m._tag === "ping" ? undefined : m.runId),
 };
 
 function machine(withIdentity: boolean) {
@@ -55,24 +55,24 @@ function machine(withIdentity: boolean) {
 describe("Identity — the kernel-enforced mis-addressed drop", () => {
   it("drops a message addressed to a different identity before `update` runs", async () => {
     const rt = await run(machine(true), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
 
-    await rt.dispatch({ type: "work", runId: "r2" }); // foreign run
+    await rt.dispatch({ _tag: "work", runId: "r2" }); // foreign run
     expect(rt.getState().applied).toEqual(["claim"]);
   });
 
   it("delivers a message addressed to THIS identity", async () => {
     const rt = await run(machine(true), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
 
-    await rt.dispatch({ type: "work", runId: "r1" });
+    await rt.dispatch({ _tag: "work", runId: "r1" });
     expect(rt.getState().applied).toEqual(["claim", "work"]);
   });
 
   it("resolves the dropped dispatch instead of rejecting, and fires nothing", async () => {
     const seen: Msg[] = [];
     const rt = await run(machine(true), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
     rt.observe((msg) => seen.push(msg));
     let listenerFires = 0;
     rt.subscribe(() => {
@@ -82,7 +82,7 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
     // A drop is not an error — it resolves, advances nothing, and is invisible
     // to observers and listeners.
     await expect(
-      rt.dispatch({ type: "work", runId: "r2" }),
+      rt.dispatch({ _tag: "work", runId: "r2" }),
     ).resolves.toBeUndefined();
     expect(seen).toEqual([]);
     expect(listenerFires).toBe(0);
@@ -90,9 +90,9 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
 
   it("never drops an identity-agnostic message (`ofMsg` → undefined)", async () => {
     const rt = await run(machine(true), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
 
-    await rt.dispatch({ type: "ping" });
+    await rt.dispatch({ _tag: "ping" });
     expect(rt.getState().applied).toEqual(["claim", "ping"]);
   });
 
@@ -100,7 +100,7 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
     const rt = await run(machine(true), { ctx: undefined }).ready;
     // Fresh boot: this instance owns no identity yet, so an addressed message
     // is identity-establishing, not foreign.
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
     expect(rt.getState().runId).toBe("r1");
   });
 
@@ -110,7 +110,7 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
       readonly hits: number;
     };
     type CompositeMsg = {
-      readonly type: "hit";
+      readonly _tag: "hit";
       readonly key: { b: string; a: string };
     };
     const rt = await run(
@@ -134,11 +134,11 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
 
     // Same identity, keys written in the other order — must NOT be dropped.
     // A reference/`===` comparison would drop this; a structural one delivers.
-    await rt.dispatch({ type: "hit", key: { b: "2", a: "1" } });
+    await rt.dispatch({ _tag: "hit", key: { b: "2", a: "1" } });
     expect(rt.getState().hits).toBe(1);
 
     // …and a genuinely different composite identity IS dropped.
-    await rt.dispatch({ type: "hit", key: { b: "9", a: "1" } });
+    await rt.dispatch({ _tag: "hit", key: { b: "9", a: "1" } });
     expect(rt.getState().hits).toBe(1);
   });
 });
@@ -159,9 +159,9 @@ describe("Identity — the drop is observable", () => {
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),
     }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
 
-    await rt.dispatch({ type: "work", runId: "r2" });
+    await rt.dispatch({ _tag: "work", runId: "r2" });
 
     expect(reports).toHaveLength(1);
     expect(reports[0]?.phase).toBe("identity-drop");
@@ -180,12 +180,12 @@ describe("Identity — the drop is observable", () => {
       ctx: undefined,
       onError: (error) => reports.push(error),
     }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
 
     await expect(
-      rt.dispatch({ type: "work", runId: "r2" }),
+      rt.dispatch({ _tag: "work", runId: "r2" }),
     ).resolves.toBeUndefined();
-    await rt.dispatch({ type: "work", runId: "r1" });
+    await rt.dispatch({ _tag: "work", runId: "r1" });
     expect(rt.getState().applied).toEqual(["claim", "work"]);
     expect(reports).toHaveLength(1);
   });
@@ -196,9 +196,9 @@ describe("Identity — the drop is observable", () => {
       ctx: undefined,
       onError: (error) => reports.push(error),
     }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
-    await rt.dispatch({ type: "work", runId: "r1" });
-    await rt.dispatch({ type: "ping" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "work", runId: "r1" });
+    await rt.dispatch({ _tag: "ping" });
     expect(reports).toEqual([]);
   });
 });
@@ -223,7 +223,7 @@ describe("Identity — a throwing projection is supervised, not raw", () => {
         },
         ofMsg: (m) => {
           if (which === "ofMsg") throw new Error("projection blew up");
-          return m.type === "ping" ? undefined : m.runId;
+          return m._tag === "ping" ? undefined : m.runId;
         },
       },
     });
@@ -236,7 +236,7 @@ describe("Identity — a throwing projection is supervised, not raw", () => {
         reports.push({ error, phase: context.phase }),
     }).ready;
 
-    await expect(rt.dispatch({ type: "work", runId: "r1" })).rejects.toThrow(
+    await expect(rt.dispatch({ _tag: "work", runId: "r1" })).rejects.toThrow(
       /projection blew up/,
     );
     expect(reports).toHaveLength(1);
@@ -256,7 +256,7 @@ describe("Identity — a throwing projection is supervised, not raw", () => {
 
     // `restart` means the transition CONTINUES from host-supplied state — the
     // dispatch resolves, exactly as it does for a throwing reducer.
-    await rt.dispatch({ type: "work", runId: "r1" });
+    await rt.dispatch({ _tag: "work", runId: "r1" });
     expect(rt.getState().applied).toEqual(["rehydrated"]);
     expect(reports).toHaveLength(1);
   });
@@ -273,7 +273,7 @@ describe("Identity — a non-plain identity fails loudly, never permissively", (
     readonly startedAt: Date | null;
     readonly applied: number;
   };
-  type DateMsg = { readonly type: "work"; readonly startedAt: Date };
+  type DateMsg = { readonly _tag: "work"; readonly startedAt: Date };
 
   const dateMachine = defineMachine({
     types: { model: {} as DateState, msg: {} as DateMsg, ctx: undefined },
@@ -293,7 +293,7 @@ describe("Identity — a non-plain identity fails loudly, never permissively", (
     }).ready;
 
     await expect(
-      rt.dispatch({ type: "work", startedAt: new Date(9_999) }),
+      rt.dispatch({ _tag: "work", startedAt: new Date(9_999) }),
     ).rejects.toThrow(/non-plain object/);
     expect(rt.getState().applied).toBe(0);
     expect(reports).toHaveLength(1);
@@ -303,9 +303,9 @@ describe("Identity — a non-plain identity fails loudly, never permissively", (
 describe("Identity — additivity", () => {
   it("a machine that declares no `identity` is completely unfiltered", async () => {
     const rt = await run(machine(false), { ctx: undefined }).ready;
-    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ _tag: "claim", runId: "r1" });
     // The exact message the identity-declaring machine drops.
-    await rt.dispatch({ type: "work", runId: "r2" });
+    await rt.dispatch({ _tag: "work", runId: "r2" });
     expect(rt.getState().applied).toEqual(["claim", "work"]);
   });
 });

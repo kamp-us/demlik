@@ -12,7 +12,7 @@ export type NotesState =
   | { readonly phase: "open"; readonly notes: readonly string[] }
   | { readonly phase: "unrestored"; readonly reason: string };
 
-export type NotesMsg = { readonly type: "add"; readonly text: string };
+export type NotesMsg = { readonly _tag: "add"; readonly text: string };
 
 /** `unrestored` is set only on the host's no-store run after a refusal. */
 export interface NotesCtx {

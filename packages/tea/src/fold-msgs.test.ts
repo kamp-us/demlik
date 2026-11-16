@@ -29,8 +29,8 @@ import {
 // ── Reducer-form machine (cells emit Cmds, so we can prove they're discarded) ──
 type CounterState = { readonly count: number };
 type CounterMsg =
-  | { readonly type: "add"; readonly n: number }
-  | { readonly type: "reset" };
+  | { readonly _tag: "add"; readonly n: number }
+  | { readonly _tag: "reset" };
 
 function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
@@ -45,23 +45,23 @@ function counterMachine() {
 }
 
 // ── Transitions-form machine ──
-type LightState = { readonly type: "red" } | { readonly type: "green" };
-type LightMsg = { readonly type: "go" } | { readonly type: "stop" };
+type LightState = { readonly _tag: "red" } | { readonly _tag: "green" };
+type LightMsg = { readonly _tag: "go" } | { readonly _tag: "stop" };
 
 function lightMachine() {
   const update: Transitions<LightState, LightMsg, never> = {
     red: {
-      go: () => [{ type: "green" }, []],
+      go: () => [{ _tag: "green" }, []],
       stop: (s) => [s, []],
     },
     green: {
       go: (s) => [s, []],
-      stop: () => [{ type: "red" }, []],
+      stop: () => [{ _tag: "red" }, []],
     },
   };
   return defineMachine({
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
-    init: () => [{ type: "red" }, []],
+    init: () => [{ _tag: "red" }, []],
     update,
   });
 }
@@ -70,8 +70,8 @@ describe("foldMsgs — folds update over Msg[] from a base state (#211)", () => 
   it("folds a reducer-form machine from base, returning the resulting state", () => {
     const m = counterMachine();
     const result = foldMsgs(m, { count: 10 }, [
-      { type: "add", n: 5 },
-      { type: "add", n: 2 },
+      { _tag: "add", n: 5 },
+      { _tag: "add", n: 2 },
     ]);
     expect(result).toEqual({ count: 17 });
   });
@@ -79,21 +79,21 @@ describe("foldMsgs — folds update over Msg[] from a base state (#211)", () => 
   it("starts from the supplied base, NOT from init (base-state entry)", () => {
     const m = counterMachine();
     // init would yield count:0; foldMsgs must honor base count:100 instead.
-    const result = foldMsgs(m, { count: 100 }, [{ type: "add", n: 1 }]);
+    const result = foldMsgs(m, { count: 100 }, [{ _tag: "add", n: 1 }]);
     expect(result).toEqual({ count: 101 });
   });
 
   it("works for a Transitions-form machine via the shared formOf reader", () => {
     const m = lightMachine();
-    expect(foldMsgs(m, { type: "red" }, [{ type: "go" }])).toEqual({
-      type: "green",
+    expect(foldMsgs(m, { _tag: "red" }, [{ _tag: "go" }])).toEqual({
+      _tag: "green",
     });
     expect(
-      foldMsgs(m, { type: "red" }, [{ type: "go" }, { type: "stop" }]),
-    ).toEqual({ type: "red" });
+      foldMsgs(m, { _tag: "red" }, [{ _tag: "go" }, { _tag: "stop" }]),
+    ).toEqual({ _tag: "red" });
     // base-state entry: enter mid-machine at "green", not init's "red".
-    expect(foldMsgs(m, { type: "green" }, [{ type: "stop" }])).toEqual({
-      type: "red",
+    expect(foldMsgs(m, { _tag: "green" }, [{ _tag: "stop" }])).toEqual({
+      _tag: "red",
     });
   });
 });
@@ -101,7 +101,7 @@ describe("foldMsgs — folds update over Msg[] from a base state (#211)", () => 
 describe("foldMsgs — fires no Store / interpret / subscription effects (#211)", () => {
   it("invokes no init and no Sub `deps`, and drops every Cmd — even when each would throw", () => {
     type FxState = { readonly n: number };
-    type FxMsg = { readonly type: "inc" };
+    type FxMsg = { readonly _tag: "inc" };
     type FxCmd = Cmd<"fx">;
     type FxSub = Sub<"tick", { readonly n: number }>;
 
@@ -111,7 +111,7 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
     const update: Reducer<FxState, FxMsg, FxCmd> = {
       // The cell EMITS a Cmd. foldMsgs takes no handlers (they are handed to
       // `run`, never kept on the machine), so it can only discard the Cmd.
-      inc: (s) => [{ n: s.n + 1 }, [{ type: "fx" }]],
+      inc: (s) => [{ n: s.n + 1 }, [{ _tag: "fx" }]],
     };
 
     // No runner to spy on: sub runners, like Cmd handlers, are handed to
@@ -131,7 +131,7 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
       update,
       subs: [
         {
-          type: "tick",
+          _tag: "tick",
           deps: () => {
             fired.deps = true;
             throw new Error(
@@ -143,9 +143,9 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
     });
 
     const result = foldMsgs(m, { n: 0 }, [
-      { type: "inc" },
-      { type: "inc" },
-      { type: "inc" },
+      { _tag: "inc" },
+      { _tag: "inc" },
+      { _tag: "inc" },
     ]);
 
     expect(result).toEqual({ n: 3 });
@@ -159,14 +159,14 @@ describe("foldMsgs — algebraic laws (#211)", () => {
 
   const counterMsg: fc.Arbitrary<CounterMsg> = fc.oneof(
     fc.record({
-      type: fc.constant<"add">("add"),
+      _tag: fc.constant<"add">("add"),
       n: fc.integer({ min: -1000, max: 1000 }),
     }),
-    fc.constant<CounterMsg>({ type: "reset" }),
+    fc.constant<CounterMsg>({ _tag: "reset" }),
   );
   const lightMsg: fc.Arbitrary<LightMsg> = fc.constantFrom<LightMsg>(
-    { type: "go" },
-    { type: "stop" },
+    { _tag: "go" },
+    { _tag: "stop" },
   );
 
   it("empty msg queue is identity on the base state (reducer form)", () => {
@@ -179,7 +179,7 @@ describe("foldMsgs — algebraic laws (#211)", () => {
   });
 
   it("empty msg queue is identity on the base state (transitions form)", () => {
-    const base: LightState = { type: "green" };
+    const base: LightState = { _tag: "green" };
     expect(foldMsgs(light, base, [])).toBe(base);
   });
 
@@ -202,7 +202,7 @@ describe("foldMsgs — algebraic laws (#211)", () => {
   it("fold [a, b] equals fold [a] then fold [b] (associativity, transitions form)", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom<LightState>({ type: "red" }, { type: "green" }),
+        fc.constantFrom<LightState>({ _tag: "red" }, { _tag: "green" }),
         fc.array(lightMsg),
         fc.array(lightMsg),
         (base, a, b) => {
@@ -219,9 +219,9 @@ describe("foldMsgs — algebraic laws (#211)", () => {
     // from that same init state must reach the same final state — the two
     // share one internal fold keyed on formOf, so they agree by construction.
     const msgs: readonly CounterMsg[] = [
-      { type: "add", n: 3 },
-      { type: "reset" },
-      { type: "add", n: 9 },
+      { _tag: "add", n: 3 },
+      { _tag: "reset" },
+      { _tag: "add", n: 9 },
     ];
     const viaReplay = replay(counter, { msgs, ctx: undefined });
     expect(foldMsgs(counter, { count: 0 }, msgs)).toEqual(viaReplay.state);

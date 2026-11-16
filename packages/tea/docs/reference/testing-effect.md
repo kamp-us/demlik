@@ -16,7 +16,7 @@ import { … } from "@demlik/tea/testing/effect";
 | [`DEFAULT_MAX_ROUNDS`](#DEFAULT_MAX_ROUNDS) | Variable | stable | The default round bound when `opts.maxRounds` is omitted: **100**. |
 | [`drive`](#drive) | Function | stable | Drive `machine` from `initial` through `msg` against the REAL Effect `interpret` map — the one a host hands the Effect engine's `run` — and the Subs the machine wants, feeding every Msg back until the machine goes quiet. |
 | [`DriveCtxArg`](#DriveCtxArg) | Type | stable | `drive`'s `ctx` field. |
-| [`DriveNoHandlerError`](#DriveNoHandlerError) | Class | stable | Raised when a Cmd reaches `drive` with no handler for its `type` in the handler record. |
+| [`DriveNoHandlerError`](#DriveNoHandlerError) | Class | stable | Raised when a Cmd reaches `drive` with no handler for its `_tag` in the handler record. |
 | [`DriveOptions`](#DriveOptions) | Type | stable | The options both `drive`s take. |
 | [`DriveResult`](#DriveResult) | Interface | stable | What a settled `drive` hands back. |
 | [`DriveRoundsExceededError`](#DriveRoundsExceededError) | Class | stable | Raised when a driven machine is still emitting work after `maxRounds` rounds. |
@@ -46,7 +46,7 @@ import { … } from "@demlik/tea/testing/effect";
 ```ts
 function arbSchemaGuidedSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -72,7 +72,7 @@ const DEFAULT_MAX_ROUNDS: 100
 ```ts
 function drive<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -103,7 +103,7 @@ type DriveCtxArg<Ctx> = [undefined] extends [Ctx] ? { readonly ctx?: Ctx } : Ctx
 class DriveNoHandlerError<M, C> extends Error {
   constructor(cmdType: string, trace: readonly DriveTraceEntry<M, C>[]);
   readonly _tag: "DriveNoHandlerError";
-  /** The Cmd `type` nothing in the handler record answered. */
+  /** The Cmd `_tag` nothing in the handler record answered. */
   readonly cmdType: string;
   readonly name: "DriveNoHandlerError";
   /** Every Msg folded and Cmd dispatched before the miss. */
@@ -223,7 +223,7 @@ interface Fold<S, M, C> {
 ```ts
 function foldEvents<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -326,7 +326,7 @@ type SchemaAnswersError = NoCmdsError | NotEffectSchemaError | NothingToDrawErro
 ### `SchemaGuidedOptions`
 
 ```ts
-interface SchemaGuidedOptions<S, M extends { type: string }> {
+interface SchemaGuidedOptions<S, M extends { _tag: string }> {
   /**
    * The saved state the fold starts from. Give `foldEvents` the same one, or it
    * reads the list from a different start. Default `null`.
@@ -342,7 +342,7 @@ interface SchemaGuidedOptions<S, M extends { type: string }> {
    * The Msgs nothing sends a Cmd for, by Msg type: a user's click, a timer. A
    * Msg type here and in no Cmd's answers is drawn only from here.
    */
-  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { type: K }>> };
+  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { _tag: K }>> };
 }
 ```
 

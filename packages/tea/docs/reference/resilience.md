@@ -74,9 +74,9 @@ import { … } from "@demlik/tea/resilience";
 | [`ResilientCallDeadlineConfig`](#ResilientCallDeadlineConfig) | Interface | battery | Overall deadline knob — a budget of IN-PROCESS time per in-flight call. |
 | [`ResilientConfig`](#ResilientConfig) | Interface | battery | The resilience knob. |
 | [`ResilientDeadlineType`](#ResilientDeadlineType) | Type | battery | The deadline Msg tag this knob's timers dispatch, derived from its name the same way the settle Msgs are. |
-| [`ResilientErrType`](#ResilientErrType) | Type | battery | The failure settle Msg's `type` for the `N` family — minted by the engine. |
-| [`ResilientOkType`](#ResilientOkType) | Type | battery | The success settle Msg's `type` for the `N` family — minted by the engine. |
-| [`ResilientRunType`](#ResilientRunType) | Type | battery | The run Cmd's `type` for the `N` family. |
+| [`ResilientErrType`](#ResilientErrType) | Type | battery | The failure settle Msg's `_tag` for the `N` family — minted by the engine. |
+| [`ResilientOkType`](#ResilientOkType) | Type | battery | The success settle Msg's `_tag` for the `N` family — minted by the engine. |
+| [`ResilientRunType`](#ResilientRunType) | Type | battery | The run Cmd's `_tag` for the `N` family. |
 | [`ResilientState`](#ResilientState) | Interface | battery | The slice. |
 | [`ResilientTimerMsg`](#ResilientTimerMsg) | Type | battery | The retry / deadline timer Msg — a `DeadlineExceeded` whose tag is this knob's (ResilientDeadlineType), keyed by the call `key` through the Sub `id`. |
 | [`RetryExhaustedError`](#RetryExhaustedError) | Class | battery | Raised when `retryToSuccess` exhausts the retry bound without a success — the `maxAttempts`-th recorded failure refuses another attempt. |
@@ -197,6 +197,7 @@ function cacheEvictionSub(
   name: string,
   everyMs: number,
 ): {
+  readonly _tag: "cache";
   /**
    * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
    * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -205,7 +206,6 @@ function cacheEvictionSub(
    * `Error` or class instance rather than collapsing them onto one id.
    */
   readonly deps: (state: unknown) => CacheEvictionDeps | null | undefined;
-  readonly type: "cache";
 }
 ```
 
@@ -239,8 +239,8 @@ function cacheEvictMsg(id: string): CacheEvictMsg
 
 ```ts
 interface CacheEvictMsg {
+  readonly _tag: "cache_evict";
   readonly id: string;
-  readonly type: "cache_evict";
 }
 ```
 
@@ -504,7 +504,7 @@ function createAuthedCall<I, R>(
   ) => readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]];
   /**
    * The built-in `timer` Sub's deps: resilient-call's `timer` over the
-   * `resilience` field. Declare `{ type: "timer", deps: (s) => ac.timer(s) }`.
+   * `resilience` field. Declare `{ _tag: "timer", deps: (s) => ac.timer(s) }`.
    */
   timer: (s: AuthedState<I, R>) => TimerDeps<ResilientTimerMsg<"resilient">> | null;
 }
@@ -657,7 +657,7 @@ function createResilientCall<I, R, N extends string = "resilient">(
    * deadlines, counted down from the slice's `clockMs`, or `null` when
    * nothing is waiting. Declare it in the machine and `run` needs no runner:
    *
-   *   subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }]
+   *   subs: [{ _tag: "timer", deps: (s) => rc.timer(s.call) }]
    *
    * Its fire is this knob's timer Msg (`deadline_exceeded`, or
    * `<name>_deadline` for a named knob); route it to `onTimer`. A phase change
@@ -777,9 +777,9 @@ function deadlineExceeded<N extends string | undefined = undefined>(
 
 ```ts
 type DeadlineExceeded<N extends string | undefined = undefined> = {
+  readonly _tag: DeadlineMsgType<N>;
   readonly atMs: number;
   readonly id: string;
-  readonly type: DeadlineMsgType<N>;
 }
 ```
 
@@ -860,6 +860,7 @@ function deadlines<N extends string | undefined = undefined>(
 function deadlinesSub<S, N extends string | undefined = undefined>(
   select: (state: S) => readonly DeadlineSub<N>[],
 ): {
+  readonly _tag: "deadline";
   /**
    * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
    * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -868,7 +869,6 @@ function deadlinesSub<S, N extends string | undefined = undefined>(
    * `Error` or class instance rather than collapsing them onto one id.
    */
   readonly deps: (state: S) => readonly DeadlineSub<N>[] | null | undefined;
-  readonly type: "deadline";
 }
 ```
 
@@ -898,9 +898,9 @@ function deadlineSub<N extends string | undefined = undefined>(
 
 ```ts
 type DeadlineSub<N extends string | undefined = undefined> = {
+  readonly _tag: "deadline";
   readonly atMs: number;
   readonly id: SubId;
-  readonly type: "deadline";
 } & DeadlineOpts<N>
 ```
 
@@ -946,10 +946,10 @@ type FailMsg<
   I = unknown,
   E = RunErr | MalformedResult,
 > = {
+  readonly _tag: ResilientErrType<N>;
   readonly at: number;
   readonly cmd: RunCmd<I, N>;
   readonly error: E;
-  readonly type: ResilientErrType<N>;
 }
 ```
 
@@ -1395,16 +1395,16 @@ function setTimeoutArmTimer<N extends string | undefined = undefined>(): ArmTime
 ```ts
 type SettleMsg<R, N extends string = DefaultResilientName> =
   | {
+    readonly _tag?: ResilientOkType<N>;
     readonly at: number;
     readonly cmd: { readonly key: string };
-    readonly type?: ResilientOkType<N>;
     readonly value: R;
   }
   | {
+    readonly _tag?: ResilientErrType<N>;
     readonly at: number;
     readonly cmd: { readonly key: string };
     readonly error: unknown;
-    readonly type?: ResilientErrType<N>;
   }
 ```
 
@@ -1484,9 +1484,9 @@ function subscribeWith<N extends string | undefined = undefined>(
 
 ```ts
 type SucceedMsg<R, N extends string = DefaultResilientName, I = unknown> = {
+  readonly _tag: ResilientOkType<N>;
   readonly at: number;
   readonly cmd: RunCmd<I, N>;
-  readonly type: ResilientOkType<N>;
   readonly value: R;
 }
 ```
@@ -1608,9 +1608,9 @@ interface TtlCache<V> {
 
 ```ts
 type Unauthorized = {
+  readonly _tag: typeof MsgType.Unauthorized;
   readonly at: number;
   readonly key: string;
-  readonly type: typeof MsgType.Unauthorized;
 }
 ```
 

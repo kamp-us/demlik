@@ -17,7 +17,7 @@ import { fakeChrome } from "./test-utils";
 // ───────────────────────────────────────────────────────────────────────────
 
 type CounterState = { readonly n: number };
-type CounterMsg = { readonly type: "inc" };
+type CounterMsg = { readonly _tag: "inc" };
 
 function parseCounter(raw: unknown): CounterState | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -84,8 +84,8 @@ describe("chromeStorageStore", () => {
       ctx: undefined,
       store: chromeStorageStore<CounterState>("counter", parseCounter, area),
     }).ready;
-    await first.dispatch({ type: "inc" });
-    await first.dispatch({ type: "inc" });
+    await first.dispatch({ _tag: "inc" });
+    await first.dispatch({ _tag: "inc" });
     expect(first.getState()).toEqual({ n: 2 });
     await first.stop();
 
@@ -127,8 +127,8 @@ function installFakeChrome() {
 
 function parseCounterMsg(raw: unknown): CounterMsg | null {
   if (typeof raw !== "object" || raw === null) return null;
-  return (raw as Record<string, unknown>).type === "inc"
-    ? { type: "inc" }
+  return (raw as Record<string, unknown>)._tag === "inc"
+    ? { _tag: "inc" }
     : null;
 }
 
@@ -156,7 +156,7 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
 
   it("hydrate() returns the host's current state and primes getSnapshot()", async () => {
     const h = await bootBridgedHost();
-    await h.dispatch({ type: "inc" });
+    await h.dispatch({ _tag: "inc" });
 
     const client = bridgeClient<CounterState, CounterMsg>({
       channel: "test",
@@ -181,15 +181,15 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
       seen.push({ msg, state });
     });
 
-    await client.dispatch({ type: "inc" });
+    await client.dispatch({ _tag: "inc" });
     await expect
       .poll(() => client.getSnapshot(), { timeout: 2000 })
       .toEqual({ n: 1 });
-    expect(seen).toContainEqual({ msg: { type: "inc" }, state: { n: 1 } });
+    expect(seen).toContainEqual({ msg: { _tag: "inc" }, state: { n: 1 } });
 
     // After unsubscribe the listener no longer hears broadcasts.
     unsubscribe();
-    await client.dispatch({ type: "inc" });
+    await client.dispatch({ _tag: "inc" });
     await new Promise((r) => setTimeout(r, 20));
     expect(seen.some((e) => e.state.n === 2)).toBe(false);
   });
@@ -203,7 +203,7 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
     });
     // getSnapshot only tracks broadcasts while a subscription is active.
     client.subscribe(() => {});
-    await client.dispatch({ type: "inc" });
+    await client.dispatch({ _tag: "inc" });
     await expect
       .poll(() => client.getSnapshot(), { timeout: 2000 })
       .toEqual({ n: 1 });
@@ -220,7 +220,7 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
     client.subscribe(() => {
       called += 1;
     });
-    await client.dispatch({ type: "inc" });
+    await client.dispatch({ _tag: "inc" });
     await new Promise((r) => setTimeout(r, 20));
     expect(called).toBe(0);
     expect(client.getSnapshot()).toBeNull();
@@ -238,7 +238,7 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
 
     // dispatch() resolves (the host replies { ok: false } rather than
     // rejecting the send), but the reducer never ran — state is untouched.
-    await client.dispatch({ type: "bogus" } as unknown as CounterMsg);
+    await client.dispatch({ _tag: "bogus" } as unknown as CounterMsg);
     await new Promise((r) => setTimeout(r, 20));
     expect(h.getState()).toEqual({ n: 0 });
   });
@@ -255,7 +255,7 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
 
     // fakeChrome mirrors chrome's no-receiver rejection once the bridge's
     // onMessage listener is removed.
-    await expect(client.dispatch({ type: "inc" })).rejects.toThrow(
+    await expect(client.dispatch({ _tag: "inc" })).rejects.toThrow(
       /Receiving end does not exist/,
     );
   });

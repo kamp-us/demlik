@@ -1,6 +1,6 @@
 /**
  * The built-in Sub runners in their plain shape, the Promise engine's (#270
- * R1.1). A machine declares a built-in Sub by type alone — `{ type: "timer", deps:
+ * R1.1). A machine declares a built-in Sub by type alone — `{ _tag: "timer", deps:
  * (s) => ({ ms, msg }) }` — and `run` starts it with the runner here unless
  * `subscribe` names one of the same type, which replaces it (#270 R2.1). `/react`
  * reads them too, because a hidden component's built-in Sub has to stop as well.

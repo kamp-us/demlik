@@ -34,7 +34,7 @@ import { useMachine } from "./index";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type Count = { readonly n: number };
-type Inc = { readonly type: "inc" };
+type Inc = { readonly _tag: "inc" };
 type Probe = Sub<"probe", { readonly name: string }>;
 
 /** A counter with one always-on Sub. Its `init` reads what a store loaded. */
@@ -48,7 +48,7 @@ function counter(name = "p") {
     },
     init: (loaded) => [loaded ?? { n: 0 }, []],
     update: { inc: (s) => [{ n: s.n + 1 }, []] },
-    subs: [{ type: "probe", deps: () => ({ name }) }],
+    subs: [{ _tag: "probe", deps: () => ({ name }) }],
   });
 }
 
@@ -141,7 +141,7 @@ describe.each(engines)("$name engine", (engine) => {
         const msgs = index + 2;
         await act(async () => {
           for (let i = 0; i < msgs; i++)
-            expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+            expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         });
         expect(
           container.querySelector(`[data-part="${name}"]`)?.textContent,
@@ -154,15 +154,15 @@ describe.each(engines)("$name engine", (engine) => {
 
     it("runs an `init` Cmd once and loses no in-flight result to the extra effect run", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const handler = vi.fn(async () => ({ type: "loaded" }) as const);
+      const handler = vi.fn(async () => ({ _tag: "loaded" }) as const);
       const machine = defineMachine({
         types: {
           model: {} as { readonly phase: string },
-          msg: {} as { readonly type: "loaded" },
-          cmd: {} as { readonly type: "load" },
+          msg: {} as { readonly _tag: "loaded" },
+          cmd: {} as { readonly _tag: "load" },
           ctx: undefined,
         },
-        init: (_loaded) => [{ phase: "loading" }, [{ type: "load" }]],
+        init: (_loaded) => [{ phase: "loading" }, [{ _tag: "load" }]],
         update: { loaded: () => [{ phase: "loaded" }, []] },
       });
       function Host() {
@@ -191,7 +191,7 @@ describe.each(engines)("$name engine", (engine) => {
       const probe = subProbe(engine);
       function Child({ inc }: { readonly inc: (msg: Inc) => void }) {
         useEffect(() => {
-          inc({ type: "inc" });
+          inc({ _tag: "inc" });
         }, [inc]);
         return null;
       }
@@ -265,8 +265,8 @@ describe.each(engines)("$name engine", (engine) => {
         let expected = 0;
         for (let cycle = 0; cycle < 3; cycle++) {
           await act(async () => {
-            expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
-            expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+            expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
+            expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
           });
           expected += 2;
           expect(container.textContent).toBe(String(expected));
@@ -297,7 +297,7 @@ describe.each(engines)("$name engine", (engine) => {
         await settle(shown(true));
         const kept = slot.dispatch;
         await act(async () => {
-          expect(kept?.({ type: "inc" })).toBeUndefined();
+          expect(kept?.({ _tag: "inc" })).toBeUndefined();
         });
 
         await settle(shown(false));
@@ -305,7 +305,7 @@ describe.each(engines)("$name engine", (engine) => {
 
         expect(slot.dispatch).toBe(kept);
         await act(async () => {
-          expect(kept?.({ type: "inc" })).toBeUndefined();
+          expect(kept?.({ _tag: "inc" })).toBeUndefined();
         });
         expect(container.textContent).toBe("2");
       });
@@ -316,7 +316,7 @@ describe.each(engines)("$name engine", (engine) => {
         await settle(shown(false));
 
         await act(async () => {
-          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+          expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         });
         expect(probe.live).toBe(0);
 
@@ -338,12 +338,12 @@ describe.each(engines)("$name engine", (engine) => {
         const { store, probe, counts, slot, shown, onError } = harness();
         await settle(shown(true));
         await act(async () => {
-          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+          expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         });
         await settle(shown(false));
         await settle(shown(true));
         await act(async () => {
-          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+          expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         });
 
         await settle(wrap(<div />));
@@ -354,7 +354,7 @@ describe.each(engines)("$name engine", (engine) => {
         if (store !== undefined) {
           await expect(store.load()).resolves.toEqual({ n: 2 });
         }
-        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         expect(onError).toHaveBeenCalledExactlyOnceWith(
           expect.any(DispatchDiscardedError),
           { phase: "discard" },
@@ -365,7 +365,7 @@ describe.each(engines)("$name engine", (engine) => {
         const { store, probe, counts, slot, shown, onError } = harness();
         await settle(shown(true));
         await act(async () => {
-          expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+          expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         });
         await settle(shown(false));
 
@@ -376,7 +376,7 @@ describe.each(engines)("$name engine", (engine) => {
         if (store !== undefined) {
           await expect(store.load()).resolves.toEqual({ n: 1 });
         }
-        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         expect(onError).toHaveBeenCalledExactlyOnceWith(
           expect.any(DispatchDiscardedError),
           { phase: "discard" },
@@ -388,7 +388,7 @@ describe.each(engines)("$name engine", (engine) => {
         await settle(shown(false));
         expect(counts).toEqual({ started: 0, stopped: 0 });
 
-        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         await act(beat);
         expect(counts).toEqual({ started: 0, stopped: 0 });
         expect(onError).not.toHaveBeenCalled();
@@ -403,7 +403,7 @@ describe.each(engines)("$name engine", (engine) => {
         const { counts, slot, shown, onError } = harness();
         await settle(shown(false));
 
-        expect(slot.dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(slot.dispatch?.({ _tag: "inc" })).toBeUndefined();
         expect(onError).not.toHaveBeenCalled();
         await settle(wrap(<div />));
 
@@ -424,7 +424,7 @@ describe.each(engines)("$name engine", (engine) => {
       function Child({ inc }: { readonly inc: (msg: Inc) => void }) {
         useEffect(
           () => () => {
-            inc({ type: "inc" });
+            inc({ _tag: "inc" });
           },
           [inc],
         );
@@ -461,17 +461,17 @@ describe.each(engines)("$name engine", (engine) => {
     ],
   ] as const)("useMachine: a Cmd in flight at a hide, %s", (_label, wrap) => {
     type Load = { readonly phase: "idle" | "loading" | "loaded" };
-    type LoadMsg = { readonly type: "start" } | { readonly type: "answered" };
+    type LoadMsg = { readonly _tag: "start" } | { readonly _tag: "answered" };
     const types = {
       model: {} as Load,
       msg: {} as LoadMsg,
-      cmd: {} as { readonly type: "fetch" },
+      cmd: {} as { readonly _tag: "fetch" },
       ctx: undefined,
     };
     const update = {
-      start: (): [Load, { readonly type: "fetch" }[]] => [
+      start: (): [Load, { readonly _tag: "fetch" }[]] => [
         { phase: "loading" },
-        [{ type: "fetch" }],
+        [{ _tag: "fetch" }],
       ],
       answered: (): [Load, never[]] => [{ phase: "loaded" }, []],
     };
@@ -485,7 +485,7 @@ describe.each(engines)("$name engine", (engine) => {
         init: (loaded) =>
           loaded?.phase === "loaded"
             ? [loaded, []]
-            : [{ phase: "loading" }, [{ type: "fetch" }]],
+            : [{ phase: "loading" }, [{ _tag: "fetch" }]],
         update,
       }),
       update: defineMachine({
@@ -517,7 +517,7 @@ describe.each(engines)("$name engine", (engine) => {
           });
           const handler = vi.fn(async () => {
             await answer;
-            return { type: "answered" } as const;
+            return { _tag: "answered" } as const;
           });
           const store = makeStore();
           const { counts, counted } = engine.countedRun();
@@ -542,7 +542,7 @@ describe.each(engines)("$name engine", (engine) => {
           await settle(shown(true));
           if (startedBy === "update") {
             await act(async () => {
-              expect(dispatch?.({ type: "start" })).toBeUndefined();
+              expect(dispatch?.({ _tag: "start" })).toBeUndefined();
             });
           }
           // The engine tells listeners before a State's Cmds start (#695), so both
@@ -580,7 +580,7 @@ describe.each(engines)("$name engine", (engine) => {
         init: (loaded) =>
           loaded?.phase === "loaded"
             ? [loaded, []]
-            : [{ phase: "loading" }, [{ type: "fetch" }]],
+            : [{ phase: "loading" }, [{ _tag: "fetch" }]],
         update,
       });
       const store = memoryStore<Load>(undefined, parseLoad);
@@ -591,7 +591,7 @@ describe.each(engines)("$name engine", (engine) => {
       });
       const handler = vi.fn(async () => {
         await answer;
-        return { type: "answered" } as const;
+        return { _tag: "answered" } as const;
       });
       function Part() {
         const [state] = useMachine(machine, {
@@ -624,13 +624,13 @@ describe.each(engines)("$name engine", (engine) => {
         types: {
           model: {} as Load,
           msg: {} as LoadMsg,
-          cmd: {} as { readonly type: "fetch" },
+          cmd: {} as { readonly _tag: "fetch" },
           sub: {} as Probe,
           ctx: undefined,
         },
-        init: (_loaded) => [{ phase: "loading" }, [{ type: "fetch" }]],
+        init: (_loaded) => [{ phase: "loading" }, [{ _tag: "fetch" }]],
         update,
-        subs: [{ type: "probe", deps: () => ({ name: "p" }) }],
+        subs: [{ _tag: "probe", deps: () => ({ name: "p" }) }],
       });
       let release = (): void => {};
       const answer = new Promise<void>((resolve) => {
@@ -644,7 +644,7 @@ describe.each(engines)("$name engine", (engine) => {
           interpret: {
             fetch: engine.cell(async () => {
               await answer;
-              return { type: "answered" } as const;
+              return { _tag: "answered" } as const;
             }),
           },
           subscribe: {
@@ -689,7 +689,7 @@ describe.each(engines)("$name engine", (engine) => {
           interpret: {
             fetch: engine.cell(async () => {
               await answer;
-              return { type: "answered" } as const;
+              return { _tag: "answered" } as const;
             }),
           },
         });
@@ -715,7 +715,7 @@ describe.each(engines)("$name engine", (engine) => {
 
   describe("useMachine under <Activity>: which Subs run", () => {
     type Flag = { readonly n: number; readonly fired: boolean };
-    type FlagMsg = Inc | { readonly type: "fired" };
+    type FlagMsg = Inc | { readonly _tag: "fired" };
 
     it("stops the built-in `timer` while hidden, and the show starts its countdown over", async () => {
       const machine = defineMachine({
@@ -727,9 +727,9 @@ describe.each(engines)("$name engine", (engine) => {
         },
         subs: [
           {
-            type: "timer",
+            _tag: "timer",
             deps: (s) =>
-              s.fired ? null : { ms: 30, msg: { type: "fired" } as const },
+              s.fired ? null : { ms: 30, msg: { _tag: "fired" } as const },
           },
         ],
       });
@@ -779,8 +779,8 @@ describe.each(engines)("$name engine", (engine) => {
         },
         subs: [
           {
-            type: "timer",
-            deps: () => ({ ms: 60_000, msg: { type: "fired" } as const }),
+            _tag: "timer",
+            deps: () => ({ ms: 60_000, msg: { _tag: "fired" } as const }),
           },
         ],
       });
@@ -810,7 +810,7 @@ describe.each(engines)("$name engine", (engine) => {
         init: () => [{ n: 0 }, []],
         update: { inc: (s) => [{ n: s.n + 1 }, []] },
         subs: [
-          { type: "probe", deps: (s) => (s.n > 0 ? { name: "p" } : null) },
+          { _tag: "probe", deps: (s) => (s.n > 0 ? { name: "p" } : null) },
         ],
       });
       const probe = subProbe(engine);
@@ -833,7 +833,7 @@ describe.each(engines)("$name engine", (engine) => {
       await settle(shown(true));
       await settle(shown(false));
       await act(async () => {
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       expect(probe).toMatchObject({ live: 0, starts: 0 });
 
@@ -852,7 +852,7 @@ describe.each(engines)("$name engine", (engine) => {
         init: () => [{ n: 0 }, []],
         update: { inc: (s) => [{ n: s.n + 1 }, []] },
         subs: [
-          { type: "probe", deps: (s) => (s.n === 0 ? { name: "p" } : null) },
+          { _tag: "probe", deps: (s) => (s.n === 0 ? { name: "p" } : null) },
         ],
       });
       const probe = subProbe(engine);
@@ -875,7 +875,7 @@ describe.each(engines)("$name engine", (engine) => {
       await settle(shown(true));
       await settle(shown(false));
       await act(async () => {
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       await settle(shown(true));
 
@@ -928,7 +928,7 @@ describe.each(engines)("$name engine", (engine) => {
 
       await settle(<Part />);
       await act(async () => {
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       expect(onError).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
@@ -965,7 +965,7 @@ describe.each(engines)("$name engine", (engine) => {
 
       await settle(shown(true));
       await act(async () => {
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       await settle(shown(false));
       await settle(shown(true));
@@ -978,10 +978,10 @@ describe.each(engines)("$name engine", (engine) => {
         types: {
           model: {} as Count,
           msg: {} as Inc,
-          cmd: {} as { readonly type: "hello" },
+          cmd: {} as { readonly _tag: "hello" },
           ctx: undefined,
         },
-        init: (_loaded) => [{ n: 0 }, [{ type: "hello" }]],
+        init: (_loaded) => [{ n: 0 }, [{ _tag: "hello" }]],
         update: { inc: (s) => [{ n: s.n + 1 }, []] },
       });
       function Part() {
@@ -1012,18 +1012,18 @@ describe.each(engines)("$name engine", (engine) => {
       const machine = defineMachine({
         types: {
           model: {} as Count,
-          msg: {} as Inc | { readonly type: "park" },
-          cmd: {} as { readonly type: "wait" },
+          msg: {} as Inc | { readonly _tag: "park" },
+          cmd: {} as { readonly _tag: "wait" },
           ctx: undefined,
         },
         init: () => [{ n: 0 }, []],
         update: {
           inc: (s) => [{ n: s.n + 1 }, []],
-          park: (s) => [s, [{ type: "wait" }]],
+          park: (s) => [s, [{ _tag: "wait" }]],
         },
       });
       let dispatch:
-        | ((msg: Inc | { readonly type: "park" }) => void)
+        | ((msg: Inc | { readonly _tag: "park" }) => void)
         | undefined;
       function Part() {
         const [state, d] = useMachine(machine, {
@@ -1046,13 +1046,13 @@ describe.each(engines)("$name engine", (engine) => {
 
       await settle(shown(true));
       await act(async () => {
-        expect(dispatch?.({ type: "park" })).toBeUndefined();
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "park" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       // The run's queue is parked on the handler, with `inc` waiting behind it.
       await settle(shown(false));
       await settle(shown(true));
-      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       expect(container.textContent).toBe("0");
 
       release();
@@ -1072,11 +1072,11 @@ describe.each(engines)("$name engine", (engine) => {
         types: {
           model: {} as Count,
           msg: {} as Inc,
-          cmd: {} as { readonly type: "save" },
+          cmd: {} as { readonly _tag: "save" },
           ctx: {} as { readonly userId: string },
         },
         init: () => [{ n: 0 }, []],
-        update: { inc: (s) => [{ n: s.n + 1 }, [{ type: "save" }]] },
+        update: { inc: (s) => [{ n: s.n + 1 }, [{ _tag: "save" }]] },
       });
       const { counts, counted } = engine.countedRun();
       let dispatch: ((msg: Inc) => void) | undefined;
@@ -1101,7 +1101,7 @@ describe.each(engines)("$name engine", (engine) => {
         </StrictMode>,
       );
       await act(async () => {
-        expect(dispatch?.({ type: "inc" })).toBeUndefined();
+        expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
       });
       expect(warn).not.toHaveBeenCalled();
       expect(counts).toEqual({ started: 1, stopped: 0 });

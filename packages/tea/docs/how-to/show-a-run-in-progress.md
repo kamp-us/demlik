@@ -18,9 +18,9 @@ const agent = defineAgent({ model, tools: [note], instructions });
 const final = await agent.run(input, {
   store,
   onEvent: (event) => {
-    if (event.type === "TurnSettled") console.log("thinking:", event.turn.content);
-    if (event.type === "ToolSettled") console.log("tool:", event.callId);
-    if (event.type === "RunDone") console.log("ended:", event.status.kind);
+    if (event._tag === "TurnSettled") console.log("thinking:", event.turn.content);
+    if (event._tag === "ToolSettled") console.log("tool:", event.callId);
+    if (event._tag === "RunDone") console.log("ended:", event.status.kind);
   },
 });
 ```
@@ -43,7 +43,7 @@ once per call, however many attempts the retry ladder spends.
 They are the same `AgentEvent`s a hand-wired `run(machine, { events: agentEvents() })`
 projects to `runtime.on(...)`; `onEvent` forwards that stream rather than minting
 a second vocabulary. The type is `DefinedAgentEvent<typeof yourTools>`, so a
-`switch` on `event.type` narrows to exactly the fields above.
+`switch` on `event._tag` narrows to exactly the fields above.
 
 ## 2. Know what it does not give you
 

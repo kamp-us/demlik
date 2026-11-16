@@ -10,8 +10,8 @@ import type { Reducer } from "../core";
 type State = { readonly id: string; readonly at: number };
 
 type Msg =
-  | { readonly type: "spawned"; readonly id: string; readonly at: number }
-  | { readonly type: "reset" };
+  | { readonly _tag: "spawned"; readonly id: string; readonly at: number }
+  | { readonly _tag: "reset" };
 
 export const pureUpdate: Reducer<State, Msg, never> = {
   // ids/timestamps from Msg payload are pure to read — permitted, not flagged.

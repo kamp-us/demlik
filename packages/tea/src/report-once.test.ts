@@ -19,16 +19,16 @@ import { run, tell } from "./promise";
 
 type State = { readonly n: number };
 type Msg =
-  | { readonly type: "boom" }
-  | { readonly type: "kick" }
-  | { readonly type: "inc" };
-type Fire = { readonly type: "fire" };
+  | { readonly _tag: "boom" }
+  | { readonly _tag: "kick" }
+  | { readonly _tag: "inc" };
+type Fire = { readonly _tag: "fire" };
 
 const update: Reducer<State, Msg, Fire> = {
   boom: () => {
     throw new Error("reducer threw");
   },
-  kick: (s) => [s, [{ type: "fire" }]],
+  kick: (s) => [s, [{ _tag: "fire" }]],
   inc: (s) => [{ n: s.n + 1 }, []],
 };
 const machine = defineMachine({
@@ -42,7 +42,7 @@ const machine = defineMachine({
   update,
 });
 const interpret: Interpret<Msg, Fire, undefined> = {
-  fire: async () => ({ type: "boom" }),
+  fire: async () => ({ _tag: "boom" }),
 };
 
 /** A live run that keeps going after a throw, and the phases its sink heard. */
@@ -60,21 +60,21 @@ const open = async () => {
 describe("a reducer throw reaches the sink once", () => {
   it("through `tell`", async () => {
     const { runtime, phases } = await open();
-    expect(tell(machine, runtime, { type: "boom" })).toBe("queued");
+    expect(tell(machine, runtime, { _tag: "boom" })).toBe("queued");
     await runtime.idle();
     expect(phases).toEqual(["reduce"]);
   });
 
   it("through a Msg a Cmd sends back", async () => {
     const { runtime, phases } = await open();
-    await runtime.dispatch({ type: "kick" });
+    await runtime.dispatch({ _tag: "kick" });
     await runtime.idle();
     expect(phases).toEqual(["reduce"]);
   });
 
   it("through `dispatch`, whose caller also gets the throw", async () => {
     const { runtime, phases } = await open();
-    await expect(runtime.dispatch({ type: "boom" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "boom" })).rejects.toThrow(
       "reducer threw",
     );
     expect(phases).toEqual(["reduce"]);
@@ -82,8 +82,8 @@ describe("a reducer throw reaches the sink once", () => {
 
   it("and the run folds on after it", async () => {
     const { runtime } = await open();
-    tell(machine, runtime, { type: "boom" });
-    tell(machine, runtime, { type: "inc" });
+    tell(machine, runtime, { _tag: "boom" });
+    tell(machine, runtime, { _tag: "inc" });
     await runtime.idle();
     expect(runtime.getState()).toEqual({ n: 1 });
   });
@@ -101,7 +101,7 @@ describe("failed boot refusals stay visible", () => {
     }[] = [];
     const bootMachine = defineMachine({
       ...machine,
-      init: () => [{ n: 0 }, [{ type: "fire" }]],
+      init: () => [{ n: 0 }, [{ _tag: "fire" }]],
     });
     const booting = run(bootMachine, {
       ctx: undefined,
@@ -125,8 +125,8 @@ describe("failed boot refusals stay visible", () => {
 
     for (const _ of ["first", "second", "third"]) {
       // @ts-expect-error failed boot exposes no ready handle; exercise a caller bypassing the type.
-      expect(tell(bootMachine, booting, { type: "inc" })).toBe("queued");
-      await expect(booting.dispatch({ type: "inc" })).rejects.toBe(failure);
+      expect(tell(bootMachine, booting, { _tag: "inc" })).toBe("queued");
+      await expect(booting.dispatch({ _tag: "inc" })).rejects.toBe(failure);
       expected.push({ error: failure, phase: "follow-up" });
       expect(reports).toEqual(expected);
     }
@@ -158,9 +158,9 @@ describe("known limit: primitive reducer throws are reported twice", () => {
     }).ready;
 
     if (source === "tell") {
-      expect(tell(primitiveMachine, runtime, { type: "boom" })).toBe("queued");
+      expect(tell(primitiveMachine, runtime, { _tag: "boom" })).toBe("queued");
     } else {
-      await runtime.dispatch({ type: "kick" });
+      await runtime.dispatch({ _tag: "kick" });
     }
     await runtime.idle();
     expect(reports).toEqual([
@@ -176,14 +176,14 @@ type Watch = Sub<"watch", { readonly on: true }>;
 const watcher = defineMachine({
   types: {
     model: {} as { readonly watching: boolean },
-    msg: {} as { readonly type: "watch" },
+    msg: {} as { readonly _tag: "watch" },
     sub: {} as Watch,
     ctx: undefined,
   },
   init: () => [{ watching: false }, []],
   update: { watch: () => [{ watching: true }, []] },
   subs: [
-    { type: "watch", deps: (s) => (s.watching ? { on: true as const } : null) },
+    { _tag: "watch", deps: (s) => (s.watching ? { on: true as const } : null) },
   ],
 });
 
@@ -203,7 +203,7 @@ describe("a Sub that throws as it starts reaches the sink once", () => {
       onError: (error, { phase }) => reports.push({ error, phase }),
     }).ready;
 
-    expect(tell(watcher, runtime, { type: "watch" })).toBe("queued");
+    expect(tell(watcher, runtime, { _tag: "watch" })).toBe("queued");
     await runtime.done().catch(() => {});
     expect(reports).toEqual([{ error: thrown, phase: "sub" }]);
   });

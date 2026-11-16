@@ -22,7 +22,7 @@ const tickets = [
   { id: "t3", title: "Export stalls" },
 ];
 
-function restoreAndDispatch<S, M extends { type: string }>(
+function restoreAndDispatch<S, M extends { _tag: string }>(
   machine: ReturnType<typeof Machine.make<S, M, never>>,
   saved: unknown,
   messages: readonly unknown[],
@@ -49,11 +49,11 @@ describe("Machine.make", () => {
       model: CounterModel,
       msg: CounterMsg,
       invalidModel: { count: "two" },
-      invalidMsg: { type: "UserIncremented", amount: "one" },
+      invalidMsg: { _tag: "UserIncremented", amount: "one" },
       execute: () =>
         restoreAndDispatch(counter, { count: 2 }, [
-          { type: "UserIncremented", amount: 1 },
-          { type: "UserIncremented", amount: 3 },
+          { _tag: "UserIncremented", amount: 1 },
+          { _tag: "UserIncremented", amount: 3 },
         ]),
       expected: { count: 6 },
     },
@@ -63,11 +63,11 @@ describe("Machine.make", () => {
       model: PreferencesModel,
       msg: PreferencesMsg,
       invalidModel: { selected: 42 },
-      invalidMsg: { type: "UserSelectedTheme", theme: false },
+      invalidMsg: { _tag: "UserSelectedTheme", theme: false },
       execute: () =>
         restoreAndDispatch(preferences, { selected: null }, [
-          { type: "UserSelectedTheme", theme: "light" },
-          { type: "UserSelectedTheme", theme: "dark" },
+          { _tag: "UserSelectedTheme", theme: "light" },
+          { _tag: "UserSelectedTheme", theme: "dark" },
         ]),
       expected: { selected: "dark" },
     },
@@ -77,11 +77,11 @@ describe("Machine.make", () => {
       model: NotebookModel,
       msg: NotebookMsg,
       invalidModel: { notes: [42] },
-      invalidMsg: { type: "UserAddedNote", text: null },
+      invalidMsg: { _tag: "UserAddedNote", text: null },
       execute: () =>
         restoreAndDispatch(notebook, { notes: ["first"] }, [
-          { type: "UserAddedNote", text: "second" },
-          { type: "UserAddedNote", text: "third" },
+          { _tag: "UserAddedNote", text: "second" },
+          { _tag: "UserAddedNote", text: "third" },
         ]),
       expected: { notes: ["first", "second", "third"] },
     },
@@ -106,7 +106,7 @@ describe("Machine.make", () => {
     expect(desk.msg).toBe(DeskMsg);
     expect(() =>
       Schema.decodeUnknownSync(Schema.toType(desk.msg))({
-        type: "LoadTickets_ok",
+        _tag: "LoadTickets_ok",
         value: tickets,
       }),
     ).toThrow();
@@ -129,18 +129,18 @@ describe("Machine.make", () => {
             },
           });
           const runtime = yield* handle.ready;
-          yield* runtime.dispatch({ type: "UserRequestedTickets" });
+          yield* runtime.dispatch({ _tag: "UserRequestedTickets" });
           yield* runtime.idle();
-          yield* runtime.dispatch({ type: "UserSelectedTicket", id: "t1" });
+          yield* runtime.dispatch({ _tag: "UserSelectedTicket", id: "t1" });
           yield* runtime.idle();
-          yield* runtime.dispatch({ type: "UserRequestedClose", id: "t1" });
+          yield* runtime.dispatch({ _tag: "UserRequestedClose", id: "t1" });
           yield* runtime.idle();
           yield* runtime.dispatch({
-            type: "UserSelectedTicket",
+            _tag: "UserSelectedTicket",
             id: "missing",
           });
           yield* runtime.idle();
-          yield* runtime.dispatch({ type: "UserRequestedClose", id: "t2" });
+          yield* runtime.dispatch({ _tag: "UserRequestedClose", id: "t2" });
           yield* runtime.idle();
           return runtime.getState();
         }).pipe(Effect.scoped),
@@ -163,20 +163,20 @@ describe("Machine.make", () => {
   it("keeps restored init and transitions usable by run and replay without decoding", async () => {
     const machine = Machine.make({
       model: Schema.Union([
-        Schema.Struct({ type: Schema.Literal("idle"), count: Schema.Number }),
-        Schema.Struct({ type: Schema.Literal("active"), count: Schema.Number }),
+        Schema.Struct({ _tag: Schema.Literal("idle"), count: Schema.Number }),
+        Schema.Struct({ _tag: Schema.Literal("active"), count: Schema.Number }),
       ]),
-      msg: Schema.Struct({ type: Schema.Literal("UserIncremented") }),
+      msg: Schema.Struct({ _tag: Schema.Literal("UserIncremented") }),
       cmds: [],
       types: { ctx: {} as { readonly increment: number } },
       init: (loaded, ctx) => [
-        { type: "idle", count: (loaded?.count ?? 0) + ctx.increment },
+        { _tag: "idle", count: (loaded?.count ?? 0) + ctx.increment },
         [],
       ],
       update: {
         idle: {
           UserIncremented: (state) => [
-            { type: "active", count: state.count + 1 },
+            { _tag: "active", count: state.count + 1 },
             [],
           ],
         },
@@ -188,15 +188,15 @@ describe("Machine.make", () => {
         },
       },
     });
-    const loaded = { type: "active" as const, count: 5 };
+    const loaded = { _tag: "active" as const, count: 5 };
     const msgs = [
-      { type: "UserIncremented" as const },
-      { type: "UserIncremented" as const },
+      { _tag: "UserIncremented" as const },
+      { _tag: "UserIncremented" as const },
     ];
     const ctx = { increment: 2 };
 
     expect(replay(machine, { loaded, msgs, ctx })).toEqual({
-      state: { type: "active", count: 9 },
+      state: { _tag: "active", count: 9 },
       cmds: [],
       subs: [],
     });
@@ -209,7 +209,7 @@ describe("Machine.make", () => {
         return runtime.getState();
       }).pipe(Effect.scoped),
     );
-    expect(actual).toEqual({ type: "active", count: 9 });
+    expect(actual).toEqual({ _tag: "active", count: 9 });
 
     const decodeCalls = { model: 0, msg: 0 };
     const schemaTypesOnly = Machine.make({
@@ -219,7 +219,7 @@ describe("Machine.make", () => {
           return true;
         }),
       ),
-      msg: Schema.Struct({ type: Schema.Literal("UserIncremented") }).check(
+      msg: Schema.Struct({ _tag: Schema.Literal("UserIncremented") }).check(
         Schema.makeFilter(() => {
           decodeCalls.msg++;
           return true;
@@ -235,7 +235,7 @@ describe("Machine.make", () => {
         const handle = yield* run(schemaTypesOnly, {});
         const runtime = yield* handle.ready;
         expect(decodeCalls).toEqual({ model: 0, msg: 0 });
-        yield* runtime.dispatch({ type: "UserIncremented" });
+        yield* runtime.dispatch({ _tag: "UserIncremented" });
         return runtime.getState();
       }).pipe(Effect.scoped),
     );
@@ -243,7 +243,7 @@ describe("Machine.make", () => {
     expect(decodeCalls).toEqual({ model: 0, msg: 0 });
     Schema.decodeUnknownSync(Schema.toType(schemaTypesOnly.model))(2);
     Schema.decodeUnknownSync(Schema.toType(schemaTypesOnly.msg))({
-      type: "UserIncremented",
+      _tag: "UserIncremented",
     });
     expect(decodeCalls).toEqual({ model: 1, msg: 1 });
   });

@@ -15,9 +15,9 @@
  *
  * Wire-shape (single `channel` string, three messages):
  *
- *   { type: channel,                msg, state }   // background → surfaces (broadcast)
- *   { type: `${channel}:hydrate`  }                 // surface → background (request)
- *   { type: `${channel}:dispatch`, msg }            // surface → background (input)
+ *   { _tag: channel,                msg, state }   // background → surfaces (broadcast)
+ *   { _tag: `${channel}:hydrate`  }                 // surface → background (request)
+ *   { _tag: `${channel}:dispatch`, msg }            // surface → background (input)
  *
  * The `:hydrate` reply is the current `runtime.getState()` snapshot —
  * lets a newly-opened surface render the right view BEFORE the next
@@ -38,23 +38,23 @@ import { type HistoryTracker, historyTracker, type Runtime } from "../index";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface BroadcastEnvelope<S, M> {
-  type: string; // === `channel`
+  _tag: string; // === `channel`
   msg: M | null;
   state: S;
 }
 
 interface DispatchEnvelope<M> {
-  type: string; // === `${channel}:dispatch`
+  _tag: string; // === `${channel}:dispatch`
   msg: M;
 }
 
 interface HydrateRequest {
-  type: string; // === `${channel}:hydrate`
+  _tag: string; // === `${channel}:hydrate`
 }
 
 /**
  * Wire shape of one entry in the hydrate `backlog`. Mirrors a single
- * broadcast envelope, but without the `type` discriminator (the parent
+ * broadcast envelope, but without the `_tag` discriminator (the parent
  * `HydrateResponse` already identified the channel).
  */
 interface BacklogEntry<V, M> {
@@ -124,8 +124,8 @@ export interface BridgeRuntimeOpts<S, M, V = S> {
    * `serialize` unset and `V = S`.
    *
    * Wire shape with `serialize`:
-   *   { type: channel, msg, state: serialize(currentState) }   // broadcast
-   *   { type: hydrate } → { state: serialize(currentState) }    // hydrate
+   *   { _tag: channel, msg, state: serialize(currentState) }   // broadcast
+   *   { _tag: hydrate } → { state: serialize(currentState) }    // hydrate
    *
    * Dispatch is NOT affected — it carries `M` end-to-end. Surfaces parse the
    * `V` they receive (they should pick a type parameter matching the
@@ -158,24 +158,24 @@ export interface BridgeRuntimeOpts<S, M, V = S> {
  * the observer and the chrome listener.
  *
  * - **Broadcast:** every (msg, state) transition emits
- *   `{ type: channel, msg, state }` via `chrome.runtime.sendMessage`. The
+ *   `{ _tag: channel, msg, state }` via `chrome.runtime.sendMessage`. The
  *   send is fire-and-forget — when no surface is listening, chrome.runtime
  *   rejects with "Could not establish connection. Receiving end does not
  *   exist." which we swallow. If `serialize` is provided, `state` carries
  *   `serialize(state)` instead of the raw state.
- * - **Hydrate:** `{ type: ":hydrate" }` is answered via `sendResponse` with
+ * - **Hydrate:** `{ _tag: ":hydrate" }` is answered via `sendResponse` with
  *   the current (optionally projected) `runtime.getState()`. If the runtime
  *   is mid-boot (store load not yet resolved), `getState()` throws — we
  *   swallow and reply with `state: null`; surfaces should treat null as
  *   "not ready yet" and wait for the first broadcast.
- * - **Dispatch:** `{ type: ":dispatch", msg }` is parsed through `parseMsg`
+ * - **Dispatch:** `{ _tag: ":dispatch", msg }` is parsed through `parseMsg`
  *   (Inv 8 — inbound msgs are an `unknown` boundary) and, if non-null, routes
  *   to `runtime.dispatch`. Returns `true` from the listener so chrome keeps the
  *   message channel open until dispatch's promise settles (we ack with
  *   `{ ok: true }`). A msg that fails the parse is dropped — the reducer never
  *   sees it and we reply `{ ok: false }`.
  */
-export function bridgeRuntime<S, M extends { type: string }, V = S>(
+export function bridgeRuntime<S, M extends { _tag: string }, V = S>(
   runtime: Runtime<S, M>,
   { channel, parseMsg, serialize, historySize }: BridgeRuntimeOpts<S, M, V>,
 ): () => void {
@@ -201,7 +201,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
   // (#47). One helper builds the envelope for both.
   const sendBroadcast = (msg: M | null, state: S): void => {
     const envelope: BroadcastEnvelope<V, M | null> = {
-      type: channel,
+      _tag: channel,
       msg,
       state: project(state),
     };
@@ -225,7 +225,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
     if (!message || typeof message !== "object") return undefined;
     const obj = message as Record<string, unknown>;
 
-    if (obj.type === hydrateType) {
+    if (obj._tag === hydrateType) {
       let state: V | null;
       try {
         state = project(runtime.getState());
@@ -248,7 +248,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
       return false;
     }
 
-    if (obj.type === dispatchType) {
+    if (obj._tag === dispatchType) {
       // Inv 8: the inbound msg crosses the same JSON/chrome boundary the
       // client side parses — parse here too, never cast. A null parse drops
       // the dispatch (the reducer never sees an arbitrary/malformed `M`) and
@@ -379,7 +379,7 @@ export interface BridgeClientOpts<S, M> {
  * (live `subscribe`) or `continue` (backlog replay). Living here keeps the
  * live-broadcast and backlog-replay paths from drifting apart.
  */
-function parseEnvelope<S, M extends { type: string }>(
+function parseEnvelope<S, M extends { _tag: string }>(
   obj: Record<string, unknown>,
   parseState: (raw: unknown) => S | null,
   parseMsg: (raw: unknown) => M | null,
@@ -407,7 +407,7 @@ function parseEnvelope<S, M extends { type: string }>(
  * Extracted so the two clients can't drift in how they parse backlog
  * payloads — both must stay symmetric with their live `subscribe` parse.
  */
-function replayBacklog<S, M extends { type: string }>(
+function replayBacklog<S, M extends { _tag: string }>(
   raw: unknown,
   parseState: (raw: unknown) => S | null,
   parseMsg: (raw: unknown) => M | null,
@@ -455,7 +455,7 @@ interface MakeBridgeClientOpts<S, M> {
  * `getSnapshot` reference stability — lives here so the two clients cannot
  * drift.
  */
-function makeBridgeClient<S, M extends { type: string }>({
+function makeBridgeClient<S, M extends { _tag: string }>({
   channel,
   parseState,
   parseMsg,
@@ -477,7 +477,7 @@ function makeBridgeClient<S, M extends { type: string }>({
 
   const client: BridgeClient<S, M> = {
     async hydrate(): Promise<S | null> {
-      const req: HydrateRequest = { type: hydrateType };
+      const req: HydrateRequest = { _tag: hydrateType };
       const res = (await send(req)) as
         | { state: unknown; backlog?: unknown }
         | undefined;
@@ -501,7 +501,7 @@ function makeBridgeClient<S, M extends { type: string }>({
     },
 
     async dispatch(msg: M): Promise<void> {
-      const env: DispatchEnvelope<M> = { type: dispatchType, msg };
+      const env: DispatchEnvelope<M> = { _tag: dispatchType, msg };
       await send(env);
     },
 
@@ -514,7 +514,7 @@ function makeBridgeClient<S, M extends { type: string }>({
         if (!senderMatches(sender)) return;
         if (!message || typeof message !== "object") return;
         const obj = message as Record<string, unknown>;
-        if (obj.type !== channel) return;
+        if (obj._tag !== channel) return;
         const parsed = parseEnvelope(obj, parseState, parseMsg);
         if (parsed === null) return;
         latestState = parsed.state;
@@ -539,7 +539,7 @@ function makeBridgeClient<S, M extends { type: string }>({
  * Create a `BridgeClient` for a popup, side panel or content script, which
  * talks to the background runtime over `chrome.runtime` messages.
  */
-export function bridgeClient<S, M extends { type: string }>({
+export function bridgeClient<S, M extends { _tag: string }>({
   channel,
   parseState,
   parseMsg,
@@ -603,11 +603,11 @@ export interface BridgeTabClientOpts<S, M> {
  *   the rejection. Callers decide whether to retry, drop, or surface; the
  *   bridge has no opinion. Fire-and-forget posture matches `bridgeRuntime`.
  * - `subscribe(listener)` registers a `chrome.runtime.onMessage` listener
- *   filtered by both `envelope.type === channel` AND `sender.tab?.id === tabId`,
+ *   filtered by both `envelope._tag === channel` AND `sender.tab?.id === tabId`,
  *   so broadcasts from other tabs are ignored (no cross-contamination across
  *   per-tab content-script runtimes).
  */
-export function bridgeTabClient<S, M extends { type: string }>({
+export function bridgeTabClient<S, M extends { _tag: string }>({
   tabId,
   channel,
   parseState,

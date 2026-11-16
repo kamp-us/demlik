@@ -13,7 +13,7 @@
 //   - `filter?: (message: unknown) => boolean` — optional pre-filter that
 //     runs BEFORE `msgFn`. The factory drops the dispatch when `filter`
 //     returns false. Use this for cheap discriminant checks (e.g.
-//     `message.type === "ping"`) that short-circuit before the more
+//     `message._tag === "ping"`) that short-circuit before the more
 //     expensive Msg construction.
 //
 //   - `msgFn(message, sender, sub)` — both the message AND the sender

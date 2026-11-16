@@ -29,7 +29,7 @@ interface HostState {
   readonly resilience: ResilientState<string, string>;
 }
 type HostMsg =
-  | { type: "attempt"; key: string; input: string; at: number }
+  | { _tag: "attempt"; key: string; input: string; at: number }
   | SucceedMsg<string>
   | FailMsg<"resilient", unknown, unknown>
   | ResilientTimerMsg;
@@ -94,7 +94,7 @@ function makeMachine(
         return [{ resilience: slice }, cmds];
       },
     },
-    subs: [{ type: "timer", deps: (s: HostState) => rc.timer(s.resilience) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => rc.timer(s.resilience) }],
   });
   return { rc, machine };
 }
@@ -121,7 +121,7 @@ describe("createResilientCall — init", () => {
     for (let i = 0; i < 100; i++) {
       const [next, cmds] = rc.attempt(st, "k", "in", i);
       st = next;
-      expect(cmds).toEqual([{ type: "resilient_run", key: "k", input: "in" }]);
+      expect(cmds).toEqual([{ _tag: "resilient_run", key: "k", input: "in" }]);
     }
   });
 });
@@ -137,7 +137,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     },
   };
   const err = (at: number): FailMsg => ({
-    type: "resilient_run_err",
+    _tag: "resilient_run_err",
     cmd: { key: "k" },
     error: { _tag: "backend_down" },
     at,
@@ -147,7 +147,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     const rc = createResilientCall<string, string>(retryTwice, rngZero);
     const [running] = rc.attempt(rc.init(), "k", "in", 0);
     const r = rc.settle(running, {
-      type: "resilient_run_ok",
+      _tag: "resilient_run_ok",
       cmd: { key: "k" },
       value: "VALUE",
       at: 1,
@@ -167,12 +167,12 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     const [timer] = rc.deadlines(r.call);
     expect(timer?.id).toBe("resilient:retry:k");
     const [, reissued] = rc.onTimer(r.call, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 10,
     });
     expect(reissued).toEqual([
-      { type: "resilient_run", key: "k", input: "in" },
+      { _tag: "resilient_run", key: "k", input: "in" },
     ]);
   });
 
@@ -181,7 +181,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     let [s] = rc.attempt(rc.init(), "k", "in", 0);
     s = rc.settle(s, err(10)).call;
     [s] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 10,
     });
@@ -221,7 +221,7 @@ describe("createResilientCall — the gate (attempt)", () => {
     const [s1] = rc.attempt(rc.init(), "k", "in", 0);
     const [s2] = pair(
       rc.settle(s1, {
-        type: "resilient_run_ok",
+        _tag: "resilient_run_ok",
         cmd: { key: "k" },
         value: "VALUE",
         at: 0,
@@ -238,7 +238,7 @@ describe("createResilientCall — the gate (attempt)", () => {
     const [s1] = rc.attempt(rc.init(), "k", "in", 0);
     const [s2] = pair(
       rc.settle(s1, {
-        type: "resilient_run_ok",
+        _tag: "resilient_run_ok",
         cmd: { key: "k" },
         value: "V",
         at: 0,
@@ -246,14 +246,14 @@ describe("createResilientCall — the gate (attempt)", () => {
     );
     // ttlMs 1000 → expired at exactly 1000 (half-open cutoff).
     const [, cmds] = rc.attempt(s2, "k", "in", 1_000);
-    expect(cmds).toEqual([{ type: "resilient_run", key: "k", input: "in" }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "k", input: "in" }]);
   });
 
   it("emits the run effect and enters `running` when all gates pass", () => {
     const rc = createResilientCall<string, string>(fullConfig, rngZero);
     const [s, cmds] = rc.attempt(rc.init(), "k", "payload", 42);
     expect(cmds).toEqual([
-      { type: "resilient_run", key: "k", input: "payload" },
+      { _tag: "resilient_run", key: "k", input: "payload" },
     ]);
     expect(s.calls.k).toEqual({
       phase: "running",
@@ -278,7 +278,7 @@ describe("createResilientCall — the gate (attempt)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e1",
         at: 0,
@@ -288,7 +288,7 @@ describe("createResilientCall — the gate (attempt)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e2",
         at: 0,
@@ -323,7 +323,7 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 0,
@@ -333,7 +333,7 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_ok",
+        _tag: "resilient_run_ok",
         cmd: { key: "k" },
         value: "OK",
         at: 0,
@@ -353,7 +353,7 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 100);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "boom",
         at: 100,
@@ -378,7 +378,7 @@ describe("createResilientCall — succeed / fail", () => {
       [s] = rc.attempt(s, "k", "in", 0);
       [s] = pair(
         rc.settle(s, {
-          type: "resilient_run_err",
+          _tag: "resilient_run_err",
           cmd: { key: "k" },
           error: `e${i}`,
           at: 0,
@@ -397,7 +397,7 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     const [s2, cmds] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "x",
         at: 0,
@@ -415,7 +415,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 0,
@@ -424,11 +424,11 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     expect(s.calls.k.phase).toBe("waiting_retry");
     // Fire the retry timer → re-attempt → effect emitted again.
     const [s2, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
-    expect(cmds).toEqual([{ type: "resilient_run", key: "k", input: "in" }]);
+    expect(cmds).toEqual([{ _tag: "resilient_run", key: "k", input: "in" }]);
     expect(s2.calls.k.phase).toBe("running");
   });
 
@@ -437,7 +437,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     let s = rc.init();
     [s] = rc.attempt(s, "k", "in", 0);
     const [s2, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:deadline:k",
       atMs: 5_000,
     });
@@ -451,7 +451,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_ok",
+        _tag: "resilient_run_ok",
         cmd: { key: "k" },
         value: "OK",
         at: 0,
@@ -459,7 +459,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     );
     const before = s;
     const [after, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
@@ -479,7 +479,7 @@ describe("createResilientCall — subs", () => {
     ]);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 100,
@@ -492,7 +492,7 @@ describe("createResilientCall — subs", () => {
     ]);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_ok",
+        _tag: "resilient_run_ok",
         cmd: { key: "k" },
         value: "OK",
         at: 100,
@@ -519,7 +519,7 @@ describe("createResilientCall — subs", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 0,
@@ -548,7 +548,7 @@ describe("createResilientCall — the deadline budget", () => {
     // The attempt burns 4_900 of the 5_000ms budget before failing.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 4_900,
@@ -563,7 +563,7 @@ describe("createResilientCall — the deadline budget", () => {
     // there, BEFORE the effect: no run Cmd, so the port is never reached for a
     // result the call could not use.
     const [spent, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 5_100,
     });
@@ -584,7 +584,7 @@ describe("createResilientCall — the deadline budget", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 1_000,
@@ -622,7 +622,7 @@ describe("createResilientCall — the deadline budget", () => {
     // pushes it negative nor settles the call.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 9_999_999,
@@ -647,17 +647,17 @@ describe("createResilientCall — wired in a machine (replay)", () => {
 
   it("an attempt msg emits the run cmd through the reducer", () => {
     bound.expectCmdSequence(
-      { msgs: [{ type: "attempt", key: "k", input: "in", at: 0 }] },
-      [{ type: "resilient_run", key: "k", input: "in" }],
+      { msgs: [{ _tag: "attempt", key: "k", input: "in", at: 0 }] },
+      [{ _tag: "resilient_run", key: "k", input: "in" }],
     );
   });
 
   it("attempt → fail → leaves the retry timer armed at the final state", () => {
     const { state, subs } = bound.replay({
       msgs: [
-        { type: "attempt", key: "k", input: "in", at: 0 },
+        { _tag: "attempt", key: "k", input: "in", at: 0 },
         {
-          type: "resilient_run_err",
+          _tag: "resilient_run_err",
           cmd: wiredRc.run({ key: "k", input: "in" }),
           error: { _tag: "port_rejected" },
           at: 0,
@@ -670,7 +670,7 @@ describe("createResilientCall — wired in a machine (replay)", () => {
       deadlineSub("resilient:retry:k", 0),
       deadlineSub("resilient:deadline:k", 5_000),
     ]);
-    expect(subs.map((sub) => sub.type)).toEqual(["timer"]);
+    expect(subs.map((sub) => sub._tag)).toEqual(["timer"]);
     expect(subs[0]?.deps).toEqual({
       ms: 0,
       msg: deadlineExceeded("resilient:retry:k", 0),
@@ -680,7 +680,7 @@ describe("createResilientCall — wired in a machine (replay)", () => {
   it("attempt → ok → settles succeeded with no further subs", () => {
     const { state, subs } = bound.replay({
       msgs: [
-        { type: "attempt", key: "k", input: "in", at: 0 },
+        { _tag: "attempt", key: "k", input: "in", at: 0 },
         wiredRc.run.ok(wiredRc.run({ key: "k", input: "in" }), "DONE", 0),
       ],
     });
@@ -778,7 +778,7 @@ describe("createResilientCall — a hand-written outcome handler (ADR 0021)", ()
       defineMachine({ ...machine, cmds: [rc.run] } as typeof machine),
       { ctx, interpret: { resilient_run: handler as never } },
     ).ready;
-    await runtime.dispatch({ type: "attempt", key: "k", input: "hi", at: 0 });
+    await runtime.dispatch({ _tag: "attempt", key: "k", input: "hi", at: 0 });
     for (let i = 0; i < 10; i++) await Promise.resolve();
     const call = runtime.getState().resilience.calls.k;
     await runtime.stop();
@@ -824,7 +824,7 @@ describe("createResilientCall — properties", () => {
           // succeed / fail likewise return fresh slices.
           const [s2] = pair(
             rc.settle(s1, {
-              type: "resilient_run_ok",
+              _tag: "resilient_run_ok",
               cmd: { key: "k" },
               value: input,
               at,
@@ -832,7 +832,7 @@ describe("createResilientCall — properties", () => {
           );
           const [s3] = pair(
             rc.settle(s1, {
-              type: "resilient_run_err",
+              _tag: "resilient_run_err",
               cmd: { key: "k" },
               error: "e",
               at,
@@ -887,7 +887,7 @@ describe("createResilientCall — properties", () => {
             case "ok":
               [s, cmds] = pair(
                 rc.settle(s, {
-                  type: "resilient_run_ok",
+                  _tag: "resilient_run_ok",
                   cmd: { key: a.key },
                   value: "r",
                   at: a.at,
@@ -897,7 +897,7 @@ describe("createResilientCall — properties", () => {
             case "err":
               [s, cmds] = pair(
                 rc.settle(s, {
-                  type: "resilient_run_err",
+                  _tag: "resilient_run_err",
                   cmd: { key: a.key },
                   error: "e",
                   at: a.at,
@@ -906,7 +906,7 @@ describe("createResilientCall — properties", () => {
               break;
             case "retry":
               [s, cmds] = rc.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${a.key}`,
                 atMs: a.at,
               });
@@ -925,13 +925,13 @@ describe("createResilientCall — properties", () => {
     const msgArb = fc.array(
       fc.oneof(
         fc.record({
-          type: fc.constant("attempt" as const),
+          _tag: fc.constant("attempt" as const),
           key: fc.constantFrom("a", "b"),
           input: fc.constant("in"),
           at: fc.nat(10_000),
         }),
         fc.record({
-          type: fc.constant("resilient_run_err" as const),
+          _tag: fc.constant("resilient_run_err" as const),
           cmd: fc.record({ key: fc.constantFrom("a", "b") }),
           error: fc.constant("e"),
           at: fc.nat(10_000),
@@ -971,7 +971,7 @@ describe("createResilientCall — properties", () => {
           // Fire the overall deadline timer for the in-flight call → settles
           // `failed` with the deadline sentinel.
           const [settled] = rc.onTimer(s, {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: `resilient:deadline:${key}`,
             atMs: at + 5_000,
           });
@@ -1036,7 +1036,7 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
     // Seed a real failure so a retry counter exists.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "e",
         at: 0,
@@ -1064,7 +1064,7 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
             [s] = rc.attempt(s, k, "in", 0);
             [s] = pair(
               rc.settle(s, {
-                type: "resilient_run_err",
+                _tag: "resilient_run_err",
                 cmd: { key: k },
                 error: "e",
                 at: 0,
@@ -1122,8 +1122,8 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     readonly resilience: ResilientState<string, string>;
   }
   type WMsg =
-    | { type: "attempt"; key: string; input: string; at: number }
-    | { type: "nop" }
+    | { _tag: "attempt"; key: string; input: string; at: number }
+    | { _tag: "nop" }
     | SucceedMsg<string>
     | FailMsg
     | ResilientTimerMsg;
@@ -1208,7 +1208,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     let guard = 0;
     while (guard++ < 50) {
       const before = ctx.calls.count;
-      await runtime.dispatch({ type: "nop" });
+      await runtime.dispatch({ _tag: "nop" });
       const after = ctx.calls.count;
       if (after === before && after === prev) return;
       prev = after;
@@ -1235,7 +1235,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     // (1) t=0 — first attempt reaches the backend and FAILS. threshold 1 → the
     // breaker trips OPEN. Bucket now empty.
     ctx.outcomes = ["fail"];
-    await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 0 });
+    await runtime.dispatch({ _tag: "attempt", key: "k", input: "in", at: 0 });
     await drain(runtime, ctx);
     expect(runtime.getState().resilience.circuit.phase).toBe("open");
     expect(ctx.calls.count).toBe(1); // backend hit exactly once so far
@@ -1246,7 +1246,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     // backend call; under the fix the circuit is never touched. Either way the
     // backend is NOT hit (no token).
     const callsBefore = ctx.calls.count;
-    await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 100 });
+    await runtime.dispatch({ _tag: "attempt", key: "k", input: "in", at: 100 });
     await drain(runtime, ctx);
     expect(ctx.calls.count).toBe(callsBefore); // backend NOT reached — rate-limited
 
@@ -1257,7 +1257,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     // backend, and the breaker stays wedged open.
     ctx.outcomes = ["ok"];
     await runtime.dispatch({
-      type: "attempt",
+      _tag: "attempt",
       key: "k",
       input: "in",
       at: 1000,
@@ -1332,7 +1332,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
   ) =>
     pair(
       rc.settle(s, {
-        type: "resilient_run_err",
+        _tag: "resilient_run_err",
         cmd: { key: "k" },
         error: "peer_unreachable",
         at,
@@ -1356,7 +1356,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       expect(s.calls.k.retryAtMs).toBe(OUTAGE_LADDER[failures] as number);
       // Re-enter the gate exactly when that timer fires (what `onTimer` does).
       s = rc.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:k`,
         atMs: s.calls.k.retryAtMs,
       })[0];
@@ -1387,7 +1387,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       failures += 1;
       if (s.calls.k?.phase !== "waiting_retry") break;
       s = rc.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:k`,
         atMs: s.calls.k.retryAtMs,
       })[0];
@@ -1411,7 +1411,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       expect((s.retry.k as TimedRetryState).firstFailureAtMs).toBe(at);
       s = pair(
         rc.settle(s, {
-          type: "resilient_run_ok",
+          _tag: "resilient_run_ok",
           cmd: { key: "k" },
           value: "VALUE",
           at: at + 1,
@@ -1449,7 +1449,7 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
       readonly resilience: ResilientState<string, string>;
     }
     type DMsg =
-      | { type: "attempt"; key: string; input: string; at: number }
+      | { _tag: "attempt"; key: string; input: string; at: number }
       | SucceedMsg<string>
       | FailMsg
       | ResilientTimerMsg;
@@ -1487,7 +1487,7 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
       },
       // The engine's built-in `timer` — the retry actually arms a setTimeout
       // against the (fake) wall clock, so the outage advances by itself.
-      subs: [{ type: "timer", deps: (s: DState) => rc.timer(s.resilience) }],
+      subs: [{ _tag: "timer", deps: (s: DState) => rc.timer(s.resilience) }],
     });
 
     const runtime = await run(
@@ -1505,7 +1505,7 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
         } as never,
       },
     ).ready;
-    await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 0 });
+    await runtime.dispatch({ _tag: "attempt", key: "k", input: "in", at: 0 });
     await flush();
 
     for (let i = 0; i < 80; i++) {
@@ -1555,8 +1555,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
     readonly llm: ResilientState<string, Draft>;
   }
   type TwoMsg =
-    | { type: "ask"; key: string; input: string; at: number }
-    | { type: "draft"; key: string; input: string; at: number }
+    | { _tag: "ask"; key: string; input: string; at: number }
+    | { _tag: "draft"; key: string; input: string; at: number }
     | SucceedMsg<Answer, "jev">
     | FailMsg<"jev", unknown, unknown>
     | SucceedMsg<Draft, "llm">
@@ -1628,8 +1628,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
       },
     },
     subs: [
-      { type: "timer", deps: (s: TwoState) => jev.timer(s.jev) },
-      { type: "timer", deps: (s: TwoState) => llm.timer(s.llm) },
+      { _tag: "timer", deps: (s: TwoState) => jev.timer(s.jev) },
+      { _tag: "timer", deps: (s: TwoState) => llm.timer(s.llm) },
     ],
   });
 
@@ -1641,13 +1641,13 @@ describe("createResilientCall — two named knobs in one machine", () => {
     two.expectCmdSequence(
       {
         msgs: [
-          { type: "ask", key: "k", input: "q", at: 0 },
-          { type: "draft", key: "k", input: "p", at: 0 },
+          { _tag: "ask", key: "k", input: "q", at: 0 },
+          { _tag: "draft", key: "k", input: "p", at: 0 },
         ],
       },
       [
-        { type: "jev_run", key: "k", input: "q" },
-        { type: "llm_run", key: "k", input: "p" },
+        { _tag: "jev_run", key: "k", input: "q" },
+        { _tag: "llm_run", key: "k", input: "p" },
       ],
     );
   });
@@ -1655,8 +1655,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
   it("each knob settles into its own cell with its own payload", () => {
     const { state } = two.replay({
       msgs: [
-        { type: "ask", key: "k", input: "q", at: 0 },
-        { type: "draft", key: "k", input: "p", at: 0 },
+        { _tag: "ask", key: "k", input: "q", at: 0 },
+        { _tag: "draft", key: "k", input: "p", at: 0 },
         jev.run.ok(jevCmd, { verdict: "yes" }, 1),
         llm.run.ok(llmCmd, { text: "hello" }, 1),
       ],
@@ -1674,8 +1674,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
   it("one knob's failure leaves the sibling sharing its key untouched", () => {
     const { state, subs } = two.replay({
       msgs: [
-        { type: "ask", key: "k", input: "q", at: 0 },
-        { type: "draft", key: "k", input: "p", at: 0 },
+        { _tag: "ask", key: "k", input: "q", at: 0 },
+        { _tag: "draft", key: "k", input: "p", at: 0 },
         jev.run.err(jevCmd, { _tag: "port_rejected" }, 0),
         llm.run.ok(llmCmd, { text: "hello" }, 0),
       ],
@@ -1712,7 +1712,7 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
   it("omitting `name` keeps the `resilient_*` vocabulary verbatim", () => {
     const rc = createResilientCall<string, string>(fullConfig, rngZero);
     const [, cmds] = rc.attempt(rc.init(), "k", "in", 0);
-    expect(cmds[0]?.type).toBe("resilient_run");
+    expect(cmds[0]?._tag).toBe("resilient_run");
     expect(rc.run.okType).toBe("resilient_run_ok");
     expect(rc.run.errType).toBe("resilient_run_err");
   });
@@ -1723,6 +1723,6 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
       rngZero,
     );
     const [, cmds] = named.attempt(named.init(), "k", "in", 0);
-    expect(cmds[0]?.type).toBe("resilient_run");
+    expect(cmds[0]?._tag).toBe("resilient_run");
   });
 });

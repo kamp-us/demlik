@@ -139,7 +139,7 @@ export class DriveRoundsExceededError<M, C> extends Error {
 }
 
 /**
- * Raised when a Cmd reaches `drive` with no handler for its `type` in the
+ * Raised when a Cmd reaches `drive` with no handler for its `_tag` in the
  * handler record. The record's mapped type makes that a compile error at a
  * well-typed call site; this is the runtime arm for a handler record assembled
  * dynamically or cast.
@@ -148,7 +148,7 @@ export class DriveNoHandlerError<M, C> extends Error {
   override readonly name = "DriveNoHandlerError";
   readonly _tag = "DriveNoHandlerError" as const;
   constructor(
-    /** The Cmd `type` nothing in the handler record answered. */
+    /** The Cmd `_tag` nothing in the handler record answered. */
     public readonly cmdType: string,
     /** Every Msg folded and Cmd dispatched before the miss. */
     public readonly trace: readonly DriveTraceEntry<M, C>[],
@@ -236,7 +236,7 @@ export interface DriveEngine<S, M, C> {
    * through `cmdEdgeOf(ctx)` mints into the same record the check reads.
    */
   readonly contract: CmdContract;
-  /** The cell that performs a Cmd of `type`, or `undefined` when none does. */
+  /** The cell that performs a Cmd of `_tag`, or `undefined` when none does. */
   readonly cellFor: (type: string) => DriveCell<M, C> | undefined;
   /** The Subs to run beside the Cmds; an engine that runs none omits it. */
   readonly subs?: DriveSubs<S, M>;
@@ -265,7 +265,7 @@ export function driveContractOf(
  */
 export async function driveLoop<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -308,9 +308,9 @@ export async function driveLoop<
 
       for (const cmd of emitted) {
         trace.push({ kind: "cmd", cmd });
-        const cell = cellFor(cmd.type);
+        const cell = cellFor(cmd._tag);
         if (cell === undefined) {
-          throw new DriveNoHandlerError<M, C>(cmd.type, trace);
+          throw new DriveNoHandlerError<M, C>(cmd._tag, trace);
         }
         // The dispatch half of ADR 0021, as the engine applies it (#304): a
         // `Cmd.define`d handler may not send a `_ok` / `_err` it built itself.

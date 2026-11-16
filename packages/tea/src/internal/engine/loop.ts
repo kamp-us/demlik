@@ -90,9 +90,9 @@ export type InterpretStep<C, M> = (
 
 /** Whether the current State has crossed this transition's save boundary. */
 type SaveStatus =
-  | { readonly type: "pending" }
-  | { readonly type: "saved" }
-  | { readonly type: "failed"; readonly error: unknown };
+  | { readonly _tag: "pending" }
+  | { readonly _tag: "saved" }
+  | { readonly _tag: "failed"; readonly error: unknown };
 
 /** What the loop lends an extension. */
 export interface LoopServices<S> {
@@ -156,7 +156,7 @@ export type LoopRunner<Ctx, M> = (
 ) => Dispose;
 
 /** Everything the loop needs from `run`. */
-export interface LoopConfig<S, M extends { type: string }, C, Ctx> {
+export interface LoopConfig<S, M extends { _tag: string }, C, Ctx> {
   readonly init: (loaded: S | null, ctx: Ctx) => Transition<S, C>;
   /** The innermost fold: the machine's own `update`. */
   readonly reduce: (state: S, msg: M) => Transition<S, C>;
@@ -359,7 +359,7 @@ class MsgLine {
  * listeners, runs the Cmds, then calls the commit callbacks — even when a Cmd
  * handler throws.
  */
-export function startLoop<S, M extends { type: string }, C, Ctx>(
+export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   config: LoopConfig<S, M, C, Ctx>,
 ): LoopHandle<S, M> {
   const { idleCap, disposeTimeoutMs } = config;
@@ -413,7 +413,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // The State the listeners were last told about. Behind `state` while a save is
   // pending, and for good when one fails.
   let installed: S | undefined;
-  let saveStatus: SaveStatus = { type: "pending" };
+  let saveStatus: SaveStatus = { _tag: "pending" };
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
   // `"closed"` or `"abandoned"` — so the discard window can never re-open under
@@ -460,7 +460,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     },
     state: () => state,
     saveStatus: () =>
-      config.store === undefined ? { type: "saved" } : saveStatus,
+      config.store === undefined ? { _tag: "saved" } : saveStatus,
   };
   const extensions = config.extensions.map((make) => make(services));
 
@@ -634,7 +634,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
         if (sub !== null) desired.set(sub.id, sub);
       } catch (err) {
         remember(err);
-        unreadTypes.add(entry.type);
+        unreadTypes.add(entry._tag);
       }
     }
 
@@ -649,17 +649,17 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     const starting = gate === "open" ? desired : new Map<string, Sub>();
     for (const [id, sub] of starting) {
       if (subRegistry.has(id)) continue;
-      const runner = config.runnerFor(sub.type);
+      const runner = config.runnerFor(sub._tag);
       if (runner === undefined) {
         remember(
           new Error(
-            `@demlik/tea: no subscribe runner for Sub type "${sub.type}". ` +
+            `@demlik/tea: no subscribe runner for Sub type "${sub._tag}". ` +
               "Pass one to run in `subscribe`.",
           ),
         );
         continue;
       }
-      const running = new RunningSub(sub.type);
+      const running = new RunningSub(sub._tag);
       // A runner's dispatch is unawaited by construction, so it gets the
       // wrapped form, which also queues the transition behind this step —
       // never on the runner's own stack (spike #260).
@@ -672,7 +672,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
           config.gate === undefined
             ? begin(runner)
             : config.gate.admit(() =>
-                begin(config.runnerFor(sub.type) ?? runner),
+                begin(config.runnerFor(sub._tag) ?? runner),
               );
       } catch (err) {
         // A runner that throws while starting is a Sub failure too: the step
@@ -784,7 +784,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // missing handler returns nothing, which is invariant 6's forward progress
   // for a miswired consumer.
   function callHandler(cmd: C, dispatch: (msg: M) => void): Promise<unknown> {
-    const { type } = cmd as { type: string };
+    const { _tag: type } = cmd as { _tag: string };
     const handler = config.handlerFor(type);
     if (handler === undefined) return Promise.resolve(undefined);
     return trackInFlight(handler(cmd as never, handlerCtx, dispatch), type);
@@ -840,13 +840,13 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     cmds: readonly C[],
   ): Promise<void> {
     state = next;
-    saveStatus = { type: "pending" };
+    saveStatus = { _tag: "pending" };
     if (store && gate !== "abandoned") {
       try {
         await store.save(next);
-        saveStatus = { type: "saved" };
+        saveStatus = { _tag: "saved" };
       } catch (error) {
-        saveStatus = { type: "failed", error };
+        saveStatus = { _tag: "failed", error };
         for (const ext of extensions) ext.saveFailed?.(next, error);
         throw error;
       }
@@ -911,8 +911,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     if (gate !== "open") {
       return Promise.reject(
         gate === "draining" || (gate === "abandoned" && origin === "loop")
-          ? new DispatchDiscardedError(msg.type)
-          : new RuntimeStoppedError(msg.type),
+          ? new DispatchDiscardedError(msg._tag)
+          : new RuntimeStoppedError(msg._tag),
       );
     }
     return enqueueStep(msg, origin, stepDispatch);
@@ -931,11 +931,11 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     origin: "caller" | "loop" | "tell",
     step: (msg: M) => Promise<void> | undefined,
   ): Promise<void> {
-    line.joined(msg.type);
+    line.joined(msg._tag);
     const next = tail.then(() => {
-      line.reachedTurn(msg.type);
+      line.reachedTurn(msg._tag);
       if (gate === "abandoned") {
-        if (origin === "caller") throw new DispatchDiscardedError(msg.type);
+        if (origin === "caller") throw new DispatchDiscardedError(msg._tag);
         return;
       }
       if (bootError !== null) throw bootError;

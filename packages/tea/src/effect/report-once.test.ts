@@ -5,10 +5,10 @@ import { run, tell } from "./index";
 
 type State = { readonly n: number };
 type Msg =
-  | { readonly type: "boom" }
-  | { readonly type: "kick" }
-  | { readonly type: "inc" };
-type Fire = { readonly type: "fire" };
+  | { readonly _tag: "boom" }
+  | { readonly _tag: "kick" }
+  | { readonly _tag: "inc" };
+type Fire = { readonly _tag: "fire" };
 
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, cmd: {} as Fire },
@@ -17,7 +17,7 @@ const machine = defineMachine({
     boom: () => {
       throw new Error("reducer threw");
     },
-    kick: (s) => [s, [{ type: "fire" }]],
+    kick: (s) => [s, [{ _tag: "fire" }]],
     inc: (s) => [{ n: s.n + 1 }, []],
   },
 });
@@ -30,22 +30,22 @@ describe("a reducer throw on the Effect engine reaches the sink once", () => {
         Effect.gen(function* () {
           const runtime = yield* (yield* run(machine, {
             interpret: {
-              fire: () => Effect.succeed({ type: "boom" } as const),
+              fire: () => Effect.succeed({ _tag: "boom" } as const),
             },
             supervision: "escalate",
             onError: (_error, context) => phases.push(context.phase),
           })).ready;
 
           if (source === "tell") {
-            expect(yield* tell(machine, runtime, { type: "boom" })).toBe(
+            expect(yield* tell(machine, runtime, { _tag: "boom" })).toBe(
               "queued",
             );
           } else {
-            yield* runtime.dispatch({ type: "kick" });
+            yield* runtime.dispatch({ _tag: "kick" });
           }
           yield* runtime.idle();
           expect(phases).toEqual(["reduce"]);
-          yield* runtime.dispatch({ type: "inc" });
+          yield* runtime.dispatch({ _tag: "inc" });
           expect(runtime.getState()).toEqual({ n: 1 });
         }),
       ),

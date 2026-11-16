@@ -69,15 +69,15 @@ function fakeClock() {
 
 type WsSub = Sub<"ws", WebSocketSubData>;
 type Msg =
-  | { type: "open" }
-  | { type: "message"; data: unknown }
-  | { type: "error" }
-  | { type: "close"; code: number }
-  | { type: "reconnect"; attempt: number };
+  | { _tag: "open" }
+  | { _tag: "message"; data: unknown }
+  | { _tag: "error" }
+  | { _tag: "close"; code: number }
+  | { _tag: "reconnect"; attempt: number };
 
 const wsSub = (wsUrl: string): WsSub => ({
   id: subIdOf("ws", { wsUrl }),
-  type: "ws",
+  _tag: "ws",
   deps: { wsUrl },
 });
 
@@ -93,11 +93,11 @@ function harness(
   const dispatched: Msg[] = [];
   const clock = fakeClock();
   const handler = fromReconnectingWebSocket<WsSub, Msg>({
-    onMessage: (data) => ({ type: "message", data }),
-    onOpen: () => ({ type: "open" }),
-    onError: () => ({ type: "error" }),
-    onClose: (code) => ({ type: "close", code }),
-    onReconnect: (attempt) => ({ type: "reconnect", attempt }),
+    onMessage: (data) => ({ _tag: "message", data }),
+    onOpen: () => ({ _tag: "open" }),
+    onError: () => ({ _tag: "error" }),
+    onClose: (code) => ({ _tag: "close", code }),
+    onReconnect: (attempt) => ({ _tag: "reconnect", attempt }),
     connect: (url) => {
       const ws = new FakeSocket(url);
       sockets.push(ws);
@@ -119,7 +119,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     expect(h.sockets[0].url).toBe("ws://x/ws");
     expect(h.dispatched).toEqual([]);
     h.sockets[0].fireOpen();
-    expect(h.dispatched).toEqual([{ type: "open" }]);
+    expect(h.dispatched).toEqual([{ _tag: "open" }]);
   });
 
   it("delivers decoded frames to onMessage", () => {
@@ -127,7 +127,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     h.sockets[0].fireOpen();
     h.sockets[0].fireMessage('{"type":"snapshot"}');
     expect(h.dispatched).toContainEqual({
-      type: "message",
+      _tag: "message",
       data: '{"type":"snapshot"}',
     });
   });
@@ -138,7 +138,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
 
     // The connection drops unexpectedly.
     h.sockets[0].fireClose(1006);
-    expect(h.dispatched).toContainEqual({ type: "close", code: 1006 });
+    expect(h.dispatched).toContainEqual({ _tag: "close", code: 1006 });
     // A reconnect is scheduled; flushing it opens a brand-new socket.
     expect(h.clock.pending).toHaveLength(1);
     h.clock.flushNext();
@@ -150,24 +150,24 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     const h = harness();
     // First open is NOT a reconnect.
     h.sockets[0].fireOpen();
-    expect(h.dispatched).toEqual([{ type: "open" }]);
+    expect(h.dispatched).toEqual([{ _tag: "open" }]);
 
     // Drop, reconnect, and the re-open fires onReconnect with attempt 1.
     h.sockets[0].fireClose();
     h.clock.flushNext();
     h.sockets[1].fireOpen();
-    expect(h.dispatched).toContainEqual({ type: "open" });
-    expect(h.dispatched).toContainEqual({ type: "reconnect", attempt: 1 });
+    expect(h.dispatched).toContainEqual({ _tag: "open" });
+    expect(h.dispatched).toContainEqual({ _tag: "reconnect", attempt: 1 });
 
     // A second drop after a successful reconnect reports attempt 1 again
     // (the backoff/attempt counter reset on the successful open).
     h.sockets[1].fireClose();
     h.clock.flushNext();
     h.sockets[2].fireOpen();
-    const reconnects = h.dispatched.filter((m) => m.type === "reconnect");
+    const reconnects = h.dispatched.filter((m) => m._tag === "reconnect");
     expect(reconnects).toEqual([
-      { type: "reconnect", attempt: 1 },
-      { type: "reconnect", attempt: 1 },
+      { _tag: "reconnect", attempt: 1 },
+      { _tag: "reconnect", attempt: 1 },
     ]);
   });
 
@@ -224,7 +224,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     const h = harness();
     h.sockets[0].fireOpen();
     h.sockets[0].fireError();
-    expect(h.dispatched).toContainEqual({ type: "error" });
+    expect(h.dispatched).toContainEqual({ _tag: "error" });
     // An error alone schedules nothing — only the following close does.
     expect(h.clock.pending).toHaveLength(0);
     h.sockets[0].fireClose();
@@ -265,7 +265,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     const dispatched: Msg[] = [];
     const clock = fakeClock();
     const handler = fromReconnectingWebSocket<WsSub, Msg>({
-      onMessage: (data) => ({ type: "message", data }),
+      onMessage: (data) => ({ _tag: "message", data }),
       connect: (url) => {
         const ws = new FakeSocket(url);
         sockets.push(ws);
@@ -286,7 +286,7 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     clock.flushNext();
     sockets[1].fireOpen();
     sockets[1].fireMessage("hi");
-    expect(dispatched).toEqual([{ type: "message", data: "hi" }]);
+    expect(dispatched).toEqual([{ _tag: "message", data: "hi" }]);
     cleanup();
   });
 });

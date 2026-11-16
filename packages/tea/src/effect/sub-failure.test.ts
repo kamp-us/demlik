@@ -35,9 +35,9 @@ class Closed extends Data.TaggedError("Closed")<{ readonly code: number }> {}
 type Feed = Sub<"feed", { readonly on: true }>;
 type Other = Sub<"other", { readonly on: true }>;
 type Msg =
-  | { readonly type: "tick" }
-  | { readonly type: "failed"; readonly code: number }
-  | { readonly type: "poke" };
+  | { readonly _tag: "tick" }
+  | { readonly _tag: "failed"; readonly code: number }
+  | { readonly _tag: "poke" };
 type Model = {
   readonly ticks: number;
   readonly failed: number | null;
@@ -57,8 +57,8 @@ const machine = defineMachine({
     poke: (m) => [{ ...m, pokes: m.pokes + 1 }, []],
   },
   subs: [
-    { type: "feed", deps: () => ({ on: true as const }) },
-    { type: "other", deps: () => ({ on: true as const }) },
+    { _tag: "feed", deps: () => ({ on: true as const }) },
+    { _tag: "other", deps: () => ({ on: true as const }) },
   ],
 });
 
@@ -106,7 +106,7 @@ describe("Effect engine: an unhandled Sub failure", () => {
         onError,
         subscribe: {
           feed: () =>
-            Stream.make({ type: "tick" } as Msg).pipe(
+            Stream.make({ _tag: "tick" } as Msg).pipe(
               Stream.concat(Stream.fail(closed)),
             ),
           other: () =>
@@ -129,7 +129,7 @@ describe("Effect engine: an unhandled Sub failure", () => {
     await vi.waitFor(() => expect(otherReleased).toBe(true));
     expect(liveSubs(rt)).toBe(0);
     const refused = await Effect.runPromise(
-      Effect.flip(rt.dispatch({ type: "poke" })),
+      Effect.flip(rt.dispatch({ _tag: "poke" })),
     );
     expect(refused).toBeInstanceOf(EffectEngine.Stopped);
     expect(exits).toEqual([]);
@@ -223,7 +223,7 @@ describe("Effect engine: an unhandled Sub failure", () => {
       }),
     );
     const rt = await Effect.runPromise(booting.ready);
-    await Effect.runPromise(rt.dispatch({ type: "poke" }));
+    await Effect.runPromise(rt.dispatch({ _tag: "poke" }));
 
     Effect.runSync(Deferred.succeed(go, undefined));
     await vi.waitFor(() => expect(liveSubs(rt)).toBe(0));
@@ -286,7 +286,7 @@ describe("Effect engine: what else lives in the caller's Scope", () => {
     await Effect.runPromise(Effect.flip(failing.done()));
     await vi.waitFor(() => expect(liveSubs(failing)).toBe(0));
 
-    await Effect.runPromise(sibling.dispatch({ type: "poke" }));
+    await Effect.runPromise(sibling.dispatch({ _tag: "poke" }));
     expect(sibling.getState().pokes).toBe(1);
     expect(siblingReleased).toBe(false);
     expect(resourceReleased).toBe(false);
@@ -296,7 +296,7 @@ describe("Effect engine: what else lives in the caller's Scope", () => {
     expect(siblingReleased).toBe(true);
     expect(resourceReleased).toBe(true);
     const refused = await Effect.runPromise(
-      Effect.flip(sibling.dispatch({ type: "poke" })),
+      Effect.flip(sibling.dispatch({ _tag: "poke" })),
     );
     expect(refused).toBeInstanceOf(EffectEngine.Stopped);
   });
@@ -330,14 +330,14 @@ describe("Effect engine: what else lives in the caller's Scope", () => {
     await vi.waitFor(() => expect(log).toContain("notify failing"));
     expect(log).toContain("remove failing");
     expect(log).not.toContain("remove staying");
-    await Effect.runPromise(staying.dispatch({ type: "poke" }));
+    await Effect.runPromise(staying.dispatch({ _tag: "poke" }));
     expect(staying.getState().pokes).toBe(1);
   });
 });
 
 describe("Effect engine: what a run acquired through Scope.Scope", () => {
-  type Hold = { readonly type: "hold" };
-  type HoldMsg = { readonly type: "take" } | { readonly type: "poke" };
+  type Hold = { readonly _tag: "hold" };
+  type HoldMsg = { readonly _tag: "take" } | { readonly _tag: "poke" };
   type HoldModel = { readonly pokes: number };
   const holding = defineMachine({
     types: {
@@ -348,10 +348,10 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
     },
     init: () => [{ pokes: 0 }, []],
     update: {
-      take: (m) => [m, [{ type: "hold" }]],
+      take: (m) => [m, [{ _tag: "hold" }]],
       poke: (m) => [{ pokes: m.pokes + 1 }, []],
     },
-    subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+    subs: [{ _tag: "feed", deps: () => ({ on: true as const }) }],
   });
 
   it("a cell's resource is released with its run, while 5 sibling runs and the caller's Scope live", async () => {
@@ -390,7 +390,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
         >,
       );
       const rt = await Effect.runPromise(booting.ready);
-      await Effect.runPromise(rt.dispatch({ type: "take" }));
+      await Effect.runPromise(rt.dispatch({ _tag: "take" }));
       return rt;
     };
 
@@ -411,7 +411,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
     await vi.waitFor(() => expect(released).toEqual(["failing"]));
     expect(callerExits).toEqual([]);
     for (const sibling of siblings) {
-      await Effect.runPromise(sibling.dispatch({ type: "poke" }));
+      await Effect.runPromise(sibling.dispatch({ _tag: "poke" }));
       expect(sibling.getState().pokes).toBe(1);
     }
 
@@ -431,7 +431,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
           feed: () =>
             Stream.fromEffect(
               Effect.acquireRelease(
-                Effect.succeed({ type: "tick" } as Msg),
+                Effect.succeed({ _tag: "tick" } as Msg),
                 () =>
                   Effect.sync(() => {
                     released = true;
@@ -481,7 +481,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
       }),
     );
     const rt = await Effect.runPromise(booting.ready);
-    await Effect.runPromise(rt.dispatch({ type: "take" }));
+    await Effect.runPromise(rt.dispatch({ _tag: "take" }));
     expect(log).toEqual([]);
 
     Effect.runSync(Deferred.succeed(go, undefined));
@@ -543,7 +543,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
       ),
     );
 
-    await Effect.runPromise(workerRun.dispatch({ type: "poke" }));
+    await Effect.runPromise(workerRun.dispatch({ _tag: "poke" }));
     expect(log).toEqual([]);
 
     Effect.runSync(Deferred.succeed(go, undefined));
@@ -551,7 +551,7 @@ describe("Effect engine: what a run acquired through Scope.Scope", () => {
 
     await vi.waitFor(() => expect(log).toEqual(["remove", "notify"]));
     const refused = await Effect.runPromise(
-      Effect.flip(workerRun.dispatch({ type: "poke" })),
+      Effect.flip(workerRun.dispatch({ _tag: "poke" })),
     );
     expect(refused).toBeInstanceOf(EffectEngine.Stopped);
   });
@@ -593,7 +593,7 @@ describe("Effect engine: done() gives one answer for one run", () => {
   };
 
   it("a Sub that sends the terminal Msg and then fails: the waiter, a later done() and result() agree", async () => {
-    const { rt, send, exits } = await sending([{ type: "poke" }]);
+    const { rt, send, exits } = await sending([{ _tag: "poke" }]);
     const waiting = Effect.runPromiseExit(rt.done());
 
     send();
@@ -613,7 +613,7 @@ describe("Effect engine: done() gives one answer for one run", () => {
     });
     let saves = 0;
     const { rt, send, reports } = await sending(
-      [{ type: "tick" }, { type: "poke" }],
+      [{ _tag: "tick" }, { _tag: "poke" }],
       async () => {
         saves += 1;
         if (saves === 2) await saving;
@@ -636,7 +636,7 @@ describe("Effect engine: done() gives one answer for one run", () => {
   });
 
   it("a Msg in line that does not reach a terminal State folds before done() fails", async () => {
-    const { rt, send } = await sending([{ type: "tick" }]);
+    const { rt, send } = await sending([{ _tag: "tick" }]);
     const waiting = Effect.runPromise(Effect.flip(rt.done()));
 
     send();
@@ -649,8 +649,8 @@ describe("Effect engine: done() gives one answer for one run", () => {
   });
 
   it("answers even with a handler that never returns, once stop() gives up on it", async () => {
-    type Stuck = { readonly type: "stuck" };
-    type StuckMsg = { readonly type: "begin" };
+    type Stuck = { readonly _tag: "stuck" };
+    type StuckMsg = { readonly _tag: "begin" };
     const stuck = defineMachine({
       types: {
         model: {} as { readonly begun: boolean },
@@ -659,8 +659,8 @@ describe("Effect engine: done() gives one answer for one run", () => {
         sub: {} as Feed,
       },
       init: () => [{ begun: false }, []],
-      update: { begin: () => [{ begun: true }, [{ type: "stuck" } as Stuck]] },
-      subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+      update: { begin: () => [{ begun: true }, [{ _tag: "stuck" } as Stuck]] },
+      subs: [{ _tag: "feed", deps: () => ({ on: true as const }) }],
     });
     const go = Effect.runSync(Deferred.make<void>());
     const { onError } = sink();
@@ -678,7 +678,7 @@ describe("Effect engine: done() gives one answer for one run", () => {
       }),
     );
     const rt = await Effect.runPromise(booting.ready);
-    Effect.runFork(Effect.ignore(rt.dispatch({ type: "begin" })));
+    Effect.runFork(Effect.ignore(rt.dispatch({ _tag: "begin" })));
     await vi.waitFor(() => expect(rt.getState().begun).toBe(true));
 
     Effect.runSync(Deferred.succeed(go, undefined));
@@ -734,7 +734,7 @@ describe("Effect engine: done() gives one answer for one run", () => {
     });
 
     it("a terminal Msg the lease refuses gives every done() the store's failure", async () => {
-      const { inner, rt, send, exits } = await losingLease([{ type: "poke" }]);
+      const { inner, rt, send, exits } = await losingLease([{ _tag: "poke" }]);
       const waiting = Effect.runPromise(Effect.flip(rt.done()));
 
       send();
@@ -762,10 +762,10 @@ describe("Effect engine: a Sub that maps its own errors to Msgs", () => {
         onError,
         subscribe: {
           feed: () =>
-            Stream.make({ type: "tick" } as Msg).pipe(
+            Stream.make({ _tag: "tick" } as Msg).pipe(
               Stream.concat(Stream.fail(new Closed({ code: 1006 }))),
               Stream.catchTag("Closed", (e) =>
-                Stream.make({ type: "failed", code: e.code } as Msg),
+                Stream.make({ _tag: "failed", code: e.code } as Msg),
               ),
             ),
           other: () => forever(() => {}),
@@ -777,7 +777,7 @@ describe("Effect engine: a Sub that maps its own errors to Msgs", () => {
     await vi.waitFor(() =>
       expect(rt.getState()).toEqual({ ticks: 1, failed: 1006, pokes: 0 }),
     );
-    await Effect.runPromise(rt.dispatch({ type: "poke" }));
+    await Effect.runPromise(rt.dispatch({ _tag: "poke" }));
     expect(rt.getState().pokes).toBe(1);
     expect(exits).toEqual([]);
     expect(reports).toEqual([]);

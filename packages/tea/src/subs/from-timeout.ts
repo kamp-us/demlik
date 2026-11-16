@@ -4,7 +4,7 @@
 // Same lifecycle shape as `fromInterval` minus the recurrence: the
 // scheduled callback fires once, the cleanup is `clearTimeout`. For the
 // common case — fire one Msg after a delay — the engine's built-in `timer`
-// Sub (`{ type: "timer", deps: (s) => cond ? { ms, msg } : null }`) needs no
+// Sub (`{ _tag: "timer", deps: (s) => cond ? { ms, msg } : null }`) needs no
 // runner at all; reach for this factory when the Msg is built from the Sub
 // rather than carried in its deps. Two observable consequences worth pinning:
 //

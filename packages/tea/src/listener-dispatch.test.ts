@@ -24,18 +24,18 @@ import { run } from "./promise";
 
 type State = { readonly log: readonly string[] };
 type Msg =
-  | { readonly type: "outer" }
-  | { readonly type: "echoed" }
-  | { readonly type: "fromSubscribe" }
-  | { readonly type: "fromObserve" }
-  | { readonly type: "later" };
-type Cmd = { readonly type: "echo" };
+  | { readonly _tag: "outer" }
+  | { readonly _tag: "echoed" }
+  | { readonly _tag: "fromSubscribe" }
+  | { readonly _tag: "fromObserve" }
+  | { readonly _tag: "later" };
+type Cmd = { readonly _tag: "echo" };
 
 // Every Msg appends its own name, so the folded `log` IS the fold order. The
 // `outer` fold also emits a Cmd, so a listener dispatch is ordered against an
 // interpret follow-up as well as against a later external one.
 const update: Reducer<State, Msg, Cmd> = {
-  outer: (s) => [{ log: [...s.log, "outer"] }, [{ type: "echo" }]],
+  outer: (s) => [{ log: [...s.log, "outer"] }, [{ _tag: "echo" }]],
   echoed: (s) => [{ log: [...s.log, "echoed"] }, []],
   fromSubscribe: (s) => [{ log: [...s.log, "fromSubscribe"] }, []],
   fromObserve: (s) => [{ log: [...s.log, "fromObserve"] }, []],
@@ -43,7 +43,7 @@ const update: Reducer<State, Msg, Cmd> = {
 };
 
 const interpret: Interpret<Msg, Cmd, undefined> = {
-  echo: async () => ({ type: "echoed" as const }),
+  echo: async () => ({ _tag: "echoed" as const }),
 };
 
 const machine = defineMachine({
@@ -65,19 +65,19 @@ describe("dispatch from inside a listener", () => {
     // so `fromSubscribe` must fold before `fromObserve`.
     runtime.subscribe(() => {
       if (runtime.getState().log.at(-1) !== "outer") return;
-      void runtime.dispatch({ type: "fromSubscribe" });
+      void runtime.dispatch({ _tag: "fromSubscribe" });
       // Still inside the `outer` fold — the dispatch was scheduled, not
       // applied. A re-entrant fold would already have appended here.
       expect(runtime.getState().log).toEqual(["outer"]);
     });
     runtime.observe((msg) => {
-      if (msg.type !== "outer") return;
-      void runtime.dispatch({ type: "fromObserve" });
+      if (msg._tag !== "outer") return;
+      void runtime.dispatch({ _tag: "fromObserve" });
       expect(runtime.getState().log).toEqual(["outer"]);
     });
 
-    await runtime.dispatch({ type: "outer" });
-    await runtime.dispatch({ type: "later" });
+    await runtime.dispatch({ _tag: "outer" });
+    await runtime.dispatch({ _tag: "later" });
 
     expect(runtime.getState().log).toEqual([
       "outer",
@@ -105,7 +105,7 @@ describe("dispatch from inside a listener", () => {
       fromObserve.push(state);
     });
 
-    await runtime.dispatch({ type: "outer" });
+    await runtime.dispatch({ _tag: "outer" });
 
     // `observe`'s `state` argument is the fold's committed State by contract;
     // `getState()` inside `subscribe` is the same State, not the one before.
@@ -121,11 +121,11 @@ describe("dispatch from inside a listener", () => {
       .ready;
 
     runtime.observe((msg) => {
-      if (msg.type !== "outer") return;
-      void runtime.dispatch({ type: "fromObserve" });
+      if (msg._tag !== "outer") return;
+      void runtime.dispatch({ _tag: "fromObserve" });
     });
 
-    await runtime.dispatch({ type: "outer" });
+    await runtime.dispatch({ _tag: "outer" });
 
     expect(runtime.getState().log).toContain("fromObserve");
     expect(
@@ -147,17 +147,17 @@ describe("dispatch from inside a listener", () => {
       seen = resolve;
     });
     runtime.observe((msg) => {
-      if (msg.type === "outer") seen();
+      if (msg._tag === "outer") seen();
     });
 
     const script = (async () => {
       await outerSeen;
-      await runtime.dispatch({ type: "fromObserve" });
+      await runtime.dispatch({ _tag: "fromObserve" });
     })();
 
-    void runtime.dispatch({ type: "outer" });
+    void runtime.dispatch({ _tag: "outer" });
     await script;
-    await runtime.dispatch({ type: "later" });
+    await runtime.dispatch({ _tag: "later" });
 
     expect(runtime.getState().log).toEqual([
       "outer",

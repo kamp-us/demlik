@@ -23,8 +23,8 @@ import {
 // The Cmd an emit produces in these tests: a plain tagged-data Cmd carrying the
 // settled value. `emit` is a pure constructor — no I/O, no clock — so the verbs
 // stay replayable and the emitted Cmd is inspectable structurally.
-type EmitCmd = { type: "emit"; value: string };
-const emit = (value: string): EmitCmd => ({ type: "emit", value });
+type EmitCmd = { _tag: "emit"; value: string };
+const emit = (value: string): EmitCmd => ({ _tag: "emit", value });
 
 const BASE = 1_000_000; // a readable epoch instant for absolute targets.
 
@@ -215,7 +215,7 @@ describe("input — dedupe gate (cacheTtlMs)", () => {
     // names the identity and two distinct values can never collapse together.
     type Query = { readonly term: string; readonly page: number };
     const structuredCmd = (q: Query): EmitCmd => ({
-      type: "emit",
+      _tag: "emit",
       value: `${q.term}#${q.page}`,
     });
     const gate = createThrottledInput<Query, EmitCmd>({
@@ -357,7 +357,7 @@ describe("subsFor — settle timer arms only while a value is held", () => {
 describe("throttledInputSettled — the settle Msg constructor", () => {
   it("constructs the deadline-shaped Msg the consumer handles via onFlush", () => {
     expect(throttledInputSettled("search", BASE + 200)).toEqual({
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "search",
       atMs: BASE + 200,
     });
@@ -368,7 +368,7 @@ describe("throttledInputSettled — the settle Msg constructor", () => {
 // runner receives, and what `replay` reports while a value is held.
 function settleSub(id: string, atMs: number): DeadlinesSub {
   const deps = [deadlineSub(id, atMs)];
-  return { id: subIdOf("deadline", deps), type: "deadline", deps };
+  return { id: subIdOf("deadline", deps), _tag: "deadline", deps };
 }
 
 describe("subscribeThrottledInput — the settle timer fires", () => {
@@ -442,8 +442,8 @@ describe("createThrottledInput — combinator knob shape", () => {
 
 type AppState = { readonly search: ThrottledInput<string> };
 type AppMsg =
-  | { readonly type: "typed"; readonly value: string; readonly at: number }
-  | { readonly type: "settled"; readonly at: number };
+  | { readonly _tag: "typed"; readonly value: string; readonly at: number }
+  | { readonly _tag: "settled"; readonly at: number };
 
 describe("createThrottledInput — wired into a machine", () => {
   const gate = createThrottledInput(allGates);
@@ -476,10 +476,10 @@ describe("createThrottledInput — wired into a machine", () => {
     t.expectCmdSequence(
       {
         msgs: [
-          { type: "typed", value: "h", at: BASE },
-          { type: "typed", value: "he", at: BASE + 50 },
-          { type: "typed", value: "hel", at: BASE + 100 },
-          { type: "settled", at: BASE + 300 },
+          { _tag: "typed", value: "h", at: BASE },
+          { _tag: "typed", value: "he", at: BASE + 50 },
+          { _tag: "typed", value: "hel", at: BASE + 100 },
+          { _tag: "settled", at: BASE + 300 },
         ],
       },
       [emit("hel")], // coalesced to the final keystroke
@@ -490,8 +490,8 @@ describe("createThrottledInput — wired into a machine", () => {
     t.expectActiveSubs(
       {
         msgs: [
-          { type: "typed", value: "h", at: BASE },
-          { type: "typed", value: "he", at: BASE + 50 },
+          { _tag: "typed", value: "h", at: BASE },
+          { _tag: "typed", value: "he", at: BASE + 50 },
         ],
       },
       [settleSub("throttled-input:settle", BASE + 250)], // anchored on last keystroke
@@ -500,8 +500,8 @@ describe("createThrottledInput — wired into a machine", () => {
     t.expectActiveSubs(
       {
         msgs: [
-          { type: "typed", value: "h", at: BASE },
-          { type: "settled", at: BASE + 200 },
+          { _tag: "typed", value: "h", at: BASE },
+          { _tag: "settled", at: BASE + 200 },
         ],
       },
       [], // settled → timer disarmed
@@ -512,9 +512,9 @@ describe("createThrottledInput — wired into a machine", () => {
     t.expectCmdSequence(
       {
         msgs: [
-          { type: "typed", value: "react", at: BASE },
-          { type: "settled", at: BASE + 200 }, // emit "react", cache it
-          { type: "typed", value: "react", at: BASE + 1_500 }, // deduped (within 5s)
+          { _tag: "typed", value: "react", at: BASE },
+          { _tag: "settled", at: BASE + 200 }, // emit "react", cache it
+          { _tag: "typed", value: "react", at: BASE + 1_500 }, // deduped (within 5s)
         ],
       },
       [emit("react")], // only the first run
@@ -537,9 +537,9 @@ describe("createThrottledInput — wired into a machine", () => {
     // 300ms after the prior emit, breaking "at most once per throttleMs".
     // The earliest legal emit is lastAt + throttleMs = BASE+1200.
     const emitFirstThenHold: readonly AppMsg[] = [
-      { type: "typed", value: "a", at: BASE },
-      { type: "settled", at: BASE + 200 }, // emit "a", lastAt = BASE+200
-      { type: "typed", value: "b", at: BASE + 300 }, // rate-blocked → HELD
+      { _tag: "typed", value: "a", at: BASE },
+      { _tag: "settled", at: BASE + 200 }, // emit "a", lastAt = BASE+200
+      { _tag: "typed", value: "b", at: BASE + 300 }, // rate-blocked → HELD
     ];
 
     it("a settle Msg that fires before lastAt+throttleMs does NOT emit (the rate cap wins)", () => {
@@ -548,7 +548,7 @@ describe("createThrottledInput — wired into a machine", () => {
       // second emit here would violate the at-most-once-per-throttleMs cap.
       t.expectCmdSequence(
         {
-          msgs: [...emitFirstThenHold, { type: "settled", at: BASE + 500 }],
+          msgs: [...emitFirstThenHold, { _tag: "settled", at: BASE + 500 }],
         },
         [emit("a")], // ONLY the first emit — "b" must NOT fire early
       );
@@ -560,7 +560,7 @@ describe("createThrottledInput — wired into a machine", () => {
       // legal instant, never lost.
       t.expectCmdSequence(
         {
-          msgs: [...emitFirstThenHold, { type: "settled", at: BASE + 1_200 }],
+          msgs: [...emitFirstThenHold, { _tag: "settled", at: BASE + 1_200 }],
         },
         [emit("a"), emit("b")],
       );
@@ -582,7 +582,7 @@ describe("createThrottledInput — wired into a machine", () => {
       // — the trailing edge is not lost to a premature timer.
       t.expectActiveSubs(
         {
-          msgs: [...emitFirstThenHold, { type: "settled", at: BASE + 500 }],
+          msgs: [...emitFirstThenHold, { _tag: "settled", at: BASE + 500 }],
         },
         [settleSub("throttled-input:settle", BASE + 1_200)],
       );
@@ -727,14 +727,14 @@ describe("createThrottledInput — properties", () => {
   // -------------------------------------------------------------------------
   it("every reachable slice round-trips through JSON unchanged (durable)", () => {
     type Query = { readonly term: string; readonly page: number };
-    type QueryCmd = { readonly type: "run"; readonly key: string };
+    type QueryCmd = { readonly _tag: "run"; readonly key: string };
     const queryKey = (q: Query): string => `${q.term}#${q.page}`;
     const cfg: ThrottledInputConfig<Query, QueryCmd> = {
       throttleMs: 1_000,
       debounceMs: 200,
       cacheTtlMs: 5_000,
       cacheKey: queryKey,
-      emit: (q) => ({ type: "run", key: queryKey(q) }),
+      emit: (q) => ({ _tag: "run", key: queryKey(q) }),
     };
     const gate = createThrottledInput(cfg);
 

@@ -63,7 +63,7 @@ import {
  */
 export async function drive<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -97,7 +97,7 @@ export async function drive<
   };
 
   // Indexed dynamically: `Interpret`'s mapped type already proved every Cmd
-  // variant has a cell, but `cmd.type` is a union at the value level and TS
+  // variant has a cell, but `cmd._tag` is a union at the value level and TS
   // cannot correlate the two sides of that index.
   const cells = handlers as unknown as Record<
     string,

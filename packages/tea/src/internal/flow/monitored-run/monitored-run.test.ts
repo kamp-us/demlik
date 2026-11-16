@@ -316,7 +316,7 @@ describe("createMonitoredRun — onDeadline", () => {
     });
     const [s] = run.start(run.init(), "run-x", 100);
     const msg: MonitoredRunTimerMsg = {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "monitored:safety:run-x:0",
       atMs: 700,
     };
@@ -335,7 +335,7 @@ describe("createMonitoredRun — onDeadline", () => {
     [s] = run.progress(s, { step: 1 }, 250); // seq -> 1, retires seq 0's alarm
     // The seq-0 alarm fires late, racing the just-armed seq-1 alarm.
     const stale: MonitoredRunTimerMsg = {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "monitored:safety:run-x:0",
       atMs: 700,
     };
@@ -349,7 +349,7 @@ describe("createMonitoredRun — onDeadline", () => {
     let [s] = run.start(run.init(), "r", 0);
     [s] = run.advance(s, { step: 1 }, { kind: "ok" }, 1); // done
     const [after] = run.onDeadline(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "monitored:safety:r:1",
       atMs: 999,
     });
@@ -437,7 +437,7 @@ describe("createMonitoredRun — snapshot composition", () => {
     s = next;
     expect(cmds).toEqual([
       {
-        type: "snapshot_write",
+        _tag: "snapshot_write",
         key: "run/cp",
         seq: 1,
         at: 2,
@@ -455,7 +455,7 @@ describe("createMonitoredRun — snapshot composition", () => {
     expect(s.phase).toBe("done");
     expect(cmds).toEqual([
       {
-        type: "snapshot_write",
+        _tag: "snapshot_write",
         key: "@@snapshot",
         seq: 1,
         at: 9,
@@ -494,8 +494,8 @@ describe("createMonitoredRun — snapshot composition", () => {
 describe("createMonitoredRun — the checkpoint Cmd (no handlers, ADR 0021)", () => {
   type WState = { readonly run: MonitoredRunState<Stage> };
   type WMsg =
-    | { readonly type: "begin"; readonly runId: string; readonly at: number }
-    | { readonly type: "tick"; readonly at: number };
+    | { readonly _tag: "begin"; readonly runId: string; readonly at: number }
+    | { readonly _tag: "tick"; readonly at: number };
 
   // A host that checkpoints every progress unit, with the write handler it
   // owns: `put` to `store`, return an outcome, let the engine mint the ack.
@@ -555,8 +555,8 @@ describe("createMonitoredRun — the checkpoint Cmd (no handlers, ADR 0021)", ()
     const runtime = await wired(async (key, value) => {
       puts.push({ key, value });
     }).ready;
-    await runtime.dispatch({ type: "begin", runId: "r", at: 0 });
-    await runtime.dispatch({ type: "tick", at: 12 });
+    await runtime.dispatch({ _tag: "begin", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "tick", at: 12 });
     await runtime.stop();
     expect(puts).toEqual([{ key: "run/cp", value: { step: 1 } }]);
     expect(runtime.getState().run.snapshot.lastSavedSeq).toBe(1);
@@ -567,8 +567,8 @@ describe("createMonitoredRun — the checkpoint Cmd (no handlers, ADR 0021)", ()
     const runtime = await wired(async () => {
       throw new Error("R2 down");
     }).ready;
-    await runtime.dispatch({ type: "begin", runId: "r", at: 0 });
-    await runtime.dispatch({ type: "tick", at: 1 });
+    await runtime.dispatch({ _tag: "begin", runId: "r", at: 0 });
+    await runtime.dispatch({ _tag: "tick", at: 1 });
     await runtime.stop();
     expect(runtime.getState().run.snapshot.seq).toBe(1);
     expect(runtime.getState().run.snapshot.lastSavedSeq).toBeNull();
@@ -581,14 +581,14 @@ describe("createMonitoredRun — the checkpoint Cmd (no handlers, ADR 0021)", ()
 
 type HostState = { readonly run: MonitoredRunState<Stage> };
 type HostMsg =
-  | { readonly type: "begin"; readonly runId: string; readonly at: number }
+  | { readonly _tag: "begin"; readonly runId: string; readonly at: number }
   | {
-      readonly type: "step";
+      readonly _tag: "step";
       readonly result: { kind: "ok" } | { kind: "fail"; error: unknown };
       readonly at: number;
     }
-  | { readonly type: "tick"; readonly at: number }
-  | { readonly type: "boot"; readonly at: number }
+  | { readonly _tag: "tick"; readonly at: number }
+  | { readonly _tag: "boot"; readonly at: number }
   | MonitoredRunTimerMsg
   | SnapshotSavedMsg<Checkpoint>
   | SnapshotFailedMsg<Checkpoint>;
@@ -636,7 +636,7 @@ function makeMachine(
       loaded !== null ? [loaded, []] : [{ run: run.init() }, []],
     update,
     // The watchdog rides the engine's built-in `timer` — no runner to wire.
-    subs: [{ type: "timer", deps: (s: HostState) => run.timer(s.run) }],
+    subs: [{ _tag: "timer", deps: (s: HostState) => run.timer(s.run) }],
   });
   return { run, machine };
 }
@@ -649,10 +649,10 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
     const bound = bindMachine(machine, ctx);
     const { state, subs } = bound.replay({
       msgs: [
-        { type: "begin", runId: "r", at: 0 },
-        { type: "step", result: { kind: "ok" }, at: 1 },
-        { type: "step", result: { kind: "ok" }, at: 2 },
-        { type: "step", result: { kind: "ok" }, at: 3 },
+        { _tag: "begin", runId: "r", at: 0 },
+        { _tag: "step", result: { kind: "ok" }, at: 1 },
+        { _tag: "step", result: { kind: "ok" }, at: 2 },
+        { _tag: "step", result: { kind: "ok" }, at: 3 },
       ],
     });
     expect(state.run.phase).toBe("done");
@@ -665,8 +665,8 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
     bound.expectActiveSubs(
       {
         msgs: [
-          { type: "begin", runId: "r", at: 0 },
-          { type: "step", result: { kind: "ok" }, at: 100 },
+          { _tag: "begin", runId: "r", at: 0 },
+          { _tag: "step", result: { kind: "ok" }, at: 100 },
         ],
       },
       [
@@ -676,16 +676,16 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
           id: subIdOf("timer", {
             ms: 1000,
             msg: {
-              type: "deadline_exceeded",
+              _tag: "deadline_exceeded",
               id: "monitored:safety:r:1",
               atMs: 1100,
             },
           }),
-          type: "timer",
+          _tag: "timer",
           deps: {
             ms: 1000,
             msg: {
-              type: "deadline_exceeded",
+              _tag: "deadline_exceeded",
               id: "monitored:safety:r:1",
               atMs: 1100,
             },
@@ -700,8 +700,8 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
     const bound = bindMachine(machine, ctx);
     const { state } = bound.replay({
       msgs: [
-        { type: "begin", runId: "r", at: 0 },
-        { type: "deadline_exceeded", id: "monitored:safety:r:0", atMs: 1000 },
+        { _tag: "begin", runId: "r", at: 0 },
+        { _tag: "deadline_exceeded", id: "monitored:safety:r:0", atMs: 1000 },
       ],
     });
     expect(state.run.phase).toBe("failed");
@@ -718,13 +718,13 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
     bound.expectCmdEmitted(
       {
         msgs: [
-          { type: "begin", runId: "r", at: 0 },
-          { type: "tick", at: 5 },
+          { _tag: "begin", runId: "r", at: 0 },
+          { _tag: "tick", at: 5 },
         ],
       },
       // payload is the checkpoint the consumer hands in — snapshotted from the
       // PRE-bump state (progressSeq is still 0 when `tick` reads it).
-      { type: "snapshot_write", key: "k", seq: 1, at: 5, payload: { step: 0 } },
+      { _tag: "snapshot_write", key: "k", seq: 1, at: 5, payload: { step: 0 } },
     );
   });
 
@@ -772,7 +772,7 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
       const first = booted.subs[0];
       // pre-fix: born-live deadline; post-fix: undefined
       const armed =
-        first?.type === "timer"
+        first?._tag === "timer"
           ? (first.deps as { msg: MonitoredRunTimerMsg }).msg
           : undefined;
 
@@ -782,8 +782,8 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
       //    the worst-case stray fire against the empty-runId/seq-0 slice to
       //    prove even a rogue alarm cannot un-start the run.
       const alarm: MonitoredRunTimerMsg = armed
-        ? { type: "deadline_exceeded", id: armed.id, atMs: armed.atMs }
-        : { type: "deadline_exceeded", id: "monitored:safety::0", atMs: 1000 };
+        ? { _tag: "deadline_exceeded", id: armed.id, atMs: armed.atMs }
+        : { _tag: "deadline_exceeded", id: "monitored:safety::0", atMs: 1000 };
 
       const { state } = bound.replay({ msgs: [alarm] });
 
@@ -828,7 +828,7 @@ describe("createMonitoredRun — properties", () => {
         const [s3] = run.markStale(frozen);
         const [s4] = run.boot(frozen, at + 2);
         const [s5] = run.onDeadline(frozen, {
-          type: "deadline_exceeded",
+          _tag: "deadline_exceeded",
           id: "monitored:safety:r:0",
           atMs: at + 3,
         });
@@ -999,7 +999,7 @@ describe("createMonitoredRun — properties", () => {
                 break;
               case "deadline":
                 [s] = run.onDeadline(s, {
-                  type: "deadline_exceeded",
+                  _tag: "deadline_exceeded",
                   id: `monitored:safety:r:${s.progressSeq}`,
                   atMs: a.at,
                 });
@@ -1075,7 +1075,7 @@ describe("createMonitoredRun — properties", () => {
               break;
             case "deadline":
               [s] = run.onDeadline(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `monitored:safety:r:${s.progressSeq}`,
                 atMs: a.at,
               });

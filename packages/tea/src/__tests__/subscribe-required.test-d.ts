@@ -5,7 +5,7 @@
 // erroring, the directive becomes "unused" and `tsc` fails the whole package.
 // Every line without a directive is a positive case that must compile.
 //
-// The contract: a machine is data. It declares `subs: [{ type, deps(state) }]`
+// The contract: a machine is data. It declares `subs: [{ _tag, deps(state) }]`
 // and carries no runner, so `subscriptions` / `subscribe` on a machine are type
 // errors. The runners arrive at `run` in `subscribe`: REQUIRED, one per type,
 // when the machine's `types.sub` names a type other than the built-in `timer`
@@ -25,7 +25,7 @@ import { run } from "../promise";
 import { useMachine } from "../react";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "bump" };
+type Msg = { readonly _tag: "bump" };
 type TickSub = Sub<"tick", { readonly every: number }>;
 
 const update: Reducer<State, Msg, never> = {
@@ -45,7 +45,7 @@ const ticking = defineMachine({
   },
   init: () => [{ count: 0 }, []],
   update,
-  subs: [{ type: "tick", deps: (s) => ({ every: s.count }) }],
+  subs: [{ _tag: "tick", deps: (s) => ({ every: s.count }) }],
 });
 
 // ── a declared Sub type needs its runner at `run` ──────────────────────────
@@ -83,8 +83,8 @@ const twoTypes = defineMachine({
   init: () => [{ count: 0 }, []],
   update,
   subs: [
-    { type: "a", deps: (s) => ({ n: s.count }) },
-    { type: "b", deps: (s) => ({ n: s.count }) },
+    { _tag: "a", deps: (s) => ({ n: s.count }) },
+    { _tag: "b", deps: (s) => ({ n: s.count }) },
   ],
 });
 export const bothRunners = run(twoTypes, {
@@ -117,8 +117,8 @@ const timed = defineMachine({
   update,
   subs: [
     {
-      type: "timer",
-      deps: (s) => (s.count < 3 ? { ms: 1_000, msg: { type: "bump" } } : null),
+      _tag: "timer",
+      deps: (s) => (s.count < 3 ? { ms: 1_000, msg: { _tag: "bump" } } : null),
     },
   ],
 });
@@ -157,7 +157,7 @@ export const wrongDeps = defineMachine({
   },
   init: () => [{ count: 0 }, []],
   update,
-  subs: [{ type: "tick", deps: () => "every-second" }],
+  subs: [{ _tag: "tick", deps: () => "every-second" }],
 });
 
 export const undeclaredType = defineMachine({
@@ -165,7 +165,7 @@ export const undeclaredType = defineMachine({
   types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
   init: () => [{ count: 0 }, []],
   update,
-  subs: [{ type: "poll", deps: () => ({ every: 1 }) }],
+  subs: [{ _tag: "poll", deps: () => ({ every: 1 }) }],
 });
 
 // ── a machine carries no runner ────────────────────────────────────────────

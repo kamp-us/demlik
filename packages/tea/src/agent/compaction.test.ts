@@ -69,8 +69,8 @@ const STAGES: readonly Stage[] = ["plan", "act"];
 const turnOf = (stage: Stage | undefined): Purpose =>
   stage === "act" ? "act_turn" : "plan_turn";
 
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): ToolCmd => ({ _tag: "run_tool", ...call });
 
 const rngZero = () => 0;
 const retry = {
@@ -123,14 +123,14 @@ function makeCompactingAgent(
 
 // The brain-call run Cmd the agent emits for a purpose (payloadOf omitted).
 const brainRunCmd = (purpose: Purpose): LlmRunCmd<Purpose> => ({
-  type: "resilient_run",
+  _tag: "resilient_run",
   key: purpose,
   input: { purpose, model: null, payload: null },
 });
 
 // The compaction run Cmd the agent emits (the re-keyed dedicated discriminant).
 const compactRunCmd = (payload: unknown = null): AgentCompactRunCmd => ({
-  type: "compact_run",
+  _tag: "compact_run",
   key: COMPACTION_PURPOSE,
   input: { purpose: COMPACTION_PURPOSE, model: null, payload },
 });
@@ -138,7 +138,7 @@ const compactRunCmd = (payload: unknown = null): AgentCompactRunCmd => ({
 // The re-entered compaction success settle Msg (what the consumer's `compact_run`
 // cell returns).
 const compactOk = (summary: string): AgentCompactOkMsg => ({
-  type: "compact_ok",
+  _tag: "compact_ok",
   key: COMPACTION_PURPOSE,
   result: {
     key: COMPACTION_PURPOSE,
@@ -153,9 +153,9 @@ const brainOk = (
   purpose: Purpose,
   output: AgentTurn,
 ): AgentLlmOkMsg<Purpose, Outputs> => ({
-  type: "resilient_run_ok",
+  _tag: "resilient_run_ok",
   cmd: {
-    type: "resilient_run",
+    _tag: "resilient_run",
     key: purpose,
     input: { purpose, model: null, payload: null },
   },
@@ -257,7 +257,7 @@ describe("compaction — trigger fires compact_run instead of the brain call", (
     });
     expect(cmds).toEqual([compactRunCmd()]);
     // No brain-call run Cmd in the batch (only the compaction round-trip).
-    expect(cmds.filter((c) => c.type === "resilient_run")).toEqual([]);
+    expect(cmds.filter((c) => c._tag === "resilient_run")).toEqual([]);
     // The compaction slice tracks the call running.
     expect(compacting.compaction.calls[COMPACTION_PURPOSE]?.phase).toBe(
       "running",
@@ -454,7 +454,7 @@ describe("compaction — off-path emits no compact_run ever (#55 forbidden cell)
         let [s] = agent.start(agent.init(), "r", 0);
         let at = 1;
         for (const a of actions) {
-          let cmds: readonly { type: string }[] = [];
+          let cmds: readonly { _tag: string }[] = [];
           if (a.kind === "empty_turn") {
             [s, cmds] = agent.turn(s, turnWith(), at++);
           } else if (a.kind === "tool_turn") {
@@ -465,7 +465,7 @@ describe("compaction — off-path emits no compact_run ever (#55 forbidden cell)
             [s, cmds] = agent.toolOk(s, running.callId, "x", at++);
           }
           // The forbidden cell can never fire — no compact_run, ever.
-          if (cmds.some((c) => c.type === "compact_run")) return false;
+          if (cmds.some((c) => c._tag === "compact_run")) return false;
           // And the conversation never enters the compacting state.
           if (s.conversation?.awaiting.kind === "compacting") return false;
         }
@@ -515,7 +515,7 @@ describe("compaction — compact_err proceeds without compacting", () => {
       error: { _tag: "provider_error" },
     };
     const errMsg: AgentCompactErrMsg = {
-      type: "compact_err",
+      _tag: "compact_err",
       key: COMPACTION_PURPOSE,
       error: err,
       at: 5,
@@ -579,11 +579,11 @@ describe("compaction — replay byte-identity with a mid-loop compaction", () =>
   // turns 1, no fold) ; plan turn (1 tool) → tool settle → fold triggers
   // compaction (turns 2 → fold 2) → compact_ok folds back → brain call.
   const msgs: M[] = [
-    { type: "agent_start", runId: "r", at: 0 },
+    { _tag: "agent_start", runId: "r", at: 0 },
     brainOk("plan_turn", turnWith(tool("c1"))),
-    { type: "agent_tool_ok", callId: "c1", result: "r1", at: 10 },
+    { _tag: "agent_tool_ok", callId: "c1", result: "r1", at: 10 },
     brainOk("plan_turn", turnWith(tool("c2"))),
-    { type: "agent_tool_ok", callId: "c2", result: "r2", at: 20 },
+    { _tag: "agent_tool_ok", callId: "c2", result: "r2", at: 20 },
     // The 2nd drain fired compaction; resolve it.
     compactOk("SUM"),
   ];
@@ -654,7 +654,7 @@ describe("compaction — WIRED machine drives a real compaction round-trip", () 
     let compactRuns = 0;
     const toolInterpret: Interpret<M, ToolCmd | AgentCompactRunCmd, object> = {
       run_tool: async (cmd) => ({
-        type: "agent_tool_ok",
+        _tag: "agent_tool_ok",
         callId: cmd.callId,
         result: `done:${cmd.callId}`,
         at: 0,
@@ -683,7 +683,7 @@ describe("compaction — WIRED machine drives a real compaction round-trip", () 
         resolveDone();
       }
     });
-    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await runtime.dispatch({ _tag: "agent_start", runId: "run-1", at: 0 });
     await reachedDone;
     await runtime.stop();
     off();

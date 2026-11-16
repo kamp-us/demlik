@@ -71,7 +71,7 @@
  *     nextCursor: (page) => page.next ?? null,
  *     itemsOf: (page) => page.nodes,                 // page → actual items
  *     diff: (desired, actual) => planChanges(desired, actual),
- *     apply: (change) => ({ type: "apply_change", change }),
+ *     apply: (change) => ({ _tag: "apply_change", change }),
  *     idOf: (change) => change.nodeId,               // applied-ledger key
  *     rateLimit: { capacity: 10, refillPerSec: 5 },
  *     retry: defaultRetryPolicy,
@@ -87,7 +87,7 @@
  *     change_done: (s, m) => lift(s, rec.applied(s.rec, m.change, m.at)),
  *     deadline_exceeded: (s, m) => lift(s, rec.onTimer(s.rec, m)),
  *   },
- *   subs: [{ type: "timer", deps: (s) => rec.timer(s.rec) }],
+ *   subs: [{ _tag: "timer", deps: (s) => rec.timer(s.rec) }],
  *
  *   // and where it runs — the scan's page fetch is the handler you write:
  *   run(machine, {
@@ -176,7 +176,7 @@ export interface ReconcilerConfig<
   ) => readonly Change[];
   /**
    * Realize one `Change` as the Cmd that mutates the actual world. Returns plain
-   * data (a `{ type, ... }` Cmd the consumer's interpret handler performs).
+   * data (a `{ _tag, ... }` Cmd the consumer's interpret handler performs).
    * PURE — the side effect happens when the runtime performs the emitted Cmd,
    * never here.
    */
@@ -640,7 +640,7 @@ export function createReconciler<
 
   /**
    * The built-in `timer` Sub's deps for the scan. Declare
-   * `{ type: "timer", deps: (s) => rec.timer(s.rec) }`.
+   * `{ _tag: "timer", deps: (s) => rec.timer(s.rec) }`.
    */
   function timer(s: State) {
     return walk.timer(s.walk);

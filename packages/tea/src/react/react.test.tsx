@@ -30,7 +30,7 @@ import { useMachine, useRuntime } from "./index";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type CounterState = { readonly n: number };
-type CounterMsg = { readonly type: "inc" };
+type CounterMsg = { readonly _tag: "inc" };
 
 function parseCounter(raw: unknown): CounterState | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -67,13 +67,13 @@ afterEach(async () => {
 
 type LabelState = { readonly label: string };
 type LabelMsg =
-  | { readonly type: "load" }
-  | { readonly type: "loaded"; readonly label: string };
-type LabelCmd = { readonly type: "read_label" };
+  | { readonly _tag: "load" }
+  | { readonly _tag: "loaded"; readonly label: string };
+type LabelCmd = { readonly _tag: "read_label" };
 
 function labelMachine() {
   const update: Reducer<LabelState, LabelMsg, LabelCmd> = {
-    load: (s) => [s, [{ type: "read_label" }]],
+    load: (s) => [s, [{ _tag: "read_label" }]],
     loaded: (_s, m) => [{ label: m.label }, []],
   };
   return defineMachine({
@@ -98,7 +98,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
         run,
         ctx: undefined,
         interpret: {
-          read_label: async () => ({ type: "loaded", label: "done" }),
+          read_label: async () => ({ _tag: "loaded", label: "done" }),
         },
       });
       dispatch = d;
@@ -109,7 +109,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
       root.render(<Label />);
     });
     await act(async () => {
-      expect(dispatch?.({ type: "load" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "load" })).toBeUndefined();
     });
     expect(container.textContent).toBe("done");
   });
@@ -125,7 +125,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
         ctx: undefined,
         // A fresh table every render, closing over the prop.
         interpret: {
-          read_label: async () => ({ type: "loaded", label: `v-${suffix}` }),
+          read_label: async () => ({ _tag: "loaded", label: `v-${suffix}` }),
         },
       });
       dispatch = d;
@@ -140,7 +140,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
       root.render(<Label suffix="2" />);
     });
     await act(async () => {
-      expect(dispatch?.({ type: "load" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "load" })).toBeUndefined();
     });
 
     expect(container.textContent).toBe("v-2");
@@ -166,7 +166,7 @@ describe("useMachine", () => {
     expect(container.textContent).toBe("0");
 
     await act(async () => {
-      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
     });
     expect(container.textContent).toBe("1");
   });
@@ -209,7 +209,7 @@ describe("useMachine", () => {
 
   it("unmount stops the runtime: active sub cleanups run", async () => {
     type Phase = { readonly phase: "armed" };
-    type M = { readonly type: "noop" };
+    type M = { readonly _tag: "noop" };
     type ProbeSub = Sub<"probe", { readonly name: string }>;
     const log: string[] = [];
     const subscribe: Subscribe<M, ProbeSub, undefined> = {
@@ -229,7 +229,7 @@ describe("useMachine", () => {
       },
       init: () => [{ phase: "armed" }, []],
       update: { noop: (s) => [s, []] },
-      subs: [{ type: "probe", deps: () => ({ name: "p1" }) }],
+      subs: [{ _tag: "probe", deps: () => ({ name: "p1" }) }],
     });
 
     function Host() {
@@ -267,8 +267,8 @@ describe("useMachine", () => {
       root.render(<Counter />);
     });
     await act(async () => {
-      expect(dispatch?.({ type: "inc" })).toBeUndefined();
-      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
     });
     expect(container.textContent).toBe("2");
 
@@ -304,8 +304,8 @@ describe("useMachine", () => {
 describe("useMachine — loud on discard", () => {
   type WizardCtx = { readonly userId: string };
   type WizardState = { readonly step: number };
-  type WizardMsg = { readonly type: "next" };
-  type SaveCmd = { readonly type: "save" };
+  type WizardMsg = { readonly _tag: "next" };
+  type SaveCmd = { readonly _tag: "save" };
 
   // The parked Cmd returns NO follow-up: re-dispatching into a stopped runtime
   // is a separate (pre-existing) `phase: "follow-up"` rejection, and the
@@ -313,7 +313,7 @@ describe("useMachine — loud on discard", () => {
   // the discard warning it asserts.
   function wizardMachine(park: Promise<void>) {
     const update: Reducer<WizardState, WizardMsg, SaveCmd> = {
-      next: (s) => [{ step: s.step + 1 }, [{ type: "save" }]],
+      next: (s) => [{ step: s.step + 1 }, [{ _tag: "save" }]],
     };
     const interpret: Interpret<WizardMsg, SaveCmd, WizardCtx> = {
       save: async () => {
@@ -369,7 +369,7 @@ describe("useMachine — loud on discard", () => {
     });
     // The sender returns immediately while the Cmd parks across the re-render.
     await act(async () => {
-      expect(dispatch({ type: "next" })).toBeUndefined();
+      expect(dispatch({ _tag: "next" })).toBeUndefined();
     });
     expect(warn).not.toHaveBeenCalled();
 
@@ -402,7 +402,7 @@ describe("useMachine — loud on discard", () => {
       root.render(<Wizard userId="u1" />);
     });
     await act(async () => {
-      expect(dispatch({ type: "next" })).toBeUndefined();
+      expect(dispatch({ _tag: "next" })).toBeUndefined();
     });
     await act(async () => {
       root.render(<Wizard userId="u2" />);
@@ -429,7 +429,7 @@ describe("useMachine — the engine is an input (#281)", () => {
       root.render(<Counter />);
     });
     await act(async () => {
-      expect(dispatch?.({ type: "inc" })).toBeUndefined();
+      expect(dispatch?.({ _tag: "inc" })).toBeUndefined();
     });
 
     expect(container.textContent).toBe("1");
@@ -453,7 +453,7 @@ describe("useRuntime", () => {
     expect(container.textContent).toBe("0");
 
     await act(async () => {
-      await external.dispatch({ type: "inc" });
+      await external.dispatch({ _tag: "inc" });
     });
     expect(container.textContent).toBe("1");
 
@@ -461,7 +461,7 @@ describe("useRuntime", () => {
     await act(async () => {
       root.render(<div />);
     });
-    await external.dispatch({ type: "inc" });
+    await external.dispatch({ _tag: "inc" });
     expect(external.getState()).toEqual({ n: 2 });
     await external.stop();
   });

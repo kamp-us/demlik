@@ -74,12 +74,12 @@ represented.
 ## Name the things that happen with Msgs
 
 Nothing mutates the Model directly. Instead, events arrive as messages, and each
-message is a value with a `type`:
+message is a value with a `_tag`:
 
 ```ts
 type Msg =
-  | { readonly type: "start"; readonly total: number }
-  | { readonly type: "chunk"; readonly size: number };
+  | { readonly _tag: "start"; readonly total: number }
+  | { readonly _tag: "chunk"; readonly size: number };
 ```
 
 `start` kicks off a download of a known size; each `chunk` reports bytes that
@@ -137,10 +137,10 @@ const isDone = (s: State) => s.phase === "done";
 
 const runtime = await run(downloader, { terminal: isDone }).ready;
 
-await runtime.dispatch({ type: "start", total: 3 });
-await runtime.dispatch({ type: "chunk", size: 1 });
-await runtime.dispatch({ type: "chunk", size: 1 });
-await runtime.dispatch({ type: "chunk", size: 1 });
+await runtime.dispatch({ _tag: "start", total: 3 });
+await runtime.dispatch({ _tag: "chunk", size: 1 });
+await runtime.dispatch({ _tag: "chunk", size: 1 });
+await runtime.dispatch({ _tag: "chunk", size: 1 });
 
 const final = await runtime.done(); // resolves when `isDone` first holds
 console.log(final.phase); // "done"
@@ -175,10 +175,10 @@ messages you dispatched, and hand them to `replay`:
 
 ```ts
 const msgs: Msg[] = [
-  { type: "start", total: 3 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
+  { _tag: "start", total: 3 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
 ];
 
 const { state } = replay(downloader, { msgs, ctx: undefined });

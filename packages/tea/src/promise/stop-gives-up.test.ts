@@ -22,10 +22,10 @@ import { run } from "./index";
 type Feed = Sub<"feed", { readonly on: true }>;
 type Model = { readonly asked: number; readonly got: number };
 type Msg =
-  | { readonly type: "ask" }
-  | { readonly type: "got" }
-  | { readonly type: "bump" };
-type Cmd = { readonly type: "wait" } | { readonly type: "after" };
+  | { readonly _tag: "ask" }
+  | { readonly _tag: "got" }
+  | { readonly _tag: "bump" };
+type Cmd = { readonly _tag: "wait" } | { readonly _tag: "after" };
 
 const machine = defineMachine({
   types: {
@@ -39,12 +39,12 @@ const machine = defineMachine({
   update: {
     ask: (s) => [
       { ...s, asked: s.asked + 1 },
-      [{ type: "wait" }, { type: "after" }],
+      [{ _tag: "wait" }, { _tag: "after" }],
     ],
     got: (s) => [{ ...s, got: s.got + 1 }, []],
     bump: (s) => [{ ...s, got: s.got + 100 }, []],
   },
-  subs: [{ type: "feed", deps: () => ({ on: true as const }) }],
+  subs: [{ _tag: "feed", deps: () => ({ on: true as const }) }],
 });
 
 const LIMIT_MS = 40;
@@ -78,7 +78,7 @@ async function startRun() {
       wait: async () => {
         started.push("wait");
         await held;
-        return { type: "got" } as const;
+        return { _tag: "got" } as const;
       },
       after: async () => {
         started.push("after");
@@ -91,7 +91,7 @@ async function startRun() {
     },
   }).ready;
   // The step saves, then its `wait` handler starts and never returns.
-  const asked = runtime.dispatchOnce({ type: "ask" });
+  const asked = runtime.dispatchOnce({ _tag: "ask" });
   while (started.length === 0) await Promise.resolve();
   return {
     runtime,
@@ -136,7 +136,7 @@ describe("Promise engine: stop() with a Cmd handler that never returns", () => {
   it("drops the stuck handler's late result, the rest of its step and the Msgs queued behind it", async () => {
     const r = await startRun();
     // Accepted while the run was open, queued behind the stuck handler.
-    const queued = r.runtime.dispatchOnce({ type: "bump" });
+    const queued = r.runtime.dispatchOnce({ _tag: "bump" });
     const queuedOutcome = queued.then(
       () => "folded",
       (error: unknown) => error,
@@ -163,7 +163,7 @@ describe("Promise engine: stop() with a Cmd handler that never returns", () => {
     expect(r.reports[2]?.error).toBeInstanceOf(DispatchDiscardedError);
     expect((r.reports[2]?.error as DispatchDiscardedError).msgType).toBe("got");
     // A caller using the retired run is still told so, loudly.
-    await expect(r.runtime.dispatch({ type: "bump" })).rejects.toThrow(
+    await expect(r.runtime.dispatch({ _tag: "bump" })).rejects.toThrow(
       "runtime stopped",
     );
   });

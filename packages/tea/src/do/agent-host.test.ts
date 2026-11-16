@@ -37,8 +37,8 @@ interface Outputs extends Record<Purpose, AgentTurn> {
   readonly act_turn: AgentTurn;
 }
 
-type ToolCmd = { readonly type: "run_tool" } & ToolCall;
-const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
+type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
+const toolOf = (call: ToolCall): ToolCmd => ({ _tag: "run_tool", ...call });
 
 const turnSchema = (): Schema<AgentTurn> => ({
   parse: (v) => {
@@ -108,7 +108,7 @@ function makeHost(
   });
   const toolInterpret: Interpret<M, ToolCmd, object> = {
     run_tool: async (cmd) => ({
-      type: "agent_tool_ok",
+      _tag: "agent_tool_ok",
       callId: cmd.callId,
       result: `done:${cmd.callId}`,
       at: 0,

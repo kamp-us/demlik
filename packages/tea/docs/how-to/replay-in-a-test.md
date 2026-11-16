@@ -11,16 +11,16 @@ so a replay test is pure, synchronous, and deterministic.
 Hand `replay` the machine, the message list, and the `ctx` your `init` expects.
 It returns the final `state`, the `cmds` that would have been emitted, and the
 `subs` that would be running at the end, each as its runner would see it
-(`{ id, type, deps }`):
+(`{ id, _tag, deps }`):
 
 ```ts
 import { replay } from "@demlik/tea";
 
 const msgs: Msg[] = [
-  { type: "start", total: 3 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
-  { type: "chunk", size: 1 },
+  { _tag: "start", total: 3 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
+  { _tag: "chunk", size: 1 },
 ];
 
 const { state, cmds } = replay(downloader, { msgs, ctx: undefined });
@@ -54,8 +54,8 @@ expectFinalState(
 
 expectCmdEmitted(
   resilientFetch,
-  { msgs: [{ type: "fetch", url: "/x", at: 1000 }], ctx },
-  { type: "do_fetch", url: "/x" },
+  { msgs: [{ _tag: "fetch", url: "/x", at: 1000 }], ctx },
+  { _tag: "do_fetch", url: "/x" },
 );
 ```
 

@@ -26,8 +26,8 @@ import { run as runPromise } from "../promise";
 import { run as runEffect, StoreFailed } from "./index";
 
 type Model = { readonly asked: number };
-type Msg = { readonly type: "ask" };
-type Cmd = { readonly type: "warm" } | { readonly type: "work" };
+type Msg = { readonly _tag: "ask" };
+type Cmd = { readonly _tag: "warm" } | { readonly _tag: "work" };
 type Feed = Sub<"feed", { readonly gen: number }>;
 
 // `init` returns a Cmd and the machine declares a Sub, so a boot that went on
@@ -41,11 +41,11 @@ const machine = defineMachine({
     sub: {} as Feed,
     ctx: {} as NoCtx,
   },
-  init: (loaded) => [loaded ?? { asked: 0 }, [{ type: "warm" }]],
+  init: (loaded) => [loaded ?? { asked: 0 }, [{ _tag: "warm" }]],
   update: {
-    ask: (s) => [{ asked: s.asked + 1 }, [{ type: "work" }]],
+    ask: (s) => [{ asked: s.asked + 1 }, [{ _tag: "work" }]],
   },
-  subs: [{ type: "feed", deps: (s: Model) => ({ gen: s.asked }) }],
+  subs: [{ _tag: "feed", deps: (s: Model) => ({ gen: s.asked }) }],
 });
 
 const LIMIT_MS = 40;
@@ -230,7 +230,7 @@ describe.each(
   ): Promise<{ run: Started; asked: Promise<unknown> }> {
     const run = await start[engine](store);
     await run.ready();
-    const asked = run.dispatch({ type: "ask" }).then(
+    const asked = run.dispatch({ _tag: "ask" }).then(
       () => undefined,
       (error: unknown) => error,
     );
@@ -242,8 +242,8 @@ describe.each(
   async function takeOver(store: Store<Model>): Promise<Started> {
     const newer = await start[engine](store);
     await newer.ready();
-    await newer.dispatch({ type: "ask" });
-    await newer.dispatch({ type: "ask" });
+    await newer.dispatch({ _tag: "ask" });
+    await newer.dispatch({ _tag: "ask" });
     expect(await store.load()).toEqual({ asked: 3 });
     return newer;
   }

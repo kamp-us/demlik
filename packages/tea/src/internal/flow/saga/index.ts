@@ -52,9 +52,9 @@
  *
  *   const saga = createSaga<BookFlight | ChargeCard | ..., Cancel | Refund | ...>({
  *     steps: [
- *       { do: { type: "book_flight" },  undo: { type: "cancel_flight" } },
- *       { do: { type: "charge_card" },  undo: { type: "refund_card" } },
- *       { do: { type: "reserve_hotel" },undo: { type: "release_hotel" } },
+ *       { do: { _tag: "book_flight" },  undo: { _tag: "cancel_flight" } },
+ *       { do: { _tag: "charge_card" },  undo: { _tag: "refund_card" } },
+ *       { do: { _tag: "reserve_hotel" },undo: { _tag: "release_hotel" } },
  *     ],
  *   });
  *

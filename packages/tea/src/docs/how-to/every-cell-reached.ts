@@ -14,7 +14,7 @@ import type { DriveTraceEntry } from "../../testing/drive-loop";
 
 /** One run's trace, whichever engine's `drive` returned it. */
 export type Trace = readonly DriveTraceEntry<
-  { readonly type: string },
+  { readonly _tag: string },
   unknown
 >[];
 
@@ -29,7 +29,7 @@ export function expectEveryCellReached(
 ): void {
   const reached = new Set(
     traces.flatMap((trace) =>
-      trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg.type] : [])),
+      trace.flatMap((entry) => (entry.kind === "msg" ? [entry.msg._tag] : [])),
     ),
   );
   expect([...reached].sort()).toEqual(Object.keys(machine.update).sort());

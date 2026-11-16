@@ -33,7 +33,7 @@
  * substrate downstream only ever sees the coalesced Msg:
  *
  *   const onResized = debounce(
- *     () => runtime.dispatch({ type: "BrowserResizedWindow" }),
+ *     () => runtime.dispatch({ _tag: "BrowserResizedWindow" }),
  *     150,
  *   );
  *   window.addEventListener("resize", onResized);

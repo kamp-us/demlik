@@ -153,7 +153,7 @@ export interface ProjectionUpdate<Model, Msg> {
  * @typeParam Msg   The write-model event (`run()`'s `M`).
  * @typeParam View  The read model this projection derives.
  */
-export interface Projection<Model, Msg extends { type: string }, View> {
+export interface Projection<Model, Msg extends { _tag: string }, View> {
   /** This projection's id (offset-isolation unit). */
   readonly id: ProjectionId;
   /** The seed view for a fresh or rebuilt run (the `NoOffset` start). */
@@ -190,7 +190,7 @@ export interface Projection<Model, Msg extends { type: string }, View> {
  * exclusive stored `offset`, and the `present`/`reset` operations the driver
  * (or a rebuild) calls.
  */
-export interface ProjectionRunner<Model, Msg extends { type: string }, View> {
+export interface ProjectionRunner<Model, Msg extends { _tag: string }, View> {
   readonly id: ProjectionId;
   /** The current derived view (the read model). */
   view(): View;
@@ -230,7 +230,7 @@ export interface ProjectionRunner<Model, Msg extends { type: string }, View> {
  * likewise re-seeds `view`/`offset` silently — `emit` fires only from `present`
  * when a strictly-newer update is folded.
  */
-export function runProjection<Model, Msg extends { type: string }, View>(
+export function runProjection<Model, Msg extends { _tag: string }, View>(
   projection: Projection<Model, Msg, View>,
   startOffset = 0,
 ): ProjectionRunner<Model, Msg, View> {
@@ -283,7 +283,7 @@ export function runProjection<Model, Msg extends { type: string }, View>(
  * monotonic offset counter; presents each observed update to every registered
  * runner independently.
  */
-export interface ProjectionRegistry<Model, Msg extends { type: string }> {
+export interface ProjectionRegistry<Model, Msg extends { _tag: string }> {
   /** Register a projection; returns its live runner. */
   register<View>(
     projection: Projection<Model, Msg, View>,
@@ -309,7 +309,7 @@ export interface ProjectionRegistry<Model, Msg extends { type: string }> {
  * is still isolated from its siblings, but its failure is not surfaced (the
  * substrate's `run(machine, { onError })` is the natural source to forward).
  */
-export function projectionRegistry<Model, Msg extends { type: string }>(
+export function projectionRegistry<Model, Msg extends { _tag: string }>(
   onError?: ProjectionOnError,
 ): ProjectionRegistry<Model, Msg> {
   const runners = new Set<ProjectionRunner<Model, Msg, unknown>>();
@@ -360,7 +360,7 @@ export function projectionRegistry<Model, Msg extends { type: string }>(
  * `Runtime<Model, Msg>` without importing the substrate's `Runtime` (types-only
  * boundary).
  */
-export function driveProjections<Model, Msg extends { type: string }>(
+export function driveProjections<Model, Msg extends { _tag: string }>(
   registry: ProjectionRegistry<Model, Msg>,
   runtime: {
     observe(observer: (msg: Msg, model: Model) => void): () => void;
@@ -409,7 +409,7 @@ export function driveProjections<Model, Msg extends { type: string }>(
  * This is the rebuild-equivalence oracle: a view cleared and replayed from the
  * stream equals the live view.
  */
-export function rebuildProjection<Model, Msg extends { type: string }, View>(
+export function rebuildProjection<Model, Msg extends { _tag: string }, View>(
   projection: Projection<Model, Msg, View>,
   updates: readonly { readonly msg: Msg | null; readonly model: Model }[],
 ): ProjectionRunner<Model, Msg, View> {

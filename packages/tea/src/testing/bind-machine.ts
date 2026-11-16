@@ -53,7 +53,7 @@ interface BoundOpts<S, M> {
  */
 export interface BoundMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   // `Ctx` is a phantom-style parameter — present for consumers that want to
@@ -95,7 +95,7 @@ export interface BoundMachine<
   /**
    * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
    * Use for the "narrow-then-assert" pattern where the test inspects a
-   * specific field after `state.type === "..."` discrimination.
+   * specific field after `state._tag === "..."` discrimination.
    */
   replay(opts: BoundOpts<S, M>): {
     state: S;
@@ -116,7 +116,7 @@ export interface BoundMachine<
  */
 export function bindMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

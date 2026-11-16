@@ -25,7 +25,7 @@ These are the ones to read first:
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`AGENT_EVENT_TYPES`](#AGENT_EVENT_TYPES) | Variable | experimental | Every AgentEvent `type`. |
+| [`AGENT_EVENT_TYPES`](#AGENT_EVENT_TYPES) | Variable | experimental | Every AgentEvent `_tag`. |
 | [`agentBootMsg`](#agentBootMsg) | Function | experimental | The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches on a resumable rehydrate. |
 | [`AgentBootMsg`](#AgentBootMsg) | Type | experimental | The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. |
 | [`agentCancelMsg`](#agentCancelMsg) | Function | experimental | Construct the `agent_cancel` Msg an abort dispatches. |
@@ -86,7 +86,7 @@ These are the ones to read first:
 | [`DefinedAgentCmd`](#DefinedAgentCmd) | Type | experimental | The Cmd union a defined agent's machine emits — one interpret cell per member. |
 | [`DefinedAgentCtx`](#DefinedAgentCtx) | Type | experimental | The ctx the tools' handlers read, intersected — what `run` asks for. |
 | [`DefinedAgentEvent`](#DefinedAgentEvent) | Type | experimental | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
-| [`DefinedAgentInterpret`](#DefinedAgentInterpret) | Type | experimental | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `type` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
+| [`DefinedAgentInterpret`](#DefinedAgentInterpret) | Type | experimental | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `_tag` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
 | [`DefinedAgentMachine`](#DefinedAgentMachine) | Type | experimental | The wired machine `defineAgent` builds per `input`. |
 | [`DefinedAgentModel`](#DefinedAgentModel) | Type | experimental | The brain a defined agent runs, in either of its two shapes: - `async (messages) => turn` — the plain port, and the common path. |
 | [`DefinedAgentMsg`](#DefinedAgentMsg) | Type | experimental | The Msg union a defined agent's machine folds. |
@@ -205,8 +205,8 @@ function agentBootMsg(at: number): AgentBootMsg
 
 ```ts
 type AgentBootMsg = {
+  readonly _tag: typeof MsgType.AgentBoot;
   readonly at: number;
-  readonly type: typeof MsgType.AgentBoot;
 }
 ```
 
@@ -224,8 +224,8 @@ function agentCancelMsg(at: number): AgentCancelMsg
 
 ```ts
 type AgentCancelMsg = {
+  readonly _tag: typeof MsgType.AgentCancel;
   readonly at: number;
-  readonly type: typeof MsgType.AgentCancel;
 }
 ```
 
@@ -252,10 +252,10 @@ type AgentCmd<
 
 ```ts
 type AgentCompactErrMsg = {
+  readonly _tag: typeof MsgType.CompactErr;
   readonly at: number;
   readonly error: LlmErr<CompactionPurpose>;
   readonly key: CompactionPurpose;
-  readonly type: typeof MsgType.CompactErr;
 }
 ```
 
@@ -277,10 +277,10 @@ type AgentCompactionConfig<R, Msg> =
 
 ```ts
 type AgentCompactOkMsg = {
+  readonly _tag: typeof MsgType.CompactOk;
   readonly at: number;
   readonly key: CompactionPurpose;
   readonly result: LlmOk<CompactionPurpose, CompactionOutputs>;
-  readonly type: typeof MsgType.CompactOk;
 }
 ```
 
@@ -465,38 +465,38 @@ type AgentEndedStatus<Stage = unknown> = Extract<AgentStatus<Stage>, {
 ```ts
 type AgentEvent<R> =
   | AgentEventHead & {
+    readonly _tag: "BrainStarted";
     readonly model: string | null;
     readonly payload: unknown;
     readonly purpose: string;
     readonly turn: number;
-    readonly type: "BrainStarted";
   }
   | AgentEventHead & {
+    readonly _tag: "TurnSettled";
     readonly turn: AgentTurn;
-    readonly type: "TurnSettled";
     /** The usage the provider reported for this turn. Absent → none reported. */
     readonly usage?: TurnUsage;
   }
   | AgentEventHead & {
+    readonly _tag: "ToolStarted";
     readonly args: Readonly<Record<string, unknown>>;
     readonly callId: string;
     readonly name: string;
-    readonly type: "ToolStarted";
   }
   | AgentEventHead & {
+    readonly _tag: "ToolSettled";
     readonly callId: string;
     readonly result: R;
-    readonly type: "ToolSettled";
   }
   | AgentEventHead & {
+    readonly _tag: "ToolFailed";
     readonly callId: string;
     readonly failure: ToolFailure;
     readonly name: string;
-    readonly type: "ToolFailed";
   }
   | AgentEventHead & {
+    readonly _tag: "RunDone";
     readonly status: AgentEndedStatus;
-    readonly type: "RunDone";
   }
 ```
 
@@ -665,21 +665,21 @@ type AgentLlmRunCmd<P extends string> = LlmRunCmd<P>
 ```ts
 type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | {
+    readonly _tag: typeof MsgType.AgentStart;
     readonly at: number;
     readonly runId: string;
-    readonly type: typeof MsgType.AgentStart;
   }
   | {
+    readonly _tag: typeof MsgType.AgentToolOk;
     readonly at: number;
     readonly callId: string;
     readonly result: R;
-    readonly type: typeof MsgType.AgentToolOk;
   }
   | {
+    readonly _tag: typeof MsgType.AgentToolErr;
     readonly at: number;
     readonly callId: string;
     readonly reason: string;
-    readonly type: typeof MsgType.AgentToolErr;
   }
   | AgentLlmOkMsg<P, O>
   | AgentLlmErrMsg<P>
@@ -1066,7 +1066,7 @@ type ChildFailureReason = AgentTerminalFailure<string>["reason"]
 ### `CompactInterpret`
 
 ```ts
-type CompactInterpret<M extends { type: string }, Compact extends boolean, Ctx> = Compact extends true ? Interpret<M, AgentCompactRunCmd, Ctx> : { readonly compact_run?: never }
+type CompactInterpret<M extends { _tag: string }, Compact extends boolean, Ctx> = Compact extends true ? Interpret<M, AgentCompactRunCmd, Ctx> : { readonly compact_run?: never }
 ```
 
 <a id="COMPACTION_PURPOSE"></a>
@@ -1237,6 +1237,7 @@ function createAgent<
 function deadlinesSub<S, N extends string | undefined = undefined>(
   select: (state: S) => readonly DeadlineSub<N>[],
 ): {
+  readonly _tag: "deadline";
   /**
    * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
    * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
@@ -1245,7 +1246,6 @@ function deadlinesSub<S, N extends string | undefined = undefined>(
    * `Error` or class instance rather than collapsing them onto one id.
    */
   readonly deps: (state: S) => readonly DeadlineSub<N>[] | null | undefined;
-  readonly type: "deadline";
 }
 ```
 
@@ -1275,9 +1275,9 @@ function deadlineSub<N extends string | undefined = undefined>(
 
 ```ts
 type DeadlineSub<N extends string | undefined = undefined> = {
+  readonly _tag: "deadline";
   readonly atMs: number;
   readonly id: SubId;
-  readonly type: "deadline";
 } & DeadlineOpts<N>
 ```
 
@@ -1941,7 +1941,7 @@ type MediaSource =
 
 ```ts
 function mergeInterpret<
-  M extends { type: string },
+  M extends { _tag: string },
   A extends Cmd,
   B extends Cmd,
   Ctx,
@@ -2090,7 +2090,7 @@ interface Schema<T> {
 ### `SnapshotInterpret`
 
 ```ts
-type SnapshotInterpret<M extends { type: string }, Snap extends boolean, Ctx> = Snap extends true ? Interpret<M, MonitoredRunCmd<unknown>, Ctx> : { readonly snapshot_write?: never }
+type SnapshotInterpret<M extends { _tag: string }, Snap extends boolean, Ctx> = Snap extends true ? Interpret<M, MonitoredRunCmd<unknown>, Ctx> : { readonly snapshot_write?: never }
 ```
 
 <a id="status"></a>
@@ -2526,7 +2526,7 @@ interface ToolRouter<T extends AnyToolDef> {
    * rendered to the `reason` string the conversation carries — and the tag and
    * its payload ride beside that rendering, never instead of it (#115).
    */
-  readonly outcomeOf: (msg: { readonly type: string }) => ToolSettlement<OkOf<T>, ToolError<T>> | null;
+  readonly outcomeOf: (msg: { readonly _tag: string }) => ToolSettlement<OkOf<T>, ToolError<T>> | null;
   /**
    * The parts the model reads for one settled call: the called tool's
    * `content` over an `ok` result. `null` for a failure, for a tool that

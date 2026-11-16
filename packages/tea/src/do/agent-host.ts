@@ -224,7 +224,7 @@ export interface AgentHost<
  * type Purpose = "plan_turn" | "act_turn";
  * type Outputs = Record<Purpose, AgentTurn>;
  * type ClientResult = string;
- * type ToolCmd = { readonly type: "run_tool" } & ToolCall;
+ * type ToolCmd = { readonly _tag: "run_tool" } & ToolCall;
  * type SseEvent =
  *   | { kind: "result"; callId: string; result: ClientResult }
  *   | { kind: "verdict"; verdict: string }
@@ -245,15 +245,15 @@ export interface AgentHost<
  *   store: doStore(storage, parse),
  *   ctx,
  *   toSseFrame: (e): SseEvent | null =>
- *     e.type === "ToolSettled" ? { kind: "result", callId: e.callId, result: e.result } :
- *     e.type === "TurnSettled" && e.turn.toolCalls.length === 0
+ *     e._tag === "ToolSettled" ? { kind: "result", callId: e.callId, result: e.result } :
+ *     e._tag === "TurnSettled" && e.turn.toolCalls.length === 0
  *       ? { kind: "verdict", verdict: e.turn.content } :
- *     e.type === "RunDone" ? { kind: "phase", phase: e.status.kind } : null,
+ *     e._tag === "RunDone" ? { kind: "phase", phase: e.status.kind } : null,
  * });
  * // route:
  * const sseRoute = (): Response => host.sse.open();
  * // start:
- * await (await host.runtime()).dispatch({ type: "agent_start", runId: "run-1", at: Date.now() });
+ * await (await host.runtime()).dispatch({ _tag: "agent_start", runId: "run-1", at: Date.now() });
  * // test:
  * const suspended = (await host.status()).kind === "suspended";
  * ```

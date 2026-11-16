@@ -52,7 +52,7 @@ const load = Cmd.define("load", {
   err: ["missing"],
 });
 
-type Msg = { readonly type: "go"; readonly id: string } | Settled<typeof load>;
+type Msg = { readonly _tag: "go"; readonly id: string } | Settled<typeof load>;
 type Model = { readonly names: readonly string[]; readonly errs: number };
 
 const machine = defineMachine({
@@ -120,10 +120,10 @@ describe("closing the scope interrupts in-flight work", () => {
     );
     const booted = await Effect.runPromise(rt.ready);
     const seen: string[] = [];
-    rt.observe((msg) => seen.push(msg.type));
+    rt.observe((msg) => seen.push(msg._tag));
 
     const pending = Effect.runPromise(
-      booted.dispatch({ type: "go", id: "slow" }),
+      booted.dispatch({ _tag: "go", id: "slow" }),
     );
     await vi.waitFor(() => expect(started).toBe(true));
     await close();
@@ -137,7 +137,7 @@ describe("closing the scope interrupts in-flight work", () => {
     expect(booted.getState()).toEqual({ names: [], errs: 0 });
     // The runtime is stopped: a new Msg fails with `Stopped`, never folded.
     const refused = await Effect.runPromise(
-      Effect.flip(booted.dispatch({ type: "go", id: "late" })),
+      Effect.flip(booted.dispatch({ _tag: "go", id: "late" })),
     );
     expect(refused).toBeInstanceOf(Stopped);
     expect(seen).toEqual(["go"]);
@@ -150,18 +150,18 @@ describe("closing the scope interrupts in-flight work", () => {
     const ticking = defineMachine({
       types: {
         model: {} as { readonly n: number },
-        msg: {} as { readonly type: "tick" },
+        msg: {} as { readonly _tag: "tick" },
         sub: {} as Tick,
       },
       init: () => [{ n: 0 }, []],
       update: { tick: (m) => [{ n: m.n + 1 }, []] },
-      subs: [{ type: "ticks", deps: () => ({ on: true as const }) }],
+      subs: [{ _tag: "ticks", deps: () => ({ on: true as const }) }],
     });
     const { value: rt, close } = await openScope(
       run(ticking, {
         subscribe: {
           ticks: () =>
-            Stream.fromEffect(Effect.succeed({ type: "tick" as const })).pipe(
+            Stream.fromEffect(Effect.succeed({ _tag: "tick" as const })).pipe(
               Stream.concat(Stream.never),
               Stream.ensuring(
                 Effect.sync(() => {
@@ -195,7 +195,7 @@ describe("services flow from the caller's Layers", () => {
   const beating = defineMachine({
     types: {
       model: {} as Model & { readonly beats: number },
-      msg: {} as Msg | { readonly type: "beat" },
+      msg: {} as Msg | { readonly _tag: "beat" },
       sub: {} as Beat,
     },
     cmds: [load],
@@ -206,7 +206,7 @@ describe("services flow from the caller's Layers", () => {
       load_ok: (m, msg) => [{ ...m, names: [...m.names, msg.value.name] }, []],
       load_err: (m) => [{ ...m, errs: m.errs + 1 }, []],
     },
-    subs: [{ type: "beat", deps: () => ({ on: true as const }) }],
+    subs: [{ _tag: "beat", deps: () => ({ on: true as const }) }],
   });
 
   const program = run(beating, {
@@ -223,7 +223,7 @@ describe("services flow from the caller's Layers", () => {
           Effect.gen(function* () {
             const pulse = yield* Pulse;
             return Stream.range(1, pulse.beats).pipe(
-              Stream.map(() => ({ type: "beat" as const })),
+              Stream.map(() => ({ _tag: "beat" as const })),
             );
           }),
         ),
@@ -234,7 +234,7 @@ describe("services flow from the caller's Layers", () => {
     type Model2 = Model & { readonly beats: number };
     expectTypeOf(program).toEqualTypeOf<
       Effect.Effect<
-        EffectBootingRun<Model2, Msg | { readonly type: "beat" }>,
+        EffectBootingRun<Model2, Msg | { readonly _tag: "beat" }>,
         never,
         Scope.Scope | Directory | Pulse
       >
@@ -257,7 +257,7 @@ describe("services flow from the caller's Layers", () => {
         Effect.gen(function* () {
           const rt = yield* program;
           const booted = yield* rt.ready;
-          yield* booted.dispatch({ type: "go", id: "7" });
+          yield* booted.dispatch({ _tag: "go", id: "7" });
           yield* Effect.promise(() =>
             vi.waitFor(() => expect(booted.getState().beats).toBe(2)),
           );
@@ -284,7 +284,7 @@ describe("a handler's Effect settles through Effect.result", () => {
             interpret: { load: cell },
           });
           const booted = yield* rt.ready;
-          yield* booted.dispatch({ type: "go", id: "x" });
+          yield* booted.dispatch({ _tag: "go", id: "x" });
           return booted.getState();
         }),
       ),
@@ -328,13 +328,13 @@ describe("a handler's Effect settles through Effect.result", () => {
 describe("the built-in timer", () => {
   type Phase = { readonly rung: number };
   const alarm = defineMachine({
-    types: { model: {} as Phase, msg: {} as { readonly type: "ring" } },
+    types: { model: {} as Phase, msg: {} as { readonly _tag: "ring" } },
     init: () => [{ rung: 0 }, []],
     update: { ring: (m) => [{ rung: m.rung + 1 }, []] },
     subs: [
       {
-        type: "timer",
-        deps: (m) => (m.rung === 0 ? { ms: 5, msg: { type: "ring" } } : null),
+        _tag: "timer",
+        deps: (m) => (m.rung === 0 ? { ms: 5, msg: { _tag: "ring" } } : null),
       },
     ],
   });
@@ -396,9 +396,9 @@ describe("a fenced store on the Effect engine", () => {
           const first = yield* bootOn("first");
           const second = yield* bootOn("second");
           // The second writer boots at the same version and saves first…
-          yield* second.dispatch({ type: "go", id: "a" });
+          yield* second.dispatch({ _tag: "go", id: "a" });
           // …so the first writer's next save is a stale compare-and-swap.
-          return yield* Effect.flip(first.dispatch({ type: "go", id: "b" }));
+          return yield* Effect.flip(first.dispatch({ _tag: "go", id: "b" }));
         }),
       ),
     );
@@ -416,12 +416,12 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
     readonly host: string;
   }> {}
 
-  type Ping = { readonly type: "ping"; readonly host: string };
-  type Relay = { readonly type: "relay"; readonly host: string };
+  type Ping = { readonly _tag: "ping"; readonly host: string };
+  type Relay = { readonly _tag: "relay"; readonly host: string };
   type PingMsg =
-    | { readonly type: "check"; readonly host: string }
-    | { readonly type: "forward"; readonly host: string }
-    | { readonly type: "pong" };
+    | { readonly _tag: "check"; readonly host: string }
+    | { readonly _tag: "forward"; readonly host: string }
+    | { readonly _tag: "pong" };
   type PingModel = { readonly checks: number; readonly pongs: number };
 
   // `check` pings a host; `forward` relays a `check` as a follow-up Msg.
@@ -436,9 +436,9 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
     update: {
       check: (m, msg) => [
         { ...m, checks: m.checks + 1 },
-        [{ type: "ping", host: msg.host }],
+        [{ _tag: "ping", host: msg.host }],
       ],
-      forward: (m, msg) => [m, [{ type: "relay", host: msg.host }]],
+      forward: (m, msg) => [m, [{ _tag: "relay", host: msg.host }]],
       pong: (m) => [{ ...m, pongs: m.pongs + 1 }, []],
     },
   });
@@ -456,9 +456,9 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
         ping: (cmd) =>
           cmd.host === "down"
             ? Effect.fail(new Offline({ host: cmd.host }))
-            : Effect.succeed({ type: "pong" as const }),
+            : Effect.succeed({ _tag: "pong" as const }),
         relay: (cmd) =>
-          Effect.succeed({ type: "check" as const, host: cmd.host }),
+          Effect.succeed({ _tag: "check" as const, host: cmd.host }),
       },
     });
 
@@ -510,7 +510,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
         Effect.gen(function* () {
           const booted = yield* (yield* pingOn()).ready;
           yield* booted.stop();
-          return yield* booted.dispatch({ type: "check", host: "up" }).pipe(
+          return yield* booted.dispatch({ _tag: "check", host: "up" }).pipe(
             Effect.as("folded"),
             Effect.catchTags({
               Stopped: (e) => Effect.succeed(`stopped ${e.msgType} ${e.when}`),
@@ -530,7 +530,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
     // `stop()` closes the gate at once, then drains; the dispatch lands inside.
     const stopped = Effect.runPromise(booted.stop());
     const refused = await Effect.runPromise(
-      Effect.flip(booted.dispatch({ type: "check", host: "up" })),
+      Effect.flip(booted.dispatch({ _tag: "check", host: "up" })),
     );
     await stopped;
     expect(refused).toBeInstanceOf(Stopped);
@@ -557,10 +557,10 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
           const booted = yield* (yield* pingOn({ store, onError })).ready;
           full = true;
           const failure = yield* Effect.flip(
-            booted.dispatch({ type: "check", host: "up" }),
+            booted.dispatch({ _tag: "check", host: "up" }),
           );
           full = false;
-          yield* booted.dispatch({ type: "check", host: "up" });
+          yield* booted.dispatch({ _tag: "check", host: "up" });
           return [failure, booted.getState()] as const;
         }),
       ),
@@ -578,7 +578,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
         Effect.gen(function* () {
           const booted = yield* (yield* pingOn()).ready;
           return yield* Effect.flip(
-            booted.dispatch({ type: "check", host: "down" }),
+            booted.dispatch({ _tag: "check", host: "down" }),
           );
         }),
       ),
@@ -593,7 +593,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
       Effect.scoped(
         Effect.gen(function* () {
           const booted = yield* (yield* pingOn({ onError })).ready;
-          yield* booted.dispatch({ type: "forward", host: "down" });
+          yield* booted.dispatch({ _tag: "forward", host: "down" });
         }),
       ),
     );
@@ -607,7 +607,7 @@ describe("the handle's verbs are Effects with a typed error channel (#308)", () 
       Effect.scoped(
         Effect.gen(function* () {
           const booted = yield* (yield* pingOn()).ready;
-          yield* booted.dispatch({ type: "nope" } as unknown as PingMsg);
+          yield* booted.dispatch({ _tag: "nope" } as unknown as PingMsg);
         }),
       ),
     );

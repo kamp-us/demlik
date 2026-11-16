@@ -66,14 +66,14 @@ GotText (Err error) ->
 
 ```typescript
 type Msg =
-  | { type: "GotText"; result: { ok: true; value: string } | { ok: false; error: FetchError } }
-  | { type: "GotQuote"; result: { ok: true; value: Quote } | { ok: false; error: FetchError } }
+  | { _tag: "GotText"; result: { ok: true; value: string } | { ok: false; error: FetchError } }
+  | { _tag: "GotQuote"; result: { ok: true; value: Quote } | { ok: false; error: FetchError } }
 
 type FetchError =
-  | { type: "Timeout" }
-  | { type: "NetworkError" }
-  | { type: "BadStatus"; status: number }
-  | { type: "BadBody"; message: string }
+  | { _tag: "Timeout" }
+  | { _tag: "NetworkError" }
+  | { _tag: "BadStatus"; status: number }
+  | { _tag: "BadBody"; message: string }
 ```
 
 The reducer handles both branches:
@@ -81,9 +81,9 @@ The reducer handles both branches:
 ```typescript
 case "GotText":
   if (msg.result.ok) {
-    return [{ type: "Success", text: msg.result.value }, []]
+    return [{ _tag: "Success", text: msg.result.value }, []]
   } else {
-    return [{ type: "Failure", error: msg.result.error }, []]
+    return [{ _tag: "Failure", error: msg.result.error }, []]
   }
 ```
 
@@ -98,12 +98,12 @@ const interpret = {
     try {
       const res = await fetch(cmd.url)
       if (!res.ok) {
-        return { type: "GotText", result: { ok: false, error: { type: "BadStatus", status: res.status } } }
+        return { _tag: "GotText", result: { ok: false, error: { _tag: "BadStatus", status: res.status } } }
       }
       const text = await res.text()
-      return { type: "GotText", result: { ok: true, value: text } }
+      return { _tag: "GotText", result: { ok: true, value: text } }
     } catch (e) {
-      return { type: "GotText", result: { ok: false, error: { type: "NetworkError" } } }
+      return { _tag: "GotText", result: { ok: false, error: { _tag: "NetworkError" } } }
     }
   },
 }
@@ -131,8 +131,8 @@ function tryInterpret(work, onOk, onErr) {
 const interpret = {
   fetch_book: tryInterpret(
     (cmd) => fetch(cmd.url).then(r => r.text()),
-    (text) => ({ type: "GotText", result: { ok: true, value: text } }),
-    (err) => ({ type: "GotText", result: { ok: false, error: { type: "NetworkError" } } }),
+    (text) => ({ _tag: "GotText", result: { ok: true, value: text } }),
+    (err) => ({ _tag: "GotText", result: { ok: false, error: { _tag: "NetworkError" } } }),
   ),
 }
 ```

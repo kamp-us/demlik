@@ -189,13 +189,13 @@ export function evictExpired<V>(
  * `cache_evict: (s) => [{ ...s, cache: evictExpired(s.cache, nowMs) }, []]`.
  */
 export interface CacheEvictMsg {
-  readonly type: "cache_evict";
+  readonly _tag: "cache_evict";
   readonly id: string;
 }
 
 /** Construct a `cache_evict` Msg for the cache identified by `id`. */
 export function cacheEvictMsg(id: string): CacheEvictMsg {
-  return { type: "cache_evict", id };
+  return { _tag: "cache_evict", id };
 }
 
 /**
@@ -210,7 +210,7 @@ export type CacheEvictionDeps = {
 
 /**
  * The running eviction Sub: a `setInterval`-shaped Sub whose `deps` carry the
- * cache's name and tick period. `type: "cache"` is the lowercase source-noun
+ * cache's name and tick period. `_tag: "cache"` is the lowercase source-noun
  * Sub convention (canon §2.5 / naming-style).
  */
 export type CacheEvictionSub = Sub<"cache", CacheEvictionDeps>;
@@ -230,7 +230,7 @@ export function cacheEvictionSub(
   name: string,
   everyMs: number,
 ): DepKeyedSub<unknown, CacheEvictionSub> {
-  return { type: "cache", deps: () => ({ name, intervalMs: everyMs }) };
+  return { _tag: "cache", deps: () => ({ name, intervalMs: everyMs }) };
 }
 
 /**

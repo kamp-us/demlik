@@ -60,7 +60,7 @@ Reference: [`spawn`](./reference/effect.md#spawn),
 
 ## Cmd
 
-A plain object, tagged by `type`, that describes one piece of work for the
+A plain object, tagged by `_tag`, that describes one piece of work for the
 engine to do once. `update` returns Cmds beside the next Model, a handler
 performs each one, and its result comes back as a Msg. `Cmd` is exported from
 `@demlik/tea`, and `Cmd.define` declares a Cmd with its input, result and
@@ -172,7 +172,7 @@ Reference: [`MachineTypes`](./reference/tea.md#MachineTypes). Why:
 
 ## Msg
 
-A plain object, tagged by `type`, that tells the machine something happened: a
+A plain object, tagged by `_tag`, that tells the machine something happened: a
 user action, a Cmd's result, a Sub's event. A machine changes only by folding a
 Msg. You name the union once, under `types.msg` in `defineMachine` from
 `@demlik/tea`.
@@ -228,7 +228,7 @@ Reference: [`Store`](./reference/tea.md#Store). Why:
 
 ## Sub
 
-A plain object, `{ type, deps }`, that names something to watch for as long as
+A plain object, `{ _tag, deps }`, that names something to watch for as long as
 the Model asks for it. The engine opens it with a Sub runner, the function for
 that Sub type you pass to `run` under `subscribe`, and each event the runner
 sees arrives as a Msg. `Sub` is exported from `@demlik/tea`; the `timer` Sub is

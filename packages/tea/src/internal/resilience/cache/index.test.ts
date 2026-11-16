@@ -118,7 +118,7 @@ describe("immutability (no input mutation)", () => {
 describe("cacheEvictMsg", () => {
   it("tags the msg with the cache id", () => {
     expect(cacheEvictMsg("session")).toEqual({
-      type: "cache_evict",
+      _tag: "cache_evict",
       id: "session",
     });
   });
@@ -128,7 +128,7 @@ describe("cacheEvictMsg", () => {
 function running(entry: ReturnType<typeof cacheEvictionSub>): CacheEvictionSub {
   const deps = entry.deps(undefined);
   if (deps == null) throw new Error("an eviction entry is always on");
-  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
+  return { id: subIdOf(entry._tag, deps), _tag: entry._tag, deps };
 }
 
 describe("eviction Sub", () => {
@@ -144,7 +144,7 @@ describe("eviction Sub", () => {
       vi.advanceTimersByTime(1); // hits 1000 — first tick
       expect(dispatch).toHaveBeenCalledTimes(1);
       expect(dispatch).toHaveBeenLastCalledWith({
-        type: "cache_evict",
+        _tag: "cache_evict",
         id: "session",
       });
 
@@ -183,7 +183,7 @@ describe("eviction Sub", () => {
     const b = running(cacheEvictionSub("session", 1000));
     // Same id across calls — the engine leaves the running interval alone.
     expect(a.id).toBe(b.id);
-    expect(a.type).toBe("cache");
+    expect(a._tag).toBe("cache");
     expect(a.deps).toEqual({ name: "session", intervalMs: 1000 });
     // A changed period restarts the interval at the new one.
     expect(running(cacheEvictionSub("session", 2000)).id).not.toBe(a.id);

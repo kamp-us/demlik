@@ -23,8 +23,8 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type State = { readonly started: number; readonly done: number };
-type Msg = { readonly type: "go" } | { readonly type: "arrived" };
-type FetchCmd = { readonly type: "fetch" };
+type Msg = { readonly _tag: "go" } | { readonly _tag: "arrived" };
+type FetchCmd = { readonly _tag: "fetch" };
 
 // A machine (and its handlers) whose one Cmd parks on a caller-controlled promise, so a test can
 // hold a Cmd "in flight" across a `stop()` and release it afterwards. Its
@@ -33,13 +33,13 @@ type FetchCmd = { readonly type: "fetch" };
 // teardown-discard path (`DispatchDiscardedError`), not a follow-up failure.
 function parkingMachine(park: Promise<void>) {
   const update: Reducer<State, Msg, FetchCmd> = {
-    go: (s) => [{ ...s, started: s.started + 1 }, [{ type: "fetch" }]],
+    go: (s) => [{ ...s, started: s.started + 1 }, [{ _tag: "fetch" }]],
     arrived: (s) => [{ ...s, done: s.done + 1 }, []],
   };
   const interpret: Interpret<Msg, FetchCmd, undefined> = {
     fetch: async () => {
       await park;
-      return { type: "arrived" as const };
+      return { _tag: "arrived" as const };
     },
   };
   const machine = defineMachine({
@@ -109,7 +109,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
 
     // `dispatchOnce` would still await the transition (and thus the parked
     // Cmd). Fire and forget so the Cmd is genuinely outstanding at stop time.
-    void runtime.dispatch({ type: "go" });
+    void runtime.dispatch({ _tag: "go" });
     // Let the tail advance into the interpret handler's `await park`.
     await Promise.resolve();
     await Promise.resolve();
@@ -140,7 +140,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
     }).ready;
 
     // Run to quiescence: the Cmd resolves and its follow-up folds back in.
-    await runtime.dispatch({ type: "go" });
+    await runtime.dispatch({ _tag: "go" });
     expect(runtime.getState()).toEqual({ started: 1, done: 1 });
 
     await runtime.stop();
@@ -167,7 +167,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
       ctx: undefined,
     }).ready;
 
-    void runtime.dispatch({ type: "go" });
+    void runtime.dispatch({ _tag: "go" });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -200,7 +200,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
       },
       init: () => [{ started: 0, done: 0 }, []],
       update: {
-        go: (s) => [{ ...s, started: s.started + 1 }, [{ type: "fetch" }]],
+        go: (s) => [{ ...s, started: s.started + 1 }, [{ _tag: "fetch" }]],
         arrived: (s) => [{ ...s, done: s.done + 1 }, []],
       } satisfies Reducer<State, Msg, FetchCmd>,
     });
@@ -216,7 +216,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
       },
     }).ready;
 
-    await expect(runtime.dispatch({ type: "go" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "go" })).rejects.toThrow(
       "cmd failed",
     );
     await runtime.stop();
@@ -252,7 +252,7 @@ describe("a throwing consumer sink is never swallowed by the discard branch", ()
       },
     }).ready;
 
-    void runtime.dispatch({ type: "go" });
+    void runtime.dispatch({ _tag: "go" });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -275,8 +275,8 @@ describe("a throwing consumer sink is never swallowed by the discard branch", ()
 });
 
 describe("the stop barrier distinguishes the drain window from after it", () => {
-  type Msg2 = { readonly type: "go" } | { readonly type: "late" };
-  type SlowCmd = { readonly type: "slow" };
+  type Msg2 = { readonly _tag: "go" } | { readonly _tag: "late" };
+  type SlowCmd = { readonly _tag: "slow" };
 
   // A machine and handlers that capture the injected detached dispatch so a test can fire a Msg at a
   // chosen moment — the shape a `ctx.waitUntil` tail has in production.
@@ -284,7 +284,7 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     onDispatch: (dispatch: (msg: Msg2) => void) => void,
   ) {
     const update: Reducer<State, Msg2, SlowCmd> = {
-      go: (s) => [{ ...s, started: s.started + 1 }, [{ type: "slow" }]],
+      go: (s) => [{ ...s, started: s.started + 1 }, [{ _tag: "slow" }]],
       late: (s) => [{ ...s, done: s.done + 1 }, []],
     };
     const interpret: Interpret<Msg2, SlowCmd, undefined> = {
@@ -322,14 +322,14 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
       },
     }).ready;
 
-    await runtime.dispatch({ type: "go" });
+    await runtime.dispatch({ _tag: "go" });
     // Fully torn down: nothing is in flight, so no discard is reported.
     await runtime.stop();
     expect(seen).toEqual([]);
 
     // A dispatch from outside the drain window is a consumer using a runtime it
     // already retired. Loud — never re-labelled a teardown discard.
-    dispatchLate?.({ type: "late" });
+    dispatchLate?.({ _tag: "late" });
     await flushMicrotasks();
 
     expect(seen).toHaveLength(1);
@@ -338,7 +338,7 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     expect(seen[0]?.error).toBeInstanceOf(Error);
     expect((seen[0]?.error as Error).message).toContain("runtime stopped");
     // The caller sees the same refusal.
-    await expect(runtime.dispatch({ type: "late" })).rejects.toThrow(
+    await expect(runtime.dispatch({ _tag: "late" })).rejects.toThrow(
       "runtime stopped",
     );
     expect(warn).not.toHaveBeenCalled();
@@ -361,9 +361,9 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
       },
     }).ready;
 
-    await runtime.dispatch({ type: "go" });
+    await runtime.dispatch({ _tag: "go" });
     const stopping = runtime.stop();
-    dispatchDuringDrain?.({ type: "late" });
+    dispatchDuringDrain?.({ _tag: "late" });
     await stopping;
     await flushMicrotasks();
 
@@ -386,11 +386,11 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     });
     const runtime = await run(machine, { interpret, ctx: undefined }).ready;
 
-    await runtime.dispatch({ type: "go" });
+    await runtime.dispatch({ _tag: "go" });
     const stopping = runtime.stop();
     // Inside the drain window: `stop()` has raised the barrier but has not
     // returned. This is the teardown discarding its own in-flight work.
-    dispatchDuringDrain?.({ type: "late" });
+    dispatchDuringDrain?.({ _tag: "late" });
     await stopping;
     await flushMicrotasks();
 

@@ -67,10 +67,10 @@ export type Branded<T> = T & { readonly [ReducerBrand]: true };
  * ```ts
  * import { absurd } from "@demlik/tea";
  *
- * type Msg = { type: "a" } | { type: "b" };
+ * type Msg = { _tag: "a" } | { _tag: "b" };
  *
  * function label(msg: Msg): string {
- *   switch (msg.type) {
+ *   switch (msg._tag) {
  *     case "a": return "A";
  *     case "b": return "B";
  *     default: return absurd(msg);  // compile error if a "c" is added
@@ -207,7 +207,7 @@ export type RuntimeErrorPhase =
 export interface TelemetryEvent {
   /** This run's applied transitions so far, counted from 1. Boot is not one. */
   readonly seq: number;
-  /** The `Msg.type` that drove the transition. */
+  /** The `Msg._tag` that drove the transition. */
   readonly msgType: string;
   /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
   readonly at: number;
@@ -276,7 +276,7 @@ export type SupervisionStrategy = "stop" | "escalate" | "restart";
  * which MUST return a valid `S` synchronously (the reducer is synchronous, so
  * recovery is too — no suspension across the single-writer slot).
  */
-export type Supervision<S, M extends { type: string }> =
+export type Supervision<S, M extends { _tag: string }> =
   | "stop"
   | "escalate"
   | {
@@ -917,7 +917,7 @@ export type DispatchSettle = "quiescent" | "once";
  * The dispatch-only view of a runtime. Use it as the type of a handle one
  * runtime holds in order to send Msgs to another.
  */
-export interface RuntimeRef<M extends { type: string }> {
+export interface RuntimeRef<M extends { _tag: string }> {
   /**
    * Put a Msg in the runtime's inbox and resolve once processed. Runs to
    * QUIESCENCE by default: settles only after the dispatched Msg AND every
@@ -959,8 +959,8 @@ export interface RuntimeRef<M extends { type: string }> {
  */
 export interface RunHandle<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > {
   /** Put a Msg in the inbox; resolves once the engine has processed it. */
   dispatch(msg: M): Promise<void>;
@@ -978,10 +978,10 @@ export interface RunHandle<
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
-  on<K extends E["type"]>(
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
+  on<K extends E["_tag"]>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /** Resolves to the booted handle once boot completes. */
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
@@ -992,8 +992,8 @@ export interface RunHandle<
 /** A {@link RunHandle} whose boot has completed, so its State exists. */
 export interface BootedRunHandle<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > extends RunHandle<S, M, E> {
   /** The current State. Total. */
   getState(): S;
@@ -1019,7 +1019,7 @@ export interface BootedRunHandle<
  */
 export interface HandlerFamily {
   // Filled in by `HandlersFor`; the bounds are what a family may assume.
-  readonly M: { type: string };
+  readonly M: { _tag: string };
   readonly C: Cmd;
   readonly U: Sub;
   readonly Ctx: unknown;
@@ -1049,11 +1049,11 @@ export interface PromiseHandlers extends HandlerFamily {
  */
 export type RunOptions<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   F extends HandlerFamily = PromiseHandlers,
 > = CtxArg<Ctx> &
   HandlersFor<F, M, C, U, Ctx> &
@@ -1072,11 +1072,11 @@ export type RunOptions<
  */
 export type EngineRun<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
   F extends HandlerFamily = PromiseHandlers,
 > = ((
   machine: Machine<S, M, C, U, Ctx>,
@@ -1098,14 +1098,14 @@ export type EngineRun<
  * `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
  * for every applied transition; boot is delivered via `onBoot` instead, so
  * `observe`'s `msg` is total (never `null`). `on(type, handler)` is the semantic
- * event channel: only the public, `type`-narrowed events a machine projects,
+ * event channel: only the public, `_tag`-narrowed events a machine projects,
  * never its private Msg vocabulary. `E` defaults to `never` (no projector → `on`
  * uncallable).
  */
 export interface BootingRuntime<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > extends RuntimeRef<M>,
     RunHandle<S, M, E> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
@@ -1140,15 +1140,15 @@ export interface BootingRuntime<
    */
   onBoot(handler: (state: S) => void): () => void;
   /**
-   * Subscribe to a SEMANTIC event of `type`. The handler receives exactly the
-   * `E` member whose `type` matches `K`, so a consumer never touches another
+   * Subscribe to a SEMANTIC event of `_tag`. The handler receives exactly the
+   * `E` member whose `_tag` matches `K`, so a consumer never touches another
    * event's shape and never references the machine's PRIVATE Msg names. Multiple
    * handlers per type; fanout is synchronous and throw-isolated. Fires only when
    * the machine's `events` projector (wired on `run`) emits that type.
    */
-  on<K extends E["type"]>(
+  on<K extends E["_tag"]>(
     type: K,
-    handler: (event: Extract<E, { type: K }>) => void,
+    handler: (event: Extract<E, { _tag: K }>) => void,
   ): () => void;
   /**
    * Subscribe to a typed Port. Multiple listeners per port; fanout is synchronous
@@ -1195,8 +1195,8 @@ export interface BootingRuntime<
  */
 export interface Runtime<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 > extends BootingRuntime<S, M, E> {
   /**
    * The current State. TOTAL — never throws. Obtaining a `Runtime` requires
@@ -1294,7 +1294,7 @@ export interface Runtime<
 // The one shape that still needs help is a zero-parameter `init` returning a
 // fresh state literal on a DISCRIMINATED Model: with no parameter the function
 // is not context-sensitive, so it is checked before `S` is fixed and
-// `{ type: "idle" }` widens to `{ type: string }`. Take `loaded` (which the
+// `{ _tag: "idle" }` widens to `{ _tag: string }`. Take `loaded` (which the
 // rehydrate contract wants named anyway) or name the initial state as a const.
 //
 // `types.cmd` / `types.sub` carry the hand-written unions — a machine that
@@ -1322,7 +1322,7 @@ export interface Runtime<
  */
 export type MachineTypes<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1342,7 +1342,7 @@ export type MachineTypes<
  */
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub = Sub<never>,
   Ctx = unknown,
@@ -1355,7 +1355,7 @@ export function defineMachine<
 // `types` without `cmds` — `C` comes from `types.cmd`.
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd = Cmd<never>,
   U extends Sub = Sub<never>,
   Ctx = unknown,
@@ -1373,25 +1373,25 @@ export function defineMachine<
 // `D` is a UNION of defs (not a tuple), so `cmds: [fetch, save]` infers
 // `typeof fetch | typeof save` and an explicit `defineMachine<S, M, typeof fetch
 // | typeof save, U, Ctx>` reads the same way. Declared first: a def has no
-// `type` field, so a Cmd union never satisfies `D extends AnyCmdDef`, and a
+// `_tag` field, so a Cmd union never satisfies `D extends AnyCmdDef`, and a
 // def never satisfies `C extends Cmd` — the two families cannot cross-match.
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub,
   Ctx,
 >(
   m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "update" | "cmds"> & {
     readonly cmds: readonly D[];
-    update: [S] extends [{ type: string }]
+    update: [S] extends [{ _tag: string }]
       ? Transitions<S, M | Settled<D>, CmdOf<D>>
       : never;
   },
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   D extends AnyCmdDef,
   U extends Sub,
   Ctx,
@@ -1401,15 +1401,15 @@ export function defineMachine<
     update: Reducer<S, M | Settled<D>, CmdOf<D>>;
   },
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
-// Transitions-form overload — 2D table keyed by State.type then Msg.type.
+// Transitions-form overload — 2D table keyed by State._tag then Msg._tag.
 // Declared before the reducer form (more specific). The S constraint is a
-// conditional (`S extends { type: string } ? Transitions<...> : never`) not a
+// conditional (`S extends { _tag: string } ? Transitions<...> : never`) not a
 // generic-parameter constraint, so `S` stays unconstrained at the signature and
 // the public `Parameters<typeof defineMachine<NonDiscriminatedS, ...>>` pattern
 // skips this overload (update becomes `never`) instead of failing.
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1417,13 +1417,13 @@ export function defineMachine<
   m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
     // `[S]` tuple-wrap disables distributive conditional behavior — see
     // the comment on `Machine.update` for why distribution is wrong here.
-    update: [S] extends [{ type: string }] ? Transitions<S, M, C> : never;
+    update: [S] extends [{ _tag: string }] ? Transitions<S, M, C> : never;
   },
 ): Machine<S, M, C, U, Ctx>;
-// Reducer-form overload — flat record keyed by Msg.type.
+// Reducer-form overload — flat record keyed by Msg._tag.
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1435,7 +1435,7 @@ export function defineMachine<
 // Implementation signature — accepts both via the union on `Machine.update`.
 export function defineMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1446,7 +1446,7 @@ export function defineMachine<
   assertDistinctCmdNames(m.cmds ?? []);
   // Tag the update form ONCE, here at the typed construction boundary, so no
   // downstream reader re-derives it structurally. Non-enumerable so it does not
-  // serialize, show up in `Object.keys`, or collide with a Msg.type key.
+  // serialize, show up in `Object.keys`, or collide with a Msg._tag key.
   // Idempotent under re-wrap (`defineMachine(defineMachine(m))`).
   if (m.__form === undefined) {
     Object.defineProperty(m, "__form", {
@@ -1470,7 +1470,7 @@ export function defineMachine<
  * Type-check a standalone reducer record and return it branded. Use it when you
  * write `update` apart from `defineMachine`.
  */
-export function asReducer<S, M extends { type: string }, C extends Cmd>(
+export function asReducer<S, M extends { _tag: string }, C extends Cmd>(
   reducer: Reducer<S, M, C>,
 ): Branded<Reducer<S, M, C>> {
   return reducer as Branded<Reducer<S, M, C>>;
@@ -1504,13 +1504,13 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
  * Recorded traces instead use `replayTrace` to fold their captured post-init State.
  *
  * `subs` is each `machine.subs` entry that is on at the final state, as its
- * runner would see it: `{ id, type, deps }`, the id derived exactly as the
+ * runner would see it: `{ id, _tag, deps }`, the id derived exactly as the
  * engine derives it, deduplicated by id the way the engine runs them. So a test
  * asserts "the retry timer is armed in `waiting`" without wiring a runner.
  */
 export function replay<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -1589,7 +1589,7 @@ export function replay<
  */
 export function wrapDetached<
   C extends Cmd,
-  M extends { type: string },
+  M extends { _tag: string },
   Allowed extends M,
   Ctx,
 >(
@@ -1650,12 +1650,12 @@ export function wrapDetached<
  * instead of a throw.
  *
  * `Ok` carries the handler's `[nextState, cmds]` verbatim; `Err` carries the same
- * `NoCellError` (msg.type + state name + accepted set) `applyCell` would have
+ * `NoCellError` (msg._tag + state name + accepted set) `applyCell` would have
  * thrown — both read one `lookupCell`, so neither can under-report. Dispatch
  * inside `run` keeps using the throwing `applyCell` — this is for callers that
  * step a machine themselves.
  */
-export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
+export function tryApplyCell<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
@@ -1663,7 +1663,7 @@ export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
   const found = lookupCell<S, M, C>(machine, state, msg);
   if (found.cell === undefined) {
     return Outcome.err(
-      new NoCellError(msg.type, found.stateName, found.acceptedTypes),
+      new NoCellError(msg._tag, found.stateName, found.acceptedTypes),
     );
   }
   return Outcome.ok(found.cell(state, msg));
@@ -1683,7 +1683,7 @@ export interface FoldRefusal<M> {
   readonly index: number;
   /** The offending Msg itself — so the caller can print it, not just point. */
   readonly msg: M;
-  /** The underlying cell-lookup failure: msg.type + state name + accepted set. */
+  /** The underlying cell-lookup failure: msg._tag + state name + accepted set. */
   readonly error: NoCellError;
 }
 
@@ -1692,7 +1692,7 @@ export interface FoldRefusal<M> {
  * INCLUDING which message failed.
  *
  * The motivating use is "this persisted log does not replay — tell the user
- * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg.type
+ * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg._tag
  * and the state, but a log usually contains that type many times, so the
  * INDEX is the load-bearing fact. The fold stops at the first refusal (state
  * past that point is not defined) and returns it.
@@ -1700,7 +1700,7 @@ export interface FoldRefusal<M> {
  * Shares `foldMsgs`' dev-mode discipline: `deepFreeze` the input state,
  * `assertPureResult` the handler's return. Both compile out of production.
  */
-export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
+export function tryFoldMsgs<S, M extends { _tag: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   base: S,
   msgs: readonly M[],
@@ -1712,7 +1712,7 @@ export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
     if (stepped._tag === "Err") {
       return Outcome.err({ index, msg, error: stepped.error });
     }
-    if (__DEV__) assertPureResult(stepped.value, msg.type);
+    if (__DEV__) assertPureResult(stepped.value, msg._tag);
     state = stepped.value[0];
   }
   return Outcome.ok(state);

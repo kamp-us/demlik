@@ -37,7 +37,7 @@
  *   const bw = createBatchWindow<LogLine, Msg>({
  *     maxItems: 100,
  *     maxMs: 5_000,
- *     flush: (items) => ({ type: "FlushBatch", items }),
+ *     flush: (items) => ({ _tag: "FlushBatch", items }),
  *   });
  *
  *   // Model:        { batch: BatchWindow<LogLine>, ... }
@@ -45,7 +45,7 @@
  *   // update cells:
  *   //   LogArrived:        (s, m) => mapBatch(s, bw.add(s.batch, m.line, m.at))
  *   //   deadline_exceeded: (s, m) => mapBatch(s, bw.onWindow(s.batch, m.atMs))
- *   // subs:         [{ type: "timer", deps: (s: Model) => bw.timer(s.batch) }]
+ *   // subs:         [{ _tag: "timer", deps: (s: Model) => bw.timer(s.batch) }]
  *   // at run:       run(machine, { interpret })   // `timer` is built in
  *
  * where `mapBatch(s, [batch, cmds]) => [{ ...s, batch }, cmds]` lifts the slice

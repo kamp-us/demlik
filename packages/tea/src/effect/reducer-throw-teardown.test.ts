@@ -29,9 +29,9 @@ import {
 
 type Beat = Sub<"beat", { readonly on: true }>;
 type WorkerMsg =
-  | { readonly type: "tick" }
-  | { readonly type: "job" }
-  | { readonly type: "explode" };
+  | { readonly _tag: "tick" }
+  | { readonly _tag: "job" }
+  | { readonly _tag: "explode" };
 interface WorkerState {
   readonly ticks: number;
   readonly jobs: number;
@@ -50,7 +50,7 @@ const worker = defineMachine({
     },
   },
   // Always on: a Sub that keeps sending Msgs for as long as it runs.
-  subs: [{ type: "beat", deps: () => ({ on: true as const }) }],
+  subs: [{ _tag: "beat", deps: () => ({ on: true as const }) }],
 });
 
 // === The host ===
@@ -85,7 +85,7 @@ const spawnWorker = (
           subscribe: {
             beat: () =>
               Stream.tick("1 millis").pipe(
-                Stream.map((): WorkerMsg => ({ type: "tick" })),
+                Stream.map((): WorkerMsg => ({ _tag: "tick" })),
                 Stream.ensuring(
                   Effect.sync(() => {
                     mine.closes++;
@@ -98,7 +98,7 @@ const spawnWorker = (
       ),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
   });
 };
 
@@ -137,9 +137,9 @@ const onePass = Effect.gen(function* () {
     runs[id] as EffectRuntime<WorkerState, WorkerMsg>;
   const seenOf = (id: (typeof ids)[number]) => seen.get(id) as Seen;
 
-  for (const id of ids) yield* runOf(id).dispatch({ type: "job" });
+  for (const id of ids) yield* runOf(id).dispatch({ _tag: "job" });
 
-  const thrown = yield* Effect.exit(runOf("b").dispatch({ type: "explode" }));
+  const thrown = yield* Effect.exit(runOf("b").dispatch({ _tag: "explode" }));
   const dead = yield* Effect.exit(runOf("b").done());
 
   // Nothing here stops "b": the reducer throw does it.
@@ -151,7 +151,7 @@ const onePass = Effect.gen(function* () {
   );
 
   for (const id of ["a", "c"] as const) {
-    for (let i = 0; i < 10; i++) yield* runOf(id).dispatch({ type: "job" });
+    for (let i = 0; i < 10; i++) yield* runOf(id).dispatch({ _tag: "job" });
   }
 
   const perWorker = <T>(read: (id: (typeof ids)[number]) => T) =>
@@ -189,7 +189,7 @@ describe("three workers under one parent, one of whose reducers throws", () => {
       thrown: boom,
       done: boom,
       table: ["a", "c"],
-      parent: { type: "open", stopped: ["b"] },
+      parent: { _tag: "open", stopped: ["b"] },
       jobs: { a: 11, b: 1, c: 11 },
       closes: { a: 0, b: 1, c: 0 },
       reduceReports: { a: 0, b: 1, c: 0 },

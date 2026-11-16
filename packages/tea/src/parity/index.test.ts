@@ -24,8 +24,8 @@ type Finding = {
   severity: Severity;
   timestamp: number;
 };
-type State = { type: "audit"; findings: readonly Finding[] };
-type Msg = { type: "found"; finding: Finding };
+type State = { _tag: "audit"; findings: readonly Finding[] };
+type Msg = { _tag: "found"; finding: Finding };
 type Ctx = Record<string, never>;
 
 type FindingSpec = { ruleId: string; selector: string; severity: Severity };
@@ -34,7 +34,7 @@ type FindingSpec = { ruleId: string; selector: string; severity: Severity };
 function auditMachine() {
   return defineMachine({
     types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
-    init: (loaded) => [loaded ?? { type: "audit", findings: [] }, Cmd.none],
+    init: (loaded) => [loaded ?? { _tag: "audit", findings: [] }, Cmd.none],
     update: {
       found: (s, m) => [
         { ...s, findings: [...s.findings, m.finding] },
@@ -49,7 +49,7 @@ function auditMachine() {
 function auditMachineDropsInfo() {
   return defineMachine({
     types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
-    init: (loaded) => [loaded ?? { type: "audit", findings: [] }, Cmd.none],
+    init: (loaded) => [loaded ?? { _tag: "audit", findings: [] }, Cmd.none],
     update: {
       found: (s, m) =>
         m.finding.severity === "info"
@@ -82,7 +82,7 @@ async function recordAudit(
   const rec = recordRun(runtime, { captureSteps: true });
   await runtime.ready;
   for (const [index, spec] of specs.entries()) {
-    await runtime.dispatch({ type: "found", finding: mint(spec, index, gen) });
+    await runtime.dispatch({ _tag: "found", finding: mint(spec, index, gen) });
   }
   const trace = rec.trace();
   await runtime.stop();
@@ -100,8 +100,8 @@ describe("recordRun / goldenReplay", () => {
   it("captures loaded at boot + the ordered non-null msgs (sufficient to replay)", async () => {
     const trace = await recordAudit(auditMachine(), SPECS, "g0");
 
-    expect(trace.loaded).toEqual({ type: "audit", findings: [] });
-    expect(trace.msgs.map((m) => m.type)).toEqual(["found", "found", "found"]);
+    expect(trace.loaded).toEqual({ _tag: "audit", findings: [] });
+    expect(trace.msgs.map((m) => m._tag)).toEqual(["found", "found", "found"]);
     expect(trace.msgs.map((m) => m.finding.ruleId)).toEqual([
       "img-alt",
       "label",
@@ -122,7 +122,7 @@ describe("recordRun / goldenReplay", () => {
     const rec = recordRun(runtime);
     await runtime.ready;
     await runtime.dispatch({
-      type: "found",
+      _tag: "found",
       finding: mint(SPECS[0] as FindingSpec, 0, "live"),
     });
 

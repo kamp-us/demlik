@@ -24,10 +24,10 @@ import { run as runPromise } from "../promise";
 import { type EffectRuntime, run as runEffect } from "./index";
 
 type Model = { readonly armed: boolean; readonly done: boolean };
-type Msg = { readonly type: "go"; readonly fail: boolean };
-type Work = { readonly type: "work"; readonly fail: boolean };
+type Msg = { readonly _tag: "go"; readonly fail: boolean };
+type Work = { readonly _tag: "work"; readonly fail: boolean };
 type Watch = Sub<"watch", { readonly on: true }>;
-type Went = { readonly type: "went" };
+type Went = { readonly _tag: "went" };
 
 // `go` installs a terminal State, arms the `watch` Sub and emits one `work`
 // Cmd, so a single transition touches every step whose order is pinned here.
@@ -43,12 +43,12 @@ const machine = defineMachine({
   update: {
     go: (_s, msg) => [
       { armed: true, done: true },
-      [{ type: "work", fail: msg.fail }],
+      [{ _tag: "work", fail: msg.fail }],
     ],
   },
   subs: [
     {
-      type: "watch",
+      _tag: "watch",
       deps: (s: Model) => (s.armed ? { on: true as const } : null),
     },
   ],
@@ -95,7 +95,7 @@ function shared(log: string[], telemetry: TelemetryEvent[]) {
     onError: () => {},
     terminal: (s: Model) => s.done,
     events: (msg: Msg): readonly Went[] =>
-      msg.type === "go" ? [{ type: "went" }] : [],
+      msg._tag === "go" ? [{ _tag: "went" }] : [],
     telemetry: (event: TelemetryEvent) => {
       telemetry.push(event);
     },
@@ -176,7 +176,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     rt.subscribe(() => log.push("listener"));
     rt.observe(() => log.push("commit"));
 
-    await rt.dispatch({ type: "go", fail: false });
+    await rt.dispatch({ _tag: "go", fail: false });
 
     expect(log).toEqual(["save", "sub", "listener", "cmd", "commit"]);
     await stop();
@@ -188,7 +188,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     rt.subscribe(() => log.push("listener"));
     rt.observe(() => log.push("commit"));
 
-    await expect(rt.dispatch({ type: "go", fail: true })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "go", fail: true })).rejects.toBe(boom);
 
     expect(log).toEqual(["save", "sub", "listener", "cmd", "commit"]);
     await stop();
@@ -199,9 +199,9 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const heard: Model[] = [];
     const observed: [string, Model][] = [];
     rt.subscribe(() => heard.push(rt.getState()));
-    rt.observe((msg, state) => observed.push([msg.type, state]));
+    rt.observe((msg, state) => observed.push([msg._tag, state]));
 
-    await expect(rt.dispatch({ type: "go", fail: true })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "go", fail: true })).rejects.toBe(boom);
 
     const next = { armed: true, done: true };
     expect(heard).toEqual([next]);
@@ -213,7 +213,7 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const { rt, stop } = await start();
     const done = rt.done();
 
-    await expect(rt.dispatch({ type: "go", fail: true })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "go", fail: true })).rejects.toBe(boom);
 
     await expect(done).resolves.toEqual({ armed: true, done: true });
     await stop();
@@ -224,9 +224,9 @@ describe.each(Object.entries(engines))("on the %s engine", (_name, start) => {
     const events: Went[] = [];
     rt.on("went", (event) => events.push(event));
 
-    await expect(rt.dispatch({ type: "go", fail: true })).rejects.toBe(boom);
+    await expect(rt.dispatch({ _tag: "go", fail: true })).rejects.toBe(boom);
 
-    expect(events).toEqual([{ type: "went" }]);
+    expect(events).toEqual([{ _tag: "went" }]);
     expect(telemetry.map((event) => event.msgType)).toEqual(["go"]);
     await stop();
   });

@@ -34,7 +34,7 @@
  *   const poll = createPoller<MyState, MyResult>({
  *     everyMs: 5_000,
  *     until: (s) => s.poll.lastResult?.status === "ready",
- *     onTick: () => ({ type: "fetch_status" }),
+ *     onTick: () => ({ _tag: "fetch_status" }),
  *     retry: { ...defaultRetryPolicy, maxAttempts: 4 },
  *   });
  *

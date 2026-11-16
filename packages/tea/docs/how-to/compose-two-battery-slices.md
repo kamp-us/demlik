@@ -96,8 +96,8 @@ export interface LookupState {
 }
 
 export type LookupMsg =
-  | { readonly type: "ask"; readonly key: string; readonly at: number }
-  | { readonly type: "arrived"; readonly key: string; readonly answer: Answer };
+  | { readonly _tag: "ask"; readonly key: string; readonly at: number }
+  | { readonly _tag: "arrived"; readonly key: string; readonly answer: Answer };
 
 /**
  * `liftSlice(key, state, verb(...))` is the `{ ...state, inFlight: slice }`

@@ -18,7 +18,7 @@ import type { BootingRuntime } from "./runtime-types";
  * A bounded log of a runtime's recent `(msg, state)` transitions, returned by
  * `historyTracker`. Use it to feed a debug inspector.
  */
-export interface HistoryTracker<S, M extends { type: string }> {
+export interface HistoryTracker<S, M extends { _tag: string }> {
   /**
    * Snapshot of recorded transitions, oldest first. Each entry is
    * `{ msg, state }`: `msg` is `null` for the boot transition (recorded via
@@ -56,7 +56,7 @@ export interface HistoryTracker<S, M extends { type: string }> {
  *                 no observer is attached to the runtime, `snapshot()` is
  *                 always `[]`, and `stop()` is a no-op.
  */
-export function historyTracker<S, M extends { type: string }>(
+export function historyTracker<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   size: number,
 ): HistoryTracker<S, M> {

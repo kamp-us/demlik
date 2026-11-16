@@ -34,7 +34,7 @@ import {
  *   that bound the draws actually use.
  * - `prefix` is the load-bearing escape hatch for "the first msg is the
  *   one that exercises the cell I care about" (e.g. Test A's
- *   `[{ type: "ws:client:hello" }]` prefix to land in the
+ *   `[{ _tag: "ws:client:hello" }]` prefix to land in the
  *   `auditing.ws:client:hello` cell on the first transition).
  *
  * @example
@@ -42,15 +42,15 @@ import {
  * import { arbMsgSequence } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type Msg = { type: "ws:client:hello" } | { type: "tick" };
+ * type Msg = { _tag: "ws:client:hello" } | { _tag: "tick" };
  * declare const msgArb: fc.Arbitrary<Msg>;
  *
  * arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 });
- * arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }], maxLength: 20 });
+ * arbMsgSequence(msgArb, { prefix: [{ _tag: "ws:client:hello" }], maxLength: 20 });
  * arbMsgSequence(msgArb, { maxLength: 60, size: "max" });
  * ```
  */
-export function arbMsgSequence<M extends { type: string }>(
+export function arbMsgSequence<M extends { _tag: string }>(
   msgArb: fc.Arbitrary<M>,
   opts?: {
     readonly minLength?: number;
@@ -92,16 +92,16 @@ export interface AnswerCell<K extends Cmd, V, M> {
  * cell is never answered. A Msg type in neither table is never drawn.
  */
 export interface GuidedCells<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
-  A extends { readonly [K in C["type"]]?: unknown },
+  A extends { readonly [K in C["_tag"]]?: unknown },
 > {
   readonly outside?: {
-    readonly [K in M["type"]]?: fc.Arbitrary<Extract<M, { type: K }>>;
+    readonly [K in M["_tag"]]?: fc.Arbitrary<Extract<M, { _tag: K }>>;
   };
   readonly answers?: {
-    readonly [K in keyof A]: K extends C["type"]
-      ? AnswerCell<Extract<C, { type: K }>, A[K], M>
+    readonly [K in keyof A]: K extends C["_tag"]
+      ? AnswerCell<Extract<C, { _tag: K }>, A[K], M>
       : never;
   };
 }
@@ -157,9 +157,9 @@ export interface GuidedCells<
  * } from "@demlik/tea/pbt";
  * import * as fc from "fast-check";
  *
- * type Merge = { readonly type: "merge"; readonly pr: number };
- * type State = { type: "idle" } | { type: "merging" } | { type: "landed" };
- * type Msg = { type: "start" } | { type: "merged"; cmd: Merge; sha: string };
+ * type Merge = { readonly _tag: "merge"; readonly pr: number };
+ * type State = { _tag: "idle" } | { _tag: "merging" } | { _tag: "landed" };
+ * type Msg = { _tag: "start" } | { _tag: "merged"; cmd: Merge; sha: string };
  * declare const machine: Machine<State, Msg, Merge, never, object>;
  * const ctx = stubCtxThrowingProxy<object>();
  *
@@ -168,7 +168,7 @@ export interface GuidedCells<
  *   answers: {
  *     merge: {
  *       draw: fc.string(),
- *       make: (cmd, sha) => ({ type: "merged", cmd, sha }),
+ *       make: (cmd, sha) => ({ _tag: "merged", cmd, sha }),
  *     },
  *   },
  * });
@@ -178,18 +178,18 @@ export interface GuidedCells<
  *   ctx,
  *   lists,
  *   (steps, final) =>
- *     !steps.some((step) => step.msg.type === "merged") ||
- *     final.type === "landed",
+ *     !steps.some((step) => step.msg._tag === "merged") ||
+ *     final._tag === "landed",
  * );
  * ```
  */
 export function arbGuidedSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-  A extends { readonly [K in C["type"]]?: unknown },
+  A extends { readonly [K in C["_tag"]]?: unknown },
 >(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,

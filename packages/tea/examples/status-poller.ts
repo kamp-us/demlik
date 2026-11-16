@@ -21,9 +21,9 @@ interface State {
 type ReadStatus = Cmd<"read_status"> & { readonly jobId: string };
 
 type Msg =
-  | { type: "start_polling"; at: number }
-  | { type: "poll_result"; result: JobStatus; at: number }
-  | { type: "poll_failed"; error: string; at: number }
+  | { _tag: "start_polling"; at: number }
+  | { _tag: "poll_result"; result: JobStatus; at: number }
+  | { _tag: "poll_failed"; error: string; at: number }
   | DeadlineExceeded;
 
 interface Ctx {
@@ -37,11 +37,11 @@ const EVERY_MS = 5_000;
 const poll = createPoller<State, JobStatus>({
   everyMs: EVERY_MS,
   until: (s) => s.poll.lastResult?.status === "ready",
-  onTick: (): ReadStatus => ({ type: "read_status", jobId: JOB_ID }),
+  onTick: (): ReadStatus => ({ _tag: "read_status", jobId: JOB_ID }),
 });
 
 function readStatusCmds(cmds: readonly Cmd[]): readonly ReadStatus[] {
-  return cmds.filter((c): c is ReadStatus => c.type === "read_status");
+  return cmds.filter((c): c is ReadStatus => c._tag === "read_status");
 }
 
 export const statusPoller = defineMachine({
@@ -88,9 +88,9 @@ export const statusPollerInterpret: Interpret<Msg, ReadStatus, Ctx> = {
   read_status: async (cmd, ctx): Promise<Msg> => {
     try {
       const result = await ctx.readStatus(cmd.jobId);
-      return { type: "poll_result", result, at: ctx.clock() };
+      return { _tag: "poll_result", result, at: ctx.clock() };
     } catch (error) {
-      return { type: "poll_failed", error: String(error), at: ctx.clock() };
+      return { _tag: "poll_failed", error: String(error), at: ctx.clock() };
     }
   },
 };
@@ -121,7 +121,7 @@ async function main() {
 
   let polls = 0;
   runtime.observe((msg) => {
-    if (msg?.type === "poll_result") {
+    if (msg?._tag === "poll_result") {
       polls += 1;
       const r = msg.result;
       const tail =
@@ -135,14 +135,14 @@ async function main() {
   console.log(
     `starting poll of ${runtime.getState().jobId} at t=${now}, everyMs=${EVERY_MS}`,
   );
-  await runtime.dispatch({ type: "start_polling", at: now });
+  await runtime.dispatch({ _tag: "start_polling", at: now });
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const before = runtime.getState().poll;
     if (before.phase !== "polling" || before.nextAtMs === null) break;
     now = before.nextAtMs;
     await runtime.dispatch({
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: `poller:tick:${now}`,
       atMs: now,
     });

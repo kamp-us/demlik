@@ -86,8 +86,8 @@ export interface AwaitTerminalOptions {
  */
 export function awaitTerminal<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   runtime: Runtime<S, M, E>,
   isTerminal: (state: S) => boolean,
@@ -164,7 +164,7 @@ export function awaitTerminal<
  */
 export async function runToTerminal<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

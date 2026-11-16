@@ -15,13 +15,13 @@ const [engine, life, stateFile, writesFile] = z
   ])
   .parse(process.argv.slice(2));
 const model = z.object({
-  type: z.enum(["pending", "working"]),
+  _tag: z.enum(["pending", "working"]),
   life: z.number().int().nonnegative(),
   pulses: z.number().int().nonnegative(),
 });
 type Model = z.infer<typeof model>;
-type Msg = { readonly type: "pulse" };
-type Command = { readonly type: "write"; readonly life: number };
+type Msg = { readonly _tag: "pulse" };
+type Command = { readonly _tag: "write"; readonly life: number };
 type Fast = Sub<"fast", { readonly life: number }>;
 const machine = defineMachine({
   types: {
@@ -36,17 +36,17 @@ const machine = defineMachine({
       throw new Error("fixture did not restore its preceding life");
     }
     return [
-      { type: "working", life: ctx.life, pulses: 0 },
-      [{ type: "write", life: ctx.life }],
+      { _tag: "working", life: ctx.life, pulses: 0 },
+      [{ _tag: "write", life: ctx.life }],
     ];
   },
   update: {
     pulse: (state) => [
-      { ...state, type: "working", pulses: state.pulses + 1 },
-      state.type === "pending" ? [{ type: "write", life: state.life }] : [],
+      { ...state, _tag: "working", pulses: state.pulses + 1 },
+      state._tag === "pending" ? [{ _tag: "write", life: state.life }] : [],
     ],
   },
-  subs: [{ type: "fast", deps: (state) => ({ life: state.life }) }],
+  subs: [{ _tag: "fast", deps: (state) => ({ life: state.life }) }],
 });
 const store = fileStore(stateFile, (raw) => model.parse(raw));
 const write = (cmd: Command) => appendFileSync(writesFile, `${cmd.life}\n`);
@@ -67,7 +67,7 @@ if (engine === "promise") {
     interpret: { write: async (cmd) => write(cmd) },
     subscribe: {
       fast: (_sub, _ctx, dispatch) => {
-        dispatch({ type: "pulse" });
+        dispatch({ _tag: "pulse" });
         return () => {};
       },
     },
@@ -76,7 +76,7 @@ if (engine === "promise") {
   const rt = await booting.ready;
   await pulse;
   await rt.idle();
-  process.send?.({ type: "settled", state: rt.getState() });
+  process.send?.({ _tag: "settled", state: rt.getState() });
 } else {
   await Effect.runPromise(
     Effect.scoped(
@@ -85,13 +85,13 @@ if (engine === "promise") {
           ctx: { life },
           store,
           interpret: { write: (cmd) => Effect.sync(() => write(cmd)) },
-          subscribe: { fast: () => Stream.make({ type: "pulse" as const }) },
+          subscribe: { fast: () => Stream.make({ _tag: "pulse" as const }) },
         });
         booting.observe(observe);
         const rt = yield* booting.ready;
         yield* Effect.promise(() => pulse);
         yield* rt.idle();
-        process.send?.({ type: "settled", state: rt.getState() });
+        process.send?.({ _tag: "settled", state: rt.getState() });
         yield* Effect.never;
       }),
     ),

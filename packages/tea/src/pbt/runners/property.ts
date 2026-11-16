@@ -19,8 +19,8 @@
 // `failOnNeverActed` throws one too, naming the Msg types a clean run never acted on.
 //
 // Before any check runs, every Cmd `init` and the steps sent is held to two rules:
-// a value with no string `type` always fails, and with `failOnUndeclaredCmd` on, so
-// does a `type` outside `machine.cmds`. Each check also gets `init`'s Cmds as its
+// a value with no string `_tag` always fails, and with `failOnUndeclaredCmd` on, so
+// does a `_tag` outside `machine.cmds`. Each check also gets `init`'s Cmds as its
 // last argument, since no `Step` holds them.
 //
 // Default shrinker is fast-check's built-in (open question 4): drop-msg /
@@ -96,13 +96,13 @@ export interface PropertyOpts<S>
    */
   readonly failOnNeverActed?: boolean;
   /**
-   * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
+   * Fail a run when `init` or a step sends a Cmd whose `_tag` isn't in
    * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
    * keep a hand-written Cmd beside its defined ones. A machine with no `cmds` field
    * has no list to check against, so this adds nothing there. `cmds: []` is a list
    * with nothing on it, so every Cmd fails.
    *
-   * A value with no string `type` is never a Cmd, so it fails with this off too, on
+   * A value with no string `_tag` is never a Cmd, so it fails with this off too, on
    * every machine.
    */
   readonly failOnUndeclaredCmd?: boolean;
@@ -157,13 +157,13 @@ export interface PropertyRun {
  * import { PropertyFailure, propertyInvariant } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type State = { type: "idle" } | { type: "done" };
- * type Msg = { type: "finish" };
+ * type State = { _tag: "idle" } | { _tag: "done" };
+ * type Msg = { _tag: "finish" };
  * declare const machine: Machine<State, Msg, never, never, object>;
  * declare const seqArb: fc.Arbitrary<readonly Msg[]>;
  *
  * try {
- *   propertyInvariant(machine, {}, seqArb, ({ next }) => next.type === "idle");
+ *   propertyInvariant(machine, {}, seqArb, ({ next }) => next._tag === "idle");
  * } catch (error) {
  *   if (error instanceof PropertyFailure) {
  *     // Replay this one failure with `{ seed, path }`.
@@ -243,9 +243,9 @@ function cmdFault(
   cmd: unknown,
   declared: ReadonlySet<string> | null,
 ): string | null {
-  const { type } = Object(cmd) as { readonly type?: unknown };
+  const { _tag: type } = Object(cmd) as { readonly _tag?: unknown };
   if (typeof cmd !== "object" || typeof type !== "string") {
-    return `${fc.stringify(cmd)} isn't a Cmd: it has no string \`type\``;
+    return `${fc.stringify(cmd)} isn't a Cmd: it has no string \`_tag\``;
   }
   if (declared === null || declared.has(type)) return null;
   return `${fc.stringify(cmd)} isn't in machine.cmds: [${[...declared].join(", ")}]`;
@@ -409,7 +409,7 @@ function assertEveryTypeActed(run: PropertyRun, tally: MsgTally): void {
  */
 function runProperty<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -477,7 +477,7 @@ function runProperty<
 /**
  * Assert every generated Msg sequence ends in a terminal state. `terminal`
  * is the predicate that names the acceptable final states (often
- * `(s) => s.type === "done" || s.type === "idle"`).
+ * `(s) => s._tag === "done" || s._tag === "idle"`).
  *
  * The "every sequence" property catches stuck states (machine gets to a
  * non-terminal state and no further msg can escape) AND silent loops
@@ -498,25 +498,25 @@ function runProperty<
  * } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type State = { type: "idle" } | { type: "auditing" } | { type: "done" };
- * type Msg = { type: "start_audit" } | { type: "ws:audit:done" };
+ * type State = { _tag: "idle" } | { _tag: "auditing" } | { _tag: "done" };
+ * type Msg = { _tag: "start_audit" } | { _tag: "ws:audit:done" };
  * interface BackgroundCtx { readonly tabId: number }
  * declare const auditBackgroundMachine: Machine<State, Msg, never, never, BackgroundCtx>;
  * declare const msgArb: fc.Arbitrary<Msg>;
- * const auditingState: State = { type: "auditing" };
+ * const auditingState: State = { _tag: "auditing" };
  *
  * propertyTerminates(
  *   auditBackgroundMachine,
  *   stubCtxThrowingProxy<BackgroundCtx>(),
  *   arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 }),
- *   (s) => s.type === "done" || s.type === "idle",
+ *   (s) => s._tag === "done" || s._tag === "idle",
  *   { loaded: auditingState, numRuns: 500 },
  * );
  * ```
  */
 export function propertyTerminates<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -558,30 +558,30 @@ export function propertyTerminates<
  * import { arbMsgSequence, propertyInvariant } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type State = { type: "idle" } | { type: "auditing" };
- * type Msg = { type: "start_audit" } | { type: "ws:client:hello" };
- * type Cmd = { type: "send_ws"; msg: { type: "client:ready" } };
+ * type State = { _tag: "idle" } | { _tag: "auditing" };
+ * type Msg = { _tag: "start_audit" } | { _tag: "ws:client:hello" };
+ * type Cmd = { _tag: "send_ws"; msg: { _tag: "client:ready" } };
  * interface BackgroundCtx { readonly tabId: number }
  * declare const auditBackgroundMachine: Machine<State, Msg, Cmd, never, BackgroundCtx>;
  * declare const ctx: BackgroundCtx;
  * declare const msgArb: fc.Arbitrary<Msg>;
- * const auditingState: State = { type: "auditing" };
+ * const auditingState: State = { _tag: "auditing" };
  *
  * // Pin the resume-handshake fix: `ws:client:hello` in auditing must
  * // emit `send_ws { client:ready }`.
  * propertyInvariant(
  *   auditBackgroundMachine, ctx,
- *   arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }] }),
+ *   arbMsgSequence(msgArb, { prefix: [{ _tag: "ws:client:hello" }] }),
  *   ({ prev, msg, cmds }) =>
- *     !(prev.type === "auditing" && msg.type === "ws:client:hello") ||
- *     cmds.some((c) => c.type === "send_ws" && c.msg.type === "client:ready"),
+ *     !(prev._tag === "auditing" && msg._tag === "ws:client:hello") ||
+ *     cmds.some((c) => c._tag === "send_ws" && c.msg._tag === "client:ready"),
  *   { loaded: auditingState, numRuns: 200 },
  * );
  * ```
  */
 export function propertyInvariant<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -603,7 +603,7 @@ export function propertyInvariant<
 /**
  * Assert a predicate over the full trace plus the final state. Use when
  * the property is "some Msg appeared in the trace before reaching the
- * final state" or "no two consecutive steps had the same state.type" —
+ * final state" or "no two consecutive steps had the same state._tag" —
  * predicates that need the full sequence, not a single step.
  *
  * Return `true` or `null` to accept. Return `false`, or a string saying why, to
@@ -620,26 +620,26 @@ export function propertyInvariant<
  * import { propertyTrace } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type State = { type: "auditing" } | { type: "done" };
- * type Msg = { type: "ws:audit:progress" } | { type: "ws:audit:done" };
+ * type State = { _tag: "auditing" } | { _tag: "done" };
+ * type Msg = { _tag: "ws:audit:progress" } | { _tag: "ws:audit:done" };
  * interface Ctx { readonly tabId: number }
  * declare const machine: Machine<State, Msg, never, never, Ctx>;
  * declare const ctx: Ctx;
  * declare const seqArb: fc.Arbitrary<readonly Msg[]>;
- * const auditingState: State = { type: "auditing" };
+ * const auditingState: State = { _tag: "auditing" };
  *
  * propertyTrace(
  *   machine, ctx, seqArb,
  *   (steps, final) =>
- *     final.type !== "done" ||
- *     steps.some((step) => step.msg.type === "ws:audit:done"),
+ *     final._tag !== "done" ||
+ *     steps.some((step) => step.msg._tag === "ws:audit:done"),
  *   { loaded: auditingState, numRuns: 500 },
  * );
  * ```
  */
 export function propertyTrace<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

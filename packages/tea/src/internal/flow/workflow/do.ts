@@ -505,7 +505,7 @@ function parseWorkflowGrainState<A, R, F>(
 
 /**
  * Boundary parse for a persisted EVENT (one logged activity-result `Msg`).
- * Accepts a non-null object whose `type` is a known {@link WorkflowMsg} tag and
+ * Accepts a non-null object whose `_tag` is a known {@link WorkflowMsg} tag and
  * whose `id` is a delivery id; returns `null` to DROP a retired/unknown variant
  * from replay (never throws).
  */
@@ -513,7 +513,7 @@ function parseWorkflowMsg<R, F>(raw: unknown): WorkflowMsg<R, F> | null {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw))
     return null;
   const m = raw as Record<string, unknown>;
-  if (typeof m.type !== "string" || !WORKFLOW_MSG_TYPES.has(m.type))
+  if (typeof m._tag !== "string" || !WORKFLOW_MSG_TYPES.has(m._tag))
     return null;
   if (typeof m.id !== "number") return null;
   return raw as WorkflowMsg<R, F>;

@@ -104,7 +104,7 @@ export interface FromTransportOpts<
   Ctx,
 > {
   /**
-   * A short, stable name for this seam — and its Sub `type`. The machine's
+   * A short, stable name for this seam — and its Sub `_tag`. The machine's
    * `subscribe` table holds the seam's runner under it, so it must be unique
    * among the machine's Sub types.
    */
@@ -152,7 +152,7 @@ export interface FromTransportOpts<
  */
 export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
   /** The seam's Sub type — its `name`. */
-  readonly type: N;
+  readonly _tag: N;
 
   /**
    * The `subs` entry. `when(state)` returns the seam's KEY when it should be
@@ -167,7 +167,7 @@ export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
 
   /**
    * The runner for this seam's Sub type — hand it to `run` as
-   * `subscribe: { [seam.type]: seam.subscribe }`. Wires inbound + close in
+   * `subscribe: { [seam._tag]: seam.subscribe }`. Wires inbound + close in
    * one shot and publishes the live transport to the outbound handle table.
    */
   readonly subscribe: (
@@ -205,11 +205,11 @@ export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
  * type RunId = string;
  * type HandsInbound = { kind: "said"; text: string };
  * type HandsOutbound = { kind: "do"; action: string };
- * type State = { type: "idle" } | { type: "auditing"; runId: RunId };
+ * type State = { _tag: "idle" } | { _tag: "auditing"; runId: RunId };
  * type Msg =
- *   | { type: "hands_said"; runId: RunId; inbound: HandsInbound }
- *   | { type: "hands_lost"; runId: RunId };
- * type Cmd = { type: "send_hands"; runId: RunId; outbound: HandsOutbound };
+ *   | { _tag: "hands_said"; runId: RunId; inbound: HandsInbound }
+ *   | { _tag: "hands_lost"; runId: RunId };
+ * type Cmd = { _tag: "send_hands"; runId: RunId; outbound: HandsOutbound };
  * interface Ctx { readonly openHandsWs: (runId: RunId) => Transport }
  * declare function parseHandsInbound(json: unknown): HandsInbound | null;
  * declare const update: Reducer<State, Msg, Cmd>;
@@ -219,8 +219,8 @@ export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
  *   name: "hands",
  *   openTransport: (runId, ctx) => ctx.openHandsWs(runId),
  *   parseInbound: (raw) => parseHandsInbound(JSON.parse(raw)),
- *   onInbound: (inbound, runId) => ({ type: "hands_said", runId, inbound }),
- *   lostMsg: (runId) => ({ type: "hands_lost", runId }),
+ *   onInbound: (inbound, runId) => ({ _tag: "hands_said", runId, inbound }),
+ *   lostMsg: (runId) => ({ _tag: "hands_lost", runId }),
  *   serializeOutbound: (out) => JSON.stringify(out),
  * });
  *
@@ -233,11 +233,11 @@ export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
  *     sub: {} as TransportSub<"hands", RunId>,
  *     ctx: {} as Ctx,
  *   },
- *   init: (loaded) => [loaded ?? { type: "idle" }, []],
+ *   init: (loaded) => [loaded ?? { _tag: "idle" }, []],
  *   update,
  *   subs: [
  *     handsSeam.depKeyed((s: State) =>
- *       s.type === "auditing" ? s.runId : null,
+ *       s._tag === "auditing" ? s.runId : null,
  *     ),
  *   ],
  * });
@@ -346,12 +346,12 @@ export function fromTransport<
   };
 
   return {
-    type: opts.name,
+    _tag: opts.name,
 
     depKeyed: <S>(
       when: (state: S) => TKey | null,
     ): DepKeyedSub<S, TransportSub<N, TKey>> => ({
-      type: opts.name,
+      _tag: opts.name,
       deps: when,
     }),
 

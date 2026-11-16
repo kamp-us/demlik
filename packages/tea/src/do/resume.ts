@@ -24,10 +24,10 @@ import type { DurableCommandCarrier } from "./deferred-gateway";
  * - `isResumable(state)` — true iff the rehydrated State is mid-loop and needs a
  *   resume dispatch. False on a fresh boot, which makes `bootResume` a no-op.
  * - `resumeMsg(now)` — the TYPED constructor for the single resume Msg (never a
- *   hand-built `{ type: … }` literal); the `agentBootMsg` shape lifted out so a
+ *   hand-built `{ _tag: … }` literal); the `agentBootMsg` shape lifted out so a
  *   non-agent grain supplies its own boot Msg constructor.
  */
-export interface ResumePort<S, M extends { type: string }> {
+export interface ResumePort<S, M extends { _tag: string }> {
   readonly isResumable: (state: S) => boolean;
   readonly resumeMsg: (now: number) => M;
 }
@@ -51,8 +51,8 @@ export interface ResumePort<S, M extends { type: string }> {
  */
 export async function bootResume<
   S,
-  M extends { type: string },
-  E extends { type: string } = never,
+  M extends { _tag: string },
+  E extends { _tag: string } = never,
 >(
   booting: RunHandle<S, M, E>,
   port: ResumePort<S, M>,
@@ -98,7 +98,7 @@ export async function autoBoot<
   P extends string,
   O extends Record<P, unknown>,
   R,
-  E extends { type: string } = never,
+  E extends { _tag: string } = never,
 >(
   booting: RunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, E>,
   now: () => number = Date.now,

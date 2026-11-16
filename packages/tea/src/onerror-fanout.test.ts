@@ -23,15 +23,15 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 
 type State = { readonly n: number; readonly subOn: boolean };
-type Msg = { readonly type: "inc" } | { readonly type: "sub_off" };
-type PingCmd = { readonly type: "ping" };
+type Msg = { readonly _tag: "inc" } | { readonly _tag: "sub_off" };
+type PingCmd = { readonly _tag: "ping" };
 type TickSub = Sub<"tick", { readonly on: true }>;
-type BumpEvent = { readonly type: "bumped" };
+type BumpEvent = { readonly _tag: "bumped" };
 
 const pingPort = definePort<number>("onerror-fanout.test.ping");
 
 const update: Reducer<State, Msg, PingCmd> = {
-  inc: (s) => [{ ...s, n: s.n + 1 }, [{ type: "ping" }]],
+  inc: (s) => [{ ...s, n: s.n + 1 }, [{ _tag: "ping" }]],
   sub_off: (s) => [{ ...s, subOn: false }, []],
 };
 
@@ -62,7 +62,7 @@ function fanoutMachine(opts?: {
     },
     init: () => [{ n: 0, subOn: opts?.subOn ?? false }, []],
     update,
-    subs: [{ type: "tick", deps: (s) => (s.subOn ? { on: true } : null) }],
+    subs: [{ _tag: "tick", deps: (s) => (s.subOn ? { on: true } : null) }],
   });
 }
 
@@ -84,7 +84,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     runtime.observe(() => {
       throw boom;
     });
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(seen).toEqual([{ error: boom, context: { phase: "observer" } }]);
     await runtime.stop();
   });
@@ -97,7 +97,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     runtime.subscribe(() => {
       throw boom;
     });
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(seen).toEqual([{ error: boom, context: { phase: "listener" } }]);
     await runtime.stop();
   });
@@ -110,7 +110,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     runtime.subscribePort(pingPort, () => {
       throw boom;
     });
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     await runtime.idle();
     expect(seen).toEqual([{ error: boom, context: { phase: "port-emit" } }]);
     await runtime.stop();
@@ -123,12 +123,12 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
       ...handlers(),
       onError,
       events: (msg): readonly BumpEvent[] =>
-        msg.type === "inc" ? [{ type: "bumped" }] : [],
+        msg._tag === "inc" ? [{ _tag: "bumped" }] : [],
     }).ready;
     runtime.on("bumped", () => {
       throw boom;
     });
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(seen).toEqual([{ error: boom, context: { phase: "event" } }]);
     await runtime.stop();
   });
@@ -145,7 +145,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     }).ready;
     // The projector only runs when at least one `on` handler is registered.
     runtime.on("bumped", () => {});
-    await runtime.dispatch({ type: "inc" });
+    await runtime.dispatch({ _tag: "inc" });
     expect(seen).toEqual([{ error: boom, context: { phase: "event" } }]);
     await runtime.stop();
   });
@@ -186,7 +186,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     }).ready;
     // `sub_off` transitions the state so the reconcile pass removes the sub
     // and calls its (throwing) cleanup.
-    await runtime.dispatch({ type: "sub_off" });
+    await runtime.dispatch({ _tag: "sub_off" });
     expect(seen).toEqual([{ error: boom, context: { phase: "sub-cleanup" } }]);
     await runtime.stop();
   });
@@ -217,7 +217,7 @@ describe("vertical tracer: onError wired to a collector, console stays silent", 
       runtime.observe(() => {
         throw boom;
       });
-      await runtime.dispatch({ type: "inc" });
+      await runtime.dispatch({ _tag: "inc" });
       await runtime.idle();
       await runtime.stop();
       expect(seen).toEqual([{ error: boom, context: { phase: "observer" } }]);

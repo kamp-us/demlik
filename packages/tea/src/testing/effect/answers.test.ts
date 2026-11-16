@@ -65,8 +65,8 @@ interface Desk {
 }
 
 type Msg =
-  | { readonly type: "open"; readonly sku: Sku }
-  | { readonly type: "close" }
+  | { readonly _tag: "open"; readonly sku: Sku }
+  | { readonly _tag: "close" }
   | Settled<Defs>;
 
 const answered = (s: Desk, more: Partial<Desk> = {}): Desk => ({
@@ -134,10 +134,10 @@ const ctx = {};
 
 const outside = {
   open: Arbitrary.map(Arbitrary.schema(Schema.Literals(["A", "B"])), (s) => ({
-    type: "open" as const,
+    _tag: "open" as const,
     sku: s,
   })),
-  close: Arbitrary.Constant({ type: "close" as const }),
+  close: Arbitrary.Constant({ _tag: "close" as const }),
 };
 
 /** The law: no more answers than asks, and the total is a count of cents. */
@@ -170,7 +170,7 @@ const sample = (m: typeof machine, count = 300) =>
   );
 
 /** A Cmd's identity, since each fold builds its Cmds anew. */
-const key = (cmd: { readonly type: string }): string => JSON.stringify(cmd);
+const key = (cmd: { readonly _tag: string }): string => JSON.stringify(cmd);
 
 describe("a machine is property-tested on Effect with no answer written by hand", () => {
   it.each(
@@ -207,7 +207,7 @@ describe("a machine is property-tested on Effect with no answer written by hand"
     expect(deskHolds(result.shrunkInput, doubleCounts)?.reason).toMatch(
       /^pending went to -/,
     );
-    expect(result.shrunkInput.some((msg) => msg.type === "stock_err")).toBe(
+    expect(result.shrunkInput.some((msg) => msg._tag === "stock_err")).toBe(
       true,
     );
   });
@@ -224,7 +224,7 @@ describe("a machine is property-tested on Effect with no answer written by hand"
     expect(deskHolds(result.shrunkInput, takesText)?.reason).toMatch(
       /^total is /,
     );
-    expect(result.shrunkInput.map((msg) => msg.type)).toEqual([
+    expect(result.shrunkInput.map((msg) => msg._tag)).toEqual([
       "open",
       "price_ok",
     ]);
@@ -294,11 +294,11 @@ describe("answers come from the Cmd's own schema", () => {
     const tags = new Map<string, Set<string>>();
     for (const msgs of await sample(m)) {
       for (const msg of msgs) {
-        if (msg.type === "price_ok") cents.add(msg.value.cents);
-        if (msg.type.endsWith("_err") && "error" in msg) {
-          const seen = tags.get(msg.type) ?? new Set<string>();
+        if (msg._tag === "price_ok") cents.add(msg.value.cents);
+        if (msg._tag.endsWith("_err") && "error" in msg) {
+          const seen = tags.get(msg._tag) ?? new Set<string>();
           seen.add(msg.error._tag);
-          tags.set(msg.type, seen);
+          tags.set(msg._tag, seen);
         }
       }
     }
@@ -366,7 +366,7 @@ describe("a machine it cannot draw answers for gets a result naming the problem"
     const empty = defineMachine({
       types: {
         model: {} as Desk,
-        msg: {} as { readonly type: "close" },
+        msg: {} as { readonly _tag: "close" },
         cmd: {} as never,
         ctx: {} as object,
       },
@@ -427,7 +427,7 @@ describe("a cmds list that names one Cmd twice is refused, not answered from the
     | typeof resize
     | typeof notify;
   type FileSent = ReturnType<FileDefs>;
-  type FileMsg = { readonly type: "start" } | Settled<FileDefs>;
+  type FileMsg = { readonly _tag: "start" } | Settled<FileDefs>;
   interface Files {
     readonly asked: number;
     readonly bytes: number;
@@ -477,7 +477,7 @@ describe("a cmds list that names one Cmd twice is refused, not answered from the
   });
   const withCmds = (cmds: readonly AnyCmdDef[]) => ({ ...good, cmds });
 
-  const fileOutside = { start: Arbitrary.Constant({ type: "start" as const }) };
+  const fileOutside = { start: Arbitrary.Constant({ _tag: "start" as const }) };
 
   /** The error `arbSchemaGuidedSequence` throws; fails when it throws nothing. */
   const thrownBy = (m: typeof good): unknown => {
@@ -533,7 +533,7 @@ describe("a cmds list that names one Cmd twice is refused, not answered from the
     );
     const values = sampled
       .flat()
-      .flatMap((msg) => (msg.type === "fetch_file_ok" ? [msg.value] : []));
+      .flatMap((msg) => (msg._tag === "fetch_file_ok" ? [msg.value] : []));
     expect(values.length).toBeGreaterThan(100);
     for (const value of values) {
       expect(typeof value.bytes).toBe("number");

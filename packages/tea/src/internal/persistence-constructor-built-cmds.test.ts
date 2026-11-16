@@ -63,8 +63,8 @@ describe("persistence + agent leaves — every emitted Cmd is constructor-built"
       [
         "drifted.ts",
         [
-          'return [next, [{ type: "snapshot_write", key, seq, at, payload }]];',
-          '/* prose quoting { type: "snapshot_load" } is not a hit */',
+          'return [next, [{ _tag: "snapshot_write", key, seq, at, payload }]];',
+          '/* prose quoting { _tag: "snapshot_load" } is not a hit */',
           'type Old = Cmd<"snapshot_load"> & { readonly key: string };',
         ].join("\n"),
       ],

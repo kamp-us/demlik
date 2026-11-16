@@ -11,16 +11,16 @@ import { defineMachine, type Transitions } from "../index";
 // === The ring: a parent and its children, answering each other ===
 
 export type RingChildState =
-  | { readonly type: "idle" }
-  | { readonly type: "working"; readonly answered: number }
-  | { readonly type: "finished"; readonly answered: number };
+  | { readonly _tag: "idle" }
+  | { readonly _tag: "working"; readonly answered: number }
+  | { readonly _tag: "finished"; readonly answered: number };
 
 export type RingChildMsg =
-  | { readonly type: "begin" }
-  | { readonly type: "answer"; readonly round: number };
+  | { readonly _tag: "begin" }
+  | { readonly _tag: "answer"; readonly round: number };
 
 export type RingChildCmd = {
-  readonly type: "report";
+  readonly _tag: "report";
   readonly id: string;
   readonly round: number;
 };
@@ -30,18 +30,18 @@ export const ringChild = (id: string, rounds: number) => {
   const update: Transitions<RingChildState, RingChildMsg, RingChildCmd> = {
     idle: {
       begin: () => [
-        { type: "working", answered: 0 },
-        [{ type: "report", id, round: 1 }],
+        { _tag: "working", answered: 0 },
+        [{ _tag: "report", id, round: 1 }],
       ],
     },
     working: {
       answer: (s, m) => {
         if (s.answered + 1 === rounds) {
-          return [{ type: "finished", answered: rounds }, []];
+          return [{ _tag: "finished", answered: rounds }, []];
         }
         return [
-          { type: "working", answered: s.answered + 1 },
-          [{ type: "report", id, round: m.round + 1 }],
+          { _tag: "working", answered: s.answered + 1 },
+          [{ _tag: "report", id, round: m.round + 1 }],
         ];
       },
     },
@@ -53,29 +53,29 @@ export const ringChild = (id: string, rounds: number) => {
       msg: {} as RingChildMsg,
       cmd: {} as RingChildCmd,
     },
-    init: (loaded) => [loaded ?? { type: "idle" }, []],
+    init: (loaded) => [loaded ?? { _tag: "idle" }, []],
     update,
   });
 };
 
 export type RingParentState =
   | {
-      readonly type: "listening";
+      readonly _tag: "listening";
       readonly reports: Readonly<Record<string, number>>;
     }
   | {
-      readonly type: "finished";
+      readonly _tag: "finished";
       readonly reports: Readonly<Record<string, number>>;
     };
 
 export type RingParentMsg = {
-  readonly type: "child_result";
+  readonly _tag: "child_result";
   readonly id: string;
   readonly round: number;
 };
 
 export type RingParentCmd = {
-  readonly type: "answer_back";
+  readonly _tag: "answer_back";
   readonly id: string;
   readonly round: number;
 };
@@ -88,7 +88,7 @@ export const ringParent = (ids: readonly string[], rounds: number) =>
       msg: {} as RingParentMsg,
       cmd: {} as RingParentCmd,
     },
-    init: (loaded) => [loaded ?? { type: "listening", reports: {} }, []],
+    init: (loaded) => [loaded ?? { _tag: "listening", reports: {} }, []],
     update: {
       listening: {
         child_result: (s, m) => {
@@ -98,8 +98,8 @@ export const ringParent = (ids: readonly string[], rounds: number) =>
           };
           const all = ids.every((id) => reports[id] === rounds);
           return [
-            { type: all ? "finished" : "listening", reports },
-            [{ type: "answer_back", id: m.id, round: m.round }],
+            { _tag: all ? "finished" : "listening", reports },
+            [{ _tag: "answer_back", id: m.id, round: m.round }],
           ];
         },
       },
@@ -110,15 +110,15 @@ export const ringParent = (ids: readonly string[], rounds: number) =>
 // === A receiver with a handler that can be held ===
 
 export type LineState =
-  | { readonly type: "open"; readonly folded: readonly string[] }
-  | { readonly type: "closed"; readonly folded: readonly string[] };
+  | { readonly _tag: "open"; readonly folded: readonly string[] }
+  | { readonly _tag: "closed"; readonly folded: readonly string[] };
 
 export type LineMsg =
-  | { readonly type: "hold" }
-  | { readonly type: "ping"; readonly name: string }
-  | { readonly type: "close" };
+  | { readonly _tag: "hold" }
+  | { readonly _tag: "ping"; readonly name: string }
+  | { readonly _tag: "close" };
 
-export type LineCmd = { readonly type: "wait" };
+export type LineCmd = { readonly _tag: "wait" };
 
 /**
  * `hold` runs a handler the test keeps waiting, so the line behind it does not
@@ -126,15 +126,15 @@ export type LineCmd = { readonly type: "wait" };
  */
 export const line = defineMachine({
   types: { model: {} as LineState, msg: {} as LineMsg, cmd: {} as LineCmd },
-  init: (loaded) => [loaded ?? { type: "open", folded: [] }, []],
+  init: (loaded) => [loaded ?? { _tag: "open", folded: [] }, []],
   update: {
     open: {
-      hold: (s) => [s, [{ type: "wait" }]],
+      hold: (s) => [s, [{ _tag: "wait" }]],
       ping: (s, m) => [{ ...s, folded: [...s.folded, m.name] }, []],
-      close: (s) => [{ type: "closed", folded: s.folded }, []],
+      close: (s) => [{ _tag: "closed", folded: s.folded }, []],
     },
     closed: {},
   },
 });
 
-export const ping = (name: string): LineMsg => ({ type: "ping", name });
+export const ping = (name: string): LineMsg => ({ _tag: "ping", name });

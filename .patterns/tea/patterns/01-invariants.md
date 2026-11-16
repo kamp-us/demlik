@@ -76,9 +76,9 @@ Ask each invariant in order. The moment one fails, name what you have:
 ```typescript
 // Invariant 1: update is pure — pattern-match on Msg, return [State, Cmd[]]
 function update(msg: Msg, state: Model): [Model, Cmd[]] {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "Roll":
-      return [state, [{ type: "generate_random", max: 6 }]]
+      return [state, [{ _tag: "generate_random", max: 6 }]]
     case "NewFace":
       return [{ dieFace: msg.face }, []]
   }
@@ -86,8 +86,8 @@ function update(msg: Msg, state: Model): [Model, Cmd[]] {
 
 // Invariant 2: Cmds are tagged data — serializable, inspectable, testable
 type Cmd =
-  | { type: "fetch_book" }
-  | { type: "generate_random"; max: number }
+  | { _tag: "fetch_book" }
+  | { _tag: "generate_random"; max: number }
 
 // Invariant 3: One interpreter — one record mapping Cmd types to real-world handlers
 const interpret = {
@@ -97,7 +97,7 @@ const interpret = {
 
 // Invariant 4: One Msg union — every event in one auditable type
 type Msg =
-  | { type: "Roll" }
-  | { type: "NewFace"; face: number }
-  | { type: "GotText"; result: Outcome<string, Error> }
+  | { _tag: "Roll" }
+  | { _tag: "NewFace"; face: number }
+  | { _tag: "GotText"; result: Outcome<string, Error> }
 ```

@@ -92,7 +92,7 @@ function replay(init, update, msgs) {
 expect(result.state).toEqual({ dieFace: 1 }) // unchanged — Roll issues a Cmd
 
 // Assert on effects — they never ran, you assert on the description
-expect(result.cmds).toEqual([{ type: "generate_random", max: 6 }])
+expect(result.cmds).toEqual([{ _tag: "generate_random", max: 6 }])
 ```
 
 The test never boots a runtime. It never calls interpret. It asserts on the
