@@ -471,7 +471,7 @@ describe("agentTool — what the parent's tool carries (#355)", () => {
       result: (output: AgentTurn) => Verdict.parse(JSON.parse(output.content)),
       namespace: (ctx: ParentCtx) => ctx.session,
       store: (key: string) => cell(new Map(), key),
-      content: () => [{ _tag: "text", text: "leaked" }],
+      content: () => [{ type: "text", text: "leaked" }],
     };
     // The spec type has no `content`, so only a caller past the types can set
     // one; `as never` stands in for that caller.

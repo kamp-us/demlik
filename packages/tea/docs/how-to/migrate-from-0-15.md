@@ -11,7 +11,7 @@ or reshaped and shows it before and after.
 - Sections 12 to 16 are 0.18.
 - 0.19 has no breaking change. A Model saved by an older release still loads.
 - Section 17 is the release after 0.27. It renames the key every Msg, Cmd, Sub
-  and State carries, and a Model saved before it does not load.
+  and State carries, and nothing converts a run saved before it.
 
 The short version:
 
@@ -619,6 +619,13 @@ The cells of `update` keep their names: a cell is still named for the variant
 it handles. A content part of an agent message keeps `type`
 (`{ type: "text", text }`), and so does a Jev question.
 
-There is no alias and nothing reads both keys. A Model, an event log or a trace
-saved by an older release does not load on this one: the saved rows carry
-`type`, and the store drops a row with no `_tag`. Start those runs fresh.
+There is no alias, nothing reads both keys, and nothing converts saved data.
+
+- An event row an older release saved carries `type`. The event-sourced
+  store's default parser drops a row with no `_tag`.
+- A saved Model is not rewritten. One with no discriminant inside loads as
+  before. One whose State or stored Msgs carry `type` no longer matches its
+  machine: a schema-checked store refuses it, and a permissive one loads it and
+  the first Msg finds no cell.
+
+Start those runs fresh, or convert them in your own `store.migrate`.

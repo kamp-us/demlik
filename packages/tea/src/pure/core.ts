@@ -1038,7 +1038,7 @@ export function lookupCell<S, M extends { _tag: string }, C extends Cmd>(
     string,
     Record<string, CellFn | undefined> | undefined
   >;
-  // The ONE sanctioned `state as unknown as { type }` read: the Transitions
+  // The ONE sanctioned `state as unknown as { _tag }` read: the Transitions
   // overload constrains S to `{ _tag: string }` at the `defineMachine`
   // boundary, but that constraint is erased on the runtime-facing `object`
   // here — every former per-site copy of this double-cast collapsed into

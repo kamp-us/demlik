@@ -116,7 +116,7 @@ function repository(): Fixture {
     JSON.stringify({
       name: "@fixture/demo",
       version: "0.1.0",
-      _tag: "module",
+      type: "module",
       exports: {
         ".": { import: "./dist/index.js" },
         "./package.json": "./package.json",

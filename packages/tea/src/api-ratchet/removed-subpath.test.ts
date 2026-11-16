@@ -99,7 +99,7 @@ function publish(
   ]);
   write(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "@fixture/demo", version: "0.1.0", _tag: "module", exports: exported }, null, 2)}\n`,
+    `${JSON.stringify({ name: "@fixture/demo", version: "0.1.0", type: "module", exports: exported }, null, 2)}\n`,
   );
   write(
     join(root, "MAINTAINING.md"),

@@ -579,7 +579,7 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
 
 describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
   const PROVIDER = {
-    blocks: [{ _tag: "thinking", thinking: "…", signature: "sig-abc" }],
+    blocks: [{ type: "thinking", thinking: "…", signature: "sig-abc" }],
   };
   const ASK_WITH_PROVIDER: AgentTurn = { ...ASK, provider: PROVIDER };
 

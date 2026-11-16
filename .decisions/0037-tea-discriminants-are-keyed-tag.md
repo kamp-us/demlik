@@ -23,7 +23,7 @@ Effect keys every tagged value by `_tag`: `Schema.TaggedStruct` and `Schema.Tagg
 1. The core constraint is `{ _tag: string }`. A Cmd's name still mints its answer Msgs (`<name>_ok`, `<name>_err`), which is why a Cmd and a Msg share one key.
 2. A shape that copies another system's format keeps that system's key. In tea these stay `type`: a content part and its source (`ContentPart`, `MediaSource`; Effect's own AI prompt parts are keyed `type` too), a Sentry-shaped `TraceBreadcrumb`, the DOM's event (`MinimalEvent`), Jev's HTTP contract, and typedoc's JSON.
 3. Only the key is renamed. A name that merely contains the word (`MsgType`, `msgType`, `acceptedTypes`) keeps its spelling.
-4. The break is hard, per [ADR 0016](./0016-removal-lands-in-a-minor-at-0x.md): no alias, no reader of both keys, no upcaster. A Model, an event log or a trace saved by an older release is not read. The event-sourced store's default parser answers `null` for a row with no string `_tag`, as it does for any row with no discriminant.
+4. The break is hard, per [ADR 0016](./0016-removal-lands-in-a-minor-at-0x.md): no alias, no reader of both keys, no upcaster. Nothing converts saved data. The event-sourced store's default parser answers `null` for a row with no string `_tag`, so an event row an older release wrote is dropped. A saved Model is not rewritten: one with no discriminant inside loads as before, and one whose State or stored Msgs carry `type` no longer matches its machine. A host that must keep such a run converts it in its own `store.migrate`.
 5. The rename was written by a script that asks the TypeScript checker who declared each key, and the pull request carries that script. A hand edit covers only what a checker cannot see: comments, pages, text in test expectations and untyped reads.
 
 **Banned.**
@@ -35,7 +35,7 @@ Effect keys every tagged value by `_tag`: `Schema.TaggedStruct` and `Schema.Tagg
 ## Consequences
 
 - Every machine written against an older release changes its Msg, Cmd, Sub and State literals and its reads. One minor changeset with a `**Breaking` callout records it.
-- A run saved before this release does not load after it. No deployment held saved runs when this was decided.
+- A run saved before this release does not continue after it unless its host converts it: its event rows are dropped, and a saved State keyed `type` matches no row of a state table. No deployment held saved runs when this was decided.
 - `Schema.TaggedStruct`, `Schema.TaggedUnion`, `Match.tag` and `Data.TaggedEnum` fit a tea Msg and a tea State with no wiring.
 - structure-sweep, backlog-sweep and code-graph do not change. Their `type` keys are `parseArgs` options, Jev shapes and a syntax tree, and none is a tea discriminant.
 - tea's unions keyed `kind` are not ruled on here.

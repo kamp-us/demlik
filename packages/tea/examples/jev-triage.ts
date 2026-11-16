@@ -199,7 +199,7 @@ function scriptedJev(
         model: request.model,
         answers: {
           category: {
-            _tag: "choice",
+            type: "choice",
             choice,
             confidence,
             probabilities: {
