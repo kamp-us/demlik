@@ -102,7 +102,7 @@ async function runId(cwd: string): Promise<string> {
 }
 
 interface Block {
-  readonly _tag: string;
+  readonly type: string;
 }
 
 interface Request {
@@ -127,7 +127,7 @@ async function recordedThinking(turn: number): Promise<Block> {
     turns: { content: Block[] }[];
   };
   const block = recorded.turns[turn]?.content.find(
-    (b) => b._tag === "thinking",
+    (b) => b.type === "thinking",
   );
   if (block === undefined)
     throw new Error(`fixture turn ${turn} has no thinking`);
@@ -193,7 +193,7 @@ describe(
       };
 
       expect(toParam({ role: "user", content: "hi" })).toEqual([
-        { role: "user", content: [{ _tag: "text", text: "hi" }] },
+        { role: "user", content: [{ type: "text", text: "hi" }] },
       ]);
       expect(
         toParam({
@@ -204,15 +204,15 @@ describe(
         {
           role: "user",
           content: [
-            { _tag: "text", text: "look" },
+            { type: "text", text: "look" },
             {
-              _tag: "image",
-              source: { _tag: "url", url: "https://example.com/a.png" },
+              type: "image",
+              source: { type: "url", url: "https://example.com/a.png" },
             },
             {
-              _tag: "document",
+              type: "document",
               source: {
-                _tag: "base64",
+                type: "base64",
                 media_type: "application/pdf",
                 data: "JVBERg==",
               },
@@ -234,13 +234,13 @@ describe(
           role: "user",
           content: [
             {
-              _tag: "tool_result",
+              type: "tool_result",
               tool_use_id: "s1",
               content: [
                 {
-                  _tag: "image",
+                  type: "image",
                   source: {
-                    _tag: "base64",
+                    type: "base64",
                     media_type: "image/jpeg",
                     data: "/9j/4AAQ",
                   },
@@ -259,7 +259,7 @@ describe(
           role: "user",
           content: [
             {
-              _tag: "tool_result",
+              type: "tool_result",
               tool_use_id: "n1",
               content: JSON.stringify(outcome),
               is_error: false,

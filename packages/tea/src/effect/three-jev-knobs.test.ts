@@ -182,7 +182,7 @@ function choiceReply(
       model: "jev-1",
       answers: {
         [id]: {
-          _tag: "choice",
+          type: "choice",
           choice,
           confidence: 0.9,
           probabilities: Object.fromEntries(

@@ -10,8 +10,8 @@ function nowTs(): string {
  *
  * `derive` lets you map a Msg to a richer entry (e.g. assign `kind: "sub"` to
  * subscription-triggered messages). Default: every msg becomes a `"msg"` row
- * tagged with `msg.type` (or `String(msg)` if it has no `type`). The substrate
- * uses `type` as the Msg discriminant — using `_tag` here would render every
+ * tagged with `msg._tag` (or `String(msg)` if it has no `_tag`). The substrate
+ * uses `_tag` as the Msg discriminant — using `type` here would render every
  * Msg as `[object Object]` in the inspector.
  *
  * `max` caps the buffer — oldest entries fall off (LIFO, newest first).
@@ -34,7 +34,7 @@ export function useMsgHistory<M>(
     opts.derive ??
     ((msg: M): MsgLogEntry => {
       const tag =
-        msg && typeof msg === "object" && "type" in msg
+        msg && typeof msg === "object" && "_tag" in msg
           ? String((msg as { _tag: unknown })._tag)
           : String(msg);
       return { ts: now(), kind: "msg", text: tag };

@@ -192,7 +192,7 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
   it("on('TurnSettled', …) only receives TurnSettled — typed narrowing", async () => {
     const runtime = await wiredRuntime();
     const seenTypes = new Set<string>();
-    // The handler is typed `(e: Extract<AgentEvent, {type:'TurnSettled'}>)`, so
+    // The handler is typed `(e: Extract<AgentEvent, {_tag:'TurnSettled'}>)`, so
     // `e.turn` is reachable and `e.callId` / `e.output` are NOT on the type. We
     // additionally assert at runtime that no other event leaks into this bucket.
     runtime.on("TurnSettled", (e) => {
@@ -312,7 +312,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
     // A consumer built ENTIRELY on the semantic channel. The only strings it
     // ever matches are public AgentEvent types — the private Msg names appear
     // nowhere in this closure (the type system also forbids them: `on`'s key is
-    // `AgentEvent["type"]`, which does not include `resilient_run_ok`).
+    // `AgentEvent["_tag"]`, which does not include `resilient_run_ok`).
     const summary: string[] = [];
     const fold = (e: AgentEvent<string>): void => {
       switch (e._tag) {

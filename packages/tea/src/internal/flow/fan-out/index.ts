@@ -33,8 +33,8 @@
  *   const fan = createFanOut<Url, Report>({
  *     concurrency: 4,
  *     idOf: (url) => url,                                 // stable, pure identity
- *     of: (url) => ({ type: "crawl", url }),              // the per-item effect, as data
- *     join: (results) => ({ type: "report_done", results }),
+ *     of: (url) => ({ _tag: "crawl", url }),              // the per-item effect, as data
+ *     join: (results) => ({ _tag: "report_done", results }),
  *   });
  *
  *   // in `update`:

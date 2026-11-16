@@ -54,8 +54,8 @@ describe("composed-flow families — every emitted Cmd is constructor-built", ()
       [
         "drifted.ts",
         [
-          'return [state, [{ type: "intake:replay", key, result }]];',
-          '/* prose quoting { type: "intake:process" } is not a hit */',
+          'return [state, [{ _tag: "intake:replay", key, result }]];',
+          '/* prose quoting { _tag: "intake:process" } is not a hit */',
           'interface Old extends Cmd<"intake:process"> {}',
         ].join("\n"),
       ],

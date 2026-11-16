@@ -233,15 +233,15 @@ describe("the retained investigation case", { timeout: 30_000 }, () => {
   it.each([
     [
       "shape",
-      '{"seq":1,"record":{"version":1,"msg":{"type":"agent_start","runId":42,"at":1}}}\n',
+      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":42,"at":1}}}\n',
     ],
     [
       "sequence",
-      '{"seq":2,"record":{"version":1,"msg":{"type":"agent_start","runId":"corrupt","at":1}}}\n',
+      '{"seq":2,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"corrupt","at":1}}}\n',
     ],
     [
       "owner",
-      '{"seq":1,"record":{"version":1,"msg":{"type":"agent_start","runId":"foreign","at":1}}}\n',
+      '{"seq":1,"record":{"version":1,"msg":{"_tag":"agent_start","runId":"foreign","at":1}}}\n',
     ],
   ])("refuses a corrupt persisted %s without overwriting it", async (name, bytes) => {
     const journal = fileJournal(join(work, `corrupt-${name}`), parseRecord);

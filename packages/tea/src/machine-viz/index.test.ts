@@ -4,7 +4,7 @@ import { toMermaid } from "./index";
 
 // ---------------------------------------------------------------------------
 // Transitions-form fixture: a traffic light. State is a discriminated union
-// over the active phase; one cell per (state.type × msg.type).
+// over the active phase; one cell per (state._tag × msg._tag).
 // ---------------------------------------------------------------------------
 type LightState = { _tag: "red" } | { _tag: "green" } | { _tag: "yellow" };
 type LightMsg = { _tag: "go" } | { _tag: "caution" } | { _tag: "stop" };
@@ -40,7 +40,7 @@ const trafficLight = defineMachine({
 
 // ---------------------------------------------------------------------------
 // Reducer-form fixture: a counter. State is a plain record (no phase union);
-// update is a flat dispatch table keyed by msg.type.
+// update is a flat dispatch table keyed by msg._tag.
 // ---------------------------------------------------------------------------
 type CounterState = { count: number };
 type CounterMsg =
@@ -63,7 +63,7 @@ const counter = defineMachine({
 });
 
 describe("toMermaid — Transitions form", () => {
-  it("emits stateDiagram-v2 with every state.type as a node", () => {
+  it("emits stateDiagram-v2 with every state._tag as a node", () => {
     const out = toMermaid(trafficLight);
     expect(out).toContain("stateDiagram-v2");
     expect(out).toContain("  red");
@@ -155,7 +155,7 @@ describe("toMermaid — subscriptions annotation", () => {
       {
         _tag: "tick",
         deps: (state) =>
-          state.type === "running" ? { phase: "running" } : null,
+          state._tag === "running" ? { phase: "running" } : null,
       },
     ],
   });

@@ -14,7 +14,7 @@ import { run } from "./promise";
 // ("reducer" | "transitions") ONCE at construction; `run`, `replay`, and the
 // `withX` wrappers read it via `formOf` instead of re-deriving it structurally.
 // These tests pin the tag mechanism: it is set, it is non-enumerable (never
-// serializes / never collides with a Msg.type key), and it is authoritative
+// serializes / never collides with a Msg._tag key), and it is authoritative
 // over the structural heuristic — so a reducer whose cell is an
 // object-with-a-call no longer flips the form to "transitions".
 // ───────────────────────────────────────────────────────────────────────────
@@ -132,16 +132,16 @@ describe("run and replay agree on the tagged form (#57)", () => {
   it("run dispatches a tagged Transitions machine correctly", async () => {
     const rt = await run(transitionsMachine(), { ctx: undefined }).ready;
     await rt.dispatch({ _tag: "go" });
-    expect(rt.getState().type).toBe("green");
+    expect(rt.getState()._tag).toBe("green");
     await rt.dispatch({ _tag: "stop" });
-    expect(rt.getState().type).toBe("red");
+    expect(rt.getState()._tag).toBe("red");
   });
 
   it("replay folds a tagged Transitions machine via the same tag", () => {
     const out = replay(transitionsMachine(), {
       msgs: [{ _tag: "go" }, { _tag: "stop" }, { _tag: "go" }] as LightMsg[],
     });
-    expect(out.state.type).toBe("green");
+    expect(out.state._tag).toBe("green");
   });
 
   it("replay folds a tagged Reducer machine via the same tag", () => {

@@ -34,7 +34,7 @@ export type { TellAnswer } from "../internal/engine/loop";
  * tea has no lock-up detector. Use `tell` there.
  *
  * ```ts
- * const answer = tell(parent, parentRun, { type: "child_result", id });
+ * const answer = tell(parent, parentRun, { _tag: "child_result", id });
  * ```
  */
 export function tell<

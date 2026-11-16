@@ -47,11 +47,11 @@ type Model = {
 
 // CORRECT — only valid states exist
 type Model =
-  | { type: "idle" }
-  | { type: "loading" }
-  | { type: "success"; data: Data }
-  | { type: "failure"; error: Error }
-  | { type: "submitted" }
+  | { _tag: "idle" }
+  | { _tag: "loading" }
+  | { _tag: "success"; data: Data }
+  | { _tag: "failure"; error: Error }
+  | { _tag: "submitted" }
 ```
 
 ## The corollary: each phase carries only its own data
@@ -68,12 +68,12 @@ type Model = {
 
 // CORRECT — data lives where it belongs
 type Model =
-  | { type: "loading" }
-  | { type: "ready"; data: Data }
-  | { type: "error"; error: Error }
+  | { _tag: "loading" }
+  | { _tag: "ready"; data: Data }
+  | { _tag: "error"; error: Error }
 ```
 
-Now `state.data` is only accessible when `state.type === "ready"`. TypeScript
+Now `state.data` is only accessible when `state._tag === "ready"`. TypeScript
 narrows it. No `if (state.data)` guards needed.
 
 ## Elm's `viewValidation` — validation as a function, not state

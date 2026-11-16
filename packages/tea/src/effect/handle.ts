@@ -67,7 +67,7 @@ export interface EffectBootingRuntime<
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
   on<K extends E["_tag"]>(
     type: K,
     handler: (event: Extract<E, { _tag: K }>) => void,

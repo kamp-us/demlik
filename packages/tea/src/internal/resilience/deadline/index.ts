@@ -347,7 +347,7 @@ export function deadlineMsgType<N extends string | undefined>(
  *
  * This is how a battery arms a whole deadline list through the engine's
  * built-in `timer` instead of a `deadline` runner: a machine declares ONE
- * `{ type: "timer", deps: (s) => nextTimer(list(s), clock(s)) }` entry. The
+ * `{ _tag: "timer", deps: (s) => nextTimer(list(s), clock(s)) }` entry. The
  * timer fires the soonest deadline's `DeadlineExceeded` Msg; the transition it
  * causes drops that deadline from the list, and the next soonest is armed.
  *

@@ -7,7 +7,7 @@ ask it that question before dispatching.
 
 ## The two forms
 
-**Reducer form** is a flat record keyed by `msg.type`. Every message type gets
+**Reducer form** is a flat record keyed by `msg._tag`. Every message type gets
 exactly one cell, whatever the Model looks like:
 
 ```ts
@@ -17,21 +17,21 @@ const update: Reducer<Model, Msg, Cmds> = {
 };
 ```
 
-**Transitions form** is a two-dimensional table keyed by `state.type`, then
-`msg.type`. It is available only when your Model is a discriminated union — when
+**Transitions form** is a two-dimensional table keyed by `state._tag`, then
+`msg._tag`. It is available only when your Model is a discriminated union — when
 the machine has a phase:
 
 ```ts
 const update: Transitions<State, Msg, Cmds> = {
   idle: {
-    insert_coin: () => [{ type: "brewing", ms: 0 }, []],
+    insert_coin: () => [{ _tag: "brewing", ms: 0 }, []],
   },
   brewing: {
     tick: (s) =>
-      s.ms >= 900 ? [{ type: "done", cups: 1 }, []] : [{ ...s, ms: s.ms + 100 }, []],
+      s.ms >= 900 ? [{ _tag: "done", cups: 1 }, []] : [{ ...s, ms: s.ms + 100 }, []],
   },
   done: {
-    collect: () => [{ type: "idle" }, []],
+    collect: () => [{ _tag: "idle" }, []],
   },
 };
 ```
@@ -57,7 +57,7 @@ a guard.
 
 ```ts
 // The shape a required cell forces. The refusal is now invisible.
-collect: (s) => (s.type === "done" ? [{ type: "idle" }, []] : [s, []]),
+collect: (s) => (s._tag === "done" ? [{ _tag: "idle" }, []] : [s, []]),
 ```
 
 Two things go wrong there. The guard is indistinguishable from a bug — nothing
@@ -76,14 +76,14 @@ not silently ignored. Dispatching it raises `NoCellError`, and the error carries
 the accepted set:
 
 ```ts
-acceptedTypes(machine, { type: "done", cups: 1 }); // ["collect"]
+acceptedTypes(machine, { _tag: "done", cups: 1 }); // ["collect"]
 
-applyCell(machine, { type: "done", cups: 1 }, { type: "tick" });
+applyCell(machine, { _tag: "done", cups: 1 }, { _tag: "tick" });
 // NoCellError: no cell for msg "tick" in state "done".
 //              This state accepts: "collect"
 
 // The same refusal as a value, for a caller that wants to branch on it:
-const r = tryApplyCell(machine, { type: "done", cups: 1 }, { type: "tick" });
+const r = tryApplyCell(machine, { _tag: "done", cups: 1 }, { _tag: "tick" });
 r._tag === "Err" && r.error.acceptedTypes; // ["collect"]
 ```
 

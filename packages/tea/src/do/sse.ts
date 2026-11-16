@@ -130,14 +130,14 @@ export function sseHub<E>(): SseHub<E> {
  * } from "@demlik/tea/do";
  *
  * type MyState = { readonly turns: number };
- * type MyMsg = { type: "turn_done"; turn: number } | { type: "tick" };
+ * type MyMsg = { _tag: "turn_done"; turn: number } | { _tag: "tick" };
  * type MyEvent = { kind: "turn"; turn: number };
  * declare const runtime: Runtime<MyState, MyMsg>;
  *
  * const hub = sseHub<MyEvent>();
  * const registry = projectionRegistry<MyState, MyMsg>();
  * registry.register(sseProjection(hub, (msg: MyMsg | null) =>
- *   msg?.type === "turn_done" ? { kind: "turn", turn: msg.turn } : null,
+ *   msg?._tag === "turn_done" ? { kind: "turn", turn: msg.turn } : null,
  * ));
  * driveProjections(registry, runtime); // SSE is now one projection
  * // /sse route unchanged:
@@ -201,7 +201,7 @@ export function sseProjection<Model, Msg extends { _tag: string }, E>(
 
 /**
  * Wire an {@link SseHub} to a runtime's semantic {@link AgentEvent} stream.
- * For each event `type` the runtime can emit, subscribes via `runtime.on` and
+ * For each event `_tag` the runtime can emit, subscribes via `runtime.on` and
  * pushes `toFrame(event)` at the hub (returning `null` skips that event). The
  * runtime MUST have been built with `run(machine, { events: agentEvents() })`,
  * which is what makes `on` deliver the `AgentEvent`s. Returns a cleanup that
@@ -220,11 +220,11 @@ export function sseProjection<Model, Msg extends { _tag: string }, E>(
  *
  * type MyFrame = { kind: "ended"; status: AgentEndedStatus };
  * // Built with `run(machine, { ctx, events: agentEvents() }).ready`.
- * declare const runtime: Runtime<unknown, { type: string }, AgentEvent<string>>;
+ * declare const runtime: Runtime<unknown, { _tag: string }, AgentEvent<string>>;
  *
  * const hub = sseHub<MyFrame>();
  * const off = sseFromAgentEvents(runtime, hub, (e) =>
- *   e.type === "RunDone" ? { kind: "ended", status: e.status } : null,
+ *   e._tag === "RunDone" ? { kind: "ended", status: e.status } : null,
  * );
  * // /sse route unchanged:
  * const sseRoute = (): Response => hub.open();

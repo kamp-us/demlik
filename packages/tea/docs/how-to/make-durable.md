@@ -18,8 +18,8 @@ export interface State {
 }
 
 export type Msg =
-  | { readonly type: "start"; readonly total: number }
-  | { readonly type: "chunk"; readonly size: number };
+  | { readonly _tag: "start"; readonly total: number }
+  | { readonly _tag: "chunk"; readonly size: number };
 
 /** A download that counts the bytes it has received until it has them all. */
 export const downloader = defineMachine({
@@ -88,8 +88,8 @@ import { run } from "@demlik/tea/promise";
 const box = { snapshot: null as string | null };
 
 const a = await run(downloader, { store: memStore(box) }).ready;
-await a.dispatch({ type: "start", total: 3 });
-await a.dispatch({ type: "chunk", size: 1 }); // phase is now "downloading"
+await a.dispatch({ _tag: "start", total: 3 });
+await a.dispatch({ _tag: "chunk", size: 1 }); // phase is now "downloading"
 await a.stop(); // box.snapshot now holds the persisted Model
 ```
 
@@ -172,7 +172,7 @@ import { StoreConflictError } from "@demlik/tea";
 
 let takenOver = false;
 try {
-  await first.dispatch({ type: "start", total: 3 }); // A's next save
+  await first.dispatch({ _tag: "start", total: 3 }); // A's next save
 } catch (err) {
   if (!(err instanceof StoreConflictError)) throw err;
   takenOver = true; // another process owns this run now: stop dispatching

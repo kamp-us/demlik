@@ -419,10 +419,10 @@ describe("paginator properties", () => {
 // green.
 //
 // The machine's state IS the paginator walk; each Msg is a knob op:
-//   { type: "start" }                       → start
-//   { type: "page", count, next }           → recordPage
-//   { type: "drain", n }                    → drain
-//   { type: "resume" }                      → resume
+//   { _tag: "start" }                       → start
+//   { _tag: "page", count, next }           → recordPage
+//   { _tag: "drain", n }                    → drain
+//   { _tag: "resume" }                      → resume
 // ===========================================================================
 
 type WalkMsg =

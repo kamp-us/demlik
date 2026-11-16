@@ -450,7 +450,7 @@ export function toolRouter<T extends AnyToolDef>(
     [rejected.cmdType]: async (cmd: ToolRejectedCmd) => Outcome.err(cmd.error),
   };
   for (const t of tools) handlers[t.cmdType] = t.interpret;
-  // Each handler is the def's own typed `interpret`, keyed by the `type` it
+  // Each handler is the def's own typed `interpret`, keyed by the `_tag` it
   // builds; the record is assembled per name, which the mapped type cannot see.
   const interpret = handlers as unknown as Interpret<
     ToolMsg<T>,
@@ -592,7 +592,7 @@ export function fanOutInterpret<T extends AnyToolDef>(
 /** The release chain carries no value and must not break — both arms land here. */
 function swallow(): void {}
 
-// The two settled arms share one shape once the `type` has been matched
+// The two settled arms share one shape once the `_tag` has been matched
 // against the router's own def; `value` / `error` are read per arm.
 type SettledShape<R> = {
   readonly cmd: { readonly callId: string };

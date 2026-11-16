@@ -530,7 +530,7 @@ function buildBuggyMachine(): ResearchMachine {
     toolInterpret: toolInterpret(),
   }).machine;
 
-  // The agent's `update` is a flat `Reducer` (one cell per Msg.type). Spread it,
+  // The agent's `update` is a flat `Reducer` (one cell per Msg._tag). Spread it,
   // then override the `resilient_run_ok` cell to plant the leak.
   const goodUpdate = good.update as Reducer<
     ResearchState,

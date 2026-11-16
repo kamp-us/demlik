@@ -419,7 +419,7 @@ export type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef<A>>>;
  * the same #67 ledger, with its own delivery id — but the consumer's interpret
  * cell performs the inverse `compensation` payload, and the result is dispatched
  * back as a {@link CompensationOk}/{@link CompensationErr} carrying the SAME id.
- * Distinguished by `type` so the consumer routes forward vs. inverse work to the
+ * Distinguished by `_tag` so the consumer routes forward vs. inverse work to the
  * right port, and the re-emit-on-wake stays type-correct.
  */
 export function workflowCompensationDef<A>() {
@@ -505,7 +505,7 @@ export type WorkflowMsg<R, F> =
   | CompensationOk
   | CompensationErr<F>;
 
-/** Every `type` discriminant tag of the {@link WorkflowMsg} union. */
+/** Every `_tag` discriminant tag of the {@link WorkflowMsg} union. */
 export type WorkflowMsgType = WorkflowMsg<unknown, unknown>["_tag"];
 
 /**

@@ -43,7 +43,7 @@ const okBody = {
   model: "jev-1",
   answers: {
     category: {
-      _tag: "choice",
+      type: "choice",
       choice: "dining",
       probabilities: { groceries: 0.1, dining: 0.9 },
       confidence: 0.9,
@@ -659,7 +659,7 @@ describe("createJevAsk — a caller may name a question `_tag`", () => {
 
   const tagAnswers = {
     _tag: {
-      _tag: "choice",
+      type: "choice",
       choice: "dining",
       probabilities: { groceries: 0.1, dining: 0.9 },
       confidence: 0.9,

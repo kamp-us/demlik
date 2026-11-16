@@ -67,10 +67,10 @@ export type Branded<T> = T & { readonly [ReducerBrand]: true };
  * ```ts
  * import { absurd } from "@demlik/tea";
  *
- * type Msg = { type: "a" } | { type: "b" };
+ * type Msg = { _tag: "a" } | { _tag: "b" };
  *
  * function label(msg: Msg): string {
- *   switch (msg.type) {
+ *   switch (msg._tag) {
  *     case "a": return "A";
  *     case "b": return "B";
  *     default: return absurd(msg);  // compile error if a "c" is added
@@ -207,7 +207,7 @@ export type RuntimeErrorPhase =
 export interface TelemetryEvent {
   /** This run's applied transitions so far, counted from 1. Boot is not one. */
   readonly seq: number;
-  /** The `Msg.type` that drove the transition. */
+  /** The `Msg._tag` that drove the transition. */
   readonly msgType: string;
   /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
   readonly at: number;
@@ -978,7 +978,7 @@ export interface RunHandle<
   ): () => void;
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
-  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  /** Subscribe to the semantic event of `_tag` the run's `events` projects. */
   on<K extends E["_tag"]>(
     type: K,
     handler: (event: Extract<E, { _tag: K }>) => void,
@@ -1098,7 +1098,7 @@ export type EngineRun<
  * `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
  * for every applied transition; boot is delivered via `onBoot` instead, so
  * `observe`'s `msg` is total (never `null`). `on(type, handler)` is the semantic
- * event channel: only the public, `type`-narrowed events a machine projects,
+ * event channel: only the public, `_tag`-narrowed events a machine projects,
  * never its private Msg vocabulary. `E` defaults to `never` (no projector → `on`
  * uncallable).
  */
@@ -1140,8 +1140,8 @@ export interface BootingRuntime<
    */
   onBoot(handler: (state: S) => void): () => void;
   /**
-   * Subscribe to a SEMANTIC event of `type`. The handler receives exactly the
-   * `E` member whose `type` matches `K`, so a consumer never touches another
+   * Subscribe to a SEMANTIC event of `_tag`. The handler receives exactly the
+   * `E` member whose `_tag` matches `K`, so a consumer never touches another
    * event's shape and never references the machine's PRIVATE Msg names. Multiple
    * handlers per type; fanout is synchronous and throw-isolated. Fires only when
    * the machine's `events` projector (wired on `run`) emits that type.
@@ -1294,7 +1294,7 @@ export interface Runtime<
 // The one shape that still needs help is a zero-parameter `init` returning a
 // fresh state literal on a DISCRIMINATED Model: with no parameter the function
 // is not context-sensitive, so it is checked before `S` is fixed and
-// `{ type: "idle" }` widens to `{ type: string }`. Take `loaded` (which the
+// `{ _tag: "idle" }` widens to `{ _tag: string }`. Take `loaded` (which the
 // rehydrate contract wants named anyway) or name the initial state as a const.
 //
 // `types.cmd` / `types.sub` carry the hand-written unions — a machine that
@@ -1373,7 +1373,7 @@ export function defineMachine<
 // `D` is a UNION of defs (not a tuple), so `cmds: [fetch, save]` infers
 // `typeof fetch | typeof save` and an explicit `defineMachine<S, M, typeof fetch
 // | typeof save, U, Ctx>` reads the same way. Declared first: a def has no
-// `type` field, so a Cmd union never satisfies `D extends AnyCmdDef`, and a
+// `_tag` field, so a Cmd union never satisfies `D extends AnyCmdDef`, and a
 // def never satisfies `C extends Cmd` — the two families cannot cross-match.
 export function defineMachine<
   S,
@@ -1401,9 +1401,9 @@ export function defineMachine<
     update: Reducer<S, M | Settled<D>, CmdOf<D>>;
   },
 ): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
-// Transitions-form overload — 2D table keyed by State.type then Msg.type.
+// Transitions-form overload — 2D table keyed by State._tag then Msg._tag.
 // Declared before the reducer form (more specific). The S constraint is a
-// conditional (`S extends { type: string } ? Transitions<...> : never`) not a
+// conditional (`S extends { _tag: string } ? Transitions<...> : never`) not a
 // generic-parameter constraint, so `S` stays unconstrained at the signature and
 // the public `Parameters<typeof defineMachine<NonDiscriminatedS, ...>>` pattern
 // skips this overload (update becomes `never`) instead of failing.
@@ -1420,7 +1420,7 @@ export function defineMachine<
     update: [S] extends [{ _tag: string }] ? Transitions<S, M, C> : never;
   },
 ): Machine<S, M, C, U, Ctx>;
-// Reducer-form overload — flat record keyed by Msg.type.
+// Reducer-form overload — flat record keyed by Msg._tag.
 export function defineMachine<
   S,
   M extends { _tag: string },
@@ -1446,7 +1446,7 @@ export function defineMachine<
   assertDistinctCmdNames(m.cmds ?? []);
   // Tag the update form ONCE, here at the typed construction boundary, so no
   // downstream reader re-derives it structurally. Non-enumerable so it does not
-  // serialize, show up in `Object.keys`, or collide with a Msg.type key.
+  // serialize, show up in `Object.keys`, or collide with a Msg._tag key.
   // Idempotent under re-wrap (`defineMachine(defineMachine(m))`).
   if (m.__form === undefined) {
     Object.defineProperty(m, "__form", {
@@ -1504,7 +1504,7 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
  * Recorded traces instead use `replayTrace` to fold their captured post-init State.
  *
  * `subs` is each `machine.subs` entry that is on at the final state, as its
- * runner would see it: `{ id, type, deps }`, the id derived exactly as the
+ * runner would see it: `{ id, _tag, deps }`, the id derived exactly as the
  * engine derives it, deduplicated by id the way the engine runs them. So a test
  * asserts "the retry timer is armed in `waiting`" without wiring a runner.
  */
@@ -1650,7 +1650,7 @@ export function wrapDetached<
  * instead of a throw.
  *
  * `Ok` carries the handler's `[nextState, cmds]` verbatim; `Err` carries the same
- * `NoCellError` (msg.type + state name + accepted set) `applyCell` would have
+ * `NoCellError` (msg._tag + state name + accepted set) `applyCell` would have
  * thrown — both read one `lookupCell`, so neither can under-report. Dispatch
  * inside `run` keeps using the throwing `applyCell` — this is for callers that
  * step a machine themselves.
@@ -1683,7 +1683,7 @@ export interface FoldRefusal<M> {
   readonly index: number;
   /** The offending Msg itself — so the caller can print it, not just point. */
   readonly msg: M;
-  /** The underlying cell-lookup failure: msg.type + state name + accepted set. */
+  /** The underlying cell-lookup failure: msg._tag + state name + accepted set. */
   readonly error: NoCellError;
 }
 
@@ -1692,7 +1692,7 @@ export interface FoldRefusal<M> {
  * INCLUDING which message failed.
  *
  * The motivating use is "this persisted log does not replay — tell the user
- * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg.type
+ * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg._tag
  * and the state, but a log usually contains that type many times, so the
  * INDEX is the load-bearing fact. The fold stops at the first refusal (state
  * past that point is not defined) and returns it.

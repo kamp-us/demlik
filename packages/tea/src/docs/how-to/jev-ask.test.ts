@@ -218,7 +218,7 @@ export function fakeJev(
         model: "jev-1",
         answers: {
           category: {
-            _tag: "choice",
+            type: "choice",
             choice,
             confidence,
             probabilities: {
@@ -391,7 +391,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run", () 
         model: "jev-1",
         answers: {
           review: {
-            _tag: "choice",
+            type: "choice",
             choice: "flag",
             confidence: 0.8,
             probabilities: { fine: 0.2, flag: 0.8 },

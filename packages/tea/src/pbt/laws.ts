@@ -47,12 +47,12 @@ function verdict(
  * import type { Machine } from "@demlik/tea";
  * import { foldEvents, lawTerminates } from "@demlik/tea/pbt";
  *
- * type State = { type: "idle" } | { type: "done" };
- * type Msg = { type: "finish" };
+ * type State = { _tag: "idle" } | { _tag: "done" };
+ * type Msg = { _tag: "finish" };
  * declare const machine: Machine<State, Msg, never, never, object>;
  *
- * const fold = foldEvents(machine, {}, null, [{ type: "finish" }]);
- * lawTerminates(fold, (s) => s.type === "done"); // null when it holds
+ * const fold = foldEvents(machine, {}, null, [{ _tag: "finish" }]);
+ * lawTerminates(fold, (s) => s._tag === "done"); // null when it holds
  * ```
  *
  * @experimental
@@ -82,10 +82,10 @@ export function lawTerminates<S, M, C>(
  * import { foldEvents, lawInvariant } from "@demlik/tea/pbt";
  *
  * type State = { readonly n: number };
- * type Msg = { type: "inc" };
+ * type Msg = { _tag: "inc" };
  * declare const machine: Machine<State, Msg, never, never, object>;
  *
- * const fold = foldEvents(machine, {}, null, [{ type: "inc" }]);
+ * const fold = foldEvents(machine, {}, null, [{ _tag: "inc" }]);
  * lawInvariant(fold, ({ prev, next }) => next.n > prev.n || "n did not grow");
  * ```
  *
@@ -121,12 +121,12 @@ export function lawInvariant<S, M, C>(
  * import type { Machine } from "@demlik/tea";
  * import { foldEvents, lawTrace } from "@demlik/tea/pbt";
  *
- * type State = { type: "open" } | { type: "done" };
- * type Msg = { type: "close" };
+ * type State = { _tag: "open" } | { _tag: "done" };
+ * type Msg = { _tag: "close" };
  * declare const machine: Machine<State, Msg, never, never, object>;
  *
- * const fold = foldEvents(machine, {}, null, [{ type: "close" }]);
- * lawTrace(fold, (steps, final) => final.type !== "done" || steps.length > 0);
+ * const fold = foldEvents(machine, {}, null, [{ _tag: "close" }]);
+ * lawTrace(fold, (steps, final) => final._tag !== "done" || steps.length > 0);
  * ```
  *
  * @experimental

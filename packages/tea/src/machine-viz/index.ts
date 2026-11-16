@@ -42,8 +42,8 @@ export { safeId, safeLabel } from "./mermaid-id";
  * `samples` is the lever that turns STRUCTURAL edges into RESOLVED edges. For a
  * Transitions machine, providing a sample state for `stateType` AND a sample
  * msg for `msgType` lets us execute `update[stateType][msgType](state, msg)` and
- * read the real target `next.type`. Sample maps are keyed by the discriminant
- * string (`state.type` / `msg.type`).
+ * read the real target `next._tag`. Sample maps are keyed by the discriminant
+ * string (`state._tag` / `msg._tag`).
  *
  * `samples.ctx` is the argument to `init(null, ctx)` — provide it to draw the
  * `[*] -->` initial-state edge. Omitted ⇒ no init edge (annotated as such),
@@ -51,9 +51,9 @@ export { safeId, safeLabel } from "./mermaid-id";
  */
 export interface MachineVizOptions<S, M> {
   samples?: {
-    /** Sample state per `state.type` — unlocks RESOLVED edges + sub annotations. */
+    /** Sample state per `state._tag` — unlocks RESOLVED edges + sub annotations. */
     states?: Partial<Record<string, S>>;
-    /** Sample msg per `msg.type` — unlocks RESOLVED edges. */
+    /** Sample msg per `msg._tag` — unlocks RESOLVED edges. */
     msgs?: Partial<Record<string, M>>;
     /** Ctx for `init(null, ctx)` — unlocks the `[*] -->` initial-state edge. */
     ctx?: unknown;
@@ -78,7 +78,7 @@ type Edge =
  * Render a `Machine` as a Mermaid `stateDiagram-v2` string.
  *
  * - **Transitions form** (`update` is a record-of-records): nodes are the
- *   `state.type` keys; each `(stateType × msgType)` cell becomes an edge. With
+ *   `state._tag` keys; each `(stateType × msgType)` cell becomes an edge. With
  *   samples for both, the edge is RESOLVED by executing the (pure) cell. Without
  *   samples it is STRUCTURAL — a `from --> from : msg?` self-loop (the `?`
  *   suffix marks "target unresolved"). A legend note documents the distinction.
@@ -86,7 +86,7 @@ type Edge =
  *
  * - **Reducer form** (`update` values are functions): there is no static phase
  *   graph (state is not a discriminated union over phases). We emit a single
- *   node listing the handled `msg.type`s and an honest note saying so. No edges
+ *   node listing the handled `msg._tag`s and an honest note saying so. No edges
  *   are invented.
  *
  * Output is deterministic for the same input (keys iterated in insertion order,
@@ -102,7 +102,7 @@ export function toMermaid<
   machine: Machine<S, M, C, U, Ctx>,
   // `NoInfer` pins S/M to the `machine` argument so sample object literals in
   // `opts` are CHECKED against the machine's State/Msg unions rather than
-  // driving inference (which would widen `{ type: "open" }` to `{ type: string }`
+  // driving inference (which would widen `{ _tag: "open" }` to `{ _tag: string }`
   // and collide with the machine's discriminated union).
   opts: MachineVizOptions<NoInfer<S>, NoInfer<M>> = {},
 ): string {
@@ -162,7 +162,7 @@ function emitReducer(machine: { update: unknown }, lines: string[]): void {
   // The note IS the design honesty: no edges, because reducer-form state is not
   // a discriminated union over phases — there is no static target to draw.
   lines.push("  note right of ReducerMachine");
-  lines.push("    Reducer-form machine: flat dispatch keyed by msg.type.");
+  lines.push("    Reducer-form machine: flat dispatch keyed by msg._tag.");
   lines.push(
     "    No phase graph — state is not a discriminated union over phases.",
   );
@@ -206,7 +206,7 @@ function emitTransitions<
   }
 
   // Init edge — only resolvable with a ctx sample. `init(null, ctx)` is pure
-  // (invariant 2: fresh-boot branch returns a starting state). Read `next.type`.
+  // (invariant 2: fresh-boot branch returns a starting state). Read `next._tag`.
   if (ctx.hasCtx) {
     const [initState] = machine.init(null, ctx.ctx as Ctx);
     const initType = (initState as unknown as { _tag: string })._tag;

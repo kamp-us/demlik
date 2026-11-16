@@ -13,8 +13,8 @@ import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Subs as data (#279, #251 R1.4, spike #252). A machine declares
-// `subs: [{ type, deps(state) }]`; the engine derives the id
-// (`structuralHash({ type, deps })`) and the gate (`deps` nullish ⇒ off), and
+// `subs: [{ _tag, deps(state) }]`; the engine derives the id
+// (`structuralHash({ _tag, deps })`) and the gate (`deps` nullish ⇒ off), and
 // runs each Sub through the `subscribe[type]` runner handed to `run` — or the
 // engine's built-in `timer`. What is pinned here is the reconcile contract
 // (start / leave alone / restart / stop), the built-in timer, and a user runner

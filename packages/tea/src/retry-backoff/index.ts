@@ -20,7 +20,7 @@
  *   const retry = recordFailure(state.retry, msg.error);
  *   if (!shouldRetry(retry, policy)) return [toGaveUp(state), []];
  *   const delayMs = nextDelayMs(retry, policy);              // pure: rng injected at call site
- *   return [{ ...state, retry }, [{ type: "ScheduleRetry", delayMs, into: TimerFiredRetry }]];
+ *   return [{ ...state, retry }, [{ _tag: "ScheduleRetry", delayMs, into: TimerFiredRetry }]];
  *
  * and the same wiring under a wall-clock outage budget, where the failure Msg
  * carries the instant it was observed:

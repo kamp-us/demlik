@@ -13,9 +13,9 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 // #276 — the runtime cell-lookup guard + the subscribe vertical tracer.
 //
-// (a) An unknown `msg.type` (wire data reaching dispatch) or a type-bypassed
+// (a) An unknown `msg._tag` (wire data reaching dispatch) or a type-bypassed
 //     missing cell used to blow up as a bare `TypeError: ... is not a
-//     function` inside `applyCell` — no msg.type, no state name, nothing
+//     function` inside `applyCell` — no msg._tag, no state name, nothing
 //     actionable. These tests pin the named `NoCellError` that replaces it,
 //     carrying both facts, thrown from the ONE dispatch primitive (#275) so
 //     every stepping site (run, replay, PBT, withX) gets the same error.
@@ -40,7 +40,7 @@ describe("NoCellError — reducer form", () => {
     });
   }
 
-  it("dispatching an unknown msg.type rejects with NoCellError, not a bare TypeError", async () => {
+  it("dispatching an unknown msg._tag rejects with NoCellError, not a bare TypeError", async () => {
     // no-op onError: the failed transition also reports to the runtime's
     // error sink; the assertion target is the dispatch rejection itself.
     const runtime = await run(machine(), {
@@ -65,7 +65,7 @@ describe("NoCellError — reducer form", () => {
     await runtime.stop();
   });
 
-  it("a known msg.type still dispatches normally", async () => {
+  it("a known msg._tag still dispatches normally", async () => {
     const runtime = await run(machine(), { ctx: undefined }).ready;
     await runtime.dispatch({ _tag: "bump" });
     expect(runtime.getState().count).toBe(1);
@@ -98,7 +98,7 @@ describe("NoCellError — transitions form carries the current state name", () =
     });
   }
 
-  it("names both the msg.type and the state the machine was in", async () => {
+  it("names both the msg._tag and the state the machine was in", async () => {
     const runtime = await run(machine(), {
       ctx: undefined,
       onError: () => {},
@@ -122,7 +122,7 @@ describe("NoCellError — transitions form carries the current state name", () =
     await runtime.stop();
   });
 
-  it("a type-bypassed missing ROW (unknown state.type) is the same named error", () => {
+  it("a type-bypassed missing ROW (unknown state._tag) is the same named error", () => {
     const m = machine();
     const rogueState = { _tag: "vanished" } as unknown as State;
     expect(() => applyCell(m, rogueState, { _tag: "step" })).toThrowError(
@@ -152,9 +152,9 @@ describe("NoCellError — the accepted set (#14)", () => {
   // The verbatim pre-#14 message, as a template. A caller that matched on it
   // must keep matching, so it is asserted as a PREFIX, never as equality.
   const legacy = (msgType: string, stateName: string) =>
-    `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
+    `@demlik/tea: no update cell for msg._tag "${msgType}" in state ` +
     `"${stateName}" — the machine's update does not handle this Msg ` +
-    `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
+    `(an unknown wire msg._tag, or a missing cell reached by bypassing ` +
     `the mapped types).`;
 
   // `applyCell` only ever reads `update` (+ the optional `__form` stamp), so a

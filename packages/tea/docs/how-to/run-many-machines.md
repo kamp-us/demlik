@@ -30,7 +30,7 @@ export interface WorkerState {
   readonly done: number;
 }
 
-export type WorkerMsg = { readonly type: "job" };
+export type WorkerMsg = { readonly _tag: "job" };
 
 export const worker = defineMachine({
   types: { model: {} as WorkerState, msg: {} as WorkerMsg },
@@ -42,20 +42,20 @@ export const worker = defineMachine({
 
 /** The parent: lists the children that stopped, until it closes. */
 export type ParentState =
-  | { readonly type: "open"; readonly stopped: readonly string[] }
-  | { readonly type: "closed"; readonly stopped: readonly string[] };
+  | { readonly _tag: "open"; readonly stopped: readonly string[] }
+  | { readonly _tag: "closed"; readonly stopped: readonly string[] };
 
 export type ParentMsg =
-  | { readonly type: "child_stopped"; readonly id: string }
-  | { readonly type: "close" };
+  | { readonly _tag: "child_stopped"; readonly id: string }
+  | { readonly _tag: "close" };
 
 export const parent = defineMachine({
   types: { model: {} as ParentState, msg: {} as ParentMsg },
-  init: (loaded) => [loaded ?? { type: "open", stopped: [] }, []],
+  init: (loaded) => [loaded ?? { _tag: "open", stopped: [] }, []],
   update: {
     open: {
       child_stopped: (s, m) => [{ ...s, stopped: [...s.stopped, m.id] }, []],
-      close: (s) => [{ type: "closed", stopped: s.stopped }, []],
+      close: (s) => [{ _tag: "closed", stopped: s.stopped }, []],
     },
     // A closed parent takes no Msg, so it has no cell for `child_stopped`.
     closed: {},
@@ -112,7 +112,7 @@ export const spawnWorker = (
       Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
   });
 
 /** Stop one worker. An id not in the table is a no-op. */
@@ -180,9 +180,9 @@ const program = Effect.gen(function* () {
 
   const a = yield* spawnWorker(parentScope, parentRun, children, "a");
   yield* spawnWorker(parentScope, parentRun, children, "b");
-  yield* (yield* a.run.ready).dispatch({ type: "job" });
+  yield* (yield* a.run.ready).dispatch({ _tag: "job" });
 
-  // Stops worker "a". The parent soon reads { type: "open", stopped: ["a"] }.
+  // Stops worker "a". The parent soon reads { _tag: "open", stopped: ["a"] }.
   yield* stopWorker(children, "a");
 
   // Stops worker "b", then the parent.
@@ -223,7 +223,7 @@ export interface ProcessState {
   readonly written: number;
 }
 
-export type ProcessMsg = { readonly type: "input"; readonly text: string };
+export type ProcessMsg = { readonly _tag: "input"; readonly text: string };
 
 export const proc = defineMachine({
   types: { model: {} as ProcessState, msg: {} as ProcessMsg },
@@ -295,7 +295,7 @@ export const spawnProcess = <E>(
       }),
     enrol: (process) => Effect.sync(() => processes.set(id, process)),
     remove: Effect.sync(() => processes.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    notify: tell(parent, parentRun, { _tag: "child_stopped", id }),
   });
 
 /** Stop one running process. Any other id is a no-op. */

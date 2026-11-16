@@ -102,7 +102,7 @@ export type EffectInterpret<
  * it on its own fiber and interrupts that fiber when the Sub stops.
  *
  * A Sub maps the errors it expects into Msgs itself, the way an Elm `Sub msg`
- * carries no error type: `Stream.catchTag("Closed", () => Stream.make({ type:
+ * carries no error type: `Stream.catchTag("Closed", () => Stream.make({ _tag:
  * "disconnected" }))`. A stream that still fails reaches the error sink under
  * `"sub"` and stops the run (#309), and `done()` fails with `SubFailed`.
  */
@@ -326,7 +326,7 @@ export function settleCellExit(
  *     },
  *   });
  *   const runtime = yield* handle.ready;
- *   yield* runtime.dispatch({ type: "go", id: "7" });
+ *   yield* runtime.dispatch({ _tag: "go", id: "7" });
  *   return runtime.getState();
  * });
  * Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(ApiLive)));

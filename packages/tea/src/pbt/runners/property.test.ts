@@ -162,7 +162,7 @@ describe.each(RUNNERS)("%s over drawn saved states", (_name, run) => {
 
     const drawnState = JSON.stringify(BAD_STATE);
     expect(failure.message).toContain(
-      `Counterexample: [[{"type":"land"}],${drawnState}]`,
+      `Counterexample: [[{"_tag":"land"}],${drawnState}]`,
     );
     expect(failure.run.seed).toBe(seed);
   });

@@ -90,7 +90,7 @@ const machine = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, cmd: {} as Cmd, sub: {} as Sub, ctx: {} as Ctx },
   init: (loaded, ctx) => [initialModel, []],          // (Model, [Cmd])
   update: (state, msg) => [nextModel, [cmd]],         // pure
-  subs: [{ type: "subType", deps: (state) => slice }], // pure; null = off
+  subs: [{ _tag: "subType", deps: (state) => slice }], // pure; null = off
 });
 
 // host: turns Cmd → Msg and runs each Sub. Handed to `run` beside the
@@ -181,7 +181,7 @@ export type Machine<S, M, C extends Cmd, U extends Sub, Ctx> = {
   init: (loaded: S | null, ctx: Ctx) => [S, readonly C[]];
   update: (state: S, msg: M) => [S, readonly C[]];
   // one entry per Sub: its type, and the state slice it depends on
-  subs?: ReadonlyArray<{ type: U["type"]; deps: (state: S) => U["deps"] | null }>;
+  subs?: ReadonlyArray<{ _tag: U["_tag"]; deps: (state: S) => U["deps"] | null }>;
 };
 
 // …and the handlers, handed to `run` beside it:
@@ -189,8 +189,8 @@ run(machine, {
   ctx,
   // one Msg, a list of them (dispatched in order — Elm's `Cmd.batch`), or nothing;
   // the Effect engine's cell is `(cmd) => Effect.Effect<M | readonly M[] | void, unknown, R>`
-  interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | readonly M[] | void> },
-  subscribe: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx, dispatch) => Dispose },
+  interpret: { [K in C["_tag"]]: (cmd, ctx) => Promise<M | readonly M[] | void> },
+  subscribe: { [K in U["_tag"]]: (sub: Extract<U, { _tag: K }>, ctx, dispatch) => Dispose },
 });
 ```
 
@@ -224,7 +224,7 @@ before the first transition.
 ```ts
 init: (loaded, ctx) => {
   if (loaded !== null) return [loaded, []];
-  return [{ phase: "loading" }, [{ type: "http_get", url: "..." }]];
+  return [{ phase: "loading" }, [{ _tag: "http_get", url: "..." }]];
 }
 ```
 
@@ -255,12 +255,12 @@ Our `Cmd` is a tagged union:
 
 ```ts
 // packages/tea/src/index.ts
-export type Cmd<T extends string = string> = { type: T };
+export type Cmd<T extends string = string> = { _tag: T };
 
 // concrete:
 type AppCmd =
-  | { type: "http_get"; url: string; into: (result: Outcome<string, HttpError>) => Msg }
-  | { type: "log"; line: string };
+  | { _tag: "http_get"; url: string; into: (result: Outcome<string, HttpError>) => Msg }
+  | { _tag: "log"; line: string };
 ```
 
 The `into` callback plays the role of Elm's `expectString GotText` — it
@@ -308,13 +308,13 @@ returned list and the previously-active set drives the actual `addEventListener`
 
 Ours uses the identical rule. The difference is who writes the id: in Elm
 the Sub value's structure is its identity, and ours derives the id the same
-way — `structuralHash({ type, deps })`. The machine declares each Sub as
+way — `structuralHash({ _tag, deps })`. The machine declares each Sub as
 data; the runner that does the plumbing is handed to `run`:
 
 ```ts
 // src/pure/core.ts
 export type Sub<T extends string = string, D = unknown> = {
-  readonly id: SubId; readonly type: T; readonly deps: D;
+  readonly id: SubId; readonly _tag: T; readonly deps: D;
 };
 
 type AppSub = Sub<"ws", { readonly socketId: string }>;
@@ -323,12 +323,12 @@ type AppSub = Sub<"ws", { readonly socketId: string }>;
 subs: [
   // built-in: Elm's `Time.every`, one-shot — dispatch `msg` after `ms`
   {
-    type: "timer",
+    _tag: "timer",
     deps: (state) =>
-      state.phase === "running" ? { ms: 1000, msg: { type: "tick" } } : null,
+      state.phase === "running" ? { ms: 1000, msg: { _tag: "tick" } } : null,
   },
   {
-    type: "ws",
+    _tag: "ws",
     deps: (state) =>
       state.phase === "running" ? { socketId: state.socketId } : null,
   },
@@ -446,7 +446,7 @@ with the produced value.
 Ours is one tagged Cmd plus a host-supplied randomness source on `ctx`:
 
 ```ts
-type AppCmd = { type: "roll_die"; sides: number; into: (n: number) => Msg };
+type AppCmd = { _tag: "roll_die"; sides: number; into: (n: number) => Msg };
 
 interpret: {
   roll_die: async (cmd, ctx) => cmd.into(ctx.random.intInRange(1, cmd.sides)),
@@ -466,9 +466,9 @@ Three concepts:
 - `Time.Posix` — wall-clock instant. (We use `number` ms since epoch, or
   `Date`.)
 - `Time.Zone` — IANA zone. (We use `string` like `"Europe/Istanbul"`.)
-- `Time.every interval Tick` — Sub. (Mapped to `{ id, type: "tick", every }`.)
+- `Time.every interval Tick` — Sub. (Mapped to `{ id, _tag: "tick", every }`.)
 - `Task.perform AdjustTimeZone Time.here` — Cmd that grabs the current
-  zone. (Mapped to `{ type: "get_zone", into: ... }`.)
+  zone. (Mapped to `{ _tag: "get_zone", into: ... }`.)
 
 `Task` itself — Elm's "deferred effect that doesn't fire a Msg until you
 `perform` it" — does not have a direct analogue. Every effect in our world
@@ -789,7 +789,7 @@ Direct map:
 | `Result e a` | `Outcome<T, E>` from `@demlik/tea` |
 
 The `tag` discriminant is convention — pick a name, use it everywhere in a
-codebase. Our codebase uses `type`. (`{ type: "..." }` rather than `{ tag:
+codebase. Our codebase uses `_tag`. (`{ _tag: "..." }` rather than `{ tag:
 "..." }`.) Stay consistent.
 
 `case ... of` in Elm guarantees exhaustiveness — the compiler refuses the
@@ -799,7 +799,7 @@ program if you forget a variant. TypeScript gets the same guarantee from
 ```ts
 function absurd(x: never): never { throw new Error("unreachable"); }
 
-switch (msg.type) {
+switch (msg._tag) {
   case "inc": return [state + 1, []];
   case "dec": return [state - 1, []];
   default: return absurd(msg);  // compile error if you add a variant and forget
@@ -838,7 +838,7 @@ import { useMachine } from "@demlik/tea/react";
 function CounterPage() {
   const ctx = useMemo(() => ({ random: cryptoRandom }), []);
   const [state, send] = useMachine(counterMachine, { run, ctx });
-  return <button onClick={() => send({ type: "inc" })}>{state.count}</button>;
+  return <button onClick={() => send({ _tag: "inc" })}>{state.count}</button>;
 }
 ```
 
@@ -882,9 +882,9 @@ The bridge:
 Wire shape (one channel string, three message types):
 
 ```
-{ type: channel,                msg, state }   // background → surfaces (broadcast)
-{ type: `${channel}:hydrate`  }                 // surface → background (request)
-{ type: `${channel}:dispatch`, msg }            // surface → background (input)
+{ _tag: channel,                msg, state }   // background → surfaces (broadcast)
+{ _tag: `${channel}:hydrate`  }                 // surface → background (request)
+{ _tag: `${channel}:dispatch`, msg }            // surface → background (input)
 ```
 
 Three constructors:
@@ -914,11 +914,11 @@ Two pieces:
 - `doStore(storage, key?)` — `Store<S>` over `DurableObjectStorage`.
   JSON-stringifies on save; `null` on missing key.
 - `doSubscribe()` — handler registry for two Sub variants:
-  - `do_alarm` — `{ id, type: "do_alarm", firesAt: epochMs, msg }`. The
+  - `do_alarm` — `{ id, _tag: "do_alarm", firesAt: epochMs, msg }`. The
     runtime reconciles alarms via `ctx.state.storage.setAlarm(firesAt)`,
     and the DO's `alarm()` callback dispatches the registered msg by
     looking up the registry by id.
-  - `do_ws` — `{ id, type: "do_ws", socketId, msg: (data) => Msg }`.
+  - `do_ws` — `{ id, _tag: "do_ws", socketId, msg: (data) => Msg }`.
     The DO's `webSocketMessage(ws, data)` callback dispatches matching
     `socketId`s.
 
@@ -1013,8 +1013,8 @@ want "here is the exact (msg, state) pair, append it."
 interpret: {
   http_get: tryInterpret(
     async (cmd, ctx) => fetch(cmd.url).then(r => r.text()),
-    (text, cmd) => ({ type: "got_text", text }),
-    (err, cmd) => ({ type: "http_failed", error: toAppError(err) }),
+    (text, cmd) => ({ _tag: "got_text", text }),
+    (err, cmd) => ({ _tag: "http_failed", error: toAppError(err) }),
   ),
 }
 ```
@@ -1145,7 +1145,7 @@ When reviewing TEA code in this repo, this is the checklist.
 |---|---|---|
 | `let foo: T \| null = null` at module scope | Module-level mutable state | Lift to Model variant |
 | `default: return state` in a reducer switch | Missing exhaustiveness | `default: return absurd(msg)` |
-| `loading: boolean` next to `result?: T` | "Make impossible states impossible" | `type Phase = { type: "loading" } \| { type: "success"; result: T } \| { type: "failure" }` |
+| `loading: boolean` next to `result?: T` | "Make impossible states impossible" | `type Phase = { _tag: "loading" } \| { _tag: "success"; result: T } \| { _tag: "failure" }` |
 | `try { await fetch(...) } catch` inside `update` | Side effect in pure code | Lift to a `Cmd`, handle in `interpret` |
 | `setTimeout` / `setInterval` inside `update` or `interpret` | Effect that should be reconciled | `Sub` variant; let runtime own the lifecycle |
 | Fold "I just announced X" into Model | Ephemeral signal as persisted fact | `Port<T>` |
@@ -1165,8 +1165,8 @@ When reviewing TEA code in this repo, this is the checklist.
 | Msg | `type Msg = ...` | `M` generic on `Machine<..., M, ...>` |
 | Update | `update : Msg -> Model -> (Model, Cmd Msg)` | `update: (state: S, msg: M) => [S, readonly C[]]` |
 | View | `view : Model -> Html Msg` | A React component reading state via `useMachine` |
-| Cmd | `Cmd msg` value | `{ type: "..." }` tagged variant; handler in `interpret` |
-| Sub | `Sub msg` value | `subs: [{ type, deps(state) }]` entry; runner in `subscribe` at `run` |
+| Cmd | `Cmd msg` value | `{ _tag: "..." }` tagged variant; handler in `interpret` |
+| Sub | `Sub msg` value | `subs: [{ _tag, deps(state) }]` entry; runner in `subscribe` at `run` |
 | Port (outgoing) | `port sendFoo : Foo -> Cmd msg` | `Port<Foo>` + `ctx.emit(port, value)` |
 | Port (incoming) | `port onFoo : (Foo -> msg) -> Sub msg` | `Sub` variant that dispatches `Foo` |
 | Flag | `Browser.element { init = init }` arg | `ctx` arg to `init(loaded, ctx)` |

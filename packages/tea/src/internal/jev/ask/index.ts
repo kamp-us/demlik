@@ -63,7 +63,7 @@
  *     resilient_run_err: (s, m) => …ask.fail(s.resilience, m)…,
  *     deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
  *   },
- *   subs: [{ type: "timer", deps: (s) => ask.timer(s.resilience) }],
+ *   subs: [{ _tag: "timer", deps: (s) => ask.timer(s.resilience) }],
  *
  *   // and where it runs — the HTTP call is your handler:
  *   run(machine, {

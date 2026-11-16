@@ -41,7 +41,7 @@ import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 // `RS` / `RM` carry the sibling Runtime's concrete State and Msg through the
 // selector: a caller that selects a `Runtime<AuditState, AuditMsg>` keeps that
-// type at the seam instead of collapsing it to `Runtime<unknown, {type:string}>`.
+// type at the seam instead of collapsing it to `Runtime<unknown, {_tag:string}>`.
 // They default to the prior broad pair so existing call sites that select a
 // less-specific Runtime still compile — the factory still only ever calls
 // `subscribePort`, so it does not read RS/RM, but the boundary no longer

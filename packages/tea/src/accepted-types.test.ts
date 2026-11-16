@@ -55,7 +55,7 @@ describe("acceptedTypes — transitions form", () => {
 
   it("a nullish state is read without a throw, and accepts nothing", () => {
     // The doc promises this function never throws; before #196 the row lookup
-    // dereferenced `state.type` and a pre-boot `null` crashed the caller that
+    // dereferenced `state._tag` and a pre-boot `null` crashed the caller that
     // trusted it.
     expect(acceptedTypes(machine, undefined)).toEqual([]);
     expect(acceptedTypes(machine, null)).toEqual([]);

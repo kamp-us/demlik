@@ -16,7 +16,7 @@ import {
 //
 // A three-step booking saga: book a flight, charge the card, reserve a hotel.
 // Each forward Cmd has a matching compensating Cmd. The Cmds carry no payload
-// beyond their tag — the saga drives ORDER, not data, so a plain `type` is
+// beyond their tag — the saga drives ORDER, not data, so a plain `_tag` is
 // enough to assert which step's effect was emitted.
 type Forward = Cmd<"book_flight"> | Cmd<"charge_card"> | Cmd<"reserve_hotel">;
 type Undo = Cmd<"cancel_flight"> | Cmd<"refund_card"> | Cmd<"release_hotel">;

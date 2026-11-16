@@ -195,7 +195,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  *   ok: Schema.Struct({ n: Schema.Int }),
  *   err: ["offline"],
  * });
- * type Msg = { type: "start" } | Settled<typeof fetchCount>;
+ * type Msg = { _tag: "start" } | Settled<typeof fetchCount>;
  * declare const machine: Machine<
  *   { readonly total: number },
  *   Msg,
@@ -206,7 +206,7 @@ function outcomesOf(def: AnyCmdDef): Arbitrary.Arbitrary<Outcome> | null {
  *
  * const lists = Result.getOrThrow(
  *   arbSchemaGuidedSequence(machine, {}, {
- *     outside: { start: Arbitrary.Constant({ type: "start" as const }) },
+ *     outside: { start: Arbitrary.Constant({ _tag: "start" as const }) },
  *   }),
  * );
  * const result = await Effect.runPromise(

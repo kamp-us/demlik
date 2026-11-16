@@ -167,7 +167,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     const [timer] = rc.deadlines(r.call);
     expect(timer?.id).toBe("resilient:retry:k");
     const [, reissued] = rc.onTimer(r.call, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 10,
     });
@@ -181,7 +181,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     let [s] = rc.attempt(rc.init(), "k", "in", 0);
     s = rc.settle(s, err(10)).call;
     [s] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 10,
     });
@@ -424,7 +424,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     expect(s.calls.k.phase).toBe("waiting_retry");
     // Fire the retry timer → re-attempt → effect emitted again.
     const [s2, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
@@ -437,7 +437,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     let s = rc.init();
     [s] = rc.attempt(s, "k", "in", 0);
     const [s2, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:deadline:k",
       atMs: 5_000,
     });
@@ -459,7 +459,7 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     );
     const before = s;
     const [after, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 0,
     });
@@ -563,7 +563,7 @@ describe("createResilientCall — the deadline budget", () => {
     // there, BEFORE the effect: no run Cmd, so the port is never reached for a
     // result the call could not use.
     const [spent, cmds] = rc.onTimer(s, {
-      type: "deadline_exceeded",
+      _tag: "deadline_exceeded",
       id: "resilient:retry:k",
       atMs: 5_100,
     });
@@ -906,7 +906,7 @@ describe("createResilientCall — properties", () => {
               break;
             case "retry":
               [s, cmds] = rc.onTimer(s, {
-                type: "deadline_exceeded",
+                _tag: "deadline_exceeded",
                 id: `resilient:retry:${a.key}`,
                 atMs: a.at,
               });
@@ -971,7 +971,7 @@ describe("createResilientCall — properties", () => {
           // Fire the overall deadline timer for the in-flight call → settles
           // `failed` with the deadline sentinel.
           const [settled] = rc.onTimer(s, {
-            type: "deadline_exceeded",
+            _tag: "deadline_exceeded",
             id: `resilient:deadline:${key}`,
             atMs: at + 5_000,
           });
@@ -1356,7 +1356,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       expect(s.calls.k.retryAtMs).toBe(OUTAGE_LADDER[failures] as number);
       // Re-enter the gate exactly when that timer fires (what `onTimer` does).
       s = rc.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:k`,
         atMs: s.calls.k.retryAtMs,
       })[0];
@@ -1387,7 +1387,7 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       failures += 1;
       if (s.calls.k?.phase !== "waiting_retry") break;
       s = rc.onTimer(s, {
-        type: "deadline_exceeded",
+        _tag: "deadline_exceeded",
         id: `resilient:retry:k`,
         atMs: s.calls.k.retryAtMs,
       })[0];

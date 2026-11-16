@@ -116,7 +116,7 @@ import { Arbitrary, Result } from "effect";
 /** The Msg no Cmd answers for: someone placing an order. */
 const place = Arbitrary.schema(
   Schema.Struct({
-    type: Schema.Literal("place"),
+    _tag: Schema.Literal("place"),
     sku: Schema.String,
     cents: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
   }),
@@ -155,9 +155,9 @@ const chargesWhatWasPlaced = (machine: typeof order, msgs: readonly Msg[]) =>
   lawTrace(foldEvents(machine, {}, null, msgs), (steps) => {
     let placed: number | null = null;
     for (const { msg, cmds } of steps) {
-      if (msg.type === "place") placed = msg.cents;
+      if (msg._tag === "place") placed = msg.cents;
       for (const cmd of cmds)
-        if (cmd.type === "charge_card" && cmd.cents !== placed)
+        if (cmd._tag === "charge_card" && cmd.cents !== placed)
           return `charge_card carries ${cmd.cents}, the order holds ${placed}`;
     }
     return null;
@@ -224,10 +224,10 @@ it("is broken by a machine that charges one cent too many", async () => {
   expect(result._tag).toBe("Falsified");
   if (result._tag !== "Falsified") return;
   expect(result.shrunkInput).toEqual([
-    { type: "place", sku: "", cents: 1 },
+    { _tag: "place", sku: "", cents: 1 },
     {
-      type: "reserve_stock_ok",
-      cmd: { type: "reserve_stock", sku: "" },
+      _tag: "reserve_stock_ok",
+      cmd: { _tag: "reserve_stock", sku: "" },
       value: { hold: "" },
     },
   ]);
@@ -248,7 +248,7 @@ it("draws lists that reach every Msg", async () => {
     Arbitrary.sampleEffect(lists, { count: 300, size: 30, seed: 749 }),
   );
 
-  expect(new Set(drawn.flat().map((msg) => msg.type))).toEqual(
+  expect(new Set(drawn.flat().map((msg) => msg._tag))).toEqual(
     new Set([
       "place",
       "reserve_stock_ok",

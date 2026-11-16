@@ -42,15 +42,15 @@ executes them.
 ```typescript
 // The reducer describes WHAT should happen
 type Cmd =
-  | { type: "fetch_book"; url: string }
-  | { type: "generate_random"; max: number }
-  | { type: "save_to_storage"; key: string; value: string }
+  | { _tag: "fetch_book"; url: string }
+  | { _tag: "generate_random"; max: number }
+  | { _tag: "save_to_storage"; key: string; value: string }
 
 function update(msg: Msg, state: Model): [Model, Cmd[]] {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "Roll":
       // Don't generate a random number. Describe that one should be generated.
-      return [state, [{ type: "generate_random", max: 6 }]]
+      return [state, [{ _tag: "generate_random", max: 6 }]]
     case "NewFace":
       return [{ dieFace: msg.face }, []]
   }
@@ -60,10 +60,10 @@ function update(msg: Msg, state: Model): [Model, Cmd[]] {
 const interpret = {
   fetch_book: async (cmd) => {
     const text = await fetch(cmd.url).then(r => r.text())
-    return { type: "GotText", result: { ok: true, value: text } }
+    return { _tag: "GotText", result: { ok: true, value: text } }
   },
   generate_random: async (cmd) => {
-    return { type: "NewFace", face: Math.floor(Math.random() * cmd.max) + 1 }
+    return { _tag: "NewFace", face: Math.floor(Math.random() * cmd.max) + 1 }
   },
   save_to_storage: async (cmd) => {
     localStorage.setItem(cmd.key, cmd.value)
@@ -86,7 +86,7 @@ function update(msg, state) {
     function effect(dispatch) {
       fetch('/api/data')
         .then(r => r.json())
-        .then(data => dispatch({ type: 'GotData', data }))
+        .then(data => dispatch({ _tag: 'GotData', data }))
     }
   ]
 }
@@ -122,9 +122,9 @@ The runtime diffs the sub list on every state change and starts/stops accordingl
 
 ### In TypeScript (`@demlik/tea`)
 
-The machine declares each Sub as data: its `type`, and the slice of state it
+The machine declares each Sub as data: its `_tag`, and the slice of state it
 depends on (`deps`). The runtime derives the rest — the id is
-`structuralHash({ type, deps })`, and `deps` returning `null` means "off".
+`structuralHash({ _tag, deps })`, and `deps` returning `null` means "off".
 
 ```typescript
 type Subs =
@@ -137,10 +137,10 @@ const machine = defineMachine({
   update,
   subs: [
     // Always tick: a constant `deps` runs for the machine's life
-    { type: "every_second", deps: () => ({ clock: "main" }) },
+    { _tag: "every_second", deps: () => ({ clock: "main" }) },
     // Only listen to WS when connected; a new url restarts it
     {
-      type: "listen_websocket",
+      _tag: "listen_websocket",
       deps: (state) =>
         state.phase === "connected" ? { url: state.url } : null,
     },
@@ -151,12 +151,12 @@ const machine = defineMachine({
 // code, so they sit beside the machine and are handed to `run`.
 const subscribe: Subscribe<Msg, Subs, Ctx> = {
   every_second: (_sub, _ctx, dispatch) => {
-    const id = setInterval(() => dispatch({ type: "Tick", time: Date.now() }), 1000)
+    const id = setInterval(() => dispatch({ _tag: "Tick", time: Date.now() }), 1000)
     return () => clearInterval(id)
   },
   listen_websocket: (sub, _ctx, dispatch) => {
     const ws = new WebSocket(sub.deps.url)
-    ws.onmessage = (e) => dispatch({ type: "WsMessage", data: e.data })
+    ws.onmessage = (e) => dispatch({ _tag: "WsMessage", data: e.data })
     return () => ws.close()
   },
 }
@@ -165,7 +165,7 @@ run(machine, { ctx, interpret, subscribe })
 ```
 
 A one-shot countdown needs no Sub type and no runner: the built-in `timer`
-(`{ type: "timer", deps: (s) => cond ? { ms, msg } : null }`) dispatches `msg`
+(`{ _tag: "timer", deps: (s) => cond ? { ms, msg } : null }`) dispatches `msg`
 once, `ms` after it starts.
 
 The runtime manages lifecycle, keyed on the derived id:

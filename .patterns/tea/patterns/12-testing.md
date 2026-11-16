@@ -27,9 +27,9 @@ function replay(program, msgs) {
   }
 
   // Each `subs` entry that is on at the final state, as its runner would see it
-  const subs = (program.subs ?? []).flatMap(({ type, deps }) => {
+  const subs = (program.subs ?? []).flatMap(({ _tag: type, deps }) => {
     const d = deps(state)
-    return d == null ? [] : [{ id: subIdOf(type, d), type, deps: d }]
+    return d == null ? [] : [{ id: subIdOf(type, d), _tag: type, deps: d }]
   })
   return { state, cmds: allCmds, subs }
 }
@@ -45,8 +45,8 @@ This is the TEA testing primitive. Everything else builds on it.
 
 ```typescript
 const result = replay(program, [
-  { type: "NameChanged", value: "Alice" },
-  { type: "EmailChanged", value: "alice@example.com" },
+  { _tag: "NameChanged", value: "Alice" },
+  { _tag: "EmailChanged", value: "alice@example.com" },
 ])
 
 expect(result.state).toEqual({
@@ -61,11 +61,11 @@ expect(result.state).toEqual({
 
 ```typescript
 const result = replay(program, [
-  { type: "Submit" },
+  { _tag: "Submit" },
 ])
 
 expect(result.cmds).toContainEqual({
-  type: "submit_form",
+  _tag: "submit_form",
   data: { name: "Alice", email: "alice@example.com" },
 })
 ```
@@ -79,12 +79,12 @@ This is the power of effects-as-data.
 
 ```typescript
 const result = replay(program, [
-  { type: "StartTimer" },
+  { _tag: "StartTimer" },
 ])
 
 expect(result.subs).toContainEqual({
   id: subIdOf("every_second", { clock: "heartbeat" }),
-  type: "every_second",
+  _tag: "every_second",
   deps: { clock: "heartbeat" },
 })
 ```
@@ -99,9 +99,9 @@ function step(update, state, msg) {
   return { state: next, cmds }
 }
 
-let s = { type: "Loading" }
-const r1 = step(update, s, { type: "GotData", data: "hello" })
-expect(r1.state).toEqual({ type: "Ready", data: "hello" })
+let s = { _tag: "Loading" }
+const r1 = step(update, s, { _tag: "GotData", data: "hello" })
+expect(r1.state).toEqual({ _tag: "Ready", data: "hello" })
 expect(r1.cmds).toEqual([]) // no effects on success
 ```
 
@@ -171,9 +171,9 @@ test "Roll issues a random generate command" <|
 In TypeScript, because Cmds are plain data:
 
 ```typescript
-const [state, cmds] = update({ type: "Roll" }, { dieFace: 1 })
+const [state, cmds] = update({ _tag: "Roll" }, { dieFace: 1 })
 expect(state).toEqual({ dieFace: 1 })  // unchanged
-expect(cmds).toEqual([{ type: "generate_random", max: 6 }])  // the description
+expect(cmds).toEqual([{ _tag: "generate_random", max: 6 }])  // the description
 ```
 
 This is the testing advantage TypeScript has over Elm — Elm's `Cmd` is opaque
@@ -186,7 +186,7 @@ can assert on directly.
 |------------------------|----------------|
 | State transition | Call `update(msg, state)`, assert on first element |
 | Effect emission | Call `update(msg, state)`, assert on second element |
-| Active subscriptions | `replay(...)`, assert on `subs` (`{ id, type, deps }` per Sub on at the end) |
+| Active subscriptions | `replay(...)`, assert on `subs` (`{ id, _tag, deps }` per Sub on at the end) |
 | Multi-step scenario | `replay(program, [msg1, msg2, ...])`, assert on final state + cumulative cmds |
 | Interpreter correctness | Integration test — boot a real runtime, dispatch, observe results |
 | Error handling | Pass error Msg (e.g. `GotText(Err NetworkError)`), assert on state transition |
@@ -247,7 +247,7 @@ property is in the wrong shape:
   hide drift — they make the test pass for the wrong reasons.
 - **Flat `Set<MsgType>` predicates over a discriminated union.**
   When terminality / cancellation / any cell semantic is involved, the
-  fact is two-dimensional: `(state.type, msg.type) → behavior`. A flat
+  fact is two-dimensional: `(state._tag, msg._tag) → behavior`. A flat
   set collapses one dimension and lets the reducer's actual table drift
   from the test's claim. Use `Partial<Record<StateType, Set<MsgType>>>`
   or convert to example tests.

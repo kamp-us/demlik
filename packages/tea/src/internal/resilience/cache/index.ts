@@ -210,7 +210,7 @@ export type CacheEvictionDeps = {
 
 /**
  * The running eviction Sub: a `setInterval`-shaped Sub whose `deps` carry the
- * cache's name and tick period. `type: "cache"` is the lowercase source-noun
+ * cache's name and tick period. `_tag: "cache"` is the lowercase source-noun
  * Sub convention (canon §2.5 / naming-style).
  */
 export type CacheEvictionSub = Sub<"cache", CacheEvictionDeps>;

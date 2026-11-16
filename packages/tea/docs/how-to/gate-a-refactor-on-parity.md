@@ -21,7 +21,7 @@ const runtime = run(auditMachine, { ctx });
 const rec = recordRun(runtime);
 
 await runtime.ready;
-for (const page of pages) await runtime.dispatch({ type: "scan", page });
+for (const page of pages) await runtime.dispatch({ _tag: "scan", page });
 
 const golden = rec.trace();
 rec.stop();
@@ -123,7 +123,7 @@ for (const [k, step] of (golden.steps ?? []).entries()) {
     finalState: step.state,
   };
   if (!parityEqual(normalize(goldenReplay(machineV2, prefix)), normalize(step.state))) {
-    throw new Error(`parity broke at msg ${k}: ${step.msg.type}`);
+    throw new Error(`parity broke at msg ${k}: ${step.msg._tag}`);
   }
 }
 ```

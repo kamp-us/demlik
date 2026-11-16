@@ -50,9 +50,9 @@ import {
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
 
 type Msg =
-  | { readonly type: "fetch"; readonly url: string }
-  | { readonly type: "fetch_ok"; readonly body: string }
-  | { readonly type: "fetch_err"; readonly error: string; readonly at: number };
+  | { readonly _tag: "fetch"; readonly url: string }
+  | { readonly _tag: "fetch_ok"; readonly body: string }
+  | { readonly _tag: "fetch_err"; readonly error: string; readonly at: number };
 
 interface Ctx {
   readonly http: (url: string) => Promise<string>;
@@ -87,7 +87,7 @@ const resilientFetch = defineMachine({
   update: {
     fetch: (s, m) => [
       { ...s, phase: "fetching", body: null },
-      [{ type: "do_fetch", url: m.url }],
+      [{ _tag: "do_fetch", url: m.url }],
     ],
     fetch_ok: (s, m) => [
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
@@ -128,8 +128,8 @@ const ctx: Ctx = {
 const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
-    (body) => ({ type: "fetch_ok", body }),
-    (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
+    (body) => ({ _tag: "fetch_ok", body }),
+    (err) => ({ _tag: "fetch_err", error: String(err), at: Date.now() }),
   ),
 };
 
@@ -185,7 +185,7 @@ const outageBoundedFetch = defineMachine({
   update: {
     fetch: (s, m) => [
       { ...s, phase: "fetching", body: null },
-      [{ type: "do_fetch", url: m.url }],
+      [{ _tag: "do_fetch", url: m.url }],
     ],
     fetch_ok: (s, m) => [
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
@@ -225,7 +225,7 @@ That is the whole recipe: a transient failure moves the machine to
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
 declare the engine's built-in `timer` in `subs`, on only while you wait: store
 the delay beside `retryAtMs` and hand it over as
-`{ type: "timer", deps: (s) => s.phase === "waiting_retry" ? { ms, msg } : null }`.
+`{ _tag: "timer", deps: (s) => s.phase === "waiting_retry" ? { ms, msg } : null }`.
 `run` needs no runner for it. The `resilient-fetch` example has the whole
 wiring.
 

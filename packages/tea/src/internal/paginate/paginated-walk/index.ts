@@ -72,7 +72,7 @@
  *   const walk = createPaginatedWalk<PageToken, ApiPage>({
  *     firstPage: null,                          // the API's "page one" sentinel
  *     nextCursor: (page) => page.nextToken ?? null,
- *     onPage: (page) => [{ type: "index_rows", rows: page.items }],
+ *     onPage: (page) => [{ _tag: "index_rows", rows: page.items }],
  *     rateLimit: { capacity: 10, refillPerSec: 5 },
  *     retry: defaultRetryPolicy,
  *   });
@@ -88,7 +88,7 @@
  *     drained:  (s, m)  => lift(s, walk.drain(s.walk, m.n)),
  *     resume:   (s, m)  => lift(s, walk.resume(s.walk, m.at)),
  *   },
- *   subs: [{ type: "timer", deps: (s) => walk.timer(s.walk) }],
+ *   subs: [{ _tag: "timer", deps: (s) => walk.timer(s.walk) }],
  *
  *   // and where it runs — the page fetch is the handler you write:
  *   run(machine, {
@@ -593,7 +593,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
 
   /**
    * The built-in `timer` Sub's deps: resilient-call's `timer` over the fetch's
-   * slice. Declare `{ type: "timer", deps: (s) => walk.timer(s.walk) }`.
+   * slice. Declare `{ _tag: "timer", deps: (s) => walk.timer(s.walk) }`.
    */
   function timer(s: PaginatedWalkState<Cursor, Page>) {
     return rc.timer(s.resilience);

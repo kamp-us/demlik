@@ -41,7 +41,7 @@
  *
  *   const onMoved = throttle(
  *     (e: PointerEvent) =>
- *       runtime.dispatch({ type: "UserMovedCursor", x: e.clientX, y: e.clientY }),
+ *       runtime.dispatch({ _tag: "UserMovedCursor", x: e.clientX, y: e.clientY }),
  *     16, // ~60fps cap
  *   );
  *   window.addEventListener("pointermove", onMoved);

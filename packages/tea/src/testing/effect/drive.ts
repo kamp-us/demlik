@@ -94,7 +94,7 @@ type ForkEffect = (
  *
  * ```ts
  * const { state, trace } = await Effect.runPromise(
- *   drive(machine, initial, { type: "go" }, {
+ *   drive(machine, initial, { _tag: "go" }, {
  *     fetch: (cmd) =>
  *       Effect.gen(function* () {
  *         const api = yield* Api;

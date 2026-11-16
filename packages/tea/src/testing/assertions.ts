@@ -57,7 +57,7 @@ export interface ReplayOpts<S, M, Ctx> {
  *   expect(state).toEqual(expected);
  *
  * Uses `toEqual` (deep structural). For type-narrowing assertions that
- * branch on `state.type` afterwards, fall back to plain `replay` —
+ * branch on `state._tag` afterwards, fall back to plain `replay` —
  * `expectFinalState` is the "exact match" tool.
  */
 export function expectFinalState<

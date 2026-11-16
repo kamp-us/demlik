@@ -62,8 +62,8 @@ describe("bare-flow knobs — every emitted Cmd is constructor-built", () => {
       [
         "drifted.ts",
         [
-          'return { type: "workflow_activity", index, id, activity };',
-          '/* prose quoting { type: "workflow_compensation" } is not a hit */',
+          'return { _tag: "workflow_activity", index, id, activity };',
+          '/* prose quoting { _tag: "workflow_compensation" } is not a hit */',
           'interface Old extends Cmd<"workflow_compensation"> {}',
         ].join("\n"),
       ],

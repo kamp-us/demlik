@@ -5,7 +5,7 @@
 // erroring, the directive becomes "unused" and `tsc` fails the whole package.
 // Every line without a directive is a positive case that must compile.
 //
-// The contract: a machine is data. It declares `subs: [{ type, deps(state) }]`
+// The contract: a machine is data. It declares `subs: [{ _tag, deps(state) }]`
 // and carries no runner, so `subscriptions` / `subscribe` on a machine are type
 // errors. The runners arrive at `run` in `subscribe`: REQUIRED, one per type,
 // when the machine's `types.sub` names a type other than the built-in `timer`

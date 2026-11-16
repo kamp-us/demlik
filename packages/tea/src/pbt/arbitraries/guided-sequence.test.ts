@@ -262,7 +262,7 @@ describe("a test author checks that something must happen, on random lists", () 
         numRuns: 500,
       }),
     );
-    expect(told(failure)).toContain('"type":"landed"');
+    expect(told(failure)).toContain('"_tag":"landed"');
   });
 });
 
@@ -281,7 +281,7 @@ describe("every answer answers a Cmd really sent", () => {
     for (const msgs of fc.sample(lists, { seed: 1, numRuns: 200 })) {
       for (const state of folded(machine, msgs).states) {
         expect(JSON.stringify(state)).not.toMatch(
-          /"type":"(lint|test|scan|publish)"/,
+          /"_tag":"(lint|test|scan|publish)"/,
         );
       }
     }
@@ -689,7 +689,7 @@ describe("a machine in the transitions form", () => {
       ),
     );
     expect(told(failure)).toContain("scan_ok broke");
-    expect(failure.message).toMatch(/"type":"scan_ok"[^\]]*\]\]/);
+    expect(failure.message).toMatch(/"_tag":"scan_ok"[^\]]*\]\]/);
   });
 });
 
@@ -712,7 +712,7 @@ describe("what goes wrong", () => {
     );
     expect(told(failure)).toContain("scan_ok broke");
     expect(failure.run.numShrinks).toBeGreaterThan(0);
-    expect(failure.message).toMatch(/"type":"scan_ok"[^\]]*\]\]/);
+    expect(failure.message).toMatch(/"_tag":"scan_ok"[^\]]*\]\]/);
   });
 
   it("an init's throw comes back as a failure on an empty list", () => {

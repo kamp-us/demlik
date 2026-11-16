@@ -27,7 +27,7 @@ const brainCmd = z.object({
   input: z.object({ purpose, model: z.string().nullable(), payload: z.json() }),
 });
 
-const msgSchema: z.ZodType<Msg> = z.discriminatedUnion("type", [
+const msgSchema: z.ZodType<Msg> = z.discriminatedUnion("_tag", [
   z.object({ _tag: z.literal("agent_start"), runId: runIdSchema, at }),
   z.object({ _tag: z.literal("agent_boot"), at }),
   z.object({ _tag: z.literal("agent_cancel"), at }),

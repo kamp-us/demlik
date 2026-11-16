@@ -69,8 +69,8 @@ anti-pattern. Chadtech's gist (see Sources) names this directly:
 So `start_audit` correctly splits into:
 
 ```ts
-| { type: "WebAppRequestedAuditStart"; ... }
-| { type: "QueueRequestedAuditStart"; ... }
+| { _tag: "WebAppRequestedAuditStart"; ... }
+| { _tag: "QueueRequestedAuditStart"; ... }
 ```
 
 The reducer's transition body may be identical for both today. That's
@@ -115,14 +115,14 @@ of `into` IS the convention.
 type BackgroundCmd =
   // With `into` — the Cmd promises a Msg back. Use when the result branches
   // (success → Msg A, failure → Msg B).
-  | { type: "CreateAuditWindow"; url: string;
+  | { _tag: "CreateAuditWindow"; url: string;
       into: (r: Outcome<WindowOk, WindowError>) => BackgroundMsg }
 
   // Without `into` — fire-and-forget. The handler returns void; the reducer
   // observes nothing about this Cmd's outcome.
-  | { type: "FocusWindow"; windowId: number }
-  | { type: "SendWs"; msg: ClientMessage }
-  | { type: "AttachDebugger"; tabId: number };
+  | { _tag: "FocusWindow"; windowId: number }
+  | { _tag: "SendWs"; msg: ClientMessage }
+  | { _tag: "AttachDebugger"; tabId: number };
 ```
 
 ### When to use `into`
@@ -179,7 +179,7 @@ ws | recorder | heartbeat
 Sub names are also identities (canon Invariant 7 — the type is half of
 every derived `SubId`), and each one keys its runner in `subscribe`. Keep
 **lowercase short names** — they match the substrate's `Sub<"ws", Deps>`
-declaration and read naturally in a machine's `subs: [{ type: "ws", … }]`.
+declaration and read naturally in a machine's `subs: [{ _tag: "ws", … }]`.
 `timer` is taken: it names the built-in countdown.
 
 | Anti-name              | Why                                  |
@@ -205,9 +205,9 @@ ws.onmessage = (e) => {
   const parsed = parseDOMessage(e.data);   // wire type: "client:hello"
   if (parsed === null) return;
   switch (parsed.type) {
-    case "client:hello":  return dispatch({ type: "BrainSentHello", hello: parsed });
-    case "tool:call":     return dispatch({ type: "BrainRequestedToolCall", call: parsed });
-    case "audit:done":    return dispatch({ type: "BrainSignalledAuditDone" });
+    case "client:hello":  return dispatch({ _tag: "BrainSentHello", hello: parsed });
+    case "tool:call":     return dispatch({ _tag: "BrainRequestedToolCall", call: parsed });
+    case "audit:done":    return dispatch({ _tag: "BrainSignalledAuditDone" });
     default: absurd(parsed);
   }
 };
@@ -233,38 +233,38 @@ From a production extension's `events.ts`. The full rename:
 ```ts
 // Before — wire-mirror dialect + snake_case + no actors
 type BackgroundMsg =
-  | { type: "start_audit"; ... }
-  | { type: "stop_audit" }
-  | { type: "window_created"; tabId: number; windowId: number }
-  | { type: "window:closed" }
-  | { type: "ws:open" }
-  | { type: "ws:client:hello"; hello: HelloMessage }
-  | { type: "ws:tool:call"; call: ToolCallMessage }
-  | { type: "ws:audit:done" }
-  | { type: "ws:close"; code: number }
-  | { type: "ws:error"; error: string; at: number }
-  | { type: "focus_window_requested" }
-  | { type: "close_window_requested" }
-  | { type: "open_results_requested" }
-  | { type: "heartbeat_tick" };
+  | { _tag: "start_audit"; ... }
+  | { _tag: "stop_audit" }
+  | { _tag: "window_created"; tabId: number; windowId: number }
+  | { _tag: "window:closed" }
+  | { _tag: "ws:open" }
+  | { _tag: "ws:client:hello"; hello: HelloMessage }
+  | { _tag: "ws:tool:call"; call: ToolCallMessage }
+  | { _tag: "ws:audit:done" }
+  | { _tag: "ws:close"; code: number }
+  | { _tag: "ws:error"; error: string; at: number }
+  | { _tag: "focus_window_requested" }
+  | { _tag: "close_window_requested" }
+  | { _tag: "open_results_requested" }
+  | { _tag: "heartbeat_tick" };
 
 // After — Elm convention (3-question framework, PascalCase, actor-in-name)
 type BackgroundMsg =
-  | { type: "WebAppRequestedAuditStart"; ... }
-  | { type: "QueueRequestedAuditStart"; ... }              // split: different cause, same body
-  | { type: "WebAppRequestedAuditStop" }
-  | { type: "ChromeOpenedAuditWindow"; tabId: number; windowId: number }
-  | { type: "UserClosedAuditWindow" }
-  | { type: "BrainConnectionOpened" }
-  | { type: "BrainSentHello"; hello: HelloMessage }
-  | { type: "BrainRequestedToolCall"; call: ToolCallMessage }
-  | { type: "BrainSignalledAuditDone" }
-  | { type: "BrainConnectionClosed"; code: number }
-  | { type: "BrainConnectionErrored"; error: string; at: number }
-  | { type: "UserClickedFocusPill" }
-  | { type: "UserClickedClosePill" }
-  | { type: "UserClickedViewResultsPill" }
-  | { type: "TimerFiredHeartbeat" };
+  | { _tag: "WebAppRequestedAuditStart"; ... }
+  | { _tag: "QueueRequestedAuditStart"; ... }              // split: different cause, same body
+  | { _tag: "WebAppRequestedAuditStop" }
+  | { _tag: "ChromeOpenedAuditWindow"; tabId: number; windowId: number }
+  | { _tag: "UserClosedAuditWindow" }
+  | { _tag: "BrainConnectionOpened" }
+  | { _tag: "BrainSentHello"; hello: HelloMessage }
+  | { _tag: "BrainRequestedToolCall"; call: ToolCallMessage }
+  | { _tag: "BrainSignalledAuditDone" }
+  | { _tag: "BrainConnectionClosed"; code: number }
+  | { _tag: "BrainConnectionErrored"; error: string; at: number }
+  | { _tag: "UserClickedFocusPill" }
+  | { _tag: "UserClickedClosePill" }
+  | { _tag: "UserClickedViewResultsPill" }
+  | { _tag: "TimerFiredHeartbeat" };
 ```
 
 The `Transitions` table reads as a sentence per cell:
@@ -272,10 +272,10 @@ The `Transitions` table reads as a sentence per cell:
 ```ts
 const update: Transitions<BackgroundState, BackgroundMsg, BackgroundCmd> = {
   Auditing: {
-    BrainRequestedToolCall:  (s, msg) => [s, [{ type: "ForwardTool", tabId: s.tabId, msg: msg.call }]],
+    BrainRequestedToolCall:  (s, msg) => [s, [{ _tag: "ForwardTool", tabId: s.tabId, msg: msg.call }]],
     BrainSignalledAuditDone: (s)      => [toDone(s), [/* ... */]],
-    BrainConnectionErrored:  (s, msg) => [{ ...s, connection: { type: "degraded", lastError: msg.error, degradedAt: msg.at } }, []],
-    TimerFiredHeartbeat:     (s)      => [s, [{ type: "SendWs", msg: { type: "client:ping" } }]],
+    BrainConnectionErrored:  (s, msg) => [{ ...s, connection: { _tag: "degraded", lastError: msg.error, degradedAt: msg.at } }, []],
+    TimerFiredHeartbeat:     (s)      => [s, [{ _tag: "SendWs", msg: { type: "client:ping" } }]],
     UserClickedClosePill:    (s)      => [toIdle(s), [/* close window + complete queue */]],
     // ... every other cell explicit per canon Invariant 7
   },

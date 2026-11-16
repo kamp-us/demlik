@@ -108,7 +108,7 @@
  *     resilient_run_err: (s, m) => onSettle(s, rc.settle(s.resilience, m)),
  *     deadline_exceeded: (s, m) => liftResilience(s, rc.onTimer(s.resilience, m)),
  *   },
- *   subs: [{ type: "timer", deps: (s) => rc.timer(s.resilience) }],
+ *   subs: [{ _tag: "timer", deps: (s) => rc.timer(s.resilience) }],
  *
  * `timer` is the engine's built-in Sub, so `run` needs no `subscribe` for it.
  * `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
@@ -253,11 +253,11 @@ const _errIsProtocol: typeof MsgType.ResilientErr =
   `${DEFAULT_RESILIENT_NAME}_run_err` as const;
 void [_runIsProtocol, _okIsProtocol, _errIsProtocol];
 
-/** The run Cmd's `type` for the `N` family. */
+/** The run Cmd's `_tag` for the `N` family. */
 export type ResilientRunType<N extends string> = `${N}_run`;
-/** The success settle Msg's `type` for the `N` family — minted by the engine. */
+/** The success settle Msg's `_tag` for the `N` family — minted by the engine. */
 export type ResilientOkType<N extends string> = `${N}_run_ok`;
-/** The failure settle Msg's `type` for the `N` family — minted by the engine. */
+/** The failure settle Msg's `_tag` for the `N` family — minted by the engine. */
 export type ResilientErrType<N extends string> = `${N}_run_err`;
 
 /**
@@ -1193,7 +1193,7 @@ export function createResilientCall<
    * {@link deadlines}, counted down from the slice's `clockMs`, or `null` when
    * nothing is waiting. Declare it in the machine and `run` needs no runner:
    *
-   *   subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }]
+   *   subs: [{ _tag: "timer", deps: (s) => rc.timer(s.call) }]
    *
    * Its fire is this knob's timer Msg (`deadline_exceeded`, or
    * `<name>_deadline` for a named knob); route it to `onTimer`. A phase change

@@ -8,7 +8,7 @@ What TEA costs in TypeScript that it doesn't cost in Elm.
 |----------------------|-------------------|
 | Exhaustive `case` matching | Write `switch` + `default: assertNever(msg)` or use a mapped record type |
 | Immutable records by default | Discipline: never mutate, use spread `{...state, field: val}` |
-| Opaque `Cmd msg` type | Define a discriminated union `{ type: string; ... }` |
+| Opaque `Cmd msg` type | Define a discriminated union `{ _tag: string; ... }` |
 | Managed Sub lifecycle (diffing) | Build the diffing yourself — track sub ids, call cleanup on removal |
 | No null / undefined | `strictNullChecks`, but null still leaks through |
 | Closed universe (no FFI) | Discipline: don't escape the machine. The interpret function is the only escape hatch |
@@ -53,7 +53,7 @@ an explicit id on each Sub so the runtime knows "this is the same subscription,
 keep it alive" vs "this is new, start it."
 
 ```typescript
-type Sub = { type: string; id: string }
+type Sub = { _tag: string; id: string }
 ```
 
 The id must be deterministic — `Math.random()` as an id means the sub restarts

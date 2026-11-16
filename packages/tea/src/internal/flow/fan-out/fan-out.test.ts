@@ -672,7 +672,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
           });
         },
         // `report_done` is the join Cmd. Its interpret RE-ENTERS it as the
-        // matching Msg (same `type`) so the reducer lands the results in
+        // matching Msg (same `_tag`) so the reducer lands the results in
         // `reports` — the runtime path that turns the verb's join Cmd into an
         // observable state change.
         report_done: async (cmd) => ({

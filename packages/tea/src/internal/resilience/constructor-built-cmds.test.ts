@@ -40,9 +40,9 @@ describe("resilience family — every emitted Cmd is constructor-built", () => {
       [
         "drifted.ts",
         [
-          'const mint = { type: "refresh_token" };',
-          '/* a comment quoting { type: "refresh_token" } is not a hit */',
-          "const run = { type: MsgType.ResilientRun, key, input };",
+          'const mint = { _tag: "refresh_token" };',
+          '/* a comment quoting { _tag: "refresh_token" } is not a hit */',
+          "const run = { _tag: MsgType.ResilientRun, key, input };",
         ].join("\n"),
       ],
     ]);

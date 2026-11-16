@@ -123,7 +123,7 @@ export type Machine<
  *
  * const counter = Machine.make({
  *   model: Schema.Struct({ count: Schema.Number }),
- *   msg: Schema.Struct({ type: Schema.Literal("UserIncremented") }),
+ *   msg: Schema.Struct({ _tag: Schema.Literal("UserIncremented") }),
  *   cmds: [],
  *   init: (loaded) => [loaded ?? { count: 0 }, []],
  *   update: {
@@ -133,7 +133,7 @@ export type Machine<
  *
  * Schema.decodeUnknownSync(Schema.toType(counter.model))({ count: 2 });
  * Schema.decodeUnknownSync(Schema.toType(counter.msg))({
- *   type: "UserIncremented",
+ *   _tag: "UserIncremented",
  * });
  * ```
  */

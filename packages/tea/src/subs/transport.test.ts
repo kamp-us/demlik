@@ -195,7 +195,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     expect(rt.getState().heard).toEqual(["<lost>"]);
     expect(rt.getState().runId).toBeNull();
     expect(
-      observed.mock.calls.filter(([msg]) => msg.type === "lost"),
+      observed.mock.calls.filter(([msg]) => msg._tag === "lost"),
     ).toHaveLength(1);
 
     await rt.stop();

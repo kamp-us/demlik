@@ -9,7 +9,7 @@ guides use are each defined in the [glossary](../glossary.md).
 
 - [Migrate from 0.15 to 0.19](./migrate-from-0-15.md) — every removed or
   reshaped API, before and after: [`run`](../glossary.md#run) on `@demlik/tea/promise`,
-  [handlers](../glossary.md#handler) and [Sub](../glossary.md#sub) runners at `run`, Subs as `{ type, deps }` data, handler outcomes, the end
+  [handlers](../glossary.md#handler) and [Sub](../glossary.md#sub) runners at `run`, Subs as `{ _tag, deps }` data, handler outcomes, the end
   of `provide`, `mount*` and the `with*` wrappers, `drive` on
   `@demlik/tea/testing/promise`, and `store.migrate`'s `Refusal`.
 

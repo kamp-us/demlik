@@ -205,7 +205,7 @@ describe("tryFoldMsgs", () => {
 
   it("names WHICH message failed — index, the msg itself, and the error", () => {
     // The motivating case: a persisted log that does not replay. The error
-    // alone is not enough — the same msg.type usually appears many times, so
+    // alone is not enough — the same msg._tag usually appears many times, so
     // the INDEX is the load-bearing fact.
     const m = counterMachine();
     const bad = { _tag: "unknown_wire" } as unknown as CounterMsg;

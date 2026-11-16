@@ -4,7 +4,7 @@
  * a ctx missing a key the machine's `ctx` names) lives in `__tests__/typed-cmd-channels.test-d.ts`.
  *
  * What the runtime owes:
- *   - the emitted Cmd is still a plain `{ type, ...input }` record (JSON
+ *   - the emitted Cmd is still a plain `{ _tag, ...input }` record (JSON
  *     round-trip equal) — the channels are phantoms;
  *   - a handler returns an outcome and the engine mints the Msg (ADR 0021):
  *     `ok(v)` → `<name>_ok`, a declared `err({ _tag })` → `<name>_err`, and an
@@ -106,12 +106,12 @@ function interpretOver(
 const fixedClock = (at: number) => () => at;
 
 describe("Cmd.define — the emitted Cmd is still a plain record", () => {
-  it("builds `{ type, ...input }` and survives a JSON round-trip unchanged", () => {
+  it("builds `{ _tag, ...input }` and survives a JSON round-trip unchanged", () => {
     const cmd = fetch({ url: "/users" });
     expect(cmd).toEqual({ _tag: "fetch", url: "/users" });
     expect(JSON.parse(JSON.stringify(cmd))).toEqual(cmd);
     // The channels are phantoms: nothing rides on the value.
-    expect(Object.keys(cmd).sort()).toEqual(["type", "url"]);
+    expect(Object.keys(cmd).sort()).toEqual(["_tag", "url"]);
   });
 
   it("carries its declaration for the runtime edge", () => {

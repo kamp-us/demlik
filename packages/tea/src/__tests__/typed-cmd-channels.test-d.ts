@@ -82,16 +82,16 @@ void fetchIsTyped;
 const typedIntoUntyped: Cmd<"fetch"> = fetch({ url: "/" });
 void typedIntoUntyped;
 
-// The value the constructor builds is the flat record: `type` beside the input.
+// The value the constructor builds is the flat record: `_tag` beside the input.
 const built: { readonly _tag: "fetch"; readonly url: string } = fetch({
   url: "/",
 });
 void built;
 
-// A `type` key in the input schema is refused — it would overwrite the
+// A `_tag` key in the input schema is refused — it would overwrite the
 // discriminant.
 Cmd.define("clash", {
-  // @ts-expect-error `type` is not an input field
+  // @ts-expect-error `_tag` is not an input field
   input: z.object({ _tag: z.string() }),
   ok: z.void(),
   err: [],

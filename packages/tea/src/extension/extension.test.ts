@@ -127,7 +127,7 @@ function installFakeChrome() {
 
 function parseCounterMsg(raw: unknown): CounterMsg | null {
   if (typeof raw !== "object" || raw === null) return null;
-  return (raw as Record<string, unknown>).type === "inc"
+  return (raw as Record<string, unknown>)._tag === "inc"
     ? { _tag: "inc" }
     : null;
 }

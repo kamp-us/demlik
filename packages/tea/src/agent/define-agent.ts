@@ -180,7 +180,7 @@ export type DefinedAgentCmd<T extends AnyToolDef> = AgentCmd<
 
 /**
  * The interpret table of the machine `defineAgent` wired: one cell per
- * {@link DefinedAgentCmd}, keyed by its `type` — a tool's own Cmd type, the
+ * {@link DefinedAgentCmd}, keyed by its `_tag` — a tool's own Cmd type, the
  * router's `tool_rejected`, and the agent-owned brain call.
  */
 export type DefinedAgentInterpret<T extends AnyToolDef> = Interpret<
@@ -1374,7 +1374,7 @@ function ownedByLadder<T extends AnyToolDef>(
 }
 
 /**
- * The tool name a Cmd was built for: its own `type`, except for the router's
+ * The tool name a Cmd was built for: its own `_tag`, except for the router's
  * `tool_rejected`, whose type is the router's and whose rejection carries the
  * name the MODEL asked for — the name a consumer needs to see for an
  * `unknown_tool`. PURE.

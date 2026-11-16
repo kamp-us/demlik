@@ -312,7 +312,7 @@ export type AgentTimerMsg = LlmTimerMsg;
 // A run that rehydrated mid-loop must re-fire its one outstanding effect on
 // activation. `do/host`'s `autoBoot` is the firing side; this agent reducer's
 // `boot` verb is the receiving side. The coupling used to be a RAW string:
-// host built `{ type: "agent_boot", at }` by hand and the agent string-matched
+// host built `{ _tag: "agent_boot", at }` by hand and the agent string-matched
 // it — a literal duplicated across the seam with nothing tying the two ends.
 //
 // `AgentBootPort` promotes that coupling to a typed contract OWNED by the agent
@@ -332,7 +332,7 @@ export type AgentBootMsg = {
  * The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches
  * on a resumable rehydrate. The agent owns this constructor so the boot Msg
  * shape lives in ONE place — the host fires it through here, never as a raw
- * `{ type: "agent_boot" }` literal.
+ * `{ _tag: "agent_boot" }` literal.
  */
 export function agentBootMsg(at: number): AgentBootMsg {
   return { _tag: MsgType.AgentBoot, at };
@@ -502,7 +502,7 @@ export interface AgentEventHead {
 }
 
 /**
- * Every {@link AgentEvent} `type`. A subscriber that wants the whole stream
+ * Every {@link AgentEvent} `_tag`. A subscriber that wants the whole stream
  * off `runtime.on` subscribes once per entry. `satisfies` proves each entry is
  * a real type; a type test proves no real type is missing.
  */
@@ -718,7 +718,7 @@ function ended<Stage, P extends string, O extends Record<P, unknown>, R>(
 
 // The agent's own Msg union, projected exhaustively. A Msg the router did not
 // claim is one of these: `WiredToolMsg<T>` and `AgentMachineMsg` are disjoint on
-// `type`, which the cast at the one call site records.
+// `_tag`, which the cast at the one call site records.
 function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   msg: AgentMachineMsg<P, O, R>,
   runId: string,
@@ -774,9 +774,9 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
  *
  * The runtime result is exactly the spread of the two key-disjoint records. The
  * single `as` is a SOUND mapped-type identity, not a laundering cast: `Interpret`
- * is a homomorphic mapped type keyed by `Cmd["type"]`, so
+ * is a homomorphic mapped type keyed by `Cmd["_tag"]`, so
  * `Interpret<M, A, Ctx> & Interpret<M, B, Ctx>` IS `Interpret<M, A | B, Ctx>`
- * (`(A | B)["type"] = A["type"] | B["type"]`). TypeScript does not reduce that
+ * (`(A | B)["_tag"] = A["_tag"] | B["_tag"]`). TypeScript does not reduce that
  * intersection of two GENERIC mapped types on its own, so the equality is
  * asserted ONCE here — preserving `M` and `Ctx` exactly — rather than smuggled
  * through `as unknown as Interpret<...>` at every wiring site. Pure.

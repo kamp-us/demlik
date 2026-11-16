@@ -16,7 +16,7 @@ The short version:
 - `run` lives in `@demlik/tea/promise` now.
 - A machine has no `interpret`, no `subscribe` and no `subscriptions`. Handlers
   and Sub runners go to `run`.
-- Subs are `{ type, deps }` data. `timer` is built in.
+- Subs are `{ _tag, deps }` data. `timer` is built in.
 - A `Cmd.define`d handler returns an outcome, and the engine mints the Msg.
 - There is no DI (`provide`, `layer`, `R`) and no battery layer (`mount*`,
   `with*`, `handlers(ports)`).
@@ -64,10 +64,10 @@ machine and its handlers together (`createAgentHost`'s `buildMachine`,
 `toMachine()`, `defineAgent(...).machine(input)`) now returns
 `{ machine, interpret }`, and the `Wired` type names that pair.
 
-## 3. Declare Subs as `{ type, deps }` data
+## 3. Declare Subs as `{ _tag, deps }` data
 
 Both 0.15 Sub forms are gone: `subscriptions(state)` plus a `subscribe` table
-on the machine, and `subs: [{ deps, source }]`. A Sub is now a `type` and a
+on the machine, and `subs: [{ deps, source }]`. A Sub is now a `_tag` and a
 `deps(state)` function. `null` means off. The runner moves to `run`.
 
 ```ts
@@ -90,7 +90,7 @@ type FeedSub = Sub<"feed", { readonly url: string }>;
 const machine = defineMachine({
   types: { model: {} as State, msg: {} as Msg, sub: {} as FeedSub },
   init, update,
-  subs: [{ type: "feed", deps: (s) => (s.live ? { url: s.url } : null) }],
+  subs: [{ _tag: "feed", deps: (s) => (s.live ? { url: s.url } : null) }],
 });
 run(machine, {
   subscribe: { feed: (sub, ctx, dispatch) => openFeed(sub.deps.url, dispatch) },
@@ -98,7 +98,7 @@ run(machine, {
 ```
 
 A runner is `(sub, ctx, dispatch) => Dispose` and reads its data off
-`sub.deps`. The Sub's id is a hash of `{ type, deps }`, so it starts when `deps`
+`sub.deps`. The Sub's id is a hash of `{ _tag, deps }`, so it starts when `deps`
 turns non-null, restarts when `deps` changes, and stops on `null`. `deps` must
 be plain data.
 
@@ -111,7 +111,7 @@ subscribe: { retry: fromTimeout(() => ({ type: "retry_due" })) },
 
 // after
 subs: [
-  { type: "timer", deps: (s) => (s.waiting ? { ms: 500, msg: { type: "retry_due" } } : null) },
+  { _tag: "timer", deps: (s) => (s.waiting ? { ms: 500, msg: { _tag: "retry_due" } } : null) },
 ],
 ```
 
@@ -120,9 +120,9 @@ time. Other moves in this area:
 
 - `defineManagedResource(...).sub(key)` and `.gated(when)` become
   `.depKeyed(when)`: put the entry in `subs`, and return `null` from `when` for
-  off. `.subIdFor(key)` becomes `subIdOf(battery.type, key)`.
+  off. `.subIdFor(key)` becomes `subIdOf(battery._tag, key)`.
   `combineManagedResources` is gone; list each resource's `.depKeyed(when)`
-  and its `.subscribe` under its own `type`.
+  and its `.subscribe` under its own `_tag`.
 - `replay(...).depSubs` is gone. Read `replay(...).subs`.
 - `SubIdCollisionError` is gone. Two Sub types can no longer share an id.
 
@@ -254,7 +254,7 @@ const machine = defineMachine({
       return [{ ...s, call }, cmds];
     },
   },
-  subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }],
+  subs: [{ _tag: "timer", deps: (s) => rc.timer(s.call) }],
 });
 run(machine, {
   interpret: {
@@ -363,9 +363,9 @@ const guarded = withDeadline(machine, { ms: 30_000, progress: (m) => m.type === 
 // after
 subs: [
   {
-    type: "timer",
+    _tag: "timer",
     deps: (s) =>
-      s.phase === "running" ? { ms: 30_000, msg: { type: "stalled", seq: s.seq } } : null,
+      s.phase === "running" ? { ms: 30_000, msg: { _tag: "stalled", seq: s.seq } } : null,
   },
 ],
 update: {
@@ -526,7 +526,7 @@ run(machine, {
       try {
         return openFeed(sub.deps.url, dispatch);
       } catch (cause) {
-        dispatch({ type: "feed_failed", reason: String(cause) });
+        dispatch({ _tag: "feed_failed", reason: String(cause) });
         return () => {};
       }
     },
@@ -588,7 +588,7 @@ onEvent: (e) => {
 
 // after
 onEvent: (e) => {
-  if (e.type === "RunDone" && e.status.kind === "done") save(e.status.output);
+  if (e._tag === "RunDone" && e.status.kind === "done") save(e.status.output);
 },
 ```
 

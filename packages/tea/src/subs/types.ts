@@ -7,14 +7,14 @@
 // The machine declares a Sub as data in `subs`; a factory in this subpath
 // returns the runner for that Sub's type, which the caller hands to `run`:
 //
-//   subs: [{ type: "audit-idle", deps: (s) => (s.watching ? {} : null) }],
+//   subs: [{ _tag: "audit-idle", deps: (s) => (s.watching ? {} : null) }],
 //   // …
 //   run(machine, {
 //     subscribe: {
 //       "audit-idle": fromPort(
 //         (ctx) => ctx.auditRuntime,
 //         auditIdlePort,
-//         (idle) => ({ type: "audit:idle", idle }),
+//         (idle) => ({ _tag: "audit:idle", idle }),
 //       ),
 //     },
 //   });

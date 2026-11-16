@@ -95,7 +95,7 @@ export interface BoundMachine<
   /**
    * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
    * Use for the "narrow-then-assert" pattern where the test inspects a
-   * specific field after `state.type === "..."` discrimination.
+   * specific field after `state._tag === "..."` discrimination.
    */
   replay(opts: BoundOpts<S, M>): {
     state: S;

@@ -4,7 +4,7 @@
 // ===========================================================================
 //
 // The resilient/agent/auth plumbing speaks a small fixed vocabulary of
-// discriminant strings on `{ type: ... }` Msgs and Cmds. Before this module
+// discriminant strings on `{ _tag: ... }` Msgs and Cmds. Before this module
 // those literals were retyped inline across ~8 modules — `resilient_ok` alone
 // appeared as a hand-written `"resilient_ok"` in resilient-call, a wrapper,
 // llm-call, agent, do/host, paginated-walk, reconciler. Adding a variant or
@@ -12,10 +12,10 @@
 //
 // `MsgType` is that vocabulary, declared ONCE `as const`. Each entry is BOTH:
 //   - a value — `MsgType.ResilientOk` is the string `"resilient_run_ok"`, used at
-//     construction sites (`{ type: MsgType.ResilientOk, ... }`), reducer keys
+//     construction sites (`{ _tag: MsgType.ResilientOk, ... }`), reducer keys
 //     (`[MsgType.ResilientOk]: ...`), and switch labels (`case MsgType.ResilientOk:`).
 //   - a type — `typeof MsgType.ResilientOk` is the literal type `"resilient_run_ok"`,
-//     used in the `readonly type:` field of every Msg/Cmd interface.
+//     used in the `readonly _tag:` field of every Msg/Cmd interface.
 //
 // Because the value and the type both derive from the single `as const`
 // declaration, a new variant or a rename is a ONE-LINE change here that
@@ -30,7 +30,7 @@
 /**
  * The closed set of cross-module Msg/Cmd discriminant strings. Declared `as
  * const` so each entry is usable as both a value (construction / reducer keys /
- * switch labels) and, via `typeof MsgType.X`, a literal type (`readonly type:`
+ * switch labels) and, via `typeof MsgType.X`, a literal type (`readonly _tag:`
  * fields). The single source of truth for issue #60.
  */
 export const MsgType = {

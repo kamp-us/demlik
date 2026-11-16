@@ -122,7 +122,7 @@ export function without<V>(
 // === Cmd: tagged-union, one-shot effect ===
 //
 // `Ok` and `E` are carried as PHANTOM type parameters (ADR 0014): the runtime
-// value stays `{ readonly type: T }` — JSON-plain, hashable, replayable — and
+// value stays `{ readonly _tag: T }` — JSON-plain, hashable, replayable — and
 // the two channels ride on optional fields that are never assigned, exactly as
 // `Port.__t` carries its `T`.
 //
@@ -136,7 +136,7 @@ export function without<V>(
 // about the handler that interprets it, not about the journaled Cmd.
 //
 // Both channels are named by `Cmd.define`; a Cmd literal never spells them.
-// The phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
+// The phantoms are optional, so a `{ _tag }` literal still satisfies `Cmd`.
 /**
  * A tagged-union, one-shot effect — JSON-plain, hashable, replayable.
  *
@@ -204,7 +204,7 @@ function isOutcome(value: unknown): value is Outcome<unknown, unknown> {
 // read ONE source for what this effect can produce.
 //
 // Everything a constructor names is a TYPE or a SCHEMA; the value it returns is
-// still the dead record `{ type, ...input }`. `input` and `ok` are Standard
+// still the dead record `{ _tag, ...input }`. `input` and `ok` are Standard
 // Schemas (https://standardschema.dev) — zod passes straight in, Effect Schema
 // through `Schema.toStandardSchemaV1` — and `err` is the `_tag` list a handler
 // may fail with.
@@ -386,12 +386,12 @@ export function assertDistinctCmdNames(
 }
 
 /**
- * The payload a constructor accepts: a plain record spread beside `type`. A
- * `type` key is refused at the type level — it would overwrite the discriminant.
+ * The payload a constructor accepts: a plain record spread beside `_tag`. A
+ * `_tag` key is refused at the type level — it would overwrite the discriminant.
  */
 export type CmdInput = { readonly _tag?: never } & Record<string, unknown>;
 
-/** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
+/** The value `Cmd.define("fetch", …)` builds: `{ _tag: "fetch", ...input }`. */
 export type CmdValue<
   Name extends string,
   Input extends CmdInput,
@@ -441,7 +441,7 @@ export interface CmdDef<
   E extends Tagged,
 > {
   (input: Input): CmdValue<Name, Input, Ok, E>;
-  /** The `type` discriminant of every Cmd this builds. */
+  /** The `_tag` discriminant of every Cmd this builds. */
   readonly cmdType: Name;
   readonly okType: `${Name}_ok`;
   readonly errType: `${Name}_err`;
@@ -464,7 +464,7 @@ export interface CmdDef<
 }
 
 /**
- * The declaration-erased view the runtime reads: which `type` a def builds,
+ * The declaration-erased view the runtime reads: which `_tag` a def builds,
  * which two Msg types it settles with, the `ok` schema the edge parses against
  * and the tags an `Err` may carry. Every `CmdDef<…>` is one of these
  * structurally.
@@ -483,7 +483,7 @@ export type AnyCmdDef = {
 // interpret handler's return, and hands the same edge to the handlers under
 // `cmdEdge` on ctx (beside `emit`). The hand-off is for a handler that invokes
 // another def's handler INSIDE its own — the agent's fanned tool cells — where
-// `run`'s edge sees the carrier's `type`,
+// `run`'s edge sees the carrier's `_tag`,
 // never the def's, so the base outcome would cross unminted (#66). Settling
 // through `cmdEdgeOf(ctx)` at the site the def's handler is actually invoked
 // keeps one mint, one parse and one clock for the bare and the wrapped machine
@@ -810,7 +810,7 @@ export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
 // — a `typeof update[firstKey] === "function"` heuristic that breaks the day a
 // reducer cell is itself an object-with-a-call — `defineMachine` computes the
 // form ONCE at construction and stamps it on the machine as a non-enumerable
-// `__form` (so it never serializes, never collides with a Msg.type key, never
+// `__form` (so it never serializes, never collides with a Msg._tag key, never
 // shows up in `Object.keys(machine)`). Every reader calls `formOf(machine)`.
 /**
  * Which of the two shapes a machine's `update` takes: a flat `reducer` keyed by
@@ -854,9 +854,9 @@ export function formOf(machine: {
 
 // === NoCellError: the named cell-lookup failure (#276) ===
 //
-// An unknown `msg.type` (wire data reaching dispatch) or a type-bypassed
+// An unknown `msg._tag` (wire data reaching dispatch) or a type-bypassed
 // missing cell used to surface as a bare `TypeError: ... is not a function`
-// deep inside dispatch — no msg.type, no state name, nothing actionable. The
+// deep inside dispatch — no msg._tag, no state name, nothing actionable. The
 // guard lives in `applyCell` because it is the single dispatch primitive
 // every stepping site goes through (#275), so one guard covers `run`,
 // replay/foldMsgs, the PBT fold runner, and the withX wrappers.
@@ -884,9 +884,9 @@ export class NoCellError extends Error {
     super(
       // The pre-#14 text is kept VERBATIM as a prefix: a caller matching on it
       // keeps matching, and the new clause only ever appends.
-      `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
+      `@demlik/tea: no update cell for msg._tag "${msgType}" in state ` +
         `"${stateName}" — the machine's update does not handle this Msg ` +
-        `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
+        `(an unknown wire msg._tag, or a missing cell reached by bypassing ` +
         `the mapped types).` +
         (acceptedTypes.length === 0
           ? ` This state accepts no Msg at all.`
@@ -898,10 +898,10 @@ export class NoCellError extends Error {
 }
 
 // Reducer-form State carries no mandatory discriminant; best-effort read of a
-// string `state.type` for the error, else a placeholder.
+// string `state._tag` for the error, else a placeholder.
 function stateNameOf(state: unknown): string {
   if (state === undefined || state === null) return "(no state)";
-  if (typeof state === "object" && "type" in state) {
+  if (typeof state === "object" && "_tag" in state) {
     const t = (state as { _tag: unknown })._tag;
     if (typeof t === "string") return t;
   }
@@ -915,7 +915,7 @@ function stateNameOf(state: unknown): string {
 // that asks first and a caller that dispatches and catches can never be told
 // different things about the same `(machine, state)` pair (#14, folded #21).
 //
-// It takes a STATE, not a `state.type`, which is what separates it from
+// It takes a STATE, not a `state._tag`, which is what separates it from
 // `acceptsOf` next to it: `acceptsOf` answers about a state NAME a tool already
 // has in hand, and this answers about the state value a caller is actually
 // holding — including a reducer-form state that carries no discriminant at all.
@@ -924,7 +924,7 @@ function stateNameOf(state: unknown): string {
 // answer and nothing throws.
 //
 // A NULLISH state is not an untagged state — it is no state at all, so it
-// accepts nothing in either form (#196). Reading `.type` off it would have
+// accepts nothing in either form (#196). Reading `._tag` off it would have
 // thrown under the transitions form, which the doc below promises never
 // happens, and answering the flat table's keys under the reducer form would
 // name a set for a machine that has not booted.
@@ -955,7 +955,7 @@ export function acceptedTypes<S>(
     Record<string, unknown> | undefined
   >;
   const row = table[(state as unknown as { _tag: string })._tag];
-  // A state with no row at all — a type-bypassed or absent `state.type` —
+  // A state with no row at all — a type-bypassed or absent `state._tag` —
   // accepts nothing, which is true of it.
   return row === undefined || row === null ? [] : cellKeysOf(row);
 }
@@ -973,8 +973,8 @@ function cellKeysOf(row: object): readonly string[] {
 
 // === lookupCell: THE single cell SELECTION, split from the invocation ===
 //
-// The form-branching (`reducer` → flat `update[msg.type]`; `transitions` →
-// `update[state.type][msg.type]`) lives here and NOWHERE else. `applyCell`
+// The form-branching (`reducer` → flat `update[msg._tag]`; `transitions` →
+// `update[state._tag][msg._tag]`) lives here and NOWHERE else. `applyCell`
 // (throwing) and `tryApplyCell` (`Result`-returning, in `../runtime-types`)
 // are both thin skins over this one selection, so the two error disciplines
 // can never disagree about WHICH cell a `(machine, state, msg)` triple picks
@@ -1010,7 +1010,7 @@ export function lookupCell<S, M extends { _tag: string }, C extends Cmd>(
 ): CellLookup<S, M, C> {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   // A nullish state is no state at all, and it refuses BEFORE the form branch
-  // in both forms (#199). Under transitions, reading `.type` off it threw a
+  // in both forms (#199). Under transitions, reading `._tag` off it threw a
   // `TypeError` where the whole path otherwise raises `NoCellError`; under
   // reducer, dispatch never consults the state, so a cell would have RUN on a
   // machine that has not booted — and `acceptedTypes` already answers `[]`
@@ -1039,7 +1039,7 @@ export function lookupCell<S, M extends { _tag: string }, C extends Cmd>(
     Record<string, CellFn | undefined> | undefined
   >;
   // The ONE sanctioned `state as unknown as { type }` read: the Transitions
-  // overload constrains S to `{ type: string }` at the `defineMachine`
+  // overload constrains S to `{ _tag: string }` at the `defineMachine`
   // boundary, but that constraint is erased on the runtime-facing `object`
   // here — every former per-site copy of this double-cast collapsed into
   // this line (#275).
@@ -1117,10 +1117,10 @@ export function applyCellChecked<S, M extends { _tag: string }, C extends Cmd>(
   );
 }
 
-// === msgKeysOf: recover the Msg.type set from either update form ===
+// === msgKeysOf: recover the Msg._tag set from either update form ===
 //
-// A Reducer's own keys ARE the Msg.type set. A Transitions table's keys are
-// state.type; its INNER keys are the Msg.type set, so the UNION of every row's
+// A Reducer's own keys ARE the Msg._tag set. A Transitions table's keys are
+// state._tag; its INNER keys are the Msg._tag set, so the UNION of every row's
 // inner keys is read — first-seen order, deduped. An empty update (`M` is
 // `never`) yields `[]`. Keyed on `formOf` — the withX wrappers and the PBT
 // `msgTypeKeys` all read through this one helper (#275).
@@ -1189,7 +1189,7 @@ export function msgKeysOf(machine: {
 // The return type is a DISCRIMINATED union on `form` because the two forms
 // genuinely answer different questions, and faking the missing one would be a
 // lie the type system would then propagate:
-//   - `transitions` — carries `states` and `accepts` (state.type → Msg.types).
+//   - `transitions` — carries `states` and `accepts` (state._tag → Msg.types).
 //   - `reducer`     — has NO per-state accept-sets AT ALL. Its dispatch does
 //     not consult the state, so `msgs` is the whole answer and there is no
 //     `accepts` field to read. Reaching for one is a compile error, not an
@@ -1201,16 +1201,16 @@ export function msgKeysOf(machine: {
 export type MachineShape =
   | {
       readonly form: "reducer";
-      /** Every `Msg.type` the flat reducer has a cell for. */
+      /** Every `Msg._tag` the flat reducer has a cell for. */
       readonly msgs: readonly string[];
     }
   | {
       readonly form: "transitions";
-      /** The union of every row's `Msg.type` keys (see `msgKeysOf`). */
+      /** The union of every row's `Msg._tag` keys (see `msgKeysOf`). */
       readonly msgs: readonly string[];
-      /** Every `state.type` the table has a row for, in table order. */
+      /** Every `state._tag` the table has a row for, in table order. */
       readonly states: readonly string[];
-      /** `state.type` → the `Msg.type`s that state has a cell for. */
+      /** `state._tag` → the `Msg._tag`s that state has a cell for. */
       readonly accepts: Readonly<Record<string, readonly string[]>>;
     };
 
@@ -1255,7 +1255,7 @@ export function acceptsOf(
 
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
-// Each cell is narrowed to its Msg variant via `Extract<M, { type: K }>`. The
+// Each cell is narrowed to its Msg variant via `Extract<M, { _tag: K }>`. The
 // mapped type is *load-bearing*: it is what rejects a missing key, so there is
 // no `absurd()` helper at call sites, no silent fall-through, no default branch
 // hiding impurity.
@@ -1265,7 +1265,7 @@ export function acceptsOf(
 // explicit — the Msg variant set is load-bearing at the type level).
 //
 // `defineMachine` accepts the Reducer record form via overload. The runtime
-// dispatches via `update[msg.type](state, msg)`.
+// dispatches via `update[msg._tag](state, msg)`.
 /**
  * The flat form of `update`: a record with one handler per Msg type, each
  * returning `[nextState, cmds]`. Leaving a Msg type out is a compile error.
@@ -1283,8 +1283,8 @@ export type Reducer<S, M extends { _tag: string }, C extends Cmd> = {
 
 // === Transitions<S, M, C>: table form of `update` for state-machine-shaped machines ===
 //
-// When `State` is itself a discriminated union (`State.type` is the active
-// phase), the table form keys every cell by (state.type × msg.type). Each cell
+// When `State` is itself a discriminated union (`State._tag` is the active
+// phase), the table form keys every cell by (state._tag × msg._tag). Each cell
 // receives the narrowed `State` for its phase and the narrowed `Msg` for its
 // variant via two `Extract` lookups. Phantom-narrow at the type level; pure
 // data at runtime.
@@ -1306,15 +1306,15 @@ export type Reducer<S, M extends { _tag: string }, C extends Cmd> = {
 // and uselessly, for anything asking which buttons to light.
 //
 // `defineMachine` accepts a third `update` form for `Transitions<S, M, C>` —
-// the runtime dispatches via `update[state.type]?.[msg.type]`.
+// the runtime dispatches via `update[state._tag]?.[msg._tag]`.
 //
 // Authors who want the old floor back take it per machine with
 // `ExhaustiveTransitions<S, M, C>` below; it is opt-in, never the default.
 //
 // Strengthens invariant 2 (table form has no fall-through default — an absent
 // cell refuses, it does not fall through), invariant 6 (runtime walks the table
-// predictably, no hidden dispatch fallback), and invariant 7 (both state.type
-// and msg.type are load-bearing at the type level).
+// predictably, no hidden dispatch fallback), and invariant 7 (both state._tag
+// and msg._tag are load-bearing at the type level).
 /**
  * The state × message table form of `update`. Every state of `S` needs a row;
  * a cell inside a row is optional, and leaving one out DECLARES that the state
@@ -1375,21 +1375,21 @@ export type ExhaustiveTransitions<
 // Two recurring frictions in reducer cells:
 //
 //   1. "Emit cmd X only when condition Y holds."
-//      Hand-rolled: `cond ? [{ type: "x", ... }] : []`
-//      With Cmd:    `Cmd.when(cond, { type: "x", ... })`
+//      Hand-rolled: `cond ? [{ _tag: "x", ... }] : []`
+//      With Cmd:    `Cmd.when(cond, { _tag: "x", ... })`
 //
 //   2. "Emit cmd X carrying a value that may be undefined; if undefined,
 //      emit nothing."
-//      Hand-rolled: `value !== undefined ? [{ type: "x", value }] : []`
-//      With Cmd:    `Cmd.whenDefined(value, (v) => ({ type: "x", value: v }))`
+//      Hand-rolled: `value !== undefined ? [{ _tag: "x", value }] : []`
+//      With Cmd:    `Cmd.whenDefined(value, (v) => ({ _tag: "x", value: v }))`
 //
 // Both forms return `readonly C[]` so they spread cleanly into the cmds
 // array returned by a Transitions cell:
 //
 //   return [next, [
-//     ...Cmd.when(state.tabId !== undefined, { type: "detach_debugger", tabId: state.tabId }),
+//     ...Cmd.when(state.tabId !== undefined, { _tag: "detach_debugger", tabId: state.tabId }),
 //     ...Cmd.whenDefined(state.queueItemId, (id) => ({
-//       type: "queue:complete", queueItemId: id, status: "done",
+//       _tag: "queue:complete", queueItemId: id, status: "done",
 //     })),
 //   ]];
 //
@@ -1410,7 +1410,7 @@ export type ExhaustiveTransitions<
 export const Cmd = {
   /**
    * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
-   * `fetch({ url })` yields `{ type: "fetch", url }` — carrying the minted Msg
+   * `fetch({ url })` yields `{ _tag: "fetch", url }` — carrying the minted Msg
    * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` (for replay
    * logs and tests) and the declaration the runtime edge parses against.
    * `Settled<typeof fetch>` is the two-arm Msg union it settles with;
@@ -1462,9 +1462,9 @@ export const Cmd = {
    * multiple conditional sources:
    *
    *   return [next, Cmd.batch(
-   *     Cmd.whenDefined(state.queueItemId, (id) => ({ type: "complete", id })),
-   *     Cmd.when(state.windowId !== undefined, { type: "close_window", windowId }),
-   *     [{ type: "detach_debugger", tabId: state.tabId }],
+   *     Cmd.whenDefined(state.queueItemId, (id) => ({ _tag: "complete", id })),
+   *     Cmd.when(state.windowId !== undefined, { _tag: "close_window", windowId }),
+   *     [{ _tag: "detach_debugger", tabId: state.tabId }],
    *   )];
    *
    * `<const C>` keeps inline cmd literals' discriminants narrow (same
@@ -1483,9 +1483,9 @@ export const Cmd = {
    * Otherwise return the empty array. Spreads cleanly into the cmds array
    * returned by a Transitions cell.
    *
-   * `const C` (TypeScript 5.0+) keeps the inferred `type:` discriminator
+   * `const C` (TypeScript 5.0+) keeps the inferred `_tag:` discriminator
    * literal narrow when called with an object literal — so `Cmd.when(b,
-   * { type: "x", ... })` infers as `{ type: "x", ... }`, not `{ type:
+   * { _tag: "x", ... })` infers as `{ _tag: "x", ... }`, not `{ _tag:
    * string, ... }`, and stays assignable to a discriminated-union arm
    * without `as const` at the call site.
    */
@@ -1498,7 +1498,7 @@ export const Cmd = {
    * the empty array. `value` is narrowed to `T` inside `build`.
    *
    * `const C` on the return type keeps the callback's object-literal
-   * `type:` field narrow (see `when` above for the full rationale).
+   * `_tag:` field narrow (see `when` above for the full rationale).
    */
   whenDefined: <T, const C extends Cmd>(
     value: T | undefined,
@@ -1535,13 +1535,13 @@ export function subId(s: string): SubId {
 }
 
 /**
- * A running subscription as its runner sees it: its `type`, the `deps` value
+ * A running subscription as its runner sees it: its `_tag`, the `deps` value
  * the machine's `subs` entry returned, and an `id` derived from both. Use it to
  * declare a machine's Sub union and to type the `sub` argument of a runner.
  *
- * A machine never builds one. It declares `{ type, deps(state) }` in `subs`
+ * A machine never builds one. It declares `{ _tag, deps(state) }` in `subs`
  * (see `DepKeyedSub`) and the engine derives the rest. A runner reads its data
- * off `sub.deps`. `id` is `structuralHash({ type, deps })`, so it changes
+ * off `sub.deps`. `id` is `structuralHash({ _tag, deps })`, so it changes
  * exactly when the type or the deps value does, which is when the engine
  * restarts the runner.
  */
@@ -1579,7 +1579,7 @@ export type BuiltinSubType = "timer";
 export type BuiltinSub<M> = TimerSub<M>;
 
 /**
- * The one `id` of a Sub: a structural hash of its `type` and its `deps`
+ * The one `id` of a Sub: a structural hash of its `_tag` and its `deps`
  * value. Same type and same deps → same id → the running Sub is left alone.
  */
 export function subIdOf(type: string, deps: unknown): SubId {
@@ -1710,30 +1710,30 @@ function stableStringify(value: unknown): string {
 
 // === DepKeyedSub<S, U>: what a machine declares in `subs` ===
 //
-// The machine names a Sub's `type` and the slice of state it depends on
+// The machine names a Sub's `_tag` and the slice of state it depends on
 // (`deps`). That is all it says — a Sub is data (#251 R1.4, spike #252). The
 // engine derives the rest:
 //
 //   - the **gate** = `deps(state)` nullish ⇒ off in this state (stopped if
 //     running); anything else ⇒ on.
-//   - the **id** = `structuralHash({ type, deps })` — changes exactly when the
+//   - the **id** = `structuralHash({ _tag, deps })` — changes exactly when the
 //     slice changes (restart), stable otherwise (left alone). A constant `deps`
 //     (`() => ({ name: "main" })`) is a Sub that runs for the machine's life.
 //   - the **runner** = `subscribe[type]` handed to `run`, or the engine's
-//     built-in of that name (`timer`). The runner gets `{ id, type, deps }`.
+//     built-in of that name (`timer`). The runner gets `{ id, _tag, deps }`.
 //
 // This is the FoldKit `modelToDependencies` shape, and Elm's: a Sub names the
 // state slice it depends on, the kernel keys on that slice, and the code that
 // opens the resource lives with the host, never on the machine.
 //
 // `DepKeyedSub<S, U>` distributes over the Sub union `U`: each variant
-// `Sub<T, D>` becomes `{ type: T; deps: (state: S) => D | null | undefined }`,
+// `Sub<T, D>` becomes `{ _tag: T; deps: (state: S) => D | null | undefined }`,
 // so an entry's `deps` is checked against the data its runner will read.
 //
 // Strengthens invariant 4 (external lifecycle owned by the substrate) and
 // invariant 7 (identity derived, never hand-authored).
 /**
- * One entry of a machine's `subs`: a Sub `type` plus `deps(state)`, which
+ * One entry of a machine's `subs`: a Sub `_tag` plus `deps(state)`, which
  * returns the data the runner needs, or `null` to keep the Sub off.
  */
 export type DepKeyedSub<S, U extends Sub = Sub> =
@@ -1755,7 +1755,7 @@ export type DepKeyedSub<S, U extends Sub = Sub> =
 //
 // The engines' reconcile and `replay`'s desired set both ask "what Sub does
 // this entry want in this state?", so the answer has one definition: `null`
-// when the entry is off, else `{ id, type, deps }` with the derived id. It may
+// when the entry is off, else `{ id, _tag, deps }` with the derived id. It may
 // throw — `deps` is user code, and `structuralHash` refuses non-plain data —
 // and each caller decides what a throw means for it.
 /** An entry of `Machine.subs`, read structurally (its `U` erased). */
@@ -2048,7 +2048,7 @@ export type InterpretDetached<
 /**
  * The Sub runner table an engine is handed: one runner per Sub type. Leaving a
  * Sub type out is a compile error. Each runner receives the running Sub
- * (`{ id, type, deps }`), the Ctx and a `dispatch`. It opens its resource,
+ * (`{ id, _tag, deps }`), the Ctx and a `dispatch`. It opens its resource,
  * dispatches Msgs from it, and returns the `Dispose` the engine calls when the
  * Sub stops.
  */
@@ -2137,14 +2137,14 @@ export type Wired<
 // on shape at dispatch time. The public `defineMachine` overloads enforce one
 // shape per call so consumers never see the union themselves.
 //
-// - Reducer form: `Reducer<S, M, C>` — flat record keyed by Msg.type;
+// - Reducer form: `Reducer<S, M, C>` — flat record keyed by Msg._tag;
 //   exhaustiveness enforced by the mapped type.
 // - Transitions form: `Transitions<S, M, C>` — 2D table keyed by
-//   `state.type` then `msg.type`; only available when `S extends { type:
+//   `state._tag` then `msg._tag`; only available when `S extends { _tag:
 //   string }`. Conditional in the union so machines without a discriminated
 //   State don't widen to include this branch.
 //
-// `M` is constrained to `{ type: string }` because both record forms require
+// `M` is constrained to `{ _tag: string }` because both record forms require
 // a string discriminant.
 //
 // A machine carries no handlers (#251 R1.1, R1.4). `interpret` and the sub
@@ -2195,14 +2195,14 @@ export type Machine<
     // member.
     | ([S] extends [{ _tag: string }] ? Transitions<S, M, C> : never);
   /**
-   * The machine's Subs, as data: each entry names a Sub `type` and the state
+   * The machine's Subs, as data: each entry names a Sub `_tag` and the state
    * slice it depends on (`deps`). The engine derives the id
-   * (`structuralHash({ type, deps })`) and the gate (`deps` non-null), starts
-   * the runner for `type` when an entry turns on, leaves it alone while the id
+   * (`structuralHash({ _tag, deps })`) and the gate (`deps` non-null), starts
+   * the runner for `_tag` when an entry turns on, leaves it alone while the id
    * holds, restarts it when the id changes, and stops it on `null` or `stop()`.
    *
    * `U` is the machine's own Sub union (`types.sub`); the built-in `timer`
-   * (`{ type: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
+   * (`{ _tag: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
    *
    * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
    * (identity derived, not hand-authored).

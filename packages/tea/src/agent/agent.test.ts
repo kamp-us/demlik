@@ -143,7 +143,7 @@ const tool = (callId: string, name = "navigate"): ToolCall => ({
 // The brain-call run Cmd the agent emits for a given purpose. payloadOf is omitted
 // so payload is null. Typed `LlmRunCmd<Purpose>` (the precise brain Cmd) so the
 // literal flows into the closed `AgentCmd<Purpose, ToolCmd>` expectations with no
-// widened `type: string`.
+// widened `_tag: string`.
 const brainRunCmd = (purpose: Purpose): LlmRunCmd<Purpose> => ({
   _tag: "resilient_run",
   key: purpose,

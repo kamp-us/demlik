@@ -310,12 +310,12 @@ describe("Sentry adapters", () => {
     const crumbs = breadcrumbsFromTrace(trace);
 
     expect(crumbs).toHaveLength(3);
-    // Default message is msg.type; order is dispatch order (newest last).
+    // Default message is msg._tag; order is dispatch order (newest last).
     expect(crumbs.map((c) => c.message)).toEqual(["inc", "dec", "note"]);
     // Every crumb carries the canonical Sentry-shaped fields.
     expect(crumbs[0]).toEqual({
       category: "tea",
-      _tag: "default",
+      type: "default",
       level: "info",
       message: "inc",
       data: { msg: { _tag: "inc", by: 1 } },

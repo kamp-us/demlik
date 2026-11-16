@@ -80,7 +80,7 @@
  *     refresh_token_err: (s) => [s, []],
  *     deadline_exceeded: (s, m) => ac.onTimer(s, m),
  *   },
- *   subs: [{ type: "timer", deps: (s) => ac.timer(s) }],
+ *   subs: [{ _tag: "timer", deps: (s) => ac.timer(s) }],
  *
  *   // and where it runs — the two handlers you write:
  *   run(machine, {
@@ -477,7 +477,7 @@ export function createAuthedCall<I, R>(
 
   /**
    * The built-in `timer` Sub's deps: resilient-call's `timer` over the
-   * `resilience` field. Declare `{ type: "timer", deps: (s) => ac.timer(s) }`.
+   * `resilience` field. Declare `{ _tag: "timer", deps: (s) => ac.timer(s) }`.
    */
   function timer(s: AuthedState<I, R>) {
     return rc.timer(s.resilience);

@@ -42,7 +42,7 @@ function withDeskMsg(declaration: string): string {
 }
 
 const taggedLiteral = (tag: string): string =>
-  `Schema.Struct({ type: Schema.Literal("${tag}") }),`;
+  `Schema.Struct({ _tag: Schema.Literal("${tag}") }),`;
 
 const diagnosticsOf = (program: string): string[] =>
   programDiagnostics(
@@ -103,17 +103,17 @@ describe(
       {
         shape: "DeskMsg replaced by one whose tag is Schema.String",
         program: withDeskMsg(
-          "export const DeskMsg = Schema.Struct({ type: Schema.String });",
+          "export const DeskMsg = Schema.Struct({ _tag: Schema.String });",
         ),
       },
       {
         shape: "a Schema.String tagged member beside the three desk Msgs",
-        program: withMembers("Schema.Struct({ type: Schema.String }),"),
+        program: withMembers("Schema.Struct({ _tag: Schema.String }),"),
       },
       {
         shape: "a Schema.TemplateLiteral tag",
         program: withMembers(
-          'Schema.Struct({ type: Schema.TemplateLiteral([Schema.String, "_ok"]) }),',
+          'Schema.Struct({ _tag: Schema.TemplateLiteral([Schema.String, "_ok"]) }),',
         ),
       },
     ])("says the tag must be a literal for $shape", ({ program }) => {

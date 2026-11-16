@@ -11,7 +11,7 @@ have.
 ```typescript
 // WRONG — update performs I/O
 function update(msg: Msg, state: Model): [Model, Cmd[]] {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "Submit":
       fetch("/api/submit", { method: "POST", body: JSON.stringify(state.form) })
       return [{ ...state, submitted: true }, []]
@@ -26,7 +26,7 @@ function update(msg: Msg, state: Model): [Model, Cmd[]] {
 ```typescript
 // CORRECT — update describes the effect
 case "Submit":
-  return [state, [{ type: "submit_form", data: state.form }]]
+  return [state, [{ _tag: "submit_form", data: state.form }]]
 ```
 
 ## Anti-pattern 2: Closures as Cmds
@@ -36,7 +36,7 @@ case "Submit":
 ```typescript
 // WRONG — Cmd is a closure that captures state
 return [state, [{
-  type: "run_effect",
+  _tag: "run_effect",
   execute: async () => {
     await fetch("/api", { body: JSON.stringify(state) })
   },
@@ -51,7 +51,7 @@ the effect.
 
 ```typescript
 // CORRECT — Cmd is serializable data
-return [state, [{ type: "submit_form", data: state.form }]]
+return [state, [{ _tag: "submit_form", data: state.form }]]
 ```
 
 ## Anti-pattern 3: Multiple dispatch paths
@@ -64,11 +64,11 @@ return [state, [{ type: "submit_form", data: state.form }]]
 interpret.fetch_data = async (cmd) => {
   const data = await fetch(cmd.url)
   await analyticsService.track("data_fetched")  // side-channel!
-  return { type: "DataFetched", data }
+  return { _tag: "DataFetched", data }
 }
 
 // ALSO wrong — setTimeout outside the machine
-setTimeout(() => dispatch({ type: "Timeout" }), 5000)  // rogue dispatch
+setTimeout(() => dispatch({ _tag: "Timeout" }), 5000)  // rogue dispatch
 ```
 
 **What you actually have:** Redux + thunks + sagas — four mental models
@@ -81,7 +81,7 @@ tracking should be its own Cmd:
 case "DataFetched":
   return [
     { ...state, data: msg.data },
-    [{ type: "track_analytics", event: "data_fetched" }],
+    [{ _tag: "track_analytics", event: "data_fetched" }],
   ]
 ```
 
@@ -91,8 +91,8 @@ case "DataFetched":
 
 ```typescript
 // WRONG — two separate event types
-type UserMsg = { type: "Click" } | { type: "Submit" }
-type SystemMsg = { type: "Timeout" } | { type: "DataLoaded" }
+type UserMsg = { _tag: "Click" } | { _tag: "Submit" }
+type SystemMsg = { _tag: "Timeout" } | { _tag: "DataLoaded" }
 
 function update(msg: UserMsg | SystemMsg, state) { ... }
 ```
@@ -103,10 +103,10 @@ function update(msg: UserMsg | SystemMsg, state) { ... }
 
 ```typescript
 type Msg =
-  | { type: "Click" }
-  | { type: "Submit" }
-  | { type: "Timeout" }
-  | { type: "DataLoaded" }
+  | { _tag: "Click" }
+  | { _tag: "Submit" }
+  | { _tag: "Timeout" }
+  | { _tag: "DataLoaded" }
 ```
 
 ## Anti-pattern 5: Mutating state
@@ -151,12 +151,12 @@ is pending, creating race conditions.
 
 ```typescript
 case "LoadData":
-  return [{ ...state, phase: "loading" }, [{ type: "fetch_data" }]]
+  return [{ ...state, phase: "loading" }, [{ _tag: "fetch_data" }]]
 ```
 
 ## Anti-pattern 7: Non-deterministic Sub identity
 
-A Sub's id is derived from its `type` and its `deps` value, so identity is
+A Sub's id is derived from its `_tag` and its `deps` value, so identity is
 whatever `deps` returns. Put something in `deps` that changes on every
 transition and the Sub never holds still.
 
@@ -164,7 +164,7 @@ transition and the Sub never holds still.
 // WRONG — deps carries a value that moves every step
 subs: [
   {
-    type: "heartbeat",
+    _tag: "heartbeat",
     deps: (state) => ({ everyMs: 30_000, seen: state.lastSeenAt }),
   },
 ]
@@ -177,7 +177,7 @@ because the runtime sees a new identity each time.
 when that changes:
 
 ```typescript
-subs: [{ type: "heartbeat", deps: () => ({ everyMs: 30_000 }) }]
+subs: [{ _tag: "heartbeat", deps: () => ({ everyMs: 30_000 }) }]
 ```
 
 ## Anti-pattern 8: Derived state in Model

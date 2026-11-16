@@ -53,7 +53,7 @@ const fetchFile = Cmd.define("fetch_file", {
 fail in one way, and that way has a name: `not_found`.
 
 Nothing has run yet. `fetchFile({ path: "package.json" })` only builds the
-object `{ type: "fetch_file", path: "package.json" }`.
+object `{ _tag: "fetch_file", path: "package.json" }`.
 
 ## Give the Model a place for failure
 
@@ -65,7 +65,7 @@ type State =
   | { readonly phase: "idle" | "downloading" | "done" }
   | { readonly phase: "failed"; readonly reason: string };
 
-type Msg = { readonly type: "start"; readonly path: string };
+type Msg = { readonly _tag: "start"; readonly path: string };
 ```
 
 `start` is the only Msg you write. The other two come from the Cmd.
@@ -128,10 +128,10 @@ produced. Print each one, then start two downloads: a file that exists, and one
 that does not.
 
 ```ts
-runtime.observe((msg, state) => console.log(msg.type, "->", state.phase));
+runtime.observe((msg, state) => console.log(msg._tag, "->", state.phase));
 
-await runtime.dispatch({ type: "start", path: "package.json" });
-await runtime.dispatch({ type: "start", path: "missing.json" });
+await runtime.dispatch({ _tag: "start", path: "package.json" });
+await runtime.dispatch({ _tag: "start", path: "missing.json" });
 
 console.log(runtime.getState());
 await runtime.stop();

@@ -368,7 +368,7 @@ describe("property: post-completion duplicates always replay the original result
               `q${r + 1}`,
             );
             state = next; // replay leaves state unchanged, but thread it anyway
-            // Bind the single Cmd, then narrow on its `type` discriminant: the
+            // Bind the single Cmd, then narrow on its `_tag` discriminant: the
             // `intake:replay` arm is `IntakeReplayCmd<Charged>`, so `.result` is
             // `Charged` with no cast. (The inline `&&` chain lost the narrowing
             // across each re-index of `cmds[0]`, which is why a cast crept in.)

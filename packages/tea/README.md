@@ -32,7 +32,7 @@ import { defineMachine } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 
 type State = { readonly count: number };
-type Msg = { readonly type: "increment" } | { readonly type: "reset" };
+type Msg = { readonly _tag: "increment" } | { readonly _tag: "reset" };
 
 const counter = defineMachine({
   types: { model: {} as State, msg: {} as Msg },
@@ -44,7 +44,7 @@ const counter = defineMachine({
 });
 
 const runtime = await run(counter, {}).ready;
-await runtime.dispatch({ type: "increment" });
+await runtime.dispatch({ _tag: "increment" });
 runtime.getState(); // { count: 1 }
 ```
 

@@ -91,7 +91,7 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 ```ts
 // Time enters as a Sub or Cmd result, never via Date.now in update.
 function update(state: State, msg: Msg): [State, Cmd[]] {
-  if (msg.type === "tick") return [{ ...state, lastSeen: msg.now }, []];
+  if (msg._tag === "tick") return [{ ...state, lastSeen: msg.now }, []];
   return [state, []];
 }
 ```
@@ -114,8 +114,8 @@ init: (loaded, ctx) => {
 
 // Permits: describe resume work and its in-flight State together.
 init: (loaded, ctx) =>
-  loaded?.type === "auditing"
-    ? [{ ...loaded, type: "attaching" }, [{ type: "attach_debugger", tabId: loaded.tabId }]]
+  loaded?._tag === "auditing"
+    ? [{ ...loaded, _tag: "attaching" }, [{ _tag: "attach_debugger", tabId: loaded.tabId }]]
     : [loaded ?? initial, []];
 ```
 
@@ -146,7 +146,7 @@ Date("...")` and read the value in the fold.
 
 ## Invariant 3 — Effects describe, don't perform
 
-A `Cmd` is a *value* describing intent: `{ type: "http_get", url, into }`.
+A `Cmd` is a *value* describing intent: `{ _tag: "http_get", url, into }`.
 The reducer never performs the effect. The runtime, via `interpret`,
 performs it and feeds the result back as a `Msg`.
 
@@ -165,7 +165,7 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 function update(state: State, msg: Msg): [State, Cmd[]] {
   return [
     { ...state, phase: "loading" },
-    [{ type: "http_get", url: "/api/foo", into: GotFoo }],   // describing
+    [{ _tag: "http_get", url: "/api/foo", into: GotFoo }],   // describing
   ];
 }
 ```
@@ -186,7 +186,7 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 
 `setInterval`, websockets, Durable Object alarms, `document` events,
 chrome runtime messages: all live as `Sub` variants. A machine declares
-them as data — `subs: [{ type, deps(state) }]` — and the runtime
+them as data — `subs: [{ _tag, deps(state) }]` — and the runtime
 reconciles the desired set by the derived id every transition. The code
 that opens each one is its runner, handed to `run` in `subscribe` (the
 built-in `timer` ships with every engine). Reducers, init, and interpret
@@ -196,7 +196,7 @@ handlers never call `setInterval` or `addEventListener` directly.
 
 ```ts
 init: (loaded, ctx) => {
-  setInterval(() => dispatch({ type: "tick" }), 1000);  // leaked subscription
+  setInterval(() => dispatch({ _tag: "tick" }), 1000);  // leaked subscription
   return [initial, []];
 }
 ```
@@ -206,7 +206,7 @@ init: (loaded, ctx) => {
 ```ts
 subs: [
   {
-    type: "tick",
+    _tag: "tick",
     deps: (state) => (state.phase === "running" ? { everyMs: 1000 } : null),
   },
 ],
@@ -239,10 +239,10 @@ class TodoMachine extends BaseMachine { ... }   // OOP composition
 **Permits**
 
 ```ts
-type ParentMsg = { type: "local" } | { type: "child"; msg: ChildMsg };
+type ParentMsg = { _tag: "local" } | { _tag: "child"; msg: ChildMsg };
 
 function update(state: ParentState, msg: ParentMsg) {
-  if (msg.type === "child") {
+  if (msg._tag === "child") {
     const [child, cmds] = childUpdate(state.child, msg.msg);
     return [{ ...state, child }, cmds.map(wrapChildCmd)];
   }
@@ -296,7 +296,7 @@ runtime.subscribePort(cursorPort, (announcement) => liveRegion.textContent = ann
 
 ## Invariant 7 — Identity is explicit
 
-Variant tags (`type: "tick"`), sub ids (derived — `structuralHash({ type,
+Variant tags (`_tag: "tick"`), sub ids (derived — `structuralHash({ _tag,
 deps })`, never hand-written), port brands (`Port<T>`). Identity is never positional, never inferred from
 string equality alone, never reflective. The type system or a runtime
 assert catches collisions; nothing is silent.
@@ -305,16 +305,16 @@ assert catches collisions; nothing is silent.
 
 ```ts
 type Msg = string;                                   // identity by raw string
-subs: [{ type: "poll", deps: (s) => s.startedAt }], // a Date: no stable identity
+subs: [{ _tag: "poll", deps: (s) => s.startedAt }], // a Date: no stable identity
 ```
 
 **Permits**
 
 ```ts
-type Msg = { type: "tick"; now: number } | { type: "reset" };
+type Msg = { _tag: "tick"; now: number } | { _tag: "reset" };
 subs: [
-  { type: "tick", deps: (s) => (s.running ? { everyMs: 1000 } : null) },
-  // The id is derived from `{ type, deps }`, so two entries can never
+  { _tag: "tick", deps: (s) => (s.running ? { everyMs: 1000 } : null) },
+  // The id is derived from `{ _tag, deps }`, so two entries can never
   // collide across types, and one that yields the same id runs once. The
   // hash refuses non-plain `deps` (Date, Map, class instances) rather than
   // collapsing them onto one id.
@@ -355,7 +355,7 @@ reducer.
 
 ```ts
 function update(state: State, msg: Msg) {
-  if (msg.type === "got_data") {
+  if (msg._tag === "got_data") {
     const parsed = Quote.parse(msg.raw);    // parsing inside reducer
     return [{ ...state, quote: parsed }, []];
   }

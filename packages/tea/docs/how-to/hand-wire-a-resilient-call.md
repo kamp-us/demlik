@@ -50,7 +50,7 @@ export interface UserState {
 }
 
 export interface Load {
-  readonly type: "load";
+  readonly _tag: "load";
   readonly id: string;
   readonly at: number;
 }
@@ -137,7 +137,7 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
       },
     },
     // 5. Arm the retry timer. `timer` is built into the engine.
-    subs: [{ type: "timer", deps: (s: UserState) => rc.timer(s.call) }],
+    subs: [{ _tag: "timer", deps: (s: UserState) => rc.timer(s.call) }],
   });
   // 6. Do the work. The handler returns an outcome; it never builds a Msg.
   const interpret: Interpret<UserMsg, UserCmd, undefined> = {
@@ -154,7 +154,7 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
 ```
 
 Hand both to `run`: `run(machine, { interpret })`. Then dispatch
-`{ type: "load", id, at: Date.now() }` to start a call.
+`{ _tag: "load", id, at: Date.now() }` to start a call.
 
 Three things to know:
 

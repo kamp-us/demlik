@@ -103,8 +103,8 @@ In `@demlik/tea` the gate lives on the Sub's own entry: `deps` returning `null`
 is `Sub.none` for that one Sub, and a constant `deps` is always-on.
 ```ts
 subs: [
-  { type: "ws", deps: () => ({ channel: "main" }) },                    // always-on
-  { type: "clock", deps: (s) => (s.paused ? null : { everyMs: 1000 }) }, // gated
+  { _tag: "ws", deps: () => ({ channel: "main" }) },                    // always-on
+  { _tag: "clock", deps: (s) => (s.paused ? null : { everyMs: 1000 }) }, // gated
 ]
 ```
 
@@ -165,7 +165,7 @@ encode it as state transitions: Cmd A completes → Msg → update → Cmd B.
 | Changes only via Msgs | **Store** | — |
 | Is a function of other Model fields | — | **Derive** |
 | Is expensive to compute and rarely changes | **Store** (memoize) | — |
-| Is a boolean that mirrors a union check | — | **Derive** (`state.type === "loading"`) |
+| Is a boolean that mirrors a union check | — | **Derive** (`state._tag === "loading"`) |
 
 From the Elm forms example — validation is derived, not stored:
 ```elm

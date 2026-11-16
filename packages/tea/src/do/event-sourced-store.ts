@@ -104,7 +104,7 @@ export interface EventSourcedOptions<S, M> {
    * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
    * a recognized shape; returning `null` DROPS the event from replay (use for a
    * removed Msg variant). Must NOT throw. Default accepts any object carrying a
-   * string `type` as `M`.
+   * string `_tag` as `M`.
    */
   readonly parseEvent?: (raw: unknown) => M | null;
   /**

@@ -34,7 +34,7 @@ import {
  *   that bound the draws actually use.
  * - `prefix` is the load-bearing escape hatch for "the first msg is the
  *   one that exercises the cell I care about" (e.g. Test A's
- *   `[{ type: "ws:client:hello" }]` prefix to land in the
+ *   `[{ _tag: "ws:client:hello" }]` prefix to land in the
  *   `auditing.ws:client:hello` cell on the first transition).
  *
  * @example
@@ -42,11 +42,11 @@ import {
  * import { arbMsgSequence } from "@demlik/tea/pbt";
  * import type * as fc from "fast-check";
  *
- * type Msg = { type: "ws:client:hello" } | { type: "tick" };
+ * type Msg = { _tag: "ws:client:hello" } | { _tag: "tick" };
  * declare const msgArb: fc.Arbitrary<Msg>;
  *
  * arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 });
- * arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }], maxLength: 20 });
+ * arbMsgSequence(msgArb, { prefix: [{ _tag: "ws:client:hello" }], maxLength: 20 });
  * arbMsgSequence(msgArb, { maxLength: 60, size: "max" });
  * ```
  */
@@ -157,9 +157,9 @@ export interface GuidedCells<
  * } from "@demlik/tea/pbt";
  * import * as fc from "fast-check";
  *
- * type Merge = { readonly type: "merge"; readonly pr: number };
- * type State = { type: "idle" } | { type: "merging" } | { type: "landed" };
- * type Msg = { type: "start" } | { type: "merged"; cmd: Merge; sha: string };
+ * type Merge = { readonly _tag: "merge"; readonly pr: number };
+ * type State = { _tag: "idle" } | { _tag: "merging" } | { _tag: "landed" };
+ * type Msg = { _tag: "start" } | { _tag: "merged"; cmd: Merge; sha: string };
  * declare const machine: Machine<State, Msg, Merge, never, object>;
  * const ctx = stubCtxThrowingProxy<object>();
  *
@@ -168,7 +168,7 @@ export interface GuidedCells<
  *   answers: {
  *     merge: {
  *       draw: fc.string(),
- *       make: (cmd, sha) => ({ type: "merged", cmd, sha }),
+ *       make: (cmd, sha) => ({ _tag: "merged", cmd, sha }),
  *     },
  *   },
  * });
@@ -178,8 +178,8 @@ export interface GuidedCells<
  *   ctx,
  *   lists,
  *   (steps, final) =>
- *     !steps.some((step) => step.msg.type === "merged") ||
- *     final.type === "landed",
+ *     !steps.some((step) => step.msg._tag === "merged") ||
+ *     final._tag === "landed",
  * );
  * ```
  */

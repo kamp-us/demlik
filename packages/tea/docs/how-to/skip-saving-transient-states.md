@@ -23,9 +23,9 @@ export interface ReplyState {
 }
 
 export type ReplyMsg =
-  | { readonly type: "start" }
-  | { readonly type: "token"; readonly text: string }
-  | { readonly type: "finish" };
+  | { readonly _tag: "start" }
+  | { readonly _tag: "token"; readonly text: string }
+  | { readonly _tag: "finish" };
 
 export const reply = defineMachine({
   types: { model: {} as ReplyState, msg: {} as ReplyMsg },
@@ -80,9 +80,9 @@ export async function streamReply(
     store: skipSaving(store, isStreaming),
   }).ready;
   try {
-    await runtime.dispatch({ type: "start" });
-    for (const text of tokens) await runtime.dispatch({ type: "token", text });
-    await runtime.dispatch({ type: "finish" });
+    await runtime.dispatch({ _tag: "start" });
+    for (const text of tokens) await runtime.dispatch({ _tag: "token", text });
+    await runtime.dispatch({ _tag: "finish" });
     return runtime.getState();
   } finally {
     await runtime.stop();
@@ -113,11 +113,11 @@ export const streamReply = (
       store: skipSaving(store, isStreaming),
     });
     const runtime = yield* handle.ready;
-    yield* runtime.dispatch({ type: "start" });
+    yield* runtime.dispatch({ _tag: "start" });
     for (const text of tokens) {
-      yield* runtime.dispatch({ type: "token", text });
+      yield* runtime.dispatch({ _tag: "token", text });
     }
-    yield* runtime.dispatch({ type: "finish" });
+    yield* runtime.dispatch({ _tag: "finish" });
     return runtime.getState();
   }).pipe(Effect.scoped);
 ```

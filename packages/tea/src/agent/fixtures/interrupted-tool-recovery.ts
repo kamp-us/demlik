@@ -16,7 +16,7 @@ const Failure = z
   .object({ _tag: z.enum(["key_conflict", "thrown", "malformed_result"]) })
   .catchall(z.unknown());
 
-export const Checkpoint = z.discriminatedUnion("type", [
+export const Checkpoint = z.discriminatedUnion("_tag", [
   z.object({ _tag: z.literal("Pending"), intent: Intent }),
   z.object({ _tag: z.literal("Settled"), intent: Intent, result: Result }),
   z.object({ _tag: z.literal("Failed"), intent: Intent, failure: Failure }),

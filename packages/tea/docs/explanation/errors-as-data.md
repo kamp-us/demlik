@@ -58,11 +58,11 @@ function onCallFailed(state: State): [State, NextMove[]] {
   // After a reload, this branch still works — the tag is data.
   switch (state.lastCall._tag) {
     case "unauthorized":
-      return [{ ...state, phase: "reauth" }, [{ type: "login" }]];
+      return [{ ...state, phase: "reauth" }, [{ _tag: "login" }]];
     case "deadline_exceeded":
       return [
         { ...state, attempts: state.attempts + 1 },
-        [{ type: "retry" }],
+        [{ _tag: "retry" }],
       ];
   }
 }
