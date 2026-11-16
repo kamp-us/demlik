@@ -97,6 +97,8 @@ export {
   acceptsOf,
   Cmd,
   CmdNameCollisionError,
+  type DeliveryId,
+  deliveryIdOf,
   describeMachine,
   detectUpdateForm,
   foldMsgs,

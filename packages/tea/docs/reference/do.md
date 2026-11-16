@@ -42,7 +42,7 @@ import { … } from "@demlik/tea/do";
 | [`DeferredStepResponse`](#DeferredStepResponse) | Type | stable | The 3-arm response a DEFER-RESUME host returns — the inline StepResponse arms PLUS StepWorking. |
 | [`DeferResumeHook`](#DeferResumeHook) | Interface | stable | The DEFER-RESUME hook — the opt-in seam that drives `engine.resume` OUT of the held `/step` request. |
 | [`DeferStepHostConfig`](#DeferStepHostConfig) | Interface | stable | `StepHostConfig` with the defer-resume hook engaged — the presence of `deferResume` is the type-level switch that selects the 3-arm response (see the `stepHost` overloads). |
-| [`DeliveryId`](#DeliveryId) | Type | stable | Monotonic, gap-free delivery id — the single correlation + dedup key. |
+| [`DeliveryId`](#DeliveryId) | Type | stable | Positive safe-integer delivery identity, increasing monotonically with optional gaps. |
 | [`doEventSourcedStore`](#doEventSourcedStore) | Function | stable | Build an event-sourced `Store<S>` over `DurableObjectStorage`. |
 | [`doStore`](#doStore) | Function | stable | `Store<S>` over `DurableObjectStorage`. |
 | [`DoStoreOptions`](#DoStoreOptions) | Interface | stable | Options for doStore. |

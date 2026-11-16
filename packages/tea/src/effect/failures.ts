@@ -15,6 +15,7 @@ import {
   type ExtensionFactory,
   RuntimeStoppedError,
 } from "../internal/engine/loop";
+import { LogWriteFailure } from "../internal/engine/store-session";
 import {
   DispatchDiscardedError,
   type Store,
@@ -82,7 +83,8 @@ class SaveFailure {
 /** What was thrown, with the edge's wrapper taken off. */
 export function unwrapped(error: unknown): unknown {
   if (error instanceof CellFailure) return error.failure;
-  if (error instanceof SaveFailure) return error.cause;
+  if (error instanceof SaveFailure || error instanceof LogWriteFailure)
+    return error.cause;
   return error;
 }
 
@@ -117,7 +119,7 @@ export function exitOf<Err>(
   error: unknown,
 ): Exit.Exit<never, Err | Stopped | StoreFailed> {
   if (error instanceof CellFailure) return Exit.fail(error.failure as Err);
-  if (error instanceof SaveFailure) {
+  if (error instanceof SaveFailure || error instanceof LogWriteFailure) {
     return Exit.fail(
       new StoreFailed({ operation: "save", cause: error.cause }),
     );

@@ -49,10 +49,12 @@
  * `stop()` gives up on the queue (ADR 0025), never backwards.
  */
 
-import type { Dispose, Sub, SubEntry } from "../../pure/core";
-import { desiredSub, detachWork, followUps } from "../../pure/core";
+import type { DeliveryId, Dispose, Sub, SubEntry } from "../../pure/core";
+import { deliveryId, desiredSub, detachWork, followUps } from "../../pure/core";
 import type {
-  DispatchSettle,
+  DispatchOptions,
+  LogCommit,
+  LogMessage,
   OnError,
   RuntimeErrorContext,
   RuntimeErrorPhase,
@@ -66,8 +68,17 @@ import {
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
 } from "../../runtime-types";
+import type { OwedEffect } from "../persistence/durable-log/durable-effects";
+import {
+  committedState,
+  consumedSources,
+  logLedger,
+  messageId,
+  pendingMessages,
+} from "../persistence/durable-log/format";
 import { type InstalledStateRead, installedState } from "./installed-state";
 import { restore } from "./restore";
+import { handlerFailed, storeSession } from "./store-session";
 import type { SubAdmission } from "./sub-gate";
 
 // === The extension points ===
@@ -86,6 +97,7 @@ export type Step<S, M, C> = (state: S, msg: M) => Transition<S, C> | null;
 export type InterpretStep<C, M> = (
   cmd: C,
   dispatch: (msg: M) => void,
+  failed?: () => void,
 ) => Promise<unknown>;
 
 /** Whether the current State has crossed this transition's save boundary. */
@@ -112,6 +124,8 @@ export interface LoopServices<S> {
   halt(error: unknown): void;
   /** The current State, or `undefined` before boot has produced one. */
   state(): S | undefined;
+  /** Record a missing-cell refusal from the fold middleware. */
+  refused(): void;
   /** The current State's save status; storeless State is saved immediately. */
   saveStatus(): SaveStatus;
 }
@@ -246,8 +260,8 @@ export interface LoopHandle<S, M>
   extends LiveWorkProbe,
     Postable<S, M>,
     InstalledStateRead<S> {
-  dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
-  dispatchOnce(msg: M): Promise<void>;
+  dispatch(msg: M, opts?: DispatchOptions): Promise<void>;
+  dispatchOnce(msg: M, opts?: DispatchOptions): Promise<void>;
   getState(): S;
   ready: Promise<unknown>;
   idle(): Promise<void>;
@@ -444,6 +458,34 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   // instead of silent (#365) and to name what it gave up on.
   const inFlight = new Set<{ readonly cmdType: string | undefined }>();
 
+  interface Invocation {
+    readonly id: DeliveryId;
+    failed: boolean;
+    closed: boolean;
+    ordinal: number;
+    readonly detached: Promise<unknown>[];
+    readonly admissions: Promise<unknown>[];
+  }
+  let invocation: Invocation | undefined;
+  let refused = false;
+  let storeClosed = false;
+  const session = storeSession<S, M, C>(
+    config.store,
+    () => gate !== "abandoned" && !storeClosed,
+  );
+  const consumed = new Set<string>();
+  const turns = new Map<
+    string,
+    { admitted: Promise<void>; folded: Promise<void> }
+  >();
+  let admitReady!: () => void;
+  let refuseAdmission!: (error: unknown) => void;
+  const admissionReady = new Promise<void>((resolve, reject) => {
+    admitReady = resolve;
+    refuseAdmission = reject;
+  });
+  admissionReady.catch(() => {});
+
   const services: LoopServices<S> = {
     report,
     fanout,
@@ -459,6 +501,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       if (!stopping) config.stopOnFailure({ kind: "halt", error });
     },
     state: () => state,
+    refused: () => {
+      refused = true;
+    },
     saveStatus: () =>
       config.store === undefined ? { _tag: "saved" } : saveStatus,
   };
@@ -786,8 +831,28 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   function callHandler(cmd: C, dispatch: (msg: M) => void): Promise<unknown> {
     const { _tag: type } = cmd as { _tag: string };
     const handler = config.handlerFor(type);
-    if (handler === undefined) return Promise.resolve(undefined);
-    return trackInFlight(handler(cmd as never, handlerCtx, dispatch), type);
+    if (handler === undefined) {
+      if (session && invocation) invocation.failed = true;
+      return Promise.resolve(undefined);
+    }
+    if (!session || !invocation)
+      return trackInFlight(handler(cmd as never, handlerCtx, dispatch), type);
+    const own = invocation;
+    const ctx = Object.assign({}, handlerCtx, {
+      [deliveryId]: own.id,
+      [handlerFailed]: () => {
+        own.failed = true;
+      },
+      [detachWork]: (work: Promise<unknown>) => {
+        const tracked = work.catch((error) => {
+          own.failed = true;
+          throw error;
+        });
+        own.detached.push(tracked);
+        detachInFlight(tracked);
+      },
+    });
+    return trackInFlight(handler(cmd as never, ctx, dispatch), type);
   }
 
   /**
@@ -811,6 +876,170 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
       const returned = await interpret(cmd, dispatchUnawaited);
       for (const follow of followUps<M>(returned)) dispatchUnawaited(follow);
     }
+  }
+
+  function canCompleteDelivery(): boolean {
+    return gate !== "abandoned" && !storeClosed && !session?.poisoned();
+  }
+
+  async function runDeliveries(owed: readonly OwedEffect<C>[]): Promise<void> {
+    for (const { id, effect } of owed) {
+      if (gate === "abandoned" || session?.poisoned() || storeClosed) return;
+      const own: Invocation = {
+        id,
+        failed: false,
+        closed: false,
+        ordinal: 0,
+        detached: [],
+        admissions: [],
+      };
+      const send = (msg: M, single = false): void => {
+        if (own.closed) {
+          report(new Error("Callback after delivery completion"), "follow-up");
+          return;
+        }
+        if (gate !== "open") {
+          own.failed = true;
+          report(new DispatchDiscardedError(msg._tag), "discard");
+          return;
+        }
+        const inputId = messageId("answer", id, single ? 0 : ++own.ordinal);
+        const turn = admitLogged(msg, "loop", inputId);
+        own.admissions.push(turn.admitted);
+        turn.folded.catch(reportUndelivered);
+      };
+      invocation = own;
+      try {
+        const returned = await interpret(
+          effect,
+          (msg) => send(msg),
+          () => {
+            own.failed = true;
+          },
+        );
+        const follows = followUps<M>(returned);
+        for (const follow of follows) send(follow, !Array.isArray(returned));
+      } catch (error) {
+        own.failed = true;
+        throw error;
+      } finally {
+        invocation = undefined;
+        const completion = (async () => {
+          await Promise.all(own.detached);
+          own.closed = true;
+          await Promise.all(own.admissions);
+          if (!own.failed && canCompleteDelivery())
+            await session?.write((store) => store.confirmEffect(id));
+        })();
+        detachInFlight(completion);
+      }
+    }
+  }
+
+  async function publishLogged(
+    next: S,
+    msg: M | undefined,
+    cmds: readonly C[],
+    owed: readonly OwedEffect<C>[],
+  ): Promise<void> {
+    state = next;
+    saveStatus = { _tag: "saved" };
+    if (gate === "abandoned" || storeClosed) return;
+    reconcileSubs();
+    installed = next;
+    for (const callback of installedCallbacks) callback();
+    try {
+      await runDeliveries(owed);
+    } finally {
+      for (const callback of commitCallbacks) callback(msg, next, cmds);
+    }
+  }
+
+  async function stepLogged(
+    source: LogMessage<M>,
+    recovering = false,
+  ): Promise<void> {
+    if (!session || consumed.has(source.id)) return;
+    if (state === undefined) throw new Error("@demlik/tea: runtime not booted");
+    if (session.poisoned()) throw session.poisoned();
+    let transition: Transition<S, C> | null;
+    refused = false;
+    try {
+      transition = update(state, source.msg);
+    } catch (error) {
+      await session.write((store) =>
+        store.commitStep({
+          _tag: "receipt",
+          sourceId: source.id,
+          disposition: "rejected",
+          failure: {
+            kind: refused ? "no_cell" : "reduce",
+            message: String(error),
+          },
+        }),
+      );
+      consumed.add(source.id);
+      throw error;
+    }
+    if (transition === null) {
+      await session.write((store) =>
+        store.commitStep({
+          _tag: "receipt",
+          sourceId: source.id,
+          disposition: "ignored",
+        }),
+      );
+      consumed.add(source.id);
+      return;
+    }
+    const [next, cmds] = transition;
+    let committed: LogCommit<S, C>;
+    try {
+      committed = await session.write((store) =>
+        store.commitStep({
+          _tag: "applied",
+          sourceId: source.id,
+          state: next,
+          cmds,
+          timers: [],
+        }),
+      );
+    } catch (error) {
+      saveStatus = { _tag: "failed", error };
+      for (const ext of extensions) ext.saveFailed?.(next, error);
+      throw error;
+    }
+    consumed.add(source.id);
+    state = committed.state;
+    if (!recovering)
+      await publishLogged(
+        committed.state,
+        source.msg,
+        committed.owed.map(({ effect }) => effect),
+        committed.owed,
+      );
+  }
+
+  function admitLogged(msg: M, origin: "caller" | "loop", inputId: string) {
+    const existing = turns.get(inputId);
+    if (existing) return existing;
+    if (session === undefined)
+      throw new Error("Durable admission requires a logged store");
+    const at = Date.now();
+    const appended = admissionReady.then(() =>
+      session.write((store) =>
+        store.appendMessage({ _tag: "message", id: inputId, at, msg }),
+      ),
+    );
+    const admitted = appended.then(() => {});
+    // Reserve the turn synchronously; append acknowledgement never waits for a fold.
+    const folded = enqueueStep(msg, origin, async () =>
+      stepLogged((await appended).entry.record),
+    );
+    const turn = { admitted, folded };
+    turns.set(inputId, turn);
+    admitted.catch(() => {});
+    return turn;
   }
 
   // Install State, then save → reconcile subs → tell `subscribe` listeners →
@@ -886,6 +1115,37 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Boundary parse (invariant 8): `store.load()` returns `unknown`;
     // `store.migrate(raw)` is the required parse — `S` on a recognized shape,
     // `null` when nothing was saved (boots fresh), a refusal otherwise.
+    if (session) {
+      let log = await session.read();
+      for (const sourceId of consumedSources(log)) consumed.add(sourceId);
+      if (log.records.length === 0) {
+        const [initial, cmds] = config.init(null, config.ctx);
+        const result = await session.write((store) =>
+          store.commitStep({
+            _tag: "birth",
+            at: Date.now(),
+            state: initial,
+            cmds,
+            timers: [],
+          }),
+        );
+        admitReady();
+        await publishLogged(
+          result.state,
+          undefined,
+          result.owed.map(({ effect }) => effect),
+          result.owed,
+        );
+        return;
+      }
+      state = committedState(log) as S;
+      for (const source of pendingMessages(log)) await stepLogged(source, true);
+      log = await session.read();
+      state = committedState(log) as S;
+      admitReady();
+      await publishLogged(state, undefined, [], logLedger(log).surviving());
+      return;
+    }
     const [initial, cmds] =
       storeless ?? config.init(await restore(store as Store<S>), config.ctx);
     await commit(initial, undefined, cmds);
@@ -907,6 +1167,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   function enqueueDispatch(
     msg: M,
     origin: "caller" | "loop" = "caller",
+    opts?: DispatchOptions,
   ): Promise<void> {
     if (gate !== "open") {
       return Promise.reject(
@@ -914,6 +1175,16 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
           ? new DispatchDiscardedError(msg._tag)
           : new RuntimeStoppedError(msg._tag),
       );
+    }
+    if (session) {
+      if (session.poisoned()) return Promise.reject(session.poisoned());
+      return admitLogged(
+        msg,
+        origin,
+        opts?.id === undefined
+          ? messageId("generated", crypto.randomUUID())
+          : messageId("caller", opts.id),
+      ).folded;
     }
     return enqueueStep(msg, origin, stepDispatch);
   }
@@ -959,8 +1230,11 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   function postMsg(msg: M, takes: (state: S) => boolean): TellAnswer {
     if (gate !== "open") return "stopped";
     if (!takes(state as S)) return "no_cell";
-    enqueueStep(msg, "tell", (queued) =>
-      takes(state as S) ? stepDispatch(queued) : undefined,
+    (session
+      ? enqueueDispatch(msg, "loop")
+      : enqueueStep(msg, "tell", (queued) =>
+          takes(state as S) ? stepDispatch(queued) : undefined,
+        )
     ).catch(reportUndelivered);
     return "queued";
   }
@@ -988,9 +1262,9 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
    */
   async function dispatchToQuiescence(
     msg: M,
-    opts?: { readonly settle?: DispatchSettle },
+    opts?: DispatchOptions,
   ): Promise<void> {
-    await enqueueDispatch(msg);
+    await enqueueDispatch(msg, "caller", opts);
     if (opts?.settle === "once") return;
     await drainToQuiescence();
   }
@@ -1002,6 +1276,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
   const bootPromise = boot();
   tail = bootPromise.catch((err) => {
     bootError = err;
+    refuseAdmission(err);
   });
 
   async function teardown(): Promise<void> {
@@ -1027,13 +1302,14 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     // Flush final State. A save throw does not reject `stop()` (contract:
     // resolves regardless) but IS loss of the last write, so it reaches the
     // sink (invariant 6).
-    if (store && state !== undefined && bootError === null) {
+    if (!session && store && state !== undefined && bootError === null) {
       try {
         await store.save(state);
       } catch (error) {
         report(error, "stop-save");
       }
     }
+    storeClosed = true;
   }
 
   // The teardown runs once. A second `stop()` — a host calling it again, or the
@@ -1048,7 +1324,7 @@ export function startLoop<S, M extends { _tag: string }, C, Ctx>(
     [post]: postMsg,
     [installedState]: () => installed,
     dispatch: dispatchToQuiescence,
-    dispatchOnce: (msg) => enqueueDispatch(msg),
+    dispatchOnce: (msg, opts) => enqueueDispatch(msg, "caller", opts),
     getState(): S {
       // TOTAL. A booted handle is only obtainable by awaiting `ready`, which
       // resolves AFTER boot set `state`. That holds for a run `stop()` gave up

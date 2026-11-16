@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (166)
+## Exports (210)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -19,8 +19,14 @@ import { … } from "@demlik/tea";
 | [`Ack`](#Ack) | Interface | stable | The authoritative side's acknowledgement: the highest `seq` it has applied. |
 | [`AckPartition`](#AckPartition) | Interface | stable | The result of splitting a seq-tagged buffer against an ack. |
 | [`AnyCmdDef`](#AnyCmdDef) | Type | stable | The declaration-erased view the runtime reads: which `_tag` a def builds, which two Msg types it settles with, the `ok` schema the edge parses against and the tags an `Err` may carry. |
+| [`appliedEffects`](#appliedEffects) | Function | stable | Build a live guard. |
+| [`AppliedEffects`](#AppliedEffects) | Type | stable | The set of keys whose effect has been applied. |
+| [`AppliedEffectsEvent`](#AppliedEffectsEvent) | Type | stable | The event union the applied-marker set folds over. |
+| [`AppliedEffectsGuard`](#AppliedEffectsGuard) | Interface | stable | A live guard over an applied-marker set. |
+| [`applyAppliedEvent`](#applyAppliedEvent) | Function | stable | Apply ONE event — the reducer at the heart of the fold. |
 | [`applyCell`](#applyCell) | Function | stable | Run the one update cell that matches `state` and `msg` and return its `[nextState, cmds]`. |
 | [`applyCellChecked`](#applyCellChecked) | Function | stable | `applyCell` with the development-mode checks that catch an impure cell: the input state is frozen and the result is asserted to be plain data. |
+| [`applyEffectEvent`](#applyEffectEvent) | Function | stable | Apply ONE ledger event — the reducer at the heart of the fold. |
 | [`asReducer`](#asReducer) | Function | stable | Type-check a standalone reducer record and return it branded. |
 | [`AsyncSchemaError`](#AsyncSchemaError) | Class | stable | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
 | [`BootedRunHandle`](#BootedRunHandle) | Interface | stable | A RunHandle whose boot has completed, so its State exists. |
@@ -44,23 +50,37 @@ import { … } from "@demlik/tea";
 | [`DefineManagedResourceOpts`](#DefineManagedResourceOpts) | Interface | stable | Options for `defineManagedResource`: the resource's `name`, how to `acquire` it for a key, and how to `release` the handle. |
 | [`definePort`](#definePort) | Function | stable | Define a typed port. |
 | [`DeletableStore`](#DeletableStore) | Interface | stable | A `Store<S>` that can remove what it saved — how a host forgets a run. |
+| [`DeliveryId`](#DeliveryId) | Type | stable | Positive safe-integer delivery identity, increasing monotonically with optional gaps. |
+| [`deliveryIdOf`](#deliveryIdOf) | Function | stable | Read this handler invocation's durable delivery identity, when present. |
 | [`DepKeyedSub`](#DepKeyedSub) | Type | stable | One entry of a machine's `subs`: a Sub `_tag` plus `deps(state)`, which returns the data the runner needs, or `null` to keep the Sub off. |
 | [`describeMachine`](#describeMachine) | Function | stable | Describe a machine's update table as data: its form, its Msg types, and the per-state accept sets of a transitions machine. |
 | [`detectUpdateForm`](#detectUpdateForm) | Function | stable | Work out an `update` record's `UpdateForm` from its shape. |
 | [`DispatchDiscardedError`](#DispatchDiscardedError) | Class | stable | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
+| [`DispatchOptions`](#DispatchOptions) | Interface | stable | Dispatch metadata, including a stable caller identity for logged admission. |
 | [`DispatchSettle`](#DispatchSettle) | Type | stable | How long a `dispatch` waits before it resolves: `quiescent`, the default, waits for every follow-up Msg to drain, and `once` waits for the single transition. |
 | [`Dispose`](#Dispose) | Type | stable | The cleanup function a Sub runner returns. |
 | [`DisposeTimeoutNotice`](#DisposeTimeoutNotice) | Class | stable | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | [`DrainTimeoutNotice`](#DrainTimeoutNotice) | Class | stable | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for the queue hits `disposeTimeoutMs` (ADR 0025): a Cmd handler, a save or detached work had not returned. |
 | [`DriveFailedError`](#DriveFailedError) | Class | stable | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | [`DriveStalledError`](#DriveStalledError) | Class | stable | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub, no in-flight Cmd. |
+| [`EffectApplied`](#EffectApplied) | Interface | stable | An effect keyed `key` has been APPLIED. |
+| [`EffectConfirmed`](#EffectConfirmed) | Interface | stable | An owed effect has been CONFIRMED delivered. |
+| [`EffectForgotten`](#EffectForgotten) | Interface | stable | An applied-marker is no longer needed (its effect can no longer re-fire, e.g. |
+| [`EffectKey`](#EffectKey) | Type | stable | The caller-supplied durable dedup identity for an effect — stable across the re-fire (e.g. |
+| [`EffectLedgerEvent`](#EffectLedgerEvent) | Type | stable | The event union the ledger folds over. |
+| [`EffectOwed`](#EffectOwed) | Interface | stable | An effect is now OWED: it has been decided but its delivery is not yet confirmed. |
+| [`emptyApplied`](#emptyApplied) | Function | stable | The empty applied set — the fold's starting value (a fresh actor has applied nothing). |
+| [`emptyLedger`](#emptyLedger) | Function | stable | The empty ledger — the fold's starting value (a fresh actor owes nothing). |
 | [`EngineRun`](#EngineRun) | Type | stable | An engine's `run`, seen from a host adapter: a machine and its RunOptions in, a RunHandle out. |
 | [`ErrOf`](#ErrOf) | Type | stable | The DECLARED failure union a def's handler may settle with. |
 | [`ErrorsOf`](#ErrorsOf) | Type | stable | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
+| [`EventSourcedOptions`](#EventSourcedOptions) | Interface | stable | Schemas and namespace for a durable log store. |
 | [`EventSourceFactoryOpts`](#EventSourceFactoryOpts) | Interface | stable | Options for `fromEventSource`: map each server-sent message, error and open event to a Msg, or to `null` to drop it. |
 | [`ExhaustiveTransitions`](#ExhaustiveTransitions) | Type | stable | `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a machine that wants the compiler to force a decision on every (state, message) pair. |
 | [`FencedRead`](#FencedRead) | Interface | stable | What a fenced store's `loadFenced` returns: the raw saved value and the version it was written at. |
 | [`FencedStore`](#FencedStore) | Interface | stable | A `Store<S>` that can refuse a second live writer. |
+| [`foldApplied`](#foldApplied) | Function | stable | THE FOLD. |
+| [`foldLedger`](#foldLedger) | Function | stable | THE FOLD. |
 | [`foldMsgs`](#foldMsgs) | Function | stable | Fold a machine's `update` over a list of Msgs from a base state and return only the final state. |
 | [`FoldRefusal`](#FoldRefusal) | Interface | stable | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where. |
 | [`foldUpdates`](#foldUpdates) | Function | stable | Fold a machine's `update` over a list of Msgs from a starting state, and return the final state with every Cmd the cells emitted. |
@@ -79,6 +99,9 @@ import { … } from "@demlik/tea";
 | [`HandlersFor`](#HandlersFor) | Type | stable | The handler options of family `F`, for a machine of these types. |
 | [`historyTracker`](#historyTracker) | Function | stable | Create a bounded history tracker over a Runtime. |
 | [`HistoryTracker`](#HistoryTracker) | Interface | stable | A bounded log of a runtime's recent `(msg, state)` transitions, returned by `historyTracker`. |
+| [`idempotentEffect`](#idempotentEffect) | Function | stable | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
+| [`IdempotentEffect`](#IdempotentEffect) | Interface | stable | A keyed external effect. |
+| [`IdempotentOutcome`](#IdempotentOutcome) | Type | stable | The outcome of running a keyed effect through the guard. |
 | [`Identity`](#Identity) | Interface | stable | A machine's optional message filter: `ofState` names the identity this instance owns, and `ofMsg` the identity a Msg is addressed to. |
 | [`IdentityDropNotice`](#IdentityDropNotice) | Class | stable | Reported to the `OnError` sink under `phase: "identity-drop"` when the `Identity` filter drops a message addressed to a different instance. |
 | [`initAck`](#initAck) | Function | stable | The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. |
@@ -86,9 +109,24 @@ import { … } from "@demlik/tea";
 | [`InterpretArg`](#InterpretArg) | Type | stable | The `interpret` option of an engine's `run`: optional for a machine that emits no Cmd, required — one handler per Cmd variant — for one that does. |
 | [`InterpretCell`](#InterpretCell) | Type | stable | One cell of Interpret: the outcome-returning form for a `Cmd.define`d Cmd, the form returning a Msg, a list of Msgs or nothing for a hand-written one. |
 | [`InterpretDetached`](#InterpretDetached) | Type | stable | A Cmd handler that reports back through a `dispatch` limited to the Msgs it is allowed to send. |
+| [`isApplied`](#isApplied) | Function | stable | Has this key's effect already been applied (folded into the set)? |
 | [`isFencedStore`](#isFencedStore) | Function | stable | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
+| [`isLoggedStore`](#isLoggedStore) | Function | stable | Recognize the optional durable log capability. |
+| [`isOwed`](#isOwed) | Function | stable | Is this id still owed (unconfirmed) in the ledger? |
 | [`liftSlice`](#liftSlice) | Function | stable | Lift a battery verb's result into the host state that carries its slice. |
 | [`ListenerTarget`](#ListenerTarget) | Interface | stable | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
+| [`LogAppend`](#LogAppend) | Interface | stable | The canonical admission and whether it was newly appended. |
+| [`LogCommit`](#LogCommit) | Interface | stable | The decoded State and deliveries returned by a committed transition. |
+| [`LogConfirmation`](#LogConfirmation) | Interface | stable | The result of acknowledging an owed delivery. |
+| [`LogDisposition`](#LogDisposition) | Type | stable | The durable result of consuming a message. |
+| [`LogFailure`](#LogFailure) | Interface | stable | A reducer refusal retained with its source receipt. |
+| [`LoggedStore`](#LoggedStore) | Interface | stable | An optional store capability for engine-owned durable execution. |
+| [`LoggedTimer`](#LoggedTimer) | Interface | stable | A committed timer decision. |
+| [`LogMessage`](#LogMessage) | Interface | stable | A canonical admitted message, saved before reduction. |
+| [`LogRead`](#LogRead) | Interface | stable | A coherent validated log and its derived checkpoint. |
+| [`LogRecord`](#LogRecord) | Type | stable | The atomic records retained by a durable log. |
+| [`LogStep`](#LogStep) | Type | stable | An atomic birth or source transition request. |
+| [`logUpdates`](#logUpdates) | Function | stable | Query applied sources in commit order with inclusive, gap-free query positions. |
 | [`Machine`](#Machine) | Type | stable | A machine as plain data: `init`, `update`, and optionally `subs`, `cmds` and `identity`. |
 | [`MachineShape`](#MachineShape) | Type | stable | What `describeMachine` returns: the Msg types a machine handles and, for a transitions machine, its states and the Msg types each one accepts. |
 | [`MachineTypes`](#MachineTypes) | Type | stable | The `types` option: the slots of a machine's shape that no value in the object can imply, declared once as phantom values (`{} as Model`). |
@@ -110,7 +148,12 @@ import { … } from "@demlik/tea";
 | [`Outcome`](#Outcome) | Variable | stable | Build an Outcome outside a handler's helpers — in a test that calls a handler directly, or in an adapter converting another result type. |
 | [`OutcomeContractError`](#OutcomeContractError) | Class | stable | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome nor nothing. |
 | [`OutcomeHelpers`](#OutcomeHelpers) | Interface | stable | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
+| [`OwedEffect`](#OwedEffect) | Interface | stable | A single surviving entry to re-emit: its id and the effect it owes. |
 | [`partitionByAck`](#partitionByAck) | Function | stable | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
+| [`pendingEffectsLedger`](#pendingEffectsLedger) | Function | stable | Build a live recorder. |
+| [`PendingEffectsLedger`](#PendingEffectsLedger) | Type | stable | The pending-effects ledger: owed-but-unconfirmed effects keyed by their monotonic delivery id. |
+| [`PendingEffectsRecorder`](#PendingEffectsRecorder) | Interface | stable | A live, monotonic-id-issuing ledger recorder. |
+| [`PersistedLogRecord`](#PersistedLogRecord) | Interface | stable | A protocol record with its namespace-local sequence. |
 | [`Port`](#Port) | Interface | stable | A named, typed channel for values leaving the runtime. |
 | [`PortEmitter`](#PortEmitter) | Interface | stable | Augmentation injected onto `ctx` inside Cmd handlers. |
 | [`PortNameCollisionError`](#PortNameCollisionError) | Class | stable | Thrown by `definePort` when a name has already been registered in the current process. |
@@ -155,6 +198,7 @@ import { … } from "@demlik/tea";
 | [`SubscribeHandler`](#SubscribeHandler) | Type | stable | A Sub runner: given the Sub, the `ctx` and a `dispatch`, it opens the resource and returns a `Dispose`. |
 | [`Supervision`](#Supervision) | Type | stable | Declared supervision policy for a reducer (`update`) throw, at `run(machine, { supervision })`. |
 | [`SupervisionStrategy`](#SupervisionStrategy) | Type | stable | The three declared reducer-throw supervision strategies. |
+| [`survivingEffects`](#survivingEffects) | Function | stable | RE-EMIT ON ACTIVATION. |
 | [`SyncReturn`](#SyncReturn) | Type | stable | What an update cell returns: the `[nextState, cmds]` tuple, typed so that a Promise cannot stand in for it. |
 | [`Tagged`](#Tagged) | Type | stable | The shape every settled failure has (ADR 0011): a plain `_tag` record. |
 | [`TaggedError`](#TaggedError) | Type | stable | One declared failure per tag. |
@@ -256,6 +300,58 @@ type AnyCmdDef = {
 }
 ```
 
+<a id="appliedEffects"></a>
+
+### `appliedEffects`
+
+```ts
+function appliedEffects(
+  restore?: {
+    readonly events?: Iterable<AppliedEffectsEvent, any, any>;
+  },
+): AppliedEffectsGuard
+```
+
+<a id="AppliedEffects"></a>
+
+### `AppliedEffects`
+
+```ts
+type AppliedEffects = ReadonlySet<EffectKey>
+```
+
+<a id="AppliedEffectsEvent"></a>
+
+### `AppliedEffectsEvent`
+
+```ts
+type AppliedEffectsEvent = EffectApplied | EffectForgotten
+```
+
+<a id="AppliedEffectsGuard"></a>
+
+### `AppliedEffectsGuard`
+
+```ts
+interface AppliedEffectsGuard {
+  applied(): AppliedEffects;
+  forget(key: string): { readonly event: EffectForgotten };
+  isApplied(key: string): boolean;
+  run<A>(effect: IdempotentEffect<A>): Promise<IdempotentOutcome<A>>;
+}
+```
+
+<a id="applyAppliedEvent"></a>
+
+### `applyAppliedEvent`
+
+```ts
+function applyAppliedEvent(
+  applied: AppliedEffects,
+  event: AppliedEffectsEvent,
+): AppliedEffects
+```
+
 <a id="applyCell"></a>
 
 ### `applyCell`
@@ -286,6 +382,17 @@ function applyCellChecked<
   state: S,
   msg: M,
 ): readonly [S, readonly C[]]
+```
+
+<a id="applyEffectEvent"></a>
+
+### `applyEffectEvent`
+
+```ts
+function applyEffectEvent<E>(
+  ledger: PendingEffectsLedger<E>,
+  event: EffectLedgerEvent<E>,
+): PendingEffectsLedger<E>
 ```
 
 <a id="asReducer"></a>
@@ -357,7 +464,7 @@ interface BootingRuntime<S, M extends { _tag: string }, E extends { _tag: string
    * quiescent drain rejects with `QuiescenceTimeoutError`. Follow-up Msg
    * rejections themselves route to the `onError` sink, never here.
    */
-  dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  dispatch(msg: M, opts?: DispatchOptions): Promise<void>;
   /**
    * Dispatch `msg` and resolve after exactly ONE transition's effects settle,
    * WITHOUT draining the follow-up chain — equivalent to
@@ -365,7 +472,7 @@ interface BootingRuntime<S, M extends { _tag: string }, E extends { _tag: string
    * `await runtime.idle()` yourself; the un-awaited follow-up chain is the
    * footgun the quiescent default removed.
    */
-  dispatchOnce(msg: M): Promise<void>;
+  dispatchOnce(msg: M, opts?: DispatchOptions): Promise<void>;
   /**
    * Emit a value on a Port from OUTSIDE an interpret handler — same synchronous
    * fanout as `ctx.emit`. The canonical use is `observe`-driven emission (one
@@ -812,6 +919,22 @@ interface DeletableStore<S> extends Store<S> {
 }
 ```
 
+<a id="DeliveryId"></a>
+
+### `DeliveryId`
+
+```ts
+type DeliveryId = number
+```
+
+<a id="deliveryIdOf"></a>
+
+### `deliveryIdOf`
+
+```ts
+function deliveryIdOf(ctx: unknown): number | undefined
+```
+
 <a id="DepKeyedSub"></a>
 
 ### `DepKeyedSub`
@@ -858,6 +981,17 @@ class DispatchDiscardedError extends RuntimeDiscardNotice {
   readonly _tag: "DispatchDiscardedError";
   readonly msgType: string;
   readonly name: "DispatchDiscardedError";
+}
+```
+
+<a id="DispatchOptions"></a>
+
+### `DispatchOptions`
+
+```ts
+interface DispatchOptions {
+  readonly id?: string;
+  readonly settle?: DispatchSettle;
 }
 ```
 
@@ -938,6 +1072,79 @@ class DriveStalledError<S> extends Error {
 }
 ```
 
+<a id="EffectApplied"></a>
+
+### `EffectApplied`
+
+```ts
+interface EffectApplied extends Cmd<"effect_applied"> {
+  readonly key: string;
+}
+```
+
+<a id="EffectConfirmed"></a>
+
+### `EffectConfirmed`
+
+```ts
+interface EffectConfirmed extends Cmd<"effect_confirmed"> {
+  readonly id: number;
+}
+```
+
+<a id="EffectForgotten"></a>
+
+### `EffectForgotten`
+
+```ts
+interface EffectForgotten extends Cmd<"effect_forgotten"> {
+  readonly key: string;
+}
+```
+
+<a id="EffectKey"></a>
+
+### `EffectKey`
+
+```ts
+type EffectKey = string
+```
+
+<a id="EffectLedgerEvent"></a>
+
+### `EffectLedgerEvent`
+
+```ts
+type EffectLedgerEvent<E> = EffectOwed<E> | EffectConfirmed
+```
+
+<a id="EffectOwed"></a>
+
+### `EffectOwed`
+
+```ts
+interface EffectOwed<E> extends Cmd<"effect_owed"> {
+  readonly effect: E;
+  readonly id: number;
+}
+```
+
+<a id="emptyApplied"></a>
+
+### `emptyApplied`
+
+```ts
+function emptyApplied(): AppliedEffects
+```
+
+<a id="emptyLedger"></a>
+
+### `emptyLedger`
+
+```ts
+function emptyLedger<E>(): PendingEffectsLedger<E>
+```
+
 <a id="EngineRun"></a>
 
 ### `EngineRun`
@@ -971,6 +1178,20 @@ type ErrOf<D extends AnyCmdDef> = D extends CmdDef<infer _Name, infer _Input, in
 
 ```ts
 type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown
+```
+
+<a id="EventSourcedOptions"></a>
+
+### `EventSourcedOptions`
+
+```ts
+interface EventSourcedOptions<S, M, C> {
+  readonly command: Schema<C>;
+  readonly key?: string;
+  readonly message: Schema<M>;
+  readonly snapshotEvery?: number;
+  readonly state: Schema<S>;
+}
 ```
 
 <a id="EventSourceFactoryOpts"></a>
@@ -1026,6 +1247,24 @@ interface FencedStore<S> extends Store<S> {
    */
   saveFenced(state: S, expectedVersion: number): Promise<number>;
 }
+```
+
+<a id="foldApplied"></a>
+
+### `foldApplied`
+
+```ts
+function foldApplied(events: Iterable<AppliedEffectsEvent>): AppliedEffects
+```
+
+<a id="foldLedger"></a>
+
+### `foldLedger`
+
+```ts
+function foldLedger<E>(
+  events: Iterable<EffectLedgerEvent<E>>,
+): PendingEffectsLedger<E>
 ```
 
 <a id="foldMsgs"></a>
@@ -1300,6 +1539,43 @@ interface HistoryTracker<S, M extends { _tag: string }> {
 }
 ```
 
+<a id="idempotentEffect"></a>
+
+### `idempotentEffect`
+
+```ts
+function idempotentEffect<A>(
+  key: string,
+  fn: () => A | Promise<A>,
+): IdempotentEffect<A>
+```
+
+<a id="IdempotentEffect"></a>
+
+### `IdempotentEffect`
+
+```ts
+interface IdempotentEffect<A> {
+  readonly fn: () => A | Promise<A>;
+  readonly key: string;
+}
+```
+
+<a id="IdempotentOutcome"></a>
+
+### `IdempotentOutcome`
+
+```ts
+type IdempotentOutcome<A> =
+  | {
+    readonly event: EffectApplied;
+    readonly key: EffectKey;
+    readonly ran: true;
+    readonly result: A;
+  }
+  | { readonly key: EffectKey; readonly ran: false }
+```
+
 <a id="Identity"></a>
 
 ### `Identity`
@@ -1382,12 +1658,36 @@ type InterpretDetached<C extends Cmd, Allowed extends { _tag: string }, Ctx> = (
 ) => Promise<void>
 ```
 
+<a id="isApplied"></a>
+
+### `isApplied`
+
+```ts
+function isApplied(applied: AppliedEffects, key: string): boolean
+```
+
 <a id="isFencedStore"></a>
 
 ### `isFencedStore`
 
 ```ts
 function isFencedStore<S>(store: Store<S>): store is FencedStore<S>
+```
+
+<a id="isLoggedStore"></a>
+
+### `isLoggedStore`
+
+```ts
+function isLoggedStore<S, M, C>(store: Store<S>): store is LoggedStore<S, M, C>
+```
+
+<a id="isOwed"></a>
+
+### `isOwed`
+
+```ts
+function isOwed<E>(ledger: PendingEffectsLedger<E>, id: number): boolean
 ```
 
 <a id="liftSlice"></a>
@@ -1411,6 +1711,190 @@ interface ListenerTarget<Args extends readonly unknown[], S extends Sub, Ctx> {
   add: (listener: (...args: Args) => void, sub: S, ctx: Ctx) => void;
   remove: (listener: (...args: Args) => void, sub: S, ctx: Ctx) => void;
 }
+```
+
+<a id="LogAppend"></a>
+
+### `LogAppend`
+
+```ts
+interface LogAppend<M> {
+  readonly appended: boolean;
+  readonly entry: PersistedLogRecord<LogMessage<M>>;
+  readonly version: number;
+}
+```
+
+<a id="LogCommit"></a>
+
+### `LogCommit`
+
+```ts
+interface LogCommit<S, C> {
+  readonly owed: readonly OwedEffect<C>[];
+  /** The current decoded State, unchanged by a receipt. */
+  readonly state: S;
+  readonly version: number;
+}
+```
+
+<a id="LogConfirmation"></a>
+
+### `LogConfirmation`
+
+```ts
+interface LogConfirmation {
+  readonly confirmed: boolean;
+  readonly version: number;
+}
+```
+
+<a id="LogDisposition"></a>
+
+### `LogDisposition`
+
+```ts
+type LogDisposition = "applied" | "ignored" | "rejected"
+```
+
+<a id="LogFailure"></a>
+
+### `LogFailure`
+
+```ts
+interface LogFailure {
+  readonly kind: "no_cell" | "reduce";
+  readonly message: string;
+}
+```
+
+<a id="LoggedStore"></a>
+
+### `LoggedStore`
+
+```ts
+interface LoggedStore<S, M, C> extends Store<S> {
+  readonly logged: true;
+  appendMessage(message: LogMessage<M>): Promise<LogAppend<M>>;
+  checkpoint(): Promise<boolean>;
+  commitStep(step: LogStep<S, M, C>): Promise<LogCommit<S, C>>;
+  confirmEffect(id: number): Promise<LogConfirmation>;
+  readLog(): Promise<LogRead<S, M, C>>;
+}
+```
+
+<a id="LoggedTimer"></a>
+
+### `LoggedTimer`
+
+```ts
+interface LoggedTimer<M> {
+  readonly at: number;
+  readonly fired: boolean;
+  readonly id: string;
+  readonly msg: M;
+  readonly subId: string;
+}
+```
+
+<a id="LogMessage"></a>
+
+### `LogMessage`
+
+```ts
+interface LogMessage<M> {
+  readonly _tag: "message";
+  readonly at: number;
+  readonly id: string;
+  readonly msg: M;
+}
+```
+
+<a id="LogRead"></a>
+
+### `LogRead`
+
+```ts
+interface LogRead<S, M, C> {
+  readonly records: readonly PersistedLogRecord<LogRecord<S, M, C>>[];
+  readonly snapshot: { readonly state: S; readonly through: number } | null;
+  readonly timers: readonly LoggedTimer<M>[];
+  readonly version: number;
+}
+```
+
+<a id="LogRecord"></a>
+
+### `LogRecord`
+
+```ts
+type LogRecord<S, M, C> =
+  | {
+    readonly _tag: "birth";
+    readonly at: number;
+    readonly owed: readonly EffectOwed<C>[];
+    readonly state: S;
+    readonly timers: readonly LoggedTimer<M>[];
+  }
+  | LogMessage<M>
+  | {
+    readonly _tag: "applied";
+    readonly owed: readonly EffectOwed<C>[];
+    readonly sourceId: string;
+    readonly state: S;
+    readonly timers: readonly LoggedTimer<M>[];
+  }
+  | {
+    readonly _tag: "receipt";
+    readonly disposition: "ignored" | "rejected";
+    readonly failure?: LogFailure;
+    readonly sourceId: string;
+  }
+  | {
+    readonly _tag: "confirmed";
+    readonly event: EffectConfirmed;
+  }
+```
+
+<a id="LogStep"></a>
+
+### `LogStep`
+
+```ts
+type LogStep<S, M, C> =
+  | {
+    readonly _tag: "birth";
+    readonly at: number;
+    readonly cmds: readonly C[];
+    readonly state: S;
+    readonly timers: readonly LoggedTimer<M>[];
+  }
+  | {
+    readonly _tag: "applied";
+    readonly cmds: readonly C[];
+    readonly sourceId: string;
+    readonly state: S;
+    readonly timers: readonly LoggedTimer<M>[];
+  }
+  | Extract<LogRecord<S, M, C>, { _tag: "receipt" }>
+```
+
+<a id="logUpdates"></a>
+
+### `logUpdates`
+
+```ts
+function logUpdates<S, M, C>(
+  log: LogRead<S, M, C>,
+  range?: {
+    readonly fromSeq?: number;
+    readonly toSeq?: number;
+  },
+): readonly {
+  readonly event: M;
+  readonly seq: number;
+  readonly state: S;
+}[]
 ```
 
 <a id="Machine"></a>
@@ -1746,6 +2230,17 @@ interface OutcomeHelpers<Ok, E> {
 }
 ```
 
+<a id="OwedEffect"></a>
+
+### `OwedEffect`
+
+```ts
+interface OwedEffect<E> {
+  readonly effect: E;
+  readonly id: number;
+}
+```
+
 <a id="partitionByAck"></a>
 
 ### `partitionByAck`
@@ -1755,6 +2250,52 @@ function partitionByAck<T>(
   buffer: readonly SeqTagged<T>[],
   ackOrSeq: number | Ack,
 ): AckPartition<T>
+```
+
+<a id="pendingEffectsLedger"></a>
+
+### `pendingEffectsLedger`
+
+```ts
+function pendingEffectsLedger<E>(
+  restore?: {
+    readonly events?: Iterable<EffectLedgerEvent<E>, any, any>;
+    readonly lastId?: number;
+  },
+): PendingEffectsRecorder<E>
+```
+
+<a id="PendingEffectsLedger"></a>
+
+### `PendingEffectsLedger`
+
+```ts
+type PendingEffectsLedger<E> = ReadonlyMap<DeliveryId, E>
+```
+
+<a id="PendingEffectsRecorder"></a>
+
+### `PendingEffectsRecorder`
+
+```ts
+interface PendingEffectsRecorder<E> {
+  confirm(id: number): { confirmed: boolean; event: EffectConfirmed };
+  lastId(): number;
+  ledger(): PendingEffectsLedger<E>;
+  owe(effect: E): { event: EffectOwed<E>; id: number };
+  surviving(): readonly OwedEffect<E>[];
+}
+```
+
+<a id="PersistedLogRecord"></a>
+
+### `PersistedLogRecord`
+
+```ts
+interface PersistedLogRecord<R> {
+  readonly record: R;
+  readonly seq: number;
+}
 ```
 
 <a id="Port"></a>
@@ -2125,7 +2666,7 @@ interface RuntimeRef<M extends { _tag: string }> {
    * quiescent drain rejects with `QuiescenceTimeoutError`. Follow-up Msg
    * rejections themselves route to the `onError` sink, never here.
    */
-  dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  dispatch(msg: M, opts?: DispatchOptions): Promise<void>;
   /**
    * Dispatch `msg` and resolve after exactly ONE transition's effects settle,
    * WITHOUT draining the follow-up chain — equivalent to
@@ -2133,7 +2674,7 @@ interface RuntimeRef<M extends { _tag: string }> {
    * `await runtime.idle()` yourself; the un-awaited follow-up chain is the
    * footgun the quiescent default removed.
    */
-  dispatchOnce(msg: M): Promise<void>;
+  dispatchOnce(msg: M, opts?: DispatchOptions): Promise<void>;
 }
 ```
 
@@ -2391,6 +2932,16 @@ type Supervision<S, M extends { _tag: string }> =
 
 ```ts
 type SupervisionStrategy = "escalate" | "restart" | "stop"
+```
+
+<a id="survivingEffects"></a>
+
+### `survivingEffects`
+
+```ts
+function survivingEffects<E>(
+  ledger: PendingEffectsLedger<E>,
+): readonly OwedEffect<E>[]
 ```
 
 <a id="SyncReturn"></a>

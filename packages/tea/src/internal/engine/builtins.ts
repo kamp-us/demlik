@@ -64,7 +64,10 @@ export function supervision<S, M extends { _tag: string }, C>(
       try {
         return next(state, msg);
       } catch (reduceError) {
-        if (isRefusal(machine, reduceError, state, msg)) throw reduceError;
+        if (isRefusal(machine, reduceError, state, msg)) {
+          loop.refused();
+          throw reduceError;
+        }
         loop.report(reduceError, "reduce");
         switch (policy.strategy) {
           case "restart":
@@ -170,13 +173,14 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
     const { settle, checkDispatch: check } = cmdContractOver(defs, clock);
     const defined = new Set(defs.map((d) => d.cmdType));
     return {
-      interpret: (next) => async (cmd, dispatch) => {
+      interpret: (next) => async (cmd, dispatch, failed) => {
         const type = (cmd as { _tag: string })._tag;
         const checked = defined.has(type)
           ? (msg: M) => {
               try {
                 check(cmd as { _tag: string }, msg);
               } catch (err) {
+                failed?.();
                 loop.report(err, "interpret");
                 return;
               }
@@ -184,9 +188,13 @@ export function cmdDefinitions<S, M extends { _tag: string }, C>(
             }
           : dispatch;
         try {
-          return settle(cmd as { _tag: string }, await next(cmd, checked));
+          return settle(
+            cmd as { _tag: string },
+            await next(cmd, checked, failed),
+          );
         } catch (err) {
           if (!defined.has(type)) throw err;
+          failed?.();
           loop.report(err, "interpret");
           return undefined;
         }

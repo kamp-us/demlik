@@ -30,6 +30,7 @@ import {
   type TellAnswer,
 } from "../internal/engine/loop";
 import type { Cmd, Machine, Sub } from "../pure/core";
+import type { DispatchOptions } from "../runtime-types";
 import {
   type BootedRunHandle,
   DispatchDiscardedError,
@@ -307,9 +308,9 @@ class HostedRun<S, M extends { _tag: string }>
     ) as S;
   }
 
-  dispatch(msg: M): Promise<void> {
+  dispatch(msg: M, opts?: DispatchOptions): Promise<void> {
     return this.attached.then((target) =>
-      Effect.runPromise(target.dispatch(msg)),
+      Effect.runPromise(target.dispatch(msg, opts)),
     );
   }
 
