@@ -17,11 +17,6 @@ import type {
 import type { EffectLedgerEvent, EffectOwed } from "./durable-effects";
 import { pendingEffectsLedger } from "./durable-effects";
 
-/** A versioned namespace envelope; derived checkpoints never replace history. */
-export interface LogEnvelope<S, M, C> extends LogRead<S, M, C> {
-  readonly protocol: 1;
-}
-
 function object(raw: unknown): Record<string, unknown> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     throw new Error("Invalid durable log object");
@@ -156,90 +151,6 @@ function parseRecord<S, M, C>(
   if (!Object.hasOwn(parsers, tag))
     throw new Error("Unknown durable log record");
   return parsers[tag as keyof typeof parsers]();
-}
-
-/** Parse and validate an envelope without rewriting malformed or legacy bytes. */
-export function readEnvelope<S, M, C>(
-  bytes: string | undefined,
-  options: EventSourcedOptions<S, M, C>,
-): LogEnvelope<S, M, C> {
-  if (bytes === undefined)
-    return { protocol: 1, version: 0, records: [], snapshot: null, timers: [] };
-  const raw = object(JSON.parse(bytes));
-  if (raw.protocol !== 1) throw new Error("Unsupported durable log protocol");
-  const version = integer(raw.version);
-  const records = array(raw.records, (raw) => {
-    const row = object(raw);
-    return {
-      seq: integer(row.seq, 1),
-      record: parseRecord(row.record, options),
-    };
-  });
-  const messages = new Set<string>();
-  const consumed = new Set<string>();
-  const deliveries = new Set<number>();
-  const confirmed = new Set<number>();
-  let high = 0;
-  for (const [index, { seq, record }] of records.entries()) {
-    if (
-      seq !== index + 1 ||
-      (index === 0 && record._tag !== "birth") ||
-      (index > 0 && record._tag === "birth")
-    )
-      throw new Error("Invalid durable log ordering");
-    if (record._tag === "message") {
-      if (messages.has(record.id)) throw new Error("Duplicate log source");
-      messages.add(record.id);
-    }
-    if (record._tag === "step") {
-      if (!messages.has(record.sourceId) || consumed.has(record.sourceId))
-        throw new Error("Invalid source receipt");
-      consumed.add(record.sourceId);
-    }
-    if (record._tag === "birth" || record._tag === "step") {
-      for (const e of record.owed) {
-        if (e.id <= high) throw new Error("Invalid delivery ordering");
-        high = e.id;
-        deliveries.add(e.id);
-      }
-    }
-    if (record._tag === "confirmed") {
-      if (!deliveries.has(record.event.id) || confirmed.has(record.event.id))
-        throw new Error("Invalid delivery receipt");
-      confirmed.add(record.event.id);
-    }
-  }
-  if (version !== records.length)
-    throw new Error("Invalid durable log revision");
-  let snapshot: LogRead<S, M, C>["snapshot"] = null;
-  if (raw.snapshot !== null) {
-    const saved = object(raw.snapshot);
-    const through = integer(saved.through, 1);
-    const source = records.find((r) => r.seq === through)?.record;
-    if (
-      source?._tag !== "message" ||
-      !consumed.has(source.id) ||
-      records.some(
-        (r) =>
-          r.seq <= through &&
-          r.record._tag === "message" &&
-          !consumed.has(r.record.id),
-      )
-    )
-      throw new Error("Invalid checkpoint boundary");
-    const parsed = options.state.safeParse(saved.state);
-    if (parsed.success) snapshot = { through, state: parsed.data };
-  }
-  const last = [...records]
-    .reverse()
-    .find(({ record }) => record._tag === "birth" || record._tag === "step");
-  // Validate the redundant envelope projection as protocol data too.
-  array(raw.timers, (r) => timer(r, options.message));
-  const timers =
-    last && (last.record._tag === "birth" || last.record._tag === "step")
-      ? last.record.timers
-      : [];
-  return { protocol: 1, version, records, snapshot, timers };
 }
 
 /** Read committed State fields; never invoke historical reducers or init. */
@@ -448,12 +359,6 @@ export function logWriter<S, M, C>(options: EventSourcedOptions<S, M, C>) {
 
   function restore(bytes: string): void {
     const raw = object(JSON.parse(bytes));
-    if (raw.protocol === 1 && records.length === 0) {
-      const legacy = readEnvelope(bytes, options);
-      for (const row of legacy.records) accept(row);
-      acceptSnapshot(legacy.snapshot);
-      return;
-    }
     if (raw.protocol !== 2) throw new Error("Unsupported durable log protocol");
     accept(
       { seq: integer(raw.seq, 1), record: parseRecord(raw.record, options) },
