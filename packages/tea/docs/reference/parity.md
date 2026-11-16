@@ -30,7 +30,7 @@ import { … } from "@demlik/tea/parity";
 ```ts
 function goldenReplay<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -157,7 +157,7 @@ interface Recording<S, M> {
 ### `recordRun`
 
 ```ts
-function recordRun<S, M extends { type: string }>(
+function recordRun<S, M extends { _tag: string }>(
   runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recording<S, M>

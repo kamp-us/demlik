@@ -30,9 +30,9 @@ interface MachineVizOptions<S, M> {
   samples?: {
     /** Ctx for `init(null, ctx)` — unlocks the `[*] -->` initial-state edge. */
     ctx?: unknown;
-    /** Sample msg per `msg.type` — unlocks RESOLVED edges. */
+    /** Sample msg per `msg._tag` — unlocks RESOLVED edges. */
     msgs?: Partial<Record<string, M>>;
-    /** Sample state per `state.type` — unlocks RESOLVED edges + sub annotations. */
+    /** Sample state per `state._tag` — unlocks RESOLVED edges + sub annotations. */
     states?: Partial<Record<string, S>>;
   };
   /** Optional diagram title, emitted as a Mermaid front-matter `title:` block. */
@@ -63,7 +63,7 @@ function safeLabel(raw: string): string
 ```ts
 function toMermaid<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

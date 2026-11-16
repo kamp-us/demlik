@@ -35,7 +35,7 @@ import { … } from "@demlik/tea/testing";
 ```ts
 function bindMachine<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -50,7 +50,7 @@ function bindMachine<
 ### `BoundMachine`
 
 ```ts
-interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> {
+interface BoundMachine<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx> {
   /**
    * Assert the exact set of subs desired at the final state. Mirrors the
    * free `expectActiveSubs(machine, opts, expected)`.
@@ -74,7 +74,7 @@ interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends S
   /**
    * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
    * Use for the "narrow-then-assert" pattern where the test inspects a
-   * specific field after `state.type === "..."` discrimination.
+   * specific field after `state._tag === "..."` discrimination.
    */
   replay(
     opts: BoundOpts<S, M>,
@@ -98,7 +98,7 @@ interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends S
 ```ts
 function expectActiveSubs<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -116,7 +116,7 @@ function expectActiveSubs<
 ```ts
 function expectCmdEmitted<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -134,7 +134,7 @@ function expectCmdEmitted<
 ```ts
 function expectCmdSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -152,7 +152,7 @@ function expectCmdSequence<
 ```ts
 function expectFinalState<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -170,7 +170,7 @@ function expectFinalState<
 ```ts
 function expectReplayDeterministic<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -185,7 +185,7 @@ function expectReplayDeterministic<
 ### `noopRuntime`
 
 ```ts
-function noopRuntime<S, M extends { type: string }>(
+function noopRuntime<S, M extends { _tag: string }>(
   opts?: {
     /**
      * Optional value returned by `getState()`. Omit
@@ -214,7 +214,7 @@ interface ReplayOpts<S, M, Ctx> {
 ### `stateFactory`
 
 ```ts
-function stateFactory<S extends { type: string }>(
+function stateFactory<S extends { _tag: string }>(
   defaults: StateFactoryDefaults<S>,
 ): StateFactoryAPI<S>
 ```
@@ -224,7 +224,7 @@ function stateFactory<S extends { type: string }>(
 ### `StateFactoryAPI`
 
 ```ts
-type StateFactoryAPI<S extends { type: string }> = { readonly [K in S["type"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K> }
+type StateFactoryAPI<S extends { _tag: string }> = { readonly [K in S["_tag"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K> }
 ```
 
 <a id="StateFactoryDefaults"></a>
@@ -232,7 +232,7 @@ type StateFactoryAPI<S extends { type: string }> = { readonly [K in S["type"]]: 
 ### `StateFactoryDefaults`
 
 ```ts
-type StateFactoryDefaults<S extends { type: string }> = { readonly [K in S["type"]]: RequiredFields<StateOf<S, K>> }
+type StateFactoryDefaults<S extends { _tag: string }> = { readonly [K in S["_tag"]]: RequiredFields<StateOf<S, K>> }
 ```
 
 <a id="step"></a>
@@ -240,7 +240,7 @@ type StateFactoryDefaults<S extends { type: string }> = { readonly [K in S["type
 ### `step`
 
 ```ts
-function step<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+function step<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx>(
   machine: Machine<S, M, C, U, Ctx>,
   loaded: NoInfer<S>,
   msg: NoInfer<M>,

@@ -55,7 +55,7 @@ interface AnswerCell<K extends Cmd, V, M> {
 ### `arbConstantMsg`
 
 ```ts
-function arbConstantMsg<T extends string>(type: T): Arbitrary<{ type: T }>
+function arbConstantMsg<T extends string>(type: T): Arbitrary<{ _tag: T }>
 ```
 
 <a id="arbGuidedSequence"></a>
@@ -65,7 +65,7 @@ function arbConstantMsg<T extends string>(type: T): Arbitrary<{ type: T }>
 ```ts
 function arbGuidedSequence<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -87,9 +87,9 @@ function arbGuidedSequence<
 ### `arbMsg`
 
 ```ts
-function arbMsg<M extends { type: string }>(
+function arbMsg<M extends { _tag: string }>(
   table: MsgArbitraryTable<M>,
-  opts?: { weights?: Partial<Record<M["type"], number>> },
+  opts?: { weights?: Partial<Record<M["_tag"], number>> },
 ): Arbitrary<M>
 ```
 
@@ -98,7 +98,7 @@ function arbMsg<M extends { type: string }>(
 ### `arbMsgSequence`
 
 ```ts
-function arbMsgSequence<M extends { type: string }>(
+function arbMsgSequence<M extends { _tag: string }>(
   msgArb: Arbitrary<M>,
   opts?: {
     readonly maxLength?: number;
@@ -124,7 +124,7 @@ function arbMsgSequence<M extends { type: string }>(
 function arbRecordMsg<T extends string, R>(
   type: T,
   fields: { [K in string | number | symbol]: Arbitrary<R[K]> },
-): Arbitrary<{ type: T } & R>
+): Arbitrary<{ _tag: T } & R>
 ```
 
 <a id="Fold"></a>
@@ -147,7 +147,7 @@ interface Fold<S, M, C> {
 ```ts
 function foldEvents<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -165,12 +165,12 @@ function foldEvents<
 
 ```ts
 interface GuidedCells<
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
-  A extends { readonly [K in C["type"]]?: unknown },
+  A extends { readonly [K in C["_tag"]]?: unknown },
 > {
-  readonly answers?: { readonly [K in string | number | symbol]: K extends C["type"] ? AnswerCell<Extract<C, { type: K }>, A[K], M> : never };
-  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { type: K }>> };
+  readonly answers?: { readonly [K in string | number | symbol]: K extends C["_tag"] ? AnswerCell<Extract<C, { _tag: K }>, A[K], M> : never };
+  readonly outside?: { readonly [K in string]?: Arbitrary<Extract<M, { _tag: K }>> };
 }
 ```
 
@@ -230,7 +230,7 @@ function lawTrace<S, M, C>(
 ### `MsgArbitraryTable`
 
 ```ts
-type MsgArbitraryTable<M extends { type: string }> = { [K in M["type"]]: fc.Arbitrary<Extract<M, { type: K }>> }
+type MsgArbitraryTable<M extends { _tag: string }> = { [K in M["_tag"]]: fc.Arbitrary<Extract<M, { _tag: K }>> }
 ```
 
 <a id="MsgCount"></a>
@@ -254,10 +254,10 @@ interface MsgCount {
 ### `msgTypeKeys`
 
 ```ts
-function msgTypeKeys<S, M extends { type: string }, C extends Cmd>(
+function msgTypeKeys<S, M extends { _tag: string }, C extends Cmd>(
   machine: {
     __form?: UpdateForm;
-    update: Reducer<S, M, C> | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+    update: Reducer<S, M, C> | ([S] extends [{ _tag: string }] ? Transitions<S, M, C> : never);
   },
 ): readonly string[]
 ```
@@ -283,7 +283,7 @@ class PropertyFailure extends Error {
 ```ts
 function propertyInvariant<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -333,13 +333,13 @@ interface PropertyOpts<S> extends Omit<fc.Parameters, "asyncReporter" | "example
    */
   readonly failOnNeverActed?: boolean;
   /**
-   * Fail a run when `init` or a step sends a Cmd whose `type` isn't in
+   * Fail a run when `init` or a step sends a Cmd whose `_tag` isn't in
    * `machine.cmds`, naming that Cmd. Default `false`, because tea lets a machine
    * keep a hand-written Cmd beside its defined ones. A machine with no `cmds` field
    * has no list to check against, so this adds nothing there. `cmds: []` is a list
    * with nothing on it, so every Cmd fails.
    *
-   * A value with no string `type` is never a Cmd, so it fails with this off too, on
+   * A value with no string `_tag` is never a Cmd, so it fails with this off too, on
    * every machine.
    */
   readonly failOnUndeclaredCmd?: boolean;
@@ -394,7 +394,7 @@ interface PropertyRun {
 ```ts
 function propertyTerminates<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
@@ -414,7 +414,7 @@ function propertyTerminates<
 ```ts
 function propertyTrace<
   S,
-  M extends { type: string },
+  M extends { _tag: string },
   C extends Cmd,
   U extends Sub,
   Ctx,

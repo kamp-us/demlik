@@ -15,7 +15,7 @@ import { … } from "@demlik/tea/testing/promise";
 | [`DEFAULT_MAX_ROUNDS`](#DEFAULT_MAX_ROUNDS) | Variable | stable | The default round bound when `opts.maxRounds` is omitted: **100**. |
 | [`drive`](#drive) | Function | stable | Drive `machine` from `initial` through `msg` against the REAL interpret `handlers`, feeding every settle Msg back until the machine goes quiet, and hand back the settled state together with the whole history. |
 | [`DriveCtxArg`](#DriveCtxArg) | Type | stable | `drive`'s `ctx` field. |
-| [`DriveNoHandlerError`](#DriveNoHandlerError) | Class | stable | Raised when a Cmd reaches `drive` with no handler for its `type` in the handler record. |
+| [`DriveNoHandlerError`](#DriveNoHandlerError) | Class | stable | Raised when a Cmd reaches `drive` with no handler for its `_tag` in the handler record. |
 | [`DriveOptions`](#DriveOptions) | Type | stable | The options both `drive`s take. |
 | [`DriveResult`](#DriveResult) | Interface | stable | What a settled `drive` hands back. |
 | [`DriveRoundsExceededError`](#DriveRoundsExceededError) | Class | stable | Raised when a driven machine is still emitting work after `maxRounds` rounds. |
@@ -37,7 +37,7 @@ const DEFAULT_MAX_ROUNDS: 100
 ### `drive`
 
 ```ts
-function drive<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+function drive<S, M extends { _tag: string }, C extends Cmd, U extends Sub, Ctx>(
   machine: Machine<S, M, C, U, Ctx>,
   initial: S,
   msg: M,
@@ -62,7 +62,7 @@ type DriveCtxArg<Ctx> = [undefined] extends [Ctx] ? { readonly ctx?: Ctx } : Ctx
 class DriveNoHandlerError<M, C> extends Error {
   constructor(cmdType: string, trace: readonly DriveTraceEntry<M, C>[]);
   readonly _tag: "DriveNoHandlerError";
-  /** The Cmd `type` nothing in the handler record answered. */
+  /** The Cmd `_tag` nothing in the handler record answered. */
   readonly cmdType: string;
   readonly name: "DriveNoHandlerError";
   /** Every Msg folded and Cmd dispatched before the miss. */

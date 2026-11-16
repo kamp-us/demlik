@@ -96,7 +96,7 @@ interface BackgroundRuntimeContext<S, M> {
 ### `bridgeClient`
 
 ```ts
-function bridgeClient<S, M extends { type: string }>(
+function bridgeClient<S, M extends { _tag: string }>(
   __namedParameters: BridgeClientOpts<S, M>,
 ): BridgeClient<S, M>
 ```
@@ -169,7 +169,7 @@ interface BridgeClientOpts<S, M> {
 ### `bridgeRuntime`
 
 ```ts
-function bridgeRuntime<S, M extends { type: string }, V = S>(
+function bridgeRuntime<S, M extends { _tag: string }, V = S>(
   runtime: Runtime<S, M>,
   __namedParameters: BridgeRuntimeOpts<S, M, V>,
 ): () => void
@@ -224,8 +224,8 @@ interface BridgeRuntimeOpts<S, M, V = S> {
    * `serialize` unset and `V = S`.
    *
    * Wire shape with `serialize`:
-   *   { type: channel, msg, state: serialize(currentState) }   // broadcast
-   *   { type: hydrate } → { state: serialize(currentState) }    // hydrate
+   *   { _tag: channel, msg, state: serialize(currentState) }   // broadcast
+   *   { _tag: hydrate } → { state: serialize(currentState) }    // hydrate
    *
    * Dispatch is NOT affected — it carries `M` end-to-end. Surfaces parse the
    * `V` they receive (they should pick a type parameter matching the
@@ -240,7 +240,7 @@ interface BridgeRuntimeOpts<S, M, V = S> {
 ### `bridgeTabClient`
 
 ```ts
-function bridgeTabClient<S, M extends { type: string }>(
+function bridgeTabClient<S, M extends { _tag: string }>(
   __namedParameters: BridgeTabClientOpts<S, M>,
 ): BridgeClient<S, M>
 ```
@@ -334,7 +334,7 @@ interface ChromeTabsEventOpts<S extends Sub, M> {
 ### `createBackgroundRuntimeContext`
 
 ```ts
-function createBackgroundRuntimeContext<S, M extends { type: string }>(): BackgroundRuntimeContext<S, M>
+function createBackgroundRuntimeContext<S, M extends { _tag: string }>(): BackgroundRuntimeContext<S, M>
 ```
 
 <a id="fakeChrome"></a>
@@ -574,7 +574,7 @@ type TabsEventName = "onActivated" | "onRemoved" | "onUpdated"
 ### `useBackgroundRuntime`
 
 ```ts
-function useBackgroundRuntime<S, M extends { type: string }>(
+function useBackgroundRuntime<S, M extends { _tag: string }>(
   __namedParameters: UseBackgroundRuntimeOpts<S>,
 ): UseBackgroundRuntimeResult<S, M>
 ```

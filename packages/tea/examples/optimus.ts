@@ -555,9 +555,7 @@ const uploaderMachine = defineMachine({
   },
   cmds: [publish.run],
   init: (loaded) =>
-    loaded !== null
-      ? [loaded, []]
-      : [{ phase: "idle", sink: publish.init() }, []],
+    loaded !== null ? [loaded, []] : [{ phase: "idle", sink: publish.init() }, []],
   update: {
     ship: (s, m) => {
       const [sink, cmds] = publish.attempt(s.sink, SINK_KEY, m.report, m.at);
@@ -610,13 +608,16 @@ async function until(cond: () => boolean, label: string): Promise<void> {
   throw new Error(`timed out waiting for: ${label}`);
 }
 
+
 async function main() {
   const ctx: AgentCtx = {
     now: () => Date.now(),
   };
 
   line("assembling Optimus from the @demlik/tea stack");
-  console.log("L1 bricks -> L2 compositions -> L3 agent -> DevX");
+  console.log(
+    "L1 bricks -> L2 compositions -> L3 agent -> DevX",
+  );
   console.log("");
   console.log(
     "  agent      = createAgent(plan->crawl->audit->report).toMachine()",
@@ -649,11 +650,11 @@ async function main() {
     "               and recovers; the duplicate /docs replays cached.",
   );
   console.log("");
-  console.log(
-    "  uploader   = a machine that hand-wires a named resilient-call",
-  );
+  console.log("  uploader   = a machine that hand-wires a named resilient-call");
   console.log("               knob (publish_run) into its own update");
-  console.log("               the agent hands it the report; the knob's plain");
+  console.log(
+    "               the agent hands it the report; the knob's plain",
+  );
   console.log(
     "               functions retry the flaky sink and cap the ship, and",
   );
@@ -764,7 +765,9 @@ async function main() {
   await runtime.stop();
 
   line("hand-wired resilient-call + telemetry: ship the report");
-  console.log("the agent hands the finished report to the uploader machine.");
+  console.log(
+    "the agent hands the finished report to the uploader machine.",
+  );
   const shipReport = async (report: string): Promise<string> => {
     if (sinkArmed) {
       sinkArmed = false;
@@ -865,7 +868,9 @@ async function main() {
   console.log(
     "idempotent-intake decides process vs replay through receive(). The two",
   );
-  console.log("uploader hand-wires a resilient report ship. Faked: the model,");
+  console.log(
+    "uploader hand-wires a resilient report ship. Faked: the model,",
+  );
   console.log("the site, the sinks, and the clock - nothing else.");
 }
 

@@ -332,9 +332,9 @@ function throttledInputSettled<N extends string | undefined = undefined>(
 
 ```ts
 type ThrottledInputSettled<N extends string | undefined = undefined> = {
+  readonly _tag: DeadlineMsgType<N>;
   readonly atMs: number;
   readonly id: string;
-  readonly type: DeadlineMsgType<N>;
 }
 ```
 

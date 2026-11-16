@@ -209,7 +209,7 @@ function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
   ) => readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]];
   /**
    * The built-in `timer` Sub's deps: resilient-call's `timer` over the fetch's
-   * slice. Declare `{ type: "timer", deps: (s) => walk.timer(s.walk) }`.
+   * slice. Declare `{ _tag: "timer", deps: (s) => walk.timer(s.walk) }`.
    */
   timer: (
     s: PaginatedWalkState<Cursor, Page>,
